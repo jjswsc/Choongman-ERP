@@ -1,7 +1,7 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/[[...slug]].js", "use": "@vercel/node" },
+    { "src": "api/__handler.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" },
     { "src": "public/**", "use": "@vercel/static" }
   ],
@@ -10,7 +10,7 @@
     { "src": "/app", "dest": "/public/app.html" },
     { "src": "/app.html", "dest": "/public/app.html" },
     { "src": "/api-adapter.js", "dest": "/public/api-adapter.js" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/api/(.*)", "dest": "/api/__handler?path=$1" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
 }
