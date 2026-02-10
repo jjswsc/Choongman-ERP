@@ -1,7 +1,7 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/handler.js", "use": "@vercel/node" },
+    { "src": "api/handler/index.js", "use": "@vercel/node" },
     { "src": "index.html", "use": "@vercel/static" },
     { "src": "public/**", "use": "@vercel/static" }
   ],
