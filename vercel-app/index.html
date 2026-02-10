@@ -21,7 +21,7 @@
 
     document.getElementById('btn-debug-env').onclick = async () => {
       try {
-        const r = await fetch('/api/debug-env');
+        const r = await fetch('/api/__handler?path=debug-env');
         const text = await r.text();
         const data = text.startsWith('{') ? JSON.parse(text) : { raw: text };
         log(data);
@@ -32,7 +32,7 @@
 
     document.getElementById('btn-login-data').onclick = async () => {
       try {
-        const r = await fetch('/api/getLoginData');
+        const r = await fetch('/api/__handler?path=getLoginData');
         const text = await r.text();
         if (!r.ok) {
           log('HTTP ' + r.status + '\n' + text);
@@ -51,7 +51,7 @@
 
     document.getElementById('btn-login-check').onclick = async () => {
       try {
-        const r = await fetch('/api/loginCheck', {
+        const r = await fetch('/api/__handler?path=loginCheck', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
