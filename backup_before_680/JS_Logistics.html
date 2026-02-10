@@ -1,0 +1,1369 @@
+<script>
+
+  /* =================================================================
+     물류/재고 관리
+     ================================================================= */ 
+
+/* =========================================================
+     [공통] 품목 검색 및 리스트
+     ========================================================= */
+  function openFinder(mode) {
+      finderMode = mode;
+      if(!itemModal) itemModal = new bootstrap.Modal(document.getElementById('itemModal'));
+      itemModal.show();
+      document.getElementById("itm-finder-search").value = "";
+      document.getElementById("itm-finder-list").innerHTML = "<tr><td colspan='3' class='text-muted p-4'>검색어 입력 또는 카테고리를 선택하세요.</td></tr>";
+      if (!itemCache || itemCache.length === 0) {
+          load(1);
+          google.script.run.withSuccessHandler(function(l) {
+              load(0); itemCache = l; 
+              var cats = {}; l.forEach(i => { if(i.category) cats[i.category] = true; });
+              var catSel = document.getElementById("itm-finder-cat");
+              if(catSel) { catSel.innerHTML = "<option value=''>전체 카테고리</option>"; Object.keys(cats).sort().forEach(c => catSel.add(new Option(c, c))); }
+          }).getAdminItemsList();
+      }
+  }
+  function filterModalItems() {
+      var k = (document.getElementById("itm-finder-search").value || "").toLowerCase().trim();
+      var c = document.getElementById("itm-finder-cat").value;
+      var b = document.getElementById("itm-finder-list"); b.innerHTML = "";
+      if (k === "" && c === "") { b.innerHTML = "<tr><td colspan='3' class='text-muted p-4'>검색 조건을 입력하세요.</td></tr>"; return; }
+      var count = 0;
+      itemCache.forEach(function(item) {
+          if (count > 50) return;
+          var matchCat = (c === "" || item.category === c);
+          var matchKey = (k === "" || String(item.code).toLowerCase().includes(k) || String(item.name).toLowerCase().includes(k));
+          if (matchCat && matchKey) {
+              b.innerHTML += `<tr style="cursor:pointer;" onclick="selectModalItem('${item.code}', '${item.name}')"><td>${item.code}</td><td class="text-start fw-bold">${item.name}</td><td class="text-end">${Number(item.price).toLocaleString()}</td></tr>`;
+              count++;
+          }
+      });
+      if (count === 0) b.innerHTML = "<tr><td colspan='3' class='text-center p-3'>결과 없음</td></tr>";
+  }
+  function selectModalItem(code, name) {
+      if (finderMode === 'force') { document.getElementById("f-code").value = code; document.getElementById("f-name").value = name; document.getElementById("f-qty").focus(); }
+      else if (finderMode === 'inbound') { document.getElementById("i-code").value = code; document.getElementById("i-name").value = name; document.getElementById("i-qty").focus(); }
+      else if (finderMode === 'adj') { document.getElementById("a-code").value = code; document.getElementById("a-name").value = name; document.getElementById("a-new").focus(); }
+      itemModal.hide();
+  }
+  /* [수정됨] 리스트 그리기 (조정 목록 날짜 표시 추가) */
+function renderList(id, list) {
+    var b = document.getElementById(id);
+    b.innerHTML = "";
+    
+    list.forEach((i, idx) => {
+        var rowHtml = "";
+        
+        if (id === 'force-cart') { // 출고
+            rowHtml = `<td>${i.store}</td><td>${i.name}</td><td>${i.qty}</td><td><button class="btn btn-sm btn-danger" onclick="delList('${id}',${idx})">X</button></td>`;
+        } else if (id === 'adj-cart') { // ★ 조정 (날짜 추가)
+            rowHtml = `<td>${i.date}</td><td>${i.name}</td><td>${i.newQty}</td><td><button class="btn btn-sm btn-danger" onclick="delList('${id}',${idx})">X</button></td>`;
+        } else { // 입고 등
+            rowHtml = `<td>${i.name}</td><td>${i.qty||i.newQty}</td><td><button class="btn btn-sm btn-danger" onclick="delList('${id}',${idx})">X</button></td>`;
+        }
+        b.innerHTML += `<tr>${rowHtml}</tr>`;
+    });
+    
+    var c = document.getElementById(id.replace("cart", "count"));
+    if (c) c.innerText = list.length;
+}
+  function delList(id, idx){ 
+      if(id=='inbound-cart') inboundList.splice(idx,1); else if(id=='force-cart') forceList.splice(idx,1); else adjList.splice(idx,1); 
+      renderList(id, id=='inbound-cart'?inboundList:(id=='force-cart'?forceList:adjList)); 
+  }
+
+  /* =========================================================
+     [기능 6] 기타 관리 (직원, 거래처, 공지) - 6칸/8칸 맞춤
+     ========================================================= */
+
+
+/* [수정] 거래처 리스트 그리기 (필터링 안전장치 추가) */
+function renderVendors(list) { 
+    var b = document.getElementById("vnd-list-body"); 
+    b.innerHTML = ""; 
+    
+    // 1. 필터 값 가져오기 (없으면 'All'로 간주)
+    var filterEl = document.getElementById("filter-vnd-type");
+    var f = filterEl ? filterEl.value : "All"; 
+    
+    // 2. 필터링 (전체이거나, 타입이 일치하면 통과)
+    var fl = list.filter(function(v) {
+        return (f === "All" || v.type === f);
+    });
+    
+    // 3. 결과 없음 처리
+    if (!fl || fl.length === 0) { 
+        b.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-muted'>검색된 거래처가 없습니다.</td></tr>"; 
+        return; 
+    }
+
+    // 4. 목록 그리기
+    fl.forEach(function(v) { 
+        // 뱃지 색상
+        var badge = '<span class="badge bg-secondary">기타</span>';
+        if(v.type === '매입처') badge = '<span class="badge bg-primary">매입처</span>';
+        if(v.type === '매출처') badge = '<span class="badge bg-danger">매출처</span>';
+        
+        // 인덱스 찾기
+        var idx = vendorCache.findIndex(x => x.row === v.row);
+        
+        b.innerHTML += `
+            <tr>
+                <td>${badge}</td>
+                <td class='fw-bold text-danger'>${v.code}</td>
+                <td class='text-start ps-3'>${v.name}</td>
+                <td>${v.manager}</td>
+                <td class='text-end'>${Number(v.balance).toLocaleString()}</td>
+                <td>
+                    <button class='btn btn-sm btn-primary' onclick='editVendor(${idx})'>수정</button> 
+                    <button class='btn btn-sm btn-danger' onclick='delVendor(${v.row})'>삭제</button>
+                </td>
+            </tr>`; 
+    }); 
+}
+  function saveVendor() { 
+      var d={ row:document.getElementById("vnd-row").value, type:document.getElementById("vnd-type").value, code:document.getElementById("vnd-code").value, name:document.getElementById("vnd-name").value, taxId:document.getElementById("vnd-tax").value, ceo:document.getElementById("vnd-ceo").value, addr:document.getElementById("vnd-addr").value, manager:document.getElementById("vnd-manager").value, phone:document.getElementById("vnd-phone").value, balance:document.getElementById("vnd-balance").value, memo:document.getElementById("vnd-memo").value }; 
+      google.script.run.withSuccessHandler(r=>{alert(r);loadVendors();}).saveVendor(d); 
+  }
+  function editVendor(i) { var v=vendorCache[i]; document.getElementById("vnd-row").value=v.row; document.getElementById("vnd-type").value=v.type; document.getElementById("vnd-code").value=v.code; document.getElementById("vnd-name").value=v.name; document.getElementById("vnd-tax").value=v.taxId; document.getElementById("vnd-ceo").value=v.ceo; document.getElementById("vnd-addr").value=v.addr; document.getElementById("vnd-manager").value=v.manager; document.getElementById("vnd-phone").value=v.phone; document.getElementById("vnd-balance").value=v.balance; document.getElementById("vnd-memo").value=v.memo; }
+  function delVendor(r) { if(confirm("삭제?")){load(1);google.script.run.withSuccessHandler(r=>{load(0);alert(r);loadVendors();}).deleteVendor(r);} }
+  function createNewVendor() { document.getElementById("vnd-row").value="0"; document.getElementById("vnd-name").value=""; }
+
+/* [수정됨] 재고 조정 저장 버튼 (반응 확인용 안전장치 포함) */
+function saveAdjBatch() {
+    // 1단계: 버튼이 살아있는지 확인
+    // alert("버튼이 눌렸습니다! (연결 성공)"); // <-- 이 창이 안 뜨면 오타가 있는 겁니다.
+
+    // 2단계: 목록 확인
+    if (typeof adjList === 'undefined' || adjList.length === 0) {
+        return alert("❌ 조정할 품목이 목록에 없습니다.\n먼저 '담기'를 진행해주세요.");
+    }
+
+    // 3단계: 사용자 확인
+    if (!confirm("총 " + adjList.length + "건의 재고를 정말로 조정하시겠습니까?\n(서버로 전송합니다)")) {
+        return;
+    }
+
+    load(1); // 로딩화면 켜기
+
+    // 4단계: 서버로 전송
+    google.script.run
+        .withSuccessHandler(function(res) {
+            load(0); // 로딩 끄기
+            alert(res); // 결과 메시지 (✅ 저장 완료 등)
+
+            // 성공 시 목록 비우기
+            if (res && (res.includes("완료") || res.includes("✅") || res.includes("성공"))) {
+                adjList = [];
+                renderList("adj-cart", []);
+                
+                // 재고 현황판이 있으면 새로고침
+                if(typeof loadStock === 'function') {
+                    loadStock(false);
+                }
+            }
+        })
+        .withFailureHandler(function(err) {
+            load(0); // 로딩 끄기
+            alert("🔥 서버 오류 발생:\n" + err.message);
+        })
+        .adjustStockBatch(adjList, userRole || "Unknown");
+}
+// [수정] 품목 데이터 로드 (화면 표시 X, 검색 대기 상태)
+function loadAdminItems() {
+    load(1);
+    google.script.run.withSuccessHandler(function(list) {
+        load(0);
+        itemCache = list || []; // 데이터는 변수에 저장 (검색용)
+        
+        // ★ 핵심 변경: 리스트를 그리지 않고 안내 문구만 표시 (다국어)
+        var b = document.getElementById("itm-list-body");
+        var itemGuideText = (typeof I18N !== "undefined" && typeof currentLang !== "undefined" && I18N[currentLang] && I18N[currentLang].item_guide) ? I18N[currentLang].item_guide : "🔍 카테고리를 선택하거나 검색어를 입력 후 [검색] 버튼을 눌러주세요.";
+        if(b) b.innerHTML = "<tr><td colspan='6' class='text-center p-5 text-muted'>🔍 " + itemGuideText + "</td></tr>";
+        
+        // (필수) 검색창의 카테고리 목록은 채워놔야 검색을 하므로 이 부분은 유지
+        var cats = {};
+        itemCache.forEach(i => { if(i.category) cats[i.category] = true; });
+        
+        // 1. 입력창용 데이터리스트
+        var dl = document.getElementById("cat-list");
+        if(dl) {
+            dl.innerHTML = "";
+            Object.keys(cats).sort().forEach(c => { 
+                var op = document.createElement("option"); op.value = c; dl.appendChild(op); 
+            });
+        }
+        // 2. 검색창용 셀렉트박스
+        var searchCat = document.getElementById("itm-search-cat");
+        if(searchCat) {
+            var catAllText = (typeof I18N !== "undefined" && typeof currentLang !== "undefined" && I18N[currentLang] && I18N[currentLang].item_cat_all) ? I18N[currentLang].item_cat_all : "전체 카테고리";
+            searchCat.innerHTML = "<option value=''>" + catAllText + "</option>"; 
+            Object.keys(cats).sort().forEach(c => searchCat.add(new Option(c, c)));
+        }
+        
+    }).getAdminItemsList();
+}
+
+/* [수정] 리스트 그리기 (이미지 아이콘 표시) */
+function renderAdminItems(list) {
+    var b = document.getElementById("itm-list-body"); 
+    b.innerHTML = "";
+    
+    if (!list || list.length === 0) { 
+        b.innerHTML = "<tr><td colspan='6' class='text-center p-3 text-muted'>데이터가 없습니다.</td></tr>"; 
+        return; 
+    }
+
+    list.forEach(i => {
+        var idx = itemCache.findIndex(x => x.row === i.row);
+        var taxBadge = String(i.tax).includes("면") ? '<span class="badge bg-secondary ms-1">면세</span>' : '';
+        
+        // 이미지가 있으면 '📷', 없으면 '-'
+        var imgDisplay = i.image ? `<a href="${i.image}" target="_blank" style="text-decoration:none;">📷</a>` : '-';
+
+        b.innerHTML += `
+            <tr>
+                <td>${i.code}</td>
+                <td>${imgDisplay}</td> <td class="text-start ps-3 fw-bold">${i.name} ${taxBadge}</td>
+                <td>${i.spec||'-'}</td>
+                <td class="text-end">${Number(i.price).toLocaleString()}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="editItem(${idx})">수정</button> 
+                    <button class="btn btn-sm btn-danger" onclick="delItem(${i.row})">삭제</button>
+                </td>
+            </tr>`;
+    });
+}
+
+/* [수정] 수정 모드 (이미지 값 불러오기) */
+function editItem(idx) {
+    var item = itemCache[idx];
+    document.getElementById("itm-row").value = item.row;
+    document.getElementById("itm-code").value = item.code;
+    document.getElementById("itm-cat").value = item.category;
+    document.getElementById("itm-name").value = item.name;
+    document.getElementById("itm-spec").value = item.spec;
+    document.getElementById("itm-price").value = item.price;
+    document.getElementById("itm-cost").value = item.cost;
+    
+    // ★ 추가된 부분
+    document.getElementById("itm-image").value = item.image || "";   // G열
+    document.getElementById("itm-vendor").value = item.vendor || ""; // H열
+    
+    document.getElementById("itm-tax").value = String(item.tax).includes("면") ? "면세" : "과세";
+}
+
+/* [수정] 저장 함수 (이미지 값 전송) */
+function saveItem() {
+    var taxVal = document.getElementById("itm-tax").value;
+    var d = { 
+        row: document.getElementById("itm-row").value, 
+        code: document.getElementById("itm-code").value, 
+        category: document.getElementById("itm-cat").value, 
+        name: document.getElementById("itm-name").value, 
+        spec: document.getElementById("itm-spec").value, 
+        price: document.getElementById("itm-price").value, 
+        cost: document.getElementById("itm-cost").value, 
+        
+        // ★ 추가된 부분
+        image: document.getElementById("itm-image").value,   // G열
+        vendor: document.getElementById("itm-vendor").value, // H열
+        
+        tax: taxVal 
+    };
+
+    if (!d.code || !d.name) return alert("코드와 품목명은 필수입니다.");
+    
+    load(1);
+    google.script.run.withSuccessHandler(res => { 
+        load(0); 
+        alert(res); 
+        loadAdminItems(); 
+        createNewItem(); 
+    }).saveAdminItem(d);
+}
+
+/* [수정] 초기화 (이미지 칸 비우기) */
+function createNewItem() {
+    document.getElementById("itm-row").value = "0"; 
+    document.getElementById("itm-code").value = ""; 
+    document.getElementById("itm-name").value = ""; 
+    document.getElementById("itm-cat").value = ""; 
+    document.getElementById("itm-spec").value = ""; 
+    document.getElementById("itm-price").value = ""; 
+    document.getElementById("itm-cost").value = ""; 
+    
+    // ★ 추가된 부분
+    document.getElementById("itm-image").value = ""; 
+    document.getElementById("itm-vendor").value = ""; 
+    
+    document.getElementById("itm-tax").value = "과세";
+}
+
+/* [수정] 품목 검색 (빈칸 안전장치 추가 버전) */
+function filterAdminItems() {
+    var searchInput = document.getElementById("itm-search");
+    var catInput = document.getElementById("itm-search-cat");
+    
+    // 입력창이 없으면 중단 (에러 방지)
+    if (!searchInput || !catInput) return;
+
+    var k = searchInput.value.toLowerCase().trim(); // 검색어 (소문자, 공백제거)
+    var c = catInput.value; // 카테고리 선택값
+    
+    // 데이터가 아직 로딩 안 됐으면 빈 배열로 처리
+    if (!itemCache) itemCache = []; 
+
+    var filtered = itemCache.filter(function(i) {
+        // ★ 핵심: 데이터가 비어있을 경우를 대비해 빈 문자열("")로 대체
+        var iCat = String(i.category || ""); 
+        var iName = String(i.name || "").toLowerCase();
+        var iCode = String(i.code || "").toLowerCase();
+        
+        // 1. 카테고리 검사 (전체이거나 일치하면 통과)
+        var matchCat = (c === "" || c === "All" || iCat === c);
+        
+        // 2. 검색어 검사 (이름이나 코드에 검색어가 포함되면 통과)
+        var matchKey = (k === "" || iName.includes(k) || iCode.includes(k));
+        
+        return matchCat && matchKey;
+    });
+    
+    renderAdminItems(filtered);
+}
+
+// 2. 저장 버튼 (한글 값 '과세'/'면세' 그대로 전송)
+/* [수정됨] 저장 버튼 (보내는 값 확인) */
+function saveItem() {
+    var taxEl = document.getElementById("itm-tax");
+    var taxVal = taxEl.value; // "과세" 또는 "면세"
+
+    // ★ 안전장치: 혹시라도 값이 비어있으면 선택된 텍스트를 보고 판단
+    if (!taxVal) {
+        var text = taxEl.options[taxEl.selectedIndex].text;
+        if (text.includes("면세")) taxVal = "면세";
+        else taxVal = "과세";
+    }
+
+    var d = {
+        row: document.getElementById("itm-row").value,
+        code: document.getElementById("itm-code").value,
+        category: document.getElementById("itm-cat").value,
+        name: document.getElementById("itm-name").value,
+        spec: document.getElementById("itm-spec").value,
+        price: document.getElementById("itm-price").value,
+        cost: document.getElementById("itm-cost").value,
+        tax: taxVal
+    };
+    
+    if (!d.code || !d.name) return alert("코드와 품목명은 필수입니다.");
+    
+    // 저장 시작 알림 (잠시 기다려주세요)
+    load(1);
+    
+    google.script.run.withSuccessHandler(function(res) {
+        load(0);
+        alert(res); // 여기에 "저장되었습니다 (면세)" 라고 떠야 성공입니다.
+        loadAdminItems(); 
+        createNewItem();
+    }).saveAdminItem(d);
+}
+
+// 3. 수정 버튼 (입력창에 값 정확히 세팅)
+function editItem(idx) {
+    var item = itemCache[idx];
+    document.getElementById("itm-row").value = item.row;
+    document.getElementById("itm-code").value = item.code;
+    document.getElementById("itm-cat").value = item.category;
+    document.getElementById("itm-name").value = item.name;
+    document.getElementById("itm-spec").value = item.spec;
+    document.getElementById("itm-price").value = item.price;
+    document.getElementById("itm-cost").value = item.cost;
+    
+    // ★ 핵심: 가져온 값이 '면세'면 면세 선택, 아니면 무조건 '과세' 선택
+    // (시트에 빈칸이어도 '과세'로 간주하여 선택되게 함)
+    if (item.tax && item.tax.trim() === "면세") {
+        document.getElementById("itm-tax").value = "면세";
+    } else {
+        document.getElementById("itm-tax").value = "과세";
+    }
+}
+
+// 6. 신규 등록 버튼 (초기화)
+function createNewItem() {
+    document.getElementById("itm-row").value = "0";
+    document.getElementById("itm-code").value = "";
+    document.getElementById("itm-name").value = "";
+    document.getElementById("itm-spec").value = "";
+    document.getElementById("itm-price").value = "";
+    document.getElementById("itm-cost").value = "";
+    document.getElementById("itm-cat").value = "";
+    document.getElementById("itm-tax").value = "VAT";
+}
+/* [Code.gs] 품목 저장 (J열 강제 저장 강화 버전) */
+function saveAdminItem(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("품목");
+  if (!sheet) return "❌ 오류: '품목' 시트가 없습니다.";
+  
+  try {
+    var row = Number(data.row);
+    
+    // 1. 신규 등록인 경우 (맨 아래 줄 추가)
+    if (row === 0) {
+      row = sheet.getLastRow() + 1;
+    }
+    
+    // 2. 기본 정보 저장 (A열 ~ F열)
+    // 순서: 코드(1), 카테고리(2), 품목명(3), 규격(4), 판매가(5), 원가(6)
+    sheet.getRange(row, 1, 1, 6).setValues([[
+      data.code,
+      data.category,
+      data.name,
+      data.spec,
+      Number(data.price) || 0,
+      Number(data.cost) || 0
+    ]]);
+
+    // 3. 과세 정보 저장 (★ J열: 10번째 칸)
+    // 시트의 컬럼이 10개보다 적으면 에러가 날 수 있으므로, 칸을 늘려서라도 저장
+    if (sheet.getMaxColumns() < 10) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), 10 - sheet.getMaxColumns());
+    }
+    
+    // 값이 비어있으면 기본값 "과세"로 처리
+    var taxValue = (data.tax && data.tax !== "") ? String(data.tax) : "과세";
+    
+    // J열에 확실하게 쓰기
+    sheet.getRange(row, 10).setValue(taxValue);
+    
+    // 저장 후 결과 메시지에 과세 정보를 포함해서 보여줌 (확인용)
+    return "✅ 저장 완료! (" + taxValue + ")";
+    
+  } catch (e) {
+    return "❌ 저장 실패: " + e.message;
+  }
+}
+
+/* [수정] 거래처 데이터 로드 (버튼 클릭 시에만 목록 표시) */
+function loadVendors(isSearch) { 
+    load(1); // 로딩 시작
+    
+    google.script.run.withSuccessHandler(function(list) { 
+        load(0); // 로딩 끝
+        
+        // 데이터가 없거나 에러가 났을 경우 빈 배열로 처리
+        vendorCache = list || []; 
+        
+        // ★ 핵심: isSearch가 true(버튼 클릭)일 때만 목록을 그림
+        if (isSearch) {
+            renderVendors(vendorCache);
+        } else {
+            // 메뉴 처음 들어갔을 땐 안내 문구만
+            var b = document.getElementById("vnd-list-body");
+            if(b) b.innerHTML = "<tr><td colspan='6' class='text-center p-5 text-muted'>🔄 구분 선택 또는 [조회] 버튼을 눌러주세요.</td></tr>";
+        }
+    }).getVendorManagementList(); 
+}
+/* [최종 수정] 탭 전환 함수 (화면 섞임 방지 + 버튼 활성화) */
+  function showStockTab(t){ 
+      // 1. 모든 탭 화면을 강제로 숨김 (ID로 직접 지정 -> 가장 안전함)
+      document.getElementById("stock-tab-status").style.display = "none";
+      document.getElementById("stock-tab-adjust").style.display = "none";
+      document.getElementById("stock-tab-history").style.display = "none";
+      
+      // 2. 선택한 탭만 보이기
+      var target = document.getElementById("stock-tab-" + t);
+      if(target) target.style.display = "block";
+      
+      // 3. 버튼 색상 변경 (Active 상태)
+      // 우선 모든 버튼의 활성화 상태를 끔
+      document.getElementById("stock-nav-status").classList.remove("active");
+      document.getElementById("stock-nav-adjust").classList.remove("active");
+      document.getElementById("stock-nav-history").classList.remove("active");
+      
+      // 클릭한 버튼만 활성화 (색상 켜기)
+      var btn = document.getElementById("stock-nav-" + t);
+      if(btn) btn.classList.add("active");
+
+      // 4. 데이터 로드 (필요할 때만)
+      if(t==='history') loadAdjHistory();
+      if(t==='status') loadStock(false);
+  }
+
+  /* [수정] 재고 현황 로드 (열 너비 강제 고정) */
+  function loadStock(useDate) { 
+      var s=document.getElementById("stock-store-selector").value; 
+      if(!s) return;
+      
+      load(1); 
+      google.script.run.withSuccessHandler(d=>{ 
+          load(0); 
+          var c=document.getElementById("stock-container"); 
+          c.innerHTML=""; 
+          
+          var gt=0; var g={}; 
+          d.forEach(i=>{
+              gt+=i.total; 
+              if(!g[i.category]) g[i.category]=[]; 
+              g[i.category].push(i); 
+          }); 
+          
+          document.getElementById("stock-grand-total").innerText=gt.toLocaleString()+" ฿"; 
+          
+          // 카테고리별 테이블 생성
+          for(var cat in g){ 
+              // 접기/펴기 헤더
+              var h = `<div class="p-2 bg-secondary text-white fw-bold d-flex justify-content-between" onclick="toggleCat('${cat}')" style="cursor:pointer; border-bottom:1px solid #ddd;">
+                          <span>${cat} (${g[cat].length})</span> <span>▼</span>
+                       </div>
+                       <div id="cat-${cat}" style="display:block;">
+                       <table class="table table-bordered text-center mb-0 align-middle" style="table-layout: fixed;">
+                           <tbody>`; 
+              
+              g[cat].forEach(i=>{ 
+                  var safeInput = `<div class="input-group input-group-sm justify-content-center"><input type="number" id="safe-${i.code}" class="form-control text-center p-0" value="${i.safe}" placeholder="0" style="max-width:60px;"><button class="btn btn-outline-dark" onclick="saveSafeQty('${s}', '${i.code}', document.getElementById('safe-${i.code}').value)">💾</button></div>`; 
+                  
+                  // ★ 핵심: style="width: XX%"로 칸 크기 강제 고정 (헤더와 동일하게)
+                  h+=`<tr>
+                          <td style="width: 15%;" class="text-muted small">${i.code}</td>
+                          <td style="width: 35%;" class="text-start ps-2 text-truncate">${i.name}</td>
+                          <td style="width: 20%;">${safeInput}</td>
+                          <td style="width: 15%; font-weight:bold; color:${i.qty<=i.safe?'red':'blue'}">${i.qty}</td>
+                          <td style="width: 15%;" class="text-end pe-2 small">${Number(i.total).toLocaleString()}</td>
+                      </tr>`; 
+              }); 
+              h+=`</tbody></table></div>`; 
+              c.innerHTML+=h; 
+          } 
+      }).getStockStatusAdmin(s, useDate?document.getElementById("stock-date").value:""); 
+  }
+  
+  // (카테고리 접기/펴기 기능)
+  function toggleCat(id){ 
+      var el=document.getElementById("cat-"+id); 
+      el.style.display = (el.style.display==='none' ? 'block' : 'none'); 
+  }
+ 
+  function saveSafeQty(s,c,v){ google.script.run.withSuccessHandler(r=>console.log(r)).saveStoreSafetyStock(s,c,v); }
+
+/* [수정됨] 재고 조정 내역 화면 (규격 추가) */
+function loadAdjHistory() {
+    var s = document.getElementById("adj-start").value;
+    var e = document.getElementById("adj-end").value;
+    var st = document.getElementById("adj-store-selector").value;
+    if(!s){ var t=new Date().toISOString().substring(0,10); s=t; e=t; }
+
+    load(1);
+    google.script.run.withSuccessHandler(list => {
+        load(0); 
+        var b = document.getElementById("adj-list"); 
+        b.innerHTML = "";
+        
+        if(!list.length){ b.innerHTML="<tr><td colspan='5'>내역 없음</td></tr>"; return; }
+        
+        var groups={}; 
+        list.forEach(i=>{ 
+            var k=i.date+"_"+i.store; 
+            if(!groups[k]) groups[k]={date:i.date, store:i.store, items:[]}; 
+            groups[k].items.push(i); 
+        });
+        
+        var idx=0;
+        for(var k in groups){
+            var g=groups[k]; 
+            var rid="adj-row-"+idx;
+            // 메인 행
+            b.innerHTML+=`
+                <tr style="cursor:pointer;" onclick="toggleRow('${rid}')">
+                    <td>${g.date}</td>
+                    <td class="fw-bold">${g.store}</td>
+                    <td class="text-start ps-3">▼ ${g.items[0].item} 외 ${g.items.length-1}건</td>
+                    <td colspan="2">${g.items.length}건 조정</td>
+                </tr>`;
+            
+            // ★ 상세 행 (규격 추가됨)
+            var dets = g.items.map(i => {
+                var diffVal = Number(i.diff);
+                var diffStr = isNaN(diffVal) ? "오류" : (diffVal>0 ? "+"+diffVal : diffVal);
+                var diffClass = diffVal>0 ? "text-primary" : "text-danger";
+                
+                return `
+                    <tr>
+                        <td class="text-start ps-4">${i.item}</td>
+                        <td class="text-muted small">${i.spec}</td> <td class="fw-bold ${diffClass}">${diffStr}</td>
+                        <td class="small text-muted">${i.reason}</td>
+                    </tr>`;
+            }).join("");
+            
+            b.innerHTML+=`
+                <tr id="${rid}" style="display:none; background-color:#f8f9fa;">
+                    <td colspan="5">
+                        <table class="table table-sm table-bordered bg-white w-90 mx-auto mb-2">
+                            <thead class="table-light"><tr><th>품목</th><th>규격</th><th>조정</th><th>사유</th></tr></thead>
+                            <tbody>${dets}</tbody>
+                        </table>
+                    </td>
+                </tr>`;
+            idx++;
+        }
+    }).getAdjustmentHistory(s, e, st);
+}
+/* [수정됨] 재고 조정 담기 (날짜 포함) */
+function addAdjList() {
+    // 1. 값 가져오기
+    var dateVal = document.getElementById("a-date").value;
+    var store = document.getElementById("a-store").value;
+    var code = document.getElementById("a-code").value;
+    var name = document.getElementById("a-name").value;
+    var curQty = document.getElementById("a-cur").value; 
+    var newQty = document.getElementById("a-new").value; 
+    var reason = document.getElementById("a-reason").value;
+
+    // 2. 날짜 없으면 오늘 날짜로 자동 채움
+    if (!dateVal) {
+        dateVal = new Date().toISOString().substring(0,10);
+        document.getElementById("a-date").value = dateVal;
+    }
+
+    if (!code) return alert("품목을 먼저 선택해주세요.");
+    if (newQty === "") return alert("실재고 수량을 입력해주세요.");
+
+    // 3. 리스트에 담기
+    adjList.push({
+        date: dateVal, // ★ 날짜 추가됨
+        store: store,
+        code: code,
+        name: name,
+        curQty: curQty,
+        newQty: newQty,
+        reason: reason
+    });
+
+    renderList("adj-cart", adjList);
+    
+    // 입력창 비우기
+    document.getElementById("a-new").value = "";
+    document.getElementById("a-reason").value = "";
+    document.getElementById("a-new").focus();
+}
+  /* =========================================================
+     [기능 3] 주문 승인 관리 (매장 필터링 포함)
+     ========================================================= */
+  var officeStockCache = {};
+  function loadOrders() {
+      var s=document.getElementById("ord-start").value, e=document.getElementById("ord-end").value;
+      if(!s){ var t=new Date().toISOString().substring(0,10); s=t; e=t; document.getElementById("ord-start").value=t; document.getElementById("ord-end").value=t; }
+      load(1);
+      google.script.run.withSuccessHandler(function(res){
+          load(0);
+          orderListCache = (res && res.list) ? res.list : (Array.isArray(res) ? res : []);
+          officeStockCache = (res && res.officeStock) ? res.officeStock : {};
+          renderOrderList();
+      }).getAdminOrders(s, e);
+  }
+  
+  function renderOrderList() { 
+      var k=document.getElementById("ord-search-keyword").value.toLowerCase();
+      var st=document.getElementById("ord-status-filter").value;
+      var storeEl=document.getElementById("ord-store-selector");
+      var sf=storeEl?storeEl.value:"All";
+      
+      var b=document.getElementById("order-list"); b.innerHTML=""; 
+      if(!orderListCache || !orderListCache.length) { b.innerHTML="<tr><td colspan='7' class='text-center p-4 text-muted'>데이터 없음</td></tr>"; return; }
+      
+      var f=orderListCache.filter(o=>(sf==="All"||o.store===sf)&&(st==="All"||o.status===st)&&o.store.toLowerCase().includes(k));
+      if(!f.length) { b.innerHTML="<tr><td colspan='7' class='text-center p-4 text-muted'>결과 없음</td></tr>"; return; }
+
+      f.forEach(o=>{ 
+          var bc = o.status==='Pending'?'bg-warning text-dark':(o.status==='Approved'?'bg-success':'bg-danger');
+          b.innerHTML+=`<tr class="ord-data-row" style="cursor:pointer;" data-row="${o.row}"><td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" class="form-check-input ord-invoice-chk" checked title="인쇄 포함"></td><td class="text-center" onclick="toggleRow('ord-row-${o.row}')">▼</td><td class="text-center">${o.date}</td><td class="fw-bold text-center">${o.store}</td><td>${o.summary}</td><td class="text-end fw-bold text-primary">${Number(o.total).toLocaleString()} ฿</td><td class="text-center"><span class="badge ${bc}">${o.status}</span></td></tr><tr id="ord-row-${o.row}" class="ord-detail-row" style="display:none; background-color:#f8f9fa;"><td colspan="7" class="p-3">${buildOrderDetailHtml(o)}</td></tr>`; 
+      });
+      var allChk = document.getElementById("ord-print-all");
+      if (allChk) allChk.checked = true;
+  }
+/* [수정됨] 주문 상세 화면 (과세/면세 표시 및 계산) */
+function buildOrderDetailHtml(o) {
+    if (!o.items || o.items.length === 0) {
+        return `<div class="p-3 text-center text-muted">상세 품목 정보가 없습니다.</div>`;
+    }
+
+    var itemRows = "";
+    o.items.forEach((item, idx) => {
+        var taxBadge = (item.taxType === "면세") ? '<span class="badge bg-secondary" style="font-size:10px;">면세</span>' : '';
+        var finalAmt = Math.round(item.lineTotal);
+        var officeQty = (typeof officeStockCache !== "undefined" && item.code && officeStockCache[item.code] != null) ? Number(officeStockCache[item.code]) : "-";
+
+        itemRows += `
+            <tr>
+                <td class="text-center align-middle">
+                    <input type="checkbox" class="form-check-input order-item-check-${o.row}" data-idx="${idx}" checked>
+                </td>
+                <td class="align-middle text-start">
+                    ${item.name}${taxBadge ? ' <br>' + taxBadge : ''}
+                </td>
+                <td class="align-middle text-center text-muted small">${(item.spec || '').trim() || '-'}</td>
+                <td class="align-middle text-end">${Number(item.price).toLocaleString()}</td>
+                <td class="align-middle text-center fw-bold">${item.qty}</td>
+                <td class="align-middle text-center office-stock-cell">${officeQty}</td>
+                <td class="align-middle text-end fw-bold">${finalAmt.toLocaleString()}</td>
+            </tr>`;
+    });
+
+    var btns = `
+        <div class="d-flex justify-content-end gap-2 mt-3 pt-2 border-top">
+            <button class="btn btn-secondary btn-sm" onclick="processOrderInline('${o.row}','Hold')">보류</button>
+            <button class="btn btn-danger btn-sm" onclick="processOrderInline('${o.row}','Rejected')">거절</button>
+            <button class="btn btn-success btn-sm fw-bold" onclick="processOrderInline('${o.row}','Approved')">승인</button>
+        </div>`;
+
+    return `
+        <div class="card p-3 border-0 shadow-sm" style="background-color: #fff;">
+            <h6 class="fw-bold mb-2">📋 주문 상세 (부가세 포함)</h6>
+            <table class="table table-sm table-bordered bg-white mb-0">
+                <thead class="table-light text-center">
+                    <tr>
+                        <th style="width:30px;">V</th>
+                        <th>품목명</th>
+                        <th style="width:10%;">규격</th>
+                        <th style="width:10%;">단가(세전)</th>
+                        <th style="width:8%;">수량</th>
+                        <th class="office-stock-header" style="width:9%;">Office 재고</th>
+                        <th style="width:14%;">합계(세후)</th>
+                    </tr>
+                </thead>
+                <tbody>${itemRows}</tbody>
+            </table>
+            ${btns}
+        </div>`;
+}
+  function processOrderInline(row, decision) {
+      if(decision!=='Approved' && !confirm(decision+" 처리하시겠습니까?")) return;
+      var checkboxes = document.querySelectorAll('.order-item-check-' + row);
+      var originalOrder = orderListCache.find(x => String(x.row) === String(row));
+      var newCart = [];
+      checkboxes.forEach(cb => { if(cb.checked) newCart.push(originalOrder.items[cb.getAttribute("data-idx")]); });
+      
+      load(1);
+      google.script.run.withSuccessHandler(res => { load(0); alert(res); loadOrders(); }).processOrderDecision(row, decision, newCart);
+  }
+  function toggleRow(id) { var el = document.getElementById(id); if(el) el.style.display = (el.style.display === 'none') ? 'table-row' : 'none'; }
+  function toggleAllOrderPrint(headerChk) {
+    var list = document.getElementById("order-list");
+    if (!list) return;
+    list.querySelectorAll(".ord-invoice-chk").forEach(function(cb) { cb.checked = !!headerChk.checked; });
+  }
+
+  /** 출고 내역 한 건(그룹) 인보이스 HTML - 매장별 장 구분용 (pageBreakWhenNewStore) */
+  function buildForceDeliveryNoteHtml(group, companyInfo, clientInfo, pageBreakBefore) {
+    var docNo = (group.invoiceNo && String(group.invoiceNo).trim()) ? group.invoiceNo : ("IV-" + (group.date || "").replace(/\D/g, ""));
+    var dateStr = (group.date || "").split(" ")[0] || "";
+    var d = dateStr.replace(/-/g, "/");
+    if (d.length === 10) d = d.slice(5, 7) + "/" + d.slice(8, 10) + "/" + d.slice(0, 4);
+    var totalBaht = Number(group.totalAmt) || 0;
+    var vat7 = Math.round(totalBaht * 0.07 / 1.07);
+    var exclVat = totalBaht - vat7;
+    var companyName = (companyInfo && companyInfo.companyName) ? companyInfo.companyName : "";
+    var address = (companyInfo && companyInfo.address) ? companyInfo.address : "";
+    var taxId = (companyInfo && companyInfo.taxId) ? companyInfo.taxId : "";
+    var phone = (companyInfo && companyInfo.phone) ? companyInfo.phone : "";
+    var bankInfo = (companyInfo && companyInfo.bankInfo) ? companyInfo.bankInfo : "";
+    var clientName = (clientInfo && clientInfo.companyName) ? clientInfo.companyName : (group.target || "-");
+    var clientAddr = (clientInfo && clientInfo.address) || "";
+    var clientTaxId = (clientInfo && clientInfo.taxId) || "";
+    var clientPhone = (clientInfo && clientInfo.phone) || "";
+    var rows = "";
+    (group.items || []).forEach(function(it, idx) {
+      var amt = Math.round(Math.abs(Number(it.amount)) || 0);
+      rows += "<tr><td class=\"text-center\">" + (idx + 1) + "</td><td>" + (it.name || "-") + "</td><td class=\"text-center\">" + (it.qty || 0) + "</td><td class=\"text-end\">" + (it.spec || "-") + "</td><td class=\"text-end\">" + amt.toLocaleString() + "</td></tr>";
+    });
+    var tableStyle = "width:100%; border-collapse: collapse; border: 1px solid #e2e8f0; margin: 8px 0;";
+    var thStyle = "background: #0369a1; color: #fff; padding: 6px 8px; text-align: center; border: 1px solid #0369a1;";
+    var pageBreak = pageBreakBefore ? " page-break-before: always;" : "";
+    return "<div class=\"delivery-note-invoice\" style=\"max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;" + pageBreak + " font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;\">" +
+      "<div style=\"display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;\">" +
+        "<h2 style=\"margin:0; font-size:1.25rem;\">Delivery Note / Tax Invoice</h2>" +
+        "<div style=\"text-align:right; font-size:11px;\">" +
+          "<div><strong>Document No.:</strong> " + docNo + "</div>" +
+          "<div><strong>Date:</strong> " + d + "</div>" +
+          "<div><strong>Store:</strong> " + clientName + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<div style=\"display:flex; justify-content:space-between; margin-bottom:12px;\">" +
+        "<div style=\"flex:1;\"><div style=\"font-weight:700;\">" + companyName + "</div><div style=\"font-size:11px; color:#475569;\">" + address + "<br>Tax ID " + taxId + " | " + phone + "</div></div>" +
+        "<div style=\"flex:1; padding-left:16px;\"><div style=\"font-weight:700;\">Client (매출처)</div><div style=\"font-size:11px; color:#475569;\">" + clientName + (clientAddr ? "<br>" + clientAddr : "") + "</div></div>" +
+      "</div>" +
+      "<table style=\"" + tableStyle + "\"><thead><tr><th style=\"" + thStyle + "\">#</th><th style=\"" + thStyle + "\">Description</th><th style=\"" + thStyle + "\">Qty</th><th style=\"" + thStyle + "\">Spec</th><th style=\"" + thStyle + "\">Amount</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+      "<div style=\"margin-top:12px; text-align:right;\"><strong>Grand Total: " + totalBaht.toLocaleString() + " THB</strong></div>" +
+      "<div style=\"margin-top:16px; font-size:11px; color:#475569;\"><strong>Remarks:</strong> " + bankInfo + "</div>" +
+    "</div>";
+  }
+
+  function printForceHistoryInvoice() {
+    var list = document.getElementById("fh-list");
+    if (!list) { alert("출고 내역 목록을 찾을 수 없습니다."); return; }
+    if (!window.forceHistoryGroups || !Array.isArray(window.forceHistoryGroups)) {
+      alert("출고 내역을 먼저 조회한 뒤 인보이스를 선택해 주세요."); return;
+    }
+    var checked = [];
+    list.querySelectorAll("tr.fh-data-row").forEach(function(tr) {
+      var chk = tr.querySelector(".fh-invoice-chk");
+      if (chk && chk.checked) {
+        var idxStr = tr.getAttribute("data-group-index");
+        if (idxStr !== null && idxStr !== undefined) {
+          var idxNum = parseInt(idxStr, 10);
+          if (!isNaN(idxNum) && checked.indexOf(idxNum) === -1) checked.push(idxNum);
+        }
+      }
+    });
+    if (checked.length === 0) { alert("인쇄할 출고 내역을 선택해 주세요. (체크박스)"); return; }
+    var groups = window.forceHistoryGroups.filter(function(g, i) { return checked.indexOf(i) !== -1; });
+    if (groups.length === 0) { alert("선택한 데이터가 없습니다. 조회 후 다시 선택해 주세요."); return; }
+    groups.sort(function(a, b) { var ta = (a.target || "").localeCompare(b.target || ""); return ta !== 0 ? ta : ((a.date || "").localeCompare(b.date || "")); });
+    google.script.run.withSuccessHandler(function(data) {
+      var area = document.getElementById("invoice-print-area");
+      if (!area) { alert("인보이스 인쇄 영역을 찾을 수 없습니다."); return; }
+      var companyInfo = (data && data.company) ? data.company : {};
+      var clientsMap = (data && data.clients) ? data.clients : {};
+      var html = "";
+      var prevTarget = "";
+      for (var i = 0; i < groups.length; i++) {
+        var g = groups[i];
+        var pageBreakBefore = (i > 0 && (g.target || "") !== prevTarget);
+        prevTarget = g.target || "";
+        var clientInfo = clientsMap[g.target] || { companyName: g.target || "-" };
+        html += buildForceDeliveryNoteHtml(g, companyInfo, clientInfo, pageBreakBefore);
+      }
+      area.innerHTML = html;
+      area.classList.remove("d-none");
+      document.body.classList.add("invoice-printing");
+      window.onafterprint = function() { document.body.classList.remove("invoice-printing"); area.classList.add("d-none"); area.innerHTML = ""; window.onafterprint = null; };
+      window.print();
+    }).withFailureHandler(function() {
+      var area = document.getElementById("invoice-print-area");
+      if (!area) return;
+      var html = ""; var prevTarget = "";
+      for (var i = 0; i < groups.length; i++) {
+        var g = groups[i];
+        var pageBreakBefore = (i > 0 && (g.target || "") !== prevTarget);
+        prevTarget = g.target || "";
+        html += buildForceDeliveryNoteHtml(g, {}, { companyName: g.target || "-" }, pageBreakBefore);
+      }
+      area.innerHTML = html;
+      area.classList.remove("d-none");
+      document.body.classList.add("invoice-printing");
+      window.onafterprint = function() { document.body.classList.remove("invoice-printing"); area.classList.add("d-none"); area.innerHTML = ""; window.onafterprint = null; };
+      window.print();
+    }).getInvoiceData();
+  }
+
+  /** Delivery Note/Tax Invoice 한 건 HTML 생성 (인쇄 양식). clientInfo=거래처 시트 매출처, isFirstPage=true면 페이지 끊기 없음 */
+  function buildDeliveryNoteInvoiceHtml(order, companyInfo, clientInfo, isFirstPage) {
+    var docNo = (order.invoiceNo && String(order.invoiceNo).trim()) ? order.invoiceNo : (order.orderId || ("IV" + (order.date || "").replace(/\D/g, "").slice(0, 8) + String(order.row).padStart(2, "0")) || "IV-");
+    var dateStr = (order.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10);
+    var d = dateStr.replace(/-/g, "/");
+    if (d.length === 10) d = d.slice(5, 7) + "/" + d.slice(8, 10) + "/" + d.slice(0, 4);
+    var totalBaht = Number(order.total) || 0;
+    var vat7 = Math.round(totalBaht * 0.07 / 1.07);
+    var exclVat = totalBaht - vat7;
+    var discount = 0;
+    var totalAfterDiscount = totalBaht;
+    var companyName = (companyInfo && companyInfo.companyName) || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)";
+    var address = (companyInfo && companyInfo.address) || "";
+    var taxId = (companyInfo && companyInfo.taxId) || "";
+    var phone = (companyInfo && companyInfo.phone) || "";
+    var bankInfo = (companyInfo && companyInfo.bankInfo) || "ธนาคารกสิกรไทย เลขที่ 166-2-97079-0 ชื่อบัญชี บจก. เอสแอนด์เจ โกลบอล";
+    var projectName = (companyInfo && companyInfo.projectName) || "CM True Digital Park";
+    var clientName = (clientInfo && clientInfo.companyName) || order.store || "-";
+    var clientAddr = (clientInfo && clientInfo.address) ? (clientInfo.address + "") : "";
+    var clientTaxId = (clientInfo && clientInfo.taxId) ? (clientInfo.taxId + "") : "";
+    var clientPhone = (clientInfo && clientInfo.phone) ? (clientInfo.phone + "") : "";
+
+    var rows = "";
+    (order.items || []).forEach(function(it, idx) {
+      var amt = Math.round(Number(it.lineTotal) || 0);
+      rows += "<tr><td class=\"text-center\">" + (idx + 1) + "</td><td>" + (it.name || "-") + "</td><td class=\"text-center\">" + (it.qty || 0) + "</td><td class=\"text-end\">" + Number(it.price || 0).toLocaleString() + "</td><td class=\"text-end\">0</td><td class=\"text-end\">" + amt.toLocaleString() + "</td></tr>";
+    });
+
+    var grandWords = "( " + totalBaht.toLocaleString() + " baht only )";
+    var tableStyle = "width:100%; border-collapse: collapse; border: 1px solid #e2e8f0; margin: 8px 0;";
+    var thStyle = "background: #0369a1; color: #fff; padding: 6px 8px; text-align: center; border: 1px solid #0369a1;";
+    var pageBreak = isFirstPage ? "" : " page-break-before: always;";
+
+    return "<div class=\"delivery-note-invoice\" style=\"max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;" + pageBreak + " font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;\">" +
+      "<div style=\"display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;\">" +
+        "<h2 style=\"margin:0; font-size:1.25rem;\">Delivery Note / Tax Invoice</h2>" +
+        "<div style=\"text-align:right; font-size:11px;\">" +
+          "<div>Copy (Set Document)</div>" +
+          "<div><strong>Document No.:</strong> " + docNo + "</div>" +
+          "<div><strong>Date:</strong> " + d + "</div>" +
+          "<div><strong>Due Date:</strong> " + d + "</div>" +
+          "<div><strong>Reference:</strong> " + (order.orderId || "-") + "</div>" +
+          "<div><strong>Project Name:</strong> " + projectName + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<div style=\"display:flex; justify-content:space-between; margin-bottom:12px;\">" +
+        "<div style=\"flex:1;\">" +
+          "<div style=\"font-weight:700; margin-bottom:4px;\">" + companyName + "</div>" +
+          "<div style=\"font-size:11px; color:#475569;\">" + (address || "-") + "<br>Tax ID " + taxId + " | " + phone + "</div>" +
+        "</div>" +
+        "<div style=\"flex:1; padding-left:16px;\">" +
+          "<div style=\"font-weight:700; margin-bottom:4px;\">Client (매출처)</div>" +
+          "<div style=\"font-size:11px; color:#475569;\">" + clientName + (clientAddr ? "<br>" + clientAddr : "") + (clientTaxId || clientPhone ? "<br>Tax ID " + clientTaxId + (clientPhone ? " | " + clientPhone : "") : "") + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<table class=\"table table-bordered\" style=\"" + tableStyle + "\">" +
+        "<thead><tr>" +
+          "<th style=\"" + thStyle + "\">#</th>" +
+          "<th style=\"" + thStyle + "\">Description</th>" +
+          "<th style=\"" + thStyle + "\">Quantity</th>" +
+          "<th style=\"" + thStyle + "\">Unit Price</th>" +
+          "<th style=\"" + thStyle + "\">Discount</th>" +
+          "<th style=\"" + thStyle + "\">Amount</th>" +
+        "</tr></thead><tbody>" + rows + "</tbody></table>" +
+      "<div style=\"display:flex; justify-content:flex-end;\">" +
+        "<div style=\"text-align:right; font-size:12px; min-width:200px;\">" +
+          "<div>Total: " + totalBaht.toLocaleString() + " THB</div>" +
+          "<div>Discount: " + discount.toLocaleString() + " THB</div>" +
+          "<div>Total after discount: " + totalAfterDiscount.toLocaleString() + " THB</div>" +
+          "<div>VAT 7%: " + vat7.toLocaleString() + " THB</div>" +
+          "<div>Total Excluding VAT: " + exclVat.toLocaleString() + " THB</div>" +
+          "<div style=\"font-weight:700;\">Grand Total: " + totalBaht.toLocaleString() + " THB</div>" +
+          "<div style=\"font-size:11px; margin-top:4px;\">" + grandWords + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<div style=\"margin-top:16px; font-size:11px; color:#475569;\"><strong>Remarks:</strong> " + bankInfo + "</div>" +
+      "<div style=\"margin-top:20px; display:flex; justify-content:space-between; font-size:11px;\">" +
+        "<div><strong>" + clientName + "</strong><br>Received by ________________  Date ______</div>" +
+        "<div><strong>" + companyName.split(" ")[0] + "</strong><br>Approved by ________________  Date ______</div>" +
+      "</div>" +
+    "</div>";
+  }
+
+  function printOrderDeliveryNoteInvoice() {
+    var list = document.getElementById("order-list");
+    if (!list) { alert("주문 목록을 찾을 수 없습니다."); return; }
+    var checkedRows = [];
+    list.querySelectorAll("tr.ord-data-row").forEach(function(tr) {
+      var chk = tr.querySelector(".ord-invoice-chk");
+      if (chk && chk.checked) checkedRows.push(tr.getAttribute("data-row"));
+    });
+    if (checkedRows.length === 0) { alert("인쇄할 주문을 선택해 주세요. (목록에서 체크)"); return; }
+    var ordersToPrint = (orderListCache || []).filter(function(o) { return checkedRows.indexOf(String(o.row)) !== -1; });
+    if (ordersToPrint.length === 0) { alert("선택한 주문 데이터가 없습니다. 조회 후 다시 시도해 주세요."); return; }
+
+    google.script.run.withSuccessHandler(function(data) {
+      var area = document.getElementById("invoice-print-area");
+      if (!area) { alert("인보이스 인쇄 영역을 찾을 수 없습니다."); return; }
+      var companyInfo = (data && data.company) ? data.company : {};
+      var clientsMap = (data && data.clients) ? data.clients : {};
+      var html = "";
+      ordersToPrint.forEach(function(o, idx) {
+        var clientInfo = clientsMap[o.store] || { companyName: o.store || "-" };
+        html += buildDeliveryNoteInvoiceHtml(o, companyInfo, clientInfo, idx === 0);
+      });
+      area.innerHTML = html;
+      area.classList.remove("d-none");
+      document.body.classList.add("invoice-printing");
+      window.onafterprint = function() {
+        document.body.classList.remove("invoice-printing");
+        area.classList.add("d-none");
+        area.innerHTML = "";
+        window.onafterprint = null;
+      };
+      window.print();
+    }).withFailureHandler(function(err) {
+      var area = document.getElementById("invoice-print-area");
+      var companyInfo = {};
+      var clientsMap = {};
+      var html = "";
+      ordersToPrint.forEach(function(o, idx) {
+        var clientInfo = clientsMap[o.store] || { companyName: o.store || "-" };
+        html += buildDeliveryNoteInvoiceHtml(o, companyInfo, clientInfo, idx === 0);
+      });
+      if (area) { area.innerHTML = html; area.classList.remove("d-none"); document.body.classList.add("invoice-printing"); }
+      window.onafterprint = function() { document.body.classList.remove("invoice-printing"); if (area) { area.classList.add("d-none"); area.innerHTML = ""; } window.onafterprint = null; };
+      window.print();
+    }).getInvoiceData();
+  }
+
+  /* =========================================================
+     [기능 4] 입고 등록 및 내역
+     ========================================================= */
+  /* [수정됨] 입고 목록 담기 (매입처 포함) */
+function addInboundList() {
+    // 1. 화면의 입력값들 가져오기
+    var dateVal = document.getElementById("i-date").value;
+    var vendorVal = document.getElementById("i-vendor").value; // ★ 매입처 값 가져오기
+    var codeVal = document.getElementById("i-code").value;
+    var nameVal = document.getElementById("i-name").value;
+    var qtyVal = document.getElementById("i-qty").value;
+
+    // 2. 필수 입력 체크
+    if (!codeVal) return alert("품목을 선택해주세요.");
+    if (!qtyVal) return alert("수량을 입력해주세요.");
+    if (!vendorVal) return alert("매입처를 선택해주세요."); // ★ 매입처 선택 강제
+
+    // 3. 목록에 담기 (vendor 속성 추가)
+    inboundList.push({
+        date: dateVal,
+        vendor: vendorVal, // ★ 여기에 매입처를 꼭 넣어줘야 저장됩니다!
+        code: codeVal,
+        name: nameVal,
+        qty: qtyVal
+    });
+
+    // 4. 화면 갱신
+    renderList("inbound-cart", inboundList);
+    
+    // 5. 편의 기능: 입력 후 품목/수량만 비우기 (매입처는 유지)
+    document.getElementById("i-name").value = "";
+    document.getElementById("i-code").value = "";
+    document.getElementById("i-qty").value = "";
+    document.getElementById("i-name").focus(); // 바로 다음 품목 검색하도록 포커스 이동
+}
+  function saveInboundBatch(){ if(confirm("저장?")) google.script.run.withSuccessHandler(r=>{alert(r);inboundList=[];renderList("inbound-cart",[]);}).registerInboundBatch(inboundList); }
+/* [수정] 입고 탭 전환 (버튼 활성화 추가) */
+function showInTab(t) { 
+    // 1. 화면 전환
+    document.getElementById("in-tab-new").style.display = "none";
+    document.getElementById("in-tab-hist").style.display = "none";
+    document.getElementById("in-tab-" + t).style.display = "block";
+    
+    // 2. 버튼 색상 변경 (Active)
+    document.getElementById("in-nav-new").classList.remove("active");
+    document.getElementById("in-nav-hist").classList.remove("active");
+    document.getElementById("in-nav-" + t).classList.add("active");
+
+    // 3. 데이터 로드 (내역 탭일 때만)
+    if(t === 'hist') loadInboundHistory(); 
+}
+
+/* [수정됨] 입고 저장 버튼 (숫자 변환 + 새로고침) */
+function saveInboundBatch() {
+    if (inboundList.length === 0) return alert("저장할 목록이 없습니다.");
+    
+    if (!confirm("총 " + inboundList.length + "건을 입고 처리하시겠습니까?")) return;
+
+    load(1);
+    google.script.run.withSuccessHandler(function(res) {
+        load(0);
+        alert(res);
+        // 성공 시 목록 비우고 초기화
+        if(res.includes("✅") || res.includes("완료")) {
+            inboundList = [];
+            renderList("inbound-cart", []);
+            // 저장 후 내역 탭으로 이동해서 보여줄까요? (선택사항)
+            // showInTab('hist'); 
+        }
+    }).registerInboundBatch(inboundList);
+}
+  
+  /* [수정됨] 입고 내역 화면 (금액 열 추가) */
+function loadInboundHistory() {
+    var s = document.getElementById("ih-start").value;
+    var e = document.getElementById("ih-end").value;
+    var v = document.getElementById("ih-vendor-selector").value;
+
+    if(!s){ var t=new Date().toISOString().substring(0,10); s=t; e=t; }
+    
+    load(1);
+    google.script.run.withSuccessHandler(list => {
+        load(0); 
+        var b = document.getElementById("ih-list"); 
+        b.innerHTML = "";
+        
+        if(!list.length){ b.innerHTML="<tr><td colspan='5'>내역 없음</td></tr>"; return; }
+        
+        // 그룹화
+        var groups={}; 
+        list.forEach(i=>{ 
+            var k=i.date+"_"+i.vendor; 
+            if(!groups[k]) groups[k]={date:i.date, vendor:i.vendor, totalQty:0, totalAmt:0, items:[]}; 
+            groups[k].items.push(i); 
+            groups[k].totalQty += Number(i.qty);
+            groups[k].totalAmt += Number(i.amount);
+        });
+
+        var idx=0;
+        // 테이블 헤더도 5칸으로 맞춰야 하므로 HTML 구조에서 헤더 수정이 필요할 수 있음
+        // 스크립트에서 헤더를 건드리지 않으므로, 아래 상세 행에서 칸 수를 맞춤
+        for(var k in groups){
+            var g=groups[k]; 
+            var rid="ib-row-"+idx;
+            
+            // 메인 행: 날짜 | 매입처 | 내용 | 수량 | 금액 (총 5칸)
+            b.innerHTML += `
+                <tr style="cursor:pointer;" onclick="toggleRow('${rid}')">
+                    <td>${g.date}</td>
+                    <td class="fw-bold">${g.vendor}</td>
+                    <td class="text-start ps-3">▼ ${g.items[0].name} 외 ${g.items.length-1}건</td>
+                    <td class="fw-bold">${g.totalQty.toLocaleString()}</td>
+                    <td class="fw-bold text-primary">${g.totalAmt.toLocaleString()}</td>
+                </tr>`;
+            
+            // 상세 행
+            var dets = g.items.map(i => `
+                <tr>
+                    <td class="text-start ps-4">${i.name}</td>
+                    <td class="small text-muted">${i.spec||'-'}</td>
+                    <td class="fw-bold">${Number(i.qty).toLocaleString()}</td>
+                    <td class="text-end pe-3">${Number(i.amount).toLocaleString()}</td>
+                </tr>`).join("");
+                
+            b.innerHTML += `
+                <tr id="${rid}" style="display:none; background-color:#f8f9fa;">
+                    <td colspan="5">
+                        <table class="table table-sm table-bordered bg-white w-90 mx-auto mb-2">
+                            <thead class="table-light"><tr><th>품목</th><th>규격</th><th>수량</th><th>금액</th></tr></thead>
+                            <tbody>${dets}</tbody>
+                        </table>
+                    </td>
+                </tr>`;
+            idx++;
+        }
+    }).getInboundHistory(s, e, v);
+}
+
+  /* =========================================================
+     [기능 5] 출고 내역 (강제+주문승인 통합)
+     ========================================================= */
+  function initForceSection() {
+      google.script.run.withSuccessHandler(function(list) {
+          var s = document.getElementById("f-store");
+          var sh = document.getElementById("fh-vendor");
+          s.innerHTML = "<option value=''>선택하세요</option>";
+          if(sh) sh.innerHTML = "<option value='All'>전체 매출처</option>";
+          list.forEach(function(name) {
+              s.add(new Option(name, name));
+              if(sh) sh.add(new Option(name, name));
+          });
+      }).getAllOutboundTargets();
+  }
+  /* [수정] 출고 탭 전환 (버튼 활성화 추가) */
+function showForceTab(t) { 
+    // 1. 화면 전환
+    document.getElementById("force-tab-new").style.display = "none";
+    document.getElementById("force-tab-hist").style.display = "none";
+    document.getElementById("force-tab-" + t).style.display = "block";
+    
+    // 2. 버튼 색상 변경 (Active)
+    document.getElementById("force-nav-new").classList.remove("active");
+    document.getElementById("force-nav-hist").classList.remove("active");
+    document.getElementById("force-nav-" + t).classList.add("active");
+
+    // 3. 데이터 로드 (내역 탭일 때만)
+    if(t === 'hist') loadForceHistory(); 
+}
+/* [수정됨] 출고 내역 화면 (인보이스번호 그룹 + 검색 + 인보이스 인쇄용 그룹 저장) */
+window.forceHistoryGroups = [];
+function loadForceHistory() {
+    var s = document.getElementById("fh-start").value;
+    var e = document.getElementById("fh-end").value;
+    var v = document.getElementById("fh-vendor").value;
+    var t = document.getElementById("fh-type") ? document.getElementById("fh-type").value : "All";
+    
+    if(!s){ var today = new Date().toISOString().substring(0,10); s=today; e=today; }
+    
+    load(1);
+    google.script.run.withSuccessHandler(function(list) {
+        load(0); 
+        var b = document.getElementById("fh-list"); 
+        b.innerHTML = "";
+        window.forceHistoryGroups = [];
+        
+        if (!list || list.length === 0) { 
+            b.innerHTML = "<tr><td colspan='8' class='text-center p-4 text-muted'>내역 없음</td></tr>"; 
+            return; 
+        }
+        
+        var groups = {};
+        list.forEach(item => {
+            var invNo = (item.invoiceNo && String(item.invoiceNo).trim()) ? String(item.invoiceNo).trim() : "";
+            var key = invNo ? invNo : (item.date + "_" + item.target + "_" + item.type);
+            if (!groups[key]) groups[key] = { 
+                date: item.date, target: item.target, type: item.type, invoiceNo: invNo,
+                totalQty: 0, totalAmt: 0, items: [] 
+            };
+            groups[key].items.push(item); 
+            groups[key].totalQty += Math.abs(Number(item.qty));
+            groups[key].totalAmt += Math.abs(Number(item.amount));
+        });
+
+        var idx = 0;
+        var groupKeys = Object.keys(groups).sort().reverse();
+        groupKeys.forEach(key => {
+            var g = groups[key];
+            window.forceHistoryGroups.push(g);
+            var badgeClass = g.type.includes("강제") ? "bg-danger" : "bg-success";
+            var summary = g.items[0].name + (g.items.length > 1 ? " 외 " + (g.items.length - 1) + "건" : "");
+            var rowId = "force-row-" + idx;
+            var invDisplay = g.invoiceNo || "-";
+            
+            b.innerHTML += `
+                <tr class="fh-data-row" style="cursor:pointer;" data-rowid="${rowId}" data-group-index="${idx}" data-invoice-no="${(g.invoiceNo || "").replace(/"/g, "&quot;")}">
+                    <td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" class="form-check-input fh-invoice-chk" checked title="인쇄 포함"></td>
+                    <td class="text-center small" onclick="toggleRow('${rowId}')">${invDisplay}</td>
+                    <td onclick="toggleRow('${rowId}')">${g.date}</td>
+                    <td onclick="toggleRow('${rowId}')"><span class="badge ${badgeClass}">${g.type}</span></td>
+                    <td class="fw-bold" onclick="toggleRow('${rowId}')">${g.target}</td>
+                    <td class="text-start ps-3" onclick="toggleRow('${rowId}')">▼ ${summary}</td>
+                    <td class="text-danger fw-bold" onclick="toggleRow('${rowId}')">-${g.totalQty.toLocaleString()}</td>
+                    <td class="fw-bold text-primary" onclick="toggleRow('${rowId}')">-${g.totalAmt.toLocaleString()}</td>
+                </tr>`;
+            
+            var detailRows = g.items.map(i => {
+                var absQty = Math.abs(Number(i.qty));
+                var absAmt = Math.abs(Number(i.amount));
+                return "<tr><td class=\"text-start ps-4\">" + i.name + "</td><td class=\"text-center text-muted small\">" + (i.spec || "-") + "</td><td class=\"text-end fw-bold text-danger\">-" + absQty.toLocaleString() + "</td><td class=\"text-end pe-3 text-muted\">-" + absAmt.toLocaleString() + "</td></tr>";
+            }).join("");
+                
+            b.innerHTML += "<tr id=\"" + rowId + "\" class=\"fh-detail-row\" style=\"display:none; background-color: #f8f9fa;\"><td colspan=\"8\" class=\"p-0\"><div class=\"p-3\"><table class=\"table table-sm table-bordered bg-white mb-0\" style=\"width: 95%; margin: 0 auto;\"><thead class=\"table-light text-center\"><tr><th style=\"width: 40%;\">품목명</th><th style=\"width: 20%;\">규격</th><th style=\"width: 15%;\">수량</th><th style=\"width: 25%;\">금액</th></tr></thead><tbody class=\"align-middle\">" + detailRows + "</tbody></table></div></td></tr>";
+            idx++;
+        });
+    }).getCombinedOutboundHistory(s, e, v, t);
+}
+
+  function filterForceHistoryByInvoice() {
+    var q = (document.getElementById("fh-invoice-search") || {}).value ? String(document.getElementById("fh-invoice-search").value).trim().toLowerCase() : "";
+    var list = document.getElementById("fh-list");
+    if (!list) return;
+    list.querySelectorAll("tr.fh-data-row").forEach(function(tr) {
+      var inv = (tr.getAttribute("data-invoice-no") || "").toLowerCase();
+      var show = !q || inv.indexOf(q) !== -1;
+      tr.style.display = show ? "" : "none";
+      var next = tr.nextElementSibling;
+      if (next && next.classList && next.classList.contains("fh-detail-row")) next.style.display = show ? (next.style.display === "none" ? "none" : "table-row") : "none";
+    });
+  }
+
+  function addForceList() { 
+      var st = document.getElementById("f-store").value, cd = document.getElementById("f-code").value, nm = document.getElementById("f-name").value, qt = document.getElementById("f-qty").value, dt = document.getElementById("f-date").value;
+      if(!st || !cd || !qt) return alert("필수 항목 입력");
+      forceList.push({ date:dt, store:st, code:cd, name:nm, qty:qt }); renderList("force-cart", forceList); 
+      document.getElementById("f-name").value = ""; document.getElementById("f-code").value = ""; document.getElementById("f-qty").value = "";
+  }
+  function saveForceBatch() { if(confirm("출고 확정?")){ load(1); google.script.run.withSuccessHandler(r=>{load(0);alert(r);forceList=[];renderList("force-cart",[]);}).forceOutboundBatch(forceList); } }
+
+/* [수정 2] 출고처(매출처) 목록 채우기 함수 */
+function loadOutboundDropdowns() {
+    // 로딩 표시 (선택하세요 대신 '로딩중...' 표시)
+    var fStore = document.getElementById("f-store");
+    if(fStore) fStore.innerHTML = "<option>로딩 중...</option>";
+
+    google.script.run.withSuccessHandler(function(list) {
+        console.log("가져온 매출처 목록:", list); // F12 콘솔에서 확인 가능
+
+        // 1. 출고 입력 탭 (#f-store)
+        if (fStore) {
+            fStore.innerHTML = "<option value=''>선택하세요</option>";
+            list.forEach(function(v) {
+                fStore.add(new Option(v, v));
+            });
+        }
+
+        // 2. 내역 조회 탭 (#fh-vendor)
+        var fhVendor = document.getElementById("fh-vendor");
+        if (fhVendor) {
+            fhVendor.innerHTML = "<option value='All'>전체 출고처</option>";
+            list.forEach(function(v) {
+                fhVendor.add(new Option(v, v));
+            });
+        }
+    }).getVendorNamesByType("매출처"); // 서버에 "매출처" 달라고 요청
+}
+
+/* [복구] 매입처 목록 채우기 (입고 등록 + 품목 관리용) */
+function loadVendorDropdowns() {
+    // 로딩 표시
+    var iVendor = document.getElementById("i-vendor");
+    if(iVendor) iVendor.innerHTML = "<option>로딩 중...</option>";
+
+    google.script.run.withSuccessHandler(function(list) {
+        console.log("가져온 매입처 목록:", list); // 확인용 로그
+
+        // 1. 입고 등록 화면 (#i-vendor)
+        if(iVendor) {
+            iVendor.innerHTML = "<option value=''>선택하세요</option>";
+            list.forEach(function(v) { iVendor.add(new Option(v, v)); });
+        }
+        
+        // 2. 입고 내역 조회 화면 (#ih-vendor-selector)
+        var ihVendor = document.getElementById("ih-vendor-selector");
+        if(ihVendor) {
+            ihVendor.innerHTML = "<option value='All'>전체 매입처</option>";
+            list.forEach(function(v) { ihVendor.add(new Option(v, v)); });
+        }
+
+        // 3. 품목 관리 화면 자동완성 (#vendor-options)
+        var itmVendorList = document.getElementById("vendor-options");
+        if(itmVendorList) {
+            itmVendorList.innerHTML = ""; 
+            list.forEach(function(v) {
+                var op = document.createElement("option");
+                op.value = v;
+                itmVendorList.appendChild(op);
+            });
+        }
+    }).getVendorNamesByType("매입처"); // ★ 서버에 "매입처" 요청 (출고는 "매출처")
+}
+
+function loadStoreOptions(elementId) {
+    var select = document.getElementById(elementId);
+    if (!select) return;
+    
+    // 이미 목록을 불러왔다면 다시 부르지 않음 (중복 방지)
+    if (select.classList.contains('loaded')) return;
+
+    google.script.run.withSuccessHandler(function(list) {
+        select.innerHTML = "";
+        
+        var allStoresText = (typeof I18N !== "undefined" && typeof currentLang !== "undefined" && I18N[currentLang] && I18N[currentLang].store_all_stores) ? I18N[currentLang].store_all_stores : "전체 매장";
+        var selectPhText = (typeof I18N !== "undefined" && typeof currentLang !== "undefined" && I18N[currentLang] && I18N[currentLang].store_select_ph) ? I18N[currentLang].store_select_ph : "매장을 선택하세요";
+        if (elementId.includes('filter') || elementId.includes('hist') || elementId === 'eval-list-store') {
+            select.add(new Option(allStoresText, "All"));
+        } else {
+            select.add(new Option(selectPhText, ""));
+        }
+        
+        // <거래처> 시트에서 가져온 매장 목록 추가
+        list.forEach(function(s) {
+            select.add(new Option(s, s));
+        });
+        
+        select.classList.add('loaded'); // 로딩 완료 표시
+    }).getStoreListFromK();
+}
+
+/** 설정 페이지: 본사 정보 폼에 현재 값 로드 */
+function loadHeadOfficeInfo() {
+    google.script.run
+        .withSuccessHandler(function(info) {
+            if (!info) return;
+            var el = function(id) { return document.getElementById(id); };
+            if (el('settings-company-name')) el('settings-company-name').value = info.companyName || '';
+            if (el('settings-tax-id')) el('settings-tax-id').value = info.taxId || '';
+            if (el('settings-address')) el('settings-address').value = info.address || '';
+            if (el('settings-phone')) el('settings-phone').value = info.phone || '';
+            if (el('settings-bank-info')) el('settings-bank-info').value = info.bankInfo || '';
+        })
+        .withFailureHandler(function() {})
+        .getInvoiceCompanyInfo();
+}
+
+/** 설정 페이지: 본사 정보 저장 */
+function saveHeadOfficeInfo() {
+    var d = {
+        companyName: document.getElementById('settings-company-name') ? document.getElementById('settings-company-name').value : '',
+        taxId: document.getElementById('settings-tax-id') ? document.getElementById('settings-tax-id').value : '',
+        address: document.getElementById('settings-address') ? document.getElementById('settings-address').value : '',
+        phone: document.getElementById('settings-phone') ? document.getElementById('settings-phone').value : '',
+        bankInfo: document.getElementById('settings-bank-info') ? document.getElementById('settings-bank-info').value : ''
+    };
+    google.script.run
+        .withSuccessHandler(function(msg) { alert(msg); })
+        .withFailureHandler(function(err) { alert('저장 실패: ' + (err && err.message ? err.message : err)); })
+        .saveHeadOfficeInfoToSheet(d);
+}
+
+</script>

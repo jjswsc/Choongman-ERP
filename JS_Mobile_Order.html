@@ -1,0 +1,292 @@
+<script>
+
+ function renderLists(){
+      if(!allItems) return;
+      renderCategoryView("orderMenuWrapper", "order");
+      renderCategoryView("stockListWrapper", "stock");
+    }
+    
+    // [수정] 목록 그리기 (배열 데이터 인식 + 슬림 디자인)
+    function renderCategoryView(target, mode){
+      var w=document.getElementById(target); if(!w) return; 
+      var noItemMsg = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_no_items) ? I18N[currentLang].m_no_items : "등록된 품목이 없습니다. 품목 시트를 확인해 주세요.";
+      if (!allItems || allItems.length === 0) { w.innerHTML = "<div class=\"text-center text-muted py-4\">" + noItemMsg + "</div>"; return; }
+      w.innerHTML=""; 
+      
+      // ★ 핵심 수정: 데이터가 배열(Array)이므로 인덱스[1]로 카테고리를 찾습니다.
+      var g={}; 
+      allItems.forEach(r=>{ 
+        var cat = r[1]; // 1번 칸이 카테고리
+        if(!g[cat]) g[cat]=[]; 
+        g[cat].push(r); 
+      });
+      
+      // 카테고리 이름 가나다순 정렬
+      var keys = Object.keys(g).sort();
+
+      keys.forEach(c => {
+        var h=document.createElement("div"); h.className="category-header"; h.innerHTML=`<span>${c}</span><span>▼</span>`;
+        var con=document.createElement("div"); con.className="menu-container"; con.style.display="none"; 
+        var grid=document.createElement("div"); grid.className="menu-grid";
+        
+        g[c].forEach(r=>{
+          var i=document.createElement("div"); i.className="menu-item";
+          
+          // 데이터 매핑 (Code.gs V108 배열 순서 기준)
+          // 0:코드, 1:카테고리, 2:이름, 3:규격, 4:가격, 6:이미지, 8:안전재고, 9:과세
+          var code = r[0], name = r[2], spec = r[3], price = r[4], imgUrl = r[6], safe = r[8], tax = r[9];
+          var qty = Number(currentStock[code])||0;
+          
+          var isLow = qty <= Number(safe||0);
+          var badgeColor = isLow ? "#F44336" : "#4CAF50";
+          var badgeText = isLow ? `Low:${qty}` : `Stock:${qty}`;
+          
+          // 사진 버튼
+          var photoBtn = "";
+          if(imgUrl && imgUrl.length > 5) {
+             photoBtn = `<button class="btn-photo" onclick="event.stopPropagation(); window.open('${imgUrl}', '_blank')">📷</button>`;
+          }
+
+          var rightHtml = "";
+          if(mode==='order') rightHtml = `<div class="item-price">${Number(price).toLocaleString()} ฿</div>`;
+
+          i.innerHTML = `
+            <div class="item-left">
+               ${photoBtn}
+               <span class="item-name">${name}</span>
+               <span class="item-spec">${spec ? '('+spec+')' : ''}</span>
+               <span class="stock-badge" style="background:${badgeColor}">${badgeText}</span>
+               ${(tax==='면세') ? '<span class="stock-badge" style="background:#9E9E9E">면세</span>' : ''}
+            </div>
+            <div class="item-right">
+               ${rightHtml}
+            </div>
+          `;
+          
+          i.onclick=function(){ 
+             document.querySelectorAll('#'+target+' .menu-item').forEach(e=>e.classList.remove('selected')); 
+             i.classList.add('selected'); 
+             if(mode==='order') selectedItem={code:code, name:name, price:price, tax:tax}; 
+             else selectedUsageItem={code:code, name:name}; 
+          };
+          grid.appendChild(i);
+        });
+        
+        con.appendChild(grid); 
+        h.onclick=(function(ct){ return function(){ ct.style.display=ct.style.display==='none'?'block':'none'; } })(con);
+        w.appendChild(h); w.appendChild(con);
+      });
+    }
+
+    // [기타 탭 전환 및 기능들
+
+    function loadMyLeaveInfo() {
+      google.script.run.withSuccessHandler(function(d) {
+        document.getElementById("my-ann").innerText = d.stats.usedAnn;
+        document.getElementById("my-sick").innerText = d.stats.usedSick;
+        document.getElementById("my-remain").innerText = d.stats.remain;
+        var listDiv = document.getElementById("my-leave-list");
+        listDiv.innerHTML = "";
+        var noRec = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_no_records : "No records found.";
+        if (!d.history || d.history.length === 0) { listDiv.innerHTML = "<div style='text-align:center; color:#999; padding:10px;'>" + noRec + "</div>"; return; }
+        var texts = d.history.map(function(item){ return item.reason || ""; });
+        var targetLang = typeof getTranslationLang === "function" ? getTranslationLang() : "ko";
+        if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+          d.history.forEach(function(item){ renderLeaveItem(listDiv, item, item.reason); });
+          return;
+        }
+        google.script.run.withSuccessHandler(function(translated) {
+          d.history.forEach(function(item, i){ renderLeaveItem(listDiv, item, (translated && translated[i] !== undefined) ? translated[i] : item.reason); });
+        }).translateBatch(texts, targetLang);
+      }).getMyLeaveInfo(loggedInStore, loggedInUser);
+    }
+    function renderLeaveItem(listDiv, item, reasonText) {
+      var badgeColor = item.status === "승인" ? "#4CAF50" : (item.status === "반려" ? "#F44336" : "#9E9E9E");
+      listDiv.innerHTML += "<div class=\"leave-item\"><div><div style=\"font-weight:bold; font-size:14px;\">" + item.date + " (" + item.type + ")</div><div style=\"font-size:12px; color:#666;\">" + (reasonText || "") + "</div></div><span style=\"background:" + badgeColor + "; color:white; padding:3px 8px; border-radius:5px; font-size:11px;\">" + item.status + "</span></div>";
+    }
+    function switchOrderTab(t){ document.getElementById('order-new-area').style.display = t==='new'?'block':'none'; document.getElementById('order-hist-area').style.display = t==='hist'?'block':'none'; document.getElementById('ord-sub-new').classList.toggle('active', t==='new'); document.getElementById('ord-sub-hist').classList.toggle('active', t==='hist'); if(t==='hist') loadHistory(); }
+    
+    function changeLanguage() { }
+    function adjustQty(type, delta){ var id = type==='order' ? 'qtyInputOrder' : 'qtyInputUsage'; var el = document.getElementById(id); if(el) { var val = Number(el.value) + delta; if(val < 1) val = 1; el.value = val; } }
+    function addToCart(type){ var msg = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_select_item : "Select an Item first!"; if(type==='order'){ if(!selectedItem) return alert(msg); var q=document.getElementById("qtyInputOrder").value; cart.push({...selectedItem, qty:q}); updateCart('order'); } else { if(!selectedUsageItem) return alert(msg); var q=document.getElementById("qtyInputUsage").value; usageCart.push({...selectedUsageItem, qty:q}); updateCart('usage'); } }
+
+    /* [수정] updateCart 함수 내부의 계산 부분 (약 275~280줄) */
+function updateCart(type){ 
+  if(type==='order'){ 
+    var b=document.querySelector("#cartTable tbody"); 
+    b.innerHTML=""; 
+    var sub=0; 
+    var vatTotal=0; // 부가세 누적 변수
+
+    cart.forEach((i,idx)=>{ 
+      var t=i.price*i.qty; 
+      sub+=t; 
+      
+      // ★ 핵심: 과세(VAT) 품목만 7% 계산, 면세는 0원
+      var itemTax = (i.tax === '면세') ? 0 : Math.round(t * 0.07);
+      vatTotal += itemTax;
+
+      b.innerHTML+=`<tr><td>${i.name}<br><small style='color:#999'>${i.tax||'VAT'}</small></td><td class="text-right">${Number(i.price).toLocaleString()}</td><td class="text-right">${i.qty}</td><td class="text-right">${t.toLocaleString()}</td><td onclick="cart.splice(${idx},1);updateCart('order')">❌</td></tr>`; 
+    }); 
+    
+    // 합계 표시
+    document.getElementById("displaySub").textContent=sub.toLocaleString()+" ฿"; 
+    document.getElementById("displayVat").textContent=vatTotal.toLocaleString()+" ฿"; 
+    document.getElementById("displayTotal").textContent=(sub+vatTotal).toLocaleString()+" ฿"; 
+  } else { 
+    // (Usage 부분은 그대로 두세요)
+    var b=document.querySelector("#usageCartTable tbody"); b.innerHTML=""; usageCart.forEach((i,idx)=>{ b.innerHTML+=`<tr><td>${i.name}</td><td class="text-right">${i.qty}</td><td class="text-right" onclick="usageCart.splice(${idx},1);updateCart('usage')">❌</td></tr>`; }); 
+  } 
+}
+    function submitOrder(){ if(!cart.length) return; google.script.run.withSuccessHandler(m=>{alert(m); cart=[]; updateCart('order');}).processOrder({storeName:loggedInStore,userName:loggedInUser,cart:cart}); }
+
+  /** 배송 일자를 주문 일자와 동일한 yyyy-MM-dd 형식으로 변환 */
+  function formatDateOnly(val) {
+    if (!val) return "";
+    var s = String(val).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var d = new Date(val);
+    if (isNaN(d.getTime())) return s;
+    var y = d.getFullYear(), m = ("0" + (d.getMonth() + 1)).slice(-2), day = ("0" + d.getDate()).slice(-2);
+    return y + "-" + m + "-" + day;
+  }
+
+/* 1. 주문 내역 불러오기 */
+  function loadHistory() { 
+    var s = document.getElementById("hist-start").value; 
+    var e = document.getElementById("hist-end").value; 
+    var loadingTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_loading_items : "Loading...";
+    document.getElementById("history-list-container").innerHTML = loadingTxt; 
+    
+    google.script.run.withSuccessHandler(function(l) { 
+      var c = document.getElementById("history-list-container"); 
+      c.innerHTML = ""; 
+      var noHist = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_no_history : "No history";
+      if(!l || !l.length){ c.innerHTML = noHist; return; } 
+      var recTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive : "📥 Receive";
+      var statusInTransit = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_status_in_transit : "배송중";
+      var statusDelivered = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_status_delivered : "배송 완료";
+      l.forEach(function(o) { 
+        var deliveryStatusBadge = "";
+        if (o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료") deliveryStatusBadge = "<span class=\"status-badge st-Received\" style=\"margin-left:4px;\">" + statusDelivered + "</span>";
+        else if (o.status === "Approved" && o.deliveryStatus === "배송중") deliveryStatusBadge = "<span class=\"status-badge\" style=\"background:#2196F3;margin-left:4px;\">" + statusInTransit + "</span>";
+        var btn = o.status == "Approved" && o.deliveryStatus !== "배송완료" && o.deliveryStatus !== "배송 완료" ? "<button class=\"login-btn\" style=\"padding:8px;margin-top:5px;background:#E91E63;\" onclick=\"doReceive(" + o.id + ")\">" + recTxt + "</button>" : ""; 
+        var items = "<div class='detail-list'>"; 
+        o.items.forEach(function(i) { items += "<div class='detail-item'><span>" + i.name + "</span><span>x" + i.qty + "</span></div>"; }); 
+        items += "</div>"; 
+        var orderDateLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_order_date) ? I18N[currentLang].m_order_date : "주문 일자";
+        var deliveryDateLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_delivery_date) ? I18N[currentLang].m_delivery_date : "배송 일자";
+        var deliveryDateStr = formatDateOnly(o.deliveryDate);
+        var dateLine = "<span>" + orderDateLabel + " " + o.date + "</span>";
+        if (deliveryDateStr) dateLine += " <span style=\"margin-left:8px;\">" + deliveryDateLabel + " " + deliveryDateStr + "</span>";
+        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
+      }); 
+    }).getMyOrderHistory(loggedInStore, s, e); 
+  }
+
+  /* 2. 물품 수령 확인: 사진 촬영 + 파일 선택(첨부) 모달 */
+  var pendingReceiveOrderId = null;
+  var receivePhotoCurrentFile = null;
+  function doReceive(id) { 
+    pendingReceiveOrderId = id;
+    receivePhotoCurrentFile = null;
+    var title = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive_photo_title : "수령 확인";
+    var hint = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive_photo_hint : "물품 수령 확인을 위해 사진을 촬영하거나 파일을 선택해 주세요.";
+    var takePhoto = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_take_photo : "사진 촬영";
+    var chooseFile = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_choose_file : "파일 선택";
+    var cancelTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_cancel : "취소";
+    var confirmTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_confirm_receive : "수령 완료";
+    var box = document.getElementById("receive-photo-modal-box");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "receive-photo-modal-box";
+      box.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+      box.innerHTML = "<div id=\"receive-photo-modal\" style=\"background:#fff;border-radius:12px;padding:20px;max-width:360px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,0.2);\">" +
+        "<div id=\"receive-photo-title\" class=\"fw-bold mb-2\"></div>" +
+        "<p id=\"receive-photo-hint\" class=\"small text-muted mb-3\"></p>" +
+        "<div class=\"mb-3 d-flex gap-2 flex-wrap\">" +
+        "<input type=\"file\" id=\"receive-photo-camera\" accept=\"image/*\" capture=\"environment\" style=\"position:absolute;opacity:0;width:0;height:0;\">" +
+        "<input type=\"file\" id=\"receive-photo-file\" accept=\"image/*\" style=\"position:absolute;opacity:0;width:0;height:0;\">" +
+        "<button type=\"button\" id=\"receive-photo-btn-camera\" class=\"btn btn-outline-primary btn-sm flex-grow-1\"></button>" +
+        "<button type=\"button\" id=\"receive-photo-btn-file\" class=\"btn btn-outline-secondary btn-sm flex-grow-1\"></button>" +
+        "</div>" +
+        "<div id=\"receive-photo-preview\" class=\"mb-3\" style=\"min-height:60px;\"></div>" +
+        "<div class=\"d-flex gap-2 justify-content-end\">" +
+        "<button type=\"button\" id=\"receive-photo-cancel\" class=\"btn btn-outline-secondary btn-sm\"></button>" +
+        "<button type=\"button\" id=\"receive-photo-submit\" class=\"btn btn-primary btn-sm\"></button></div></div>";
+      document.body.appendChild(box);
+      document.getElementById("receive-photo-cancel").onclick = function() { box.style.display = "none"; pendingReceiveOrderId = null; receivePhotoCurrentFile = null; };
+      function onFileSelected(file) {
+        receivePhotoCurrentFile = file;
+        var preview = document.getElementById("receive-photo-preview");
+        preview.innerHTML = "";
+        if (file) {
+          var img = document.createElement("img");
+          img.style.maxWidth = "100%"; img.style.maxHeight = "120px"; img.style.borderRadius = "8px";
+          img.src = URL.createObjectURL(file);
+          preview.appendChild(img);
+        }
+      }
+      document.getElementById("receive-photo-camera").onchange = function() { if (this.files && this.files[0]) onFileSelected(this.files[0]); };
+      document.getElementById("receive-photo-file").onchange = function() { if (this.files && this.files[0]) onFileSelected(this.files[0]); };
+      document.getElementById("receive-photo-btn-camera").onclick = function() { document.getElementById("receive-photo-camera").click(); };
+      document.getElementById("receive-photo-btn-file").onclick = function() { document.getElementById("receive-photo-file").click(); };
+      document.getElementById("receive-photo-submit").onclick = function() {
+        if (!receivePhotoCurrentFile) {
+          var msg = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive_photo_required : "사진을 촬영하거나 선택해 주세요.";
+          alert(msg); return;
+        }
+        var file = receivePhotoCurrentFile;
+        function sendToServer(base64) {
+          box.style.display = "none";
+          document.getElementById("receive-photo-modal-box").style.display = "none";
+          var doneMsg = (typeof I18N !== "undefined" && I18N[currentLang]) ? (I18N[currentLang].m_receive_done || "완료되었습니다.") : "완료되었습니다.";
+          google.script.run.withSuccessHandler(function(r) {
+            alert(r && r.trim() ? r : doneMsg);
+            loadHistory();
+            refreshStock();
+          }).withFailureHandler(function(err) {
+            alert(err && err.message ? err.message : "처리 중 오류가 났습니다.");
+          }).processOrderReceive(pendingReceiveOrderId, base64);
+          pendingReceiveOrderId = null;
+          receivePhotoCurrentFile = null;
+          document.getElementById("receive-photo-camera").value = "";
+          document.getElementById("receive-photo-file").value = "";
+        }
+        function compressAndSend() {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            var img = new Image();
+            img.onerror = function() { sendToServer(e.target.result); };
+            img.onload = function() {
+              var maxPx = 400, w = img.width, h = img.height;
+              if (w > maxPx || h > maxPx) {
+                if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; } else { w = Math.round(w * maxPx / h); h = maxPx; }
+              }
+              var canvas = document.createElement("canvas");
+              canvas.width = w; canvas.height = h;
+              var ctx = canvas.getContext("2d");
+              ctx.drawImage(img, 0, 0, w, h);
+              try { sendToServer(canvas.toDataURL("image/jpeg", 0.5)); } catch (err) { sendToServer(e.target.result); }
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+        compressAndSend();
+      };
+    }
+    document.getElementById("receive-photo-title").textContent = title;
+    document.getElementById("receive-photo-hint").textContent = hint;
+    document.getElementById("receive-photo-btn-camera").textContent = takePhoto;
+    document.getElementById("receive-photo-btn-file").textContent = chooseFile;
+    document.getElementById("receive-photo-cancel").textContent = cancelTxt;
+    document.getElementById("receive-photo-submit").textContent = confirmTxt;
+    document.getElementById("receive-photo-camera").value = "";
+    document.getElementById("receive-photo-file").value = "";
+    document.getElementById("receive-photo-preview").innerHTML = "";
+    box.style.display = "flex";
+  }
+
+
+ </script>

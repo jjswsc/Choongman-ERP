@@ -1,0 +1,111 @@
+<style>
+    /* 기존 스타일 유지 */
+    body { font-family: 'Poppins', 'Noto Sans KR', sans-serif; background: #f5f5f5; margin:0; padding:0; color:#333; -webkit-tap-highlight-color: transparent; }
+    button, .menu-item, .category-header, .btn-attend, .login-btn { transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; user-select: none; }
+    button:active, .menu-item:active, .category-header:active, .btn-attend:active, .login-btn:active { transform: scale(0.94); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); filter: brightness(0.9); }
+    #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background-color: #FFE0B2; padding: 20px; box-sizing: border-box; }
+    .brand-logo-large { color: #E65100; font-size: 32px; font-weight: 900; margin-bottom: 20px; text-transform: uppercase; }
+    .login-card { background: white; width: 100%; max-width: 350px; border-radius: 20px; padding: 30px 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+    .login-input { width: 100%; padding: 15px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; box-sizing: border-box; }
+    .login-btn { width: 100%; padding: 16px; background: #E65100; color: white; border: none; border-radius: 12px; font-weight: 800; font-size: 16px; margin-top: 10px; box-shadow: 0 4px 0 #bf360c; }
+    .login-btn:active { box-shadow: none; transform: translateY(4px); }
+    #app-screen { display: none; }
+    .container { background: white; max-width: 800px; margin: 0 auto; min-height: 100vh; padding: 20px; box-sizing: border-box; }
+    .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+    .app-title { font-size: 18px; font-weight: 800; color: #E65100; }
+    .nav-tabs { display: flex; margin-bottom: 20px; background: #FFF3E0; border-radius: 12px; padding: 4px; overflow-x: auto; }
+    .nav-item { flex: 1; text-align: center; padding: 12px; border-radius: 10px; font-weight: 700; cursor: pointer; color: #888; font-size: 12px; white-space: nowrap; }
+    .nav-item.active { background: white; color: #E65100; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .category-header { margin-top: 15px; padding: 15px; background: #FFF8E1; border: 1px solid #FFE0B2; border-radius: 12px; font-weight: 700; display: flex; justify-content: space-between; color: #333; cursor: pointer; }
+    .menu-container { display: none; }
+    /* [수정] 바(Bar) 형태 디자인 & 사진 버튼 스타일 */
+    .menu-grid { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    
+ /* [수정] 슬림한 바(Bar) 디자인 */
+    .menu-item { 
+      display: flex; justify-content: space-between; align-items: center; 
+      padding: 8px 10px; /* 여백 축소 */
+      background: white; border: 1px solid #eee; border-radius: 8px; 
+      box-shadow: 0 1px 1px rgba(0,0,0,0.05); position: relative; 
+      text-align: left;
+      min-height: 40px; /* 최소 높이 축소 */
+    }
+    /* 내부 배치용 (왼쪽: 정보 / 오른쪽: 가격,버튼) */
+    /* [수정] 한 줄로 나열하기 위한 스타일 */
+    .item-left { 
+      flex: 1; 
+      padding-right: 10px; 
+      /* 내용물을 가로로 배치 */
+      display: flex; 
+      flex-wrap: wrap; 
+      align-items: center; 
+      gap: 6px; /* 글자 사이 간격 */
+    }
+    
+    .item-name { font-size: 15px; font-weight: 700; color: #333; margin: 0; }
+  
+    .item-spec { font-size: 13px; color: #888; margin: 0; }
+    
+    .stock-badge { 
+      font-size: 10px; 
+      padding: 1px 5px; 
+      border-radius: 4px; 
+      color: white; 
+      font-weight: bold; 
+      display: inline-block;
+      white-space: nowrap; /* 뱃지 글씨 줄바꿈 방지 */
+    }
+    
+    .item-right { text-align: right; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; min-width: 80px; }
+    .item-price { font-size: 15px; font-weight: 800; color: #d32f2f; }    
+   /* 사진 버튼 (작고 슬림하게) */
+    .btn-photo { 
+      background: #546E7A; color: white; border: none; padding: 2px 6px; 
+      border-radius: 4px; font-size: 10px; cursor: pointer; display: inline-block;
+      margin-right: 6px; white-space: nowrap; vertical-align: middle;
+    }
+    
+    /* 기존 이미지 박스 숨김 (속도 향상) */
+    .menu-img-box, .menu-img, .stock-badge-large { display: none !important; }
+    .menu-item.selected { border: 2px solid #E65100; background: #FFF3E0; }
+    .menu-img-box { height: 110px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .menu-img { width: 100%; height: 100%; object-fit: cover; }
+    .menu-info-box { padding: 10px; text-align: left; }
+    .menu-price { color:#d32f2f; font-weight:bold; display:block; text-align:right; margin-top:5px; }
+    .input-area { display: flex; align-items: center; gap: 10px; background: white; padding: 15px; position: sticky; bottom: 20px; border-radius: 15px; box-shadow: 0 -5px 10px rgba(0,0,0,0.05); z-index: 100; }
+    .btn-add { flex: 1; background: #E65100; color: white; border: none; border-radius: 10px; font-weight: bold; height: 45px; box-shadow: 0 4px 0 #e65100; }
+    .btn-add:active { box-shadow: none; transform: translateY(4px); }
+    .stepper-btn { width: 40px; height: 40px; background: #fff; border: 1px solid #ddd; border-radius: 8px; font-weight: bold; font-size: 20px; color: #E65100; display:flex; align-items:center; justify-content:center; box-shadow: 0 2px 0 #ccc; }
+    .stepper-btn:active { box-shadow: none; transform: translateY(2px); }
+    .stepper-input { width: 50px; text-align: center; border: none; font-size: 18px; font-weight: bold; background: transparent; }
+    .stock-badge-large { position: absolute; top: 0; left: 0; width: 100%; background: rgba(230, 81, 0, 0.9); color: white; padding: 4px 0; font-size: 14px; font-weight: 800; z-index: 10; }
+    .stock-total-box { background: #333; color: white; padding: 20px; border-radius: 12px; margin-top: 25px; margin-bottom: 20px; text-align: center; }
+    .stock-total-label { font-size: 13px; opacity: 0.8; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; }
+    .stock-total-value { font-size: 24px; font-weight: 900; color: #FFCC80; }
+    .history-card { border: 1px solid #eee; border-radius: 12px; padding: 15px; margin-bottom: 10px; background: white; }
+    .history-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; font-size: 14px; }
+    .status-badge { padding: 3px 8px; border-radius: 5px; font-size: 11px; color: white; }
+    .st-Pending { background: #9E9E9E; } .st-Approved { background: #2196F3; } .st-Received { background: #4CAF50; }
+    .detail-list { margin-top: 10px; background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px dashed #ddd; }
+    .detail-item { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
+    .usage-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+    .usage-table td { padding: 10px; border-bottom: 1px solid #eee; }
+    .usage-table tr:last-child td { border-bottom: none; }
+    .sub-tabs { display:flex; margin-bottom:15px; border-bottom:2px solid #eee; }
+    .sub-tab { flex:1; text-align:center; padding:10px; cursor:pointer; color:#888; font-weight:bold; }
+    .sub-tab.active { color:#E65100; border-bottom:2px solid #E65100; }
+    .btn-attend { padding: 15px; border: none; border-radius: 12px; font-weight: 800; color: white; width: 48%; font-size: 15px; box-shadow: 0 4px 0 rgba(0,0,0,0.2); transition: all 0.1s; position: relative; top: 0; }
+    .btn-attend:active { box-shadow: none; top: 4px; transform: scale(0.98); }
+    .hidden { display: none !important; }
+    .vat-row { display: flex; justify-content: space-between; font-size: 13px; color: #666; margin-bottom: 3px; }
+    .grand-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 800; color: #E65100; border-top: 1px dashed #ccc; padding-top: 10px; }
+    .today-log-box { background: #fff3e0; border-radius: 12px; padding: 15px; margin-top: 20px; margin-bottom: 20px; }
+    .log-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+    .log-table td { padding: 8px; border-bottom: 1px solid #ffe0b2; }
+    .leave-stats-table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px; }
+    .leave-stats-table th { background: #eee; padding: 8px; border: 1px solid #ddd; text-align: center; }
+    .leave-stats-table td { padding: 8px; border: 1px solid #ddd; text-align: center; font-weight: bold; }
+    .my-leave-history { margin-top: 15px; max-height: 200px; overflow-y: auto; }
+    .leave-item { padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+    #loading { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; justify-content:center; align-items:center; }
+  </style>

@@ -1,0 +1,176 @@
+<script>
+
+ function renderLists(){
+      if(!allItems) return;
+      renderCategoryView("orderMenuWrapper", "order");
+      renderCategoryView("stockListWrapper", "stock");
+    }
+    
+    // [수정] 목록 그리기 (배열 데이터 인식 + 슬림 디자인)
+    function renderCategoryView(target, mode){
+      var w=document.getElementById(target); if(!w) return; w.innerHTML=""; 
+      
+      // ★ 핵심 수정: 데이터가 배열(Array)이므로 인덱스[1]로 카테고리를 찾습니다.
+      var g={}; 
+      allItems.forEach(r=>{ 
+        var cat = r[1]; // 1번 칸이 카테고리
+        if(!g[cat]) g[cat]=[]; 
+        g[cat].push(r); 
+      });
+      
+      // 카테고리 이름 가나다순 정렬
+      var keys = Object.keys(g).sort();
+
+      keys.forEach(c => {
+        var h=document.createElement("div"); h.className="category-header"; h.innerHTML=`<span>${c}</span><span>▼</span>`;
+        var con=document.createElement("div"); con.className="menu-container"; con.style.display="none"; 
+        var grid=document.createElement("div"); grid.className="menu-grid";
+        
+        g[c].forEach(r=>{
+          var i=document.createElement("div"); i.className="menu-item";
+          
+          // 데이터 매핑 (Code.gs V108 배열 순서 기준)
+          // 0:코드, 1:카테고리, 2:이름, 3:규격, 4:가격, 6:이미지, 8:안전재고, 9:과세
+          var code = r[0], name = r[2], spec = r[3], price = r[4], imgUrl = r[6], safe = r[8], tax = r[9];
+          var qty = Number(currentStock[code])||0;
+          
+          var isLow = qty <= Number(safe||0);
+          var badgeColor = isLow ? "#F44336" : "#4CAF50";
+          var badgeText = isLow ? `Low:${qty}` : `Stock:${qty}`;
+          
+          // 사진 버튼
+          var photoBtn = "";
+          if(imgUrl && imgUrl.length > 5) {
+             photoBtn = `<button class="btn-photo" onclick="event.stopPropagation(); window.open('${imgUrl}', '_blank')">📷</button>`;
+          }
+
+          var rightHtml = "";
+          if(mode==='order') rightHtml = `<div class="item-price">${Number(price).toLocaleString()} ฿</div>`;
+
+          i.innerHTML = `
+            <div class="item-left">
+               ${photoBtn}
+               <span class="item-name">${name}</span>
+               <span class="item-spec">${spec ? '('+spec+')' : ''}</span>
+               <span class="stock-badge" style="background:${badgeColor}">${badgeText}</span>
+               ${(tax==='면세') ? '<span class="stock-badge" style="background:#9E9E9E">면세</span>' : ''}
+            </div>
+            <div class="item-right">
+               ${rightHtml}
+            </div>
+          `;
+          
+          i.onclick=function(){ 
+             document.querySelectorAll('#'+target+' .menu-item').forEach(e=>e.classList.remove('selected')); 
+             i.classList.add('selected'); 
+             if(mode==='order') selectedItem={code:code, name:name, price:price, tax:tax}; 
+             else selectedUsageItem={code:code, name:name}; 
+          };
+          grid.appendChild(i);
+        });
+        
+        con.appendChild(grid); 
+        h.onclick=(function(ct){ return function(){ ct.style.display=ct.style.display==='none'?'block':'none'; } })(con);
+        w.appendChild(h); w.appendChild(con);
+      });
+    }
+
+    // [기타 탭 전환 및 기능들
+
+    function loadMyLeaveInfo() {
+      google.script.run.withSuccessHandler(function(d) {
+        document.getElementById("my-ann").innerText = d.stats.usedAnn;
+        document.getElementById("my-sick").innerText = d.stats.usedSick;
+        document.getElementById("my-remain").innerText = d.stats.remain;
+        var listDiv = document.getElementById("my-leave-list");
+        listDiv.innerHTML = "";
+        var noRec = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_no_records : "No records found.";
+        if (!d.history || d.history.length === 0) { listDiv.innerHTML = "<div style='text-align:center; color:#999; padding:10px;'>" + noRec + "</div>"; return; }
+        var texts = d.history.map(function(item){ return item.reason || ""; });
+        var targetLang = typeof getTranslationLang === "function" ? getTranslationLang() : "ko";
+        if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+          d.history.forEach(function(item){ renderLeaveItem(listDiv, item, item.reason); });
+          return;
+        }
+        google.script.run.withSuccessHandler(function(translated) {
+          d.history.forEach(function(item, i){ renderLeaveItem(listDiv, item, (translated && translated[i] !== undefined) ? translated[i] : item.reason); });
+        }).translateBatch(texts, targetLang);
+      }).getMyLeaveInfo(loggedInStore, loggedInUser);
+    }
+    function renderLeaveItem(listDiv, item, reasonText) {
+      var badgeColor = item.status === "승인" ? "#4CAF50" : (item.status === "반려" ? "#F44336" : "#9E9E9E");
+      listDiv.innerHTML += "<div class=\"leave-item\"><div><div style=\"font-weight:bold; font-size:14px;\">" + item.date + " (" + item.type + ")</div><div style=\"font-size:12px; color:#666;\">" + (reasonText || "") + "</div></div><span style=\"background:" + badgeColor + "; color:white; padding:3px 8px; border-radius:5px; font-size:11px;\">" + item.status + "</span></div>";
+    }
+    function switchOrderTab(t){ document.getElementById('order-new-area').style.display = t==='new'?'block':'none'; document.getElementById('order-hist-area').style.display = t==='hist'?'block':'none'; document.getElementById('ord-sub-new').classList.toggle('active', t==='new'); document.getElementById('ord-sub-hist').classList.toggle('active', t==='hist'); if(t==='hist') loadHistory(); }
+    
+    function changeLanguage() { }
+    function adjustQty(type, delta){ var id = type==='order' ? 'qtyInputOrder' : 'qtyInputUsage'; var el = document.getElementById(id); if(el) { var val = Number(el.value) + delta; if(val < 1) val = 1; el.value = val; } }
+    function addToCart(type){ var msg = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_select_item : "Select an Item first!"; if(type==='order'){ if(!selectedItem) return alert(msg); var q=document.getElementById("qtyInputOrder").value; cart.push({...selectedItem, qty:q}); updateCart('order'); } else { if(!selectedUsageItem) return alert(msg); var q=document.getElementById("qtyInputUsage").value; usageCart.push({...selectedUsageItem, qty:q}); updateCart('usage'); } }
+
+    /* [수정] updateCart 함수 내부의 계산 부분 (약 275~280줄) */
+function updateCart(type){ 
+  if(type==='order'){ 
+    var b=document.querySelector("#cartTable tbody"); 
+    b.innerHTML=""; 
+    var sub=0; 
+    var vatTotal=0; // 부가세 누적 변수
+
+    cart.forEach((i,idx)=>{ 
+      var t=i.price*i.qty; 
+      sub+=t; 
+      
+      // ★ 핵심: 과세(VAT) 품목만 7% 계산, 면세는 0원
+      var itemTax = (i.tax === '면세') ? 0 : Math.round(t * 0.07);
+      vatTotal += itemTax;
+
+      b.innerHTML+=`<tr><td>${i.name}<br><small style='color:#999'>${i.tax||'VAT'}</small></td><td class="text-right">${Number(i.price).toLocaleString()}</td><td class="text-right">${i.qty}</td><td class="text-right">${t.toLocaleString()}</td><td onclick="cart.splice(${idx},1);updateCart('order')">❌</td></tr>`; 
+    }); 
+    
+    // 합계 표시
+    document.getElementById("displaySub").textContent=sub.toLocaleString()+" ฿"; 
+    document.getElementById("displayVat").textContent=vatTotal.toLocaleString()+" ฿"; 
+    document.getElementById("displayTotal").textContent=(sub+vatTotal).toLocaleString()+" ฿"; 
+  } else { 
+    // (Usage 부분은 그대로 두세요)
+    var b=document.querySelector("#usageCartTable tbody"); b.innerHTML=""; usageCart.forEach((i,idx)=>{ b.innerHTML+=`<tr><td>${i.name}</td><td class="text-right">${i.qty}</td><td class="text-right" onclick="usageCart.splice(${idx},1);updateCart('usage')">❌</td></tr>`; }); 
+  } 
+}
+    function submitOrder(){ if(!cart.length) return; google.script.run.withSuccessHandler(m=>{alert(m); cart=[]; updateCart('order');}).processOrder({storeName:loggedInStore,userName:loggedInUser,cart:cart}); }
+
+/* 1. 주문 내역 불러오기 */
+  function loadHistory() { 
+    var s = document.getElementById("hist-start").value; 
+    var e = document.getElementById("hist-end").value; 
+    var loadingTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_loading_items : "Loading...";
+    document.getElementById("history-list-container").innerHTML = loadingTxt; 
+    
+    google.script.run.withSuccessHandler(function(l) { 
+      var c = document.getElementById("history-list-container"); 
+      c.innerHTML = ""; 
+      var noHist = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_no_history : "No history";
+      if(!l || !l.length){ c.innerHTML = noHist; return; } 
+      var recTxt = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive : "📥 Receive";
+      l.forEach(function(o) { 
+        var btn = o.status == "Approved" ? "<button class=\"login-btn\" style=\"padding:8px;margin-top:5px;background:#E91E63;\" onclick=\"doReceive(" + o.id + ")\">" + recTxt + "</button>" : ""; 
+        var items = "<div class='detail-list'>"; 
+        o.items.forEach(function(i) { items += "<div class='detail-item'><span>" + i.name + "</span><span>x" + i.qty + "</span></div>"; }); 
+        items += "</div>"; 
+        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\"><span>" + o.date + "</span><span class=\"status-badge st-" + o.status + "\">" + o.status + "</span></div>" + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
+      }); 
+    }).getMyOrderHistory(loggedInStore, s, e); 
+  }
+
+  /* 2. 물품 수령 확인 처리 */
+  function doReceive(id) { 
+    var msg = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_receive_confirm : "Receive items?";
+    if(confirm(msg)) {
+      google.script.run.withSuccessHandler(r => {
+        alert(r);
+        loadHistory();   // 내역 새로고침
+        refreshStock();  // 재고 현황판 새로고침
+      }).processOrderReceive(id); 
+    }
+  }
+
+
+ </script>

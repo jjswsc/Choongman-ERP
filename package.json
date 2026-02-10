@@ -1,0 +1,11 @@
+{
+  "name": "choongman-erp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "clasp-push": "clasp push"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.0.0"
+  }
+}

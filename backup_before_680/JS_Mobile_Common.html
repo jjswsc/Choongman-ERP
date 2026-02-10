@@ -1,0 +1,556 @@
+<script>
+  /**
+   * 1. 전역 변수 설정 (시스템 전체 공유)
+   */
+  var loginData = {}, allItems = [], cart = [], usageCart = [], currentStock = {}, 
+      loggedInStore = "", loggedInUser = "", loggedInRole = "", 
+      selectedItem = null, selectedUsageItem = null, myNotices = [];
+
+  /** 모바일 다국어: 로그인 시 선택한 언어 유지 (sessionStorage) */
+  var currentLang = (typeof sessionStorage !== "undefined" && sessionStorage.getItem("cm_lang")) || "ko";
+
+  /** 모바일 전용 다국어 맵 (ko, en, th, mm, la) */
+  var I18N = {
+    ko: {
+      login_title: "CM ERP SYSTEM", btn_login: "로그인", m_processing: "처리 중...",
+      m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)",
+      m_logout: "로그아웃", m_tab_home: "홈", m_tab_order: "주문", m_tab_stock: "사용", m_tab_hr: "인사", m_tab_visit: "방문", m_tab_admin: "관리",
+      m_welcome: "환영합니다!", m_welcome_sub: "오늘도 안전하고 즐겁게 근무하세요!", m_notice_board: "공지사항", m_loading_notices: "공지 불러오는 중...", m_no_notices: "공지사항이 없습니다.",
+      m_ord_new: "신규 주문", m_ord_hist: "주문 내역", m_loading_items: "불러오는 중...", m_add_cart: "담기",
+      m_item: "품목", m_price: "단가", m_qty: "수량", m_sub: "소계", m_subtotal: "소계:", m_vat: "VAT (7%):", m_total: "합계:", m_place_order: "주문하기", m_search_hist: "내역 조회",
+      m_use_new: "사용 입력", m_use_hist: "내역", m_add_usage: "사용 추가", m_items_used: "사용 품목", m_confirm_usage: "사용 확정", m_search_period: "기간 조회",
+      m_user: "사용자", m_att_in: "☀️ 출근", m_att_out: "🌙 퇴근", m_break: "☕ 휴식", m_resume: "▶ 재개",
+      m_today_record: "오늘 기록", m_att_help: "위 버튼을 눌러 출퇴근을 기록하세요.", m_leave_stats: "휴가 현황 (올해)",
+      m_used_ann: "연차 사용", m_used_sick: "병가 사용", m_remain: "잔여", m_leave_req: "휴가 신청",
+      m_annual: "연차", m_half: "반차", m_sick: "병가", m_reason_ph: "사유", m_submit_req: "신청하기", m_req_hist: "신청 내역",
+      m_visit_title: "매장 방문", m_visit_sub: "현장 지원 및 교육 활동을 기록하세요.", m_visit_store: "방문 매장 선택", m_visit_purpose: "방문 목적",
+      m_purpose_inspect: "🔍 정기 점검 (Inspection)", m_purpose_training: "👨‍🏫 직원 교육 (Training)", m_purpose_urgent: "🚨 긴급 지원 (Urgent Support)", m_purpose_meeting: "🤝 매장 미팅 (Meeting)", m_purpose_etc: "ETC",
+      m_visit_start: "방문 시작 (Check-in)", m_visit_end: "방문 종료 (Check-out)", m_today_visit_log: "Today's Visit Log", m_loading_visit: "기록을 조회 중입니다...",
+      m_time: "시간", m_store: "매장", m_type: "구분", m_duration: "체류", m_modal_later: "다음에", m_modal_confirm: "확인함 (Confirm)",
+      m_no_visit: "오늘 기록이 없습니다.", m_select_store_name: "매장과 이름을 선택하세요.", m_login_fail: "로그인 실패: PIN 번호를 확인하세요.",
+      m_no_history: "No history", m_no_records: "No records found.", m_receive: "📥 Receive", m_receive_confirm: "Receive items?", m_select_item: "Select an Item first!",
+      m_app_title: "충만치킨", m_admin_sub: "공지 발송, 연차·근태 승인", m_admin_notice: "📢 공지사항 발송", m_admin_att: "📅 근태 승인 (지각/OT)",
+      label_subject: "제목", label_content: "내용", label_all: "전체", leave_wait: "대기", btn_query: "조회"
+    },
+    en: {
+      login_title: "CM ERP SYSTEM", btn_login: "Login", m_processing: "Processing...",
+      m_select_store: "Select Store...", m_select_name: "Select Name...", m_pin_ph: "Password (PIN)",
+      m_logout: "Logout", m_tab_home: "Home", m_tab_order: "Order", m_tab_stock: "Usage", m_tab_hr: "HR", m_tab_visit: "Visit", m_tab_admin: "Admin",
+      m_welcome: "Welcome!", m_welcome_sub: "Work safe and enjoy your day!", m_notice_board: "Notice Board", m_loading_notices: "Loading...", m_no_notices: "No notices.",
+      m_ord_new: "New Order", m_ord_hist: "Order History", m_loading_items: "Loading...", m_add_cart: "Add to Cart",
+      m_item: "Item", m_price: "Price", m_qty: "Qty", m_sub: "Sub", m_subtotal: "Subtotal:", m_vat: "VAT (7%):", m_total: "Total:", m_place_order: "Place Order", m_search_hist: "Search History",
+      m_use_new: "New Usage", m_use_hist: "History", m_add_usage: "Add Usage", m_items_used: "Items Used", m_confirm_usage: "Confirm Usage", m_search_period: "Search Period",
+      m_user: "User", m_att_in: "☀️ IN", m_att_out: "🌙 OUT", m_break: "☕ Break", m_resume: "▶ Resume",
+      m_today_record: "Today's Record", m_att_help: "Tap buttons to record attendance.", m_leave_stats: "My Vacation Stats (This Year)",
+      m_used_ann: "Used Annual", m_used_sick: "Used Sick", m_remain: "Remaining", m_leave_req: "Leave Request",
+      m_annual: "Annual Leave", m_half: "Half-Day", m_sick: "Sick Leave", m_reason_ph: "Reason", m_submit_req: "Submit Request", m_req_hist: "Request History",
+      m_visit_title: "Store Visit", m_visit_sub: "Record support and training.", m_visit_store: "Select Store", m_visit_purpose: "Purpose",
+      m_purpose_inspect: "🔍 Inspection", m_purpose_training: "👨‍🏫 Training", m_purpose_urgent: "🚨 Urgent", m_purpose_meeting: "🤝 Meeting", m_purpose_etc: "ETC",
+      m_visit_start: "Check-in", m_visit_end: "Check-out", m_today_visit_log: "Today's Visit Log", m_loading_visit: "Loading...",
+      m_time: "Time", m_store: "Store", m_type: "Type", m_duration: "Duration", m_modal_later: "Later", m_modal_confirm: "Confirm",
+      m_no_visit: "No visits today.", m_select_store_name: "Select Store and Name", m_login_fail: "Login Failed: Check PIN.",
+      m_no_history: "No history", m_no_records: "No records found.", m_receive: "📥 Receive", m_receive_confirm: "Receive items?", m_select_item: "Select an Item first!",
+      m_app_title: "Choongman Chicken", m_admin_sub: "Notice, Leave & Attendance approval", m_admin_notice: "📢 Send Notice", m_admin_att: "📅 Attendance (Late/OT) approval",
+      label_subject: "Subject", label_content: "Content", label_all: "All", leave_wait: "Pending", btn_query: "Query"
+    },
+    th: {
+      login_title: "CM ERP SYSTEM", btn_login: "เข้าสู่ระบบ", m_processing: "กำลังดำเนินการ...",
+      m_select_store: "เลือกสาขา", m_select_name: "เลือกชื่อ", m_pin_ph: "รหัสผ่าน (PIN)",
+      m_logout: "ออกจากระบบ", m_tab_home: "หน้าแรก", m_tab_order: "ออเดอร์", m_tab_stock: "การใช้งาน", m_tab_hr: "บุคลากร", m_tab_visit: "เยี่ยมสาขา", m_tab_admin: "แอดมิน",
+      m_welcome: "ยินดีต้อนรับ!", m_welcome_sub: "ทำงานอย่างปลอดภัยและสนุก!", m_notice_board: "ประกาศ", m_loading_notices: "กำลังโหลด...", m_no_notices: "ไม่มีประกาศ",
+      m_ord_new: "ออเดอร์ใหม่", m_ord_hist: "ประวัติ", m_loading_items: "กำลังโหลด...", m_add_cart: "เพิ่มลงตะกร้า",
+      m_item: "รายการ", m_price: "ราคา", m_qty: "จำนวน", m_sub: "ยอด", m_subtotal: "ยอดรวม:", m_vat: "VAT (7%):", m_total: "รวม:", m_place_order: "สั่งซื้อ", m_search_hist: "ค้นหาประวัติ",
+      m_use_new: "ใช้ใหม่", m_use_hist: "ประวัติ", m_add_usage: "เพิ่มการใช้งาน", m_items_used: "ที่ใช้แล้ว", m_confirm_usage: "ยืนยัน", m_search_period: "ค้นหาช่วง",
+      m_user: "ผู้ใช้", m_att_in: "☀️ เข้างาน", m_att_out: "🌙 ออกงาน", m_break: "☕ พัก", m_resume: "▶ กลับทำงาน",
+      m_today_record: "บันทึกวันนี้", m_att_help: "กดปุ่มเพื่อบันทึกการเข้างาน", m_leave_stats: "สถิติลางาน (ปีนี้)",
+      m_used_ann: "ใช้ลาประจำปี", m_used_sick: "ใช้ลาป่วย", m_remain: "เหลือ", m_leave_req: "ขอลางาน",
+      m_annual: "ลาประจำปี", m_half: "ล half-day", m_sick: "ลาป่วย", m_reason_ph: "เหตุผล", m_submit_req: "ส่งคำขอ", m_req_hist: "ประวัติคำขอ",
+      m_visit_title: "เยี่ยมสาขา", m_visit_sub: "บันทึกการสนับสนุนและฝึกอบรม", m_visit_store: "เลือกสาขา", m_visit_purpose: "วัตถุประสงค์",
+      m_purpose_inspect: "🔍 ตรวจสอบ", m_purpose_training: "👨‍🏫 ฝึกอบรม", m_purpose_urgent: "🚨 ด่วน", m_purpose_meeting: "🤝 ประชุม", m_purpose_etc: "อื่นๆ",
+      m_visit_start: "เช็คอิน", m_visit_end: "เช็คเอาท์", m_today_visit_log: "บันทึกการเยี่ยมวันนี้", m_loading_visit: "กำลังโหลด...",
+      m_time: "เวลา", m_store: "สาขา", m_type: "ประเภท", m_duration: "ระยะเวลา", m_modal_later: "ภายหลัง", m_modal_confirm: "ยืนยัน",
+      m_no_visit: "ไม่มีบันทึกวันนี้", m_select_store_name: "เลือกสาขาและชื่อ", m_login_fail: "เข้าสู่ระบบไม่สำเร็จ: ตรวจสอบ PIN",
+      m_no_history: "ไม่มีประวัติ", m_no_records: "ไม่พบข้อมูล", m_receive: "📥 รับของ", m_receive_confirm: "รับของ?", m_select_item: "เลือกรายการก่อน!",
+      m_app_title: "Choongman Chicken", m_admin_sub: "ประกาศ, อนุมัติลางานและเข้างาน", m_admin_notice: "📢 ส่งประกาศ", m_admin_att: "📅 อนุมัติเข้างาน (สาย/OT)",
+      label_subject: "หัวข้อ", label_content: "เนื้อหา", label_all: "ทั้งหมด", leave_wait: "รอ", btn_query: "ค้นหา"
+    },
+    mm: {
+      login_title: "CM ERP SYSTEM", btn_login: "ဝင်ရောက်မည်", m_processing: "လုပ်ဆောင်နေသည်...",
+      m_select_store: "ဆိုင်ရွေးပါ", m_select_name: "အမည်ရွေးပါ", m_pin_ph: "လျှို့ဝှက်နံပါတ် (PIN)",
+      m_logout: "ထွက်မည်", m_tab_home: "ပင်မ", m_tab_order: "အော်ဒါ", m_tab_stock: "အသုံး", m_tab_hr: "အရပ်", m_tab_visit: "သွားရောက်", m_tab_admin: "အက်ဒ်မင်",
+      m_welcome: "ကြိုဆိုပါသည်!", m_welcome_sub: "ဘေးကင်းစွာအလုပ်လုပ်ပါ!", m_notice_board: "ကြေညာချက်", m_loading_notices: "ချိတ်ဆောင်နေသည်...", m_no_notices: "ကြေညာချက်မရှိ",
+      m_ord_new: "အော်ဒါအသစ်", m_ord_hist: "မှတ်တမ်း", m_loading_items: "ချိတ်ဆောင်နေသည်...", m_add_cart: "ခြင်းတောင်းထည့်မည်",
+      m_item: "ပစ္စည်း", m_price: "ဈေးနှုန်း", m_qty: "အရေအတွက်", m_sub: "ပေါင်း", m_subtotal: "စုစုပေါင်း:", m_vat: "VAT (7%):", m_total: "စုစုပေါင်း:", m_place_order: "အော်ဒါမှာမည်", m_search_hist: "မှတ်တမ်းရှာမည်",
+      m_use_new: "အသုံးအသစ်", m_use_hist: "မှတ်တမ်း", m_add_usage: "အသုံးထည့်မည်", m_items_used: "သုံးပြီး", m_confirm_usage: "အတည်ပြုမည်", m_search_period: "ကာလရှာမည်",
+      m_user: "အသုံးပြုသူ", m_att_in: "☀️ ဝင်ရောက်", m_att_out: "🌙 ထွက်", m_break: "☕ နားမည်", m_resume: "▶ ပြန်စမည်",
+      m_today_record: "ယနေ့မှတ်တမ်း", m_att_help: "ခလုတ်နှိပ်ပြီးမှတ်တမ်းတင်ပါ", m_leave_stats: "ခွင့်စာရင်း (ဤနှစ်)",
+      m_used_ann: "ခွင့်နှစ်သုံး", m_used_sick: "အပျော့ခွင့်သုံး", m_remain: "ကျန်", m_leave_req: "ခွင့်တောင်းမည်",
+      m_annual: "နှစ်စဉ်ခွင့်", m_half: "တစ်ဝက်ခွင့်", m_sick: "အပျော့ခွင့်", m_reason_ph: "အကြပြချက်", m_submit_req: "တင်မည်", m_req_hist: "တောင်းခံမှတ်တမ်း",
+      m_visit_title: "ဆိုင်သွားခြင်း", m_visit_sub: "ပံ့ပိုးမှုမှတ်တမ်း", m_visit_store: "ဆိုင်ရွေးပါ", m_visit_purpose: "ရည်ရွယ်ချက်",
+      m_purpose_inspect: "🔍 စစ်ဆေးခြင်း", m_purpose_training: "👨‍🏫 သင်တန်း", m_purpose_urgent: "🚨 အရေးပေါ်", m_purpose_meeting: "🤝 အစည်းအဝေး", m_purpose_etc: "အခြား",
+      m_visit_start: "စတင်မည်", m_visit_end: "ပြီးဆုံးမည်", m_today_visit_log: "ယနေ့သွားခြင်းမှတ်တမ်း", m_loading_visit: "ချိတ်ဆောင်နေသည်...",
+      m_time: "အချိန်", m_store: "ဆိုင်", m_type: "အမျိုးအစား", m_duration: "ကြာချိန်", m_modal_later: "နောက်မှ", m_modal_confirm: "အတည်ပြုပြီး",
+      m_no_visit: "ယနေ့မှတ်တမ်းမရှိ", m_select_store_name: "ဆိုင်နှင့်အမည်ရွေးပါ", m_login_fail: "ဝင်မအောင်မြင်ပါ: PIN စစ်ပါ",
+      m_no_history: "မှတ်တမ်းမရှိ", m_no_records: "မှတ်တမ်းမရှိ", m_receive: "📥 လက်ခံမည်", m_receive_confirm: "လက်ခံမလား?", m_select_item: "ပစ္စည်းရွေးပါ!",
+      m_app_title: "Choongman Chicken", m_admin_sub: "ကြေညာချက်၊ ခွင့်နှင့်အချိန်မှတ်တမ်း အတည်ပြု", m_admin_notice: "📢 ကြေညာချက်ပို့မည်", m_admin_att: "📅 အချိန်မှတ်တမ်း (နောက်ကျ/OT) အတည်ပြု",
+      label_subject: "ခေါင်းစဉ်", label_content: "အကြောင်းအရာ", label_all: "အားလုံး", leave_wait: "ဆိုင်းငံ့", btn_query: "ရှာမည်"
+    },
+    la: {
+      login_title: "CM ERP SYSTEM", btn_login: "ເຂົ້າສູ່ລະບົບ", m_processing: "ກຳລັງດຳເນີນການ...",
+      m_select_store: "ເລືອກສາຂາ", m_select_name: "ເລືອກຊື່", m_pin_ph: "ລະຫັດ (PIN)",
+      m_logout: "ອອກຈາກລະບົບ", m_tab_home: "ໜ້າຫຼັກ", m_tab_order: "ອໍເດີ", m_tab_stock: "ການໃຊ້", m_tab_hr: "ບຸກຄະລາກອນ", m_tab_visit: "ໄປສາຂາ", m_tab_admin: "ແອດມິນ",
+      m_welcome: "ຍິນດີຕ້ອນຮັບ!", m_welcome_sub: "ເຮັດວຽກຢ່າງປອດໄພ!", m_notice_board: "ປະກາດ", m_loading_notices: "ກຳລັງໂຫຼດ...", m_no_notices: "ບໍ່ມີປະກາດ",
+      m_ord_new: "ອໍເດີໃໝ່", m_ord_hist: "ປະຫວັດ", m_loading_items: "ກຳລັງໂຫຼດ...", m_add_cart: "ເພີ່ມໃສ່ກະຕ່າ",
+      m_item: "ລາຍການ", m_price: "ລາຄາ", m_qty: "ຈຳນວນ", m_sub: "ຍ່ອຍ", m_subtotal: "ຍ່ອຍ:", m_vat: "VAT (7%):", m_total: "ລວມ:", m_place_order: "ສັ່ງຊື້", m_search_hist: "ຄົ້ນຫາປະຫວັດ",
+      m_use_new: "ໃຊ້ໃໝ່", m_use_hist: "ປະຫວັດ", m_add_usage: "ເພີ່ມການໃຊ້", m_items_used: "ໃຊ້ແລ້ວ", m_confirm_usage: "ຢືນຢັນ", m_search_period: "ຄົ້ນຫາໄລຍະ",
+      m_user: "ຜູ້ໃຊ້", m_att_in: "☀️ ເຂົ້າງານ", m_att_out: "🌙 ອອກງານ", m_break: "☕ ພັກ", m_resume: "▶ ກັບມາ",
+      m_today_record: "ບັນທຶກມື້ນີ້", m_att_help: "ກົດປຸ່ມເພື່ອບັນທຶກ", m_leave_stats: "ສະຖິຕິລາພັກ (ປີນີ້)",
+      m_used_ann: "ໃຊ້ລາປະຈຳປີ", m_used_sick: "ໃຊ້ລາປ່ວຍ", m_remain: "ເຫຼືອ", m_leave_req: "ຂໍລາພັກ",
+      m_annual: "ລາປະຈຳປີ", m_half: "ລາຄົວມື້", m_sick: "ລາປ່ວຍ", m_reason_ph: "ເຫດຜົນ", m_submit_req: "ສົ່ງຄຳຂໍ", m_req_hist: "ປະຫວັດຄຳຂໍ",
+      m_visit_title: "ໄປສາຂາ", m_visit_sub: "ບັນທຶກການຊ່ວຍເຫຼືອ", m_visit_store: "ເລືອກສາຂາ", m_visit_purpose: "ຈຸດປະສົງ",
+      m_purpose_inspect: "🔍 ກວດສອບ", m_purpose_training: "👨‍🏫 ຝຶກອົບຮົມ", m_purpose_urgent: "🚨 ດ່ວນ", m_purpose_meeting: "🤝 ປະຊຸມ", m_purpose_etc: "ອື່ນໆ",
+      m_visit_start: "ເຂົ້າມາ", m_visit_end: "ອອກໄປ", m_today_visit_log: "ບັນທຶກການໄປມື້ນີ້", m_loading_visit: "ກຳລັງໂຫຼດ...",
+      m_time: "ເວລາ", m_store: "ສາຂາ", m_type: "ປະເພດ", m_duration: "ໄລຍະ", m_modal_later: "ພາຍຫຼັງ", m_modal_confirm: "ຢືນຢັນ",
+      m_no_visit: "ບໍ່ມີບັນທຶກມື້ນີ້", m_select_store_name: "ເລືອກສາຂາແລະຊື່", m_login_fail: "ເຂົ້າບໍ່ສຳເລັດ: ກວດ PIN",
+      m_no_history: "ບໍ່ມີປະຫວັດ", m_no_records: "ບໍ່ພົບຂໍ້ມູນ", m_receive: "📥 ຮັບ", m_receive_confirm: "ຮັບສິນຄ້າ?", m_select_item: "ເລືອກລາຍການກ່ອນ!",
+      m_app_title: "Choongman Chicken", m_admin_sub: "ປະກາດ, ອະນຸມັດລາພັກ ແລະ ມາງານ", m_admin_notice: "📢 ສົ່ງປະກາດ", m_admin_att: "📅 ອະນຸມັດມາງານ (ສາຍ/OT)",
+      label_subject: "ຫົວຂໍ້", label_content: "ເນື້ອໃນ", label_all: "ທັງໝົດ", leave_wait: "ລໍຖ້າ", btn_query: "ຄົ້ນຫາ"
+    }
+  };
+
+  function getTranslationLang() {
+    var c = currentLang || "ko";
+    if (c === "mm") return "my";
+    if (c === "la") return "lo";
+    return c;
+  }
+  function changeLanguage() {
+    var sel = document.getElementById("langSelect");
+    if (!sel) return;
+    currentLang = sel.value || "ko";
+    try { sessionStorage.setItem("cm_lang", currentLang); } catch (e) {}
+    applyTranslations();
+  }
+  function applyTranslations() {
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (I18N.ko || {});
+    var root = document.body || document.documentElement;
+    if (!root) return;
+    var list = root.querySelectorAll ? root.querySelectorAll("[data-i18n]") : [];
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      var key = el.getAttribute("data-i18n");
+      if (!key) continue;
+      var text = lang[key];
+      if (text === undefined) text = (I18N.ko && I18N.ko[key]) ? I18N.ko[key] : "";
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+        if (key.indexOf("_ph") >= 0 || el.placeholder !== undefined) el.placeholder = text;
+        else if (el.type === "submit" || el.type === "button") el.value = text;
+      } else {
+        el.textContent = text;
+      }
+    }
+    var s = document.getElementById("storeSelect");
+    if (s && s.options.length && s.options[0]) s.options[0].text = (lang.m_select_store != null ? lang.m_select_store : "Select Store...");
+    var n = document.getElementById("loginName");
+    if (n && n.options.length && n.options[0]) n.options[0].text = (lang.m_select_name != null ? lang.m_select_name : "Select Name...");
+  }
+
+  /**
+   * 2. 실시간 시계 (1초마다 업데이트)
+   */
+  setInterval(function() { 
+    var clock = document.getElementById("live-clock");
+    if(clock) clock.innerText = new Date().toLocaleTimeString('en-GB'); 
+  }, 1000);
+
+  /**
+   * 3. [핵심] 페이지 로드 시 초기화 로직
+   */
+  window.onload = function() {
+    // [다국어] 로그인 화면 언어 복원 및 적용 (저장된 언어로 드롭다운 맞춤 후 번역 적용)
+    var langSel = document.getElementById("langSelect");
+    if (langSel) {
+      if (currentLang) langSel.value = currentLang;
+      else currentLang = langSel.value || "ko";
+    }
+    applyTranslations();
+
+    // [날짜 초기화] 모든 데이트 입력칸을 오늘로 세팅
+    var today = new Date();
+    var todayStr = today.toISOString().substring(0, 10);
+    var dateIds = ['use-start', 'use-end', 'hist-start', 'hist-end', 'noticeStart', 'noticeEnd'];
+    dateIds.forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = todayStr; });
+    
+    var tmr = new Date(today); tmr.setDate(tmr.getDate() + 1);
+    if(document.getElementById('leaveDate')) document.getElementById('leaveDate').value = tmr.toISOString().substring(0, 10);
+
+    // [기초 공지 로드] 홈 화면 상단 알림
+    google.script.run.withSuccessHandler(txt => { 
+      if(txt && document.getElementById("home-notice-content")) document.getElementById("home-notice-content").innerText = txt; 
+    }).getNotice();
+
+    // [데이터 통합 로드] 매장, 직원 목록을 가져온 후 UI를 구성
+    load(1);
+    google.script.run.withSuccessHandler(d => { 
+      load(0);
+      loginData = d.users; // { "매장명": ["직원1", "직원2"], ... }
+      
+      fillStoreSelect("storeSelect");        // 로그인 화면 드롭다운
+      fillStoreSelect("visit-store-select"); // 방문 기록 화면 드롭다운
+
+      // 이미 로그인 상태일 때 방문 기록 확인
+      if(loggedInUser) checkActiveVisitStatus();
+
+    }).withFailureHandler(err => { alert("Server Error: " + err); }).getLoginData(); 
+
+    if(loggedInStore) {
+        loadNotices();
+        if(typeof loadTodayVisitLog === 'function') loadTodayVisitLog();
+    }
+  };
+
+  /**
+   * 4. 로그인 및 드롭다운 연동 로직
+   */
+  // 매장 드롭다운 채우기
+  function fillStoreSelect(id) {
+    var s = document.getElementById(id);
+    if(!s || !loginData) return;
+    var txt = (I18N[currentLang] || I18N.ko).m_select_store || "Select Store...";
+    s.innerHTML = "<option value=''>" + txt + "</option>";
+    var officeKey = loginData["Office"] ? "Office" : (loginData["본사"] ? "본사" : null);
+    if (officeKey) s.add(new Option("Office (본사)", officeKey)); 
+    for (var k in loginData) { if (k !== officeKey) s.add(new Option(k, k)); }
+  }
+
+  // [중요] 매장 선택 시 해당 매장 직원 명단 채우기
+  function onStoreChange() { 
+    var s = document.getElementById("storeSelect").value;
+    var n = document.getElementById("loginName");
+    if(!n) return;
+    var txt = (I18N[currentLang] || I18N.ko).m_select_name || "Select Name...";
+    n.innerHTML = "<option value=''>" + txt + "</option>";
+    if(loginData[s]) { 
+      loginData[s].forEach(name => { n.add(new Option(name, name)); }); 
+    }
+  }
+
+  /**
+ * [통합] 모바일 앱 로그인 시도 및 권한 제어 함수
+ * 로그인 화면은 언어 선택 영향 없이 버튼 문구는 항상 영어(Login / Processing...) 사용
+ */
+function tryLogin() {
+  var s = document.getElementById("storeSelect").value;
+  var n = document.getElementById("loginName").value;
+  var p = document.getElementById("loginPw").value;
+  var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : {};
+  if (!s || !n) return alert(lang.m_select_store_name || "Select Store and Name");
+
+  var btn = document.getElementById("btn-login");
+  if (btn) btn.innerText = "Processing...";
+
+  google.script.run.withSuccessHandler(function(res) {
+    if (btn) btn.innerText = "Login";
+    if (res.success) {
+      // 1. 로그인 유저 정보 전역 변수에 저장
+      loggedInStore = res.storeName; 
+      loggedInUser = res.userName; 
+      loggedInRole = res.role;
+      
+      // 2. 화면 전환 및 유저 이름 세팅
+      document.getElementById("login-screen").style.display = "none"; 
+      document.getElementById("app-screen").style.display = "block";
+      if (document.getElementById("hr-username")) {
+        document.getElementById("hr-username").innerText = loggedInUser;
+      }
+      
+      // 3. [권한 제어] Visit 탭 노출 여부 결정 (Office/본사 소속만 가능)
+      var visitTab = document.getElementById("tab-store-visit");
+      if (visitTab) {
+        // 소속 매장이 Office 또는 본사인 경우만 hidden 클래스 제거
+        if (loggedInStore === "Office" || loggedInStore === "본사") {
+          visitTab.classList.remove("hidden");
+        } else {
+          visitTab.classList.add("hidden");
+        }
+      }
+      
+      // 4. [권한 제어] Admin(관리자) 탭 노출 여부 결정
+      var role = loggedInRole.toLowerCase();
+      var adminRoles = ['manager', 'ceo', 'hr', 'director', 'officer'];
+      if (adminRoles.some(r => role.includes(r))) {
+        if (document.getElementById("tab-admin")) {
+          document.getElementById("tab-admin").classList.remove("hidden");
+        }
+      }
+      
+      // 5. 앱 구동에 필요한 데이터 로드 및 상태 체크
+      loadData();               // 물류 데이터
+      loadNotices();            // 공지사항
+      checkActiveVisitStatus(); // 현재 방문 중인지 여부 체크
+      
+      // 로그인 후 선택한 언어를 확실히 반영 (langSelect에서 다시 읽고, 화면 표시 후 번역 적용)
+      var langSel = document.getElementById("langSelect");
+      if (langSel && langSel.value) currentLang = langSel.value;
+      try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem("cm_lang", currentLang); } catch (e) {}
+      setTimeout(function() { applyTranslations(); }, 150);
+    } else {
+      alert(lang.m_login_fail || "Login Failed: Check PIN.");
+    }
+  }).withFailureHandler(function(err) {
+    if (btn) btn.innerText = "Login";
+    alert("Server Error: " + (err && err.message ? err.message : String(err)));
+  }).loginCheck(s, n, p);
+}
+
+  /**
+   * 5. 메인 탭 전환 및 데이터 리로드
+   */
+  function switchTab(m) {
+  // ✅ 여기에 'store-visit'이 반드시 포함되어야 모든 탭이 정상적으로 꺼집니다.
+  var views = ['home', 'order', 'stock', 'hr', 'admin', 'store-visit']; 
+  
+  views.forEach(x => {
+    var v = document.getElementById('view-' + x);
+    var t = document.getElementById('tab-' + x);
+    if (v) v.classList.add('hidden');
+    if (t) t.classList.remove('active'); // 여기서 Visit 탭의 불을 끕니다.
+  });
+
+  var targetView = document.getElementById('view-' + m);
+  var targetTab = document.getElementById('tab-' + m);
+  if (targetView) targetView.classList.remove('hidden');
+  if (targetTab) targetTab.classList.add('active');
+
+  // 탭 이동 시 데이터 로드 로직 유지
+  if(m === 'stock') { if(typeof refreshStock === 'function') refreshStock(); }
+  if(m === 'order') { if(allItems.length > 0) renderLists(); else loadData(); }
+  if(m === 'hr') { if(typeof loadMyLeaveInfo === 'function') loadMyLeaveInfo(); }
+  if(m === 'store-visit') { 
+      if(typeof loadTodayVisitLog === 'function') loadTodayVisitLog(); 
+      fillStoreSelect("visit-store-select"); 
+  }
+  if(m === 'admin') {
+    if(typeof loadMobileAdminOptions === 'function') loadMobileAdminOptions();
+  }
+}
+
+  /**
+   * 6. 공지사항 로직
+   */
+  function loadNotices() {
+    google.script.run.withSuccessHandler(list => {
+      myNotices = list; renderNotices();
+      var newNotice = list.find(n => n.status === 'New');
+      if (newNotice) openNoticeModal(newNotice);
+    }).getMyNotices(loggedInStore, loggedInRole, loggedInUser);
+  }
+
+  function renderNotices() {
+    var box = document.getElementById("notice-list-box");
+    if(!box) return; box.innerHTML = "";
+    var lang = I18N[currentLang] || I18N.ko;
+    var s = document.getElementById("noticeStart").value, e = document.getElementById("noticeEnd").value;
+    var filtered = myNotices.filter(function(n){ return (!s || n.date >= s) && (!e || n.date <= e); });
+    if (filtered.length === 0) { box.innerHTML = "<div class='text-center py-4 text-muted'>" + (lang.m_no_notices || "공지사항이 없습니다.") + "</div>"; return; }
+    var texts = filtered.map(function(n){ return n.title || ""; });
+    var targetLang = typeof getTranslationLang === "function" ? getTranslationLang() : "ko";
+    if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+      filtered.forEach(function(n){ appendNoticeItem(box, n, n.title); });
+      return;
+    }
+    google.script.run.withSuccessHandler(function(translated) {
+      filtered.forEach(function(n, i){ appendNoticeItem(box, n, (translated && translated[i] !== undefined) ? translated[i] : n.title); });
+    }).translateBatch(texts, targetLang);
+  }
+
+  function appendNoticeItem(box, n, titleText) {
+    var badge = n.status === "New" ? "<span style='background:#F44336;color:white;font-size:10px;padding:2px 6px;border-radius:4px;'>NEW</span>" : "";
+    var item = document.createElement("div");
+    item.style.cssText = "border-bottom:1px solid #eee; padding:12px 0; cursor:pointer;";
+    item.innerHTML = "<div style=\"display:flex;justify-content:space-between;\"><span>" + n.date + "</span>" + badge + "</div><div style=\"font-weight:bold;\">" + (titleText || "") + "</div>";
+    item.onclick = function() { openNoticeModal(n); };
+    box.appendChild(item);
+  }
+
+  function openNoticeModal(n) {
+    document.getElementById("modalNoticeId").value = n.id;
+    document.getElementById("modalDate").innerText = n.date + " (From: " + n.sender + ")";
+    renderNoticeAttachments(n);
+    var targetLang = typeof getTranslationLang === "function" ? getTranslationLang() : "ko";
+    if (targetLang === "ko" || (!n.title && !n.content)) {
+      document.getElementById("modalTitle").innerText = n.title || "";
+      document.getElementById("modalContent").innerText = n.content || "";
+      document.getElementById("noticeModal").style.display = "flex";
+      return;
+    }
+    var texts = [n.title || "", n.content || ""];
+    google.script.run.withSuccessHandler(function(translated) {
+      document.getElementById("modalTitle").innerText = translated[0] !== undefined ? translated[0] : n.title;
+      document.getElementById("modalContent").innerText = translated[1] !== undefined ? translated[1] : n.content;
+      document.getElementById("noticeModal").style.display = "flex";
+    }).translateBatch(texts, targetLang);
+  }
+
+  function renderNoticeAttachments(n) {
+    var el = document.getElementById("modalAttachments");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!n.attachments || n.attachments.length === 0) return;
+    var lang = I18N[currentLang] || I18N.ko;
+    var label = (lang.notice_attach || "📎 첨부파일").replace(/📎\s*/, "");
+    var wrap = document.createElement("div");
+    wrap.style.borderTop = "1px solid #eee";
+    wrap.style.paddingTop = "10px";
+    wrap.style.marginTop = "10px";
+    var title = document.createElement("div");
+    title.style.fontWeight = "bold";
+    title.style.marginBottom = "8px";
+    title.textContent = "📎 " + label;
+    wrap.appendChild(title);
+    n.attachments.forEach(function(a) {
+      if (a.error) return;
+      var isImg = (a.mime || "").indexOf("image/") === 0;
+      if (isImg) {
+        var img = document.createElement("img");
+        img.src = a.url || ("https://drive.google.com/uc?export=view&id=" + (a.id || ""));
+        img.alt = a.name || "";
+        img.style.maxWidth = "100%";
+        img.style.maxHeight = "180px";
+        img.style.objectFit = "contain";
+        img.style.borderRadius = "8px";
+        img.style.marginBottom = "8px";
+        wrap.appendChild(img);
+      } else {
+        var link = document.createElement("a");
+        link.href = a.url || ("https://drive.google.com/uc?export=download&id=" + (a.id || ""));
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = a.name || "파일";
+        link.style.display = "block";
+        link.style.marginBottom = "6px";
+        link.style.color = "#E65100";
+        wrap.appendChild(link);
+      }
+    });
+    el.appendChild(wrap);
+  }
+
+  function actNotice(action) {
+    var id = document.getElementById("modalNoticeId").value;
+    document.getElementById("noticeModal").style.display = "none";
+    var target = myNotices.find(x => x.id == id);
+    if (target) target.status = action; renderNotices();
+    google.script.run.logNoticeRead(id, loggedInStore, loggedInUser, action);
+  }
+
+  /**
+   * 7. 유틸리티 및 데이터 로드
+   */
+  function load(on) { var el=document.getElementById("loading"); if(el) el.style.display=on?"flex":"none"; }
+  
+  function loadData() { 
+    var loadingTxt = (I18N[currentLang] || I18N.ko).m_loading_items || "Loading...";
+    if(document.getElementById("orderMenuWrapper")) document.getElementById("orderMenuWrapper").innerHTML = loadingTxt; 
+    if(document.getElementById("stockListWrapper")) document.getElementById("stockListWrapper").innerHTML = loadingTxt;
+    google.script.run.withSuccessHandler(function(res) { allItems = res.items; currentStock = res.stock || {}; if(typeof renderLists === "function") renderLists(); }).getAppData(loggedInStore); 
+  }
+
+  function convertDriveLink(url) {
+    if (!url) return ""; var id = "";
+    try { var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/); if (match) id = match[1]; else if (url.indexOf("id=") > -1) id = url.split("id=")[1].split("&")[0]; } catch(e) {}
+    return id ? "https://drive.google.com/uc?export=view&id=" + id : url;
+  }
+
+  /* ========== [모바일 Admin] 공지 발송 / 연차·근태 승인 ========== */
+  var mobileAdminLeaveData = null;
+  var mobileAdminAttData = null;
+
+  function loadMobileAdminOptions() {
+    google.script.run.withSuccessHandler(function(opt) {
+      var stores = opt.stores || [];
+      var roles = opt.roles || [];
+      var allStoresText = (I18N[currentLang] && I18N[currentLang].label_all) ? I18N[currentLang].label_all : "전체";
+      var allRolesText = allStoresText;
+      var storeSel = document.getElementById("admin-notice-stores");
+      var roleSel = document.getElementById("admin-notice-roles");
+      var leaveStoreSel = document.getElementById("admin-leave-store");
+      var attStoreSel = document.getElementById("admin-att-store");
+      function fillSelect(sel, list, allText, allVal) {
+        if (!sel) return;
+        sel.innerHTML = "";
+        if (list.length > 1) { sel.add(new Option(allText, allVal || "전체")); }
+        list.forEach(function(s) { sel.add(new Option(s, s)); });
+      }
+      fillSelect(storeSel, stores, allStoresText, "전체");
+      fillSelect(roleSel, roles, allRolesText, "전체");
+      fillSelect(leaveStoreSel, stores, allStoresText, "All");
+      fillSelect(attStoreSel, stores, allStoresText, "All");
+      var today = new Date().toISOString().substring(0, 10);
+      var startEl = document.getElementById("admin-att-start");
+      var endEl = document.getElementById("admin-att-end");
+      if (startEl && !startEl.value) startEl.value = today;
+      if (endEl && !endEl.value) endEl.value = today;
+    }).getNoticeOptionsForMobile(typeof loggedInStore !== "undefined" ? loggedInStore : "", typeof loggedInRole !== "undefined" ? loggedInRole : "");
+  }
+
+  function mobileSendNotice() {
+    var title = document.getElementById("admin-notice-title") && document.getElementById("admin-notice-title").value;
+    var content = document.getElementById("admin-notice-content") && document.getElementById("admin-notice-content").value;
+    var targetStore = document.getElementById("admin-notice-stores") && document.getElementById("admin-notice-stores").value;
+    var targetRole = document.getElementById("admin-notice-roles") && document.getElementById("admin-notice-roles").value;
+    if (!title || !content) { alert((I18N[currentLang] && I18N[currentLang].label_subject) ? "제목과 내용을 입력하세요." : "Enter title and content."); return; }
+    var data = { title: title, content: content, targetStore: targetStore || "전체", targetRole: targetRole || "전체", sender: typeof loggedInUser !== "undefined" ? loggedInUser : "", attachments: [] };
+    google.script.run.withSuccessHandler(function(msg) { alert(msg); document.getElementById("admin-notice-title").value = ""; document.getElementById("admin-notice-content").value = ""; }).withFailureHandler(function(err) { alert(err.message || "Failed"); }).adminSaveNotice(data, typeof loggedInRole !== "undefined" ? loggedInRole : "");
+  }
+
+  function mobileLoadLeaveList() {
+    google.script.run.withSuccessHandler(function(raw) {
+      mobileAdminLeaveData = raw;
+      var storeFilter = document.getElementById("admin-leave-store") && document.getElementById("admin-leave-store").value;
+      var statusFilter = document.getElementById("admin-leave-status") && document.getElementById("admin-leave-status").value;
+      var list = (raw.leaves || []).filter(function(l) {
+        var matchStore = !storeFilter || storeFilter === "All" || l.store === storeFilter;
+        var matchStatus = !statusFilter || statusFilter === "All" || (l.status && String(l.status).trim() === statusFilter);
+        return matchStore && matchStatus;
+      });
+      var box = document.getElementById("admin-leave-list");
+      if (!box) return;
+      if (!list.length) { box.innerHTML = "<div class='text-muted text-center py-4 small'>" + ((I18N[currentLang] && I18N[currentLang].leave_wait) ? "대기 건이 없습니다." : "No pending items.") + "</div>"; return; }
+      box.innerHTML = list.map(function(l) {
+        return "<div class='border-bottom py-2 px-2' style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;'>" +
+          "<div><b>" + (l.store || "") + "</b> " + (l.name || "") + " · " + (l.type || "") + " " + (l.date || "") + "<br><small class='text-muted'>" + (l.reason || "") + " · " + (l.status || "") + "</small></div>" +
+          (l.status === "대기" || l.status === "Pending" ? "<div><button type='button' class='btn btn-sm' style='background:#4caf50;color:white;' onclick='mobileLeaveDecision(" + l.row + ",\"승인\")'>승인</button> <button type='button' class='btn btn-sm btn-danger' onclick='mobileLeaveDecision(" + l.row + ",\"반려\")'>반려</button></div>" : "") + "</div>";
+      }).join("");
+    }).withFailureHandler(function() { if (document.getElementById("admin-leave-list")) document.getElementById("admin-leave-list").innerHTML = "<div class='text-muted text-center py-4 small'>조회 실패</div>"; }).getLeaveAllDataForMobile(typeof loggedInStore !== "undefined" ? loggedInStore : "", typeof loggedInRole !== "undefined" ? loggedInRole : "");
+  }
+
+  function mobileLeaveDecision(row, decision) {
+    google.script.run.withSuccessHandler(function(msg) { alert(msg); mobileLoadLeaveList(); }).withFailureHandler(function(err) { alert(err.message || "Failed"); }).processLeaveDecisionMobile(row, decision, typeof loggedInStore !== "undefined" ? loggedInStore : "", typeof loggedInRole !== "undefined" ? loggedInRole : "");
+  }
+
+  function mobileLoadAttendancePending() {
+    var startEl = document.getElementById("admin-att-start");
+    var endEl = document.getElementById("admin-att-end");
+    var storeEl = document.getElementById("admin-att-store");
+    var start = startEl && startEl.value ? startEl.value : "";
+    var end = endEl && endEl.value ? endEl.value : "";
+    var storeFilter = storeEl && storeEl.value ? storeEl.value : "";
+    google.script.run.withSuccessHandler(function(list) {
+      mobileAdminAttData = list;
+      var box = document.getElementById("admin-att-list");
+      if (!box) return;
+      if (!list || !list.length) { box.innerHTML = "<div class='text-muted text-center py-4 small'>" + ((I18N[currentLang] && I18N[currentLang].leave_wait) ? "승인 대기 건이 없습니다." : "No pending items.") + "</div>"; return; }
+      box.innerHTML = list.map(function(a) {
+        var label = (a.status === "지각" ? "지각 " + (a.late || 0) + "분" : "") + (a.ot ? " OT " + (a.ot || 0) + "분" : "") || (a.status || a.type || "대기");
+        return "<div class='border-bottom py-2 px-2' style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;'>" +
+          "<div><b>" + (a.store || "") + "</b> " + (a.name || "") + " · " + (a.timestamp || "") + " " + (a.type || "") + "<br><small class='text-muted'>" + label + " · " + (a.reason || "") + "</small></div>" +
+          "<div><button type='button' class='btn btn-sm' style='background:#2e7d32;color:white;' onclick='mobileAttDecision(" + a.row + ",\"승인완료\")'>승인</button> <button type='button' class='btn btn-sm btn-danger' onclick='mobileAttDecision(" + a.row + ",\"반려\")'>반려</button></div></div>";
+      }).join("");
+    }).withFailureHandler(function() { if (document.getElementById("admin-att-list")) document.getElementById("admin-att-list").innerHTML = "<div class='text-muted text-center py-4 small'>조회 실패</div>"; }).getAttendancePendingForMobile(typeof loggedInStore !== "undefined" ? loggedInStore : "", typeof loggedInRole !== "undefined" ? loggedInRole : "", start, end, storeFilter === "All" ? "" : storeFilter);
+  }
+
+  function mobileAttDecision(row, decision) {
+    google.script.run.withSuccessHandler(function(msg) { alert(msg); mobileLoadAttendancePending(); }).withFailureHandler(function(err) { alert(err.message || "Failed"); }).processAttendanceApprovalMobile(row, decision, typeof loggedInStore !== "undefined" ? loggedInStore : "", typeof loggedInRole !== "undefined" ? loggedInRole : "");
+  }
+</script>

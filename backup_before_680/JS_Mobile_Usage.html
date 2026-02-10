@@ -1,0 +1,14 @@
+<script>
+
+
+
+function switchUsageTab(t){ document.getElementById('usage-new-area').style.display = t==='new'?'block':'none'; document.getElementById('usage-hist-area').style.display = t==='hist'?'block':'none'; document.getElementById('sub-new').classList.toggle('active', t==='new'); document.getElementById('sub-hist').classList.toggle('active', t==='hist'); if(t==='hist') loadUsageHistory(); }
+
+function refreshStock(){ google.script.run.withSuccessHandler(m=>{ currentStock=m || {}; renderLists(); }).getStoreStock(loggedInStore); }
+
+function submitUsage(){ if(!usageCart.length) return; if(!confirm("Update Stock?"))return; google.script.run.withSuccessHandler(m=>{alert(m);usageCart=[];updateCart('usage');refreshStock();}).processUsage({storeName:loggedInStore,userName:loggedInUser,items:usageCart}); }
+
+function loadUsageHistory(){ var s = document.getElementById("use-start").value; var e = document.getElementById("use-end").value; document.getElementById("usage-history-list").innerHTML="<tr><td colspan='2' style='text-align:center;'>Loading...</td></tr>"; google.script.run.withSuccessHandler(l=>{ var c=document.getElementById("usage-history-list"); c.innerHTML=""; if(!l.length){ c.innerHTML="<tr><td colspan='2' style='text-align:center;'>No records</td></tr>"; return; } l.forEach(i=>{ c.innerHTML+=`<tr><td><span style="font-size:11px;color:#999;">${i.date}</span><br><b>${i.item}</b></td><td style="text-align:right;font-weight:bold;color:#E65100;">-${i.qty}</td></tr>`; }); }).getMyUsageHistory(loggedInStore, s, e); }
+
+
+ </script>

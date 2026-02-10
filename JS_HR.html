@@ -1,0 +1,2564 @@
+<script>
+  var lastAttendanceSummaryList = [];
+
+  /* =================================================================
+      인사/스케줄 관리
+     ================================================================= */ 
+  /* =================================================================
+     직원 / 급여
+     ================================================================= */ 
+
+// 직원 데이터 로드. 검색 버튼 클릭 시에만 호출되며, 완료 후 optionalCallback 실행(예: filterEmpList)
+function loadEmployeeList(optionalCallback) { 
+    load(1); 
+    google.script.run.withSuccessHandler(l => { 
+        load(0); 
+        employeeCache = l || [];
+        google.script.run.withSuccessHandler(function(grades) {
+            function normName(n) { return String(n || "").trim().replace(/\s+/g, " ").replace(/^(Mr\.?|Ms\.?|Mrs\.?)\s*/i, "").trim() || String(n || "").trim(); }
+            (employeeCache || []).forEach(function(e) {
+                var fromSheet = (e.grade != null && String(e.grade).trim() !== "") ? String(e.grade).trim() : null;
+                if (fromSheet) { e.finalGrade = fromSheet; return; }
+                var store = String(e.store || "").trim().replace(/\s+/g, " ");
+                var name = String(e.name || "").trim().replace(/\s+/g, " ");
+                var nick = String(e.nick || "").trim().replace(/\s+/g, " ");
+                var key = store + "|" + name;
+                var keyNorm = store + "|" + (normName(name) || name);
+                var keyNick = (nick && nick !== name) ? store + "|" + nick : "";
+                var g = (grades && grades[key]) ? grades[key].grade : (grades && grades[keyNorm]) ? grades[keyNorm].grade : (grades && keyNick && grades[keyNick]) ? grades[keyNick].grade : null;
+                e.finalGrade = (g && String(g).trim()) ? g : "-";
+            });
+            var filterSelect = document.getElementById("filter-store-select");
+            if (filterSelect) {
+                var role = (typeof userRole !== "undefined") ? userRole : "";
+                google.script.run.withSuccessHandler(function(stores) {
+                    if (!filterSelect) return;
+                    filterSelect.innerHTML = "";
+                    var allStoresText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].store_all_stores) ? I18N[currentLang].store_all_stores : "전체 매장";
+                    filterSelect.add(new Option(allStoresText, "All"));
+                    if (stores && stores.length) stores.forEach(function(s) { filterSelect.add(new Option(s, s)); });
+                    filterSelect.disabled = false;
+                    if (typeof optionalCallback === "function") optionalCallback();
+                    else {
+                        var b = document.getElementById("emp-list-body");
+                        var hint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].emp_search_hint) ? I18N[currentLang].emp_search_hint : "매장·등급을 선택하거나 이름을 입력 후 [검색] 버튼을 눌러주세요.";
+                        if(b) b.innerHTML = "<tr><td colspan='8' class='text-center p-5 text-muted'>🔍 " + hint + "</td></tr>";
+                    }
+                }).getPayrollStoreList(role);
+            } else {
+                if (typeof optionalCallback === "function") optionalCallback();
+                else {
+                    var b = document.getElementById("emp-list-body");
+                    var hint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].emp_search_hint) ? I18N[currentLang].emp_search_hint : "매장·등급을 선택하거나 이름을 입력 후 [검색] 버튼을 눌러주세요.";
+                    if(b) b.innerHTML = "<tr><td colspan='8' class='text-center p-5 text-muted'>🔍 " + hint + "</td></tr>";
+                }
+            }
+        }).getEmployeeLatestGrades();
+    }).getAdminEmployeeList(userStore, userRole); 
+}
+function filterEmpList(){ 
+    var storeInput = document.getElementById("filter-store-select");
+    var gradeInput = document.getElementById("filter-grade-select");
+    var searchInput = document.getElementById("emp-search");
+
+    if (!storeInput || !searchInput) return;
+
+    if (!employeeCache || employeeCache.length === 0) {
+        loadEmployeeList(function() { filterEmpList(); });
+        return;
+    }
+
+    var s = storeInput.value;
+    var g = (gradeInput && gradeInput.value) ? gradeInput.value : "All";
+    var k = searchInput.value.toLowerCase().trim();
+
+    var f = employeeCache.filter(e => {
+        var eStore = String(e.store || "");
+        var eName = String(e.name || "").toLowerCase();
+        var eNick = String(e.nick || "").toLowerCase();
+        var eGrade = String(e.finalGrade || "").trim();
+        var matchStore = (s === "" || s === "All" || eStore === s);
+        var matchGrade = (g === "" || g === "All" || eGrade === g);
+        var matchKey = (k === "" || eName.includes(k) || eNick.includes(k));
+        return matchStore && matchGrade && matchKey;
+    });
+    
+    renderEmpTable(f); 
+}
+  function gradeBadgeStyle(g) {
+      var v = String(g || "-").trim().toUpperCase();
+      if (v === "A" || v === "S") return "background:linear-gradient(135deg,#1B5E20,#4CAF50); color:#fff; border:none; font-weight:600;";
+      if (v === "B") return "background:linear-gradient(135deg,#0D47A1,#1976D2); color:#fff; border:none; font-weight:600;";
+      if (v === "C") return "background:linear-gradient(135deg,#F57F17,#FFC107); color:#1a1a1a; border:none; font-weight:600;";
+      if (v === "D") return "background:linear-gradient(135deg,#BF360C,#FF5722); color:#fff; border:none; font-weight:600;";
+      if (v === "F" || v === "E") return "background:linear-gradient(135deg,#3E2723,#795548); color:#fff; border:none; font-weight:600;";
+      return "background:linear-gradient(135deg,#9e9e9e,#bdbdbd); color:#fff; border:none;";
+    }
+  function renderEmpTable(l) { 
+      var L = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : {};
+      var txtEmpty = L.emp_result_empty || "결과 없음", txtEdit = L.btn_edit || "수정", txtDel = L.btn_delete || "삭제";
+      var b=document.getElementById("emp-list-body"); b.innerHTML=""; 
+      if(!l.length){ b.innerHTML="<tr><td colspan='9'>"+txtEmpty+"</td></tr>"; return; }
+      l.forEach(e=>{ 
+          var age = "-"; if(e.birth) { var d=new Date(e.birth); age = new Date().getFullYear()-d.getFullYear(); }
+          var grade = e.finalGrade || "-";
+          var idx = employeeCache.findIndex(z=>z.row===e.row);
+          var gradeStyle = gradeBadgeStyle(grade);
+          b.innerHTML+=`<tr><td>${e.store}</td><td><span class='badge' style='${gradeStyle}'>${grade}</span></td><td class='fw-bold'>${e.name}</td><td>${e.nick||'-'}</td><td>${e.nation||'-'}</td><td>${age}세</td><td><span class='badge bg-info text-dark'>${e.role}</span></td><td class='text-end'>${Number(e.salAmt).toLocaleString()}</td><td><button class='btn btn-sm btn-primary' onclick='editEmp(${idx})'>${txtEdit}</button> <button class='btn btn-sm btn-danger' onclick='delEmp(${e.row})'>${txtDel}</button></td></tr>`; 
+      }); 
+  }
+  function updateEmpFormPhoto() {
+      var inp = document.getElementById("emp-photo");
+      var img = document.getElementById("emp-form-photo-img");
+      if (!inp || !img) return;
+      var v = (inp.value || "").trim();
+      if (v) { img.src = v; img.style.display = "block"; img.onerror = function() { img.style.display = "none"; }; } else { img.src = ""; img.style.display = "none"; }
+  }
+  function saveEmployee() { 
+      var d={ row:document.getElementById("emp-row").value, store:document.getElementById("emp-store").value, name:document.getElementById("emp-name").value, nick:document.getElementById("emp-nick").value, job:document.getElementById("emp-job").value, phone:document.getElementById("emp-phone").value, email:document.getElementById("emp-email").value, birth:document.getElementById("emp-birth").value, nation:document.getElementById("emp-nation").value, join:document.getElementById("emp-date").value, resign:document.getElementById("emp-resign").value, salType:document.getElementById("emp-sal-type").value, salAmt:document.getElementById("emp-sal-amt").value, pw:document.getElementById("emp-pw").value, role:document.getElementById("emp-role").value, annualLeaveDays:document.getElementById("emp-annual-leave")?document.getElementById("emp-annual-leave").value:15, bankName:document.getElementById("emp-bank-name")?document.getElementById("emp-bank-name").value:"", accountNumber:document.getElementById("emp-account-number")?document.getElementById("emp-account-number").value:"", positionAllowance:document.getElementById("emp-position-allowance")?document.getElementById("emp-position-allowance").value:0, grade:document.getElementById("emp-grade")?document.getElementById("emp-grade").value:"", photo:document.getElementById("emp-photo")?document.getElementById("emp-photo").value:"" }; 
+      if(!d.name) return; load(1); google.script.run.withSuccessHandler(function(r){load(0);alert(r);loadEmployeeList(function(){filterEmpList();});}).saveAdminEmployee(d, typeof userStore !== "undefined" ? userStore : "", typeof userRole !== "undefined" ? userRole : ""); 
+  }
+  function editEmp(i) { var e=employeeCache[i]; document.getElementById("emp-row").value=e.row; document.getElementById("emp-store").value=e.store; document.getElementById("emp-name").value=e.name; document.getElementById("emp-nick").value=e.nick; document.getElementById("emp-phone").value=e.phone; document.getElementById("emp-job").value=e.job; document.getElementById("emp-birth").value=e.birth; document.getElementById("emp-nation").value=e.nation; document.getElementById("emp-email").value=e.email; document.getElementById("emp-date").value=e.join; document.getElementById("emp-resign").value=e.resign; document.getElementById("emp-sal-type").value=e.salType; document.getElementById("emp-sal-amt").value=e.salAmt; document.getElementById("emp-pw").value=e.pw; document.getElementById("emp-role").value=e.role; var a=document.getElementById("emp-annual-leave"); if(a) a.value=(e.annualLeaveDays!=null&&e.annualLeaveDays!=="")?e.annualLeaveDays:15; var bn=document.getElementById("emp-bank-name"); if(bn) bn.value=e.bankName||""; var ac=document.getElementById("emp-account-number"); if(ac) ac.value=e.accountNumber||""; var pa=document.getElementById("emp-position-allowance"); if(pa) pa.value=(e.positionAllowance!=null)?e.positionAllowance:0; var g=document.getElementById("emp-grade"); if(g) g.value=(e.grade!=null&&String(e.grade).trim())?String(e.grade).trim():""; var ph=document.getElementById("emp-photo"); if(ph) ph.value=e.photo||""; if(typeof updateEmpFormPhoto==="function") updateEmpFormPhoto(); }
+  function delEmp(r) { var msg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].confirm_delete) ? I18N[currentLang].confirm_delete : "삭제하시겠습니까?"; if(confirm(msg)){load(1);google.script.run.withSuccessHandler(function(res){load(0);alert(res);loadEmployeeList(function(){filterEmpList();});}).deleteAdminEmployee(r, typeof userStore !== "undefined" ? userStore : "", typeof userRole !== "undefined" ? userRole : "");} }
+  function createNewEmployee() { document.querySelectorAll('#hr-employee-section input').forEach(i=>i.value=""); document.getElementById("emp-row").value="0"; var ph=document.getElementById("emp-photo"); if(ph) ph.value=""; var a=document.getElementById("emp-annual-leave"); if(a) a.value="15"; var g=document.getElementById("emp-grade"); if(g) g.value=""; var pa=document.getElementById("emp-position-allowance"); if(pa) pa.value="0"; if(typeof updateEmpFormPhoto==="function") updateEmpFormPhoto(); }
+
+/* ----- 직원 관리: 5개 탭 (직원 목록 / 직원 평가 / 평가 목록 / 주방 항목 설정 / 서비스 항목 설정) ----- */
+function showHrEmployeeTab(t) {
+  var listPanel = document.getElementById("hr-emp-tab-list");
+  var evalPanel = document.getElementById("eval-type-eval");
+  var evalListPanel = document.getElementById("eval-type-list");
+  var kitchenPanel = document.getElementById("eval-type-kitchen-setting");
+  var servicePanel = document.getElementById("eval-type-service-setting");
+  if (listPanel) listPanel.style.display = (t === "list") ? "block" : "none";
+  if (evalPanel) evalPanel.style.display = (t === "eval") ? "block" : "none";
+  if (evalListPanel) evalListPanel.style.display = (t === "eval-list") ? "block" : "none";
+  if (kitchenPanel) kitchenPanel.style.display = (t === "kitchen-setting") ? "block" : "none";
+  if (servicePanel) servicePanel.style.display = (t === "service-setting") ? "block" : "none";
+  var navIds = ["hr-emp-nav-list", "hr-emp-nav-eval", "hr-emp-nav-eval-list", "hr-emp-nav-kitchen-setting", "hr-emp-nav-service-setting"];
+  var tabValues = ["list", "eval", "eval-list", "kitchen-setting", "service-setting"];
+  navIds.forEach(function(id, idx) {
+    var el = document.getElementById(id);
+    if (el) el.classList.toggle("active", tabValues[idx] === t);
+  });
+  if (t === "list") {
+    var b = document.getElementById("emp-list-body");
+    var hint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].emp_search_hint) ? I18N[currentLang].emp_search_hint : "매장·등급을 선택하거나 이름을 입력 후 [검색] 버튼을 눌러주세요.";
+    if (b) b.innerHTML = "<tr><td colspan='8' class='text-center p-5 text-muted'>🔍 " + hint + "</td></tr>";
+  }
+  if (t === "eval") {
+    var evalInsp = document.getElementById("eval-evaluator");
+    if (evalInsp) {
+      var loginName = (typeof userName !== "undefined" && userName) ? userName : (typeof sessionStorage !== "undefined" && sessionStorage.getItem("cm_name")) || "";
+      if (!loginName) {
+        var uInfo = document.getElementById("u-info");
+        if (uInfo && uInfo.innerText) loginName = uInfo.innerText.trim().split(/\s+/).pop() || uInfo.innerText.trim();
+      }
+      evalInsp.value = loginName || "";
+    }
+    var evalDate = document.getElementById("eval-date");
+    if (evalDate && !evalDate.value) evalDate.valueAsDate = new Date();
+    var evalStore = document.getElementById("eval-store");
+    if (evalStore && typeof loadStoreOptions === "function" && (!evalStore.options || evalStore.options.length <= 1)) loadStoreOptions("eval-store");
+    fillEvalEmployeeOptions();
+  }
+  if (t === "eval-list") {
+    var startEl = document.getElementById("eval-list-start");
+    var endEl = document.getElementById("eval-list-end");
+    if (startEl && !startEl.value) {
+      var d = new Date();
+      var y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0");
+      startEl.value = y + "-" + m + "-01";
+      endEl.value = y + "-" + m + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    var storeSel = document.getElementById("eval-list-store");
+    if (storeSel && typeof loadStoreOptions === "function") {
+      if (storeSel.options.length <= 1) storeSel.classList.remove("loaded");
+      loadStoreOptions("eval-list-store");
+    }
+    loadEvaluationHistory();
+  }
+  if (t === "kitchen-setting") loadEvaluationSettings("kitchen");
+  if (t === "service-setting") loadEvaluationSettings("service");
+}
+function getEvalType() {
+  var sel = document.getElementById("eval-type-select");
+  return (sel && sel.value) ? sel.value : "kitchen";
+}
+function showEvalTypeTab(type) {
+  if (type === "eval") showHrEmployeeTab("eval");
+  else if (type === "list") showHrEmployeeTab("eval-list");
+  else if (type === "kitchen-setting") showHrEmployeeTab("kitchen-setting");
+  else if (type === "service-setting") showHrEmployeeTab("service-setting");
+}
+function fillEvalEmployeeOptions() {
+  var storeSel = document.getElementById("eval-store");
+  var empSel = document.getElementById("eval-employee");
+  if (!storeSel || !empSel) return;
+  var store = storeSel.value;
+  empSel.innerHTML = "<option value=\"\">직원 선택</option>";
+  if (!store || store === "All" || !employeeCache || !employeeCache.length) { updateEvalEmployeePhoto(); return; }
+  var list = employeeCache.filter(function(e) { return String(e.store || "") === String(store); });
+  list.forEach(function(e) { empSel.add(new Option(e.name || "", e.name || "")); });
+  updateEvalEmployeePhoto();
+}
+function updateEvalEmployeePhoto() {
+  var empSel = document.getElementById("eval-employee");
+  var img = document.getElementById("eval-employee-photo");
+  var wrap = document.getElementById("eval-employee-photo-wrap");
+  if (!empSel || !img) return;
+  var name = (empSel.value || "").trim();
+  var storeSel = document.getElementById("eval-store");
+  var store = storeSel ? (storeSel.value || "").trim() : "";
+  if (!name || !store || !employeeCache || !employeeCache.length) { img.style.display = "none"; img.src = ""; if (wrap) wrap.title = ""; return; }
+  var emp = employeeCache.find(function(e) { return String(e.store || "") === store && String(e.name || "") === name; });
+  if (emp && emp.photo && String(emp.photo).trim()) { img.src = emp.photo; img.style.display = "block"; img.onerror = function() { img.style.display = "none"; }; if (wrap) wrap.title = emp.name || ""; } else { img.src = ""; img.style.display = "none"; if (wrap) wrap.title = ""; }
+}
+var EVAL_INCIDENT_TYPES = ["반복 과다 소스", "위생 관련 이력", "고객 관련", "개선 없음", "안전 사고(화상/미끄럼/낙상 등)"];
+var EVAL_WEIGHTS = { "메뉴숙련": 0.4, "원가정확도": 0.2, "위생": 0.2, "태도": 0.2 };
+var EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.5, 3.0, 2.0];
+var EVAL_GRADE_LABEL = ["S", "A", "B", "C", "D", "E", "F"];
+
+function scoreToGrade(score) {
+  var s = parseFloat(score);
+  for (var i = 0; i < EVAL_GRADE_CUT.length; i++) { if (s >= EVAL_GRADE_CUT[i]) return EVAL_GRADE_LABEL[i]; }
+  return EVAL_GRADE_LABEL[EVAL_GRADE_LABEL.length - 1];
+}
+function updateEvalTotals() {
+  var rows = document.querySelectorAll(".eval-row");
+  var sums = {}, counts = {};
+  rows.forEach(function(row) {
+    var section = row.getAttribute("data-main") || "";
+    if (!section) return;
+    var sel = row.querySelector(".eval-score-select");
+    var v = sel ? parseInt(sel.value, 10) : 0;
+    if (isNaN(v)) v = 0;
+    sums[section] = (sums[section] || 0) + v;
+    counts[section] = (counts[section] || 0) + 1;
+  });
+  var menuAvg = counts["메뉴숙련"] ? sums["메뉴숙련"] / counts["메뉴숙련"] : 0;
+  var costAvg = counts["원가정확도"] ? sums["원가정확도"] / counts["원가정확도"] : 0;
+  var hygieneAvg = counts["위생"] ? sums["위생"] / counts["위생"] : 0;
+  var attitudeAvg = counts["태도"] ? sums["태도"] / counts["태도"] : 0;
+  var serviceAvgForSection = counts["서비스"] ? sums["서비스"] / counts["서비스"] : 0;
+  document.querySelectorAll(".eval-section-avg").forEach(function(span) {
+    var sec = span.getAttribute("data-section");
+    var avg = sec === "메뉴숙련" ? menuAvg : sec === "원가정확도" ? costAvg : sec === "위생" ? hygieneAvg : sec === "태도" ? attitudeAvg : sec === "서비스" ? serviceAvgForSection : 0;
+    span.textContent = avg > 0 ? avg.toFixed(2) : "-";
+  });
+  var serviceAvg = counts["서비스"] ? sums["서비스"] / counts["서비스"] : 0;
+  var total;
+  if (counts["서비스"] !== undefined && counts["서비스"] > 0) {
+    total = serviceAvg;
+  } else {
+    total = menuAvg * EVAL_WEIGHTS["메뉴숙련"] + costAvg * EVAL_WEIGHTS["원가정확도"] + hygieneAvg * EVAL_WEIGHTS["위생"] + attitudeAvg * EVAL_WEIGHTS["태도"];
+  }
+  var grade = (menuAvg || costAvg || hygieneAvg || attitudeAvg || serviceAvg) ? scoreToGrade(total) : "-";
+  var totalEl = document.getElementById("eval-total-score");
+  var gradeSel = document.getElementById("eval-final-grade");
+  if (totalEl) totalEl.textContent = total > 0 ? total.toFixed(2) : "-";
+  if (gradeSel && grade !== "-") { gradeSel.value = grade; }
+}
+function updateEvalGradeDisplay() {}
+
+function fillEvalIncidents() {
+  var tbody = document.getElementById("eval-incidents-body");
+  if (!tbody) return;
+  var html = "";
+  EVAL_INCIDENT_TYPES.forEach(function(label) {
+    html += buildEvalIncidentRow(label);
+  });
+  html += "<tr><td colspan=\"5\" class=\"text-end\"><button type=\"button\" class=\"btn btn-sm btn-outline-primary\" onclick=\"addEvalIncidentRow()\">+ 행 추가</button></td></tr>";
+  tbody.innerHTML = html;
+}
+function buildEvalIncidentRow(typeLabel) {
+  var esc = function(s) { return String(s != null && s !== undefined ? s : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\"/g, "&quot;"); };
+  var opts = EVAL_INCIDENT_TYPES.map(function(l) {
+    return "<option value=\"" + esc(l) + "\"" + (l === typeLabel ? " selected" : "") + ">" + (l || "") + "</option>";
+  }).join("");
+  opts += "<option value=\"__기타__\">기타(직접입력)</option>";
+  return "<tr class=\"eval-incident-row\">" +
+    "<td><select class=\"form-select form-select-sm eval-incident-type\" onchange=\"var o=this.nextElementSibling;if(o)o.style.display=this.value==='__기타__'?'block':'none';\">" + opts + "</select><input type=\"text\" class=\"form-control form-control-sm mt-1 eval-incident-type-other\" placeholder=\"기타 유형\" style=\"display:none;\"></td>" +
+    "<td><select class=\"form-select form-select-sm eval-incident-occured\"><option value=\"No\">No</option><option value=\"Yes\">Yes</option></select></td>" +
+    "<td><input type=\"date\" class=\"form-control form-control-sm eval-incident-date\"></td>" +
+    "<td><input type=\"text\" class=\"form-control form-control-sm eval-incident-details\" placeholder=\"상세\"></td>" +
+    "<td style=\"width:50px;\"><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"removeEvalIncidentRow(this)\" title=\"삭제\">×</button></td></tr>";
+}
+function addEvalIncidentRow() {
+  var tbody = document.getElementById("eval-incidents-body");
+  if (!tbody) return;
+  var addRow = tbody.querySelector("tr:last-child");
+  var html = buildEvalIncidentRow(EVAL_INCIDENT_TYPES[0]);
+  var tmp = document.createElement("tbody");
+  tmp.innerHTML = html;
+  var newTr = tmp.querySelector("tr");
+  if (!newTr) return;
+  if (addRow) tbody.insertBefore(newTr, addRow);
+  else tbody.appendChild(newTr);
+  var sel = newTr.querySelector(".eval-incident-type");
+  var other = newTr.querySelector(".eval-incident-type-other");
+  if (sel && other) sel.addEventListener("change", function() { other.style.display = (sel.value === "__기타__") ? "block" : "none"; });
+}
+function removeEvalIncidentRow(btn) {
+  var row = btn && btn.closest ? btn.closest("tr") : null;
+  if (row && row.classList.contains("eval-incident-row")) row.remove();
+}
+
+/** 양식 불러오기: 평가 유형(주방 직원 → 주방 항목 설정, 서비스 직원 → 서비스 항목 설정)에 따라 해당 시트 항목을 불러옴 */
+function loadEvaluationForm(type) {
+  var container = document.getElementById("eval-sections-container");
+  if (!container) return;
+  type = type || getEvalType();
+  if (!type) type = "kitchen";
+  var extraKitchen = document.getElementById("eval-extra-kitchen");
+  if (extraKitchen) extraKitchen.style.display = "block"; /* 주방·서비스 모두 6)7) 표시 */
+  var weightLine = document.querySelector(".eval-weight-line");
+  if (weightLine) weightLine.style.display = (type === "kitchen") ? "block" : "none";
+  container.innerHTML = "<p class=\"text-center py-3\">⏳ 양식을 불러오는 중...</p>";
+  var loadTimeout = setTimeout(function() {
+    if (container.innerHTML.indexOf("양식을 불러오는 중") !== -1) {
+      container.innerHTML = "<p class=\"text-center text-danger py-3\">양식 불러오기 시간이 초과되었습니다. 네트워크와 시트(평가항목_주방/평가항목_서비스)를 확인한 뒤 다시 시도하세요.</p>";
+    }
+  }, 25000);
+  google.script.run
+    .withSuccessHandler(function(items) {
+      clearTimeout(loadTimeout);
+      try {
+        if (!container) return;
+        container.innerHTML = "";
+        if (!items || !Array.isArray(items)) items = [];
+        if (items.length === 0) {
+          var hint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_no_items_hint) ? I18N[currentLang].eval_no_items_hint : "등록된 평가 항목이 없습니다. [주방 항목 설정] 또는 [서비스 항목 설정] 탭에서 항목 불러오기 후 저장하세요.";
+          container.innerHTML = "<p class=\"text-center text-muted\">" + hint + "</p>";
+          fillEvalIncidents();
+          return;
+        }
+        var bySection = {};
+        items.forEach(function(item) {
+          var sec = (item && item.main != null) ? String(item.main).trim() : "";
+          if (!bySection[sec]) bySection[sec] = [];
+          bySection[sec].push(item);
+        });
+        var sectionOrder = type === "service" ? ["서비스"] : ["메뉴숙련", "원가정확도", "위생", "태도"];
+        var sectionTitles = type === "service" ? { "서비스": "서비스 평가 항목 (1-5)" } : { "메뉴숙련": "2) 메뉴 숙련 (1-5)", "원가정확도": "3) 조리 정확도·원가 관리 (1-5)", "위생": "4) 위생·작업 습관 (1-5)", "태도": "5) 태도·피크타임 수행 (1-5)" };
+        var fullHtml = "";
+        sectionOrder.forEach(function(sec) {
+          var list = bySection[sec];
+          if (!list || list.length === 0) return;
+          var card = "<div class=\"card-box mb-3\"><h6 class=\"fw-bold border-bottom pb-2\">" + (sectionTitles[sec] || sec) + "</h6><div class=\"table-responsive\"><table class=\"table table-sm table-bordered align-middle mb-0\"><thead class=\"table-light\"><tr class=\"text-center\">";
+          if (sec === "메뉴숙련") card += "<th>NO</th><th>Category</th><th>Menu Item</th><th>Score(1-5)</th><th>Solo OK</th><th>Peak OK</th><th>Can Train</th><th>Notes</th></tr></thead><tbody>";
+          else card += "<th>NO</th><th>평가 항목</th><th>Score(1-5)</th><th>Notes</th></tr></thead><tbody>";
+          list.forEach(function(item) {
+            var esc = function(s) { return String(s != null && s !== undefined ? s : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\"/g, "&quot;"); };
+            var id = item && (item.id != null) ? item.id : "";
+            var main = item && (item.main != null) ? String(item.main) : "";
+            var sub = item && (item.sub != null) ? String(item.sub) : "";
+            var name = item && (item.name != null) ? String(item.name) : "";
+            var scoreOpts = "<option value=\"1\">1</option><option value=\"2\">2</option><option value=\"3\">3</option><option value=\"4\">4</option><option value=\"5\" selected>5</option>";
+            if (sec === "메뉴숙련" && type === "kitchen") {
+              card += "<tr class=\"eval-row\" data-id=\"" + esc(id) + "\" data-main=\"" + esc(main) + "\" data-sub=\"" + esc(sub) + "\" data-name=\"" + esc(name) + "\">" +
+                "<td class=\"text-center fw-bold bg-light\">" + esc(id) + "</td><td>" + esc(sub) + "</td><td class=\"text-start\">" + esc(name) + "</td>" +
+                "<td class=\"text-center\"><select class=\"form-select form-select-sm eval-score-select\" onchange=\"updateEvalTotals()\">" + scoreOpts + "</select></td>" +
+                "<td class=\"text-center\"><input type=\"checkbox\" class=\"form-check-input eval-solo-ok\"></td><td class=\"text-center\"><input type=\"checkbox\" class=\"form-check-input eval-peak-ok\"></td><td class=\"text-center\"><input type=\"checkbox\" class=\"form-check-input eval-can-train\"></td>" +
+                "<td><input type=\"text\" class=\"form-control form-control-sm eval-remark\" placeholder=\"비고\"></td></tr>";
+            } else {
+              card += "<tr class=\"eval-row\" data-id=\"" + esc(id) + "\" data-main=\"" + esc(main) + "\" data-sub=\"" + esc(sub) + "\" data-name=\"" + esc(name) + "\">" +
+                "<td class=\"text-center fw-bold bg-light\">" + esc(id) + "</td><td class=\"text-start\">" + esc(name) + "</td>" +
+                "<td class=\"text-center\"><select class=\"form-select form-select-sm eval-score-select\" onchange=\"updateEvalTotals()\">" + scoreOpts + "</select></td>" +
+                "<td><input type=\"text\" class=\"form-control form-control-sm eval-remark\" placeholder=\"비고\"></td></tr>";
+            }
+          });
+          card += "</tbody></table></div><p class=\"small mb-0 mt-1\">" + sec + " 평균: <span class=\"eval-section-avg\" data-section=\"" + sec + "\">-</span></p></div>";
+          fullHtml += card;
+        });
+        container.innerHTML = fullHtml;
+        fillEvalIncidents();
+        updateEvalTotals();
+      } catch (e) {
+        if (container) container.innerHTML = "<p class=\"text-center text-danger py-3\">양식 표시 중 오류가 발생했습니다. " + (e.message || "") + "</p>";
+        console.error("loadEvaluationForm success handler error:", e);
+      }
+    })
+    .withFailureHandler(function(err) {
+      clearTimeout(loadTimeout);
+      if (container) container.innerHTML = "<p class=\"text-center text-danger py-3\">양식 불러오기에 실패했습니다. 시트(평가항목_주방/평가항목_서비스)가 있는지 확인하세요.</p>";
+      console.error("getEvaluationItems error:", err);
+    })
+    .getEvaluationItems(type, true);
+}
+function saveEvaluationResult(type) {
+  var store = document.getElementById("eval-store").value;
+  var employee = document.getElementById("eval-employee").value;
+  var date = document.getElementById("eval-date").value;
+  var evaluator = document.getElementById("eval-evaluator").value;
+  var finalGrade = document.getElementById("eval-final-grade").value;
+  var memo = document.getElementById("eval-total-memo").value;
+  var id = document.getElementById("eval-id").value;
+  if (!store || !employee || !date) { alert("매장, 직원, 평가일을 선택하세요."); return; }
+  var isService = (type === "service");
+  var sections = { menu: [], cost: [], hygiene: [], attitude: [] };
+  var sectionKey = { "메뉴숙련": "menu", "원가정확도": "cost", "위생": "hygiene", "태도": "attitude", "서비스": "menu" };
+  var rowContainer = document.getElementById("eval-sections-container");
+  var rowSelector = rowContainer ? rowContainer.querySelectorAll(".eval-row") : document.querySelectorAll(".eval-row");
+  [].forEach.call(rowSelector || [], function(row) {
+    var rId = row.getAttribute("data-id");
+    var main = row.getAttribute("data-main");
+    var sub = row.getAttribute("data-sub");
+    var name = row.getAttribute("data-name");
+    var scoreSel = row.querySelector(".eval-score-select");
+    var score = scoreSel ? scoreSel.value : "5";
+    var remark = row.querySelector(".eval-remark");
+    var note = remark ? remark.value : "";
+    var rec = { id: rId, main: main, sub: sub, name: name, score: score, notes: note };
+    if (main === "메뉴숙련") {
+      var solo = row.querySelector(".eval-solo-ok");
+      var peak = row.querySelector(".eval-peak-ok");
+      var train = row.querySelector(".eval-can-train");
+      rec.soloOK = solo ? solo.checked : false;
+      rec.peakOK = peak ? peak.checked : false;
+      rec.canTrain = train ? train.checked : false;
+    }
+    var key = sectionKey[main];
+    if (key && sections[key]) sections[key].push(rec);
+  });
+  var incidents = [];
+  document.querySelectorAll(".eval-incident-row").forEach(function(row) {
+    var typeSel = row.querySelector(".eval-incident-type");
+    var typeOther = row.querySelector(".eval-incident-type-other");
+    var typeLabel = typeSel ? (typeSel.value === "__기타__" && typeOther ? typeOther.value : typeSel.value) : "";
+    if (!typeLabel) return;
+    var occ = row.querySelector(".eval-incident-occured");
+    var dt = row.querySelector(".eval-incident-date");
+    var det = row.querySelector(".eval-incident-details");
+    incidents.push({ type: typeLabel, occurred: occ ? occ.value : "No", date: dt ? dt.value : "", details: det ? det.value : "" });
+  });
+  var actionPlan = {
+    trainingNeeded: document.getElementById("eval-training-needed") ? document.getElementById("eval-training-needed").value : "",
+    coach: document.getElementById("eval-coach") ? document.getElementById("eval-coach").value : "",
+    targetDate: document.getElementById("eval-target-date") ? document.getElementById("eval-target-date").value : "",
+    reEvalDate: document.getElementById("eval-reeval-date") ? document.getElementById("eval-reeval-date").value : ""
+  };
+  var totalScoreEl = document.getElementById("eval-total-score");
+  var totalScore = totalScoreEl && totalScoreEl.textContent !== "-" ? parseFloat(totalScoreEl.textContent) : 0;
+  var payload = { sections: sections, incidents: incidents, actionPlan: actionPlan, totalScore: totalScore, grade: finalGrade };
+  if (confirm("평가 내용을 저장하시겠습니까?")) {
+    if (typeof load === "function") load(1);
+    google.script.run.withSuccessHandler(function(res) {
+      if (typeof load === "function") load(0);
+      alert(res === "UPDATED" ? "수정되었습니다." : "저장되었습니다.");
+      document.getElementById("eval-id").value = "";
+      document.getElementById("eval-total-memo").value = "";
+      document.getElementById("eval-training-needed").value = "";
+      document.getElementById("eval-coach").value = "";
+      var td = document.getElementById("eval-target-date"); if (td) td.value = "";
+      var rd = document.getElementById("eval-reeval-date"); if (rd) rd.value = "";
+      if (typeof loadEmployeeList === "function") loadEmployeeList();
+    }).saveEvaluationResult(type, id, date, store, employee, evaluator, finalGrade, memo, JSON.stringify(payload));
+  }
+}
+function loadEvaluationHistory() {
+  var typeEl = document.getElementById("eval-list-type");
+  var startEl = document.getElementById("eval-list-start");
+  var endEl = document.getElementById("eval-list-end");
+  var storeEl = document.getElementById("eval-list-store");
+  var empEl = document.getElementById("eval-list-employee");
+  var evalEl = document.getElementById("eval-list-evaluator");
+  var tbody = document.getElementById("eval-history-tbody");
+  var countEl = document.getElementById("eval-history-count");
+  if (!tbody) return;
+  var type = typeEl ? typeEl.value : "kitchen";
+  var start = startEl ? startEl.value : "";
+  var end = endEl ? endEl.value : "";
+  var store = storeEl ? storeEl.value : "All";
+  var employee = empEl ? empEl.value : "All";
+  var evaluator = evalEl ? evalEl.value : "All";
+  var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+  var loadingTxt = lang.eval_list_loading || "조회 중...";
+  var noDataTxt = lang.eval_list_no_data || "조회된 평가 이력이 없습니다.";
+  var countSuffix = lang.eval_list_count || "건";
+  var failTxt = lang.eval_list_fail || "조회 실패. 시트를 확인하세요.";
+  var viewTxt = lang.eval_list_btn_view || "보기";
+  tbody.innerHTML = "<tr><td colspan=\"8\" class=\"text-center py-4\">⏳ " + loadingTxt + "</td></tr>";
+  google.script.run
+    .withSuccessHandler(function(list) {
+      tbody.innerHTML = "";
+      if (!list || list.length === 0) {
+        tbody.innerHTML = "<tr><td colspan=\"8\" class=\"text-center py-4 text-muted\">" + noDataTxt + "</td></tr>";
+        if (countEl) countEl.textContent = "0" + countSuffix;
+        return;
+      }
+      window.evalHistoryList = list;
+      var employees = {}, evaluators = {};
+      list.forEach(function(r) {
+        if (r.employeeName) employees[r.employeeName] = true;
+        if (r.evaluator) evaluators[r.evaluator] = true;
+      });
+      if (empEl && empEl.options.length <= 1) {
+        Object.keys(employees).sort().forEach(function(name) { empEl.add(new Option(name, name)); });
+      }
+      if (evalEl && evalEl.options.length <= 1) {
+        Object.keys(evaluators).sort().forEach(function(name) { evalEl.add(new Option(name, name)); });
+      }
+      list.forEach(function(r, idx) {
+        var memoShort = (r.memo || "").substring(0, 30);
+        if ((r.memo || "").length > 30) memoShort += "…";
+        var row = "<tr><td>" + (r.date || "") + "</td><td class=\"fw-bold\">" + (r.store || "") + "</td><td>" + (r.employeeName || "") + "</td><td>" + (r.evaluator || "") + "</td><td class=\"text-center\">" + (r.totalScore || "-") + "</td><td><span class=\"badge bg-primary\">" + (r.finalGrade || "-") + "</span></td><td class=\"small text-muted\">" + (memoShort || "-") + "</td><td><button type=\"button\" class=\"btn btn-sm btn-outline-primary\" onclick=\"openEvalDetailModal(" + idx + ")\">" + viewTxt + "</button></td></tr>";
+        tbody.innerHTML += row;
+      });
+      if (countEl) countEl.textContent = list.length + countSuffix;
+    })
+    .withFailureHandler(function() {
+      tbody.innerHTML = "<tr><td colspan=\"8\" class=\"text-center py-4 text-danger\">" + failTxt + "</td></tr>";
+      if (countEl) countEl.textContent = "";
+    })
+    .getEvaluationHistory(type, start, end, store, employee, evaluator);
+}
+function openEvalDetailModal(idx) {
+  var list = window.evalHistoryList;
+  if (!list || !list[idx]) return;
+  var r = list[idx];
+  var modal = document.getElementById("evalDetailModal");
+  if (!modal) return;
+  document.getElementById("eval-detail-title").textContent = (r.store || "") + " / " + (r.employeeName || "") + " (" + (r.date || "") + ")";
+  document.getElementById("eval-detail-meta").innerHTML = "평가자: <strong>" + (r.evaluator || "-") + "</strong> &nbsp;|&nbsp; 등급: <span class=\"badge bg-primary\">" + (r.finalGrade || "-") + "</span> &nbsp;|&nbsp; 총점: " + (r.totalScore || "-");
+  document.getElementById("eval-detail-memo").textContent = r.memo || "(없음)";
+  var body = document.getElementById("eval-detail-body");
+  body.innerHTML = "";
+  var jsonData = r.jsonData;
+  if (jsonData) {
+    try {
+      var data = typeof jsonData === "string" ? JSON.parse(jsonData) : jsonData;
+      if (data && data.sections) {
+        var html = "<p class=\"fw-bold mb-2\">총점: " + (data.totalScore != null ? data.totalScore : "-") + "</p><table class=\"table table-sm table-bordered\"><thead class=\"table-light\"><tr><th>대분류</th><th>항목</th><th>점수</th><th>비고</th></tr></thead><tbody>";
+        ["menu", "cost", "hygiene", "attitude"].forEach(function(key) {
+          var arr = data.sections[key];
+          if (!arr || !arr.length) return;
+          arr.forEach(function(item) {
+            html += "<tr><td>" + (item.main || "") + "</td><td>" + (item.name || item.sub || "") + "</td><td>" + (item.score || "") + "</td><td class=\"small\">" + (item.notes || "") + "</td></tr>";
+          });
+        });
+        html += "</tbody></table>";
+        body.innerHTML = html;
+      } else {
+        body.textContent = JSON.stringify(data).substring(0, 500) + (JSON.stringify(data).length > 500 ? "…" : "");
+      }
+    } catch (e) {
+      body.textContent = "상세 데이터를 파싱할 수 없습니다.";
+    }
+  } else {
+    body.textContent = "저장된 상세 데이터가 없습니다.";
+  }
+  if (modal.parentNode !== document.body) document.body.appendChild(modal);
+  try {
+    var inst = bootstrap.Modal.getOrCreateInstance(modal);
+    inst.show();
+  } catch (e) {
+    modal.style.display = "block";
+    modal.classList.add("show");
+  }
+}
+function loadEvaluationSettings(type) {
+  var tbodyId = type === "service" ? "eval-setting-list-body-service" : "eval-setting-list-body";
+  google.script.run.withSuccessHandler(function(items) {
+    var tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    if (!items || items.length === 0) { tbody.innerHTML = "<tr><td colspan='6' class='text-center text-muted'>등록된 항목이 없습니다. 시트가 없으면 저장 시 자동 생성됩니다.</td></tr>"; return; }
+    items.forEach(function(item) {
+      var checked = item.use ? "checked" : "";
+      var mainVal = (item.main || "").replace(/"/g, "&quot;");
+      var subVal = (item.sub || "").replace(/"/g, "&quot;");
+      var nameVal = (item.name || "").replace(/"/g, "&quot;");
+      tbody.innerHTML += "<tr><td>" + item.id + "</td><td><input class=\"form-control form-control-sm\" value=\"" + mainVal + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + subVal + "\" readonly></td><td><input class=\"form-control form-control-sm eval-set-name\" value=\"" + nameVal + "\"></td><td><input type=\"checkbox\" class=\"form-check-input eval-set-use\" data-id=\"" + item.id + "\" " + checked + "></td><td><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteEvalItem('" + type + "', '" + item.id + "')\">삭제</button></td></tr>";
+    });
+  }).getEvaluationItems(type, false);
+}
+function saveEvaluationSettings(type) {
+  var tbodyId = type === "service" ? "eval-setting-list-body-service" : "eval-setting-list-body";
+  var tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  var updates = [];
+  tbody.querySelectorAll("tr").forEach(function(tr) {
+    var useEl = tr.querySelector(".eval-set-use");
+    var nameEl = tr.querySelector(".eval-set-name");
+    if (useEl && nameEl) updates.push({ id: useEl.getAttribute("data-id"), name: nameEl.value, use: useEl.checked });
+  });
+  if (!updates.length) { alert("저장할 항목이 없습니다."); return; }
+  google.script.run.withSuccessHandler(function(res) { alert("항목이 저장되었습니다."); loadEvaluationSettings(type); }).updateEvaluationItems(type, updates);
+}
+
+function addEvalItemRow(type) {
+  var mainCat = type === "service" ? "서비스" : "";
+  var subCat = "";
+  var itemName = "";
+  if (type === "kitchen") {
+    mainCat = prompt("대분류 (메뉴숙련 / 원가정확도 / 위생 / 태도)", "메뉴숙련") || "메뉴숙련";
+    subCat = prompt("중분류 (메뉴 카테고리 등, 없으면 비워두기)", "");
+    itemName = prompt("평가 항목 이름", "(새 항목)") || "(새 항목)";
+  } else {
+    itemName = prompt("평가 항목 이름", "(새 항목)") || "(새 항목)";
+  }
+  if (!itemName) return;
+  if (typeof load === "function") load(1);
+  var addOk = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_add_item_ok) ? I18N[currentLang].eval_add_item_ok : "항목이 추가되었습니다.";
+  var addErr = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_add_item_error) ? I18N[currentLang].eval_add_item_error : "항목 추가 중 오류가 발생했습니다.";
+  google.script.run.withSuccessHandler(function(res) {
+    if (typeof load === "function") load(0);
+    if (res === "SUCCESS") { alert(addOk); loadEvaluationSettings(type); }
+    else alert(res || "추가 실패");
+  }).withFailureHandler(function() { if (typeof load === "function") load(0); alert(addErr); }).addEvaluationItem(type, mainCat, subCat, itemName);
+}
+
+function deleteEvalItem(type, id) {
+  var confirmMsg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_delete_confirm) ? I18N[currentLang].eval_delete_confirm : "이 평가 항목을 삭제하시겠습니까?";
+  if (!confirm(confirmMsg)) return;
+  var delOk = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_delete_ok) ? I18N[currentLang].eval_delete_ok : "삭제되었습니다.";
+  var delErr = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_delete_error) ? I18N[currentLang].eval_delete_error : "삭제 중 오류가 발생했습니다.";
+  if (typeof load === "function") load(1);
+  google.script.run.withSuccessHandler(function(res) {
+    if (typeof load === "function") load(0);
+    if (res === "SUCCESS") { alert(delOk); loadEvaluationSettings(type); }
+    else alert(res || "삭제 실패");
+  }).withFailureHandler(function() { if (typeof load === "function") load(0); alert(delErr); }).deleteEvaluationItem(type, id);
+}
+
+var globalPayrollList = []; // 데이터를 담아둘 전역 변수
+
+/* 급여 계산 탭: 매장 필터 옵션 로드 (C.E.O/HR만 Office 옵션 노출) */
+function loadPayrollStoreOptions() {
+    var sel = document.getElementById("payroll-store-filter");
+    if (!sel) return;
+    var role = (typeof userRole !== "undefined") ? userRole : "";
+    google.script.run.withSuccessHandler(function(stores) {
+        sel.innerHTML = "";
+        var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : {};
+        var allText = (lang.label_all || "전체");
+        sel.add(new Option(allText, "All"));
+        if (stores && stores.length) stores.forEach(function(s) { sel.add(new Option(s, s)); });
+    }).getPayrollStoreList(role);
+}
+
+/* 0. DB 초기화 (최초 1회용) */
+function runDBSetup() {
+    if(confirm("급여 데이터를 저장할 [급여_DB] 시트를 생성하시겠습니까?\n(이미 있으면 생성되지 않습니다)")) {
+        google.script.run.withSuccessHandler(alert).setupPayrollDB();
+    }
+}
+
+/* 1. 계산 실행 버튼 (매장 필터 적용, C.E.O/HR만 Office 조회 가능) */
+function calculateMonthlySalary() {
+    var month = document.getElementById("payroll-month").value;
+    if(!month) return alert("날짜(년-월)를 먼저 선택해주세요.");
+    var storeEl = document.getElementById("payroll-store-filter");
+    var storeFilter = (storeEl && storeEl.value) ? storeEl.value : "All";
+    var role = (typeof userRole !== "undefined") ? userRole : "";
+    
+    load(1); // 로딩 시작
+    google.script.run.withSuccessHandler(res => {
+        load(0); // 로딩 끝
+        if(!res.success) return alert(res.msg);
+        
+        globalPayrollList = res.list;
+        renderPayrollTable();
+        alert("✅ 계산 완료! 내용을 확인하고 저장하세요.");
+    }).calculatePayrollPreview(month, storeFilter, role);
+}
+
+/* 2. 테이블 그리기 (수정 사항 즉시 반영) */
+function renderPayrollTable() {
+    var tbody = document.getElementById("payroll-list-body");
+    tbody.innerHTML = "";
+    
+    if(globalPayrollList.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='16' class='py-5 text-muted'>데이터가 없습니다.</td></tr>"; 
+        return; 
+    }
+
+    globalPayrollList.forEach((p, idx) => {
+        var holidayPay = Number(p.holidayPay) || 0;
+        var income = p.salary + p.posAllow + p.hazAllow + p.birthBonus + holidayPay + p.splBonus + p.otAmt;
+        var deduct = p.lateDed + p.sso + p.tax + p.otherDed;
+        p.netPay = income - deduct;
+
+        var rowClass = (idx % 2 === 0) ? "payroll-row-even" : "payroll-row-odd";
+        var row = `<tr class="${rowClass}">
+            <td class="payroll-td-num">${idx+1}</td>
+            <td class="payroll-td-store fw-bold">${p.store}</td>
+            <td class="payroll-td-name">${p.name}<br><small class="text-secondary">${p.role}</small></td>
+            <td class="payroll-td-num text-end">${p.salary.toLocaleString()}</td>
+            <td class="payroll-td-num text-end small">${p.posAllow.toLocaleString()}</td>
+            <td class="payroll-td-num text-end small">${p.hazAllow.toLocaleString()}</td>
+            <td class="payroll-td-num text-end small">${p.birthBonus.toLocaleString()}</td>
+            <td class="payroll-td-num text-end small">${holidayPay.toLocaleString()}${p.holidayWorkDays ? ' <small class="text-secondary">(' + p.holidayWorkDays + '일)</small>' : ''}</td>
+            <td class="payroll-td-num text-end small fw-bold">${p.splBonus.toLocaleString()}</td>
+            <td class="payroll-td-num text-center small text-secondary">(1.5: ${p.ot15}h)</td>
+            <td class="payroll-td-num text-end small fw-bold">${p.otAmt.toLocaleString()}</td>
+            <td class="payroll-td-deduct text-end small">${p.lateDed.toLocaleString()}</td>
+            <td class="payroll-td-deduct text-end small">${p.sso.toLocaleString()}</td>
+            <td class="payroll-td-deduct text-end small fw-bold">${p.otherDed.toLocaleString()}</td>
+            <td class="payroll-td-net text-end fw-bold">${p.netPay.toLocaleString()}</td>
+            <td><button class="btn btn-sm btn-outline-primary" onclick="openEditPayroll(${idx})">✏️ 수정</button></td>
+        </tr>`;
+        tbody.innerHTML += row;
+    });
+}
+
+/* 3. 수정 팝업 열기 */
+function openEditPayroll(idx) {
+    var p = globalPayrollList[idx]; // 선택한 직원 데이터
+    document.getElementById("py-index").value = idx;
+    document.getElementById("py-name").innerText = p.name;
+    document.getElementById("py-store").innerText = p.store;
+    
+    // 기존 값 채워넣기
+    document.getElementById("py-bonus").value = p.splBonus; // 보너스
+    document.getElementById("py-ot").value = p.otAmt;       // OT 금액
+    document.getElementById("py-late").value = p.lateDed;   // 지각 공제
+    document.getElementById("py-deduct").value = p.otherDed;// 기타 공제
+
+    // 모달 띄우기
+    new bootstrap.Modal(document.getElementById('modalPayrollEdit')).show();
+}
+
+/* 4. 수정 적용 (팝업에서 저장 누를 때) */
+function applyPayrollEdit() {
+    var idx = document.getElementById("py-index").value;
+    var p = globalPayrollList[idx];
+    
+    // 입력값 업데이트 (숫자로 변환)
+    p.splBonus = Number(document.getElementById("py-bonus").value) || 0;
+    p.otAmt = Number(document.getElementById("py-ot").value) || 0;
+    p.lateDed = Number(document.getElementById("py-late").value) || 0;
+    p.otherDed = Number(document.getElementById("py-deduct").value) || 0;
+    
+    // 모달 닫기
+    var modal = bootstrap.Modal.getInstance(document.getElementById('modalPayrollEdit'));
+    modal.hide();
+    
+    // 테이블 다시 그려서 합계 갱신
+    renderPayrollTable();
+}
+
+/* 5. 최종 DB 저장 - 확정 저장 시 상태를 "확정"으로 저장 (명세서 조회에서 확정으로 표시) */
+function saveFinalPayroll() {
+    var month = document.getElementById("payroll-month").value;
+    if(!globalPayrollList.length) return alert("저장할 데이터가 없습니다.");
+    
+    if(!confirm("⚠️ " + month + "월 급여를 확정 저장하시겠습니까?\n(기존에 저장된 이 달의 데이터는 덮어씌워집니다)")) return;
+    
+    var listToSave = globalPayrollList.map(function(p) {
+        var q = {};
+        for (var k in p) q[k] = p[k];
+        q.status = "확정";
+        return q;
+    });
+    load(1);
+    google.script.run.withSuccessHandler(res => {
+        load(0);
+        alert(res);
+    }).savePayrollToDB(month, JSON.stringify(listToSave));
+}
+
+/* 6. 내역 조회 - loadPayrollHistory / renderHistoryTable 사용 */
+/* payroll-history-ui: 체크박스 선택 후 일괄 이메일 발송 (v2) */
+
+/* =========================================
+   [급여 명세서 조회] 기능 추가
+   ========================================= */
+
+// 1. 페이지 열릴 때 매장 목록 채우기 (기존 함수 활용)
+// (이 코드는 calculateMonthlySalary 함수 근처나 go 함수 안에 넣어도 되지만, 편의상 조회 버튼 누를 때 없으면 채우도록 함)
+
+/* 2. 내역 불러오기 버튼 클릭 (서버: getPayrollFromDB 사용) */
+function loadPayrollHistory() {
+    if (typeof google === "undefined" || !google.script || !google.script.run) {
+        alert("명세서 조회는 Google Apps Script 환경에서만 동작합니다.");
+        return;
+    }
+    var monthEl = document.getElementById("py-history-month");
+    var storeFilter = document.getElementById("py-history-store");
+    var month = monthEl ? monthEl.value : "";
+
+    if (storeFilter && storeFilter.options.length <= 1 && typeof loadStoreOptions === "function") {
+       loadStoreOptions("py-history-store");
+    }
+
+    if (!month) { alert("조회할 월을 선택해주세요."); return; }
+
+    load(1); // 로딩 시작
+    
+    google.script.run
+        .withSuccessHandler(function(res) {
+            load(0); // 로딩 끝
+            var tbody = document.getElementById("py-history-list");
+            if (!tbody) return;
+            tbody.innerHTML = "";
+            if (!res) {
+                tbody.innerHTML = "<tr><td colspan=\"9\" class=\"py-4 text-danger\">서버 응답이 없습니다. (clasp push 후 배포 버전을 새로고침하세요)</td></tr>";
+                return;
+            }
+            if (!res.success) {
+                var msg = (res.msg && String(res.msg).trim()) ? res.msg : "데이터를 불러올 수 없습니다.";
+                tbody.innerHTML = "<tr><td colspan=\"9\" class=\"py-4 text-danger\">" + msg + "</td></tr>";
+                return;
+            }
+            window.historyData = res.list || [];
+            window.historyMonth = month || "";
+            renderHistoryTable();
+        })
+        .withFailureHandler(function(err) {
+            load(0);
+            var tbody = document.getElementById("py-history-list");
+            var errMsg = (err && (err.message || err)) ? String(err.message || err) : "서버 연결 확인";
+            if (tbody) tbody.innerHTML = "<tr><td colspan=\"9\" class=\"py-4 text-danger\">조회 중 오류: " + errMsg + "</td></tr>";
+            console.error("getPayrollFromDB error:", err);
+        })
+        .getPayrollFromDB(month);
+}
+
+/* 3. 테이블 그리기 (매장 필터 적용, getPayrollFromDB 응답 형식) */
+function renderHistoryTable() {
+    var storeEl = document.getElementById("py-history-store");
+    var filterStore = storeEl ? storeEl.value : "All";
+    var tbody = document.getElementById("py-history-list");
+    var totalCount = 0;
+    var totalMoney = 0;
+    
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (!window.historyData || window.historyData.length === 0) {
+        tbody.innerHTML = "<tr><td colspan=\"9\" class=\"py-4 text-muted\">조회된 내역이 없습니다.</td></tr>";
+        if (document.getElementById("total-count")) document.getElementById("total-count").innerText = "0";
+        if (document.getElementById("total-amount")) document.getElementById("total-amount").innerText = "0";
+        return;
+    }
+
+    window.historyData.forEach(function(p) {
+        if (filterStore !== "All" && p.store !== filterStore) return;
+        totalCount++;
+        var totalAllow = (Number(p.posAllow) || 0) + (Number(p.hazAllow) || 0) + (Number(p.birthBonus) || 0) + (Number(p.holidayPay) || 0) + (Number(p.splBonus) || 0);
+        var totalDed = (Number(p.lateDed) || 0) + (Number(p.sso) || 0) + (Number(p.tax) || 0) + (Number(p.otherDed) || 0);
+        var netPay = Number(p.netPay) || 0;
+        totalMoney += netPay;
+        var storeEsc = (p.store || "").replace(/"/g, "&quot;");
+        var nameEsc = (p.name || "").replace(/"/g, "&quot;");
+        var row = "<tr><td class=\"align-middle\"><input type=\"checkbox\" class=\"form-check-input py-history-check\" data-store=\"" + storeEsc + "\" data-name=\"" + nameEsc + "\" title=\"발송 대상 선택\"></td>" +
+            "<td class=\"fw-bold\">" + (p.store || "") + "</td><td>" + (p.name || "") + "</td>" +
+            "<td class=\"text-end text-muted\">" + (Number(p.salary) || 0).toLocaleString() + "</td>" +
+            "<td class=\"text-end text-primary\">+" + totalAllow.toLocaleString() + "</td>" +
+            "<td class=\"text-end text-info\">+" + (Number(p.otAmt) || 0).toLocaleString() + "</td>" +
+            "<td class=\"text-end text-danger\">-" + totalDed.toLocaleString() + "</td>" +
+            "<td class=\"text-end fw-bold bg-light\" style=\"color:#E65100;\">" + netPay.toLocaleString() + "</td>" +
+            "<td><span class=\"badge bg-secondary\">" + (p.status || "지급대기") + "</span></td></tr>";
+        tbody.innerHTML += row;
+    });
+
+    if (totalCount === 0) {
+        tbody.innerHTML = "<tr><td colspan=\"9\" class=\"py-4 text-muted\">조건에 맞는 내역이 없습니다.</td></tr>";
+    }
+
+    if (document.getElementById("total-count")) document.getElementById("total-count").innerText = totalCount;
+    if (document.getElementById("total-amount")) document.getElementById("total-amount").innerText = totalMoney.toLocaleString();
+}
+
+/* 전체 선택/해제 */
+function togglePayrollHistoryCheckAll(headerCheck) {
+    var list = document.querySelectorAll(".py-history-check");
+    var checked = headerCheck ? headerCheck.checked : false;
+    for (var i = 0; i < list.length; i++) list[i].checked = checked;
+    var headerEl = document.getElementById("py-history-check-all");
+    if (headerEl && !headerCheck) headerEl.checked = false;
+}
+
+/* 선택한 명세서 이메일 일괄 발송 */
+function sendPayrollEmailSelected() {
+    var month = window.historyMonth || (document.getElementById("py-history-month") && document.getElementById("py-history-month").value) || "";
+    if (!month) { alert("조회월이 없습니다. 먼저 조회하기를 실행해 주세요."); return; }
+    var checks = document.querySelectorAll(".py-history-check:checked");
+    if (!checks || checks.length === 0) { alert("발송할 대상이 없습니다. 행의 체크박스를 선택해 주세요."); return; }
+    var list = [];
+    for (var i = 0; i < checks.length; i++) {
+        list.push({ store: checks[i].getAttribute("data-store") || "", name: checks[i].getAttribute("data-name") || "" });
+    }
+    var btn = document.getElementById("py-send-selected-btn");
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    if (btn) { btn.disabled = true; btn.textContent = (lang.pay_sending_count || "발송 중… (N명)").replace("N", list.length); }
+    google.script.run.withSuccessHandler(function(res) {
+        if (btn) { btn.disabled = false; btn.textContent = (lang.pay_send_selected || "📧 선택한 명세서 이메일 발송"); }
+        if (res && res.sent !== undefined) {
+            var msg = "발송 완료: " + (res.sent || 0) + "명";
+            if (res.failed && res.failed.length) msg += ", 실패 " + res.failed.length + "명 (" + (res.errors ? res.errors.join("; ") : "") + ")";
+            alert(msg);
+            if (res.sent > 0) togglePayrollHistoryCheckAll(null);
+        } else {
+            alert("❌ " + (res && res.msg ? res.msg : "발송 실패"));
+        }
+    }).withFailureHandler(function(err) {
+        if (btn) { btn.disabled = false; btn.textContent = (lang.pay_send_selected || "📧 선택한 명세서 이메일 발송"); }
+        alert("❌ 발송 실패: " + (err && err.message ? err.message : err));
+    }).sendPayrollStatementEmailBatch(month, JSON.stringify(list));
+}
+
+/* 5. 매장 선택 바꿀 때마다 바로바로 표 갱신 */
+(function(){
+    var el = document.getElementById("py-history-store");
+    if (el) el.addEventListener("change", renderHistoryTable);
+})();
+
+/* [신규] 급여 관리 탭 전환 함수 */
+function showPayrollTab(t) {
+    var tabCalc = document.getElementById("payroll-tab-calc");
+    var tabHist = document.getElementById("payroll-tab-hist");
+    var tabHoliday = document.getElementById("payroll-tab-holiday");
+    if (tabCalc) tabCalc.style.display = "none";
+    if (tabHist) tabHist.style.display = "none";
+    if (tabHoliday) tabHoliday.style.display = "none";
+    var targetTab = document.getElementById("payroll-tab-" + t);
+    if (targetTab) targetTab.style.display = "block";
+
+    document.getElementById("payroll-nav-calc").classList.remove("active");
+    document.getElementById("payroll-nav-hist").classList.remove("active");
+    var navHoliday = document.getElementById("payroll-nav-holiday");
+    if (navHoliday) navHoliday.classList.remove("active");
+    document.getElementById("payroll-nav-" + t).classList.add("active");
+
+    if (t === "hist") {
+        var storeFilter = document.getElementById("py-history-store");
+        if (storeFilter && storeFilter.options.length <= 1) loadStoreOptions("py-history-store");
+    }
+    if (t === "holiday") {
+        var yearEl = document.getElementById("holiday-year");
+        if (yearEl && yearEl.options.length <= 1) fillHolidayYearOptions();
+        loadPublicHolidays();
+    }
+}
+
+function fillHolidayYearOptions() {
+    var el = document.getElementById("holiday-year");
+    if (!el) return;
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    var suffix = (lang.pay_holiday_year_suffix != null && lang.pay_holiday_year_suffix !== "") ? lang.pay_holiday_year_suffix : "년";
+    var y = new Date().getFullYear();
+    el.innerHTML = "";
+    for (var i = y - 1; i <= y + 3; i++) el.add(new Option(i + suffix, i));
+    el.value = y;
+}
+
+function loadPublicHolidays() {
+    var yearEl = document.getElementById("holiday-year");
+    var tbody = document.getElementById("public-holiday-list");
+    if (!yearEl || !tbody) return;
+    var year = yearEl.value || new Date().getFullYear();
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    var loadingTxt = lang.pay_holiday_loading || "불러오는 중...";
+    var noDataTxt = lang.pay_holiday_no_data || "해당 연도 공휴일이 없습니다. [추가]로 등록하거나 시트 생성 후 시트에서 직접 입력하세요.";
+    var editBtnTxt = lang.pay_holiday_edit_btn || "수정";
+    var delBtnTxt = lang.pay_holiday_delete_btn || "삭제";
+    tbody.innerHTML = "<tr><td colspan='4' class='py-3 text-muted'>" + loadingTxt + "</td></tr>";
+    google.script.run.withSuccessHandler(function(res) {
+        tbody.innerHTML = "";
+        var list = (res && res.list) ? res.list : [];
+        if (list.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='4' class='py-4 text-muted'>" + noDataTxt + "</td></tr>";
+            return;
+        }
+        list.forEach(function(h, i) {
+            var rowIndex = (h.rowIndex != null) ? h.rowIndex : "";
+            var editBtn = rowIndex ? "<button type='button' class='btn btn-sm btn-outline-secondary me-1' onclick='openHolidayEditModal(" + rowIndex + ",\"" + (h.date || "") + "\",\"" + (String(h.name || "-").replace(/"/g, "&quot;")) + "\")'>" + editBtnTxt + "</button>" : "";
+            var delBtn = rowIndex ? "<button type='button' class='btn btn-sm btn-outline-danger' onclick='deleteHolidayRow(" + rowIndex + ")'>" + delBtnTxt + "</button>" : "";
+            tbody.innerHTML += "<tr><td>" + (i + 1) + "</td><td>" + (h.date || "") + "</td><td>" + (h.name || "-") + "</td><td>" + editBtn + delBtn + "</td></tr>";
+        });
+    }).withFailureHandler(function() {
+        tbody.innerHTML = "<tr><td colspan='4' class='py-4 text-danger'>" + (lang.eval_list_fail || "조회 실패") + "</td></tr>";
+    }).getPublicHolidaysWithRows(parseInt(year, 10));
+}
+
+function openHolidayAddModal() {
+    var yearEl = document.getElementById("holiday-year");
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    document.getElementById("holiday-form-modal-title").textContent = lang.pay_holiday_modal_add || "공휴일 추가";
+    document.getElementById("holiday-form-rowIndex").value = "";
+    document.getElementById("holiday-form-year").value = yearEl ? yearEl.value : new Date().getFullYear();
+    document.getElementById("holiday-form-date").value = "";
+    document.getElementById("holiday-form-name").value = "";
+    var modal = new bootstrap.Modal(document.getElementById("holiday-form-modal"));
+    modal.show();
+}
+
+function openHolidayEditModal(rowIndex, dateStr, name) {
+    var yearEl = document.getElementById("holiday-year");
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    document.getElementById("holiday-form-modal-title").textContent = lang.pay_holiday_modal_edit || "공휴일 수정";
+    document.getElementById("holiday-form-rowIndex").value = rowIndex;
+    document.getElementById("holiday-form-year").value = yearEl ? yearEl.value : new Date().getFullYear();
+    document.getElementById("holiday-form-date").value = (dateStr || "").substring(0, 10);
+    document.getElementById("holiday-form-name").value = name || "";
+    var modal = new bootstrap.Modal(document.getElementById("holiday-form-modal"));
+    modal.show();
+}
+
+function saveHolidayForm() {
+    var rowIndex = document.getElementById("holiday-form-rowIndex").value.trim();
+    var year = document.getElementById("holiday-form-year").value;
+    var dateStr = document.getElementById("holiday-form-date").value;
+    var name = document.getElementById("holiday-form-name").value.trim() || "-";
+    if (!year || !dateStr) { alert("연도와 날짜를 입력해주세요."); return; }
+    var done = function(msg) { alert(msg); bootstrap.Modal.getInstance(document.getElementById("holiday-form-modal")).hide(); loadPublicHolidays(); };
+    var fail = function(err) { alert("실패: " + (err && err.message ? err.message : err)); };
+    if (rowIndex) {
+        google.script.run.withSuccessHandler(done).withFailureHandler(fail).updatePublicHoliday(parseInt(rowIndex, 10), parseInt(year, 10), dateStr, name);
+    } else {
+        google.script.run.withSuccessHandler(done).withFailureHandler(fail).addPublicHoliday(parseInt(year, 10), dateStr, name);
+    }
+}
+
+function deleteHolidayRow(rowIndex) {
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    if (!confirm(lang.pay_holiday_delete_confirm || "이 공휴일 행을 삭제할까요?")) return;
+    google.script.run.withSuccessHandler(function(msg) {
+        alert(msg);
+        loadPublicHolidays();
+    }).withFailureHandler(function(err) {
+        alert("실패: " + (err && err.message ? err.message : err));
+    }).deletePublicHoliday(parseInt(rowIndex, 10));
+}
+
+function setupPublicHolidaysSheet() {
+    google.script.run.withSuccessHandler(function(msg) {
+        alert(msg);
+        loadPublicHolidays();
+    }).withFailureHandler(function(err) {
+        alert("실패: " + (err && err.message ? err.message : err));
+    }).setupPublicHolidaysSheet();
+}
+
+/* =========================================
+   [NEW] 급여 관리 통합 스크립트 (DB 버전)
+   ========================================= */
+
+
+/* [최종 통합] 근태 관리 탭 전환 함수 */
+function showAttendanceTab(tabName) {
+    // 1. 모든 탭 컨텐츠를 숨김 (조회 탭 포함)
+    const tabs = ['status', 'schedule', 'view-edit', 'today-realtime'];
+    tabs.forEach(t => {
+        const el = document.getElementById('attendance-tab-' + t);
+        if (el) el.style.display = 'none';
+    });
+
+    // 2. 선택한 탭만 보이기
+    const targetTab = document.getElementById('attendance-tab-' + tabName);
+    if (targetTab) targetTab.style.display = 'block';
+
+    // 3. 탭 버튼 활성화 스타일 처리 (ID 기반으로 정확히 타겟팅)
+    const navLinks = document.querySelectorAll('#attendanceTab .nav-link');
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        // 클릭된 버튼의 텍스트나 인자를 비교하여 active 클래스 부여
+        if (link.getAttribute('onclick').includes(tabName)) {
+            link.classList.add('active');
+        }
+    });
+
+    // 4. [특수 로직] 근태 기록/승인 탭 진입 시 매장 리스트 비어있으면 로드, 직원 선택창은 매장에 맞게 초기화
+    if (tabName === 'status') {
+        const attStore = document.getElementById('att-store-filter');
+        if (attStore && attStore.options.length <= 1 && typeof loadStoreOptions === 'function') {
+            attStore.classList.remove('loaded');
+            loadStoreOptions('att-store-filter');
+        }
+        if (typeof loadAttEmployeeOptions === 'function') loadAttEmployeeOptions();
+    }
+
+    // 5. [특수 로직] 스케줄 작성 탭 진입 시
+    if (tabName === 'schedule') {
+        if (typeof loadScheduleManager === 'function') loadScheduleManager();
+    }
+
+    // 6. [특수 로직] 스케줄 조회/수정 탭 진입 시 날짜(해당 주 월요일) 세팅 및 매장 로드
+    if (tabName === 'view-edit') {
+        const dateInput = document.getElementById('view-week-monday');
+        if (dateInput && !dateInput.value) {
+            var today = new Date().toISOString().substring(0, 10);
+            dateInput.value = (typeof getMondayOfWeek === 'function') ? getMondayOfWeek(today) : today;
+        }
+        // 매장 목록이 비어있으면 로드
+        const viewSelect = document.getElementById('view-store-select');
+        if (viewSelect && viewSelect.options.length <= 1) {
+            loadStoreOptions('view-store-select');
+        }
+    }
+
+    // 7. [특수 로직] 당일 실시간 근무 탭 진입 시 날짜·매장 로드
+    if (tabName === 'today-realtime') {
+        var dateEl = document.getElementById('att-today-date');
+        if (dateEl && !dateEl.value) {
+            var today = new Date();
+            dateEl.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        }
+        var storeEl = document.getElementById('att-today-store');
+        if (storeEl && storeEl.options.length <= 1 && typeof loadStoreOptions === 'function') {
+            storeEl.classList.remove('loaded');
+            loadStoreOptions('att-today-store');
+        }
+    }
+}
+
+/** [당일 실시간 근무 탭] 데이터 로드 후 렌더 (모바일과 동일한 표) */
+function loadAdminTodayRealtime() {
+    var dateEl = document.getElementById('att-today-date');
+    var storeEl = document.getElementById('att-today-store');
+    var areaEl = document.getElementById('att-today-area');
+    var box = document.getElementById('att-today-realtime-box');
+    if (!box) return;
+    var dateStr = (dateEl && dateEl.value) ? dateEl.value.substring(0, 10) : (function() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); })();
+    var storeFilter = (storeEl && storeEl.value) ? String(storeEl.value).trim() : 'All';
+    var areaFilter = (areaEl && areaEl.value) ? areaEl.value : 'All';
+    var mondayStr = (typeof getMondayOfWeek === 'function') ? getMondayOfWeek(dateStr) : dateStr;
+    box.innerHTML = "<div class='text-center text-muted py-4 small'>조회 중...</div>";
+    google.script.run.withSuccessHandler(function(weekList) {
+        var daySchedule = (weekList || []).filter(function(r) { return (r.date || "").substring(0, 10) === dateStr; });
+        if (areaFilter !== 'All') daySchedule = daySchedule.filter(function(r) { return (r.area || 'Service') === areaFilter; });
+        google.script.run.withSuccessHandler(function(attList) {
+            renderAdminTodayRealtime(daySchedule, attList || [], areaFilter, storeFilter);
+        }).withFailureHandler(function() {
+            renderAdminTodayRealtime(daySchedule, [], areaFilter, storeFilter);
+        }).getMobileTodayAttendance(storeFilter, dateStr);
+    }).withFailureHandler(function() {
+        box.innerHTML = "<div class='text-center text-muted py-4 small'>스케줄을 불러올 수 없습니다.</div>";
+    }).getMobileWeeklySchedule(storeFilter, mondayStr, areaFilter);
+}
+
+/** [당일 실시간 근무 탭] 모바일과 동일한 당일 근무 표 렌더. storeFilter === 'All'이면 매장별 구분 행 추가 */
+function renderAdminTodayRealtime(todaySchedule, attendanceList, areaFilter, storeFilter) {
+    var box = document.getElementById('att-today-realtime-box');
+    if (!box) return;
+    var areaFilter = areaFilter || 'All';
+    var storeFilter = (storeFilter || '').toString().trim();
+    var showStoreSection = (storeFilter === 'All' || storeFilter === '');
+    var attByKey = {};
+    (attendanceList || []).forEach(function(r) {
+        var k = (r.store || '') + '|' + (r.name || '');
+        attByKey[k] = r;
+    });
+    var invT = (typeof window.invT === 'function') ? window.invT : (typeof invT === 'function') ? invT : function(k) { return (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang][k]) ? I18N[currentLang][k] : k; };
+    var areaLabelT = function(area) { return invT(area === 'Service' ? 'm_schedule_area_service' : area === 'Kitchen' ? 'm_schedule_area_kitchen' : 'm_schedule_area_office') || area; };
+    var multiArea = (function() { var a = {}; (todaySchedule || []).forEach(function(x) { a[x.area || 'Service'] = 1; }); return Object.keys(a).length > 1; })();
+    var showArea = (areaFilter === 'All' && multiArea);
+    if (!todaySchedule || todaySchedule.length === 0) {
+        box.innerHTML = "<div class='text-center text-muted py-5 small'>해당 날짜·매장·구역에 스케줄이 없습니다.</div>";
+        return;
+    }
+    function parseTimeToDecimal(s) {
+        if (!s || typeof s !== 'string') return null;
+        var m = s.match(/(\d{1,2}):(\d{2})/);
+        return m ? parseInt(m[1], 10) + parseInt(m[2], 10) / 60 : null;
+    }
+    var byPerson = {};
+    todaySchedule.forEach(function(r) {
+        var key = (r.store || '') + '|' + (r.name || '');
+        if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || '', store: r.store || '', area: r.area || 'Service', pIn: r.pIn, pOut: r.pOut, pBS: r.pBS, pBE: r.pBE };
+    });
+    var minDec = 24, maxDec = 0;
+    Object.keys(byPerson).forEach(function(k) {
+        var p = byPerson[k];
+        var inD = parseTimeToDecimal(p.pIn), outD = parseTimeToDecimal(p.pOut), bsD = parseTimeToDecimal(p.pBS), beD = parseTimeToDecimal(p.pBE);
+        if (inD != null && inD < minDec) minDec = inD;
+        if (bsD != null && bsD < minDec) minDec = bsD;
+        if (outD != null && outD > maxDec) maxDec = outD;
+        if (beD != null && beD > maxDec) maxDec = beD;
+    });
+    var hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6;
+    var hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24;
+    if (hourEnd <= hourStart) { hourStart = 6; hourEnd = 24; }
+    var hours = [];
+    for (var h = hourStart; h < hourEnd; h++) hours.push(h);
+    var areaOrder = { Service: 0, Kitchen: 1, Office: 2 };
+    var personKeys = Object.keys(byPerson).sort(function(a, b) {
+        var pA = byPerson[a], pB = byPerson[b];
+        if (showStoreSection && pA.store !== pB.store) return (pA.store || '').localeCompare(pB.store || '');
+        var oA = areaOrder[pA.area] !== undefined ? areaOrder[pA.area] : 3;
+        var oB = areaOrder[pB.area] !== undefined ? areaOrder[pB.area] : 3;
+        if (oA !== oB) return oA - oB;
+        var inA = parseTimeToDecimal(pA.pIn), inB = parseTimeToDecimal(pB.pIn);
+        return (inA || 0) - (inB || 0);
+    });
+    var tc = 'text-align:center;', nowrap = 'white-space:nowrap;';
+    var areaLabel = invT('m_schedule_label_area') || '구역';
+    var nameLabel = invT('label_name') || '이름';
+    var storeLabel = invT('label_store') || '매장';
+    var areaColHeader = showArea ? "<th style='min-width:52px;padding:4px 6px;" + tc + ";" + nowrap + "'>" + areaLabel + "</th>" : "";
+    var nameColSpan = (showArea ? 1 : 0) + 1;
+    var storeToKeys = {};
+    personKeys.forEach(function(key) {
+        var st = byPerson[key].store || '';
+        if (!storeToKeys[st]) storeToKeys[st] = [];
+        storeToKeys[st].push(key);
+    });
+    function countWorkingAtHour(keys, h) {
+        var h0 = h, h05 = h + 0.5, h1 = h + 1;
+        var count = 0;
+        keys.forEach(function(key) {
+            var p = byPerson[key];
+            var inDec = parseTimeToDecimal(p.pIn), outDec = parseTimeToDecimal(p.pOut), bsDec = parseTimeToDecimal(p.pBS), beDec = parseTimeToDecimal(p.pBE);
+            var breakFirst = (bsDec != null && beDec != null && bsDec < h05 && beDec > h0);
+            var breakSecond = (bsDec != null && beDec != null && bsDec < h1 && beDec > h05);
+            var workFirst = (inDec != null && outDec != null && inDec < h05 && outDec > h0) && !breakFirst;
+            var workSecond = (inDec != null && outDec != null && inDec < h1 && outDec > h05) && !breakSecond;
+            if (workFirst || workSecond) count++;
+        });
+        return count;
+    }
+    var html = "<div style='overflow-x:auto;'><table class='table table-bordered table-sm mb-0' style='font-size:12px;border-collapse:collapse;'>";
+    html += "<thead><tr style='background:#f5f5f5;'>" + areaColHeader + "<th style='min-width:80px;padding:4px 6px;" + tc + ";" + nowrap + "'>" + nameLabel + "</th>";
+    hours.forEach(function(h) { html += "<th style='min-width:26px;padding:2px;font-size:11px;" + tc + "'>" + h + "</th>"; });
+    html += "</tr></thead><tbody>";
+    var lastStore = null;
+    personKeys.forEach(function(key) {
+        var p = byPerson[key];
+        if (showStoreSection && (lastStore === null || lastStore !== p.store)) {
+            var storeName = (p.store || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var storeKeys = storeToKeys[p.store] || [];
+            html += "<tr style='background:#E8EAF6;'>";
+            html += "<td colspan='" + nameColSpan + "' class='fw-bold py-2' style='text-align:left; padding-left:12px;'>" + storeLabel + ": " + storeName + "</td>";
+            hours.forEach(function(h) {
+                var cnt = countWorkingAtHour(storeKeys, h);
+                html += "<td style='padding:2px;font-size:11px;" + tc + ";'>" + (cnt > 0 ? cnt : "") + "</td>";
+            });
+            html += "</tr>";
+        }
+        lastStore = p.store;
+        var att = attByKey[key];
+        var inDec = parseTimeToDecimal(p.pIn), outDec = parseTimeToDecimal(p.pOut), bsDec = parseTimeToDecimal(p.pBS), beDec = parseTimeToDecimal(p.pBE);
+        var hasProblem = !att ? true : (att.lateMin && att.lateMin > 0) || att.onlyIn === true || (att.status && (att.status.indexOf('지각') !== -1 || att.status.indexOf('결석') !== -1 || att.status.indexOf('미기록') !== -1));
+        var rowBg = hasProblem ? '#FFCDD2' : '#E3F2FD';
+        var areaCell = showArea ? "<td style='padding:4px 6px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + (areaLabelT(p.area) || p.area) + "</td>" : "";
+        html += "<tr>" + areaCell + "<td style='padding:4px 6px;font-weight:600;min-width:80px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + (p.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + "</td>";
+        hours.forEach(function(h) {
+            var h0 = h, h05 = h + 0.5, h1 = h + 1;
+            var breakFirst = (bsDec != null && beDec != null && bsDec < h05 && beDec > h0);
+            var breakSecond = (bsDec != null && beDec != null && bsDec < h1 && beDec > h05);
+            var workFirst = (inDec != null && outDec != null && inDec < h05 && outDec > h0) && !breakFirst;
+            var workSecond = (inDec != null && outDec != null && inDec < h1 && outDec > h05) && !breakSecond;
+            var fullBreak = breakFirst && breakSecond;
+            var fullWork = workFirst && workSecond;
+            var mark = '';
+            if (fullBreak) mark = "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #555;background:transparent;'></span>";
+            else if (fullWork) mark = "<span style='color:#000;'>●</span>";
+            else if (breakFirst && workSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border:1px solid #555;border-right:none;border-radius:50% 0 0 50%;background:transparent;box-sizing:border-box;'></span><span style='position:absolute;right:0;top:0;width:6px;height:12px;border-radius:0 50% 50% 0;background:#000;'></span></span>";
+            else if (workFirst && breakSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border-radius:50% 0 0 50%;background:#000;'></span><span style='position:absolute;right:0;top:0;width:6px;height:12px;border:1px solid #555;border-left:none;border-radius:0 50% 50% 0;background:transparent;box-sizing:border-box;'></span></span>";
+            else if (workFirst && !workSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border-radius:50% 0 0 50%;background:#000;'></span></span>";
+            else if (workSecond && !workFirst) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;right:0;top:0;width:6px;height:12px;border-radius:0 50% 50% 0;background:#000;'></span></span>";
+            html += "<td style='padding:2px;min-width:26px;" + tc + ";background:" + (mark ? rowBg : 'transparent') + "'>" + mark + "</td>";
+        });
+        html += "</tr>";
+    });
+    html += "</tbody></table></div>";
+    box.innerHTML = html;
+}
+
+/** [근태 기록/승인] 매장 선택 시 해당 매장 직원 목록을 직원 검색창에 로드. 전체 매장이면 '전체 직원'만 표시해 직원 필터 꼬임 방지 */
+function loadAttEmployeeOptions() {
+    var storeEl = document.getElementById('att-store-filter');
+    var empEl = document.getElementById('att-employee-filter');
+    if (!storeEl || !empEl) return;
+    var store = (storeEl.value || '').trim();
+    var storeText = storeEl.options[storeEl.selectedIndex] ? (storeEl.options[storeEl.selectedIndex].text || '').trim() : '';
+    var isAllStores = !store || store === 'All' || storeText === '전체 매장' || storeText.indexOf('전체') >= 0;
+    var allEmpText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].att_all_employees) ? I18N[currentLang].att_all_employees : (I18N.ko && I18N.ko.att_all_employees) ? I18N.ko.att_all_employees : "전체 직원";
+    var selectFirstText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].att_select_store_first) ? I18N[currentLang].att_select_store_first : (I18N.ko && I18N.ko.att_select_store_first) ? I18N.ko.att_select_store_first : "매장을 먼저 선택";
+    empEl.disabled = true;
+    empEl.innerHTML = '<option value="">' + selectFirstText + '</option>';
+    if (isAllStores) {
+        empEl.innerHTML = '<option value="">' + allEmpText + '</option>';
+        empEl.disabled = false;
+        return;
+    }
+    google.script.run
+        .withSuccessHandler(function(list) {
+            var optHtml = '<option value="">' + allEmpText + '</option>';
+            if (list && list.length > 0) {
+                list.forEach(function(emp) {
+                    var nm = (emp.name || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    var display = (emp.name || '') + (emp.nick ? ' (' + (emp.nick || '') + ')' : '');
+                    display = display.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    optHtml += '<option value="' + nm + '">' + display + '</option>';
+                });
+            } else {
+                optHtml += '<option value="" disabled>해당 매장에 등록된 직원 없음</option>';
+            }
+            empEl.innerHTML = optHtml;
+            empEl.disabled = false;
+        })
+        .withFailureHandler(function() {
+            empEl.innerHTML = '<option value="">직원 목록 로드 실패</option>';
+            empEl.disabled = false;
+        })
+        .getStoreStaffOnly(store);
+}
+
+/** [근태 기록/승인] 일별 요약 목록 렌더 (전역). list 없으면 lastAttendanceSummaryList 사용. */
+function renderDailySummaryList(list) {
+    list = list || lastAttendanceSummaryList || [];
+    var tbody = document.getElementById('att-list-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    var approvalTypeFilterEl = document.getElementById('att-approval-type-filter');
+    var approvalTypeFilter = (approvalTypeFilterEl && approvalTypeFilterEl.value) ? approvalTypeFilterEl.value : 'all';
+    if (list && list.length > 0 && approvalTypeFilter !== 'all') {
+        list = list.filter(function(r) { return r.approvalType === approvalTypeFilter; });
+    }
+    if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="12" class="py-5 text-muted">조회된 기록이 없습니다.</td></tr>';
+        return;
+    }
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    var noRecord = lang.att_no_record || "미기록";
+    var statusNoOut = lang.att_status_no_out || "퇴근미기록";
+    var statusNormal = lang.att_status_normal || "정상";
+    var wait = lang.att_wait || "대기";
+    var btnApprove = lang.att_approve_btn || "승인";
+    var btnReject = lang.att_reject_btn || "반려";
+    var approvalDone = lang.att_approval_done || "승인완료";
+    list.forEach(function(r) {
+        var lateStr = (r.lateMin && r.lateMin !== 0) ? '지각 ' + r.lateMin + '분' : '';
+        var earlyStr = (r.earlyMin && r.earlyMin !== 0) ? '조퇴 ' + r.earlyMin + '분' : '';
+        var otStr = (r.otMin && r.otMin !== 0) ? '연장 ' + r.otMin + '분' : '';
+        var lateExtraText = [lateStr, earlyStr, otStr].filter(Boolean).join(' / ') || '-';
+        var diffText = (r.diffMin != null && r.diffMin !== 0) ? (r.diffMin > 0 ? '+' : '') + r.diffMin + '분' : '-';
+        var approval = String(r.approval || '').trim();
+        var status = String(r.status || '').trim();
+        var onlyIn = r.onlyIn === true;
+        var showApprovalButtons = !onlyIn && (approval !== '승인완료' && approval !== '반려') && (r.lateMin > 0 || r.otMin > 0 || status.indexOf('위치미확인') !== -1 || status.indexOf('승인대기') !== -1 || status.indexOf('강제퇴근') !== -1);
+        var approvalRow = r.approvalRow != null ? r.approvalRow : 0;
+        var outStr = (r.outTimeStr === '미기록') ? noRecord : (r.outTimeStr || '-');
+        var statusStr = (status === '퇴근미기록') ? statusNoOut : (status === '정상') ? statusNormal : (status || '-');
+        var approvalStr = (approval === '대기') ? wait : (approval === '승인완료') ? approvalDone : (approval === '반려') ? btnReject : (approval || '-');
+        var isForcedOut = (r.approvalType === 'forced_out');
+        var otPlaceholder = (typeof lang.att_ot_min === 'string') ? lang.att_ot_min : '연장(분)';
+        var actionCell = '';
+        if (onlyIn) {
+            actionCell = '<td><small class="text-muted">' + statusStr + '</small></td>';
+        } else if (showApprovalButtons && approvalRow) {
+            if (isForcedOut) {
+                actionCell = '<td><input type="number" id="att-ot-' + approvalRow + '" min="0" max="9999" placeholder="' + otPlaceholder + '" class="form-control form-control-sm d-inline-block me-1" style="width:4rem;"> <button type="button" class="btn btn-sm btn-success me-1" onclick="processAttApprovalWithOt(' + approvalRow + ')">' + btnApprove + '</button><button type="button" class="btn btn-sm btn-danger" onclick="processAttApproval(' + approvalRow + ',\'반려\')">' + btnReject + '</button></td>';
+            } else {
+                actionCell = '<td><button type="button" class="btn btn-sm btn-success me-1" onclick="processAttApproval(' + approvalRow + ',\'승인완료\')">' + btnApprove + '</button><button type="button" class="btn btn-sm btn-danger" onclick="processAttApproval(' + approvalRow + ',\'반려\')">' + btnReject + '</button></td>';
+            }
+        } else {
+            actionCell = '<td><small class="text-muted">' + approvalStr + '</small></td>';
+        }
+        var actualHrsText = (r.actualWorkHrs != null) ? r.actualWorkHrs : '-';
+        tbody.innerHTML += '<tr><td>' + (r.date || '') + '</td><td><small>' + (r.store || '') + '</small></td><td><b>' + (r.name || '') + '</b></td><td>' + (r.inTimeStr || '-') + '</td><td>' + outStr + '</td><td>' + (r.breakMin != null ? r.breakMin : '-') + '</td><td>' + actualHrsText + '</td><td>' + (r.plannedWorkHrs != null ? r.plannedWorkHrs : '-') + '</td><td>' + diffText + '</td><td>' + lateExtraText + '</td><td>' + statusStr + '</td>' + actionCell + '</tr>';
+    });
+}
+
+/** 승인 유형 필터 변경 시 저장된 목록으로만 다시 그리기 */
+function rerenderAttendanceByApprovalType() {
+    if (lastAttendanceSummaryList) renderDailySummaryList(lastAttendanceSummaryList);
+}
+
+/** [근태 기록/승인] 조회 - 파라미터를 객체로 전달, '전체 매장'·오피스 필터 서버 인식 보강 */
+function loadAttendanceRecords() {
+    var startEl = document.getElementById('att-start');
+    var endEl = document.getElementById('att-end');
+    var storeEl = document.getElementById('att-store-filter');
+    var empEl = document.getElementById('att-employee-filter');
+    var tbody = document.getElementById('att-list-body');
+    if (!startEl || !endEl || !storeEl || !tbody) return;
+
+    var startStr = (startEl.value || '').trim();
+    var endStr = (endEl.value || '').trim();
+    if (!startStr || !endStr) {
+        var now = new Date();
+        var today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        var firstDay = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-01';
+        startStr = startStr || firstDay;
+        endStr = endStr || today;
+        if (startEl) startEl.value = startStr;
+        if (endEl) endEl.value = endStr;
+    }
+
+    var storeVal = (storeEl.value || '').trim();
+    var storeText = storeEl.options[storeEl.selectedIndex] ? (storeEl.options[storeEl.selectedIndex].text || '').trim() : '';
+    if (!storeVal || storeText.indexOf('전체') >= 0 || storeVal === 'All' || storeVal.toLowerCase() === 'all' || storeVal === '전체 매장' || storeVal === '전체') {
+        storeVal = 'All';
+    }
+    var employeeVal = (empEl && empEl.value) ? (empEl.value || '').trim() : '';
+    var sendStore = (storeVal || 'All');
+    if (sendStore === '' || String(sendStore).toLowerCase().replace(/\s/g, '') === 'all') sendStore = 'All';
+    if (sendStore === 'All') employeeVal = '';  // 전체 매장이면 직원 필터 무시(전체 직원으로 조회)
+
+    var isAllStores = (sendStore === 'All');
+    var s = String(sendStore).toLowerCase();
+    var isOfficeStores = (s.indexOf('office') !== -1 || s.indexOf('오피스') !== -1 || s.indexOf('본사') !== -1);
+
+    var statusFilterEl = document.getElementById('att-status-filter');
+    var approvalOnly = (statusFilterEl && statusFilterEl.value === 'pending');
+    if (typeof load === 'function') load(1);
+    var mode = (isAllStores ? 'all' : isOfficeStores ? 'office' : 'store');
+    var payload = { start: startStr, end: endStr, store: sendStore, emp: employeeVal, mode: mode, approvalOnly: approvalOnly, dailySummary: true };
+
+    function doLoadList() {
+        google.script.run
+            .withSuccessHandler(function(list) {
+                if (typeof load === 'function') load(0);
+                lastAttendanceSummaryList = list || [];
+                renderDailySummaryList(list);
+            })
+            .withFailureHandler(function(err) {
+                if (typeof load === 'function') load(0);
+                tbody.innerHTML = '<tr><td colspan="12" class="py-5 text-danger">조회 중 오류가 발생했습니다.</td></tr>';
+            })
+            .getAttendanceListFromPayload(JSON.stringify(payload));
+    }
+
+    doLoadList();
+    var batchWrap = document.getElementById('att-batch-forced-wrap');
+    if (batchWrap) batchWrap.style.display = (statusFilterEl && statusFilterEl.value === 'pending') ? '' : 'none';
+}
+
+/** 기간 내 퇴근 미기록 건을 강제퇴근(승인대기)으로 일괄 생성 후 목록 새로고침 */
+function runBatchForcedClockOutThenReload() {
+    var startEl = document.getElementById('att-start');
+    var endEl = document.getElementById('att-end');
+    if (!startEl || !endEl) return;
+    var startStr = (startEl.value || '').trim();
+    var endStr = (endEl.value || '').trim();
+    if (!startStr || !endStr) { alert('시작일·종료일을 선택한 뒤 실행해 주세요.'); return; }
+    if (typeof load === 'function') load(1);
+    google.script.run
+        .withSuccessHandler(function() {
+            if (typeof load === 'function') load(0);
+            if (typeof loadAttendanceRecords === 'function') loadAttendanceRecords();
+        })
+        .withFailureHandler(function(err) {
+            if (typeof load === 'function') load(0);
+            alert(err && err.message ? err.message : '처리 중 오류가 발생했습니다.');
+        })
+        .processDailyForcedClockOutForRange(startStr, endStr);
+}
+
+/** 근태 승인/반려 버튼 처리. optOtMinutes: 강제퇴근 시 연장(분) 입력 시 전달 */
+function processAttApproval(row, decision, optOtMinutes) {
+    var runner = google.script.run.withSuccessHandler(function(msg) {
+        alert(msg);
+        if (typeof loadAttendanceRecords === 'function') loadAttendanceRecords();
+    });
+    var uStore = (typeof userStore !== 'undefined') ? userStore : '';
+    var uRole = (typeof userRole !== 'undefined') ? userRole : '';
+    if (optOtMinutes != null && optOtMinutes !== '') {
+        runner.processAttendanceApproval(row, decision, optOtMinutes, uStore, uRole);
+    } else {
+        runner.processAttendanceApproval(row, decision, null, uStore, uRole);
+    }
+}
+
+/** 강제퇴근 행에서 연장(분) 입력값을 넣어 승인 */
+function processAttApprovalWithOt(approvalRow) {
+    var el = document.getElementById('att-ot-' + approvalRow);
+    var otVal = (el && el.value !== undefined) ? el.value.trim() : '';
+    processAttApproval(approvalRow, '승인완료', otVal);
+}
+
+/** 강제 퇴근 기록 (출근만 있고 퇴근 미기록인 경우, 시간표 계획 퇴근으로 기록 → 승인대기) */
+function recordForcedClockOutFromUI(dateStr, storeName, employeeName) {
+    if (!dateStr || !storeName || !employeeName) return;
+    if (!confirm('해당 날짜의 계획 퇴근 시각으로 강제 퇴근을 기록합니다. 매니저 승인 후 인정됩니다. 진행할까요?')) return;
+    google.script.run
+        .withSuccessHandler(function(msg) {
+            alert(msg);
+            if (typeof loadAttendanceRecords === 'function') loadAttendanceRecords();
+        })
+        .withFailureHandler(function(err) { alert(err.message || '처리 중 오류가 발생했습니다.'); })
+        .recordForcedClockOut(dateStr, storeName, employeeName);
+}
+
+/* 시간표 관리 데이터 로드 (sch-date-filter/sch-store-filter UI가 있을 때만 동작) */
+function loadScheduleManager() {
+    const dateEl = document.getElementById('sch-date-filter');
+    const storeEl = document.getElementById('sch-store-filter');
+    const tbody = document.getElementById('sch-list-body');
+    if (!dateEl || !storeEl || !tbody) return;
+    const date = dateEl.value;
+    const store = storeEl.value;
+    if (!date) return;
+
+    load(1);
+    google.script.run
+        .withSuccessHandler(function(list) {
+            load(0);
+            tbody.innerHTML = "";
+            if (!list || !list.length) {
+                tbody.innerHTML = "<tr><td colspan=\"6\" class=\"text-muted py-3\">해당 날짜/매장에 스케줄이 없습니다.</td></tr>";
+                return;
+            }
+            list.forEach(s => {
+                tbody.innerHTML += `
+                <tr>
+                    <td><b>${s.name}</b><br><small>${s.store}</small></td>
+                    <td><input type="time" id="pIn-${s.row}" class="form-control form-control-sm" value="${s.pIn || ""}"></td>
+                    <td><input type="time" id="pOut-${s.row}" class="form-control form-control-sm" value="${s.pOut || ""}"></td>
+                    <td><input type="time" id="pBS-${s.row}" class="form-control form-control-sm" value="${s.pBS || ""}"></td>
+                    <td><input type="time" id="pBE-${s.row}" class="form-control form-control-sm" value="${s.pBE || ""}"></td>
+                    <td><button class="btn btn-sm btn-success" onclick="saveScheduleRow(${s.row})">💾</button></td>
+                </tr>`;
+            });
+        })
+        .withFailureHandler(function(err) {
+            load(0);
+            tbody.innerHTML = "<tr><td colspan=\"6\" class=\"text-danger py-3\">스케줄 조회 중 오류가 발생했습니다. (서버 연결 확인)</td></tr>";
+            console.error("getScheduleForAdmin error:", err);
+        })
+        .getScheduleForAdmin(date, store);
+}
+
+/* 시간표 개별 수정 저장 */
+function saveScheduleRow(row) {
+    const data = {
+        row: row,
+        pIn: document.getElementById('pIn-'+row).value,
+        pOut: document.getElementById('pOut-'+row).value,
+        pBS: document.getElementById('pBS-'+row).value,
+        pBE: document.getElementById('pBE-'+row).value
+    };
+    load(1);
+    google.script.run.withSuccessHandler(res => {
+        load(0);
+        alert("시간표가 업데이트되었습니다.");
+    }).updateScheduleRow(data);
+}
+
+let currentStaff = "";
+let isDrawing = false;
+
+/** 매장이 오피스(본사)인지 판별 - 스케줄 그리드에서 Office 구역 사용 여부 */
+function isOfficeStore(store) {
+    var s = (store || '').toString().trim().toLowerCase();
+    return s === 'office' || s === '오피스' || s === '본사' || s.indexOf('office') !== -1;
+}
+
+/* [수정] 7일 고정 그리드 생성 함수 (오피스 선택 시 Office 구역만, 매장 선택 시 Service/Kitchen) */
+function initWeeklyGrid(type = 'sch') {
+    const mondayEl = document.getElementById(type + '-week-monday');
+    const monday = mondayEl ? (mondayEl.value || '').trim() : '';
+    const startSel = document.getElementById('sch-start-hour');
+    const endSel = document.getElementById('sch-end-hour');
+    let startHour = startSel ? parseInt(startSel.value, 10) : NaN;
+    let endHour = endSel ? parseInt(endSel.value, 10) : NaN;
+    if (isNaN(startHour)) startHour = 6;
+    if (isNaN(endHour)) endHour = 23;
+    if (endHour < startHour) endHour = 23;
+
+    if (!monday) return;
+
+    var storeEl = (type === 'view') ? document.getElementById('view-store-select') : document.getElementById('sch-store-select');
+    var store = storeEl ? (storeEl.value || '').trim() : '';
+    var areas = isOfficeStore(store) ? ['Office'] : ['Service', 'Kitchen'];
+    window.currentScheduleAreas = areas;
+
+    // 1. 기존 내용 싹 비우기 (10일이 나오는 주범 방지)
+    const headerRow = document.getElementById(type + '-header-row');
+    const areaRow = document.getElementById(type + '-header-areas');
+    const tbody = document.getElementById(type + '-body-slots');
+
+    if (!headerRow || !areaRow || !tbody) return;
+
+    headerRow.innerHTML = "<th>Time</th>";
+    areaRow.innerHTML = "<th></th>";
+    tbody.innerHTML = "";
+
+    var areaStyles = { Service: 'background:#FFE0B2; color:#E65100;', Kitchen: 'background:#C8E6C9; color:#2E7D32;', Office: 'background:#BBDEFB; color:#1976D2;' };
+    var areaLabels = { Service: '서비스', Kitchen: '주방', Office: '오피스' };
+
+    // 2. 헤더 생성 (딱 7번만 반복!) - 태국 시간 기준: yyyy-MM-dd 문자열 기준 일수 계산(브라우저 시간대 무관)
+    var mondayNorm = (monday || "").substring(0, 10);
+    for(let i=0; i<7; i++) {
+        var dayStr = (typeof addDaysToYyyyMmDd === "function") ? addDaysToYyyyMmDd(mondayNorm, i) : mondayNorm;
+        var parts = dayStr.split("-");
+        var dateStr = (parts.length >= 3) ? (parseInt(parts[1],10) + "/" + parseInt(parts[2],10)) : dayStr;
+
+        headerRow.innerHTML += `<th colspan="${areas.length}" class="bg-dark text-white sch-date-header text-center">${dateStr}</th>`;
+
+        areas.forEach(function(area) {
+            areaRow.innerHTML += `<th class="small py-1 text-center" style="min-width:60px;${areaStyles[area] || ''}">${areaLabels[area] || area}<br><span id="${type}-count-${i}-${area}" class="area-count fw-bold">0</span>명</th>`;
+        });
+    }
+
+    // 3. 바디(시간 슬롯) 생성
+    let currentH = startHour;
+    let isFinished = false;
+    var isViewOnly = (type === 'view');
+    var slotClick = isViewOnly ? '' : ' onclick="toggleMultiSlot(this)"';
+
+    while (!isFinished) {
+        let row = `<tr><td class="time-label text-center fw-bold">${currentH.toString().padStart(2,'0')}:00</td>`;
+
+        for(let day=0; day<7; day++) {
+            areas.forEach(function(area) {
+                row += `<td class="hour-cell p-0">
+                            <div class="slot-container">
+                                <div class="half-slot"${slotClick} data-day="${day}" data-area="${area}" data-time="${currentH.toString().padStart(2,'0')}:00"></div>
+                                <div class="half-slot"${slotClick} data-day="${day}" data-area="${area}" data-time="${currentH.toString().padStart(2,'0')}:30"></div>
+                            </div>
+                        </td>`;
+            });
+        }
+        tbody.innerHTML += row + "</tr>";
+
+        if (currentH === endHour) isFinished = true;
+        currentH = (currentH + 1) % 24;
+    }
+
+    if (typeof updateDailyCounts === 'function') updateDailyCounts(type);
+}
+
+
+/* 구역별(Service/Kitchen/Office) 당일 총 근무 인원수를 계산해 헤더에 표시 */
+function updateDailyCounts(type = 'sch') {
+    var areas = window.currentScheduleAreas || ['Service', 'Kitchen'];
+    for(let day=0; day<7; day++) {
+        areas.forEach(function(area) {
+            const slots = document.querySelectorAll('#' + type + '-body-slots .half-slot[data-day="' + day + '"][data-area="' + area + '"].active-fill');
+            let uniqueStaff = new Set();
+            slots.forEach(function(slot) {
+                let namesStr = slot.getAttribute('data-names');
+                if(namesStr) {
+                    namesStr.split(',').forEach(function(n) { uniqueStaff.add(n.replace("BRK_", "")); });
+                }
+            });
+            const countEl = document.getElementById(type + '-count-' + day + '-' + area);
+            if(countEl) countEl.innerText = uniqueStaff.size;
+        });
+    }
+}
+
+
+// 페이지 로드 시 선택지 먼저 채우기 실행
+fillHourSelectors();
+
+/* [추가] 초기 로드 시 시간 범위 선택지 채우기 (00시 ~ 24시) */
+function fillHourSelectors() {
+    const s = document.getElementById('sch-start-hour');
+    const e = document.getElementById('sch-end-hour');
+    if(!s || s.options.length > 0) return;
+
+    for(let i=0; i<24; i++) {
+        let h = i.toString().padStart(2, '0') + ":00";
+        s.add(new Option(h, i));
+        e.add(new Option(h, i));
+    }
+    s.value = 9;  // 기본 시작: 09:00 (첫 행에 09:00, 09:30 표시)
+    e.value = 18; // 기본 종료: 18:00
+}
+
+/* 칸 클릭 시 작동하는 토글 함수 */
+function toggleSlot(el) {
+    if(!selectedName) return alert("왼쪽에서 직원을 먼저 선택하세요!");
+
+    // 이미 해당 직원이 채워져 있다면 비우기 (삭제)
+    if(el.getAttribute('data-name') === selectedName) {
+        el.classList.remove('active-fill');
+        el.innerHTML = "";
+        el.removeAttribute('data-name');
+        el.removeAttribute('data-nick');
+    } 
+    // 비어있거나 다른 사람이 있다면 현재 선택된 직원으로 채우기
+    else {
+        el.classList.add('active-fill');
+        el.innerHTML = selectedNick; // 화면에는 닉네임 표시
+        el.setAttribute('data-name', selectedName); // 저장용 실명 속성
+        el.setAttribute('data-nick', selectedNick);
+        
+        // 구역(Hall/Kitchen)에 따라 색상을 약간 다르게 하고 싶다면 여기서 제어 가능
+        if(el.getAttribute('data-area') === "Hall") {
+            el.style.backgroundColor = "#E65100"; // 홀: 주황색계열
+        } else {
+            el.style.backgroundColor = "#2E7D32"; // 주방: 초록색계열
+        }
+        el.style.color = "white";
+    }
+}
+
+// 2. 드래그 색칠 로직
+function startDraw(el) { if(!currentStaff) return alert("직원을 선택하세요!"); isDrawing = true; fillSlot(el); }
+function moveDraw(el) { if(isDrawing) fillSlot(el); }
+function fillSlot(el) {
+    if(el.classList.contains('active-fill') && el.getAttribute('data-staff') === currentStaff) {
+        el.classList.remove('active-fill'); el.innerText = ""; el.removeAttribute('data-staff');
+    } else {
+        el.classList.add('active-fill'); el.innerText = currentStaff.split(' ')[0];
+        el.setAttribute('data-staff', currentStaff);
+    }
+}
+
+/* [최종] 데이터 분석 후 서버(시트) 저장 함수 */
+function prepareAndSave() {
+    const store = document.getElementById('sch-store-select').value;
+    const monday = document.getElementById('sch-week-monday').value;
+    const slots = document.querySelectorAll('.half-slot.active-fill');
+    
+    if(!monday) return alert("날짜를 선택하세요.");
+    if(!store || store === "All") return alert("매장을 선택하세요.");
+
+    // 데이터 구조: { "날짜_이름_구역": { work: [시간들], break: [시간들] } }
+    let map = {}; 
+
+    slots.forEach(s => {
+        let namesStr = s.getAttribute('data-names');
+        if(!namesStr) return;
+        
+        let names = namesStr.split(',');
+        let day = parseInt(s.getAttribute('data-day'));
+        let time = s.getAttribute('data-time');
+        let area = s.getAttribute('data-area');
+        
+        let datePart = (typeof addDaysToYyyyMmDd === "function") ? addDaysToYyyyMmDd((monday || "").substring(0, 10), day) : (monday || "").substring(0, 10);
+
+        names.forEach(n => {
+            let name = n.trim();
+            if(!name) return;
+
+            // 휴게 여부 확인 및 실제 이름 추출
+            const isBrk = name.startsWith("BRK_");
+            const realName = isBrk ? name.replace("BRK_", "") : name;
+            
+            let key = datePart + "_" + realName + "_" + area;
+            if(!map[key]) map[key] = { work: [], break: [] };
+            
+            // 휴게와 근무 시간을 각각 분류해서 수집
+            if(isBrk) map[key].break.push(time);
+            else map[key].work.push(time);
+        });
+    });
+
+    let finalData = [];
+    for(let k in map) {
+        let parts = k.split('_');
+        let date = parts[0];
+        let area = parts[parts.length - 1];
+        let name = parts.length > 2 ? parts.slice(1, -1).join('_') : (parts[1] || '');
+        
+        // 해당 직원의 모든 시간(근무+휴게)을 합쳐서 출퇴근 범위 계산
+        let allTimes = [...map[k].work, ...map[k].break].sort();
+        if(allTimes.length === 0) continue;
+
+        // 1. 전체 출근/퇴근 시간 계산
+        let pIn = allTimes[0];
+        let last = allTimes[allTimes.length - 1];
+        let [hh, mm] = last.split(':').map(Number);
+        mm += 30; if(mm === 60) { hh++; mm = 0; }
+        let pOut = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+
+        // 2. 휴게 시작/종료 시간 계산 (검정색 카드 데이터가 있을 때만)
+        let pBS = "", pBE = "";
+        if(map[k].break.length > 0) {
+            let brkTimes = map[k].break.sort();
+            pBS = brkTimes[0];
+            let bLast = brkTimes[brkTimes.length - 1];
+            let [bhh, bmm] = bLast.split(':').map(Number);
+            bmm += 30; if(bmm === 60) { bhh++; bmm = 0; }
+            pBE = `${bhh.toString().padStart(2, '0')}:${bmm.toString().padStart(2, '0')}`;
+        }
+
+        finalData.push({
+            date: date,
+            name: name,
+            pIn: pIn,
+            pOut: pOut,
+            pBS: pBS, // 휴게 시작 시간
+            pBE: pBE, // 휴게 종료 시간
+            remark: "[" + area + "]"
+        });
+    }
+
+    if(finalData.length === 0) return alert("저장할 데이터가 없습니다.");
+
+    load(1);
+    google.script.run
+        .withSuccessHandler(res => {
+            load(0);
+            alert(res);
+        })
+        .withFailureHandler(function(err) {
+            load(0);
+            alert("주간 스케줄 저장 중 오류가 발생했습니다. 다시 시도해 주세요.");
+            console.error(err);
+        })
+        .saveWeeklySmartSchedule(store, monday, finalData);
+}
+
+let selectedName = ""; // 시트 저장용 (실명)
+let selectedNick = ""; // 화면 표시용 (닉네임)
+
+/* 직원 목록 로드 및 선택 함수 */
+function loadStaffAndGrid() {
+    const store = document.getElementById('sch-store-select').value;
+    if(!store || store === "All") return;
+    
+    google.script.run.withSuccessHandler(function(list) {
+        const pool = document.getElementById('sch-staff-list');
+        pool.innerHTML = "";
+        
+        list.forEach(function(emp) {
+            const btn = document.createElement("button");
+            btn.className = "list-group-item list-group-item-action staff-item";
+            btn.innerHTML = '<div><b>' + emp.name + '</b> (' + emp.nick + ')</div><div class="staff-dept small text-muted">[' + emp.dept + ']</div>';
+            btn.onclick = function() {
+                document.querySelectorAll('.staff-item').forEach(function(b) { b.classList.remove('active'); });
+                this.classList.add('active');
+                selectedName = emp.name;
+                selectedNick = emp.nick;
+            };
+            pool.appendChild(btn);
+        });
+        initWeeklyGrid();
+        var isOffice = isOfficeStore(store);
+        var btnService = document.getElementById('btn-quick-service');
+        var btnKitchen = document.getElementById('btn-quick-kitchen');
+        var btnOffice = document.getElementById('btn-quick-office');
+        if (btnService) btnService.style.display = isOffice ? 'none' : 'inline-block';
+        if (btnKitchen) btnKitchen.style.display = isOffice ? 'none' : 'inline-block';
+        if (btnOffice) btnOffice.style.display = isOffice ? 'inline-block' : 'none'; 
+    }).getStoreStaffOnly(store);
+}
+
+function toggleMultiSlot(el) {
+    if (el.closest('.view-schedule-readonly')) return;
+    if(!selectedName) return alert("왼쪽에서 직원을 먼저 선택하세요!");
+
+    // 1. 기존 데이터 가져오기
+    let assignedNames = el.getAttribute('data-names') ? el.getAttribute('data-names').split(',') : [];
+    let assignedNicks = el.getAttribute('data-nicks') ? el.getAttribute('data-nicks').split(',') : [];
+
+    const nameIdx = assignedNames.indexOf(selectedName);
+
+    // 2. 추가 또는 제거 결정
+    if(nameIdx > -1) {
+        // 이미 명단에 있으면 제거 (토글)
+        assignedNames.splice(nameIdx, 1);
+        assignedNicks.splice(nameIdx, 1);
+    } else {
+        // 같은 요일 다른 칸에 이미 배정되어 있으면 중복 방지
+        var day = el.getAttribute('data-day');
+        var otherSlots = document.querySelectorAll('#sch-body-slots .half-slot[data-day="' + day + '"]');
+        for (var o = 0; o < otherSlots.length; o++) {
+            if (otherSlots[o] === el) continue;
+            var onames = (otherSlots[o].getAttribute('data-names') || '').split(',');
+            for (var n = 0; n < onames.length; n++) {
+                var nm = (onames[n] || '').trim();
+                if (nm === selectedName || nm === 'BRK_' + selectedName) {
+                    alert('해당 요일에는 이미 배정되어 있습니다. 기존 칸을 클릭해 제거한 뒤 배정하세요.');
+                    return;
+                }
+            }
+        }
+        assignedNames.push(selectedName);
+        assignedNicks.push(selectedNick);
+    }
+
+    // 3. 엘리먼트에 데이터 속성 업데이트
+    el.setAttribute('data-names', assignedNames.join(','));
+    el.setAttribute('data-nicks', assignedNicks.join(','));
+
+    // 4. 화면 그리기 (닉네임 칩 생성)
+    el.innerHTML = "";
+    const area = el.getAttribute('data-area'); // 'Service', 'Kitchen', 'Office'
+    
+    var chipColor = '#2E7D32';
+    if (area === 'Service') chipColor = '#E65100';
+    else if (area === 'Office') chipColor = '#1976D2';
+    assignedNicks.forEach(function(nick) {
+        el.innerHTML += '<span class="nick-chip" style="background:' + chipColor + '; color:white;">' + nick + '</span>';
+    });
+
+    // 5. 칸의 배경색 강조 처리
+    var bgColor = (area === 'Service') ? '#FFF3E0' : (area === 'Office') ? '#E3F2FD' : '#E8F5E9';
+    if(assignedNames.length > 0) {
+        el.classList.add('active-fill');
+        el.style.backgroundColor = bgColor;
+    } else {
+        el.classList.remove('active-fill');
+        el.style.backgroundColor = "";
+    }
+}
+
+/* 페이지 로드 시 시간 선택지(08:00~23:30)를 채워줍니다 */
+function fillTimeOptions() {
+    const startSelect = document.getElementById('quick-start');
+    const breakSelect = document.getElementById('quick-break-start');
+    for(let h=8; h<24; h++) {
+        ["00", "30"].forEach(m => {
+            let t = `${h.toString().padStart(2,'0')}:${m}`;
+            startSelect.add(new Option(t, t));
+            breakSelect.add(new Option(t, t));
+        });
+    }
+    if (startSelect) startSelect.value = "09:30";
+    if (breakSelect) breakSelect.value = "13:30";
+}
+
+function applyQuickSchedule(area) {
+    if(!selectedName) return alert("왼쪽에서 직원을 먼저 선택하세요!");
+    
+    const startTimeStr = document.getElementById('quick-start').value;
+    const workHours = parseFloat(document.getElementById('quick-work-hours').value) || 0;
+    const breakStartTimeStr = document.getElementById('quick-break-start').value;
+    const breakHours = parseFloat(document.getElementById('quick-break-hours').value) || 0;
+    const targetDay = document.getElementById('quick-day').value;
+    const gridStartHour = parseInt(document.getElementById('sch-start-hour').value);
+
+    if(isNaN(workHours)) return alert("근무 시간을 숫자로 입력하세요.");
+
+    // --- [1단계] 해당 직원의 기존 기록 초기화 (덮어쓰기 준비) ---
+    const allSlots = document.querySelectorAll(`.half-slot[data-day="${targetDay}"][data-area="${area}"]`);
+    
+    allSlots.forEach(slot => {
+        let names = slot.getAttribute('data-names') ? slot.getAttribute('data-names').split(',') : [];
+        let nicks = slot.getAttribute('data-nicks') ? slot.getAttribute('data-nicks').split(',') : [];
+        
+        // 일반 근무(selectedName)와 휴게(BRK_selectedName) 기록을 모두 찾아 제거
+        const brkName = "BRK_" + selectedName;
+        
+        for (let i = names.length - 1; i >= 0; i--) {
+            if (names[i] === selectedName || names[i] === brkName) {
+                names.splice(i, 1);
+                nicks.splice(i, 1);
+            }
+        }
+        
+        slot.setAttribute('data-names', names.join(','));
+        slot.setAttribute('data-nicks', nicks.join(','));
+        refreshSlotUI(slot); // UI를 다시 그려주는 함수 호출
+    });
+
+    // --- [2단계] 시간 계산 로직 ---
+    let [sH, sM] = startTimeStr.split(':').map(Number);
+    let startMin = sH * 60 + sM;
+    if (sH < gridStartHour) startMin += 1440; // 자정 이월 처리
+    let endMin = startMin + (workHours + breakHours) * 60;
+
+    let [bSH, bSM] = breakStartTimeStr.split(':').map(Number);
+    let bStartMin = bSH * 60 + bSM;
+    if (bSH < gridStartHour) bStartMin += 1440;
+    let bEndMin = bStartMin + (breakHours * 60);
+
+    // --- [3단계] 신규 스케줄 적용 ---
+    allSlots.forEach(slot => {
+        let [currH, currM] = slot.getAttribute('data-time').split(':').map(Number);
+        let currMin = currH * 60 + currM;
+        if (currH < gridStartHour) currMin += 1440;
+
+        if (currMin >= startMin && currMin < endMin) {
+            let names = slot.getAttribute('data-names') ? slot.getAttribute('data-names').split(',') : [];
+            let nicks = slot.getAttribute('data-nicks') ? slot.getAttribute('data-nicks').split(',') : [];
+            
+            if (currMin >= bStartMin && currMin < bEndMin) {
+                // 휴게 시간: 검정색 닉네임 카드
+                names.push("BRK_" + selectedName);
+                nicks.push(selectedNick);
+            } else {
+                // 근무 시간: 일반 색상 닉네임 카드
+                names.push(selectedName);
+                nicks.push(selectedNick);
+            }
+            
+            slot.setAttribute('data-names', names.join(','));
+            slot.setAttribute('data-nicks', nicks.join(','));
+            refreshSlotUI(slot);
+        }
+    });
+    if (typeof updateDailyCounts === 'function') updateDailyCounts();
+}
+
+/* [보조] 슬롯의 UI를 데이터에 맞게 다시 그려주는 함수 */
+function refreshSlotUI(el) {
+    el.innerHTML = "";
+    let names = el.getAttribute('data-names') ? el.getAttribute('data-names').split(',') : [];
+    let nicks = el.getAttribute('data-nicks') ? el.getAttribute('data-nicks').split(',') : [];
+    const area = el.getAttribute('data-area');
+    var color = (area === 'Service') ? '#E65100' : (area === 'Office') ? '#1976D2' : '#2E7D32';
+
+    nicks.forEach(function(nick, i) {
+        if (names[i] && names[i].startsWith("BRK_")) {
+            el.innerHTML += '<span class="nick-chip break-mode">' + nick + '</span>';
+        } else {
+            el.innerHTML += '<span class="nick-chip" style="background-color:' + color + ';">' + nick + '</span>';
+        }
+    });
+
+    if (names.length > 0) el.classList.add('active-fill');
+    else el.classList.remove('active-fill');
+}
+
+// 초기화 시 시간 선택지 생성 실행
+fillTimeOptions();
+
+/* 태국(Asia/Bangkok) 등 시간대 무관: yyyy-MM-dd에 N일 더한 날짜 반환 (UTC 기준 일수 계산) */
+function addDaysToYyyyMmDd(dateStr, days) {
+    var p = (dateStr || "").substring(0, 10).split("-");
+    if (p.length !== 3) return dateStr;
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, d = parseInt(p[2], 10);
+    var utc = Date.UTC(y, m, d) + (days || 0) * 24 * 60 * 60 * 1000;
+    var t = new Date(utc);
+    return t.getUTCFullYear() + "-" + String(t.getUTCMonth() + 1).padStart(2, "0") + "-" + String(t.getUTCDate()).padStart(2, "0");
+}
+/* 해당 주의 월요일 날짜(YYYY-MM-DD) 반환 - UTC 기준 요일 계산(태국 시간과 일치) */
+function getMondayOfWeek(dateStr) {
+    if (!dateStr) return '';
+    var p = (dateStr || "").substring(0, 10).split("-");
+    if (p.length !== 3) return dateStr;
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1, d = parseInt(p[2], 10);
+    var dayOfWeek = new Date(Date.UTC(y, m, d)).getUTCDay();
+    var diff = dayOfWeek === 0 ? -6 : -(dayOfWeek - 1);
+    return addDaysToYyyyMmDd(dateStr, diff);
+}
+/* 날짜 입력 시 해당 주 월요일로 자동 보정 */
+function snapToMonday(el) {
+    if (!el || !el.value) return;
+    var monday = getMondayOfWeek(el.value);
+    if (monday && monday !== el.value) el.value = monday;
+}
+
+/* [모바일형] 주간 스케줄 데이터를 테이블 HTML로 변환 (조회 탭용). areaFilter All이면 구역 표시 */
+function buildAdminScheduleTableHtml(list, mondayStr, areaFilter) {
+    if (!list || list.length === 0) return "<p class=\"text-muted py-4 text-center mb-0\">해당 주에 저장된 스케줄이 없습니다.</p>";
+    areaFilter = areaFilter || "All";
+    if (areaFilter !== "All") list = list.filter(function(r) { return (r.area || "Service") === areaFilter; });
+    if (!list || list.length === 0) return "<p class=\"text-muted py-4 text-center mb-0\">해당 구역에 스케줄이 없습니다.</p>";
+    var dayLabels = ["월", "화", "수", "목", "금", "토", "일"];
+    var areaLabelKo = { Service: "서비스", Kitchen: "주방", Office: "오피스" };
+    var mondayNorm = (mondayStr || "").substring(0, 10);
+    var dayStrs = [];
+    for (var i = 0; i < 7; i++) {
+        dayStrs.push(typeof addDaysToYyyyMmDd === "function" ? addDaysToYyyyMmDd(mondayNorm, i) : mondayNorm);
+    }
+    var byPerson = {};
+    list.forEach(function(r) {
+        var key = (r.store || "") + "|" + (r.name || "");
+        if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", byDate: {} };
+        byPerson[key].byDate[r.date] = r;
+    });
+    var personKeys = Object.keys(byPerson).sort();
+    var dailyCount = [0, 0, 0, 0, 0, 0, 0];
+    var persons = [];
+    var multiArea = (function() { var a = {}; list.forEach(function(x) { a[x.area || "Service"] = 1; }); return Object.keys(a).length > 1; })();
+    var showArea = (areaFilter === "All" && multiArea);
+    function scheduleTimeOnly(v) {
+        if (v == null || v === "") return "";
+        var s = String(v).trim();
+        var match = s.match(/(\d{1,2}):(\d{2})/);
+        if (match) return ("0" + match[1]).slice(-2) + ":" + match[2];
+        if (s.indexOf("T") !== -1) { var tPart = s.split("T")[1]; if (tPart && (match = tPart.match(/(\d{1,2}):(\d{2})/))) return ("0" + match[1]).slice(-2) + ":" + match[2]; }
+        return s.length >= 5 && s.charAt(2) === ":" ? s.substring(0, 5) : s;
+    }
+    personKeys.forEach(function(key) {
+        var p = byPerson[key];
+        var workDays = [], breakDays = [];
+        var offCount = 0;
+        for (var i = 0; i < 7; i++) {
+            var row = p.byDate[dayStrs[i]];
+            var pIn = row && row.pIn ? scheduleTimeOnly(row.pIn) : "";
+            var pOut = row && row.pOut ? scheduleTimeOnly(row.pOut) : "";
+            var workStr = row && (pIn || pOut) ? (pIn || "-") + "-" + (pOut || "-") : "OFF";
+            var pBS = row && row.pBS ? scheduleTimeOnly(row.pBS) : "";
+            var pBE = row && row.pBE ? scheduleTimeOnly(row.pBE) : "";
+            var breakStr = row && pBS && pBE ? (pBS + "-" + pBE) : "-";
+            workDays.push(workStr);
+            breakDays.push(breakStr);
+            if (workStr === "OFF") offCount++; else dailyCount[i]++;
+        }
+        persons.push({ name: p.name, store: p.store, area: p.area, workDays: workDays, breakDays: breakDays, offCount: offCount, workCount: 7 - offCount });
+    });
+    window._lastScheduleViewData = { persons: persons, dayLabels: dayLabels, dayStrs: dayStrs, dailyCount: dailyCount, mondayStr: mondayStr, showArea: showArea, areaLabelKo: areaLabelKo };
+    var tc = "text-align:center;";
+    var cellWork = "background:#E3F2FD;";
+    var cellBreak = "background:#e8e8e8;";
+    var areaColHeader = showArea ? "<th style=\"min-width:42px;padding:6px 4px;" + tc + "\">구역</th>" : "";
+    var html = "<div style=\"overflow-x:auto;\"><table class=\"table table-bordered table-sm mb-0\" style=\"font-size:15px; min-width:520px; border-collapse:collapse;\">";
+    html += "<thead><tr style=\"background:#f5f5f5;\">" + areaColHeader + "<th style=\"min-width:52px;padding:6px 4px;" + tc + "\">이름</th>";
+    for (var i = 0; i < 7; i++) html += "<th style=\"min-width:58px;padding:6px 4px;" + tc + "\">" + dayLabels[i] + "</th>";
+    html += "<th style=\"min-width:36px;padding:6px 4px;" + tc + "\">휴무</th><th style=\"min-width:48px;padding:6px 4px;" + tc + "\">근무일</th></tr></thead><tbody>";
+    persons.forEach(function(p) {
+        var displayName = p.name + (p.store ? " (" + p.store + ")" : "");
+        var areaCell = showArea ? "<td style=\"padding:4px;" + tc + ";" + cellWork + "\">" + (areaLabelKo[p.area] || p.area) + "</td>" : "";
+        html += "<tr>" + areaCell + "<td style=\"padding:4px;font-weight:600;" + tc + ";" + cellWork + "\">" + (displayName.replace(/</g, "&lt;").replace(/>/g, "&gt;")) + "</td>";
+        for (var i = 0; i < 7; i++) html += "<td style=\"padding:4px;" + tc + ";" + cellWork + "\">" + (p.workDays[i].replace(/</g, "&lt;")) + "</td>";
+        html += "<td style=\"padding:4px;" + tc + ";" + cellWork + "\">" + p.offCount + "</td><td style=\"padding:4px;" + tc + ";" + cellWork + "\">" + p.workCount + "</td></tr>";
+        var breakAreaCell = showArea ? "<td style=\"padding:2px 4px;font-size:14px;color:#555;" + tc + ";" + cellBreak + "\"></td>" : "";
+        html += "<tr>" + breakAreaCell + "<td style=\"padding:2px 4px;font-size:14px;color:#555;" + tc + ";" + cellBreak + "\">휴식</td>";
+        for (var i = 0; i < 7; i++) html += "<td style=\"padding:2px 4px;font-size:14px;" + tc + ";" + cellBreak + "\">" + (p.breakDays[i].replace(/</g, "&lt;")) + "</td>";
+        html += "<td style=\"" + tc + ";" + cellBreak + "\"></td><td style=\"" + tc + ";" + cellBreak + "\"></td></tr>";
+    });
+    var footAreaCell = showArea ? "<td style=\"padding:4px;" + tc + "\"></td>" : "";
+    html += "</tbody><tfoot><tr style=\"background:#E8EAF6;font-weight:600;\">" + footAreaCell + "<td style=\"padding:4px;" + tc + "\">일일 근무 인원</td>";
+    for (var i = 0; i < 7; i++) html += "<td style=\"padding:4px;" + tc + "\">" + dailyCount[i] + "</td>";
+    html += "<td style=\"" + tc + "\"></td><td style=\"" + tc + "\"></td></tr></tfoot></table></div>";
+    return html;
+}
+
+function exportScheduleToExcel() {
+    var data = window._lastScheduleViewData;
+    if (!data || !data.persons || data.persons.length === 0) {
+        alert("먼저 스케줄을 조회하세요.");
+        return;
+    }
+    var dayLabels = data.dayLabels;
+    var headerRow = (data.showArea ? ["구역", "이름"] : ["이름"]).concat(dayLabels).concat(["휴무", "근무일"]);
+    var colCount = headerRow.length;
+    var rows = [];
+    var periodStr = (data.period || (data.mondayStr && data.dayStrs && data.dayStrs[6]) ? (data.mondayStr || "") + " ~ " + (data.dayStrs ? data.dayStrs[6] : "") : "");
+    var storeStr = data.storeName || "";
+    if (periodStr || storeStr) {
+        var periodRow = []; for (var i = 0; i < colCount; i++) periodRow.push(i === 0 ? "기간: " + periodStr : ""); rows.push(periodRow);
+        var storeRow = []; for (var i = 0; i < colCount; i++) storeRow.push(i === 0 ? "매장: " + storeStr : ""); rows.push(storeRow);
+    }
+    rows.push(headerRow);
+    data.persons.forEach(function(p) {
+        var nameCell = p.name + (p.store ? " (" + p.store + ")" : "");
+        var workRow = data.showArea ? [(data.areaLabelKo[p.area] || p.area), nameCell] : [nameCell];
+        rows.push(workRow.concat(p.workDays).concat([String(p.offCount), String(p.workCount)]));
+        var breakRow = data.showArea ? ["", "휴식"] : ["휴식"];
+        rows.push(breakRow.concat(p.breakDays).concat(["", ""]));
+    });
+    var footRow = data.showArea ? ["", "일일 근무 인원"] : ["일일 근무 인원"];
+    rows.push(footRow.concat(data.dailyCount.map(String)).concat(["", ""]));
+    var csv = rows.map(function(row) {
+        return row.map(function(cell) {
+            var s = String(cell == null ? "" : cell).replace(/"/g, '""');
+            return s.indexOf(",") >= 0 || s.indexOf('"') >= 0 || s.indexOf("\n") >= 0 ? '"' + s + '"' : s;
+        }).join(",");
+    }).join("\n");
+    var BOM = "\uFEFF";
+    var blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "schedule_" + (data.mondayStr || "week") + ".csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+/* [최종] 저장된 스케줄을 불러와 '조회' 탭에 모바일형 테이블로 표시 */
+function loadSavedSchedule() {
+    var storeEl = document.getElementById('view-store-select');
+    var mondayEl = document.getElementById('view-week-monday');
+    var areaEl = document.getElementById('view-area-select');
+    if (!storeEl || !mondayEl) return;
+    var store = (storeEl.value || '').trim();
+    var monday = (mondayEl.value || '').trim();
+    var areaFilter = (areaEl && areaEl.value) ? areaEl.value : 'All';
+    if (!store || !monday) {
+        alert("매장과 기준 월요일 날짜를 선택하세요.");
+        return;
+    }
+    monday = getMondayOfWeek(monday) || monday;
+    mondayEl.value = monday;
+
+    if (typeof load === 'function') load(1);
+    var loadTimeout = setTimeout(function() {
+        if (typeof load === 'function') load(0);
+        alert("저장된 시간표 불러오기 시간이 초과되었습니다. 네트워크와 직원시간표 시트를 확인한 뒤 다시 시도하세요.");
+    }, 25000);
+    google.script.run
+        .withSuccessHandler(function(data) {
+            clearTimeout(loadTimeout);
+            if (typeof load === 'function') load(0);
+            try {
+                var container = document.querySelector('.view-schedule-readonly .table-responsive');
+                var exportBtn = document.getElementById('view-export-excel-btn');
+                if (!container) {
+                    return alert("조회 영역을 찾을 수 없습니다.");
+                }
+                if (!data || !Array.isArray(data)) {
+                    container.innerHTML = "<p class=\"text-muted py-4 text-center mb-0\">해당 주에 저장된 스케줄이 없습니다.</p>";
+                    if (exportBtn) exportBtn.style.display = 'none';
+                    return;
+                }
+                container.innerHTML = buildAdminScheduleTableHtml(data, monday, areaFilter);
+                var viewData = window._lastScheduleViewData;
+                if (viewData) {
+                    viewData.storeName = (storeEl.options[storeEl.selectedIndex] && storeEl.options[storeEl.selectedIndex].text) ? storeEl.options[storeEl.selectedIndex].text : store;
+                    viewData.period = (viewData.mondayStr || "") + " ~ " + (viewData.dayStrs && viewData.dayStrs[6] ? viewData.dayStrs[6] : "");
+                }
+                if (exportBtn) exportBtn.style.display = 'inline-block';
+            } catch (e) {
+                alert("저장된 시간표 표시 중 오류가 발생했습니다. " + (e.message || ""));
+                console.error("loadSavedSchedule:", e);
+            }
+        })
+        .withFailureHandler(function(err) {
+            clearTimeout(loadTimeout);
+            if (typeof load === 'function') load(0);
+            alert("저장된 시간표를 불러오는 중 오류가 발생했습니다. 매장·날짜를 확인하고 다시 시도해 주세요.");
+            console.error(err);
+        })
+        .getSavedWeeklyData(store, monday);
+}
+
+/* [스케줄 작성 탭] 저장된 시간표를 불러와 편집 그리드(sch-body-slots)에 채우기 (타임아웃 + try/catch로 안정화) */
+function loadSavedScheduleIntoEditor() {
+    var storeEl = document.getElementById('sch-store-select');
+    var mondayEl = document.getElementById('sch-week-monday');
+    if (!storeEl || !mondayEl) return;
+    var store = (storeEl.value || '').trim();
+    var monday = (mondayEl.value || '').trim();
+    if (!store || !monday) {
+        alert("매장과 기준 월요일 날짜를 선택한 뒤 불러오기를 눌러 주세요.");
+        return;
+    }
+    monday = getMondayOfWeek(monday) || monday;
+    mondayEl.value = monday;
+
+    if (typeof load === 'function') load(1);
+    var loadTimeout = setTimeout(function() {
+        if (typeof load === 'function') load(0);
+        alert("저장된 시간표 불러오기 시간이 초과되었습니다. 네트워크와 직원시간표 시트를 확인한 뒤 다시 시도하세요.");
+    }, 25000);
+    google.script.run
+        .withSuccessHandler(function(data) {
+            clearTimeout(loadTimeout);
+            try {
+                mondayEl.value = monday;
+                var startEl = document.getElementById('sch-start-hour');
+                var endEl = document.getElementById('sch-end-hour');
+                if (startEl && endEl) { startEl.value = "6"; endEl.value = "23"; }
+                var schBody = document.getElementById('sch-body-slots');
+                var schHeader = document.getElementById('sch-header-row');
+                if (!schBody || !schHeader) {
+                    if (typeof initWeeklyGrid === 'function') initWeeklyGrid('sch');
+                    schBody = document.getElementById('sch-body-slots');
+                    schHeader = document.getElementById('sch-header-row');
+                }
+                if (!schBody || !schHeader) {
+                    if (typeof load === 'function') load(0);
+                    return alert("스케줄 그리드 영역을 찾을 수 없습니다.");
+                }
+                if (!data || !Array.isArray(data)) {
+                    if (typeof load === 'function') load(0);
+                    alert("해당 주에 저장된 스케줄이 없습니다.\n\n직원시간표 시트의 1행 헤더가 '날짜,매장명,이름,...' 순서인지, 선택한 매장·기준 월요일이 맞는지 확인해 주세요.");
+                    return;
+                }
+            initWeeklyGrid('sch');
+            if (data.length === 0) {
+                if (typeof load === 'function') load(0);
+                alert("해당 주에 저장된 스케줄이 없습니다.\n\n직원시간표 시트의 1행 헤더가 '날짜,매장명,이름,...' 순서인지, 선택한 매장·기준 월요일이 맞는지 확인해 주세요.");
+                return;
+            }
+            var mondayPartsSch = monday.split('-');
+            var d1UtcSch = mondayPartsSch.length >= 3 ? Date.UTC(parseInt(mondayPartsSch[0],10), parseInt(mondayPartsSch[1],10)-1, parseInt(mondayPartsSch[2],10)) : 0;
+            var idx = 0;
+            function findSchSlot(dayIdx, area, timeStr) {
+                var sel = '#sch-body-slots .half-slot[data-day="' + dayIdx + '"][data-area="' + (area || 'Service') + '"][data-time="' + timeStr + '"]';
+                var slot = document.querySelector(sel);
+                if (slot) return slot;
+                var any = document.querySelectorAll('#sch-body-slots .half-slot[data-day="' + dayIdx + '"][data-time="' + timeStr + '"]');
+                for (var a = 0; a < any.length; a++) { if (any[a].getAttribute('data-area') === (area || 'Service')) return any[a]; }
+                return any.length ? any[0] : null;
+            }
+            function applyNextBatch() {
+                var batch = 15;
+                var end = Math.min(idx + batch, data.length);
+                for (var i = idx; i < end; i++) {
+                    var row = data[i];
+                    var dateStr = String(row.date || '').trim().substring(0, 10);
+                    var rowParts = dateStr.split('-');
+                    var d2Utc = rowParts.length >= 3 ? Date.UTC(parseInt(rowParts[0],10), parseInt(rowParts[1],10)-1, parseInt(rowParts[2],10)) : 0;
+                    var dayIdx = Math.round((d2Utc - d1UtcSch) / (1000 * 60 * 60 * 24));
+                    if (dayIdx < 0 || dayIdx > 6) continue;
+                    var times = get30MinIntervals(row.pIn || '09:00', row.pOut || '18:00');
+                    var breakTimes = (row.pBS && row.pBE) ? get30MinIntervals(row.pBS, row.pBE) : [];
+                    for (var ti = 0; ti < times.length; ti++) {
+                        var t = times[ti];
+                        var slot = findSchSlot(dayIdx, row.area || 'Service', t);
+                        if (slot) {
+                            var names = (slot.getAttribute('data-names') || '').split(',').filter(Boolean);
+                            var nicks = (slot.getAttribute('data-nicks') || '').split(',').filter(Boolean);
+                            var saveName = breakTimes.indexOf(t) !== -1 ? 'BRK_' + row.name : row.name;
+                            if (names.indexOf(saveName) === -1) {
+                                names.push(saveName);
+                                nicks.push(row.nick || row.name);
+                                slot.setAttribute('data-names', names.join(','));
+                                slot.setAttribute('data-nicks', nicks.join(','));
+                                refreshSlotUI(slot);
+                            }
+                        }
+                    }
+                }
+                idx = end;
+                if (idx < data.length) {
+                    setTimeout(applyNextBatch, 0);
+                } else {
+                    if (typeof updateDailyCounts === 'function') updateDailyCounts('sch');
+                    if (typeof load === 'function') load(0);
+                }
+            }
+            requestAnimationFrame(function() {
+                setTimeout(applyNextBatch, 120);
+            });
+            } catch (e) {
+                if (typeof load === 'function') load(0);
+                alert("저장된 시간표 표시 중 오류가 발생했습니다. " + (e.message || ""));
+                console.error("loadSavedScheduleIntoEditor success handler:", e);
+            }
+        })
+        .withFailureHandler(function(err) {
+            clearTimeout(loadTimeout);
+            if (typeof load === 'function') load(0);
+            alert("저장된 시간표를 불러오는 중 오류가 발생했습니다. 매장·날짜를 확인하고 다시 시도해 주세요.");
+            console.error(err);
+        })
+        .getSavedWeeklyData(store, monday);
+}
+
+/* [보조] 두 시간 사이의 30분 단위 배열 생성 (예: "09:00", "09:30", "10:00"...) */
+function get30MinIntervals(start, end) {
+    let result = [];
+    let [sh, sm] = start.split(':').map(Number);
+    let [eh, em] = end.split(':').map(Number);
+    let cur = sh * 60 + sm;
+    const finish = eh * 60 + em;
+
+    while(cur < finish) {
+        let h = Math.floor(cur / 60).toString().padStart(2, '0');
+        let m = (cur % 60).toString().padStart(2, '0');
+        result.push(`${h}:${m}`);
+        cur += 30;
+    }
+    return result;
+}
+
+/* [추가] 현재 스케줄을 다음 주로 그대로 복사하여 저장하는 함수 (스케줄 작성 그리드만 대상) */
+function copyToNextWeek() {
+    const store = document.getElementById('sch-store-select').value;
+    const currentMonday = document.getElementById('sch-week-monday').value;
+    const slots = document.querySelectorAll('#sch-body-slots .half-slot.active-fill');
+
+    if(!currentMonday) return alert("기준 날짜를 먼저 선택하세요.");
+    if(!store || store === "All") return alert("매장을 선택하세요.");
+    if(slots.length === 0) return alert("복사할 데이터가 화면에 없습니다. 먼저 스케줄을 작성하거나 불러오세요.");
+
+    // 1. 다음 주 월요일 날짜 계산 (태국 기준: UTC 일수로 +7일)
+    const nextMondayStr = (typeof addDaysToYyyyMmDd === "function") ? addDaysToYyyyMmDd((currentMonday || "").substring(0, 10), 7) : currentMonday;
+
+    if(!confirm(`현재 화면의 스케줄을 다음 주(${nextMondayStr})로 그대로 복사하시겠습니까?`)) return;
+
+    // 2. 현재 그리드 데이터 수집 (prepareAndSave의 로직 재활용)
+    let map = {}; 
+    slots.forEach(s => {
+        let namesStr = s.getAttribute('data-names');
+        if(!namesStr) return;
+        
+        let names = namesStr.split(',');
+        let dayOffset = parseInt(s.getAttribute('data-day'));
+        let time = s.getAttribute('data-time');
+        let area = s.getAttribute('data-area');
+        
+        // ★ 다음 주 월요일 + 요일 오프셋 (태국 기준 날짜 문자열)
+        let datePart = (typeof addDaysToYyyyMmDd === "function") ? addDaysToYyyyMmDd((nextMondayStr || "").substring(0, 10), dayOffset) : nextMondayStr;
+
+        names.forEach(n => {
+            let name = n.trim();
+            if(!name) return;
+            const isBrk = name.startsWith("BRK_");
+            const realName = isBrk ? name.replace("BRK_", "") : name;
+            
+            let key = datePart + "_" + realName + "_" + area;
+            if(!map[key]) map[key] = { work: [], break: [] };
+            if(isBrk) map[key].break.push(time);
+            else map[key].work.push(time);
+        });
+    });
+
+    // 3. 최종 데이터 변환 (키 형식: date_name_area, 이름에 _ 포함 가능)
+    let finalData = [];
+    for(let k in map) {
+        let parts = k.split('_');
+        let date = parts[0];
+        let area = parts[parts.length - 1];
+        let name = parts.length > 2 ? parts.slice(1, -1).join('_') : (parts[1] || '');
+        let allTimes = [...map[k].work, ...map[k].break].sort();
+        if(allTimes.length === 0) continue;
+
+        let pIn = allTimes[0];
+        let last = allTimes[allTimes.length - 1];
+        let [hh, mm] = last.split(':').map(Number);
+        mm += 30; if(mm === 60) { hh++; mm = 0; }
+        let pOut = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+
+        let pBS = "", pBE = "";
+        if(map[k].break.length > 0) {
+            let brkTimes = map[k].break.sort();
+            pBS = brkTimes[0];
+            let bLast = brkTimes[brkTimes.length - 1];
+            let [bhh, bmm] = bLast.split(':').map(Number);
+            bmm += 30; if(bmm === 60) { bhh++; bmm = 0; }
+            pBE = `${bhh.toString().padStart(2, '0')}:${bmm.toString().padStart(2, '0')}`;
+        }
+
+        finalData.push({ date: date, name: name, pIn: pIn, pOut: pOut, pBS: pBS, pBE: pBE, remark: "[" + area + "]" });
+    }
+
+    // 4. 서버 저장 실행
+    load(1);
+    google.script.run
+        .withSuccessHandler(res => {
+            load(0);
+            alert(`✅ 복사 완료!\n다음 주(${nextMondayStr}) 스케줄이 성공적으로 저장되었습니다.`);
+            document.getElementById('sch-week-monday').value = nextMondayStr;
+            loadSavedScheduleIntoEditor(); // 작성 탭에 다음 주 데이터 불러오기
+        })
+        .withFailureHandler(function(err) {
+            load(0);
+            alert("다음 주로 복사 저장 중 오류가 발생했습니다. 다시 시도해 주세요.");
+            console.error(err);
+        })
+        .saveWeeklySmartSchedule(store, nextMondayStr, finalData);
+}
+
+
+
+/* =================================================================
+     휴가 연차
+ ================================================================= */ 
+function showLeaveTab(tab) {
+    var panelApproval = document.getElementById("leave-panel-approval");
+    var panelStats = document.getElementById("leave-panel-stats");
+    var tabApproval = document.getElementById("leave-tab-approval");
+    var tabStats = document.getElementById("leave-tab-stats");
+    if (!panelApproval || !panelStats || !tabApproval || !tabStats) return;
+    panelApproval.style.display = (tab === "approval") ? "block" : "none";
+    panelStats.style.display = (tab === "stats") ? "block" : "none";
+    tabApproval.classList.toggle("active", tab === "approval");
+    tabStats.classList.toggle("active", tab === "stats");
+    if (tab === "stats") {
+      var statsList = document.getElementById("stats-list");
+      if (statsList) statsList.innerHTML = "<tr><td colspan='7' class='text-muted py-4'>기간·매장 선택 후 [검색] 버튼을 눌러주세요.</td></tr>";
+    }
+}
+function procLv(r,d){ if(confirm(d+"?")) google.script.run.withSuccessHandler(r=>{alert(r);loadLeaveData(filterLeaves);}).processLeaveDecision(r,d); }
+  /* [수정] 휴가 통계 검색 함수 (매장 필터 기능 추가) */
+  function filterStats() {
+    var start = document.getElementById("stats-start").value;
+    var end = document.getElementById("stats-end").value;
+    var store = document.getElementById("hr-store-selector").value; // ★ 매장 값 읽어오기
+
+    // 로딩 표시
+    document.getElementById("stats-list").innerHTML = "<tr><td colspan='7'>⏳ 데이터를 불러오는 중...</td></tr>";
+
+    // 서버로 날짜와 함께 '매장(store)' 정보도 같이 보냄!
+    google.script.run.withSuccessHandler(function(data) {
+        var tbody = document.getElementById("stats-list");
+        tbody.innerHTML = "";
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='7'>조회된 데이터가 없습니다.</td></tr>";
+            return;
+        }
+
+        // 결과 테이블 그리기
+        data.forEach(function(r) {
+            var row = "<tr>" +
+                "<td>" + r.store + "</td>" +
+                "<td>" + r.name + "</td>" +
+                "<td>" + r.used_annual + "</td>" + // 기간 내 연차
+                "<td>" + r.used_sick + "</td>" +   // 기간 내 병가
+                "<td>" + r.total_annual + "</td>" + // 전체 누적 연차
+                "<td>" + r.total_sick + "</td>" +   // 전체 누적 병가
+                "<td class='fw-bold text-primary'>" + r.remain + "</td>" + // 잔여
+                "</tr>";
+            tbody.innerHTML += row;
+        });
+    }).getLeaveStats(start, end, store); // ★ 서버 함수에 store 전달
+}
+
+/* [수정] 휴가 검색 (기간, 매장, 상태 필터링 적용) */
+function filterLeaves() { 
+    var startInput = document.getElementById("leave-start");
+    var endInput = document.getElementById("leave-end");
+    var statusInput = document.getElementById("leave-status");
+    var storeInput = document.getElementById("leave-store-select");
+    var b = document.getElementById("leave-list");
+
+    // 안전장치: 데이터가 없으면 중단
+    if (!allLeaveData || !allLeaveData.leaves) {
+        b.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-muted'>데이터를 불러오는 중입니다...</td></tr>";
+        return;
+    }
+
+    b.innerHTML = "";
+
+    // 1. 입력값 가져오기
+    var s = startInput.value; // 시작일
+    var e = endInput.value;   // 종료일
+    var st = statusInput.value; // 상태 (All, 대기, 승인, 반려)
+    var str = storeInput.value; // 매장
+
+    // 2. 필터링 로직 (여기가 중요합니다!)
+    var f = allLeaveData.leaves.filter(function(i) {
+        // (1) 날짜 비교: 시작일보다 크거나 같고, 종료일보다 작거나 같아야 함
+        // 값이 비어있으면(선택 안 했으면) 날짜 조건은 무시하고 통과
+        var dateMatch = true;
+        if (s && i.date < s) dateMatch = false; // 시작일보다 전이면 탈락
+        if (e && i.date > e) dateMatch = false; // 종료일보다 후면 탈락
+
+        // (2) 상태 비교: 'All'이면 통과, 아니면 정확히 일치해야 함
+        var statusMatch = (st === "All" || i.status === st);
+
+        // (3) 매장 비교: 'All'이거나 비어있으면 통과, 아니면 일치해야 함
+        var storeMatch = (str === "All" || str === "" || i.store === str);
+
+        return dateMatch && statusMatch && storeMatch;
+    });
+
+    // 3. 결과 그리기
+    var lang = (typeof I18N !== "undefined" && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    var noMatchTxt = lang.mgr_no_match || "조건에 맞는 내역이 없습니다.";
+    if (f.length === 0) {
+        b.innerHTML = "<tr><td colspan='6' class='text-center p-4 text-muted'>" + noMatchTxt + "</td></tr>";
+        return;
+    }
+
+    f.forEach(i => { 
+        // 종류 번역: 연차/병가/반차
+        var typeLabel = i.type;
+        if (i.type === "연차") typeLabel = lang.leave_annual || i.type;
+        else if (i.type === "병가") typeLabel = lang.leave_sick || i.type;
+        else if (i.type === "반차") typeLabel = lang.leave_half || i.type;
+
+        // 상태 번역: 대기/Pending/승인/반려
+        var statusLabel = i.status;
+        if (i.status === "대기" || i.status === "Pending") statusLabel = lang.leave_wait || i.status;
+        else if (i.status === "승인") statusLabel = lang.leave_approved || i.status;
+        else if (i.status === "반려") statusLabel = lang.leave_rejected || i.status;
+
+        // 버튼: 승인/반려 버튼은 '대기(Pending)' 상태일 때만 보여줌
+        var btns = "";
+        if (i.status === 'Pending' || i.status === '대기') {
+            btns = `<button class="btn btn-success btn-sm me-1" onclick="procLv('${i.row}','승인')">O</button>
+                    <button class="btn btn-danger btn-sm" onclick="procLv('${i.row}','반려')">X</button>`;
+        } else {
+            btns = `<span class="text-muted small">-</span>`;
+        }
+
+        // 상태 뱃지 꾸미기
+        var badgeClass = "bg-secondary";
+        if(i.status === '승인') badgeClass = "bg-success";
+        if(i.status === '반려') badgeClass = "bg-danger";
+        if(i.status === '대기' || i.status === 'Pending') badgeClass = "bg-warning text-dark";
+
+        b.innerHTML += `
+            <tr>
+                <td>${i.date}</td>
+                <td><span class="fw-bold">${i.store}</span></td>
+                <td>${i.name}</td>
+                <td>${typeLabel}</td>
+                <td><span class="badge ${badgeClass}">${statusLabel}</span></td>
+                <td>${btns}</td>
+            </tr>`; 
+    }); 
+}
+
+  function loadLeaveData(cb) { load(1); google.script.run.withSuccessHandler(l => { load(0); allLeaveData = l; if(cb) cb(); }).getLeaveAllData(); }
+
+
+</script>

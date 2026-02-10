@@ -1,0 +1,1912 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Noto+Sans+Thai:wght@400;700&display=swap" rel="stylesheet">
+
+  <?!= include('Style_Admin'); ?>
+  <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
+</head>
+<body>
+
+<div id="loading"><div class="spinner-border text-warning" style="width: 3rem; height: 3rem;"></div></div>
+<div class="d-md-none no-print bg-white p-3 d-flex justify-content-between align-items-center sticky-top border-bottom" style="z-index: 1030; border-color: #e2e8f0 !important;">
+  <span style="font-size:22px; cursor:pointer; color:#64748b;" onclick="toggleSidebar()">☰</span>
+  <span class="fw-bold" style="color:#0369a1; font-size:1rem; letter-spacing:-0.02em;">CHOONGMAN ERP</span>
+  <span style="width:22px;"></span>
+</div>
+<div class="overlay no-print" onclick="toggleSidebar()"></div>
+
+<div id="login-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);z-index:2000;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#fff;padding:40px 36px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 4px 24px rgba(15,23,42,0.08);border:1px solid #e2e8f0;">
+    <div class="text-center mb-4">
+      <h2 class="fw-bold mb-1" style="color:#0f172a; font-size:1.5rem; letter-spacing:-0.03em;" data-i18n="login_title">CM ERP</h2>
+      <p class="small mb-0" style="color:#64748b;">Enterprise Resource Planning</p>
+    </div>
+    <select id="login-lang" class="form-select mb-3" onchange="changeLoginLanguage()" style="border-color:#e2e8f0;">
+      <option value="ko">🇰🇷 한국어</option><option value="en">🇺🇸 English</option>
+      <option value="th">🇹🇭 ภาษาไทย</option><option value="mm">🇲🇲 မြန်မာ</option><option value="la">🇱🇦 ພາສາລາວ</option>
+    </select>
+    <div id="l-store-wrap" class="mb-2">
+      <label class="form-label small fw-bold mb-1" id="login-label-store" data-i18n="login_label_store" style="color:#475569;">소속</label>
+      <select id="l-store" class="form-select" onchange="loadNames()" style="border-color:#e2e8f0;"><option value="">매장 선택</option></select>
+    </div>
+    <div class="mb-2">
+      <label class="form-label small fw-bold mb-1" id="login-label-name" data-i18n="login_label_name" style="color:#475569;">성명</label>
+      <select id="l-name" class="form-select" style="border-color:#e2e8f0;"></select>
+    </div>
+    <div class="mb-4">
+      <label class="form-label small fw-bold mb-1" id="login-label-pw" data-i18n="login_label_pw" style="color:#475569;">P/W</label>
+      <input type="password" id="l-pw" class="form-control" placeholder="PIN" style="border-color:#e2e8f0;">
+    </div>
+    <button class="btn btn-primary w-100 fw-bold text-white py-2" style="background:#0369a1;border:#0369a1;" onclick="login()" data-i18n="btn_login">로그인</button>
+  </div>
+</div>
+
+<div id="admin-screen" style="display:none;">
+  <div class="sidebar no-print" id="sidebar">
+    <div class="px-4 pt-4 pb-3 border-bottom sidebar-top-title" style="border-color:#1e293b !important;">
+      <div class="fw-bold text-white" style="font-size:1.1rem; letter-spacing:-0.02em;">CHOONGMAN</div>
+      <div class="fw-bold text-white" style="font-size:0.85rem; letter-spacing:0.02em;">ERP MANAGER</div>
+    </div>
+    <div class="mb-2 px-3 pt-3">
+      <select id="langSelect" class="form-select form-select-sm" onchange="changeLanguage()" style="background:#1e293b;border:#334155;color:#94a3b8;">
+        <option value="ko">🇰🇷 한국어</option><option value="en">🇺🇸 English</option>
+        <option value="th">🇹🇭 ภาษาไทย</option><option value="mm">🇲🇲 မြန်မာ</option><option value="la">🇱🇦 ພາສາລາວ</option>
+      </select>
+    </div>
+    <a onclick="go('dashboard',this)" class="active" data-i18n="menu_dashboard">📊 대시보드</a>
+    <a onclick="go('notices',this)" id="menu-notices" data-i18n="menu_notices">📢 공지사항 관리</a>
+    <a role="button" tabindex="0" onclick="go('work-log', this)" class="manager-hide" data-i18n="menu_work_log"><span class="icon">📝</span> 업무일지</a>
+    <div class="sidebar-header" data-i18n="menu_header_logistics">물류 관리</div>
+    <a onclick="go('item-manage',this)" class="hq-only manager-hide" data-i18n="menu_item_manage">📦 품목 관리</a>
+    <a onclick="go('vendor-manage',this)" class="hq-only manager-hide" data-i18n="menu_vendor">🏢 거래처 관리</a>
+    <a onclick="go('outbound',this)" class="hq-only manager-hide" data-i18n="menu_outbound">🚚 주문 승인</a>
+    <a onclick="go('stock',this)" id="menu-stock" data-i18n="menu_stock">⚖️ 재고 현황</a>
+    <a onclick="go('inbound',this)" data-i18n="menu_inbound">📦 입고 관리</a>
+    <a onclick="go('force',this)" data-i18n="menu_force">📤 출고 관리</a> 
+
+    <div class="sidebar-header" data-i18n="menu_header_hr">인사 관리</div>
+    <a onclick="go('hr-employee',this)" data-i18n="menu_hr_employee">👥 직원 관리</a>
+    <a role="button" tabindex="0" onclick="go('attendance-manage',this)" data-i18n="menu_attendance">📅 근태/스케줄 관리</a>
+    <a onclick="go('payroll',this)" class="hq-only manager-hide" data-i18n="menu_payroll">💰 급여 관리</a>
+    <a role="button" tabindex="0" onclick="go('hr-leave',this)" data-i18n="menu_hr_leave">🏖️ 휴가 관리</a>
+    
+    <div class="sidebar-header" data-i18n="menu_header_store">매장 관리</div>
+
+<a role="button" tabindex="0" id="menu-store-check" onclick="go('store-manage', this)" data-i18n="menu_store_check"><span class="icon">🏢</span> 매장 점검</a>
+<a role="button" tabindex="0" id="menu-store-visit" class="manager-hide" onclick="go('store-visit', this)" data-i18n="menu_store_visit"><span class="icon">📍</span> 매장 방문 현황</a>
+<a role="button" tabindex="0" id="menu-store-complaint" onclick="go('store-complaint', this)" data-i18n="menu_store_complaint"><span class="icon">📋</span> 컴플레인 일지</a>
+
+    <a href="javascript:void(0)" class="sidebar-header sidebar-header-link director-only manager-hide" onclick="go('settings',this)" role="button" data-i18n="menu_header_settings">⚙️ 설정</a>
+    
+    <div style="margin-top:24px; padding:16px 20px; border-top:1px solid #1e293b;">
+        <button class="btn btn-outline-light w-100 btn-sm mb-2" style="border-color:#334155;color:#94a3b8;" onclick="openChangePwModal()" data-i18n="pw_change_title">🔐 비밀번호 변경</button>
+        <button class="btn btn-outline-light w-100 btn-sm" style="border-color:#334155;color:#94a3b8;" onclick="doLogout()" data-i18n="btn_logout">로그아웃</button>
+    </div>
+  </div>
+  <!-- 비밀번호 변경 모달 -->
+  <div class="modal fade" id="changePwModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content bg-dark text-light">
+        <div class="modal-header border-secondary">
+          <h6 class="modal-title">🔐 비밀번호 변경</h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><label class="form-label small">현재 비밀번호</label><input type="password" id="change-pw-old" class="form-control form-control-sm" placeholder="현재 비밀번호"></div>
+          <div class="mb-2"><label class="form-label small">새 비밀번호</label><input type="password" id="change-pw-new" class="form-control form-control-sm" placeholder="새 비밀번호"></div>
+          <div class="mb-0"><label class="form-label small">새 비밀번호 확인</label><input type="password" id="change-pw-new2" class="form-control form-control-sm" placeholder="다시 입력"></div>
+        </div>
+        <div class="modal-footer border-secondary">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">취소</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="submitChangePw()">변경</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+ <div class="main-content">
+    <div class="print-container">
+    <div id="page-notices">
+      <h3 class="fw-bold mb-4" data-i18n="notice_title">📢 공지사항 관리</h3>
+      <div class="row">
+        <div class="col-md-5">
+          <div class="card p-4 h-100">
+            <h5 class="fw-bold mb-3" data-i18n="notice_send_new">✏️ 새 공지 보내기</h5>
+            <div class="mb-2"><label class="form-label small text-secondary" data-i18n="label_subject">제목</label><input type="text" id="noticeTitle" class="form-control"></div>
+            <div class="row mb-2">
+                <div class="col-6"><label class="form-label small text-secondary" data-i18n="label_store">매장</label><div class="border rounded p-2" style="height:150px;overflow-y:auto;"><div class="form-check"><input class="form-check-input" type="checkbox" id="chk-store-all" onchange="toggleAll('store',this.checked)"><label class="form-check-label fw-bold" for="chk-store-all" data-i18n="label_all">전체</label></div><div id="storeCheckList"></div></div></div>
+                <div class="col-6"><label class="form-label small text-secondary" data-i18n="label_role">직급</label><div class="border rounded p-2" style="height:150px;overflow-y:auto;"><div class="form-check"><input class="form-check-input" type="checkbox" id="chk-role-all" onchange="toggleAll('role',this.checked)"><label class="form-check-label fw-bold" for="chk-role-all" data-i18n="label_all">전체</label></div><div id="roleCheckList"></div></div></div>
+            </div>
+            <div class="mb-3"><label class="form-label small text-secondary" data-i18n="label_content">내용</label><textarea id="noticeContent" class="form-control" rows="5"></textarea></div>
+            <div class="mb-3"><label class="form-label small text-secondary" data-i18n="notice_attach">📎 첨부파일</label><div id="notice-attachments-container" class="border rounded p-2 bg-light"><div class="d-flex align-items-center gap-2 mb-2"><input type="file" class="form-control form-control-sm notice-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="max-width:280px;"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="addNoticeAttachmentInput()" data-i18n="notice_attach_add">➕ 파일 추가</button></div></div><small class="text-muted" data-i18n="notice_attach_hint">이미지, PDF, 문서 등 (파일당 5MB, 최대 10개)</small></div>
+            <button class="btn btn-warning w-100 fw-bold text-white" onclick="sendNotice()" data-i18n="notice_send_btn">공지 발송하기</button>
+          </div>
+        </div>
+        <div class="col-md-7">
+          <div class="card p-4 h-100">
+             <div class="d-flex justify-content-between mb-3"><h5 class="fw-bold" data-i18n="notice_history">📑 발송 내역</h5><div><input type="date" id="notice-start" class="form-control-sm border date-picker-lg"><input type="date" id="notice-end" class="form-control-sm border date-picker-lg"><button class="btn btn-sm btn-dark" onclick="loadNoticeHistory()" data-i18n="btn_query">조회</button></div></div>
+             <div id="noticeHistoryBox" style="height:500px;overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 받은 공지 내용 보기 모달 (대시보드에서 사용) -->
+    <div class="modal fade" id="noticeReceivedModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title fw-bold" id="noticeReceivedModalTitle"></h6>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body small">
+            <div class="text-muted mb-2" id="noticeReceivedModalMeta"></div>
+            <div id="noticeReceivedModalContent" style="white-space:pre-wrap;"></div>
+            <div id="noticeReceivedModalAttachments" class="mt-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 수신 확인 현황 모달 (발송 내역 > 수신확인 버튼) - z-index로 백드롭 위에 표시 -->
+    <div class="modal fade" id="readStatsModal" tabindex="-1" style="z-index: 1060;">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title fw-bold" id="readStatsModalTitle">👀 수신 확인 현황</h6>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body small">
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+              <div class="d-flex align-items-center gap-2">
+                <label class="form-label small mb-0" id="readStatsLabelStore">매장</label>
+                <select id="readStatsStoreFilter" class="form-select form-select-sm" style="max-width:180px;" onchange="if(window._readStatsNoticeId!=null) showReadStats(window._readStatsNoticeId);">
+                  <option value="">전체</option>
+                </select>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <label class="form-label small mb-0" id="readStatsLabelStatus">상태</label>
+                <select id="readStatsStatusFilter" class="form-select form-select-sm" style="max-width:140px;" onchange="if(window._readStatsLastList) renderReadStatsTable(window._readStatsLastList);">
+                  <option value="">전체</option>
+                  <option value="확인">읽음</option>
+                  <option value="미확인">안읽음</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
+              <table class="table table-sm table-hover mb-0">
+                <thead class="table-light sticky-top">
+                  <tr id="readStatsThead"><th>매장</th><th>이름</th><th>상태</th><th>확인일시</th></tr>
+                </thead>
+                <tbody id="readStatsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 출고 내역 수령 사진 보기: 검정 배경 없음, 사진+제목+X만 표시, ESC로 닫기 -->
+    <div class="modal fade" id="receivePhotoModal" tabindex="-1" data-bs-backdrop="false" data-bs-keyboard="true" aria-labelledby="receivePhotoModalTitle" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content receive-photo-modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title fw-bold" id="receivePhotoModalTitle" data-i18n="force_hist_view_photo">수령 사진</h6>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center p-3">
+            <img id="receivePhotoModalImg" src="" alt="수령 사진" class="img-fluid" style="max-height:70vh; border-radius:8px;" onerror="this.style.display='none'; document.getElementById('receivePhotoModalLink').style.display='block';">
+            <a id="receivePhotoModalLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-primary mt-2" style="display:none;" data-i18n="force_hist_open_in_tab">새 탭에서 보기</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 직원 평가 상세 보기 모달 -->
+    <div class="modal fade" id="evalDetailModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title fw-bold" id="eval-detail-title"></h6>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body small">
+            <div class="text-muted mb-2" id="eval-detail-meta"></div>
+            <p class="fw-bold mb-1">종합 의견</p>
+            <div id="eval-detail-memo" class="mb-3 p-2 bg-light rounded" style="white-space:pre-wrap;"></div>
+            <p class="fw-bold mb-1">상세 점수</p>
+            <div id="eval-detail-body" class="overflow-auto" style="max-height:320px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-dashboard">
+        <h3 data-i18n="dash_title" class="mb-1">대시보드</h3>
+        <p class="mb-4 text-secondary"><span data-i18n="dash_welcome">환영합니다</span>, <span id="u-info" class="fw-semibold text-dark" data-i18n="dash_user">사용자</span>님.</p>
+        <div id="dash-summary-cards" class="row g-3 mb-4">
+            <div class="col-6 col-md-4">
+                <div class="card h-100 border" style="cursor:pointer; border-color:#e2e8f0 !important; transition:border-color .2s, box-shadow .2s;" onmouseover="this.style.borderColor='#0369a1';this.style.boxShadow='0 4px 12px rgba(3,105,161,0.12)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="go('outbound')">
+                    <div class="card-body text-center py-4">
+                        <div class="display-6 fw-bold" style="color:#0369a1;" id="dash-pending-orders">0</div>
+                        <div class="small text-muted mt-1" data-i18n="dash_pending_orders">미승인 주문</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="card h-100 border" style="cursor:pointer; border-color:#e2e8f0 !important; transition:border-color .2s, box-shadow .2s;" onmouseover="this.style.borderColor='#059669';this.style.boxShadow='0 4px 12px rgba(5,150,105,0.12)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="go('inbound')">
+                    <div class="card-body text-center py-4">
+                        <div class="display-6 fw-bold" style="color:#059669;" id="dash-inbound">0</div>
+                        <div class="small text-muted mt-1" data-i18n="dash_inbound_month">이번 달 입고</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="card h-100 border" style="cursor:pointer; border-color:#e2e8f0 !important; transition:border-color .2s, box-shadow .2s;" onmouseover="this.style.borderColor='#0891b2';this.style.boxShadow='0 4px 12px rgba(8,145,178,0.12)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="go('force')">
+                    <div class="card-body text-center py-4">
+                        <div class="display-6 fw-bold" style="color:#0891b2;" id="dash-outbound">0</div>
+                        <div class="small text-muted mt-1" data-i18n="dash_outbound_month">이번 달 출고</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="card h-100 border" style="cursor:pointer; border-color:#e2e8f0 !important; transition:border-color .2s, box-shadow .2s;" onmouseover="this.style.borderColor='#ca8a04';this.style.boxShadow='0 4px 12px rgba(202,138,4,0.12)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="go('hr-leave')">
+                    <div class="card-body text-center py-4">
+                        <div class="display-6 fw-bold" style="color:#ca8a04;" id="dash-leave-pending">0</div>
+                        <div class="small text-muted mt-1" data-i18n="dash_leave_pending">휴가 대기</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4">
+                <div class="card h-100 border" style="cursor:pointer; border-color:#e2e8f0 !important; transition:border-color .2s, box-shadow .2s;" onmouseover="this.style.borderColor='#64748b';this.style.boxShadow='0 4px 12px rgba(100,116,139,0.12)';" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='';" onclick="go('attendance-manage')">
+                    <div class="card-body text-center py-4">
+                        <div class="display-6 fw-bold" style="color:#64748b;" id="dash-att-pending">0</div>
+                        <div class="small text-muted mt-1" data-i18n="dash_att_pending">근태 승인 대기</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card p-4">
+                    <h5 class="fw-bold mb-3" data-i18n="notice_received_title">📬 받은 공지</h5>
+                    <p class="small text-muted mb-3" data-i18n="notice_received_hint">날짜 범위를 선택하면 지나간 공지도 조회할 수 있습니다.</p>
+                    <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+                        <div><label class="form-label small mb-0" data-i18n="label_date_from">시작일</label><input type="date" id="notice-received-start" class="form-control form-control-sm"></div>
+                        <div><label class="form-label small mb-0" data-i18n="label_date_to">종료일</label><input type="date" id="notice-received-end" class="form-control form-control-sm"></div>
+                        <button class="btn btn-sm btn-primary" onclick="loadNoticeReceived()" data-i18n="btn_query">조회</button>
+                    </div>
+                    <div id="noticeReceivedBox" style="height:320px;overflow-y:auto; border:1px solid #eee; border-radius:8px; background:#fafafa;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+   
+   
+   <div id="page-work-log" style="display:none;">
+    <h4 class="fw-bold mb-3" data-i18n="wl_title">📝 오피스 업무일지 </h4>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a class="nav-link active" id="tab-wl-personal" onclick="showWorkLogTab('personal')" data-i18n="tab_wl_personal">👤 내 업무일지</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="tab-wl-manager" onclick="showWorkLogTab('manager')" data-i18n="tab_wl_manager">👮‍♂️ 관리자 승인</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="tab-wl-report" onclick="showWorkLogTab('report')" data-i18n="tab_wl_report">📊 주간 리포트</a>
+        </li>
+    </ul>
+
+    <div id="wl-view-personal">
+        <div class="card-box mb-3">
+            <div class="row align-items-end">
+                <div class="col-md-3">
+                    <label class="fw-bold" data-i18n="wl_label_date">📅 날짜</label>
+                    <input type="date" id="wl-date" class="form-control date-picker-lg" onchange="loadWorkLog()">
+                </div>
+                <div class="col-md-3">
+                    <label class="fw-bold" data-i18n="wl_label_staff">👤 직원</label>
+                    <select id="wl-staff" class="form-select" onchange="loadWorkLog()"></select>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-outline-secondary" onclick="loadWorkLog()" data-i18n="btn_refresh">🔄 새로고침</button>
+                    <button class="btn btn-primary fw-bold" onclick="saveWorkLog()" data-i18n="wl_save_progress">💾 진행상황 저장</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-3">
+                <div class="card h-100 border-success">
+                    <div class="card-header bg-success text-white fw-bold" data-i18n="wl_finish_work">
+                        🏆 Finish Work (완료됨)
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0 text-center align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="5%">No</th>
+                                    <th data-i18n="wl_task_content">업무 내용</th>
+                                    <th width="10%" data-i18n="wl_importance">중요도</th>
+                                    <th width="10%" data-i18n="wl_progress">진행률</th>
+                                    <th width="20%" data-i18n="wl_status">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wl-body-finish"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 mb-2">
+                <div class="card h-100 border-warning">
+                    <div class="card-header bg-warning text-dark fw-bold d-flex justify-content-between">
+                        <span data-i18n="wl_continue_work">⏳ Continue Work (진행 대기)</span>
+                        <span class="small" style="font-size:0.8rem;" data-i18n="wl_check_today_hint">* 오늘 할 일을 체크하세요</span>
+                    </div>
+                    <div class="card-body p-2" id="wl-body-continue" style="min-height: 100px;"></div>
+                    
+                    <div class="card-footer bg-white text-center">
+                        <button class="btn btn-sm btn-outline-warning w-100 fw-bold" onclick="addWorkRow('continue')">
+                            <i class="bi bi-plus-lg"></i> <span data-i18n="wl_add_item">항목 추가 (Add Item)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 text-center mb-3">
+                <button class="btn btn-primary shadow-sm fw-bold w-100 py-2" onclick="moveCheckedToToday()">
+                    <span data-i18n="wl_start_today">⬇️ 선택한 업무 오늘 시작하기 (Start Today)</span>
+                </button>
+            </div>
+
+            <div class="col-12">
+                <div class="card h-100 border-primary">
+                    <div class="card-header bg-primary text-white fw-bold" data-i18n="wl_today_work">
+                        🚀 Today Work (오늘 진행 중)
+                    </div>
+                    
+                    <div class="card-body p-2" id="wl-body-today" style="min-height: 100px;">
+                        </div>
+
+                    <div class="card-footer bg-white p-3">
+                        <button class="btn btn-dark w-100 fw-bold py-2" onclick="finishDailyWork()">
+                            <span data-i18n="wl_finish_daily">👋 업무 끝내기 (퇴근 처리)</span>
+                        </button>
+                        <div class="text-muted small text-center mt-2" data-i18n="wl_finish_hint">
+                            * 100%는 'Finish'로, 미완료는 기록 후 'Continue'로 이월됩니다.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> 
+    </div> <div id="wl-view-manager" style="display:none;">
+        <div class="card-box mb-3">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-4">
+                    <label class="fw-bold small" data-i18n="wl_query_period">📅 조회 기간</label>
+                    <div class="input-group">
+                        <input type="date" id="mgr-date-start" class="form-control form-control-sm date-picker-lg">
+                        <span class="input-group-text">~</span>
+                        <input type="date" id="mgr-date-end" class="form-control form-control-sm date-picker-lg">
+                        <button class="btn btn-dark btn-sm" onclick="loadManagerReview()" data-i18n="btn_query_go">🔍 조회</button>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="fw-bold small" data-i18n="wl_dept">🏢 부서</label>
+                    <select id="filter-dept" class="form-select form-select-sm" onchange="renderManagerTable()">
+                        <option value="All" data-i18n="label_all">전체</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="fw-bold small" data-i18n="label_employee">👤 직원</label>
+                    <select id="filter-name" class="form-select form-select-sm" onchange="renderManagerTable()">
+                        <option value="All" data-i18n="label_all">전체</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                <label class="fw-bold small" data-i18n="filter_status_multi">📌 상태 (중복선택)</label>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="statusDropdownBtn" data-bs-toggle="dropdown" aria-expanded="false" data-i18n="wl_filter_all">전체 보기</button>
+                    <ul class="dropdown-menu p-2 shadow" aria-labelledby="statusDropdownBtn" style="min-width: 220px;">
+                        <li>
+                            <div class="form-check mb-1">
+                                <input class="form-check-input chk-filter-status" type="checkbox" value="Finish" id="chk-finish" checked onchange="renderManagerTable()">
+                                <label class="form-check-label badge bg-success" for="chk-finish" data-i18n="status_finish">🟢 완료</label>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="form-check mb-1">
+                                <input class="form-check-input chk-filter-status" type="checkbox" value="Carry Over" id="chk-carry" checked onchange="renderManagerTable()">
+                                <label class="form-check-label badge bg-warning text-dark" for="chk-carry" data-i18n="status_carry_over">🟠 이월</label>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="form-check mb-1">
+                                <input class="form-check-input chk-filter-status" type="checkbox" value="Today" id="chk-today" checked onchange="renderManagerTable()">
+                                <label class="form-check-label badge bg-primary" for="chk-today" data-i18n="status_today">🔵 진행중</label>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="form-check">
+                                <input class="form-check-input chk-filter-status" type="checkbox" value="Continue" id="chk-continue" onchange="renderManagerTable()">
+                                <label class="form-check-label badge bg-secondary" for="chk-continue" data-i18n="status_continue">🟡 대기</label>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+                <div class="col-md-2 text-end">
+                    <label class="d-block small">&nbsp;</label>
+                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="resetFilters()" data-i18n="filter_reset">필터 초기화</button>
+                </div>
+            </div>
+        </div>
+        <div id="mgr-review-list">
+            <div class="text-center text-muted py-5" data-i18n="mgr_hint">
+                📅 날짜 구간을 선택하고 [🔍 조회] 버튼을 눌러주세요.
+            </div>
+        </div>
+    </div>
+
+    <div id="wl-view-report" style="display:none;">
+        <div class="alert alert-info text-center">📊 주간/월간 업무 통계 기능 준비 중...</div>
+    </div>
+</div>
+
+
+    <div id="page-item-manage">
+        <h4 class="fw-bold mb-3" data-i18n="item_title">📦 품목 관리</h4>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card-box">
+                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                        <h6 class="fw-bold m-0" data-i18n="item_form_title">📦 품목 정보 입력</h6>
+                        <button class="btn btn-sm btn-outline-success" onclick="createNewItem()" data-i18n="item_new">+ 신규 등록</button>
+                    </div>
+                    <input type="hidden" id="itm-row" value="0">
+                    
+                    <div class="mb-2">
+                        <label class="form-label" data-i18n="item_code">코드 (A열)</label>
+                        <input id="itm-code" class="form-control" placeholder="예: A001">
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <label class="form-label" data-i18n="item_cat">카테고리</label>
+                            <input id="itm-cat" class="form-control" list="cat-list">
+                            <datalist id="cat-list"></datalist>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-primary" data-i18n="item_vendor">주거래처</label>
+                            <input id="itm-vendor" class="form-control" list="vendor-options" data-i18n="item_vendor_ph" data-i18n-placeholder="1" placeholder="매입처 선택/입력">
+                            <datalist id="vendor-options"></datalist>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label" data-i18n="item_name">품목명</label>
+                        <input id="itm-name" class="form-control">
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label text-success" data-i18n="item_image">이미지 링크 (G열)</label>
+                        <input id="itm-image" class="form-control" placeholder="https://...">
+                    </div>
+                    
+                    <div class="mb-2">
+                        <label class="form-label text-primary" data-i18n="item_tax">과세 구분</label>
+                        <select id="itm-tax" class="form-select">
+                            <option value="과세" data-i18n="item_tax_vat">과세 (VAT 포함)</option>
+                            <option value="면세" data-i18n="item_tax_free">면세 (VAT 없음)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label" data-i18n="item_spec">규격</label>
+                        <input id="itm-spec" class="form-control" placeholder="예: 1kg, 1ea">
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-6"><label class="form-label" data-i18n="item_price">판매가</label><input type="number" id="itm-price" class="form-control"></div>
+                        <div class="col-6"><label class="form-label" data-i18n="item_cost">원가</label><input type="number" id="itm-cost" class="form-control"></div>
+                    </div>
+                    
+                    <button class="btn btn-dark w-100 fw-bold mt-3" onclick="saveItem()" data-i18n="item_save">💾 저장</button>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card-box p-0">
+                    <div class="search-toolbar m-3">
+                        <div class="input-group">
+                            <select id="itm-search-cat" class="form-select" style="max-width:150px;"><option value="" data-i18n="item_cat_all">전체 카테고리</option></select>
+                            <input id="itm-search" class="form-control" placeholder="검색어 입력" data-i18n="item_search_ph">
+                            <button class="btn btn-primary" onclick="filterAdminItems()" data-i18n="btn_search">검색</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height:650px;">
+                        <table class="table table-hover mb-0 text-center align-middle">
+                            <thead class="table-header-dark">
+                                <tr>
+                                    <th data-i18n="item_col_code">코드</th>
+                                    <th data-i18n="item_col_image">이미지</th>
+                                    <th data-i18n="item_col_name">품목명</th>
+                                    <th data-i18n="item_col_spec">규격</th>
+                                    <th data-i18n="item_col_price">판매가</th>
+                                    <th data-i18n="item_manage">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="itm-list-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="page-vendor-manage">
+         <h4 class="fw-bold mb-3" data-i18n="vendor_title">🏢 거래처 관리</h4>
+         <div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card-box">
+                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                        <h6 class="fw-bold m-0" data-i18n="vendor_form">🏢 거래처 입력</h6>
+                        <button class="btn btn-sm btn-outline-success" onclick="createNewVendor()" data-i18n="item_new">+ 신규 등록</button>
+                    </div>
+                    <input type="hidden" id="vnd-row" value="0">
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <label class="form-label text-primary" data-i18n="vendor_type">구분</label>
+                            <select id="vnd-type" class="form-select">
+                                <option value="매입처" data-i18n="vendor_type_buy">🔵 매입처</option>
+                                <option value="매출처" data-i18n="vendor_type_sell">🔴 매출처</option>
+                                <option value="기타" data-i18n="vendor_type_etc">⚪ 기타</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-danger" data-i18n="vendor_code">코드</label>
+                            <input id="vnd-code" class="form-control" placeholder="예: V001">
+                        </div>
+                    </div>
+                    <div class="mb-2"><label class="form-label" data-i18n="vendor_company">회사명</label><input id="vnd-name" class="form-control"></div>
+                    <div class="row mb-2">
+                        <div class="col-6"><label class="form-label" data-i18n="vendor_manager">담당자</label><input id="vnd-manager" class="form-control"></div>
+                        <div class="col-6"><label class="form-label" data-i18n="vendor_phone">연락처</label><input id="vnd-phone" class="form-control"></div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6"><label class="form-label" data-i18n="vendor_taxno">사업자번호</label><input id="vnd-tax" class="form-control"></div>
+                        <div class="col-6"><label class="form-label" data-i18n="vendor_ceo">대표자</label><input id="vnd-ceo" class="form-control"></div>
+                    </div>
+                    <div class="mb-2"><label class="form-label" data-i18n="vendor_addr">주소</label><input id="vnd-addr" class="form-control"></div>
+                    <div class="mb-2"><label class="form-label" data-i18n="vendor_balance">미수금</label><input type="number" id="vnd-balance" class="form-control"></div>
+                    <div class="mb-3"><label class="form-label" data-i18n="vendor_memo">메모</label><textarea id="vnd-memo" class="form-control" rows="2"></textarea></div>
+                    <button class="btn btn-dark w-100 fw-bold" onclick="saveVendor()" data-i18n="item_save">💾 저장</button>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card-box p-0">
+                    <div class="search-toolbar m-3 d-flex justify-content-between">
+                        <div class="d-flex gap-2">
+                            <select id="filter-vnd-type" class="form-select" style="width:120px;">
+                                <option value="All" data-i18n="label_all">전체</option>
+                                <option value="매입처" data-i18n="vendor_type_buy">매입처</option>
+                                <option value="매출처" data-i18n="vendor_type_sell">매출처</option>
+                            </select>
+                            <button class="btn btn-secondary btn-sm" onclick="loadVendors(true)" data-i18n="btn_query_go">🔄 조회</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height:650px;">
+                        <table class="table table-hover mb-0 text-center align-middle">
+                            <thead class="table-header-dark">
+                                <tr>
+                                    <th data-i18n="vendor_col_type">구분</th>
+                                    <th data-i18n="vendor_code">코드</th>
+                                    <th data-i18n="vendor_col_company">회사명</th>
+                                    <th data-i18n="vendor_col_manager">담당자</th>
+                                    <th data-i18n="vendor_col_balance">잔액</th>
+                                    <th data-i18n="item_manage">관리</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vnd-list-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+         </div>
+    </div>
+
+    <div id="page-hr-employee">
+        <h4 class="fw-bold mb-3" data-i18n="hr_emp_title">👥 직원 관리</h4>
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><a class="nav-link active" id="hr-emp-nav-list" href="javascript:void(0)" style="cursor:pointer" onclick="showHrEmployeeTab('list')" data-i18n="tab_hr_list">📋 직원 목록</a></li>
+            <li class="nav-item"><a class="nav-link" id="hr-emp-nav-eval" href="javascript:void(0)" style="cursor:pointer" onclick="showHrEmployeeTab('eval')" data-i18n="tab_hr_eval">📝 직원 평가</a></li>
+            <li class="nav-item"><a class="nav-link" id="hr-emp-nav-eval-list" href="javascript:void(0)" style="cursor:pointer" onclick="showHrEmployeeTab('eval-list')" data-i18n="tab_eval_list">📋 평가 목록</a></li>
+            <li class="nav-item"><a class="nav-link" id="hr-emp-nav-kitchen-setting" href="javascript:void(0)" style="cursor:pointer" onclick="showHrEmployeeTab('kitchen-setting')" data-i18n="tab_eval_kitchen_setting">⚙️ 주방 항목 설정</a></li>
+            <li class="nav-item"><a class="nav-link" id="hr-emp-nav-service-setting" href="javascript:void(0)" style="cursor:pointer" onclick="showHrEmployeeTab('service-setting')" data-i18n="tab_eval_service_setting">⚙️ 서비스 항목 설정</a></li>
+        </ul>
+        <div id="hr-emp-tab-list">
+            <div class="row">
+                <div class="col-md-4 mb-3" id="hr-employee-section"><div class="card-box"><div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2"><h6 class="fw-bold m-0" data-i18n="hr_emp_form">✏️ 직원 입력</h6><button class="btn btn-sm btn-outline-success" onclick="createNewEmployee()" data-i18n="hr_emp_new">+ 신규</button></div><input type="hidden" id="emp-row" value="0"><div class="row mb-2 align-items-stretch"><div class="col-6"><div class="mb-2"><label class="form-label" data-i18n="label_store">매장</label><select id="emp-store" class="form-select"></select></div><div class="mb-2"><label class="form-label" data-i18n="label_name">이름</label><input id="emp-name" class="form-control"></div><div class="mb-2"><label class="form-label" data-i18n="label_nickname">닉네임</label><input id="emp-nick" class="form-control"></div></div><div class="col-6 d-flex flex-column"><label class="form-label" data-i18n="emp_photo">사진</label><div id="emp-form-photo-wrap" style="flex:1;min-height:100px;border-radius:8px;overflow:hidden;background:#e2e8f0;display:flex;align-items:center;justify-content:center;"><img id="emp-form-photo-img" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;"></div><input id="emp-photo" class="form-control form-control-sm mt-1" placeholder="URL (선택)" oninput="if(typeof updateEmpFormPhoto==='function')updateEmpFormPhoto()"></div></div><div class="mb-2"><label class="form-label" data-i18n="label_job">직무</label><select id="emp-job" class="form-select"><option>Service</option><option>Kitchen</option><option>Manager</option><option>Director</option></select></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="vendor_phone">연락처</label><input id="emp-phone" class="form-control"></div><div class="col-6"><label class="form-label" data-i18n="label_email">이메일</label><input id="emp-email" class="form-control"></div></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="label_birth">생일</label><input type="date" id="emp-birth" class="form-control"></div><div class="col-6"><label class="form-label" data-i18n="label_nation">국적</label><input id="emp-nation" class="form-control"></div></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="label_join_date">입사일</label><input type="date" id="emp-date" class="form-control"></div><div class="col-6"><label class="form-label" data-i18n="label_leave_date">퇴사일</label><input type="date" id="emp-resign" class="form-control"></div></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="label_sal_type">급여타입</label><select id="emp-sal-type" class="form-select"><option>Monthly</option><option>Hourly</option></select></div><div class="col-6"><label class="form-label" data-i18n="label_amount">금액</label><input type="number" id="emp-sal-amt" class="form-control"></div></div><div class="row mb-3"><div class="col-6"><label class="form-label" data-i18n="placeholder_pin">PIN</label><input id="emp-pw" class="form-control"></div><div class="col-6"><label class="form-label" data-i18n="label_role_perm">권한</label><select id="emp-role" class="form-select"><option>Staff</option><option>Manager</option><option>Officer</option><option>Director</option></select></div></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="emp_annual_leave_days">연차(일)</label><input type="number" id="emp-annual-leave" class="form-control" min="0" value="15"></div><div class="col-6"><label class="form-label" data-i18n="eval_list_th_grade">등급</label><select id="emp-grade" class="form-select"><option value="">-</option><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option><option value="F">F</option></select></div></div><div class="row mb-2"><div class="col-6"><label class="form-label" data-i18n="emp_bank_name">은행명</label><input id="emp-bank-name" class="form-control"></div><div class="col-6"><label class="form-label" data-i18n="emp_account_number">계좌번호</label><input id="emp-account-number" class="form-control"></div></div><div class="row mb-3"><div class="col-6"><label class="form-label" data-i18n="emp_position_allowance">직책수당</label><input type="number" id="emp-position-allowance" class="form-control" min="0" value="0"></div></div><button class="btn btn-dark w-100 fw-bold" onclick="saveEmployee()" data-i18n="item_save">💾 저장</button></div></div>
+                <div class="col-md-8"><div class="card-box p-0"><div class="search-toolbar m-3"><div class="input-group"><select id="filter-store-select" class="form-select" style="max-width:150px;"></select><select id="filter-grade-select" class="form-select" style="max-width:120px;"><option value="All" data-i18n="eval_list_grade_all">전체 등급</option><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option><option value="F">F</option></select><input id="emp-search" class="form-control" placeholder="검색" data-i18n="placeholder_search"><button class="btn btn-primary" onclick="filterEmpList()" data-i18n="btn_search">검색</button></div></div><div class="table-responsive" style="max-height:650px;"><table class="table table-hover mb-0 text-center align-middle"><thead class="table-header-dark"><tr><th data-i18n="label_store">매장</th><th data-i18n="eval_list_th_grade">등급</th><th data-i18n="label_name">이름</th><th data-i18n="label_nickname">닉네임</th><th data-i18n="label_nation">국적</th><th data-i18n="emp_col_age">나이</th><th data-i18n="label_role_perm">권한</th><th data-i18n="emp_col_salary">급여</th><th data-i18n="item_manage">관리</th></tr></thead><tbody id="emp-list-body"></tbody></table></div></div></div>
+            </div>
+        </div>
+        <div id="eval-type-list" style="display:none;">
+                <div class="card-box mb-3">
+                    <h6 class="fw-bold border-bottom pb-2 mb-3" data-i18n="eval_list_title">📋 평가 이력 조회</h6>
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="eval_list_type">평가 유형</label><select id="eval-list-type" class="form-select form-select-sm"><option value="all" data-i18n="eval_list_type_all">📋 전체(ALL)</option><option value="kitchen" data-i18n="eval_list_type_kitchen">🍳 주방</option><option value="service" data-i18n="eval_list_type_service">🍽 서비스</option></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="eval_list_start">시작일</label><input type="date" id="eval-list-start" class="form-control form-control-sm"></div>
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="eval_list_end">종료일</label><input type="date" id="eval-list-end" class="form-control form-control-sm"></div>
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="label_store">매장</label><select id="eval-list-store" class="form-select form-select-sm"><option value="All" data-i18n="label_all">전체</option></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="label_employee">직원</label><select id="eval-list-employee" class="form-select form-select-sm"><option value="All" data-i18n="label_all">전체</option></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="eval_list_evaluator">작성자(평가자)</label><select id="eval-list-evaluator" class="form-select form-select-sm"><option value="All" data-i18n="label_all">전체</option></select></div>
+                        <div class="col-md-2"><button class="btn btn-primary btn-sm w-100" onclick="loadEvaluationHistory()" data-i18n="btn_query_go">🔍 조회</button></div>
+                    </div>
+                    <div class="table-responsive" style="max-height:480px;">
+                        <table class="table table-sm table-hover table-bordered align-middle mb-0">
+                            <thead class="table-header-dark"><tr><th data-i18n="eval_list_th_date">날짜</th><th data-i18n="label_store">매장</th><th data-i18n="eval_list_th_employee">직원</th><th data-i18n="label_evaluator">평가자</th><th data-i18n="eval_list_th_score">총점</th><th data-i18n="eval_list_th_grade">등급</th><th data-i18n="eval_list_th_memo">총평</th><th style="width:80px;" data-i18n="eval_list_btn_view">보기</th></tr></thead>
+                            <tbody id="eval-history-tbody"></tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0" id="eval-history-count"></p>
+                </div>
+            </div>
+            <div id="eval-type-eval" style="display:none;">
+                <div class="card-box mb-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold" data-i18n="label_store">매장</label><select id="eval-store" class="form-select" onchange="fillEvalEmployeeOptions()"></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold" data-i18n="label_employee">직원</label><select id="eval-employee" class="form-select" onchange="updateEvalEmployeePhoto()"><option value="" data-i18n="eval_store_first">매장 선택 후</option></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold">평가 유형</label><select id="eval-type-select" class="form-select"><option value="kitchen">🍳 주방 직원</option><option value="service">🍽 서비스 직원</option></select></div>
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold" data-i18n="eval_date">평가일</label><input type="date" id="eval-date" class="form-control"></div>
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold" data-i18n="eval_shift">시프트/역할</label><select id="eval-shift" class="form-select"><option value="Kitchen">Kitchen</option><option value="Service">Service</option><option value="Morning">Morning</option><option value="Evening">Evening</option><option value="Full">Full</option></select></div><div class="col-auto d-flex align-items-end pb-1"><div id="eval-employee-photo-wrap" style="width:52px;height:52px;border-radius:8px;overflow:hidden;background:#e2e8f0;display:flex;align-items:center;justify-content:center;"><img id="eval-employee-photo" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:none;"></div></div>
+                        <div class="col-md-2"><label class="form-label small mb-1 fw-bold" data-i18n="label_evaluator">평가자</label><input type="text" id="eval-evaluator" class="form-control" readonly></div>
+                        <div class="col-md-2"><button class="btn btn-primary w-100 fw-bold" onclick="loadEvaluationForm(getEvalType())" data-i18n="eval_load_form">🔄 양식 불러오기</button></div>
+                    </div>
+                </div>
+                <input type="hidden" id="eval-id">
+                <div id="eval-sections-container"></div>
+                <div class="card-box mt-3 bg-light">
+                    <p class="small mb-1 eval-weight-line" data-i18n="eval_weight">가중치: 메뉴숙련 40% · 원가/정확도 20% · 위생 20% · 태도 20%</p>
+                    <p class="mb-0 fw-bold"><span data-i18n="eval_total_score">총점</span>: <span id="eval-total-score">-</span> &nbsp;|&nbsp; <span data-i18n="eval_final_grade_label">최종 등급</span>: <select id="eval-final-grade" class="form-select d-inline-block" style="width:80px;" onchange="updateEvalGradeDisplay()"><option value="S">S</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option><option value="F">F</option></select></p>
+                </div>
+                <div id="eval-extra-kitchen">
+                <div class="card-box mt-3">
+                    <h6 class="fw-bold border-bottom pb-2" data-i18n="eval_incident">6) 사고 / 이슈 이력</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+<thead class="table-light"><tr><th data-i18n="eval_issue_type">이슈 유형</th><th style="width:90px;" data-i18n="eval_occur">발생 여부</th><th style="width:120px;" data-i18n="label_date">일자</th><th data-i18n="eval_detail">상세</th><th style="width:50px;">삭제</th></tr></thead>
+                                                            <tbody id="eval-incidents-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-box mt-3">
+                    <h6 class="fw-bold border-bottom pb-2" data-i18n="eval_action_plan">7) Next Action Plan</h6>
+                    <div class="row g-2">
+                        <div class="col-md-3"><label class="form-label small mb-0" data-i18n="eval_training">교육 필요</label><input type="text" id="eval-training-needed" class="form-control form-control-sm" placeholder="Training Needed"></div>
+                        <div class="col-md-3"><label class="form-label small mb-0" data-i18n="eval_coach">코치/트레이너</label><input type="text" id="eval-coach" class="form-control form-control-sm" placeholder="Coach/Trainer"></div>
+                        <div class="col-md-2"><label class="form-label small mb-0" data-i18n="eval_target_date">목표일</label><input type="date" id="eval-target-date" class="form-control form-control-sm date-picker-lg"></div>
+                        <div class="col-md-2"><label class="form-label small mb-0" data-i18n="eval_reeval_date">재평가일</label><input type="date" id="eval-reeval-date" class="form-control form-control-sm date-picker-lg"></div>
+                    </div>
+                </div>
+                </div>
+                <div class="mt-2">
+                    <label class="fw-bold" data-i18n="eval_total_comment">💡 종합 의견 / 총평</label>
+                    <textarea id="eval-total-memo" class="form-control" rows="2" placeholder="종합 의견을 입력하세요." data-i18n="placeholder_comment"></textarea>
+                </div>
+                <button class="btn btn-success w-100 mt-3 fw-bold py-3" onclick="saveEvaluationResult(getEvalType())" data-i18n="eval_save">💾 평가 저장</button>
+            </div>
+            <div id="eval-type-kitchen-setting" style="display:none;">
+                <div class="card-box">
+                    <h6 class="fw-bold border-bottom pb-2" data-i18n="eval_setting">⚙️ 주방 평가 항목 설정</h6>
+                    <p class="small text-muted" data-i18n="eval_setting_desc_kitchen">평가 항목 내용을 수정하거나 사용 여부를 체크할 수 있습니다. 대분류=메뉴숙련/원가정확도/위생/태도, 중분류=카테고리(메뉴만).</p>
+                    <div class="table-responsive" style="max-height:400px;">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light"><tr><th data-i18n="store_no">NO</th><th data-i18n="eval_cat_main">대분류</th><th data-i18n="eval_cat_sub">중분류</th><th data-i18n="eval_item">평가 항목</th><th data-i18n="eval_use">사용</th><th style="width:60px;" data-i18n="eval_delete">삭제</th></tr></thead>
+                            <tbody id="eval-setting-list-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2">
+                        <button class="btn btn-outline-primary" onclick="loadEvaluationSettings('kitchen')" data-i18n="eval_load_items">항목 불러오기</button>
+                        <button class="btn btn-outline-success ms-2" onclick="addEvalItemRow('kitchen')" data-i18n="eval_add_item">+ 항목 추가</button>
+                        <button class="btn btn-primary ms-2" onclick="saveEvaluationSettings('kitchen')" data-i18n="eval_save_items">항목 저장</button>
+                    </div>
+                </div>
+            </div>
+            <div id="eval-type-service-setting" style="display:none;">
+                <div class="card-box">
+                    <h6 class="fw-bold border-bottom pb-2" data-i18n="eval_setting_service">⚙️ 서비스 평가 항목 설정</h6>
+                    <p class="small text-muted" data-i18n="eval_setting_desc">평가 항목을 추가·삭제하거나 사용 여부를 체크할 수 있습니다.</p>
+                    <div class="table-responsive" style="max-height:400px;">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light"><tr><th data-i18n="store_no">NO</th><th data-i18n="eval_cat_main">대분류</th><th data-i18n="eval_cat_sub">중분류</th><th data-i18n="eval_item">평가 항목</th><th data-i18n="eval_use">사용</th><th style="width:60px;" data-i18n="eval_delete">삭제</th></tr></thead>
+                            <tbody id="eval-setting-list-body-service"></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2">
+                        <button class="btn btn-outline-primary" onclick="loadEvaluationSettings('service')" data-i18n="eval_load_items">항목 불러오기</button>
+                        <button class="btn btn-outline-success ms-2" onclick="addEvalItemRow('service')" data-i18n="eval_add_item">+ 항목 추가</button>
+                        <button class="btn btn-primary ms-2" onclick="saveEvaluationSettings('service')" data-i18n="eval_save_items">항목 저장</button>
+                    </div>
+                </div>
+            </div>
+    </div>
+     
+    <div id="page-attendance-manage" style="display:none;">
+    <h4 class="fw-bold mb-3" data-i18n="att_title">📅 근태 시스템 관리</h4>
+
+    <ul class="nav nav-tabs mb-3" id="attendanceTab" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link active" onclick="showAttendanceTab('status')" data-i18n="tab_att_status">📊 근태 기록/승인</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" onclick="showAttendanceTab('schedule')" data-i18n="tab_att_schedule">📝 스케줄 작성</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" onclick="showAttendanceTab('view-edit')" data-i18n="tab_att_view">🔍 스케줄 조회</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" onclick="showAttendanceTab('today-realtime')" data-i18n="tab_att_today_realtime">📋 당일 실시간 근무</a>
+    </li>
+</ul>
+
+<div id="attendance-tab-today-realtime" style="display:none;">
+    <div class="card-box mb-3">
+        <p class="text-muted small mb-2" data-i18n="m_schedule_today_hint">날짜·매장·구역 선택 후 검색하면 모바일과 동일한 당일 실시간 근무 표가 표시됩니다.</p>
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+                <label class="small fw-bold" data-i18n="m_schedule_label_date">날짜</label>
+                <input type="date" id="att-today-date" class="form-control form-control-sm">
+            </div>
+            <div>
+                <label class="small fw-bold" data-i18n="label_store">매장</label>
+                <select id="att-today-store" class="form-select form-select-sm"></select>
+            </div>
+            <div>
+                <label class="small fw-bold" data-i18n="m_schedule_label_area">구역</label>
+                <select id="att-today-area" class="form-select form-select-sm">
+                    <option value="All" data-i18n="m_schedule_area_all">전체</option>
+                    <option value="Service" data-i18n="m_schedule_area_service">서비스</option>
+                    <option value="Kitchen" data-i18n="m_schedule_area_kitchen">주방</option>
+                    <option value="Office" data-i18n="m_schedule_area_office">오피스</option>
+                </select>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="loadAdminTodayRealtime()" data-i18n="m_schedule_btn_search">검색</button>
+        </div>
+    </div>
+    <div class="card-box p-0">
+        <div id="att-today-realtime-box" style="max-height:520px; overflow:auto; font-size:12px;">
+            <div class="text-center text-muted py-5 small" data-i18n="m_schedule_today_hint">날짜·매장·구역 선택 후 검색하세요</div>
+        </div>
+    </div>
+</div>
+
+<div id="attendance-tab-view-edit" style="display:none;">
+    <div class="card-box mb-3 border-info">
+        <p class="text-muted small mb-2" data-i18n="att_view_hint">저장된 주간 스케줄을 조회만 할 수 있습니다. 수정은 스케줄 작성 탭에서 불러오기 후 편집하세요.</p>
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+                <label class="small fw-bold" data-i18n="att_store_select">매장 선택</label>
+                <select id="view-store-select" class="form-select"></select>
+            </div>
+            <div>
+                <label class="small fw-bold" data-i18n="m_schedule_label_area">구역</label>
+                <select id="view-area-select" class="form-select">
+                    <option value="All" data-i18n="m_schedule_area_all">전체</option>
+                    <option value="Service" data-i18n="m_schedule_area_service">서비스</option>
+                    <option value="Kitchen" data-i18n="m_schedule_area_kitchen">주방</option>
+                </select>
+            </div>
+            <div>
+                <label class="small fw-bold" data-i18n="att_week_monday">기준 월요일 날짜</label>
+                <input type="date" id="view-week-monday" class="form-control" onchange="snapToMonday(this)">
+            </div>
+            <button class="btn btn-info fw-bold text-white" onclick="loadSavedSchedule()" data-i18n="att_load_schedule">📅 저장된 시간표 불러오기</button>
+            <button class="btn btn-success fw-bold text-white" onclick="exportScheduleToExcel()" id="view-export-excel-btn" style="display:none;">📥 엑셀 다운로드</button>
+        </div>
+    </div>
+
+    <div class="card-box view-schedule-readonly">
+        <div class="table-responsive" style="max-height: 800px; border: 1px solid #ddd;">
+            <table class="table table-sm table-bordered text-center align-middle mb-0 sch-table">
+                <thead class="table-dark sticky-top">
+                    <tr id="view-header-row"></tr>
+                    <tr id="view-header-areas" style="background: #444; color: #eee; font-size: 11px;"></tr>
+                </thead>
+                <tbody id="view-body-slots"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+    <div id="attendance-tab-status">
+        <div class="card-box">
+            <div class="row g-2 mb-2 align-items-end">
+                <div class="col-auto"><label class="form-label small mb-1" data-i18n="att_start_date">시작일</label><input type="date" id="att-start" class="form-control" style="min-width:8rem;"></div>
+                <div class="col-auto"><label class="form-label small mb-1" data-i18n="att_end_date">종료일</label><input type="date" id="att-end" class="form-control" style="min-width:8rem;"></div>
+                <div class="col-md-2"><label class="form-label small mb-1" data-i18n="label_store">매장</label><select id="att-store-filter" class="form-select" onchange="loadAttEmployeeOptions()"><option value="All" data-i18n="att_all_stores">전체 매장</option></select></div>
+                <div class="col-md-2"><label class="form-label small mb-1" data-i18n="label_employee">직원</label><select id="att-employee-filter" class="form-select" disabled><option value="" data-i18n="att_select_store_first">매장을 먼저 선택</option></select></div>
+                <div class="col-auto"><label class="form-label small mb-1" data-i18n="att_status_filter">상태</label><select id="att-status-filter" class="form-select" onchange="var w=document.getElementById('att-batch-forced-wrap');if(w) w.style.display=this.value==='pending'?'':'none';"><option value="all" data-i18n="label_all">전체</option><option value="pending" data-i18n="att_pending_only">승인대기</option></select></div>
+                <div class="col-auto"><label class="form-label small mb-1" data-i18n="att_approval_type">승인 유형</label><select id="att-approval-type-filter" class="form-select" onchange="if(typeof rerenderAttendanceByApprovalType==='function')rerenderAttendanceByApprovalType()"><option value="all" data-i18n="label_all">전체</option><option value="late" data-i18n="att_type_late">지각</option><option value="gps" data-i18n="att_type_gps">GPS미확인</option><option value="ot" data-i18n="att_type_ot">O.T</option><option value="forced_out" data-i18n="att_type_forced_out">강제퇴근</option></select></div>
+                <div class="col-auto align-self-end"><button type="button" class="btn btn-primary" onclick="loadAttendanceRecords()" data-i18n="btn_query">조회</button></div>
+                <div class="col-auto align-self-end" id="att-batch-forced-wrap" style="display:none;"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="runBatchForcedClockOutThenReload()" data-i18n="att_btn_batch_forced">퇴근 미기록 → 강제퇴근</button></div>
+            </div>
+            <p class="small text-muted mb-2" data-i18n="att_approval_help">승인 시: 지각→급여 공제 없음, GPS미확인→출퇴근 인정, O.T→연장 수당 반영, 강제퇴근→퇴근 인정</p>
+            <div class="table-responsive">
+                <table class="table table-hover text-center align-middle" style="font-size:0.85rem;">
+                    <thead class="table-dark">
+                        <tr>
+                            <th data-i18n="label_date">날짜</th><th data-i18n="pay_col_store">매장</th><th data-i18n="label_name">이름</th>
+                            <th data-i18n="att_col_in">출근</th><th data-i18n="att_col_out">퇴근</th><th data-i18n="att_col_break_min">휴게(분)</th>
+                            <th data-i18n="att_col_actual_hrs">실제(시간)</th><th data-i18n="att_col_planned_hrs">계획(시간)</th><th data-i18n="att_col_diff">차이</th>
+                            <th data-i18n="att_late_extra">지각/연장</th><th data-i18n="wl_status">상태</th><th data-i18n="att_approve_btn">승인</th>
+                        </tr>
+                    </thead>
+                    <tbody id="att-list-body">
+                        <tr><td colspan="12" class="py-5 text-muted" data-i18n="att_query_please">기록을 조회해 주세요.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+  
+    <div id="attendance-tab-schedule" style="display:none;">
+    <div class="card-box bg-light mb-3 border-primary" style="border: 2px solid #0d6efd !important;">
+        <h6 class="fw-bold text-primary"><i class="bi bi-magic"></i> <span data-i18n="att_smart_tool">스마트 일괄 입력 도구</span></h6>
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-1"><label class="small fw-bold" data-i18n="att_start_date">시작 시간</label><select id="quick-start" class="form-select form-select-sm"></select></div>
+            <div class="col-6 col-md-1"><label class="small fw-bold" data-i18n="att_work_hours">총 근무(시간)</label><input type="number" id="quick-work-hours" class="form-control form-control-sm" step="0.5" value="8"></div>
+            <div class="col-6 col-md-1"><label class="small fw-bold" data-i18n="att_break_start">휴게 시작</label><select id="quick-break-start" class="form-select form-select-sm"></select></div>
+            <div class="col-6 col-md-1"><label class="small fw-bold" data-i18n="att_break_hours">휴게(시간)</label><input type="number" id="quick-break-hours" class="form-control form-control-sm" step="0.5" value="1"></div>
+            <div class="col-6 col-md-1"><label class="small fw-bold text-danger" data-i18n="att_apply_day">적용 요일</label>
+                <select id="quick-day" class="form-select form-select-sm">
+                    <option value="0" data-i18n="att_mon">월요일</option><option value="1" data-i18n="att_tue">화요일</option><option value="2" data-i18n="att_wed">수요일</option>
+                    <option value="3" data-i18n="att_thu">목요일</option><option value="4" data-i18n="att_fri">금요일</option><option value="5" data-i18n="att_sat">토요일</option><option value="6" data-i18n="att_sun">일요일</option>
+                </select>
+            </div>
+            <div class="col-12 col-md d-flex gap-1 align-items-end flex-nowrap">
+                <button id="btn-quick-service" class="btn btn-primary btn-sm flex-grow-1" onclick="applyQuickSchedule('Service')">Service</button>
+                <button id="btn-quick-kitchen" class="btn btn-success btn-sm flex-grow-1" onclick="applyQuickSchedule('Kitchen')">Kitchen</button>
+                <button id="btn-quick-office" class="btn btn-sm flex-grow-1" style="background:#1976D2; color:white;" onclick="applyQuickSchedule('Office')">Office</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-2">
+            <div class="card-box bg-light" style="min-height: 600px;">
+                <h6 class="fw-bold border-bottom pb-2" data-i18n="att_staff_select">👥 직원 선택</h6>
+                <div id="sch-staff-list" class="list-group list-group-flush"></div>
+            </div>
+        </div>
+        <div class="col-md-10">
+            <div class="card-box">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                        <select id="sch-store-select" class="form-select form-select-sm" style="width:160px;" onchange="loadStaffAndGrid()"></select>
+                        <input type="date" id="sch-week-monday" class="form-control form-control-sm" onchange="snapToMonday(this); initWeeklyGrid();">
+                        <button class="btn btn-info btn-sm fw-bold" onclick="loadSavedScheduleIntoEditor()" data-i18n="att_load_saved">📅 저장된 시간표 불러오기</button>
+                        <div class="time-range-box border rounded p-2 bg-light ms-1">
+                            <span class="fw-bold text-dark" data-i18n="att_display_time">🕒 표시 시간:</span>
+                            <select id="sch-start-hour" class="form-select form-select-sm" style="width:85px;" onchange="initWeeklyGrid()"></select>
+                            <span class="fw-bold">~</span>
+                            <select id="sch-end-hour" class="form-select form-select-sm" style="width:85px;" onchange="initWeeklyGrid()"></select>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="initWeeklyGrid()" data-i18n="att_reset">🧹 초기화</button>
+                        <button class="btn btn-outline-primary btn-sm fw-bold" onclick="copyToNextWeek()" data-i18n="att_copy_next">⏭️ 다음 주로 복사</button>
+                        <button class="btn btn-success btn-sm fw-bold" onclick="prepareAndSave()" data-i18n="att_save_schedule">💾 주간 스케줄 저장</button>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height: 800px; border: 1px solid #ddd;">
+                    <table class="table table-sm table-bordered text-center align-middle mb-0 sch-table" id="sch-main-grid">
+                        <thead class="table-dark sticky-top">
+                            <tr id="sch-header-row"></tr>
+                            <tr id="sch-header-areas" style="background: #444; color: #eee; font-size: 11px;"></tr>
+                        </thead>
+                        <tbody id="sch-body-slots"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<style>
+    .slot { height: 32px; cursor: crosshair; user-select: none; transition: 0.1s; }
+    .slot:hover { background-color: #fff3e0; }
+    .slot.active-fill { 
+    background-color: transparent !important; 
+}
+    .staff-item.active { background-color: #E65100 !important; color: white !important; }
+    .time-label { 
+    background: #212529 !important; 
+    color: #ffffff !important; 
+    font-weight: bold; 
+    font-size: 18px !important; /* 대표님 요청: 18px 확대 */
+    width: 90px;
+    text-align: center;
+    vertical-align: middle !important;
+}
+</style>
+
+   
+
+
+    <div id="page-payroll" style="display:none;">
+        <h4 class="fw-bold mb-3" data-i18n="pay_title">💰 급여 관리 (Payroll DB)</h4>
+
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a class="nav-link active" id="payroll-nav-calc" onclick="showPayrollTab('calc')" style="cursor:pointer;" data-i18n="tab_pay_calc">🧮 급여 계산 및 확정</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="payroll-nav-hist" onclick="showPayrollTab('hist')" style="cursor:pointer;" data-i18n="tab_pay_hist">📂 명세서 조회</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="payroll-nav-holiday" onclick="showPayrollTab('holiday')" style="cursor:pointer;" data-i18n="pay_tab_holiday">🇹🇭 공휴일 (13일)</a>
+            </li>
+        </ul>
+
+        <div id="payroll-tab-calc">
+            <div class="card-box">
+                <div class="row align-items-end mb-3">
+                    <div class="col-md-2">
+                        <label class="fw-bold small" data-i18n="pay_month">📅 급여 귀속월</label>
+                        <input type="month" id="payroll-month" class="form-control">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="fw-bold small" data-i18n="label_store">매장</label>
+                        <select id="payroll-store-filter" class="form-select"><option value="All" data-i18n="label_all">전체</option></select>
+                    </div>
+                    <div class="col-md-8 text-end">
+                        <button class="btn btn-outline-danger me-1" onclick="runDBSetup()" data-i18n="pay_db_setup">🛠️ DB 시트 생성 (최초 1회)</button>
+                        <button class="btn btn-primary fw-bold" onclick="calculateMonthlySalary()" data-i18n="pay_calc_run">🧮 계산 실행</button>
+                        <button class="btn btn-success fw-bold ms-2" onclick="saveFinalPayroll()" data-i18n="pay_save_confirm">💾 DB에 확정 저장</button>
+                    </div>
+                </div>
+
+                <div class="alert alert-info small py-2">
+                    <span data-i18n="pay_calc_hint_line1"></span><br>
+                    <span data-i18n="pay_calc_hint_line2"></span><br>
+                    <span data-i18n="pay_calc_hint_line3"></span><br>
+                    <span data-i18n="pay_calc_hint_line4"></span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover text-center align-middle payroll-calc-table" style="font-size:0.85rem; min-width: 1300px;">
+                        <thead>
+                            <tr class="payroll-thead-row1">
+                                <th rowspan="2" style="width:50px">No</th>
+                                <th rowspan="2" data-i18n="pay_col_store">매장</th>
+                                <th rowspan="2" data-i18n="pay_col_name">이름</th>
+                                <th rowspan="2" class="payroll-th-base" data-i18n="pay_col_base">기본급</th>
+                                <th colspan="5" class="payroll-th-allow" data-i18n="pay_allowance">수당 (+)</th>
+                                <th colspan="2" class="payroll-th-ot" data-i18n="pay_ot">OT (+)</th>
+                                <th colspan="3" class="payroll-th-deduct" data-i18n="pay_deduct">공제 (-)</th>
+                                <th rowspan="2" class="payroll-th-net" data-i18n="pay_net">실수령액</th>
+                                <th rowspan="2" class="payroll-th-edit" data-i18n="pay_edit">수정</th>
+                            </tr>
+                            <tr class="payroll-thead-row2">
+                                <th class="payroll-th-allow" data-i18n="pay_col_role">직책</th><th class="payroll-th-allow" data-i18n="pay_col_risk">위험</th><th class="payroll-th-allow" data-i18n="pay_col_birth">생일</th><th class="payroll-th-allow" data-i18n-title="pay_col_holiday_title"><span data-i18n="pay_col_holiday">공휴일</span></th><th class="payroll-th-allow" data-i18n="pay_col_bonus">보너스</th>
+                                <th class="payroll-th-ot" data-i18n="pay_col_ot_hr">시간</th><th class="payroll-th-ot" data-i18n="pay_col_ot_amt">금액</th>
+                                <th class="payroll-th-deduct" data-i18n="pay_col_late">지각</th><th class="payroll-th-deduct" data-i18n="pay_col_sso">SSO</th><th class="payroll-th-deduct" data-i18n="pay_col_etc">기타</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payroll-list-body" class="payroll-tbody">
+                            <tr><td colspan="16" class="py-5 text-muted" data-i18n="pay_query_please">위에서 날짜를 선택하고 [계산 실행]을 눌러주세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="payroll-tab-holiday" style="display:none;">
+            <div class="card-box">
+                <h6 class="fw-bold mb-2" data-i18n="pay_holiday_title">🇹🇭 태국 공휴일 13일 (공휴일 근무 시 2배 급여)</h6>
+                <p class="small text-muted mb-3" data-i18n="pay_holiday_desc">기본 데이터 없이 시트만 만들고, [추가]로 필요한 공휴일만 하나씩 입력하세요. 연도별로 달라지는 휴일은 [수정]/[삭제]로 관리할 수 있습니다.</p>
+                <div class="row align-items-end mb-3">
+                    <div class="col-md-2">
+                        <label class="fw-bold small" data-i18n="pay_holiday_year">연도</label>
+                        <select id="holiday-year" class="form-select" onchange="loadPublicHolidays()"></select>
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-outline-primary btn-sm" onclick="setupPublicHolidaysSheet()" data-i18n="pay_holiday_setup_btn">🛠️ 공휴일 시트 생성/초기화</button>
+                        <button class="btn btn-primary btn-sm ms-2" onclick="openHolidayAddModal()" data-i18n="pay_holiday_add_btn">➕ 추가</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light"><tr><th data-i18n="pay_holiday_th_no">No</th><th data-i18n="pay_holiday_th_date">날짜</th><th data-i18n="pay_holiday_th_name">휴일명</th><th style="width:120px;" data-i18n="pay_holiday_th_manage">관리</th></tr></thead>
+                        <tbody id="public-holiday-list"><tr><td colspan="4" class="py-4 text-muted" data-i18n="pay_holiday_query_hint">연도를 선택한 뒤 조회됩니다.</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- 공휴일 추가/수정 모달 -->
+        <div class="modal fade" id="holiday-form-modal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header"><h6 class="modal-title" id="holiday-form-modal-title" data-i18n="pay_holiday_modal_add">공휴일 추가</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <input type="hidden" id="holiday-form-rowIndex" value="">
+                        <div class="mb-2"><label class="form-label small fw-bold" data-i18n="pay_holiday_modal_year">연도</label><input type="number" id="holiday-form-year" class="form-control" min="2020" max="2030" placeholder="2025"></div>
+                        <div class="mb-2"><label class="form-label small fw-bold" data-i18n="pay_holiday_modal_date">날짜 (yyyy-MM-dd)</label><input type="date" id="holiday-form-date" class="form-control"></div>
+                        <div class="mb-2"><label class="form-label small fw-bold" data-i18n="pay_holiday_modal_name">휴일명</label><input type="text" id="holiday-form-name" class="form-control" placeholder="New Year's Day"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="pay_holiday_cancel">취소</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="holiday-form-save-btn" onclick="saveHolidayForm()" data-i18n="btn_save">저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="payroll-tab-hist" style="display:none;">
+            <div class="card-box bg-light border-0">
+                <div class="row align-items-end mb-3">
+                    <div class="col-md-3">
+                        <label class="fw-bold small" data-i18n="pay_hist_month">📅 조회월</label>
+                        <input type="month" id="py-history-month" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="fw-bold small" data-i18n="pay_hist_store">🏢 매장 필터</label>
+                        <select id="py-history-store" class="form-select"><option value="All" data-i18n="label_all">전체</option></select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-dark w-100 fw-bold" onclick="loadPayrollHistory()" data-i18n="btn_query_go2">🔍 조회하기</button>
+                    </div>
+                </div>
+                <!-- 명세서 이메일: 체크박스 선택 후 일괄 발송 (v2) -->
+                <div class="mb-2">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="sendPayrollEmailSelected()" id="py-send-selected-btn" data-i18n="pay_send_selected">📧 선택한 명세서 이메일 발송</button>
+                    <span class="ms-2 small text-muted" data-i18n="pay_email_hint">발송할 행을 체크한 뒤 버튼을 누르세요.</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm text-center align-middle bg-white" style="font-size:0.85rem; min-width: 1000px;">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th style="width:44px;"><input type="checkbox" id="py-history-check-all" title="전체 선택" onchange="togglePayrollHistoryCheckAll(this)"></th>
+                                <th data-i18n="pay_col_store">매장</th><th data-i18n="pay_col_name">이름</th><th data-i18n="pay_col_base">기본급</th>
+                                <th data-i18n="pay_allowance">수당계</th><th data-i18n="pay_ot">OT계</th><th data-i18n="pay_deduct">공제계</th>
+                                <th class="fw-bold text-primary" data-i18n="pay_net">실수령액</th>
+                                <th data-i18n="wl_status">상태</th>
+                            </tr>
+                        </thead>
+                        <tbody id="py-history-list">
+                             <tr><td colspan="9" class="py-4 text-muted" data-i18n="pay_hist_query_please">조회 버튼을 눌러주세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3 text-end fw-bold fs-5 text-danger"><span data-i18n="pay_total_amount">총 지급액</span>: <span id="total-amount">0</span> THB</div>
+            </div>
+        </div>
+    </div> 
+    
+    <div id="page-hr-leave">
+        <h4 class="fw-bold mb-3" data-i18n="leave_title">🏖️ 휴가 관리</h4>
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><a class="nav-link active" id="leave-tab-approval" href="javascript:void(0)" style="cursor:pointer" onclick="showLeaveTab('approval')" data-i18n="leave_tab_approval">휴가 승인</a></li>
+            <li class="nav-item"><a class="nav-link" id="leave-tab-stats" href="javascript:void(0)" style="cursor:pointer" onclick="showLeaveTab('stats')" data-i18n="leave_tab_stats">휴가 통계</a></li>
+        </ul>
+        <div id="leave-panel-approval">
+            <div class="card-box p-0"><div class="search-toolbar m-3"><div class="input-group"><span class="input-group-text" data-i18n="label_period">기간</span><input type="date" id="leave-start" class="form-control"><input type="date" id="leave-end" class="form-control"><select id="leave-status" class="form-select" style="max-width:120px;"><option value="All" data-i18n="label_all">전체</option><option value="대기" data-i18n="leave_wait">대기</option><option value="승인" data-i18n="leave_approved">승인</option><option value="반려" data-i18n="leave_rejected">반려</option></select><select id="leave-store-select" class="form-select" style="max-width:140px;"></select><button class="btn btn-primary" onclick="filterLeaves()" data-i18n="btn_query">조회</button></div></div><div class="table-responsive" style="max-height:500px;"><table class="table mb-0 text-center align-middle"><thead class="table-header-dark"><tr><th data-i18n="leave_col_date">날짜</th><th data-i18n="label_store">매장</th><th data-i18n="leave_col_name">이름</th><th data-i18n="leave_col_type">종류</th><th data-i18n="leave_col_status">상태</th><th data-i18n="item_manage">관리</th></tr></thead><tbody id="leave-list"></tbody></table></div></div>
+        </div>
+        <div id="leave-panel-stats" style="display:none;">
+            <div class="card-box p-0"><div class="search-toolbar m-3"><div class="input-group"><span class="input-group-text" data-i18n="label_period">기간</span><input type="date" id="stats-start" class="form-control"><input type="date" id="stats-end" class="form-control"><select id="hr-store-selector" class="form-select" style="max-width:150px;"></select><button class="btn btn-primary" onclick="filterStats()" data-i18n="btn_search">검색</button></div></div><div class="table-responsive"><table class="table table-bordered mb-0 text-center align-middle"><thead class="table-dark"><tr><th rowspan="2" data-i18n="label_store">매장</th><th rowspan="2" data-i18n="leave_col_name">이름</th><th colspan="2" data-i18n="leave_used_period">사용(기간)</th><th colspan="2" data-i18n="leave_used_total">사용(전체)</th><th rowspan="2" data-i18n="leave_remain">잔여</th></tr><tr><th data-i18n="leave_annual">연차</th><th data-i18n="leave_sick">병가</th><th data-i18n="leave_annual">연차</th><th data-i18n="leave_sick">병가</th></tr></thead><tbody id="stats-list"></tbody></table></div></div>
+        </div>
+    </div>
+
+     <div id="page-store-manage" style="display:none;">
+    <h4 class="fw-bold mb-3" data-i18n="store_title">🏢 매장 관리</h4>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a id="store-nav-check" class="nav-link active" onclick="showStoreTab('check')" data-i18n="tab_store_check">✅ 일일 점검</a>
+        </li>
+        <li class="nav-item">
+            <a id="store-nav-history" class="nav-link" onclick="showStoreTab('history')" data-i18n="tab_store_history">📋 점검 이력</a>
+        </li>
+        <li class="nav-item hq-only">
+            <a id="store-nav-setting" class="nav-link" onclick="showStoreTab('setting')" data-i18n="tab_store_setting">⚙️ 항목 설정</a>
+        </li> 
+    </ul>
+
+    <div id="store-tab-check">
+        <div class="card-box">
+            <div class="row mb-3 align-items-end">
+                <div class="col-md-3 mb-2"><label class="fw-bold" data-i18n="store_check_store">매장</label><select id="chk-store" class="form-select"></select></div>
+                <div class="col-md-3 mb-2"><label class="fw-bold" data-i18n="store_check_date">날짜</label><input type="date" id="chk-date" class="form-control"></div>
+                <div class="col-md-3 mb-2"><label class="fw-bold" data-i18n="store_check_inspector">점검자</label><input type="text" id="chk-inspector" class="form-control" readonly></div>
+                <div class="col-md-3 mb-2"><button class="btn btn-primary w-100 fw-bold" onclick="loadChecklistForm()" data-i18n="store_load_form">🔄 양식 불러오기</button></div>
+                <div id="store-tab-check">
+    <div class="card-box">
+        
+        <input type="hidden" id="chk-id"> 
+
+        <div class="row mb-3 align-items-end">
+             </div>
+        
+        </div>
+</div>
+            </div>
+            
+            <hr>
+
+            <div class="table-responsive" style="max-height:600px; border:1px solid #ddd;">
+                <table class="table table-bordered table-hover align-middle mb-0" style="min-width: 800px;">
+                    <thead class="table-dark sticky-top">
+                        <tr class="text-center">
+                            <th style="width:50px;" data-i18n="store_no">NO</th>
+                            <th style="width:120px;" data-i18n="store_cat_main">대분류</th>
+                            <th style="width:150px;" data-i18n="store_cat_sub">중분류</th>
+                            <th data-i18n="store_check_item">점검 항목</th>
+                            <th style="width:140px;" data-i18n="store_check">체크</th>
+                            <th style="width:200px;" data-i18n="store_remark">비고 (특이사항)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checklist-body">
+                        <tr><td colspan="6" class="text-center py-5" data-i18n="store_load_hint">상단 정보를 선택하고 '양식 불러오기'를 눌러주세요.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-3">
+                <label class="fw-bold" data-i18n="store_total_comment">💡 종합 의견 / 총평</label>
+                <textarea id="chk-total-memo" class="form-control" rows="2" data-i18n="chk_memo" data-i18n-placeholder="1" placeholder="전체적인 특이사항이 있다면 적어주세요."></textarea>
+            </div>
+            <button class="btn btn-success w-100 mt-3 fw-bold py-3" onclick="saveStoreCheckResult()" data-i18n="store_save_check">💾 점검 완료 및 저장</button>
+        </div>
+    </div>
+
+   <div id="store-tab-history" style="display:none;">
+        <div class="card-box">
+            <div class="input-group mb-3">
+                <span class="input-group-text bg-light fw-bold" data-i18n="store_hist_period">기간</span>
+                <input type="date" id="hist-date-start" class="form-control">
+                <span class="input-group-text bg-light">~</span>
+                <input type="date" id="hist-date-end" class="form-control">
+                
+                <select id="hist-store" class="form-select" style="max-width: 130px;">
+                    <option value="All" data-i18n="store_all_stores">전체 매장</option>
+                </select>
+                
+                <input type="text" id="hist-inspector" class="form-control" data-i18n="store_inspector_ph" data-i18n-placeholder="1" placeholder="점검자 이름 (선택)">
+                
+                <button class="btn btn-dark" onclick="searchCheckHistory()" data-i18n="btn_query_go">🔍 조회</button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover text-center align-middle">
+                    <thead class="table-light"><tr><th data-i18n="store_col_date">날짜</th><th data-i18n="label_store">매장</th><th data-i18n="store_col_inspector">점검자</th><th data-i18n="store_col_result">결과</th><th data-i18n="item_manage">관리</th></tr></thead>
+                    <tbody id="check-history-list"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="store-tab-setting" style="display:none;">
+        <div class="card-box">
+            <div class="d-flex justify-content-between mb-3">
+                <h6 class="fw-bold" data-i18n="store_setting_title">🛠 점검 항목 관리 (시트 연동)</h6>
+                <button class="btn btn-sm btn-outline-primary" onclick="loadChecklistSettings()" data-i18n="store_refresh">새로고침</button>
+            </div>
+            <div class="alert alert-warning py-2 small" data-i18n="store_setting_desc">
+                * 항목 추가/삭제는 점검항목 시트에서 직접 하시는 게 가장 빠릅니다.<br>
+                * 여기서는 '항목명 수정'과 '사용 여부(ON/OFF)'만 가능합니다.
+            </div>
+            <div class="table-responsive" style="max-height:600px;">
+                <table class="table table-sm table-bordered text-center align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th width="50" data-i18n="store_no">NO</th>
+                            <th data-i18n="store_cat_main">대분류</th>
+                            <th data-i18n="store_cat_sub">중분류</th>
+                            <th data-i18n="store_check_item">점검 항목</th>
+                            <th width="80" data-i18n="eval_use">사용</th>
+                        </tr>
+                    </thead>
+                    <tbody id="setting-list-body"></tbody>
+                </table>
+            </div>
+            <button class="btn btn-dark w-100 mt-3" onclick="saveChecklistSettings()" data-i18n="store_save_settings">⚙️ 변경사항 저장</button>
+        </div>
+    </div>
+</div>
+<div id="store-tab-schedule" style="display:none;">
+        <div class="card-box">
+           <h6 class="text-muted text-center py-5" data-i18n="store_preparing">직원 시간표 기능 준비 중...</h6>
+        </div>
+    </div>
+
+
+    <div id="page-outbound">
+        <div class="d-none print-invoice-title mb-2 fw-bold">🚚 주문 승인 인보이스</div>
+        <h4 class="fw-bold mb-3 no-print" data-i18n="ord_title">🚚 주문 승인 관리</h4>
+        <div class="card-box">
+           <div class="search-toolbar mb-3 no-print"><div class="row g-2 align-items-end flex-wrap"><div class="col-auto" style="min-width:110px;"><label class="form-label fw-bold small mb-0" data-i18n="label_store">매장</label><div class="input-group input-group-sm"><select id="ord-store-selector" class="form-select"><option value="All" data-i18n="label_all">전체</option></select></div></div><div class="col-auto" style="min-width:200px;"><label class="form-label fw-bold small mb-0" data-i18n="label_period">기간</label><div class="input-group input-group-sm"><input type="date" id="ord-start" class="form-control"><input type="date" id="ord-end" class="form-control"></div></div><div class="col-auto" style="min-width:180px;"><label class="form-label fw-bold small mb-0" data-i18n="wl_status">상태</label><div class="input-group input-group-sm"><select id="ord-status-filter" class="form-select"><option value="All" data-i18n="label_all">전체</option><option value="Pending" selected data-i18n="ord_pending">대기</option><option value="Approved" data-i18n="ord_approved">승인</option><option value="Rejected" data-i18n="ord_rejected">거절</option></select><input type="text" id="ord-search-keyword" class="form-control" data-i18n="placeholder_search" data-i18n-placeholder="1" placeholder="검색" style="max-width:80px;"></div></div><div class="col-auto d-flex gap-1"><button class="btn btn-primary btn-sm fw-bold" onclick="loadOrders()" data-i18n="btn_query_go">🔍 조회</button></div></div></div>
+           <div class="table-responsive"><table class="table table-hover mb-0 align-middle"><thead class="table-header-dark"><tr class="text-center"><th style="width:38px;"><input type="checkbox" class="form-check-input" id="ord-print-all" checked title="인쇄 포함 전체" onchange="toggleAllOrderPrint(this)"></th><th style="width:38px;">▼</th><th data-i18n="label_order_date">주문 일자</th><th data-i18n="ord_delivery_date">배송 일자</th><th data-i18n="label_store">매장</th><th data-i18n="ord_summary">요약</th><th data-i18n="ord_total">총액</th><th data-i18n="wl_status">상태</th></tr></thead><tbody id="order-list"><tr><td colspan="8" class="p-4 text-center text-muted" data-i18n="ord_query_please">조회하세요.</td></tr></tbody></table></div>
+        </div>
+    </div>
+    <!-- Delivery Note/Tax Invoice 인쇄 전용 영역 (숨김, 인쇄 시에만 표시) -->
+    <div id="invoice-print-area" class="d-none invoice-print-only" style="max-width:210mm; margin:0 auto; padding:16px; background:#fff;"></div>
+    
+   <div id="page-inbound">
+         <h4 class="fw-bold mb-3" data-i18n="in_title">📦 입고 관리</h4>
+         
+         <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a id="in-nav-new" class="nav-link active" onclick="showInTab('new')" style="cursor:pointer;" data-i18n="tab_in_new">신규 입고</a>
+            </li>
+            <li class="nav-item">
+                <a id="in-nav-hist" class="nav-link" onclick="showInTab('hist')" style="cursor:pointer;" data-i18n="in_nav_hist">내역 조회</a>
+            </li>
+         </ul>
+
+         <div id="in-tab-new">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <div class="card-box">
+                        <div class="mb-2">
+                            <label data-i18n="in_date">날짜</label>
+                            <input type="date" id="i-date" class="form-control">
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="in_vendor">매입처</label>
+                            <select id="i-vendor" class="form-select"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="in_item">품목</label>
+                            <div class="input-group">
+                                <input id="i-name" class="form-control" readonly data-i18n="in_find_item" data-i18n-placeholder="1" placeholder="품목 찾기">
+                                <button class="btn btn-warning" onclick="openFinder('inbound')">🔍</button>
+                            </div>
+                            <input type="hidden" id="i-code">
+                            <input type="hidden" id="i-spec">
+                        </div>
+                        <div class="mb-3">
+                            <label data-i18n="in_qty">수량</label>
+                            <input type="number" id="i-qty" class="form-control" placeholder="수량">
+                        </div>
+                        <button class="btn btn-secondary w-100" onclick="addInboundList()" data-i18n="in_add_list">담기 ⬇️</button>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="card-box">
+                        <h5 class="mb-3"><span data-i18n="in_wait_list">입고 대기 목록</span> <span id="i-count" class="badge bg-secondary">0</span></h5>
+                        <div class="batch-list-box">
+                            <table class="table table-sm text-center align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th data-i18n="in_col_item">품목명</th>
+                                        <th data-i18n="in_col_qty">수량</th>
+                                        <th data-i18n="in_col_del">삭제</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inbound-cart"></tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-success w-100 mt-3 fw-bold" onclick="saveInboundBatch()" data-i18n="in_save">💾 저장</button>
+                    </div>
+                </div>
+            </div>
+         </div>
+
+         <div id="in-tab-hist" style="display:none;">
+            <div class="card-box">
+                <div class="search-toolbar mb-3">
+                    <div class="input-group input-group-sm flex-wrap align-items-center gap-2">
+                        <span class="input-group-text" data-i18n="label_period">기간</span>
+                        <input type="date" id="ih-start" class="form-control" style="max-width:130px;">
+                        <input type="date" id="ih-end" class="form-control" style="max-width:130px;">
+                        <span class="input-group-text">월별</span>
+                        <input type="month" id="ih-month" class="form-control" style="max-width:140px;" title="월 선택 후 조회 시 해당 월 전체 검색">
+                        <select id="ih-vendor-selector" class="form-select" style="max-width:140px;">
+                            <option value="All" data-i18n="in_vendor_all">전체 매입처</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="loadInboundHistory()" data-i18n="btn_query">조회</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="printInvoice('inbound')">📄 인보이스 인쇄</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="downloadInboundHistoryExcel()" data-i18n="excel_btn">📥 엑셀 다운로드</button>
+                        <span id="ih-total-summary" class="ms-2 fw-bold text-primary align-middle" style="font-size:1rem;"></span>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height:600px;">
+                    <table class="table table-hover mb-0 text-center align-middle">
+                        <thead class="table-header-dark">
+                            <tr>
+                                <th data-i18n="label_date">날짜</th>
+                                <th data-i18n="in_vendor">매입처</th>
+                                <th data-i18n="label_content">내용</th>
+                                <th data-i18n="in_col_qty">수량</th>
+                                <th data-i18n="label_amount">금액</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ih-list">
+                            <tr><td colspan="5" class="p-3 text-muted" data-i18n="mgr_hint">기간 선택 후 조회하세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+         </div>
+    </div>
+
+<div id="page-stock">
+         <h4 class="fw-bold mb-3" data-i18n="stock_title">⚖️ 재고 관리</h4>
+         
+         <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a id="stock-nav-status" class="nav-link active" onclick="showStockTab('status')" style="cursor:pointer;" data-i18n="stock_nav_status">📊 현황 및 적정재고</a>
+            </li>
+            <li class="nav-item">
+                <a id="stock-nav-adjust" class="nav-link" onclick="showStockTab('adjust')" style="cursor:pointer;" data-i18n="stock_nav_adjust">🛠️ 재고 조정</a>
+            </li>
+            <li class="nav-item">
+                <a id="stock-nav-history" class="nav-link" onclick="showStockTab('history')" style="cursor:pointer;" data-i18n="stock_nav_history">📋 조정 내역</a>
+            </li>
+         </ul>
+
+         <div id="stock-tab-status" style="display:block;">
+            <div class="d-flex justify-content-between mb-3 align-items-center">
+                <div class="d-flex gap-2">
+                    <select id="stock-store-selector" class="form-select hq-only" style="width:150px;" onchange="loadStock(false)"></select>
+                    <input type="date" id="stock-date" class="form-control" style="width:140px;">
+                    <button class="btn btn-primary btn-sm" onclick="loadStock(true)" data-i18n="stock_past">과거 조회</button>
+                    <button class="btn btn-secondary btn-sm" onclick="loadStock(false)" data-i18n="stock_current">현재고 조회</button>
+                </div>
+                <h4 id="stock-grand-total" style="color:#E65100; margin:0;">0 ฿</h4>
+            </div>
+            
+            <div class="card-box p-0">
+                <table class="table table-bordered mb-0 text-center" style="table-layout: fixed;">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 15%;" data-i18n="stock_col_code">코드</th>
+                            <th style="width: 35%;" data-i18n="stock_col_name">품목명</th>
+                            <th style="width: 20%;" data-i18n="stock_safe_qty">적정재고</th>
+                            <th style="width: 15%;" data-i18n="stock_current_qty">현재고</th>
+                            <th style="width: 15%;" data-i18n="stock_amt">금액</th>
+                        </tr>
+                    </thead>
+                </table>
+                <div id="stock-container" style="max-height:550px; overflow-y:auto;"></div>
+            </div>
+         </div>
+
+         <div id="stock-tab-adjust" style="display:none;">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <div class="card-box">
+                        <h6 class="fw-bold mb-3" data-i18n="stock_adj_input">🛠️ 조정 입력</h6>
+                        <div class="mb-2">
+                            <label class="form-label" data-i18n="stock_adj_date">조정 날짜</label>
+                            <input type="date" id="a-date" class="form-control">
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="label_store">매장</label>
+                            <select id="a-store" class="form-select"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="in_item">품목</label>
+                            <div class="input-group">
+                                <input id="a-name" class="form-control" readonly placeholder="선택하세요">
+                                <button class="btn btn-warning" onclick="openFinder('adj')">🔍</button>
+                            </div>
+                            <input type="hidden" id="a-code">
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="stock_system_qty">전산재고</label>
+                            <input id="a-cur" class="form-control" readonly style="background:#eee;">
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="stock_actual_qty">실재고 (변경할 수량)</label>
+                            <input type="number" id="a-new" class="form-control" placeholder="숫자 입력">
+                        </div>
+                        <div class="mb-3">
+                            <label data-i18n="stock_adj_reason">조정 사유</label>
+                            <input id="a-reason" class="form-control" placeholder="예: 파손, 분실, 오차">
+                        </div>
+                        <button class="btn btn-secondary w-100" onclick="addAdjList()" data-i18n="stock_add_to_list">담기 ⬇️</button>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="card-box">
+                        <h5 class="mb-3" data-i18n="stock_adj_pending_list">조정 대기 목록</h5>
+                        <div class="batch-list-box">
+                            <table class="table table-sm text-center">
+                                <thead><tr><th data-i18n="label_date">날짜</th><th data-i18n="in_col_item">품목</th><th data-i18n="stock_actual_qty">실재고</th><th data-i18n="in_col_del">삭제</th></tr></thead>
+                                <tbody id="adj-cart"></tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-danger w-100 mt-3 fw-bold" onclick="saveAdjBatch()" data-i18n="stock_adj_confirm_btn">🚨 재고 조정 확정 (관리자 전용)</button>
+                    </div>
+                </div>
+            </div>
+         </div>
+
+         <div id="stock-tab-history" style="display:none;">
+            <div class="card-box">
+                <div class="search-toolbar mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text" data-i18n="label_period">기간</span>
+                        <input type="date" id="adj-start" class="form-control">
+                        <input type="date" id="adj-end" class="form-control">
+                        <select id="adj-store-selector" class="form-select" style="max-width:150px;">
+                            <option value="All" data-i18n="store_all_stores">전체 매장</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="loadAdjHistory()" data-i18n="btn_query">조회</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm text-center align-middle table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th data-i18n="label_date">날짜</th>
+                                <th data-i18n="label_store">매장</th>
+                                <th data-i18n="in_col_item">품목</th>
+                                <th data-i18n="stock_hist_col_diff">차이</th>
+                                <th data-i18n="stock_hist_col_reason">사유</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adj-list">
+                            <tr><td colspan="5" class="p-3 text-muted" data-i18n="stock_hist_hint">기간과 매장을 선택 후 조회하세요.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+         </div>
+         </div>
+
+    <div id="page-force">
+         <div class="d-none print-invoice-title mb-2 fw-bold">📤 출고 내역 (인보이스)</div>
+         <h4 class="fw-bold mb-3 no-print" data-i18n="force_title">📤 출고 관리</h4>
+         <ul class="nav nav-tabs mb-3 no-print">
+            <li class="nav-item">
+<a id="force-nav-new" class="nav-link active" onclick="showForceTab('new')" style="cursor:pointer;" data-i18n="tab_force_new">✍️ 출고 입력</a>
+        </li>
+        <li class="nav-item">
+            <a id="force-nav-hist" class="nav-link" onclick="showForceTab('hist')" style="cursor:pointer;" data-i18n="tab_force_hist">📋 내역 조회</a>
+            </li>
+            <li class="nav-item">
+                <a id="force-nav-order" class="nav-link" onclick="showForceTab('order')" style="cursor:pointer;" data-i18n="tab_order_status">📋 발주현황조회</a>
+            </li>
+         </ul>
+
+         <div id="force-tab-new">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <div class="card-box">
+                        <div class="mb-2">
+                            <label class="form-label" data-i18n="force_order_date">주문 일자</label>
+                            <input type="date" id="f-date" class="form-control">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label" data-i18n="force_delivery_date">배송 일자</label>
+                            <input type="date" id="f-delivery-date" class="form-control">
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="force_store">출고처</label>
+                            <select id="f-store" class="form-select"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label data-i18n="force_item">품목</label>
+                            <div class="input-group">
+                                <input id="f-name" class="form-control" data-i18n="placeholder_search" data-i18n-placeholder="1" placeholder="찾기" readonly>
+                                <button class="btn btn-warning" onclick="openFinder('force')">🔍</button>
+                            </div>
+                            <input type="hidden" id="f-code">
+                        </div>
+                        <div class="mb-3">
+                            <label data-i18n="force_qty">수량</label>
+                            <input id="f-qty" type="number" class="form-control">
+                        </div>
+                        <button class="btn btn-secondary w-100" onclick="addForceList()" data-i18n="force_add_list">담기 ⬇️</button>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="card-box">
+                        <h5 class="mb-3"><span data-i18n="force_wait_list">대기 목록</span> <span id="f-count" class="badge bg-secondary">0</span></h5>
+                        <div class="batch-list-box">
+                            <table class="table table-sm table-bordered text-center align-middle bg-white">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th data-i18n="force_col_store">출고처</th>
+                                        <th data-i18n="force_col_item">품목명</th>
+                                        <th data-i18n="force_col_qty">수량</th>
+                                        <th data-i18n="force_col_del">삭제</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="force-cart"></tbody>
+                            </table>
+                        </div>
+                        <button class="btn btn-dark w-100 mt-3 py-2 fw-bold" onclick="saveForceBatch()" data-i18n="force_confirm">🚀 출고 확정</button>
+                    </div>
+                </div>
+            </div>
+         </div>
+
+         <div id="force-tab-hist" style="display:none;">
+            <div class="card-box">
+                <div class="search-toolbar mb-3 no-print">
+                    <div class="input-group input-group-sm flex-wrap align-items-center gap-2">
+                        <span class="input-group-text" data-i18n="label_period">기간</span>
+                        <input type="date" id="fh-start" class="form-control" style="max-width:130px;">
+                        <input type="date" id="fh-end" class="form-control" style="max-width:130px;">
+                        <span class="input-group-text">월별</span>
+                        <input type="month" id="fh-month" class="form-control" style="max-width:140px;" title="월 선택 후 조회 시 해당 월 전체 검색">
+                        <select id="fh-type" class="form-select" style="max-width:100px;">
+                            <option value="All" data-i18n="label_all">전체</option>
+                            <option value="Force">강제</option>
+                            <option value="Order">주문</option>
+                        </select>
+                        <select id="fh-vendor" class="form-select" style="max-width:120px;">
+                            <option value="All" data-i18n="label_all">전체</option>
+                        </select>
+                        <input type="text" id="fh-invoice-search" class="form-control form-control-sm" data-i18n="force_invoice_search_ph" data-i18n-placeholder="force_invoice_search_ph" placeholder="인보이스번호 검색" style="max-width:140px;" oninput="filterForceHistoryByInvoice()">
+                        <button class="btn btn-primary btn-sm" onclick="loadForceHistory()" data-i18n="btn_query">조회</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="printForceHistoryInvoice()" data-i18n="force_invoice_print">📄 인보이스 인쇄</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="downloadForceHistoryExcel()" data-i18n="excel_btn">📥 엑셀 다운로드</button>
+                        <span id="fh-total-summary" class="ms-2 fw-bold text-primary align-middle" style="font-size:1rem;"></span>
+                    </div>
+                </div>
+                <div class="table-responsive" style="max-height:600px;">
+                    <table class="table table-hover mb-0 text-center align-middle">
+                        <thead class="table-header-dark">
+                            <tr>
+                                <th style="width:38px;"><input type="checkbox" class="form-check-input" id="fh-print-all" checked title="인쇄 포함 전체" onchange="toggleAllForceInvoiceChk(this)"></th>
+                                <th data-i18n="force_order_date">주문 일자</th>
+                                <th data-i18n="ord_delivery_date">배송 일자</th>
+                                <th style="width:100px;" data-i18n="force_invoice_no">인보이스번호</th>
+                                <th data-i18n="force_hist_type">유형</th>
+                                <th data-i18n="force_hist_status">상태</th>
+                                <th data-i18n="force_col_store">출고처</th>
+                                <th data-i18n="force_col_item">품목명</th>
+                                <th data-i18n="force_col_qty">수량</th>
+                                <th data-i18n="label_amount">금액</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fh-list"></tbody>
+                    </table>
+                </div>
+            </div>
+         </div>
+
+         <div id="force-tab-order" style="display:none;" class="order-summary-print-area">
+            <div class="card-box">
+                <p class="text-muted small no-print mb-3" data-i18n="order_status_hint">기간 내 매장 출고량을 기준으로 거래처(매입처)별·품목별 발주 수량을 조회합니다. 인쇄하여 발주 시 참고하세요.</p>
+                <div class="search-toolbar mb-3 no-print">
+                    <div class="input-group input-group-sm flex-wrap align-items-center gap-2">
+                        <span class="input-group-text" data-i18n="label_period">기간</span>
+                        <input type="date" id="order-start" class="form-control" style="max-width:130px;">
+                        <input type="date" id="order-end" class="form-control" style="max-width:130px;">
+                        <span class="input-group-text" data-i18n="order_view_by">조회 방식</span>
+                        <select id="order-view-by" class="form-select" style="max-width:140px;">
+                            <option value="vendor" data-i18n="order_by_vendor">거래처별</option>
+                            <option value="item" data-i18n="order_by_item">품목별</option>
+                        </select>
+                        <span class="input-group-text" data-i18n="in_vendor">매입처</span>
+                        <select id="order-vendor" class="form-select" style="max-width:160px;">
+                            <option value="All" data-i18n="label_all">전체</option>
+                        </select>
+                        <span class="input-group-text" data-i18n="order_item_filter">품목 검색</span>
+                        <input type="text" id="order-item-filter" class="form-control" style="max-width:120px;" data-i18n="order_item_filter_ph" placeholder="코드/품목명">
+                        <button class="btn btn-primary btn-sm" onclick="loadOrderSummary()" data-i18n="btn_query">조회</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printOrderSummary()" data-i18n="order_btn_print">🖨️ 인쇄</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="downloadOrderSummaryExcel()" data-i18n="excel_btn">📥 엑셀 다운로드</button>
+                    </div>
+                </div>
+                <div id="order-summary-result" class="table-responsive">
+                    <div id="order-by-vendor-table-wrap" style="display:none;">
+                        <table class="table table-bordered mb-0 order-summary-table">
+                            <thead class="table-light"><tr><th data-i18n="order_vendor">거래처</th><th data-i18n="item_col_code">코드</th><th data-i18n="force_col_item">품목명</th><th data-i18n="item_spec">규격</th><th data-i18n="force_col_qty">수량</th></tr></thead>
+                            <tbody id="order-by-vendor-body"></tbody>
+                        </table>
+                    </div>
+                    <div id="order-by-item-table-wrap" style="display:none;">
+                        <table class="table table-bordered mb-0 order-summary-table">
+                            <thead class="table-light"><tr><th data-i18n="item_col_code">코드</th><th data-i18n="force_col_item">품목명</th><th data-i18n="order_vendor">거래처</th><th data-i18n="item_spec">규격</th><th data-i18n="force_col_qty">수량</th></tr></thead>
+                            <tbody id="order-by-item-body"></tbody>
+                        </table>
+                    </div>
+                    <p id="order-summary-empty" class="text-center text-muted py-5 mb-0" style="display:none;" data-i18n="order_no_data">조회 조건에 맞는 데이터가 없습니다.</p>
+                </div>
+            </div>
+         </div>
+    </div>
+ </div>
+    
+</div>
+
+<div class="modal fade" id="checkDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable"> <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📄 점검 상세 결과</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modal-check-body"></div>
+        </div>
+    </div>
+</div>
+
+
+    <div id="out-status-section" class="section-view"><h4 class="fw-bold mb-3">출고 관리</h4><div class="card-box p-0"><div class="search-toolbar m-3"><div class="input-group"><input type="date" id="os-start" class="form-control"><input type="date" id="os-end" class="form-control"><select id="os-store" class="form-select"><option>전체</option></select><button class="btn btn-primary" onclick="loadOutboundStatus()" data-i18n="btn_query">조회</button></div></div><div class="table-responsive"><table class="table mb-0"><thead class="table-header-dark"><tr><th>날짜</th><th>매장</th><th>유형</th><th>내용</th><th>금액</th></tr></thead><tbody id="os-list"></tbody></table></div></div></div>
+    <div id="notice-config-section" class="section-view"><h3>공지사항</h3><div class="card-box"><textarea id="notice-text" class="form-control mb-3" rows="5"></textarea><button class="btn btn-primary w-100" onclick="saveNotice()">저장</button></div></div>
+  </div>
+</div>
+
+<div class="modal fade" id="itemModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold" data-i18n="modal_item_search">📦 품목 검색</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom bg-white sticky-top">
+                    <select id="itm-finder-cat" class="form-select mb-2" onchange="filterModalItems()">
+                        <option value="">전체 카테고리</option>
+                    </select>
+                    <div class="input-group">
+                        <input id="itm-finder-search" class="form-control" placeholder="품목명 또는 코드 (엔터)" onkeyup="if(event.key==='Enter') filterModalItems()">
+                        <button class="btn btn-outline-secondary" onclick="filterModalItems()" data-i18n="btn_search">검색</button>
+                    </div>
+                </div>
+                <div style="max-height:400px; overflow-y:auto;">
+                    <table class="table table-hover mb-0 text-center align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:25%">코드</th>
+                                <th style="width:50%">품목명</th>
+                                <th style="width:25%">단가</th>
+                            </tr>
+                        </thead>
+                        <tbody id="itm-finder-list">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div class="modal fade" id="orderDetailModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5>주문 상세</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="modal-order-row"><div class="table-responsive"><table class="table table-bordered"><thead class="table-light"><tr><th>선택</th><th>품목명</th><th>수량</th><th>단가</th><th>합계</th></tr></thead><tbody id="modal-order-items"></tbody></table></div></div><div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">닫기</button><button class="btn btn-primary" onclick="confirmPartialApproval()">승인</button></div></div></div></div>
+<div class="modal fade" id="vendorStatsModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 id="v-stats-title">거래처 정보</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><ul class="list-group"><li class="list-group-item d-flex justify-content-between"><span>이번 달</span><strong id="v-stat-month">0</strong></li><li class="list-group-item d-flex justify-content-between"><span>누적</span><strong id="v-stat-total">0</strong></li><li class="list-group-item d-flex justify-content-between"><span>최근</span><strong id="v-stat-date">-</strong></li></ul></div></div></div></div>
+
+<div class="modal fade" id="modalPayrollEdit" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">✏️ 급여 내역 수정</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="py-index"> <div class="mb-3 text-center">
+                    <h4 id="py-name" class="fw-bold m-0">홍길동</h4>
+                    <small id="py-store" class="text-muted">Office</small>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-12"><hr class="my-2"></div>
+                    
+                    <div class="col-6">
+                        <label class="small fw-bold text-primary">➕ OT 수당</label>
+                        <input type="number" id="py-ot" class="form-control text-end" placeholder="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="small fw-bold text-primary">➕ 특별 보너스</label>
+                        <input type="number" id="py-bonus" class="form-control text-end" placeholder="0">
+                    </div>
+
+                    <div class="col-12"><hr class="my-2"></div>
+
+                    <div class="col-6">
+                        <label class="small fw-bold text-danger">➖ 지각 공제 (수동)</label>
+                        <input type="number" id="py-late" class="form-control text-end" placeholder="0">
+                    </div>
+                    <div class="col-6">
+                        <label class="small fw-bold text-danger">➖ 기타 공제</label>
+                        <input type="number" id="py-deduct" class="form-control text-end" placeholder="0">
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning small mt-3 mb-0">
+                    * 수정 후 [적용]을 누르면 실지급액이 재계산됩니다.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="applyPayrollEdit()">💾 적용하기</button>
+            </div>
+        </div>
+    </div>
+</div>
+    </div>
+    </div>
+    <!-- // modalPayrollEdit, page-payroll -->
+
+    <div id="page-store-visit" style="display:none;">
+  <div class="store-visit-inner">
+  <h4 class="fw-bold mb-3" data-i18n="visit_page_title">📍 실시간 매장 방문 현황</h4>
+  <ul class="nav nav-tabs mb-3" id="visit-tabs">
+    <li class="nav-item"><a class="nav-link active" id="tab-visit-list" onclick="showVisitTab('list')" data-i18n="tab_visit_list">📋 방문 목록</a></li>
+    <li class="nav-item"><a class="nav-link" id="tab-visit-stats" onclick="showVisitTab('stats')" data-i18n="tab_visit_stats">📊 매장 방문 통계</a></li>
+  </ul>
+  <div class="card-box" id="visit-list-section">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_start_date">시작일</label><input type="date" id="visit-start" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_end_date">종료일</label><input type="date" id="visit-end" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="label_store">매장</label><select id="visit-filter-store" class="form-select"></select></div>
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_dept_col">부서(E열)</label><select id="visit-filter-dept" class="form-select" onchange="filterVisitEmployeeByDept()"><option value="All" data-i18n="label_all">전체</option></select></div>
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_employee_office">직원(오피스)</label><select id="visit-filter-employee" class="form-select"></select></div>
+      <div class="col-md-2"><label class="form-label small mb-1">&nbsp;</label><button class="btn btn-primary w-100" onclick="loadVisitHistory()" data-i18n="btn_search">조회</button></div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover text-center align-middle" id="visit-list-table">
+        <thead class="table-dark">
+          <tr><th data-i18n="visit_col_date">날짜</th><th data-i18n="visit_col_time">시간</th><th data-i18n="visit_col_visitor">방문자</th><th data-i18n="visit_col_store">매장</th><th data-i18n="visit_col_type">구분</th><th data-i18n="visit_col_purpose">목적</th><th data-i18n="visit_col_duration">체류시간</th></tr>
+        </thead>
+        <tbody id="visit-history-list" class="visit-list-tbody">
+          <tr><td colspan="7" class="py-5 text-muted" data-i18n="visit_query_please">기록을 조회해 주세요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-box" id="visit-stats-section" style="display:none;">
+    <div class="row g-2 mb-3 align-items-end">
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_start_date">시작일</label><input type="date" id="visit-stats-start" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label small mb-1" data-i18n="visit_end_date">종료일</label><input type="date" id="visit-stats-end" class="form-control"></div>
+      <div class="col-md-4">
+        <label class="form-label small mb-1" data-i18n="visit_stats_label">표시할 통계</label>
+        <div class="d-flex flex-wrap gap-3 pt-1">
+          <label class="form-check-label small me-2"><input type="checkbox" id="visit-stats-show-dept" class="form-check-input" checked><span data-i18n="visit_stat_dept">부서별</span></label>
+          <label class="form-check-label small me-2"><input type="checkbox" id="visit-stats-show-employee" class="form-check-input" checked><span data-i18n="visit_stat_employee">직원별</span></label>
+          <label class="form-check-label small"><input type="checkbox" id="visit-stats-show-store" class="form-check-input" checked><span data-i18n="visit_stat_store">매장별</span></label>
+        </div>
+      </div>
+      <div class="col-md-2"><label class="form-label small mb-1">&nbsp;</label><button class="btn btn-success w-100" onclick="loadVisitStats()" data-i18n="visit_stats_query_btn">📊 통계 조회</button></div>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-4" id="visit-chart-dept-wrap"><div class="card p-3"><h6 class="fw-bold text-primary mb-2" data-i18n="visit_chart_dept">부서별 투입 시간</h6><div class="visit-chart-wrap"><canvas id="chart-visit-dept"></canvas></div></div></div>
+      <div class="col-md-4" id="visit-chart-employee-wrap"><div class="card p-3"><h6 class="fw-bold text-success mb-2" data-i18n="visit_chart_employee">직원별 투입 시간</h6><div class="visit-chart-wrap"><canvas id="chart-visit-employee"></canvas></div></div></div>
+      <div class="col-md-4" id="visit-chart-store-wrap"><div class="card p-3"><h6 class="fw-bold text-info mb-2" data-i18n="visit_chart_store">매장별 투입 시간</h6><div class="visit-chart-wrap"><canvas id="chart-visit-store"></canvas></div></div></div>
+    </div>
+  </div>
+  </div>
+  </div>
+  <!-- // store-visit-inner, page-store-visit -->
+
+  <!-- 컴플레인 일지: 입력 탭 + 조회 탭 -->
+  <div id="page-store-complaint" style="display:none;">
+    <div class="store-visit-inner">
+      <h4 class="fw-bold mb-3" data-i18n="complaint_page_title">📋 컴플레인 일지</h4>
+      <ul class="nav nav-tabs mb-3" id="complaint-tabs">
+        <li class="nav-item"><a class="nav-link active" id="tab-complaint-input" onclick="showComplaintTab('input')" data-i18n="tab_complaint_input">✏️ 입력</a></li>
+        <li class="nav-item"><a class="nav-link" id="tab-complaint-list" onclick="showComplaintTab('list')" data-i18n="tab_complaint_list">📋 조회</a></li>
+      </ul>
+      <div class="card-box" id="complaint-input-section">
+        <div class="row g-2 mb-2">
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_number">고유 번호</label><input type="text" id="complaint-number" class="form-control form-control-sm bg-light" readonly placeholder="" data-i18n-placeholder="complaint_number_auto" title=""></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="label_date">날짜</label><input type="date" id="complaint-date" class="form-control form-control-sm"></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_time">일시</label><input type="time" id="complaint-time" class="form-control form-control-sm"></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="pay_col_store">매장</label><select id="complaint-store" class="form-select form-select-sm"></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_writer">작성자</label><input type="text" id="complaint-writer" class="form-control form-control-sm" readonly></div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-3"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_customer">고객명</label><input type="text" id="complaint-customer" class="form-control form-control-sm" data-i18n="complaint_ph_customer" placeholder="이름 또는 익명"></div>
+          <div class="col-md-3"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_contact">연락처</label><input type="text" id="complaint-contact" class="form-control form-control-sm" data-i18n="complaint_ph_contact" placeholder="전화/LINE ID"></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_visit_path">방문 경로</label><select id="complaint-visit-path" class="form-select form-select-sm" onchange="toggleComplaintDeliveryPlatform()"><option value="홀" data-i18n="complaint_path_hall">홀</option><option value="배달" data-i18n="complaint_path_delivery">배달</option><option value="포장" data-i18n="complaint_path_takeout">포장</option></select></div>
+          <div class="col-md-2" id="complaint-platform-wrap" style="display:none;"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_platform">배달 플랫폼</label><select id="complaint-platform" class="form-select form-select-sm"><option value="">-</option><option value="Grab">Grab</option><option value="Lineman">Lineman</option><option value="Shopee">Shopee</option><option value="Robinhood">Robinhood</option><option value="기타" data-i18n="complaint_platform_etc">기타</option></select></div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_type">유형</label><select id="complaint-type" class="form-select form-select-sm"><option value="음식" data-i18n="complaint_type_food">음식</option><option value="서비스" data-i18n="complaint_type_service">서비스</option><option value="환경/청결" data-i18n="complaint_type_env">환경/청결</option><option value="가격/결제" data-i18n="complaint_type_price">가격/결제</option><option value="기타" data-i18n="complaint_type_etc">기타</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_menu">관련 메뉴</label><input type="text" id="complaint-menu" class="form-control form-control-sm" data-i18n="complaint_ph_menu" placeholder="메뉴명"></div>
+          <div class="col-md-4"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_title">제목</label><input type="text" id="complaint-title" class="form-control form-control-sm" data-i18n-placeholder="complaint_ph_title" placeholder="한 줄 요약"></div>
+        </div>
+        <div class="mb-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_content">내용</label><textarea id="complaint-content" class="form-control form-control-sm" rows="3" data-i18n-placeholder="complaint_ph_content" placeholder="상세 내용"></textarea></div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_severity">심각도</label><select id="complaint-severity" class="form-select form-select-sm"><option value="경미" data-i18n="complaint_sev_low">경미</option><option value="보통" data-i18n="complaint_sev_mid">보통</option><option value="심각" data-i18n="complaint_sev_high">심각</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_status">상태</label><select id="complaint-status" class="form-select form-select-sm"><option value="접수" data-i18n="complaint_status_recv">접수</option><option value="조사중" data-i18n="complaint_status_inv">조사중</option><option value="처리완료" data-i18n="complaint_status_done">처리완료</option><option value="보류" data-i18n="complaint_status_hold">보류</option><option value="종료" data-i18n="complaint_status_closed">종료</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_handler">담당자</label><input type="text" id="complaint-handler" class="form-control form-control-sm"></div>
+          <div class="col-md-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_done_date">완료일</label><input type="date" id="complaint-done-date" class="form-control form-control-sm"></div>
+        </div>
+        <div class="mb-2"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_action">조치 사항</label><textarea id="complaint-action" class="form-control form-control-sm" rows="2" data-i18n="complaint_ph_action" placeholder="환불, 재제공, 사과 등"></textarea></div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-6"><label class="form-label small mb-0 fw-bold" data-i18n="complaint_photo">사진 (URL)</label><input type="text" id="complaint-photo" class="form-control form-control-sm" data-i18n="complaint_ph_photo" placeholder="영수증/음식 사진 URL"></div>
+          <div class="col-md-6"><label class="form-label small mb-0 fw-bold" data-i18n="store_remark">비고</label><input type="text" id="complaint-remark" class="form-control form-control-sm"></div>
+        </div>
+        <input type="hidden" id="complaint-edit-row" value="">
+        <button type="button" class="btn btn-primary" onclick="saveComplaintLogFromUI()" data-i18n="btn_save">💾 저장</button>
+        <button type="button" class="btn btn-outline-secondary ms-2" onclick="resetComplaintForm()" data-i18n="complaint_btn_reset">초기화</button>
+      </div>
+      <div class="card-box" id="complaint-list-section" style="display:none;">
+        <div class="row g-2 mb-2 align-items-end">
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="visit_start_date">시작일</label><input type="date" id="complaint-list-start" class="form-control form-control-sm"></div>
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="visit_end_date">종료일</label><input type="date" id="complaint-list-end" class="form-control form-control-sm"></div>
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="label_store">매장</label><select id="complaint-list-store" class="form-select form-select-sm"></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="complaint_visit_path">방문 경로</label><select id="complaint-list-path" class="form-select form-select-sm"><option value="" data-i18n="label_all">전체</option><option value="홀" data-i18n="complaint_path_hall">홀</option><option value="배달" data-i18n="complaint_path_delivery">배달</option><option value="포장" data-i18n="complaint_path_takeout">포장</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="complaint_type">유형</label><select id="complaint-list-type" class="form-select form-select-sm"><option value="" data-i18n="label_all">전체</option><option value="음식" data-i18n="complaint_type_food">음식</option><option value="서비스" data-i18n="complaint_type_service">서비스</option><option value="환경/청결" data-i18n="complaint_type_env">환경/청결</option><option value="가격/결제" data-i18n="complaint_type_price">가격/결제</option><option value="기타" data-i18n="complaint_type_etc">기타</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0" data-i18n="complaint_status">상태</label><select id="complaint-list-status" class="form-select form-select-sm"><option value="" data-i18n="label_all">전체</option><option value="접수" data-i18n="complaint_status_recv">접수</option><option value="조사중" data-i18n="complaint_status_inv">조사중</option><option value="처리완료" data-i18n="complaint_status_done">처리완료</option><option value="보류" data-i18n="complaint_status_hold">보류</option><option value="종료" data-i18n="complaint_status_closed">종료</option></select></div>
+          <div class="col-md-2"><label class="form-label small mb-0">&nbsp;</label><button type="button" class="btn btn-primary btn-sm w-100" onclick="loadComplaintList()" data-i18n="btn_query">조회</button></div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover text-center align-middle table-sm">
+            <thead class="table-dark">
+              <tr><th data-i18n="complaint_col_number">번호</th><th data-i18n="label_date">날짜</th><th data-i18n="pay_col_store">매장</th><th data-i18n="complaint_col_customer">고객</th><th data-i18n="complaint_col_visit">방문</th><th data-i18n="complaint_type">유형</th><th data-i18n="complaint_title">제목</th><th data-i18n="complaint_severity">심각도</th><th data-i18n="complaint_status">상태</th><th data-i18n="complaint_btn_detail">상세보기</th></tr>
+            </thead>
+            <tbody id="complaint-list-body">
+              <tr><td colspan="10" class="py-5 text-muted" data-i18n="complaint_query_please">기간·매장 선택 후 조회해 주세요.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- // page-store-complaint -->
+
+  <!-- 설정: 본사 정보 + 메뉴별 권한 설정 + 권한 안내 (휴가 관리와 동일 레이아웃) -->
+  <div id="page-settings" style="display:none;">
+    <h4 class="fw-bold mb-3" data-i18n="settings_title">⚙️ 설정</h4>
+    <ul class="nav nav-tabs mb-3" id="settings-tabs">
+      <li class="nav-item"><a class="nav-link active" id="settings-tab-office" href="javascript:void(0)" onclick="showSettingsTab('office')" data-i18n="settings_head_office">본사 정보</a></li>
+      <li class="nav-item"><a class="nav-link" id="settings-tab-menu-permission" href="javascript:void(0)" onclick="showSettingsTab('menu-permission')" data-i18n="settings_menu_permission">메뉴별 권한 설정</a></li>
+      <li class="nav-item"><a class="nav-link" id="settings-tab-about" href="javascript:void(0)" onclick="showSettingsTab('about')" data-i18n="settings_permission_title">권한 안내</a></li>
+    </ul>
+    <div id="settings-panel-office">
+      <div class="card-box">
+        <p class="small text-muted mb-3" data-i18n="settings_head_office_desc">주문 승인·출고 인보이스 인쇄 시 사용되는 본사 정보입니다. 거래처 시트의 '본사' 행에 저장됩니다.</p>
+        <div class="row g-2 mb-2"><div class="col-md-6"><label class="form-label small fw-bold" data-i18n="settings_company_name">회사명</label><input type="text" id="settings-company-name" class="form-control form-control-sm" placeholder="본사 회사명"></div><div class="col-md-6"><label class="form-label small fw-bold" data-i18n="settings_tax_id">사업자번호/Tax ID</label><input type="text" id="settings-tax-id" class="form-control form-control-sm" placeholder="사업자번호"></div></div>
+        <div class="mb-2"><label class="form-label small fw-bold" data-i18n="settings_address">주소</label><input type="text" id="settings-address" class="form-control form-control-sm" placeholder="본사 주소"></div>
+        <div class="mb-2"><label class="form-label small fw-bold" data-i18n="settings_phone">연락처</label><input type="text" id="settings-phone" class="form-control form-control-sm" placeholder="전화번호"></div>
+        <div class="mb-3"><label class="form-label small fw-bold" data-i18n="settings_bank_info">계좌/메모 (인보이스 하단)</label><textarea id="settings-bank-info" class="form-control form-control-sm" rows="2" placeholder="은행명, 계좌번호, 예금주 등"></textarea></div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveHeadOfficeInfo()" data-i18n="settings_save_btn">💾 본사 정보 저장</button>
+      </div>
+    </div>
+    <div id="settings-panel-menu-permission" style="display:none;">
+      <div class="card-box p-0">
+        <div class="search-toolbar m-3">
+          <div class="row g-2 align-items-end">
+            <div class="col-md-4"><label class="form-label small fw-bold mb-0" data-i18n="label_store">매장</label><select id="perm-store" class="form-select form-select-sm" onchange="loadMenuPermissionEmployees()"></select></div>
+            <div class="col-md-4"><label class="form-label small fw-bold mb-0" data-i18n="label_employee">직원</label><select id="perm-employee" class="form-select form-select-sm" onchange="loadMenuPermissionForEmployee()"></select></div>
+            <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" onclick="saveMenuPermission()" data-i18n="btn_save">저장</button></div>
+          </div>
+        </div>
+        <div class="p-3 border-top">
+          <p class="small text-muted mb-2" data-i18n="settings_menu_permission_hint">직원을 선택한 뒤 허용할 메뉴에 체크하고 [저장]을 누르세요.</p>
+          <div id="perm-checkboxes" class="row g-2"></div>
+        </div>
+      </div>
+    </div>
+    <div id="settings-panel-about" style="display:none;">
+      <div class="card-box">
+        <p class="mb-2" data-i18n="settings_permission_hq">• <strong>HQ(본사)</strong>: 물류/인사/급여/설정 등 전체 메뉴 이용 가능</p>
+        <p class="mb-2" data-i18n="settings_permission_store">• <strong>매장</strong>: 소속 매장 관련 메뉴(근태, 점검, 방문 등) 이용</p>
+        <p class="mb-0" data-i18n="settings_permission_note">권한은 직원정보 시트의 '권한' 열 및 [메뉴별 권한 설정]에서 관리됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  </div>
+  <!-- // .main-content -->
+  </div>
+  <!-- // #admin-screen -->
+
+<?!= include('JS_Common'); ?> <?!= include('JS_Office'); ?>
+  <?!= include('JS_Logistics'); ?>
+  <?!= include('JS_HR'); ?>
+  <?!= include('JS_Store'); ?>
+  
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</body>
+</html>

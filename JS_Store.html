@@ -1,0 +1,812 @@
+<script>
+
+  /* =================================================================
+     매장 현장 관리
+     ================================================================= */ 
+
+/* [수정] 탭 전환 */
+function showStoreTab(t) {
+    document.querySelectorAll('[id^="store-tab-"]').forEach(el => el.style.display = 'none');
+    document.getElementById("store-tab-" + t).style.display = "block";
+    
+    document.querySelectorAll('.nav-link[id^="store-nav-"]').forEach(el => el.classList.remove('active'));
+    document.getElementById("store-nav-" + t).classList.add("active");
+
+    if (t === 'setting') loadChecklistSettings();
+    if (t === 'history') {
+        var today = new Date().toISOString().substring(0, 10);
+        var startEl = document.getElementById("hist-date-start");
+        var endEl = document.getElementById("hist-date-end");
+        if (startEl) startEl.value = today;
+        if (endEl) endEl.value = today;
+    }
+}
+
+/* [1. 점검 양식 그리기 (표 형태)] */
+function loadChecklistForm() {
+    var tbody = document.getElementById("checklist-body");
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>⏳ 양식을 불러오는 중...</td></tr>";
+
+    google.script.run.withSuccessHandler(function(items) {
+        tbody.innerHTML = "";
+        
+        if(!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>등록된 점검 항목이 없습니다.</td></tr>";
+            return;
+        }
+
+        items.forEach(item => {
+            // 각 행(TR) 생성 - data-id에 번호 저장
+            var row = `
+                <tr class="check-row" data-id="${item.id}" data-main="${item.main}" data-sub="${item.sub}" data-name="${item.name}">
+                    <td class="text-center fw-bold bg-light">${item.id}</td>
+                    <td>${item.main}</td>
+                    <td>${item.sub}</td>
+                    <td class="text-start">${item.name}</td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="o_${item.id}" value="O" checked>
+                            <label class="btn btn-outline-success btn-sm" for="o_${item.id}">O</label>
+
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="x_${item.id}" value="X">
+                            <label class="btn btn-outline-danger btn-sm" for="x_${item.id}">X</label>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm chk-remark" placeholder="특이사항 입력">
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }).getChecklistItems(true); // true = 사용중인 것만
+}
+
+/* ==============================================
+   1. 매장 점검 (저장 + 수정 기능 포함)
+   ============================================== */
+
+/* [수정됨] 점검 결과 저장 (ID 포함 전송 -> 수정/신규 구분) */
+function saveStoreCheckResult() {
+    // ★ 1. 수정 모드인지 확인하기 위해 숨겨진 ID 가져오기
+    var id = document.getElementById("chk-id").value; 
+    
+    var store = document.getElementById("chk-store").value;
+    var date = document.getElementById("chk-date").value;
+    var inspector = document.getElementById("chk-inspector").value;
+    var totalMemo = document.getElementById("chk-total-memo").value;
+
+    if(!store || !date) return alert("매장과 날짜를 선택하세요.");
+    
+    // 메시지도 상황에 따라 다르게
+    var msg = id ? "점검 내용을 수정하시겠습니까?" : "점검 내용을 저장하시겠습니까?";
+    if(confirm(msg) == false) return;
+
+    // 데이터 수집
+    var resultList = [];
+    var rows = document.querySelectorAll(".check-row");
+    var failCount = 0;
+
+    rows.forEach(row => {
+        var rId = row.getAttribute("data-id");
+        var rMain = row.getAttribute("data-main"); // ★ 나중에 복원할 때 필요해서 저장
+        var rSub = row.getAttribute("data-sub");
+        var rName = row.getAttribute("data-name");
+        
+        var val = document.querySelector(`input[name="chk_${rId}"]:checked`).value;
+        var remark = row.querySelector(".chk-remark").value;
+
+        if(val === 'X') failCount++;
+
+        resultList.push({
+            id: rId, main: rMain, sub: rSub, name: rName, val: val, remark: remark
+        });
+    });
+
+    var summary = (failCount === 0) ? "PASS" : "FAIL (" + failCount + "건)";
+
+    // ★ 2. 서버로 보낼 때 'id'도 같이 보냄!
+    google.script.run.withSuccessHandler(function(res){
+        alert(res === "UPDATED" ? "수정되었습니다." : "저장되었습니다.");
+        
+        // 초기화 및 이동
+        document.getElementById("chk-id").value = ""; 
+        document.getElementById("chk-total-memo").value = "";
+        showStoreTab('history'); 
+        searchCheckHistory();      
+    }).saveCheckResult(id, date, store, inspector, summary, totalMemo, JSON.stringify(resultList));
+}
+
+
+/* ==============================================
+   2. 점검 양식 불러오기 (수정 시 데이터 채우기 기능 추가)
+   ============================================== */
+
+/** 점검 이력/양식 번역용: 현재 UI 언어 (JS_Common currentLang 또는 langSelect, sessionStorage) */
+function getStoreCheckTranslationLang() {
+    if (typeof getTranslationLang === "function") return getTranslationLang();
+    var c = (typeof currentLang !== "undefined" && currentLang) ? currentLang : (typeof sessionStorage !== "undefined" && sessionStorage.getItem("cm_lang")) || "";
+    if (!c) {
+        var sel = document.getElementById("langSelect");
+        if (sel && sel.value) c = sel.value;
+    }
+    if (c === "mm") return "my";
+    if (c === "la") return "lo";
+    return c || "ko";
+}
+
+/** 번역 요청을 작은 묶음으로 나눠 순차 호출 (서버 제한 시간으로 절반만 번역되는 현상 방지) */
+function translateBatchChunked(texts, targetLang, onDone, onFail) {
+    if (!texts || texts.length === 0) { if (onDone) onDone([]); return; }
+    var CHUNK = 24;
+    var chunks = [];
+    for (var i = 0; i < texts.length; i += CHUNK) chunks.push(texts.slice(i, i + CHUNK));
+    var result = [];
+    var idx = 0;
+    function next() {
+        if (idx >= chunks.length) {
+            if (onDone) onDone(result);
+            return;
+        }
+        var chunk = chunks[idx];
+        google.script.run
+            .withSuccessHandler(function(translated) {
+                if (translated && translated.length) {
+                    for (var j = 0; j < translated.length; j++) result.push(translated[j]);
+                }
+                idx++;
+                next();
+            })
+            .withFailureHandler(function() {
+                for (var k = 0; k < chunk.length; k++) result.push(chunk[k]);
+                idx++;
+                next();
+            })
+            .translateBatch(chunk, targetLang);
+    }
+    next();
+}
+
+/* [수정됨] 양식 그리기 + (옵션) 다 그리면 콜백 실행 + 대분류/중분류/항목명 자동 번역(업무일지처럼) */
+function loadChecklistForm(callback) {
+    var tbody = document.getElementById("checklist-body");
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>⏳ 양식을 불러오는 중...</td></tr>";
+    var targetLang = getStoreCheckTranslationLang();
+
+    function renderRows(items, translated) {
+        tbody.innerHTML = "";
+        items.forEach(function(item, i) {
+            var main = (translated && translated[3*i] !== undefined) ? translated[3*i] : (item.main || "");
+            var sub  = (translated && translated[3*i+1] !== undefined) ? translated[3*i+1] : (item.sub || "");
+            var name = (translated && translated[3*i+2] !== undefined) ? translated[3*i+2] : (item.name || "");
+            var row = "<tr class=\"check-row\" data-id=\"" + item.id + "\" data-main=\"" + (item.main || "") + "\" data-sub=\"" + (item.sub || "") + "\" data-name=\"" + (item.name || "") + "\">" +
+                "<td class=\"text-center fw-bold bg-light\">" + item.id + "</td>" +
+                "<td>" + main + "</td>" +
+                "<td>" + sub + "</td>" +
+                "<td class=\"text-start\">" + name + "</td>" +
+                "<td class=\"text-center\"><div class=\"btn-group\" role=\"group\">" +
+                "<input type=\"radio\" class=\"btn-check\" name=\"chk_" + item.id + "\" id=\"o_" + item.id + "\" value=\"O\" checked><label class=\"btn btn-outline-success btn-sm\" for=\"o_" + item.id + "\">O</label>" +
+                "<input type=\"radio\" class=\"btn-check\" name=\"chk_" + item.id + "\" id=\"x_" + item.id + "\" value=\"X\"><label class=\"btn btn-outline-danger btn-sm\" for=\"x_" + item.id + "\">X</label>" +
+                "</div></td>" +
+                "<td><input type=\"text\" class=\"form-control form-control-sm chk-remark\"></td></tr>";
+            tbody.innerHTML += row;
+        });
+        if (typeof callback === "function") callback();
+        else {
+            document.getElementById("chk-id").value = "";
+            document.getElementById("chk-total-memo").value = "";
+        }
+    }
+
+    google.script.run.withSuccessHandler(function(items) {
+        if (!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>등록된 항목이 없습니다.</td></tr>";
+            if (typeof callback === "function") callback();
+            return;
+        }
+        var texts = [];
+        items.forEach(function(item) {
+            texts.push(item.main || "");
+            texts.push(item.sub || "");
+            texts.push(item.name || "");
+        });
+        if (texts.every(function(t){ return !t || !String(t).trim(); })) {
+            renderRows(items, null);
+            return;
+        }
+        translateBatchChunked(texts, targetLang, function(translated) {
+            renderRows(items, (translated && translated.length > 0) ? translated : null);
+        }, function() { renderRows(items, null); });
+    }).getChecklistItems(true);
+}
+
+
+/* ==============================================
+   3. 점검 이력 조회 (수정/삭제 버튼 추가)
+   ============================================== */
+
+/* [수정] 점검 이력 조회 (점검자 검색어 추가 전송) */
+function searchCheckHistory() {
+    var start = document.getElementById("hist-date-start").value;
+    var end = document.getElementById("hist-date-end").value;
+    var store = document.getElementById("hist-store").value;
+    var inspector = document.getElementById("hist-inspector").value; // ★ 추가됨
+
+    // 날짜가 비어있으면 오늘 날짜로 자동 설정 (안전장치)
+    if(!start || !end) {
+        var today = new Date().toISOString().substring(0,10);
+        document.getElementById("hist-date-start").value = today;
+        document.getElementById("hist-date-end").value = today;
+        start = today; end = today;
+    }
+
+    var tbody = document.getElementById("check-history-list");
+    tbody.innerHTML = "<tr><td colspan='5' class='py-4'>⏳ 조회 중...</td></tr>";
+
+    google.script.run.withSuccessHandler(function(rows){
+        tbody.innerHTML = "";
+        if(rows.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='5' class='py-4 text-muted'>검색된 이력이 없습니다.</td></tr>";
+            return;
+        }
+        rows.forEach(r => {
+            var badge = r.result.includes("PASS") ? "bg-success" : "bg-danger";
+            var safeJson = encodeURIComponent(JSON.stringify(r));
+
+            var row = `<tr>
+                <td>${r.date}</td>
+                <td class="fw-bold">${r.store}</td>
+                <td>${r.inspector}</td>
+                <td><span class="badge ${badge}">${r.result}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-info text-white me-1" onclick='openCheckDetail(${JSON.stringify(r.json)})'>보기</button>
+                    <button class="btn btn-sm btn-warning text-white me-1" onclick="editCheckResult('${safeJson}')">수정</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteStoreCheck('${r.id}')">삭제</button>
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }).getCheckHistory(start, end, store, inspector); // ★ 서버로 점검자 이름도 같이 보냄
+}
+
+
+/* ==============================================
+   4. [신규] 수정 및 삭제 기능 함수들 (이게 빠져 있었음!)
+   ============================================== */
+
+/* [신규] 수정 버튼 누르면 실행 -> 화면 이동 및 데이터 복구 */
+function editCheckResult(encodedRowData) {
+    if(!confirm("해당 점검 내용을 불러와서 수정하시겠습니까?\n(현재 작성 중인 내용은 사라집니다.)")) return;
+
+    // 1. 암호화된 데이터 풀기
+    var r = JSON.parse(decodeURIComponent(encodedRowData));
+    var detailItems = (typeof r.json === 'string') ? JSON.parse(r.json) : r.json;
+
+    // 2. 화면 전환 (이력탭 -> 입력탭)
+    showStoreTab('check');
+
+    // 3. 기본 정보 채우기
+    document.getElementById("chk-id").value = r.id; // ★ ID 세팅 (수정모드 ON)
+    document.getElementById("chk-date").value = r.date;
+    document.getElementById("chk-store").value = r.store;
+    document.getElementById("chk-inspector").value = r.inspector;
+    document.getElementById("chk-total-memo").value = r.memo || "";
+
+    // 4. 양식 불러오기 + (다 불러오면) 값 채우기
+    loadChecklistForm(function() {
+        // 여기가 callback 함수: 양식이 다 그려진 뒤 실행됨
+        detailItems.forEach(item => {
+            // O/X 체크 복구
+            var radio = document.querySelector(`input[name="chk_${item.id}"][value="${item.val}"]`);
+            if(radio) radio.checked = true;
+
+            // 비고란 복구
+            var row = document.querySelector(`.check-row[data-id="${item.id}"]`);
+            if(row) {
+                var input = row.querySelector(".chk-remark");
+                if(input) input.value = item.remark || "";
+            }
+        });
+        alert("기존 데이터를 불러왔습니다. 수정 후 저장하세요.");
+    });
+}
+
+/* [신규] 삭제 버튼 누르면 실행 */
+function deleteStoreCheck(id) {
+    if(!confirm("정말 이 점검 기록을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) return;
+
+    google.script.run.withSuccessHandler(function(res){
+        if(res === "DELETED") {
+            alert("삭제되었습니다.");
+            searchCheckHistory(); // 목록 새로고침
+        } else {
+            alert("삭제 실패: 데이터를 찾을 수 없습니다.");
+        }
+    }).deleteCheckHistory(id);
+}
+
+// 상세 보기 모달 (대분류·항목·비고 자동 번역, 업무일지처럼)
+function openCheckDetail(jsonData) {
+    var items = (typeof jsonData === 'string') ? JSON.parse(jsonData) : jsonData;
+    var modalBody = document.getElementById("modal-check-body");
+    var targetLang = getStoreCheckTranslationLang();
+    var texts = [];
+    items.forEach(function(item) {
+        texts.push(item.main || "");
+        texts.push(item.name || "");
+        texts.push(item.remark || "");
+    });
+
+    function renderTable(translated) {
+        var html = "<table class=\"table table-bordered table-sm align-middle text-center\"><thead class=\"table-light\"><tr><th>NO</th><th>대분류</th><th>항목</th><th>결과</th><th>비고</th></tr></thead><tbody>";
+        items.forEach(function(item, i) {
+            var main = (translated && translated[3*i] !== undefined) ? (translated[3*i] || "-") : (item.main || "-");
+            var name = (translated && translated[3*i+1] !== undefined) ? (translated[3*i+1] || "-") : (item.name || "-");
+            var remark = (translated && translated[3*i+2] !== undefined) ? (translated[3*i+2] || "-") : (item.remark || "-");
+            var bg = (item.val === "X") ? "table-danger" : "";
+            var valColor = (item.val === "O") ? "text-success fw-bold" : "text-danger fw-bold";
+            html += "<tr class=\"" + bg + "\"><td>" + item.id + "</td><td>" + main + "</td><td class=\"text-start\">" + name + "</td><td class=\"" + valColor + "\">" + item.val + "</td><td class=\"text-start text-muted small\">" + remark + "</td></tr>";
+        });
+        html += "</tbody></table>";
+        modalBody.innerHTML = html;
+        new bootstrap.Modal(document.getElementById("checkDetailModal")).show();
+    }
+
+    if (texts.every(function(t){ return !t || !String(t).trim(); })) {
+        renderTable(null);
+        return;
+    }
+    translateBatchChunked(texts, targetLang, function(translated) {
+        if (translated && translated.length > 0) renderTable(translated);
+        else renderTable(null);
+    }, function() { renderTable(null); });
+}
+
+// 설정 화면 로딩 (그대로 사용)
+function loadChecklistSettings() {
+    google.script.run.withSuccessHandler(function(items){
+        var tbody = document.getElementById("setting-list-body");
+        tbody.innerHTML = "";
+        items.forEach(item => {
+            var checked = item.use ? "checked" : "";
+            tbody.innerHTML += `<tr><td>${item.id}</td><td><input class="form-control form-control-sm" value="${item.main}" readonly></td><td><input class="form-control form-control-sm" value="${item.sub}" readonly></td><td><input class="form-control form-control-sm" value="${item.name}"></td><td><input type="checkbox" class="form-check-input chk-use" data-id="${item.id}" ${checked}></td></tr>`;
+        });
+    }).getChecklistItems(false);
+}
+
+function saveChecklistSettings() {
+    var updates = [];
+    document.querySelectorAll("#setting-list-body tr").forEach(tr => {
+        updates.push({id: tr.querySelector(".chk-use").getAttribute("data-id"), name: tr.querySelectorAll("input")[2].value, use: tr.querySelector(".chk-use").checked});
+    });
+    google.script.run.withSuccessHandler(res => alert("저장됨")).updateChecklistItems(updates);
+}
+
+/* [관리자] 방문 기록 서버에서 가져오기 (날짜/매장/부서/직원 오피스 필터) */
+  function loadVisitHistory() {
+    var s = document.getElementById("visit-start").value;
+    var e = document.getElementById("visit-end").value;
+    var st = document.getElementById("visit-filter-store").value;
+    var emp = document.getElementById("visit-filter-employee") ? document.getElementById("visit-filter-employee").value : "All";
+    var dept = document.getElementById("visit-filter-dept") ? document.getElementById("visit-filter-dept").value : "All";
+    
+    load(1);
+    google.script.run.withSuccessHandler(list => {
+      load(0);
+      var b = document.getElementById("visit-history-list");
+      b.innerHTML = "";
+      if(!list || list.length === 0) {
+        b.innerHTML = "<tr><td colspan='7' class='p-4'>내역이 없습니다.</td></tr>";
+        return;
+      }
+      
+      list.forEach(r => {
+        b.innerHTML += `<tr>
+          <td>${r.date || '-'}</td>
+          <td>${r.time || '-'}</td>
+          <td class="fw-bold">${r.name}</td>
+          <td>${r.store}</td>
+          <td>${r.type}</td>
+          <td>${r.purpose}</td>
+          <td class="fw-bold">${r.duration ? r.duration + '분' : '-'}</td>
+        </tr>`;
+      });
+    }).getStoreVisitHistory(s, e, st, emp, dept);
+  }
+
+/** 매장 방문: 방문 목록 / 방문 통계 탭 전환 */
+function showVisitTab(tab) {
+  var listSec = document.getElementById('visit-list-section');
+  var statsSec = document.getElementById('visit-stats-section');
+  var tabList = document.getElementById('tab-visit-list');
+  var tabStats = document.getElementById('tab-visit-stats');
+  if (!listSec || !statsSec) return;
+  if (tab === 'list') {
+    listSec.style.display = 'block';
+    statsSec.style.display = 'none';
+    if (tabList) { tabList.classList.add('active'); }
+    if (tabStats) { tabStats.classList.remove('active'); }
+  } else {
+    listSec.style.display = 'none';
+    statsSec.style.display = 'block';
+    if (tabList) { tabList.classList.remove('active'); }
+    if (tabStats) { tabStats.classList.add('active'); }
+    if (typeof applyTranslations === 'function') applyTranslations();
+    var today = new Date().toISOString().substring(0, 10);
+    var s = document.getElementById('visit-stats-start');
+    var e = document.getElementById('visit-stats-end');
+    if (s && !s.value) s.value = today;
+    if (e && !e.value) e.value = today;
+  }
+}
+
+/** 컴플레인 일지: 입력 / 조회 탭 전환 */
+function showComplaintTab(tab) {
+  var inputSec = document.getElementById('complaint-input-section');
+  var listSec = document.getElementById('complaint-list-section');
+  var tabInput = document.getElementById('tab-complaint-input');
+  var tabList = document.getElementById('tab-complaint-list');
+  if (!inputSec || !listSec) return;
+  if (tab === 'input') {
+    inputSec.style.display = 'block';
+    listSec.style.display = 'none';
+    if (tabInput) tabInput.classList.add('active');
+    if (tabList) tabList.classList.remove('active');
+  } else {
+    inputSec.style.display = 'none';
+    listSec.style.display = 'block';
+    if (tabInput) tabInput.classList.remove('active');
+    if (tabList) tabList.classList.add('active');
+    loadComplaintList();
+  }
+}
+
+function toggleComplaintDeliveryPlatform() {
+  var path = document.getElementById('complaint-visit-path');
+  var wrap = document.getElementById('complaint-platform-wrap');
+  if (wrap) wrap.style.display = (path && path.value === '배달') ? 'block' : 'none';
+}
+
+function saveComplaintLogFromUI() {
+  var store = (document.getElementById('complaint-store') && document.getElementById('complaint-store').value) || '';
+  var date = (document.getElementById('complaint-date') && document.getElementById('complaint-date').value) || '';
+  if (!store || !date) { var msg = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_msg_store_date) ? I18N[currentLang].complaint_msg_store_date : '매장과 날짜를 입력해 주세요.'; alert(msg); return; }
+  var getVal = function(id, dataAttr) {
+    var el = document.getElementById(id);
+    if (!el) return '';
+    var orig = dataAttr && el.getAttribute(dataAttr);
+    return (orig !== null && orig !== undefined) ? orig : (el.value || '');
+  };
+  var data = {
+    date: date,
+    time: (document.getElementById('complaint-time') && document.getElementById('complaint-time').value) || '',
+    store: store,
+    writer: (document.getElementById('complaint-writer') && document.getElementById('complaint-writer').value) || '',
+    customer: (document.getElementById('complaint-customer') && document.getElementById('complaint-customer').value) || '',
+    contact: (document.getElementById('complaint-contact') && document.getElementById('complaint-contact').value) || '',
+    visitPath: (document.getElementById('complaint-visit-path') && document.getElementById('complaint-visit-path').value) || '홀',
+    platform: (document.getElementById('complaint-platform') && document.getElementById('complaint-platform').value) || '',
+    type: (document.getElementById('complaint-type') && document.getElementById('complaint-type').value) || '기타',
+    menu: getVal('complaint-menu', 'data-original-menu'),
+    title: getVal('complaint-title', 'data-original-title'),
+    content: (document.getElementById('complaint-content') && document.getElementById('complaint-content').value) || '',
+    severity: (document.getElementById('complaint-severity') && document.getElementById('complaint-severity').value) || '보통',
+    action: getVal('complaint-action', 'data-original-action'),
+    status: (document.getElementById('complaint-status') && document.getElementById('complaint-status').value) || '접수',
+    handler: (document.getElementById('complaint-handler') && document.getElementById('complaint-handler').value) || '',
+    doneDate: (document.getElementById('complaint-done-date') && document.getElementById('complaint-done-date').value) || '',
+    photoUrl: (document.getElementById('complaint-photo') && document.getElementById('complaint-photo').value) || '',
+    remark: getVal('complaint-remark', 'data-original-remark')
+  };
+  var editRowEl = document.getElementById('complaint-edit-row');
+  var editRow = (editRowEl && editRowEl.value) ? editRowEl.value : '';
+  if (typeof load === 'function') load(1);
+  var onSuccess = function(msg) {
+    if (typeof load === 'function') load(0);
+    if (editRowEl) editRowEl.value = '';
+    alert(msg);
+  };
+  var onFail = function(err) {
+    if (typeof load === 'function') load(0);
+    var failMsg = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_msg_save_fail) ? I18N[currentLang].complaint_msg_save_fail : '저장 실패';
+    alert(err.message || failMsg);
+  };
+  if (editRow) {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail).updateComplaintLog(Number(editRow), JSON.stringify(data));
+  } else {
+    google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFail).saveComplaintLog(JSON.stringify(data));
+  }
+}
+
+function loadComplaintList() {
+  var startEl = document.getElementById('complaint-list-start');
+  var endEl = document.getElementById('complaint-list-end');
+  var startStr = (startEl && startEl.value) ? startEl.value : '';
+  var endStr = (endEl && endEl.value) ? endEl.value : '';
+  if (!startStr || !endStr) {
+    var today = new Date().toISOString().substring(0, 10);
+    if (startEl) startEl.value = today;
+    if (endEl) endEl.value = today;
+    startStr = startStr || today;
+    endStr = endStr || today;
+  }
+  var storeVal = (document.getElementById('complaint-list-store') && document.getElementById('complaint-list-store').value) || '';
+  var pathVal = (document.getElementById('complaint-list-path') && document.getElementById('complaint-list-path').value) || '';
+  var typeVal = (document.getElementById('complaint-list-type') && document.getElementById('complaint-list-type').value) || '';
+  var statusVal = (document.getElementById('complaint-list-status') && document.getElementById('complaint-list-status').value) || '';
+  if (typeof load === 'function') load(1);
+  var langForTranslate = (typeof currentLang !== 'undefined' && currentLang) ? currentLang : 'ko';
+  google.script.run.withSuccessHandler(function(list) {
+    if (typeof load === 'function') load(0);
+    renderComplaintList(list || []);
+  }).withFailureHandler(function(err) {
+    if (typeof load === 'function') load(0);
+    var errMsg = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_msg_query_error) ? I18N[currentLang].complaint_msg_query_error : '조회 중 오류가 발생했습니다.';
+    document.getElementById('complaint-list-body').innerHTML = '<tr><td colspan="10" class="py-5 text-danger">' + errMsg + '</td></tr>';
+  }).getComplaintLogList(startStr, endStr, storeVal, pathVal, typeVal, statusVal, langForTranslate);
+}
+
+var complaintListCache = [];
+
+/** 저장값(한글 등) → 현재 언어 표시 텍스트 */
+function getComplaintDisplayText(val, cat) {
+  if (!val) return '';
+  var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== 'undefined' && I18N.ko) ? I18N.ko : {};
+  var map = {
+    visitPath: { '홀': 'complaint_path_hall', '배달': 'complaint_path_delivery', '포장': 'complaint_path_takeout' },
+    type: { '음식': 'complaint_type_food', '서비스': 'complaint_type_service', '환경/청결': 'complaint_type_env', '가격/결제': 'complaint_type_price', '기타': 'complaint_type_etc' },
+    severity: { '경미': 'complaint_sev_low', '보통': 'complaint_sev_mid', '심각': 'complaint_sev_high' },
+    status: { '접수': 'complaint_status_recv', '조사중': 'complaint_status_inv', '처리완료': 'complaint_status_done', '보류': 'complaint_status_hold', '종료': 'complaint_status_closed' }
+  };
+  var key = map[cat] && map[cat][val] ? map[cat][val] : null;
+  return key && lang[key] ? lang[key] : val;
+}
+
+function openComplaintDetail(idx) {
+  var r = complaintListCache[idx];
+  if (!r) return;
+  var editRowEl = document.getElementById('complaint-edit-row');
+  if (editRowEl) editRowEl.value = r.row || '';
+  var numEl = document.getElementById('complaint-number');
+  if (numEl) { numEl.value = r.number || '-'; numEl.placeholder = ''; }
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.value = v != null ? v : ''; };
+  set('complaint-date', r.date);
+  set('complaint-time', r.time);
+  set('complaint-store', r.store);
+  set('complaint-writer', r.writer);
+  set('complaint-customer', r.customer);
+  set('complaint-contact', r.contact);
+  set('complaint-visit-path', r.visitPath);
+  set('complaint-platform', r.platform);
+  set('complaint-type', r.type);
+  set('complaint-menu', r.menu);
+  set('complaint-title', r.title);
+  set('complaint-content', r.content);
+  set('complaint-severity', r.severity);
+  set('complaint-status', r.status);
+  set('complaint-handler', r.handler);
+  set('complaint-done-date', r.doneDate);
+  set('complaint-action', r.action);
+  set('complaint-photo', r.photoUrl);
+  set('complaint-remark', r.remark);
+  var menuEl = document.getElementById('complaint-menu');
+  var titleEl = document.getElementById('complaint-title');
+  var actionEl = document.getElementById('complaint-action');
+  var remarkEl = document.getElementById('complaint-remark');
+  if (menuEl) { menuEl.setAttribute('data-original-menu', r.menu || ''); }
+  if (titleEl) { titleEl.setAttribute('data-original-title', r.title || ''); }
+  if (actionEl) { actionEl.setAttribute('data-original-action', r.action || ''); }
+  if (remarkEl) { remarkEl.setAttribute('data-original-remark', r.remark || ''); }
+  var langForTranslate = (typeof currentLang !== 'undefined' && currentLang) ? currentLang : 'ko';
+  if (langForTranslate === 'ko') {
+    var platformWrap = document.getElementById('complaint-platform-wrap');
+    if (platformWrap) platformWrap.style.display = (r.visitPath === '배달') ? 'block' : 'none';
+    if (typeof showComplaintTab === 'function') showComplaintTab('input');
+    bindComplaintOriginalSync();
+    return;
+  }
+  google.script.run.withSuccessHandler(function(tr) {
+    if (tr) {
+      set('complaint-menu', tr.menu);
+      set('complaint-title', tr.title);
+      set('complaint-action', tr.action);
+      set('complaint-remark', tr.remark);
+    }
+    var platformWrap = document.getElementById('complaint-platform-wrap');
+    if (platformWrap) platformWrap.style.display = (r.visitPath === '배달') ? 'block' : 'none';
+    if (typeof showComplaintTab === 'function') showComplaintTab('input');
+    bindComplaintOriginalSync();
+  }).withFailureHandler(function() {
+    var platformWrap = document.getElementById('complaint-platform-wrap');
+    if (platformWrap) platformWrap.style.display = (r.visitPath === '배달') ? 'block' : 'none';
+    if (typeof showComplaintTab === 'function') showComplaintTab('input');
+    bindComplaintOriginalSync();
+  }).translateComplaintFields(r.menu, r.title, r.action, r.remark, langForTranslate);
+}
+
+function bindComplaintOriginalSync() {
+  var sync = function(el, attr) { if (el) el.oninput = el.onchange = function() { el.setAttribute(attr, el.value || ''); }; };
+  sync(document.getElementById('complaint-menu'), 'data-original-menu');
+  sync(document.getElementById('complaint-title'), 'data-original-title');
+  sync(document.getElementById('complaint-action'), 'data-original-action');
+  sync(document.getElementById('complaint-remark'), 'data-original-remark');
+}
+
+function resetComplaintForm() {
+  var editRowEl = document.getElementById('complaint-edit-row');
+  if (editRowEl) editRowEl.value = '';
+  var numEl = document.getElementById('complaint-number');
+  if (numEl) {
+    numEl.value = '';
+    var ph = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_number_auto) ? I18N[currentLang].complaint_number_auto : '저장 시 자동 부여';
+    numEl.placeholder = ph;
+  }
+  var ids = ['complaint-date', 'complaint-time', 'complaint-store', 'complaint-writer', 'complaint-customer', 'complaint-contact', 'complaint-visit-path', 'complaint-platform', 'complaint-type', 'complaint-menu', 'complaint-title', 'complaint-content', 'complaint-severity', 'complaint-status', 'complaint-handler', 'complaint-done-date', 'complaint-action', 'complaint-photo', 'complaint-remark'];
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (!el) continue;
+    if (el.tagName === 'SELECT') {
+      if (ids[i] === 'complaint-visit-path') el.value = '홀';
+      else if (ids[i] === 'complaint-type') el.value = '기타';
+      else if (ids[i] === 'complaint-severity') el.value = '보통';
+      else if (ids[i] === 'complaint-status') el.value = '접수';
+      else el.value = el.options && el.options[0] ? el.options[0].value : '';
+    } else el.value = '';
+  }
+  var platformWrap = document.getElementById('complaint-platform-wrap');
+  if (platformWrap) platformWrap.style.display = 'none';
+  var menuEl = document.getElementById('complaint-menu');
+  var titleEl = document.getElementById('complaint-title');
+  var actionEl = document.getElementById('complaint-action');
+  var remarkEl = document.getElementById('complaint-remark');
+  if (menuEl) menuEl.removeAttribute('data-original-menu');
+  if (titleEl) titleEl.removeAttribute('data-original-title');
+  if (actionEl) actionEl.removeAttribute('data-original-action');
+  if (remarkEl) remarkEl.removeAttribute('data-original-remark');
+  var today = new Date();
+  var dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  var dateEl = document.getElementById('complaint-date');
+  if (dateEl) dateEl.value = dateStr;
+}
+
+function renderComplaintList(list) {
+  var tbody = document.getElementById('complaint-list-body');
+  if (!tbody) return;
+  complaintListCache = list || [];
+  if (!list || list.length === 0) {
+    var noDataMsg = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_msg_no_data) ? I18N[currentLang].complaint_msg_no_data : '조회된 기록이 없습니다.';
+    tbody.innerHTML = '<tr><td colspan="10" class="py-5 text-muted">' + noDataMsg + '</td></tr>';
+    return;
+  }
+  var viewLinkText = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_link_view) ? I18N[currentLang].complaint_link_view : '보기';
+  var btnDetailText = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].complaint_btn_detail) ? I18N[currentLang].complaint_btn_detail : '상세보기';
+  tbody.innerHTML = '';
+  list.forEach(function(r, idx) {
+    var visitDisp = getComplaintDisplayText(r.visitPath, 'visitPath') || r.visitPath;
+    var typeDisp = getComplaintDisplayText(r.type, 'type') || r.type;
+    var sevDisp = getComplaintDisplayText(r.severity, 'severity') || r.severity;
+    var statusDisp = getComplaintDisplayText(r.status, 'status') || r.status;
+    var platformSuffix = r.platform ? ' (' + r.platform + ')' : '';
+    var photoCell = (r.photoUrl) ? '<a href="' + r.photoUrl.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener">' + viewLinkText + '</a>' : '-';
+    var detailBtn = '<button type="button" class="btn btn-sm btn-outline-primary" onclick="openComplaintDetail(' + idx + ')">' + btnDetailText + '</button>';
+    tbody.innerHTML += '<tr><td><small>' + (r.number || '-') + '</small></td><td>' + (r.date || '') + '</td><td><small>' + (r.store || '') + '</small></td><td>' + (r.customer || '-') + '</td><td>' + visitDisp + platformSuffix + '</td><td>' + typeDisp + '</td><td class="text-start">' + (r.title || '-') + '</td><td>' + sevDisp + '</td><td>' + statusDisp + '</td><td>' + detailBtn + '</td></tr>';
+  });
+}
+
+var visitChartDept = null, visitChartEmployee = null, visitChartStore = null;
+
+/** 매장 방문 통계 조회 및 차트 렌더링 (선택한 항목만 표시) */
+function loadVisitStats() {
+  var s = document.getElementById('visit-stats-start').value;
+  var e = document.getElementById('visit-stats-end').value;
+  var dateHint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].visit_stats_date_hint) ? I18N[currentLang].visit_stats_date_hint : "시작일·종료일을 선택해 주세요.";
+  if (!s || !e) { alert(dateHint); return; }
+  var showDept = document.getElementById('visit-stats-show-dept') ? document.getElementById('visit-stats-show-dept').checked : true;
+  var showEmployee = document.getElementById('visit-stats-show-employee') ? document.getElementById('visit-stats-show-employee').checked : true;
+  var showStore = document.getElementById('visit-stats-show-store') ? document.getElementById('visit-stats-show-store').checked : true;
+  var selectHint = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].visit_stats_select_hint) ? I18N[currentLang].visit_stats_select_hint : "표시할 통계를 하나 이상 선택해 주세요.";
+  if (!showDept && !showEmployee && !showStore) { alert(selectHint); return; }
+  if (typeof load === 'function') load(1);
+  google.script.run.withSuccessHandler(function(data) {
+    if (typeof load === 'function') load(0);
+    if (!data) data = { byDept: [], byEmployee: [], byStore: [] };
+    var colors = ['#E65100', '#1976D2', '#2E7D32', '#7B1FA2', '#C62828', '#00838F', '#F9A825', '#5D4037'];
+    function setWrapVisible(wrapId, visible) {
+      var w = document.getElementById(wrapId);
+      if (w) w.style.display = visible ? '' : 'none';
+    }
+    function makeChart(canvasId, items, title) {
+      var ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      if (canvasId === 'chart-visit-dept' && visitChartDept) { visitChartDept.destroy(); visitChartDept = null; }
+      if (canvasId === 'chart-visit-employee' && visitChartEmployee) { visitChartEmployee.destroy(); visitChartEmployee = null; }
+      if (canvasId === 'chart-visit-store' && visitChartStore) { visitChartStore.destroy(); visitChartStore = null; }
+      var labels = items.map(function(x) { return x.label; });
+      var values = items.map(function(x) { return x.minutes; });
+      var bg = labels.map(function(_, i) { return colors[i % colors.length]; });
+      var chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: '투입 시간(분)', data: values, backgroundColor: bg }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { left: 4, right: 8 } },
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, title: { display: true, text: '분' } },
+            y: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }
+          }
+        }
+      });
+      if (canvasId === 'chart-visit-dept') visitChartDept = chart;
+      if (canvasId === 'chart-visit-employee') visitChartEmployee = chart;
+      if (canvasId === 'chart-visit-store') visitChartStore = chart;
+    }
+    setWrapVisible('visit-chart-dept-wrap', showDept);
+    setWrapVisible('visit-chart-employee-wrap', showEmployee);
+    setWrapVisible('visit-chart-store-wrap', showStore);
+    if (showDept) makeChart('chart-visit-dept', data.byDept || [], '부서별');
+    else if (visitChartDept) { visitChartDept.destroy(); visitChartDept = null; }
+    if (showEmployee) makeChart('chart-visit-employee', data.byEmployee || [], '직원별');
+    else if (visitChartEmployee) { visitChartEmployee.destroy(); visitChartEmployee = null; }
+    if (showStore) makeChart('chart-visit-store', data.byStore || [], '매장별');
+    else if (visitChartStore) { visitChartStore.destroy(); visitChartStore = null; }
+  }).getStoreVisitStats(s, e);
+}
+
+/**
+ * [모바일 UI] 방문 기록 목록 새로고침 함수
+ */
+function loadMyTodayVisitLog() {
+  google.script.run.withSuccessHandler(list => {
+    // 모바일 화면의 로그 테이블 바디 ID (없으면 생성 필요)
+    var logBody = document.getElementById("visit-log-body"); 
+    if (!logBody) return;
+
+    logBody.innerHTML = "";
+    if (list.length === 0) {
+      logBody.innerHTML = "<tr><td colspan='4' class='text-muted small'>오늘 기록이 없습니다.</td></tr>";
+      return;
+    }
+
+    list.forEach(r => {
+      var durationText = r.duration ? `<span class="badge bg-info">${r.duration}분</span>` : "-";
+      var typeColor = r.type === "방문시작" ? "text-primary" : "text-danger";
+      
+      logBody.innerHTML += `
+        <tr style="font-size: 0.85rem;">
+          <td>${r.time}</td>
+          <td class="fw-bold">${r.store}</td>
+          <td class="${typeColor}">${r.type}</td>
+          <td>${durationText}</td>
+        </tr>`;
+    });
+  }).getTodayMyVisits(loggedInUser); // 전역 변수 loggedInUser 사용
+}
+
+/**
+ * [모바일 UI] 방문 버튼 클릭 핸들러 (수정본)
+ */
+function handleVisitSubmit(type) {
+  // ... (기존 GPS 정보 및 데이터 수집 코드) ...
+
+  google.script.run.withSuccessHandler(res => {
+    if (res.success) {
+      alert(res.msg);
+      
+      // ✅ 핵심: 저장 성공과 동시에 화면 목록을 다시 불러옵니다!
+      loadMyTodayVisitLog(); 
+      
+      // 버튼 상태 업데이트 (시작 <-> 종료 전환)
+      checkActiveVisitStatus(); 
+    } else {
+      alert(res.msg);
+    }
+  }).submitStoreVisit(visitData);
+}
+
+</script>

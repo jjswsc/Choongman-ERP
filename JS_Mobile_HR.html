@@ -1,0 +1,455 @@
+<script>
+  var ATT_TYPE_TO_BTN = { '출근': 'att-btn-in', '퇴근': 'att-btn-out', '휴식시작': 'att-btn-break', '휴식종료': 'att-btn-resume' };
+  var ATT_TYPE_TO_CONFIRM = { '출근': 'att_confirm_in', '퇴근': 'att_confirm_out', '휴식시작': 'att_confirm_break', '휴식종료': 'att_confirm_resume' };
+
+  function setAttendanceButtonDisabled(type, disabled) {
+    var id = ATT_TYPE_TO_BTN[type];
+    if (id) { var b = document.getElementById(id); if (b) b.disabled = !!disabled; }
+  }
+
+  function attT(key) {
+    var L = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang][key]) ? I18N[currentLang][key] : (I18N.ko && I18N.ko[key]) ? I18N.ko[key] : "";
+    return L || key;
+  }
+
+  /** 인사 탭 진입 시: 출근을 먼저 해야 휴식/재개/퇴근 가능. 이미 기록된 유형은 버튼 비활성화 */
+  function updateAttendanceButtonState() {
+    if (typeof loggedInStore === 'undefined' || typeof loggedInUser === 'undefined') return;
+    google.script.run.withSuccessHandler(function(types) {
+      var hasClockIn = (types && types.indexOf('출근') !== -1);
+      setAttendanceButtonDisabled('출근', hasClockIn);
+      setAttendanceButtonDisabled('휴식시작', !hasClockIn || (types && types.indexOf('휴식시작') !== -1));
+      setAttendanceButtonDisabled('휴식종료', !hasClockIn || (types && types.indexOf('휴식종료') !== -1));
+      setAttendanceButtonDisabled('퇴근', !hasClockIn || (types && types.indexOf('퇴근') !== -1));
+    }).getTodayAttendanceTypes(loggedInStore, loggedInUser);
+  }
+
+  /** 인사 탭 진입 시 서버에서 오늘 근태 기록 로드 → 로그아웃 후 재로그인해도 기록 표시 */
+  function loadTodayAttendanceLog() {
+    if (typeof loggedInStore === 'undefined' || typeof loggedInUser === 'undefined') return;
+    var d = new Date();
+    var todayStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    var statusMsg = document.getElementById("attendance-status-msg");
+    var logTable = document.getElementById("attendance-log-table");
+    var tbody = document.getElementById("attendance-log-body");
+    if (!tbody) return;
+    google.script.run.withSuccessHandler(function(list) {
+      tbody.innerHTML = "";
+      if (!list || list.length === 0) {
+        if (statusMsg) statusMsg.style.display = "block";
+        if (logTable) logTable.style.display = "none";
+        return;
+      }
+      if (statusMsg) statusMsg.style.display = "none";
+      if (logTable) logTable.style.display = "table";
+      var pendingTxt = attT("att_status_pending");
+      var successTxt = attT("att_success");
+      list.forEach(function(r) {
+        var row = tbody.insertRow(0);
+        row.style.borderBottom = "1px solid #ffe0b2";
+        var ts = String(r.timestamp || "");
+        var timePart = (ts.indexOf(" ") !== -1) ? ts.split(" ")[1] : (ts.match(/\d{2}:\d{2}(:\d{2})?/) ? ts.match(/\d{2}:\d{2}(:\d{2})?/)[0] : ts) || ts;
+        var isPending = String(r.status || "").indexOf("위치미확인") !== -1 || String(r.status || "").indexOf("승인대기") !== -1;
+        var statusHtml = isPending ? "<span style=\"color:#ff9800;\">" + pendingTxt + "</span>" : "<span style=\"color:#4CAF50;\">" + successTxt + "</span>";
+        row.insertCell(0).innerHTML = "<span style=\"color:#888;\">" + timePart + "</span>";
+        row.insertCell(1).innerHTML = "<b>" + (r.type || "") + "</b>";
+        row.insertCell(2).innerHTML = statusHtml;
+      });
+    }).getAttendanceList({ startDate: todayStr, endDate: todayStr, storeFilter: loggedInStore, employeeFilter: loggedInUser });
+  }
+
+function submitLeave(){ var t=document.getElementById("leaveType").value, d=document.getElementById("leaveDate").value, r=document.getElementById("leaveReason").value; google.script.run.withSuccessHandler(res=>{alert(res);loadMyLeaveInfo();}).requestLeave({store:loggedInStore,name:loggedInUser,type:t,date:d,reason:r}); }
+
+function sendAttendance(t){ var key = ATT_TYPE_TO_CONFIRM[t]; var msg = key ? attT(key) : (t + "?"); if(!confirm(msg)) return; var options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }; var gpsFailMsg = attT("att_gps_fail_confirm"); navigator.geolocation.getCurrentPosition( p => { sendData(t, p.coords.latitude, p.coords.longitude); }, e => { if(confirm(gpsFailMsg)) { sendData(t, "Unknown", "Unknown"); } }, options ); }
+
+/* [수정] 근태 기록 성공 시 화면 표에 즉시 추가 + 해당 버튼 비활성화(하루 1회). 중복 기록 시에도 버튼 비활성화 */
+function sendData(type, lat, lng) {
+  google.script.run.withSuccessHandler(res => {
+    var isGpsPending = (typeof res === "string" && (res === "ATT_GPS_PENDING" || res.includes("ATT_GPS_PENDING")));
+    var isDuplicate = (typeof res === "string" && res.indexOf("오늘 이미") !== -1 && res.indexOf("기록이 있습니다") !== -1);
+
+    if (isDuplicate) {
+      setAttendanceButtonDisabled(type, true);
+      alert(attT("att_duplicate_once"));
+      return;
+    }
+
+    // 1. 서버 응답 메시지에 지각/조퇴/연장 단어가 포함된 경우 사유 입력창 띄우기 (위치미확인 저장 건 제외)
+    if (!isGpsPending && (res.includes("지각") || res.includes("조퇴") || res.includes("연장"))) {
+      var reasonPrompt = attT("att_reason_prompt");
+      var reason = prompt(res + "\n\n" + reasonPrompt);
+      if (reason) {
+        google.script.run.withSuccessHandler(r => console.log(r)).updateLastReason(reason, loggedInUser);
+      }
+    } else if (isGpsPending) {
+      alert(attT("att_gps_pending_saved"));
+    } else {
+      alert(res);
+    }
+
+    // 2. 기록이 서버에 저장된 경우 (✅ 정상 또는 ATT_GPS_PENDING 승인대기) 버튼 상태 갱신 + 오늘 기록을 서버에서 다시 로드 (재로그인 시에도 동일하게 보이도록)
+    if (res.includes("✅") || isGpsPending) {
+      if (typeof updateAttendanceButtonState === 'function') updateAttendanceButtonState();
+      if (typeof loadTodayAttendanceLog === 'function') loadTodayAttendanceLog();
+    }
+  }).submitAttendance({
+    storeName: loggedInStore, 
+    name: loggedInUser, 
+    type: type, 
+    lat: lat, 
+    lng: lng
+  });
+}
+
+  var mobileScheduleMondayStr = "";
+
+  function getMondayOfWeek(d) {
+    var date = d ? new Date(d) : new Date();
+    var day = date.getDay();
+    var diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    var mon = new Date(date);
+    mon.setDate(diff);
+    return mon.getFullYear() + "-" + String(mon.getMonth() + 1).padStart(2, "0") + "-" + String(mon.getDate()).padStart(2, "0");
+  }
+
+  function scheduleT(key) {
+    return (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang][key]) ? I18N[currentLang][key] : (I18N.ko && I18N.ko[key]) ? I18N.ko[key] : key;
+  }
+
+  function initScheduleWeekLabel() {
+    if (!mobileScheduleMondayStr) mobileScheduleMondayStr = getMondayOfWeek();
+    var weekMondayInput = document.getElementById("schedule-week-monday");
+    if (weekMondayInput && !weekMondayInput.value) weekMondayInput.value = mobileScheduleMondayStr;
+    var weekLabel = document.getElementById("schedule-week-label");
+    if (weekLabel) {
+      var mon = new Date(mobileScheduleMondayStr + "T12:00:00");
+      var sun = new Date(mon);
+      sun.setDate(sun.getDate() + 6);
+      weekLabel.textContent = mon.getMonth() + 1 + "/" + mon.getDate() + " ~ " + (sun.getMonth() + 1) + "/" + sun.getDate();
+    }
+    var todayInput = document.getElementById("schedule-today-date");
+    if (todayInput && !todayInput.value) {
+      var d = new Date();
+      todayInput.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+  }
+  function loadMobileTodayData() {
+    var dateEl = document.getElementById("schedule-today-date");
+    var areaEl = document.getElementById("schedule-today-area");
+    var storeSel = document.getElementById("schedule-today-store");
+    var dateStr = (dateEl && dateEl.value) ? dateEl.value.substring(0, 10) : (function() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+    var areaFilter = (areaEl && areaEl.value) ? areaEl.value : "All";
+    var storeFilter = (storeSel && storeSel.value) ? String(storeSel.value).trim() : "";
+    if (!storeFilter && typeof loggedInStore !== "undefined" && loggedInStore) storeFilter = loggedInStore;
+    if (!storeFilter) storeFilter = "All";
+    var mondayStr = getMondayOfWeek(new Date(dateStr + "T12:00:00"));
+    google.script.run.withSuccessHandler(function(list) {
+      window._mobileWeekScheduleList = list || [];
+      var daySchedule = (list || []).filter(function(r) { return (r.date || "").substring(0, 10) === dateStr; });
+      if (areaFilter !== "All") daySchedule = daySchedule.filter(function(r) { return (r.area || "Service") === areaFilter; });
+      google.script.run.withSuccessHandler(function(attList) {
+        renderScheduleToday(daySchedule, attList || [], areaFilter);
+      }).withFailureHandler(function() {
+        renderScheduleToday(daySchedule, [], areaFilter);
+      }).getMobileTodayAttendance(storeFilter, dateStr);
+    }).withFailureHandler(function() {
+      var box = document.getElementById("schedule-today-box");
+      if (box) box.innerHTML = "<div class='text-center text-muted py-3 small'>" + scheduleT("m_schedule_no_data") + "</div>";
+    }).getMobileWeeklySchedule(storeFilter, mondayStr, "All");
+  }
+  function loadMobileScheduleStoreSearch() {
+    loadMobileTodayData();
+    loadMobileScheduleData();
+  }
+  function loadMobileScheduleData() {
+    var mondayEl = document.getElementById("schedule-week-monday");
+    var mondayStr = (mondayEl && mondayEl.value) ? mondayEl.value.trim() : "";
+    if (!mondayStr) {
+      mondayStr = getMondayOfWeek();
+      if (mondayEl) mondayEl.value = mondayStr;
+    }
+    mobileScheduleMondayStr = mondayStr;
+    var storeSel = document.getElementById("schedule-today-store");
+    var store = (storeSel && storeSel.value) ? String(storeSel.value).trim() : "";
+    if (!store && typeof loggedInStore !== "undefined" && loggedInStore) store = String(loggedInStore).trim();
+    if (!store) store = "All";
+    var areaEl = document.getElementById("schedule-week-area");
+    var areaFilter = (areaEl && areaEl.value) ? areaEl.value : "All";
+    var box = document.getElementById("schedule-week-box");
+    if (box) box.innerHTML = "<div class='text-center text-muted py-4 small'>" + (scheduleT("m_processing") || "처리 중...") + "</div>";
+    var done = false;
+    var timeoutMs = 18000;
+    var timeoutId = setTimeout(function() {
+      if (done) return;
+      done = true;
+      if (box) box.innerHTML = "<div class='text-center text-muted py-4 small'>" + (scheduleT("m_schedule_no_data") || "요청 시간이 초과되었습니다. 다시 시도해 주세요.") + "</div>";
+    }, timeoutMs);
+    google.script.run
+      .withSuccessHandler(function(list) {
+        if (done) return;
+        done = true;
+        clearTimeout(timeoutId);
+        try {
+          var withStore = (list || []).map(function(r) { r.store = r.store || store; return r; });
+          window._mobileWeekScheduleList = withStore;
+          renderScheduleWeek(withStore, areaFilter);
+        } catch (e) {
+          if (box) box.innerHTML = "<div class='text-center text-muted py-4 small'>" + (scheduleT("m_schedule_no_data") || "데이터 표시 중 오류가 발생했습니다.") + "</div>";
+        }
+      })
+      .withFailureHandler(function() {
+        if (done) return;
+        done = true;
+        clearTimeout(timeoutId);
+        if (box) box.innerHTML = "<div class='text-center text-muted py-4 small'>" + scheduleT("m_schedule_no_data") + "<br><small>해당 주·매장에 저장된 시간표가 없을 수 있습니다. 관리자 페이지에서 직원시간표를 확인해 주세요.</small></div>";
+      })
+      .getMobileWeeklySchedule(store, mondayStr, areaFilter);
+
+    if (typeof loggedInStore !== "undefined" && loggedInUser !== "undefined") {
+      loadMobileMyAttendanceSummary();
+    }
+  }
+
+  function loadMobileMyAttendanceSummary() {
+    var box = document.getElementById("schedule-my-punch-box");
+    var sel = document.getElementById("schedule-my-month-select");
+    var yearMonth = (sel && sel.value) ? sel.value : (function() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); })();
+    if (!loggedInStore || !loggedInUser || !box) return;
+    google.script.run.withSuccessHandler(function(data) {
+      renderMyAttendanceSummary(data || {});
+    }).withFailureHandler(function() {
+      if (box) box.innerHTML = "<div class='text-center text-muted py-3 small'>" + scheduleT("m_schedule_no_data") + "</div>";
+    }).getMobileMyAttendanceSummary(loggedInStore, loggedInUser, yearMonth);
+  }
+
+  function fillScheduleMyMonthSelect() {
+    var sel = document.getElementById("schedule-my-month-select");
+    if (!sel) return;
+    sel.innerHTML = "";
+    var d = new Date();
+    for (var i = 0; i < 24; i++) {
+      var y = d.getFullYear(), m = d.getMonth() + 1;
+      var val = y + "-" + String(m).padStart(2, "0");
+      sel.add(new Option(y + "-" + String(m).padStart(2, "0"), val));
+      d.setMonth(d.getMonth() - 1);
+    }
+    sel.value = (new Date().getFullYear()) + "-" + String(new Date().getMonth() + 1).padStart(2, "0");
+  }
+
+  function mobileSchedulePrevWeek() {
+    var d = new Date(mobileScheduleMondayStr + "T12:00:00");
+    d.setDate(d.getDate() - 7);
+    mobileScheduleMondayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    loadMobileScheduleData();
+  }
+
+  function mobileScheduleNextWeek() {
+    var d = new Date(mobileScheduleMondayStr + "T12:00:00");
+    d.setDate(d.getDate() + 7);
+    mobileScheduleMondayStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    loadMobileScheduleData();
+  }
+
+  function renderScheduleWeek(list, areaFilter) {
+    areaFilter = areaFilter || "All";
+    var box = document.getElementById("schedule-week-box");
+    if (!box) return;
+    if (!list || list.length === 0) {
+      var hint = (scheduleT("m_schedule_load_hint") || "").indexOf("검색") >= 0 ? " 해당 주·매장에 저장된 시간표가 없을 수 있습니다. 관리자 페이지에서 직원시간표 시트와 매장/날짜를 확인해 주세요." : "";
+      box.innerHTML = "<div class='text-center text-muted py-4 small'>" + scheduleT("m_schedule_no_data") + hint + "</div>";
+      return;
+    }
+    var multiStore = (function() { var s = {}; list.forEach(function(x) { if (x.store) s[x.store] = 1; }); return Object.keys(s).length > 1; })();
+    var dayLabels = [scheduleT("m_schedule_mon"), scheduleT("m_schedule_tue"), scheduleT("m_schedule_wed"), scheduleT("m_schedule_thu"), scheduleT("m_schedule_fri"), scheduleT("m_schedule_sat"), scheduleT("m_schedule_sun")];
+    var monDate = new Date((mobileScheduleMondayStr || getMondayOfWeek()) + "T12:00:00");
+    var dayStrs = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(monDate.getTime());
+      d.setDate(monDate.getDate() + i);
+      dayStrs.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
+    }
+    var byPerson = {};
+    list.forEach(function(r) {
+      var key = (r.store || "") + "|" + (r.name || "");
+      if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", byDate: {} };
+      byPerson[key].byDate[r.date] = r;
+    });
+    var personKeys = Object.keys(byPerson).sort();
+    var dailyCount = [0, 0, 0, 0, 0, 0, 0];
+    var persons = [];
+    var multiArea = (function() { var a = {}; list.forEach(function(x) { var ar = x.area || "Service"; a[ar] = 1; }); return Object.keys(a).length > 1; })();
+    var showArea = (areaFilter === "All" && multiArea);
+    personKeys.forEach(function(key) {
+      var p = byPerson[key];
+      var workDays = [], breakDays = [];
+      var offCount = 0;
+      for (var i = 0; i < 7; i++) {
+        var row = p.byDate[dayStrs[i]];
+        var pIn = row && row.pIn ? scheduleTimeOnly(row.pIn) : "";
+        var pOut = row && row.pOut ? scheduleTimeOnly(row.pOut) : "";
+        var workStr = row && (pIn || pOut) ? (pIn || "-") + "-" + (pOut || "-") : "OFF";
+        var pBS = row && row.pBS ? scheduleTimeOnly(row.pBS) : "";
+        var pBE = row && row.pBE ? scheduleTimeOnly(row.pBE) : "";
+        var breakStr = row && pBS && pBE ? (pBS + "-" + pBE) : "-";
+        workDays.push(workStr);
+        breakDays.push(breakStr);
+        if (workStr === "OFF") offCount++; else dailyCount[i]++;
+      }
+      persons.push({ name: p.name, store: p.store, area: p.area, workDays: workDays, breakDays: breakDays, offCount: offCount, workCount: 7 - offCount });
+    });
+    var nameLabel = scheduleT("m_schedule_name"), offLabel = scheduleT("m_schedule_off"), workDayLabel = scheduleT("m_schedule_working_day"), breakLabel = scheduleT("m_schedule_break_time"), dailyStaffLabel = scheduleT("m_schedule_daily_staff");
+    var areaLabelT = function(area) { return scheduleT(area === "Service" ? "m_schedule_area_service" : area === "Kitchen" ? "m_schedule_area_kitchen" : "m_schedule_area_office") || area; };
+    var tc = "text-align:center;";
+    var areaColHeader = showArea ? "<th style='min-width:42px; padding:4px 2px;" + tc + "'>" + scheduleT("m_schedule_label_area") + "</th>" : "";
+    var cellWork = "background:#E3F2FD;";
+    var cellBreak = "background:#e8e8e8;";
+    var html = "<div style='overflow-x:auto; -webkit-overflow-scrolling:touch; margin:-4px;'><table class='table table-bordered table-sm mb-0' style='font-size:13px; min-width:520px; border-collapse:collapse;'>";
+    html += "<thead><tr style='background:#f5f5f5;'>" + areaColHeader + "<th style='min-width:52px; padding:6px 4px;" + tc + "'>" + nameLabel + "</th>";
+    for (var i = 0; i < 7; i++) html += "<th style='min-width:58px; padding:6px 4px;" + tc + "'>" + dayLabels[i] + "</th>";
+    html += "<th style='min-width:36px; padding:6px 4px;" + tc + "'>" + offLabel + "</th><th style='min-width:48px; padding:6px 4px;" + tc + "'>" + workDayLabel + "</th></tr></thead><tbody>";
+    persons.forEach(function(p) {
+      var areaCell = showArea ? "<td style='padding:4px 2px;" + tc + ";" + cellWork + "'>" + (areaLabelT(p.area) || p.area) + "</td>" : "";
+      html += "<tr>" + areaCell + "<td style='padding:4px; font-weight:600;" + tc + ";" + cellWork + "'>" + escapeHtml(p.name || "") + "</td>";
+      for (var i = 0; i < 7; i++) html += "<td style='padding:4px;" + tc + ";" + cellWork + "'>" + escapeHtml(p.workDays[i]) + "</td>";
+      html += "<td style='padding:4px;" + tc + ";" + cellWork + "'>" + p.offCount + "</td><td style='padding:4px;" + tc + ";" + cellWork + "'>" + p.workCount + "</td></tr>";
+      html += "<tr>" + (showArea ? "<td style='padding:2px;" + tc + ";" + cellBreak + "'></td>" : "") + "<td style='padding:2px 4px; font-size:12px; color:#555;" + tc + ";" + cellBreak + "'>" + breakLabel + "</td>";
+      for (var i = 0; i < 7; i++) html += "<td style='padding:2px 4px; font-size:12px;" + tc + ";" + cellBreak + "'>" + escapeHtml(p.breakDays[i]) + "</td>";
+      html += "<td style='" + tc + ";" + cellBreak + "'></td><td style='" + tc + ";" + cellBreak + "'></td></tr>";
+    });
+    html += "</tbody><tfoot><tr style='background:#E8EAF6; font-weight:600;'>" + (showArea ? "<td style='padding:4px;" + tc + "'></td>" : "") + "<td style='padding:4px;" + tc + "'>" + dailyStaffLabel + "</td>";
+    for (var i = 0; i < 7; i++) html += "<td style='padding:4px;" + tc + "'>" + dailyCount[i] + "</td>";
+    html += "<td style='" + tc + "'></td><td style='" + tc + "'></td></tr></tfoot></table></div>";
+    box.innerHTML = html;
+  }
+  function escapeHtml(s) {
+    if (s == null) return "";
+    var t = document.createElement("span");
+    t.textContent = s;
+    return t.innerHTML;
+  }
+  /** 주간 시간표 셀 표시용: "HH:mm"만 사용 (Supabase TIME/ISO 문자열로 "Sat Dec 30 1899" 등이 넘어와도 시간만 표시) */
+  function scheduleTimeOnly(v) {
+    if (v == null || v === "") return "";
+    var s = String(v).trim();
+    var match = s.match(/(\d{1,2}):(\d{2})/);
+    if (match) return ("0" + match[1]).slice(-2) + ":" + match[2];
+    if (s.indexOf("T") !== -1) {
+      var tPart = s.split("T")[1];
+      if (tPart && (match = tPart.match(/(\d{1,2}):(\d{2})/))) return ("0" + match[1]).slice(-2) + ":" + match[2];
+    }
+    return s.length >= 5 && s.charAt(2) === ":" ? s.substring(0, 5) : s;
+  }
+
+  function parseHourFromTimeStr(s) {
+    if (!s || typeof s !== "string") return null;
+    var part = s.indexOf(" ") !== -1 ? s.split(" ")[1] : s.trim();
+    var match = part.match(/(\d{1,2}):(\d{2})/);
+    return match ? parseInt(match[1], 10) : null;
+  }
+  function parseHourFromPlanTime(s) {
+    if (!s || typeof s !== "string") return null;
+    var match = s.match(/(\d{1,2}):(\d{2})/);
+    return match ? parseInt(match[1], 10) : null;
+  }
+  function parseTimeToDecimal(s) {
+    if (!s || typeof s !== "string") return null;
+    var match = s.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return null;
+    return parseInt(match[1], 10) + parseInt(match[2], 10) / 60;
+  }
+  function renderScheduleToday(todaySchedule, attendanceList, areaFilter) {
+    var box = document.getElementById("schedule-today-box");
+    if (!box) return;
+    var attByKey = {};
+    (attendanceList || []).forEach(function(r) {
+      var k = (r.store || "") + "|" + (r.name || "");
+      attByKey[k] = r;
+    });
+    var tc = "text-align:center;";
+    var multiArea = (function() { var a = {}; (todaySchedule || []).forEach(function(x) { a[x.area || "Service"] = 1; }); return Object.keys(a).length > 1; })();
+    var showArea = (areaFilter === "All" && multiArea);
+    var areaLabelT = function(area) { return scheduleT(area === "Service" ? "m_schedule_area_service" : area === "Kitchen" ? "m_schedule_area_kitchen" : "m_schedule_area_office") || area; };
+    if (!todaySchedule || todaySchedule.length === 0) {
+      box.innerHTML = "<div class='text-center text-muted py-3 small'>" + scheduleT("m_schedule_today_empty") + "</div>";
+      return;
+    }
+    var byPerson = {};
+    todaySchedule.forEach(function(r) {
+      var key = (r.store || "") + "|" + (r.name || "");
+      if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", pIn: r.pIn, pOut: r.pOut, pBS: r.pBS, pBE: r.pBE };
+    });
+    var minDec = 24, maxDec = 0;
+    Object.keys(byPerson).forEach(function(k) {
+      var p = byPerson[k];
+      var inD = parseTimeToDecimal(p.pIn), outD = parseTimeToDecimal(p.pOut), bsD = parseTimeToDecimal(p.pBS), beD = parseTimeToDecimal(p.pBE);
+      if (inD != null && inD < minDec) minDec = inD;
+      if (bsD != null && bsD < minDec) minDec = bsD;
+      if (outD != null && outD > maxDec) maxDec = outD;
+      if (beD != null && beD > maxDec) maxDec = beD;
+    });
+    var hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6;
+    var hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24;
+    if (hourEnd <= hourStart) { hourStart = 6; hourEnd = 24; }
+    var hours = [];
+    for (var h = hourStart; h < hourEnd; h++) hours.push(h);
+    var areaOrder = { Service: 0, Kitchen: 1, Office: 2 };
+    var personKeys = Object.keys(byPerson).sort(function(a, b) {
+      var pA = byPerson[a], pB = byPerson[b];
+      var oA = areaOrder[pA.area] !== undefined ? areaOrder[pA.area] : 3;
+      var oB = areaOrder[pB.area] !== undefined ? areaOrder[pB.area] : 3;
+      if (oA !== oB) return oA - oB;
+      var inA = parseTimeToDecimal(pA.pIn), inB = parseTimeToDecimal(pB.pIn);
+      return (inA || 0) - (inB || 0);
+    });
+    var nowrap = "white-space:nowrap;";
+    var areaColHeader = showArea ? "<th style='min-width:52px; padding:4px 6px;" + tc + ";" + nowrap + "'>" + scheduleT("m_schedule_label_area") + "</th>" : "";
+    var html = "<div style='overflow-x:auto; -webkit-overflow-scrolling:touch;'><table class='table table-bordered table-sm mb-0' style='font-size:12px; border-collapse:collapse;'>";
+    html += "<thead><tr style='background:#f5f5f5;'>" + areaColHeader + "<th style='min-width:80px; padding:4px 6px;" + tc + ";" + nowrap + "'>" + scheduleT("m_schedule_name") + "</th>";
+    hours.forEach(function(h) { html += "<th style='min-width:26px; padding:2px; font-size:11px;" + tc + "'>" + h + "</th>"; });
+    html += "</tr></thead><tbody>";
+    personKeys.forEach(function(key) {
+      var p = byPerson[key];
+      var att = attByKey[key];
+      var inDec = parseTimeToDecimal(p.pIn), outDec = parseTimeToDecimal(p.pOut), bsDec = parseTimeToDecimal(p.pBS), beDec = parseTimeToDecimal(p.pBE);
+      var hasProblem = !att ? true : (att.lateMin && att.lateMin > 0) || att.onlyIn === true || (att.status && (att.status.indexOf("지각") !== -1 || att.status.indexOf("결석") !== -1 || att.status.indexOf("미기록") !== -1));
+      var rowBg = hasProblem ? "#FFCDD2" : "#E3F2FD";
+      var areaCell = showArea ? "<td style='padding:4px 6px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + areaLabelT(p.area) + "</td>" : "";
+      html += "<tr>" + areaCell + "<td style='padding:4px 6px; font-weight:600; min-width:80px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + escapeHtml(p.name || "") + "</td>";
+      hours.forEach(function(h) {
+        var h0 = h, h05 = h + 0.5, h1 = h + 1;
+        var breakFirst = (bsDec != null && beDec != null && bsDec < h05 && beDec > h0);
+        var breakSecond = (bsDec != null && beDec != null && bsDec < h1 && beDec > h05);
+        var workFirst = (inDec != null && outDec != null && inDec < h05 && outDec > h0) && !breakFirst;
+        var workSecond = (inDec != null && outDec != null && inDec < h1 && outDec > h05) && !breakSecond;
+        var fullBreak = breakFirst && breakSecond;
+        var fullWork = workFirst && workSecond;
+        var mark = "";
+        if (fullBreak) mark = "<span style='display:inline-block; width:12px; height:12px; border-radius:50%; border:1px solid #555; background:transparent;'></span>";
+        else if (fullWork) mark = "<span style='color:#000;'>●</span>";
+        else if (breakFirst && workSecond) mark = "<span style='display:inline-block; width:12px; height:12px; position:relative;'><span style='position:absolute; left:0; top:0; width:6px; height:12px; border:1px solid #555; border-right:none; border-radius:50% 0 0 50%; background:transparent; box-sizing:border-box;'></span><span style='position:absolute; right:0; top:0; width:6px; height:12px; border-radius:0 50% 50% 0; background:#000;'></span></span>";
+        else if (workFirst && breakSecond) mark = "<span style='display:inline-block; width:12px; height:12px; position:relative;'><span style='position:absolute; left:0; top:0; width:6px; height:12px; border-radius:50% 0 0 50%; background:#000;'></span><span style='position:absolute; right:0; top:0; width:6px; height:12px; border:1px solid #555; border-left:none; border-radius:0 50% 50% 0; background:transparent; box-sizing:border-box;'></span></span>";
+        else if (workFirst && !workSecond) mark = "<span style='display:inline-block; width:12px; height:12px; position:relative;'><span style='position:absolute; left:0; top:0; width:6px; height:12px; border-radius:50% 0 0 50%; background:#000;'></span></span>";
+        else if (workSecond && !workFirst) mark = "<span style='display:inline-block; width:12px; height:12px; position:relative;'><span style='position:absolute; right:0; top:0; width:6px; height:12px; border-radius:0 50% 50% 0; background:#000;'></span></span>";
+        var inAny = fullBreak || fullWork || (breakFirst && workSecond) || (workFirst && breakSecond) || (workFirst && !workSecond) || (workSecond && !workFirst);
+        html += "<td style='padding:2px; min-width:26px;" + tc + ";background:" + (inAny ? rowBg : "transparent") + "'>" + mark + "</td>";
+      });
+      html += "</tr>";
+    });
+    html += "</tbody></table></div>";
+    box.innerHTML = html;
+  }
+
+  function renderMyAttendanceSummary(data) {
+    var box = document.getElementById("schedule-my-punch-box");
+    if (!box) return;
+    var tc = "text-align:center;";
+    var normalDays = Number(data.normalDays) || 0, otHours = Number(data.otHours) || 0, otDays = Number(data.otDays) || 0, lateMin = Number(data.lateMinutes) || 0, lateDays = Number(data.lateDays) || 0;
+    var html = "<table class='table table-sm table-bordered mb-0' style='font-size:12px;'>";
+    html += "<tr style='background:#f9f9f9;'><td style='padding:8px;" + tc + "'>" + scheduleT("m_schedule_normal_days") + "</td><td style='padding:8px;" + tc + "'><strong>" + normalDays + "</strong></td></tr>";
+    html += "<tr><td style='padding:8px;" + tc + "'>" + scheduleT("m_schedule_ot_hours") + " / " + scheduleT("m_schedule_ot_days") + "</td><td style='padding:8px;" + tc + "'><strong>" + otHours + " h / " + otDays + "</strong></td></tr>";
+    html += "<tr style='background:#f9f9f9;'><td style='padding:8px;" + tc + "'>" + scheduleT("m_schedule_late_min") + " / " + scheduleT("m_schedule_late_days") + "</td><td style='padding:8px;" + tc + "'><strong>" + lateMin + " min / " + lateDays + "</strong></td></tr>";
+    html += "</table>";
+    box.innerHTML = html;
+  }
+
+ </script>

@@ -1,0 +1,1039 @@
+<script>
+
+  /* =================================================================
+     운영 관리
+     ================================================================= */ 
+
+/* 업무일지 중요도 표시 텍스트 (다국어) */
+function wlPriorityLabel(lang, val) {
+  if (val === '긴급') return '⚡' + (lang && lang.wl_priority_urgent ? lang.wl_priority_urgent : '긴급');
+  if (val === '상') return (lang && lang.wl_priority_high) ? lang.wl_priority_high : '상';
+  if (val === '중') return (lang && lang.wl_priority_medium) ? lang.wl_priority_medium : '중';
+  if (val === '하') return (lang && lang.wl_priority_low) ? lang.wl_priority_low : '하';
+  return val || '-';
+}
+
+/* [최종 수정] 관리자 조회 (줄바꿈 표시 + 다국어 I18N 적용) */
+function renderManagerTable() {
+    var container = document.getElementById("mgr-review-list");
+    var filterDept = document.getElementById("filter-dept").value;
+    var filterName = document.getElementById("filter-name").value;
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+
+    // 1. 체크박스 값 읽기
+    var checkedStatuses = [];
+    document.querySelectorAll('.chk-filter-status:checked').forEach(function(chk) {
+        checkedStatuses.push(chk.value);
+    });
+
+    // 버튼 글자 업데이트 (다국어)
+    var btn = document.getElementById("statusDropdownBtn");
+    if(btn) {
+        if(checkedStatuses.length === 4) btn.innerText = lang.wl_filter_all || "전체 보기";
+        else if(checkedStatuses.length === 0) btn.innerText = lang.filter_none || "선택 안함";
+        else btn.innerText = checkedStatuses.length + (lang.filter_n_selected || "개 선택됨");
+    }
+
+    container.innerHTML = "";
+
+    if (!globalManagerData || globalManagerData.length === 0) {
+        container.innerHTML = "<div class='text-center py-5 text-muted'>❌ " + (lang.mgr_no_data || "조회된 데이터가 없습니다.") + "</div>";
+        return;
+    }
+
+    // 2. 필터링
+    var filteredData = globalManagerData.filter(item => {
+        var matchDept = (filterDept === "All") || (item.dept === filterDept);
+        var matchName = (filterName === "All") || (item.name === filterName);
+        var status = item.status === 'Start Today' ? 'Carry Over' : item.status;
+        var matchStatus = checkedStatuses.includes(status);
+        return matchDept && matchName && matchStatus;
+    });
+
+    if(filteredData.length === 0) {
+        container.innerHTML = "<div class='text-center py-5 text-muted'>" + (lang.mgr_no_match || "조건에 맞는 내역이 없습니다.") + "</div>";
+        return;
+    }
+
+    var L = {
+        date: lang.label_date || "날짜",
+        importance: lang.wl_importance || "중요도",
+        task: lang.wl_task_content || "업무 내용",
+        progress: lang.wl_progress || "진행률",
+        status: lang.wl_status || "상태",
+        approveFeedback: lang.wl_approve_feedback || "승인/피드백",
+        statusFinish: lang.status_finish || "완료",
+        statusCarry: lang.status_carry_over || "이월",
+        statusToday: lang.status_today || "진행중",
+        statusContinue: lang.status_continue || "대기",
+        approved: lang.mgr_approved || "승인됨",
+        reject: lang.mgr_reject || "반려",
+        approveBtn: lang.mgr_approve_btn || "승인"
+    };
+
+    // 3. 그룹화
+    var grouped = {};
+    filteredData.forEach(item => {
+        var deptKey = item.dept || "기타";
+        if(!grouped[deptKey]) grouped[deptKey] = {};
+        if(!grouped[deptKey][item.name]) grouped[deptKey][item.name] = [];
+        grouped[deptKey][item.name].push(item);
+    });
+
+    // 4. HTML 생성
+    for (var dept in grouped) {
+        var html = `<div class="mb-4 border rounded shadow-sm bg-white">
+            <div class="p-2 bg-light border-bottom text-primary fw-bold">🏢 ${dept}</div>
+            <div class="p-2">`;
+
+        for (var name in grouped[dept]) {
+            html += `<div class="mb-3">
+                <h6 class="fw-bold ms-2">👤 ${name}</h6>
+                <table class="table table-bordered table-sm align-middle text-center table-hover" style="font-size:0.9rem;">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th width="12%">📅 ${L.date}</th>
+                            <th width="10%">${L.importance}</th>
+                            <th width="38%">${L.task}</th>
+                            <th width="10%">${L.progress}</th>
+                            <th width="10%">${L.status}</th>
+                            <th width="20%">${L.approveFeedback}</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            var logs = grouped[dept][name].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+
+            logs.forEach(log => {
+                var statusBadge = "";
+                var displayStatus = log.status === 'Start Today' ? 'Carry Over' : log.status;
+
+                if(displayStatus === 'Finish') statusBadge = "<span class=\"badge bg-success\">" + L.statusFinish + "</span>";
+                else if(displayStatus === 'Carry Over') statusBadge = "<span class=\"badge bg-warning text-dark\">" + L.statusCarry + "</span>";
+                else if(displayStatus === 'Today') statusBadge = "<span class=\"badge bg-primary\">" + L.statusToday + "</span>";
+                else statusBadge = "<span class=\"badge bg-secondary\">" + L.statusContinue + "</span>";
+
+                var priBadge = "bg-secondary"; 
+                if(log.priority === '긴급') priBadge = "bg-warning text-dark";
+                else if(log.priority === '상') priBadge = "bg-danger";
+                else if(log.priority === '중') priBadge = "bg-primary";
+
+                var priText = wlPriorityLabel(lang, log.priority);
+
+                var checkBtn = "";
+                if(log.managerCheck === '승인') {
+                    checkBtn = "<span class=\"text-success fw-bold\"><i class=\"bi bi-check-circle-fill\"></i> " + L.approved + "</span>";
+                } else if(log.managerCheck === '반려') {
+                    checkBtn = "<span class=\"text-danger fw-bold\">🚫 " + L.reject + "</span>";
+                } else {
+                    checkBtn = "<button class=\"btn btn-xs btn-outline-success me-1\" onclick=\"mgrAction('" + log.id + "', 'approve')\">" + L.approveBtn + "</button><button class=\"btn btn-xs btn-outline-danger\" onclick=\"mgrAction('" + log.id + "', 'reject')\">" + L.reject + "</button>";
+                }
+                
+                var commentHtml = log.managerComment ? "<div class=\"text-danger small text-start mt-1\">💬 " + log.managerComment + "</div>" : "";
+
+                html += "<tr><td>" + log.date + "</td><td><span class=\"badge " + priBadge + "\">" + (priText || '-') + "</span></td><td class=\"text-start\" style=\"white-space: pre-wrap;\">" + log.content + " " + commentHtml + "</td><td><div class=\"progress\" style=\"height: 15px;\"><div class=\"progress-bar " + (log.progress==100?'bg-success':(displayStatus==='Carry Over'?'bg-warning':'bg-primary')) + "\" role=\"progressbar\" style=\"width: " + log.progress + "%\">" + log.progress + "%</div></div></td><td>" + statusBadge + "</td><td>" + checkBtn + "</td></tr>";
+            });
+
+            html += `</tbody></table></div>`;
+        }
+        html += `</div></div>`;
+        container.innerHTML += html;
+    }
+}
+
+/* 승인/반려 액션 */
+function mgrAction(id, action) {
+    var comment = "";
+    if(action === 'reject') {
+        comment = prompt("반려 사유(피드백)를 입력하세요:");
+        if(comment === null) return;
+    }
+    
+    var status = (action === 'approve') ? "승인" : "반려";
+
+    google.script.run.withSuccessHandler(function(){
+        // 데이터 갱신 (화면만)
+        var target = globalManagerData.find(x => x.id === id);
+        if(target) {
+            target.managerCheck = status;
+            if(comment) target.managerComment = comment;
+        }
+        renderManagerTable();
+    }).updateManagerCheck(id, status, comment);
+}
+/* 4. 필터 초기화 */
+function resetFilters() {
+    document.getElementById("filter-dept").value = "All";
+    document.getElementById("filter-name").value = "All";
+    document.getElementById("filter-status").value = "All";
+    renderManagerTable();
+}
+
+/* 5. 승인/반려 액션 (서버 통신 후 새로고침 대신 해당 줄만 업데이트도 가능하지만, 간단히 재조회) */
+function mgrAction(id, action) {
+    var comment = "";
+    if(action === 'reject') {
+        comment = prompt("반려 사유(피드백)를 입력하세요:");
+        if(comment === null) return; // 취소
+    }
+    
+    var status = (action === 'approve') ? "승인" : "반려";
+
+    google.script.run.withSuccessHandler(function(){
+        // 데이터 갱신을 위해 재조회 (또는 globalManagerData만 수정해서 다시 그리기)
+        // 여기서는 UX를 위해 globalArray를 수정하고 다시 그립니다.
+        var target = globalManagerData.find(x => x.id === id);
+        if(target) {
+            target.managerCheck = status;
+            if(comment) target.managerComment = comment;
+        }
+        renderManagerTable(); // 화면만 갱신 (빠름)
+        
+    }).updateManagerCheck(id, status, comment);
+}
+
+/* [수정] 중요도 색상 변경 (번개/빨강/파랑/회색) */
+function updatePriorityColor(el) {
+    var val = el.value;
+    
+    // 기존 색상 클래스 초기화
+    el.classList.remove('bg-danger', 'bg-warning', 'bg-primary', 'bg-secondary', 'text-white', 'text-dark');
+    
+    if(val === '긴급') {
+        // 번개 (노랑)
+        el.classList.add('bg-warning', 'text-dark'); 
+    } else if(val === '상') {
+        // 빨강
+        el.classList.add('bg-danger', 'text-white');
+    } else if(val === '중') {
+        // 파랑
+        el.classList.add('bg-primary', 'text-white');
+    } else {
+        // 회색
+        el.classList.add('bg-secondary', 'text-white');
+    }
+}
+
+/* =========================================
+   [관리자용] 스마트 조회 및 필터링
+   ========================================= */
+
+var globalManagerData = []; // 조회된 데이터를 저장해둘 변수
+
+function loadManagerReview() {
+    var start = document.getElementById("mgr-date-start").value;
+    var end = document.getElementById("mgr-date-end").value;
+
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    if(!start || !end) return alert(lang.mgr_prompt_date || "시작일과 종료일을 모두 선택해주세요.");
+    if(start > end) return alert(lang.mgr_prompt_order || "종료일이 시작일보다 빠를 수 없습니다.");
+
+    var container = document.getElementById("mgr-review-list");
+    container.innerHTML = "<div class='text-center py-5'>⏳ " + (lang.mgr_loading || "데이터를 불러오는 중입니다...") + "</div>";
+
+    google.script.run.withSuccessHandler(function(data){
+        var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+        var texts = [];
+        if (data && data.length) data.forEach(function(item){ texts.push(item.content || ""); texts.push(item.managerComment || ""); });
+        if (targetLang === "ko" || texts.length === 0) {
+            globalManagerData = data || [];
+            renderManagerTable();
+            return;
+        }
+        google.script.run.withSuccessHandler(function(translated){
+            var ti = 0;
+            globalManagerData = (data || []).map(function(item){
+                return { id: item.id, date: item.date, dept: item.dept, name: item.name, content: translated[ti++] || item.content, managerComment: translated[ti++] || item.managerComment, progress: item.progress, priority: item.priority, status: item.status, managerCheck: item.managerCheck };
+            });
+            renderManagerTable();
+        }).translateBatch(texts, targetLang);
+    }).getManagerRangeReport(start, end);
+}
+
+/* 2. 필터 드롭다운 채우기 (데이터에 있는 사람만) */
+function populateFilters(data) {
+    var deptSet = new Set();
+    var nameSet = new Set();
+
+    data.forEach(item => {
+        if(item.dept) deptSet.add(item.dept);
+        if(item.name) nameSet.add(item.name);
+    });
+
+    var deptSel = document.getElementById("filter-dept");
+    var nameSel = document.getElementById("filter-name");
+    
+    // 기존 옵션(전체) 남기고 초기화
+    deptSel.length = 1; 
+    nameSel.length = 1;
+
+    deptSet.forEach(d => deptSel.add(new Option(d, d)));
+    nameSet.forEach(n => nameSel.add(new Option(n, n)));
+}
+
+
+/* =========================================
+   [업무일지] 통합 스크립트
+   ========================================= */
+
+/* [수정] 탭 전환 시 필터 미리 로딩 */
+function showWorkLogTab(tabName) {
+    document.getElementById("wl-view-personal").style.display = "none";
+    document.getElementById("wl-view-manager").style.display = "none";
+    document.getElementById("wl-view-report").style.display = "none";
+    
+    document.getElementById("wl-view-" + tabName).style.display = "block";
+    
+    document.querySelectorAll(".nav-link").forEach(el => el.classList.remove("active"));
+    document.getElementById("tab-wl-" + tabName).classList.add("active");
+
+    if(tabName === 'personal') initWorkLog();
+    
+    // ★ 관리자 탭을 누르면 -> 조회기간 오늘로 세팅 + 필터 로딩
+    if(tabName === 'manager') {
+        var today = new Date().toISOString().substring(0, 10);
+        var startEl = document.getElementById("mgr-date-start");
+        var endEl = document.getElementById("mgr-date-end");
+        if (startEl) startEl.value = today;
+        if (endEl) endEl.value = today;
+        initManagerFilters(); // 필터 로딩 함수 호출
+    }
+}
+
+function initManagerFilters() {
+    // 이미 채워져 있으면 다시 로딩 안 함 (깜빡임 방지)
+    if(document.getElementById("filter-name").options.length > 1) return;
+
+    google.script.run.withSuccessHandler(function(res){
+        var deptSel = document.getElementById("filter-dept");
+        var nameSel = document.getElementById("filter-name");
+
+        // 기존 옵션 초기화 (전체는 남김)
+        deptSel.length = 1; 
+        nameSel.length = 1;
+
+        // 부서 채우기
+        res.depts.forEach(d => {
+            deptSel.add(new Option(d, d));
+        });
+
+        // 직원 채우기
+        res.staff.forEach(n => {
+            nameSel.add(new Option(n, n));
+        });
+
+    }).getAllFilterOptions();
+}
+
+/* [수정] 초기화 함수 (닉네임/부서 표시 최적화) - 로그인 계정 이름 사용 (u-info는 번역 시 '사용자'로 덮어씌워짐) */
+function initWorkLog() {
+    var dateEl = document.getElementById("wl-date");
+    if(!dateEl.value) dateEl.valueAsDate = new Date();
+    
+    var myName = (typeof userName !== "undefined" && userName) ? userName : "";
+    if (!myName && typeof sessionStorage !== "undefined") myName = sessionStorage.getItem("cm_name") || "";
+
+    google.script.run.withSuccessHandler(function(res){
+        var select = document.getElementById("wl-staff");
+        select.innerHTML = ""; 
+        
+        var foundMe = false;
+
+        // 1. 목록 채우기
+        if(res.list && res.list.length > 0) {
+            res.list.forEach(function(p){
+                var opt = document.createElement("option");
+                opt.value = p.name; // 저장될 값 (닉네임)
+                
+                // 화면에 보여질 텍스트: [Marketing] Mill
+                opt.text = `[${p.dept}] ${p.name}`; 
+                
+                select.appendChild(opt);
+
+                // 내 이름(닉네임) 자동 선택 로직
+                // (공백 제거 후 비교)
+                var n1 = p.name.toLowerCase().replace(/\s/g, "");
+                var n2 = myName.toLowerCase().replace(/\s/g, "");
+                
+                // 이름이 포함되어 있으면 선택
+                if(n1.includes(n2) || n2.includes(n1)) {
+                    select.value = p.name;
+                    foundMe = true;
+                }
+            });
+        } else {
+            select.add(new Option("❌ 데이터 없음", ""));
+        }
+
+        // 2. 내 이름이 목록에 없으면 강제 추가
+        if (!foundMe) {
+            var opt = document.createElement("option");
+            opt.value = myName;
+            opt.text = `👤 ${myName}`;
+            select.add(opt, 0);
+            select.value = myName;
+        }
+
+        // 3. 권한 잠금 처리
+        if (res.isAdmin) {
+            select.disabled = false;
+            select.classList.remove("bg-light");
+        } else {
+            select.disabled = true;
+            select.classList.add("bg-light");
+        }
+        
+        loadWorkLog();
+
+    }).getOfficeStaffList(myName); 
+}
+
+
+/* [수정] 내 업무일지 (Finish 목록 색상 적용 + 사용자 입력 글 자동 번역) */
+function loadWorkLog() {
+    var date = document.getElementById("wl-date").value;
+    var name = document.getElementById("wl-staff").value;
+    if(!name) return;
+
+    document.getElementById("wl-body-finish").innerHTML = "";
+    document.getElementById("wl-body-continue").innerHTML = "";
+    document.getElementById("wl-body-today").innerHTML = "";
+
+    google.script.run.withSuccessHandler(function(data){
+        var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+        var texts = [];
+        data.finish.forEach(function(item){ texts.push(item.content || ""); texts.push(item.managerComment || ""); });
+        data.continueItems.forEach(function(item){ texts.push(item.content || ""); texts.push(item.managerComment || ""); });
+        data.todayItems.forEach(function(item){ texts.push(item.content || ""); texts.push(item.managerComment || ""); });
+
+        if (targetLang === "ko" || texts.length === 0) {
+            renderWorkLogData(data, null);
+            return;
+        }
+        google.script.run.withSuccessHandler(function(translated){
+            renderWorkLogData(data, translated);
+        }).translateBatch(texts, targetLang);
+    }).getWorkLogData(date, name);
+}
+
+function renderWorkLogData(data, translated) {
+    var ti = 0;
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    function next(){ return translated ? (translated[ti++] || "") : null; }
+    function content(item){ var t = next(); return t !== null ? t : (item.content || ""); }
+    function comment(item){ var t = next(); return t !== null ? t : (item.managerComment || ""); }
+
+    document.getElementById("wl-body-finish").innerHTML = "";
+    document.getElementById("wl-body-continue").innerHTML = "";
+    document.getElementById("wl-body-today").innerHTML = "";
+
+    if(data.finish.length === 0) {
+        document.getElementById("wl-body-finish").innerHTML = "<tr><td colspan='5' class='text-muted'>완료된 업무가 없습니다.</td></tr>";
+    } else {
+        data.finish.forEach(function(item, idx) {
+            var c = content(item), cmt = comment(item);
+            var statusBadge = `<span class="badge bg-secondary">대기</span>`;
+            if(item.managerCheck === '승인') statusBadge = `<span class="badge bg-success">승인</span>`;
+            if(item.managerCheck === '반려') statusBadge = `<span class="badge bg-danger">반려</span>`;
+            var commentHtml = cmt ? `<div class="small text-danger">└ 💬 ${cmt}</div>` : "";
+            var priBadge = "bg-secondary";
+            if(item.priority === '긴급') priBadge = "bg-warning text-dark";
+            else if(item.priority === '상') priBadge = "bg-danger";
+            else if(item.priority === '중') priBadge = "bg-primary";
+            var priText = wlPriorityLabel(lang, item.priority);
+            var row = `<tr><td>${idx+1}</td><td class="text-start">${c} ${commentHtml}</td><td><span class="badge ${priBadge}">${priText || '-'}</span></td><td><span class="badge bg-success">100%</span></td><td>${statusBadge}</td></tr>`;
+            document.getElementById("wl-body-finish").innerHTML += row;
+        });
+    }
+
+    if(data.continueItems.length === 0) {
+        document.getElementById("wl-body-continue").innerHTML = "<div class='text-muted small text-center py-3'>대기 중인 업무가 없습니다.</div>";
+    } else {
+        data.continueItems.forEach(function(item){
+            var c = content(item), cmt = comment(item);
+            addWorkRow('continue', { id: item.id, content: c, progress: item.progress, priority: item.priority, managerComment: cmt || undefined });
+        });
+    }
+
+    if(data.todayItems.length === 0) {
+        document.getElementById("wl-body-today").innerHTML = "<div class='text-muted small text-center py-5'>위 'Continue Work'에서 업무를 선택하여 내려받으세요.</div>";
+    } else {
+        data.todayItems.forEach(function(item){
+            var c = content(item), cmt = comment(item);
+            addWorkRow('today', { id: item.id, content: c, progress: item.progress, priority: item.priority, managerComment: cmt || undefined });
+        });
+    }
+}
+
+/* [수정] 업무 입력 줄 생성 (번개/빨강/파랑/회색 적용) */
+function addWorkRow(type, item) {
+    var container = document.getElementById("wl-body-" + type);
+    var contentVal = item ? item.content : "";
+    var progressVal = item ? item.progress : 0;
+    var priorityVal = item ? item.priority : "중";
+    var idVal = item ? item.id : "";
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    var Lurgent = '⚡' + (lang.wl_priority_urgent || '긴급');
+    var Lhigh = lang.wl_priority_high || '상';
+    var Lmedium = lang.wl_priority_medium || '중';
+    var Llow = lang.wl_priority_low || '하';
+
+    // 초기 색상 설정 (기본: 파랑)
+    var colorClass = "bg-primary text-white"; 
+    var selectTextClass = "bg-white text-primary"; // 옵션 내부 색상
+
+    if(priorityVal === '긴급') {
+        colorClass = "bg-warning text-dark"; // 번개(노랑)
+    } else if(priorityVal === '상') {
+        colorClass = "bg-danger text-white"; // 빨강
+    } else if(priorityVal === '하') {
+        colorClass = "bg-secondary text-white"; // 회색
+    }
+
+    var checkboxHtml = "";
+    if (type === 'continue') {
+        checkboxHtml = `
+            <div class="input-group-text bg-white border-0 ps-1 pe-2" style="align-self: flex-start; margin-top: 5px;">
+                <input class="form-check-input mt-0 chk-move" type="checkbox" value="" style="transform: scale(1.2);">
+            </div>`;
+    }
+
+    var div = document.createElement("div");
+    div.className = "card p-2 mb-2 work-row border-light shadow-sm";
+    div.setAttribute("data-type", type);
+    div.setAttribute("data-id", idVal);
+
+    div.innerHTML = `
+        <div class="d-flex align-items-start">
+            ${checkboxHtml}
+            <div class="input-group input-group-sm flex-grow-1">
+                <select class="form-select work-priority fw-bold ${colorClass}" 
+                        style="max-width: 80px; height: 38px; border:none;" 
+                        onchange="updatePriorityColor(this)">
+                    <option value="긴급" class="bg-white text-dark" ${priorityVal==='긴급'?'selected':''}>${Lurgent}</option>
+                    <option value="상" class="bg-white text-danger" ${priorityVal==='상'?'selected':''}>${Lhigh}</option>
+                    <option value="중" class="bg-white text-primary" ${priorityVal==='중'?'selected':''}>${Lmedium}</option>
+                    <option value="하" class="bg-white text-secondary" ${priorityVal==='하'?'selected':''}>${Llow}</option>
+                </select>
+                
+                <textarea class="form-control work-content" 
+                          placeholder="업무 내용 (Enter로 줄바꿈)" 
+                          rows="1" 
+                          style="resize:none; overflow:hidden; min-height: 38px; height:auto;" 
+                          oninput="this.style.height='auto'; this.style.height=(this.scrollHeight)+'px'">${contentVal}</textarea>
+                
+                <input type="number" class="form-control text-center work-progress" style="max-width: 70px; height: 38px;" value="${progressVal}" placeholder="%">
+                <span class="input-group-text" style="height: 38px;">%</span>
+
+                <button class="btn btn-outline-danger" style="height: 38px;" onclick="deleteWorkRow(this)">🗑</button>
+            </div>
+        </div>
+        ${item && item.managerComment ? `<div class="alert alert-warning py-1 px-2 mt-1 mb-0 small">📢 ${item.managerComment}</div>` : ""}
+    `;
+    container.appendChild(div);
+
+    var textarea = div.querySelector('textarea');
+    if(contentVal) {
+        textarea.style.height = 'auto';
+        textarea.style.height = (textarea.scrollHeight) + 'px';
+    }
+}
+
+function deleteWorkRow(btn) {
+    if(confirm("삭제하시겠습니까?")) btn.closest('.work-row').remove();
+}
+
+/* [2] 체크한 업무를 Today로 이동 */
+function moveCheckedToToday() {
+    var checkedBoxes = document.querySelectorAll('#wl-body-continue .chk-move:checked');
+    if (checkedBoxes.length === 0) return alert("업무를 선택해주세요.");
+
+    var todayContainer = document.getElementById("wl-body-today");
+    
+    checkedBoxes.forEach(function(box) {
+        var row = box.closest('.work-row');
+        row.setAttribute("data-type", "today"); // 타입 변경
+        
+        // 체크박스 제거
+        var chkDiv = box.closest('.input-group-text');
+        if(chkDiv) chkDiv.remove();
+
+        // 테두리 파란색으로 변경 (Start Today 효과)
+        row.classList.remove("border-warning", "border-light");
+        row.classList.add("border-primary");
+        
+        todayContainer.appendChild(row);
+    });
+}
+
+/* [신규] 업무 끝내기 (퇴근) 버튼 클릭 시 실행되는 함수 */
+function finishDailyWork() {
+    // 1. 오늘 업무(Today Work) 목록에 있는 것들만 가져옴
+    var todayRows = document.querySelectorAll('#wl-body-today .work-row');
+    
+    if (todayRows.length === 0) {
+        return alert("오늘 진행 중인 업무가 없습니다.\n(Continue에서 먼저 업무를 가져오세요)");
+    }
+
+    // 2. 사용자 확인 (중요)
+    if (!confirm("오늘 업무를 마감하시겠습니까?\n\n✅ 100% 달성 → Finish로 이동\n🚧 100% 미만 → 기록 후 '내일'로 이월")) {
+        return;
+    }
+
+    // 3. 데이터 수집
+    var date = document.getElementById("wl-date").value;
+    var name = document.getElementById("wl-staff").value;
+    var logs = [];
+
+    todayRows.forEach(row => {
+        var content = row.querySelector(".work-content").value;
+        var progress = row.querySelector(".work-progress").value;
+        var priority = row.querySelector(".work-priority").value;
+        var id = row.getAttribute("data-id");
+
+        if (content.trim() !== "") {
+            logs.push({
+                id: id,
+                content: content,
+                progress: progress,
+                priority: priority
+            });
+        }
+    });
+
+    // 4. 로딩바 켜기
+    var loadingEl = document.getElementById('loading');
+    if(loadingEl) loadingEl.style.display = 'flex';
+
+    // 5. 서버로 전송 (submitDailyClose 함수 호출)
+    google.script.run.withSuccessHandler(function(res) {
+        // 로딩바 끄기
+        if(loadingEl) loadingEl.style.display = 'none';
+        
+        // 결과 메시지 출력
+        alert(res);
+        
+        // ★ 화면 새로고침 (중요: 그래야 Finish로 간 게 보임)
+        loadWorkLog(); 
+        
+    }).withFailureHandler(function(err) {
+        if(loadingEl) loadingEl.style.display = 'none';
+        alert("오류 발생: " + err.message);
+    }).submitDailyClose(date, name, JSON.stringify(logs));
+}
+
+/* [직원용] 저장하기 */
+function saveWorkLog() {
+    var date = document.getElementById("wl-date").value;
+    var name = document.getElementById("wl-staff").value;
+    var logs = [];
+
+    document.querySelectorAll(".work-row").forEach(row => {
+        var content = row.querySelector(".work-content").value;
+        var progress = row.querySelector(".work-progress").value;
+        var priority = row.querySelector(".work-priority").value;
+        var type = row.getAttribute("data-type");
+        var id = row.getAttribute("data-id");
+
+        if(content.trim() !== "") {
+            logs.push({
+                id: id,
+                type: type,
+                content: content,
+                progress: progress,
+                priority: priority
+            });
+        }
+    });
+
+    if(logs.length === 0) return alert("저장할 내용이 없습니다.");
+
+    google.script.run.withSuccessHandler(function(res){
+        alert("✅ 저장되었습니다.");
+        loadWorkLog();
+    }).saveWorkLogData(date, name, JSON.stringify(logs));
+}
+
+/* ================= [추가] 공지사항 기능 ================= */
+    
+    // 1. 공지 발송
+    // [신규] 전체 선택/해제 헬퍼 함수
+    function toggleAll(type, checked) {
+       var className = type === 'store' ? 'store-chk' : 'role-chk';
+       document.querySelectorAll('.' + className).forEach(el => el.checked = checked);
+    }
+
+    // [수정] 공지 발송 (다중 선택 처리 + 첨부파일)
+    function sendNotice() {
+      var t = document.getElementById("noticeTitle").value;
+      var c = document.getElementById("noticeContent").value;
+
+      var stores = [];
+      if(document.getElementById("chk-store-all").checked) stores.push("전체");
+      else document.querySelectorAll('.store-chk:checked').forEach(el => stores.push(el.value));
+
+      var roles = [];
+      if(document.getElementById("chk-role-all").checked) roles.push("전체");
+      else document.querySelectorAll('.role-chk:checked').forEach(el => roles.push(el.value));
+
+      if(!t || !c) return alert("제목과 내용을 입력해주세요.");
+      if(stores.length === 0) return alert("매장을 선택해주세요.");
+      if(roles.length === 0) return alert("직급을 선택해주세요.");
+
+      var storeStr = stores.join(",");
+      var roleStr = roles.join(",");
+      if(!confirm(`[매장: ${storeStr}]\n[직급: ${roleStr}]\n\n발송하시겠습니까?`)) return;
+
+      var myRole = (typeof userRole !== 'undefined' && userRole) ? userRole : (typeof currentRole !== 'undefined' ? currentRole : 'officer');
+      var myName = (typeof userName !== 'undefined' && userName) ? userName : (typeof currentUser !== 'undefined' ? currentUser : '관리자');
+      var data = { title:t, content:c, targetStore:storeStr, targetRole:roleStr, sender:myName };
+
+      var container = document.getElementById("notice-attachments-container");
+      var inputs = container ? container.querySelectorAll("input.notice-file-input") : [];
+      var files = [];
+      for (var i = 0; i < inputs.length; i++) {
+        var fl = inputs[i].files;
+        if (fl && fl.length) for (var j = 0; j < fl.length; j++) files.push(fl[j]);
+      }
+      if (files.length === 0) {
+        doSendNotice(data, myRole);
+        return;
+      }
+      var maxSize = 5 * 1024 * 1024; // 5MB per file
+      var readers = [];
+      for (var i = 0; i < Math.min(files.length, 10); i++) {
+        if (files[i].size > maxSize) { var msg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_attach_over_5mb) ? I18N[currentLang].notice_attach_over_5mb : "5MB를 초과합니다"; alert(files[i].name + " " + msg); return; }
+        readers.push(readFileAsBase64(files[i]));
+      }
+      Promise.all(readers).then(function(arr) {
+        data.attachments = arr.filter(function(x){ return x; });
+        doSendNotice(data, myRole);
+      }).catch(function() { var msg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_attach_read_fail) ? I18N[currentLang].notice_attach_read_fail : "첨부파일 읽기 실패"; alert(msg); });
+    }
+
+    function addNoticeAttachmentInput() {
+      var container = document.getElementById("notice-attachments-container");
+      if (!container) return;
+      var count = container.querySelectorAll("input.notice-file-input").length;
+      var maxMsg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_attach_max_10) ? I18N[currentLang].notice_attach_max_10 : "첨부파일은 최대 10개까지 추가할 수 있습니다.";
+      if (count >= 10) { alert(maxMsg); return; }
+      var removeText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_attach_remove) ? I18N[currentLang].notice_attach_remove : "✕ 제거";
+      var wrap = document.createElement("div");
+      wrap.className = "d-flex align-items-center gap-2 mb-2";
+      wrap.innerHTML = "<input type=\"file\" class=\"form-control form-control-sm notice-file-input\" accept=\"image/*,.pdf,.doc,.docx,.xls,.xlsx\" style=\"max-width:280px;\"><button type=\"button\" class=\"btn btn-outline-danger btn-sm\" onclick=\"this.parentElement.remove()\">" + removeText + "</button>";
+      container.appendChild(wrap);
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise(function(resolve) {
+        var r = new FileReader();
+        r.onload = function() {
+          var b64 = (r.result || "").split(",")[1] || "";
+          resolve({ base64: b64, fileName: file.name, mimeType: file.type || "application/octet-stream" });
+        };
+        r.onerror = function() { resolve(null); };
+        r.readAsDataURL(file);
+      });
+    }
+
+    function doSendNotice(data, myRole) {
+      google.script.run.withSuccessHandler(function(res) {
+        alert(res);
+        if(res.indexOf("✅") !== -1) {
+          document.getElementById("noticeTitle").value = "";
+          document.getElementById("noticeContent").value = "";
+          var container = document.getElementById("notice-attachments-container");
+          if (container) {
+            container.querySelectorAll("input.notice-file-input").forEach(function(inp){ inp.value = ""; });
+            while (container.children.length > 1) container.lastElementChild.remove();
+          }
+          document.querySelectorAll('input[type=checkbox]').forEach(function(el){ el.checked = false; });
+          loadNoticeHistory();
+        }
+      }).adminSaveNotice(data, myRole);
+    }
+    // 2. 내역 조회
+    // [수정] 내역 조회 (슬림 디자인 + 삭제 버튼 + 선택 언어 자동 번역)
+    function appendNoticeHistoryItem(box, n, titleText, contentText) {
+      var div = document.createElement("div");
+      div.className = "notice-item border-bottom";
+      div.style.cssText = "padding: 10px; background:white; transition: 0.2s;";
+      div.onmouseover = function() { this.style.backgroundColor = "#f8f9fa"; };
+      div.onmouseout = function() { this.style.backgroundColor = "white"; };
+      var esc = function(s){ if(!s) return ""; return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); };
+      div.innerHTML = "<div class=\"d-flex justify-content-between align-items-center\"><div style=\"flex: 1; min-width: 0; margin-right: 10px;\"><div class=\"d-flex align-items-center mb-1\"><span class=\"fw-bold text-dark text-truncate me-2\" style=\"font-size:13px;\">" + esc(titleText) + "</span><span class=\"text-secondary small\" style=\"font-size:11px;\">" + esc(n.date) + "</span></div><div class=\"text-truncate\" style=\"font-size:12px; color:#555;\"><span class=\"badge bg-light text-dark border me-1\" style=\"font-size:10px;\">To: " + esc(n.targetStore) + "</span> " + esc(contentText) + "</div></div><div class=\"d-flex gap-1 flex-shrink-0\"><button class=\"btn btn-outline-danger\" style=\"padding: 2px 8px; font-size: 11px;\" onclick=\"deleteNotice('" + String(n.id).replace(/'/g, "\\'") + "')\">삭제</button><button class=\"btn btn-outline-dark\" style=\"padding: 2px 8px; font-size: 11px;\" onclick=\"showReadStats('" + String(n.id).replace(/'/g, "\\'") + "')\">수신확인</button></div></div>";
+      box.appendChild(div);
+    }
+    function loadNoticeHistory() {
+      var s = document.getElementById("notice-start").value;
+      var e = document.getElementById("notice-end").value;
+      
+      if(!s) { 
+         var today = new Date().toISOString().substring(0,10);
+         s = today; e = today;
+         document.getElementById("notice-start").value = today;
+         document.getElementById("notice-end").value = today;
+      }
+
+      var box = document.getElementById("noticeHistoryBox");
+      box.innerHTML = "<div class='text-center mt-5 text-muted small'>로딩 중...</div>";
+      
+      google.script.run.withSuccessHandler(function(list) {
+        box.innerHTML = "";
+        if (list.length === 0) { box.innerHTML = "<div class='text-center mt-5 text-muted small'>조회된 내역이 없습니다.</div>"; return; }
+        var texts = [];
+        list.forEach(function(n){ texts.push(n.title || ""); texts.push(n.content || ""); });
+        var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+        if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+          list.forEach(function(n){ appendNoticeHistoryItem(box, n, n.title || "", n.content || ""); });
+          return;
+        }
+        google.script.run.withSuccessHandler(function(translated) {
+          var ti = 0;
+          list.forEach(function(n) {
+            var titleText = (translated && translated[ti] !== undefined) ? translated[ti] : (n.title || "");
+            ti++;
+            var contentText = (translated && translated[ti] !== undefined) ? translated[ti] : (n.content || "");
+            ti++;
+            appendNoticeHistoryItem(box, n, titleText, contentText);
+          });
+        }).translateBatch(texts, targetLang);
+      }).getNoticeHistoryAdmin(s, e);
+    }
+    
+    // [추가] 내가 받은 공지 로드 (지나간 공지 포함, 날짜 필터)
+    var myReceivedNotices = [];
+    function loadNoticeReceived() {
+      var box = document.getElementById("noticeReceivedBox");
+      if (!box) return;
+      var store = typeof userStore !== "undefined" ? userStore : "";
+      var role = typeof userRole !== "undefined" ? userRole : "";
+      var name = typeof userName !== "undefined" ? userName : "";
+      if (!store || !name) { box.innerHTML = "<div class='p-4 text-center text-muted small'>로그인 정보가 없습니다.</div>"; return; }
+
+      var s = document.getElementById("notice-received-start") && document.getElementById("notice-received-start").value;
+      var e = document.getElementById("notice-received-end") && document.getElementById("notice-received-end").value;
+      box.innerHTML = "<div class='p-4 text-center text-muted small'>로딩 중...</div>";
+
+      google.script.run.withSuccessHandler(function(list) {
+        myReceivedNotices = list || [];
+        var unread = myReceivedNotices.filter(function(n){ return n.status === "New" || n.status === "new"; });
+        var read = myReceivedNotices.filter(function(n){ return n.status !== "New" && n.status !== "new"; });
+        var readInRange = read.filter(function(n){ return (!s || n.date >= s) && (!e || n.date <= e); });
+        var filtered = unread.concat(readInRange);
+        filtered.sort(function(a, b){ if ((a.status === "New" || a.status === "new") && (b.status !== "New" && b.status !== "new")) return -1; if ((a.status !== "New" && a.status !== "new") && (b.status === "New" || b.status === "new")) return 1; return (b.date || "").localeCompare(a.date || ""); });
+        box.innerHTML = "";
+        if (filtered.length === 0) { box.innerHTML = "<div class='p-4 text-center text-muted small'>조회된 공지가 없습니다.</div>"; return; }
+        var texts = filtered.map(function(n){ return n.title || ""; });
+        var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+        if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+          filtered.forEach(function(n){ appendNoticeReceivedItem(box, n, n.title || ""); });
+          return;
+        }
+        google.script.run.withSuccessHandler(function(translated) {
+          filtered.forEach(function(n, i){ appendNoticeReceivedItem(box, n, (translated && translated[i] !== undefined) ? translated[i] : (n.title || "")); });
+        }).translateBatch(texts, targetLang);
+      }).getMyNotices(store, role, name);
+    }
+
+    function appendNoticeReceivedItem(box, n, titleText) {
+      var div = document.createElement("div");
+      div.className = "border-bottom p-3";
+      div.style.cssText = "cursor:pointer; background:white; transition:0.2s;";
+      div.onmouseover = function() { this.style.backgroundColor = "#f8f9fa"; };
+      div.onmouseout = function() { this.style.backgroundColor = "white"; };
+      var badge = n.status === "New" ? "<span class='badge bg-danger me-1'>NEW</span>" : "";
+      div.innerHTML = "<div class='d-flex justify-content-between'><span class='fw-bold'>" + badge + (titleText || "") + "</span><span class='text-muted small'>" + n.date + "</span></div><div class='small text-secondary mt-1'>From: " + (n.sender || "") + "</div>";
+      div.onclick = function() { openNoticeReceivedModal(n); };
+      box.appendChild(div);
+    }
+
+    function openNoticeReceivedModal(n) {
+      var modal = document.getElementById("noticeReceivedModal");
+      if (!modal) return;
+      // 이전 모달 백드롭이 남아 있으면 제거 (화면 멈춤 방지)
+      document.querySelectorAll(".modal-backdrop").forEach(function(el) { el.remove(); });
+      document.body.classList.remove("modal-open");
+      document.body.style.overflow = "";
+      document.body.style.paddingRight = "";
+
+      document.getElementById("noticeReceivedModalMeta").innerText = n.date + " · From: " + (n.sender || "");
+      var attachEl = document.getElementById("noticeReceivedModalAttachments");
+      if (attachEl) {
+        attachEl.innerHTML = "";
+        if (n.attachments && n.attachments.length > 0) {
+          var wrap = document.createElement("div");
+          wrap.className = "border-top pt-2 mt-2";
+          var attachLabel = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_attach) ? I18N[currentLang].notice_attach : "📎 첨부파일";
+          wrap.innerHTML = "<strong class=\"d-block mb-2\">" + attachLabel + "</strong>";
+          var list = document.createElement("div");
+          list.className = "d-flex flex-wrap gap-2";
+          n.attachments.forEach(function(a) {
+            if (a.error) return;
+            var isImg = (a.mime || "").indexOf("image/") === 0;
+            if (isImg) {
+              var img = document.createElement("img");
+              img.src = a.url || ("https://drive.google.com/uc?export=view&id=" + (a.id || ""));
+              img.alt = a.name || "";
+              img.style.maxWidth = "100%"; img.style.maxHeight = "200px"; img.style.objectFit = "contain";
+              img.className = "rounded border";
+              list.appendChild(img);
+            } else {
+              var link = document.createElement("a");
+              link.href = a.url || ("https://drive.google.com/uc?export=download&id=" + (a.id || ""));
+              link.target = "_blank";
+              link.rel = "noopener";
+              link.className = "btn btn-outline-secondary btn-sm";
+              link.textContent = a.name || (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].notice_file ? I18N[currentLang].notice_file : "파일");
+              list.appendChild(link);
+            }
+          });
+          wrap.appendChild(list);
+          attachEl.appendChild(wrap);
+        }
+      }
+      // 선택 언어로 제목/내용 자동 번역 (모바일과 동일)
+      var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+      if (targetLang === "ko" || (!(n.title || "").trim() && !(n.content || "").trim())) {
+        document.getElementById("noticeReceivedModalTitle").innerText = n.title || "";
+        document.getElementById("noticeReceivedModalContent").innerText = n.content || "";
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        setTimeout(function() { bsModal.show(); }, 0);
+        return;
+      }
+      var texts = [n.title || "", n.content || ""];
+      google.script.run.withSuccessHandler(function(translated) {
+        document.getElementById("noticeReceivedModalTitle").innerText = (translated && translated[0] !== undefined) ? translated[0] : (n.title || "");
+        document.getElementById("noticeReceivedModalContent").innerText = (translated && translated[1] !== undefined) ? translated[1] : (n.content || "");
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        setTimeout(function() { bsModal.show(); }, 0);
+      }).translateBatch(texts, targetLang);
+    }
+
+    // 받은 공지 모달 닫힐 때 백드롭/스크롤 잠금 정리 (한 번만 등록)
+    (function initNoticeReceivedModalCleanup() {
+      var modal = document.getElementById("noticeReceivedModal");
+      if (modal && !modal._noticeCleanupDone) {
+        modal._noticeCleanupDone = true;
+        modal.addEventListener("hidden.bs.modal", function() {
+          document.querySelectorAll(".modal-backdrop").forEach(function(el) { el.remove(); });
+          document.body.classList.remove("modal-open");
+          document.body.style.overflow = "";
+          document.body.style.paddingRight = "";
+        });
+      }
+    })();
+
+    // [추가] 공지사항 삭제 요청
+    function deleteNotice(id) {
+      if (!confirm("정말 이 공지사항을 삭제하시겠습니까?\n(직원들 앱에서도 즉시 사라집니다.)")) return;
+      
+      google.script.run.withSuccessHandler(res => {
+        if (res === "Success") {
+          // 성공하면 목록을 다시 불러와서 화면 갱신
+          loadNoticeHistory(); 
+        } else {
+          alert("삭제 실패: " + res);
+        }
+      }).deleteNoticeAdmin(id);
+    }
+
+
+   // [수정] 수신확인 모달: I18N 적용 + 매장/상태 필터 + 상태는 클라이언트 필터
+    function _readStatsLang() {
+      return (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : (typeof I18N !== "undefined" && I18N.ko) ? I18N.ko : {};
+    }
+    function renderReadStatsTable(list) {
+      var lang = _readStatsLang();
+      var titleEl = document.getElementById("readStatsModalTitle") || document.querySelector('#readStatsModal .modal-title');
+      var tbody = document.getElementById("readStatsBody");
+      var statusFilter = document.getElementById("readStatsStatusFilter");
+      var statusVal = (statusFilter && statusFilter.value) ? statusFilter.value : "";
+      var filtered = !statusVal ? list : list.filter(function(r) { return r.status === statusVal; });
+      var total = list.length;
+      var unread = list.filter(function(r) { return r.status === "미확인"; }).length;
+      var lblRead = (lang.read_stats_read != null) ? lang.read_stats_read : "읽음";
+      var lblUnread = (lang.read_stats_unread != null) ? lang.read_stats_unread : "안읽음";
+      var summary = (lang.read_stats_summary != null) ? lang.read_stats_summary : "👀 수신 현황 (안읽음: {unread} / 전체: {total})";
+      summary = summary.replace("{unread}", "<span class=\"text-danger fw-bold\">" + unread + "</span>").replace("{total}", total);
+      if (titleEl) titleEl.innerHTML = summary;
+      if (!filtered.length) {
+        tbody.innerHTML = "<tr><td colspan='4' class='text-center py-4'>" + (lang.read_stats_no_data || "해당되는 대상 직원이 없습니다.") + "</td></tr>";
+        return;
+      }
+      var html = "";
+      filtered.forEach(function(r) {
+        var badge = r.status === "확인" ? "<span class=\"badge bg-success\">" + lblRead + "</span>" : "<span class=\"badge bg-danger\">" + lblUnread + "</span>";
+        var bgStyle = r.status === "미확인" ? "background-color: #fff5f5;" : "";
+        html += "<tr style=\"" + bgStyle + "\"><td><span class=\"fw-bold\">" + (r.store || "").replace(/</g, "&lt;") + "</span></td><td>" + (r.name || "").replace(/</g, "&lt;") + " <small class=\"text-muted\">(" + (r.role || "").replace(/</g, "&lt;") + ")</small></td><td>" + badge + "</td><td class=\"small text-secondary\">" + (r.date || "-") + "</td></tr>";
+      });
+      tbody.innerHTML = html;
+    }
+    function showReadStats(id) {
+      window._readStatsNoticeId = id;
+      var modalEl = document.getElementById('readStatsModal');
+      if (!modalEl) { alert("수신 확인 모달을 찾을 수 없습니다."); return; }
+      if (modalEl.parentNode !== document.body) {
+        document.body.appendChild(modalEl);
+      }
+      if (!window._readStatsModalInstance) {
+        window._readStatsModalInstance = new bootstrap.Modal(modalEl, { backdrop: true, keyboard: true });
+        modalEl.addEventListener('hidden.bs.modal', function() {
+          document.querySelectorAll('.modal-backdrop').forEach(function(el) { el.remove(); });
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('overflow');
+          document.body.style.removeProperty('padding-right');
+        });
+      }
+      var lang = _readStatsLang();
+      var titleEl = document.getElementById("readStatsModalTitle") || document.querySelector('#readStatsModal .modal-title');
+      var tbody = document.getElementById("readStatsBody");
+      var storeSel = document.getElementById("readStatsStoreFilter");
+      var statusSel = document.getElementById("readStatsStatusFilter");
+      var thead = document.getElementById("readStatsThead");
+      var labelStore = document.getElementById("readStatsLabelStore");
+      var labelStatus = document.getElementById("readStatsLabelStatus");
+
+      if (titleEl) titleEl.textContent = (lang.read_stats_title != null) ? lang.read_stats_title : "👀 수신 확인 현황";
+      if (labelStore) labelStore.textContent = (lang.read_stats_store != null) ? lang.read_stats_store : "매장";
+      if (labelStatus) labelStatus.textContent = (lang.read_stats_status != null) ? lang.read_stats_status : "상태";
+      if (thead) {
+        var h = (lang.read_stats_store != null ? lang.read_stats_store : "매장") + "</th><th>" + (lang.read_stats_name != null ? lang.read_stats_name : "이름") + "</th><th>" + (lang.read_stats_status != null ? lang.read_stats_status : "상태") + "</th><th>" + (lang.read_stats_read_at != null ? lang.read_stats_read_at : "확인일시");
+        thead.innerHTML = "<th>" + h + "</th>";
+      }
+      if (statusSel && statusSel.options.length >= 3) {
+        statusSel.options[0].text = (lang.read_stats_all != null) ? lang.read_stats_all : "전체";
+        statusSel.options[1].text = (lang.read_stats_read != null) ? lang.read_stats_read : "읽음";
+        statusSel.options[2].text = (lang.read_stats_unread != null) ? lang.read_stats_unread : "안읽음";
+      }
+      var storeFilter = (storeSel && storeSel.value) ? storeSel.value : "";
+      tbody.innerHTML = "<tr><td colspan='4' class='text-center py-4'>" + (lang.read_stats_loading != null ? lang.read_stats_loading : "데이터 조회 중...") + "</td></tr>";
+      window._readStatsModalInstance.show();
+
+      google.script.run.withSuccessHandler(function(list) {
+        window._readStatsLastList = list || [];
+        if (!list || !list.length) {
+          tbody.innerHTML = "<tr><td colspan='4' class='text-center py-4'>" + (lang.read_stats_no_data || "해당되는 대상 직원이 없습니다.") + "</td></tr>";
+          if (titleEl) titleEl.textContent = (lang.read_stats_title != null) ? lang.read_stats_title : "👀 수신 확인 현황";
+          return;
+        }
+        if (storeSel) {
+          while (storeSel.options.length > 1) storeSel.remove(1);
+          var stores = [];
+          list.forEach(function(r) { if (r.store && stores.indexOf(r.store) === -1) stores.push(r.store); });
+          stores.sort();
+          stores.forEach(function(s) {
+            var opt = document.createElement("option");
+            opt.value = s;
+            opt.textContent = s;
+            storeSel.appendChild(opt);
+          });
+        }
+        renderReadStatsTable(list);
+      }).adminGetNoticeStats(id, storeFilter);
+    }
+  function saveNotice() { google.script.run.withSuccessHandler(alert).saveNotice(document.getElementById("notice-text").value); }
+
+
+</script>
+

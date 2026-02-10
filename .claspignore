@@ -1,0 +1,6 @@
+# 백업 폴더 제외 (appsscript.json 중복 푸시 방지)
+backup_before_680/**
+# 의존성 제외
+node_modules/**
+# 아이콘 원본 파일 (배포에는 IconData.html만 사용)
+assets/**

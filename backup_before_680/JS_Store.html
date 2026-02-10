@@ -1,0 +1,488 @@
+<script>
+
+  /* =================================================================
+     매장 현장 관리
+     ================================================================= */ 
+
+/* [수정] 탭 전환 */
+function showStoreTab(t) {
+    document.querySelectorAll('[id^="store-tab-"]').forEach(el => el.style.display = 'none');
+    document.getElementById("store-tab-" + t).style.display = "block";
+    
+    document.querySelectorAll('.nav-link[id^="store-nav-"]').forEach(el => el.classList.remove('active'));
+    document.getElementById("store-nav-" + t).classList.add("active");
+
+    if(t === 'setting') loadChecklistSettings();
+}
+
+/* [1. 점검 양식 그리기 (표 형태)] */
+function loadChecklistForm() {
+    var tbody = document.getElementById("checklist-body");
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>⏳ 양식을 불러오는 중...</td></tr>";
+
+    google.script.run.withSuccessHandler(function(items) {
+        tbody.innerHTML = "";
+        
+        if(!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>등록된 점검 항목이 없습니다.</td></tr>";
+            return;
+        }
+
+        items.forEach(item => {
+            // 각 행(TR) 생성 - data-id에 번호 저장
+            var row = `
+                <tr class="check-row" data-id="${item.id}" data-main="${item.main}" data-sub="${item.sub}" data-name="${item.name}">
+                    <td class="text-center fw-bold bg-light">${item.id}</td>
+                    <td>${item.main}</td>
+                    <td>${item.sub}</td>
+                    <td class="text-start">${item.name}</td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="o_${item.id}" value="O" checked>
+                            <label class="btn btn-outline-success btn-sm" for="o_${item.id}">O</label>
+
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="x_${item.id}" value="X">
+                            <label class="btn btn-outline-danger btn-sm" for="x_${item.id}">X</label>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm chk-remark" placeholder="특이사항 입력">
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }).getChecklistItems(true); // true = 사용중인 것만
+}
+
+/* ==============================================
+   1. 매장 점검 (저장 + 수정 기능 포함)
+   ============================================== */
+
+/* [수정됨] 점검 결과 저장 (ID 포함 전송 -> 수정/신규 구분) */
+function saveStoreCheckResult() {
+    // ★ 1. 수정 모드인지 확인하기 위해 숨겨진 ID 가져오기
+    var id = document.getElementById("chk-id").value; 
+    
+    var store = document.getElementById("chk-store").value;
+    var date = document.getElementById("chk-date").value;
+    var inspector = document.getElementById("chk-inspector").value;
+    var totalMemo = document.getElementById("chk-total-memo").value;
+
+    if(!store || !date) return alert("매장과 날짜를 선택하세요.");
+    
+    // 메시지도 상황에 따라 다르게
+    var msg = id ? "점검 내용을 수정하시겠습니까?" : "점검 내용을 저장하시겠습니까?";
+    if(confirm(msg) == false) return;
+
+    // 데이터 수집
+    var resultList = [];
+    var rows = document.querySelectorAll(".check-row");
+    var failCount = 0;
+
+    rows.forEach(row => {
+        var rId = row.getAttribute("data-id");
+        var rMain = row.getAttribute("data-main"); // ★ 나중에 복원할 때 필요해서 저장
+        var rSub = row.getAttribute("data-sub");
+        var rName = row.getAttribute("data-name");
+        
+        var val = document.querySelector(`input[name="chk_${rId}"]:checked`).value;
+        var remark = row.querySelector(".chk-remark").value;
+
+        if(val === 'X') failCount++;
+
+        resultList.push({
+            id: rId, main: rMain, sub: rSub, name: rName, val: val, remark: remark
+        });
+    });
+
+    var summary = (failCount === 0) ? "PASS" : "FAIL (" + failCount + "건)";
+
+    // ★ 2. 서버로 보낼 때 'id'도 같이 보냄!
+    google.script.run.withSuccessHandler(function(res){
+        alert(res === "UPDATED" ? "수정되었습니다." : "저장되었습니다.");
+        
+        // 초기화 및 이동
+        document.getElementById("chk-id").value = ""; 
+        document.getElementById("chk-total-memo").value = "";
+        showStoreTab('history'); 
+        searchCheckHistory();      
+    }).saveCheckResult(id, date, store, inspector, summary, totalMemo, JSON.stringify(resultList));
+}
+
+
+/* ==============================================
+   2. 점검 양식 불러오기 (수정 시 데이터 채우기 기능 추가)
+   ============================================== */
+
+/* [수정됨] 양식 그리기 + (옵션) 다 그리면 콜백함수 실행 */
+function loadChecklistForm(callback) {
+    var tbody = document.getElementById("checklist-body");
+    tbody.innerHTML = "<tr><td colspan='6' class='text-center'>⏳ 양식을 불러오는 중...</td></tr>";
+
+    google.script.run.withSuccessHandler(function(items) {
+        tbody.innerHTML = "";
+        
+        if(!items || items.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' class='text-center'>등록된 항목이 없습니다.</td></tr>";
+            return;
+        }
+
+        items.forEach(item => {
+            var row = `
+                <tr class="check-row" data-id="${item.id}" data-main="${item.main}" data-sub="${item.sub}" data-name="${item.name}">
+                    <td class="text-center fw-bold bg-light">${item.id}</td>
+                    <td>${item.main}</td>
+                    <td>${item.sub}</td>
+                    <td class="text-start">${item.name}</td>
+                    <td class="text-center">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="o_${item.id}" value="O" checked>
+                            <label class="btn btn-outline-success btn-sm" for="o_${item.id}">O</label>
+
+                            <input type="radio" class="btn-check" name="chk_${item.id}" id="x_${item.id}" value="X">
+                            <label class="btn btn-outline-danger btn-sm" for="x_${item.id}">X</label>
+                        </div>
+                    </td>
+                    <td><input type="text" class="form-control form-control-sm chk-remark"></td>
+                </tr>`;
+            tbody.innerHTML += row;
+        });
+
+        // ★ [핵심] 수정 모드일 때는 다 그리고 나서 값을 채워넣어야 함!
+        if (typeof callback === 'function') {
+            callback(); // 값을 채우는 함수 실행
+        } else {
+            // 신규 작성일 때는 깨끗하게 비움
+            document.getElementById("chk-id").value = "";
+            document.getElementById("chk-total-memo").value = "";
+        }
+
+    }).getChecklistItems(true); 
+}
+
+
+/* ==============================================
+   3. 점검 이력 조회 (수정/삭제 버튼 추가)
+   ============================================== */
+
+/* [수정] 점검 이력 조회 (점검자 검색어 추가 전송) */
+function searchCheckHistory() {
+    var start = document.getElementById("hist-date-start").value;
+    var end = document.getElementById("hist-date-end").value;
+    var store = document.getElementById("hist-store").value;
+    var inspector = document.getElementById("hist-inspector").value; // ★ 추가됨
+
+    // 날짜가 비어있으면 오늘 날짜로 자동 설정 (안전장치)
+    if(!start || !end) {
+        var today = new Date().toISOString().substring(0,10);
+        document.getElementById("hist-date-start").value = today;
+        document.getElementById("hist-date-end").value = today;
+        start = today; end = today;
+    }
+
+    var tbody = document.getElementById("check-history-list");
+    tbody.innerHTML = "<tr><td colspan='5' class='py-4'>⏳ 조회 중...</td></tr>";
+
+    google.script.run.withSuccessHandler(function(rows){
+        tbody.innerHTML = "";
+        if(rows.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='5' class='py-4 text-muted'>검색된 이력이 없습니다.</td></tr>";
+            return;
+        }
+        rows.forEach(r => {
+            var badge = r.result.includes("PASS") ? "bg-success" : "bg-danger";
+            var safeJson = encodeURIComponent(JSON.stringify(r));
+
+            var row = `<tr>
+                <td>${r.date}</td>
+                <td class="fw-bold">${r.store}</td>
+                <td>${r.inspector}</td>
+                <td><span class="badge ${badge}">${r.result}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-info text-white me-1" onclick='openCheckDetail(${JSON.stringify(r.json)})'>보기</button>
+                    <button class="btn btn-sm btn-warning text-white me-1" onclick="editCheckResult('${safeJson}')">수정</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteStoreCheck('${r.id}')">삭제</button>
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }).getCheckHistory(start, end, store, inspector); // ★ 서버로 점검자 이름도 같이 보냄
+}
+
+
+/* ==============================================
+   4. [신규] 수정 및 삭제 기능 함수들 (이게 빠져 있었음!)
+   ============================================== */
+
+/* [신규] 수정 버튼 누르면 실행 -> 화면 이동 및 데이터 복구 */
+function editCheckResult(encodedRowData) {
+    if(!confirm("해당 점검 내용을 불러와서 수정하시겠습니까?\n(현재 작성 중인 내용은 사라집니다.)")) return;
+
+    // 1. 암호화된 데이터 풀기
+    var r = JSON.parse(decodeURIComponent(encodedRowData));
+    var detailItems = (typeof r.json === 'string') ? JSON.parse(r.json) : r.json;
+
+    // 2. 화면 전환 (이력탭 -> 입력탭)
+    showStoreTab('check');
+
+    // 3. 기본 정보 채우기
+    document.getElementById("chk-id").value = r.id; // ★ ID 세팅 (수정모드 ON)
+    document.getElementById("chk-date").value = r.date;
+    document.getElementById("chk-store").value = r.store;
+    document.getElementById("chk-inspector").value = r.inspector;
+    document.getElementById("chk-total-memo").value = r.memo || "";
+
+    // 4. 양식 불러오기 + (다 불러오면) 값 채우기
+    loadChecklistForm(function() {
+        // 여기가 callback 함수: 양식이 다 그려진 뒤 실행됨
+        detailItems.forEach(item => {
+            // O/X 체크 복구
+            var radio = document.querySelector(`input[name="chk_${item.id}"][value="${item.val}"]`);
+            if(radio) radio.checked = true;
+
+            // 비고란 복구
+            var row = document.querySelector(`.check-row[data-id="${item.id}"]`);
+            if(row) {
+                var input = row.querySelector(".chk-remark");
+                if(input) input.value = item.remark || "";
+            }
+        });
+        alert("기존 데이터를 불러왔습니다. 수정 후 저장하세요.");
+    });
+}
+
+/* [신규] 삭제 버튼 누르면 실행 */
+function deleteStoreCheck(id) {
+    if(!confirm("정말 이 점검 기록을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.")) return;
+
+    google.script.run.withSuccessHandler(function(res){
+        if(res === "DELETED") {
+            alert("삭제되었습니다.");
+            searchCheckHistory(); // 목록 새로고침
+        } else {
+            alert("삭제 실패: 데이터를 찾을 수 없습니다.");
+        }
+    }).deleteCheckHistory(id);
+}
+
+// 상세 보기 모달 (비고 특이사항 자동 번역 연동)
+function openCheckDetail(jsonData) {
+    var items = (typeof jsonData === 'string') ? JSON.parse(jsonData) : jsonData;
+    var modalBody = document.getElementById("modal-check-body");
+    var texts = items.map(function(item){ return item.remark || ""; });
+    var targetLang = (typeof getTranslationLang === "function" ? getTranslationLang() : "ko");
+
+    function renderTable(remarks) {
+        var html = `<table class="table table-bordered table-sm align-middle text-center"><thead class="table-light"><tr><th>NO</th><th>대분류</th><th>항목</th><th>결과</th><th>비고</th></tr></thead><tbody>`;
+        items.forEach(function(item, i) {
+            var remark = remarks && remarks[i] !== undefined ? (remarks[i] || "-") : (item.remark || "-");
+            var bg = (item.val === 'X') ? "table-danger" : "";
+            var valColor = (item.val === 'O') ? "text-success fw-bold" : "text-danger fw-bold";
+            html += `<tr class="${bg}"><td>${item.id}</td><td>${item.main}</td><td class="text-start">${item.name}</td><td class="${valColor}">${item.val}</td><td class="text-start text-muted small">${remark}</td></tr>`;
+        });
+        html += `</tbody></table>`;
+        modalBody.innerHTML = html;
+        new bootstrap.Modal(document.getElementById('checkDetailModal')).show();
+    }
+
+    if (targetLang === "ko" || texts.every(function(t){ return !t || !String(t).trim(); })) {
+        renderTable(null);
+        return;
+    }
+    google.script.run.withSuccessHandler(function(translated) {
+        renderTable(translated);
+    }).translateBatch(texts, targetLang);
+}
+
+// 설정 화면 로딩 (그대로 사용)
+function loadChecklistSettings() {
+    google.script.run.withSuccessHandler(function(items){
+        var tbody = document.getElementById("setting-list-body");
+        tbody.innerHTML = "";
+        items.forEach(item => {
+            var checked = item.use ? "checked" : "";
+            tbody.innerHTML += `<tr><td>${item.id}</td><td><input class="form-control form-control-sm" value="${item.main}" readonly></td><td><input class="form-control form-control-sm" value="${item.sub}" readonly></td><td><input class="form-control form-control-sm" value="${item.name}"></td><td><input type="checkbox" class="form-check-input chk-use" data-id="${item.id}" ${checked}></td></tr>`;
+        });
+    }).getChecklistItems(false);
+}
+
+function saveChecklistSettings() {
+    var updates = [];
+    document.querySelectorAll("#setting-list-body tr").forEach(tr => {
+        updates.push({id: tr.querySelector(".chk-use").getAttribute("data-id"), name: tr.querySelectorAll("input")[2].value, use: tr.querySelector(".chk-use").checked});
+    });
+    google.script.run.withSuccessHandler(res => alert("저장됨")).updateChecklistItems(updates);
+}
+
+/* [관리자] 방문 기록 서버에서 가져오기 (날짜/매장/부서/직원 오피스 필터) */
+  function loadVisitHistory() {
+    var s = document.getElementById("visit-start").value;
+    var e = document.getElementById("visit-end").value;
+    var st = document.getElementById("visit-filter-store").value;
+    var emp = document.getElementById("visit-filter-employee") ? document.getElementById("visit-filter-employee").value : "All";
+    var dept = document.getElementById("visit-filter-dept") ? document.getElementById("visit-filter-dept").value : "All";
+    
+    load(1);
+    google.script.run.withSuccessHandler(list => {
+      load(0);
+      var b = document.getElementById("visit-history-list");
+      b.innerHTML = "";
+      if(!list || list.length === 0) {
+        b.innerHTML = "<tr><td colspan='6' class='p-4'>내역이 없습니다.</td></tr>";
+        return;
+      }
+      
+      list.forEach(r => {
+        b.innerHTML += `<tr>
+          <td>${r.date}</td>
+          <td class="fw-bold">${r.name}</td>
+          <td>${r.store}</td>
+          <td>${r.type}</td>
+          <td>${r.purpose}</td>
+          <td class="text-primary fw-bold">${r.duration ? r.duration + '분' : '-'}</td>
+        </tr>`;
+      });
+    }).getStoreVisitHistory(s, e, st, emp, dept);
+  }
+
+/** 매장 방문: 방문 목록 / 방문 통계 탭 전환 */
+function showVisitTab(tab) {
+  var listSec = document.getElementById('visit-list-section');
+  var statsSec = document.getElementById('visit-stats-section');
+  var tabList = document.getElementById('tab-visit-list');
+  var tabStats = document.getElementById('tab-visit-stats');
+  if (!listSec || !statsSec) return;
+  if (tab === 'list') {
+    listSec.style.display = 'block';
+    statsSec.style.display = 'none';
+    if (tabList) { tabList.classList.add('active'); }
+    if (tabStats) { tabStats.classList.remove('active'); }
+  } else {
+    listSec.style.display = 'none';
+    statsSec.style.display = 'block';
+    if (tabList) { tabList.classList.remove('active'); }
+    if (tabStats) { tabStats.classList.add('active'); }
+    var today = new Date().toISOString().substring(0, 10);
+    var s = document.getElementById('visit-stats-start');
+    var e = document.getElementById('visit-stats-end');
+    if (s && !s.value) s.value = today;
+    if (e && !e.value) e.value = today;
+  }
+}
+
+var visitChartDept = null, visitChartEmployee = null, visitChartStore = null;
+
+/** 매장 방문 통계 조회 및 차트 렌더링 (선택한 항목만 표시) */
+function loadVisitStats() {
+  var s = document.getElementById('visit-stats-start').value;
+  var e = document.getElementById('visit-stats-end').value;
+  if (!s || !e) { alert('시작일·종료일을 선택해 주세요.'); return; }
+  var showDept = document.getElementById('visit-stats-show-dept') ? document.getElementById('visit-stats-show-dept').checked : true;
+  var showEmployee = document.getElementById('visit-stats-show-employee') ? document.getElementById('visit-stats-show-employee').checked : true;
+  var showStore = document.getElementById('visit-stats-show-store') ? document.getElementById('visit-stats-show-store').checked : true;
+  if (!showDept && !showEmployee && !showStore) { alert('표시할 통계를 하나 이상 선택해 주세요.'); return; }
+  if (typeof load === 'function') load(1);
+  google.script.run.withSuccessHandler(function(data) {
+    if (typeof load === 'function') load(0);
+    if (!data) data = { byDept: [], byEmployee: [], byStore: [] };
+    var colors = ['#E65100', '#1976D2', '#2E7D32', '#7B1FA2', '#C62828', '#00838F', '#F9A825', '#5D4037'];
+    function setWrapVisible(wrapId, visible) {
+      var w = document.getElementById(wrapId);
+      if (w) w.style.display = visible ? '' : 'none';
+    }
+    function makeChart(canvasId, items, title) {
+      var ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      if (canvasId === 'chart-visit-dept' && visitChartDept) { visitChartDept.destroy(); visitChartDept = null; }
+      if (canvasId === 'chart-visit-employee' && visitChartEmployee) { visitChartEmployee.destroy(); visitChartEmployee = null; }
+      if (canvasId === 'chart-visit-store' && visitChartStore) { visitChartStore.destroy(); visitChartStore = null; }
+      var labels = items.map(function(x) { return x.label; });
+      var values = items.map(function(x) { return x.minutes; });
+      var bg = labels.map(function(_, i) { return colors[i % colors.length]; });
+      var chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: '투입 시간(분)', data: values, backgroundColor: bg }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { left: 4, right: 8 } },
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { beginAtZero: true, title: { display: true, text: '분' } },
+            y: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }
+          }
+        }
+      });
+      if (canvasId === 'chart-visit-dept') visitChartDept = chart;
+      if (canvasId === 'chart-visit-employee') visitChartEmployee = chart;
+      if (canvasId === 'chart-visit-store') visitChartStore = chart;
+    }
+    setWrapVisible('visit-chart-dept-wrap', showDept);
+    setWrapVisible('visit-chart-employee-wrap', showEmployee);
+    setWrapVisible('visit-chart-store-wrap', showStore);
+    if (showDept) makeChart('chart-visit-dept', data.byDept || [], '부서별');
+    else if (visitChartDept) { visitChartDept.destroy(); visitChartDept = null; }
+    if (showEmployee) makeChart('chart-visit-employee', data.byEmployee || [], '직원별');
+    else if (visitChartEmployee) { visitChartEmployee.destroy(); visitChartEmployee = null; }
+    if (showStore) makeChart('chart-visit-store', data.byStore || [], '매장별');
+    else if (visitChartStore) { visitChartStore.destroy(); visitChartStore = null; }
+  }).getStoreVisitStats(s, e);
+}
+
+/**
+ * [모바일 UI] 방문 기록 목록 새로고침 함수
+ */
+function loadMyTodayVisitLog() {
+  google.script.run.withSuccessHandler(list => {
+    // 모바일 화면의 로그 테이블 바디 ID (없으면 생성 필요)
+    var logBody = document.getElementById("visit-log-body"); 
+    if (!logBody) return;
+
+    logBody.innerHTML = "";
+    if (list.length === 0) {
+      logBody.innerHTML = "<tr><td colspan='4' class='text-muted small'>오늘 기록이 없습니다.</td></tr>";
+      return;
+    }
+
+    list.forEach(r => {
+      var durationText = r.duration ? `<span class="badge bg-info">${r.duration}분</span>` : "-";
+      var typeColor = r.type === "방문시작" ? "text-primary" : "text-danger";
+      
+      logBody.innerHTML += `
+        <tr style="font-size: 0.85rem;">
+          <td>${r.time}</td>
+          <td class="fw-bold">${r.store}</td>
+          <td class="${typeColor}">${r.type}</td>
+          <td>${durationText}</td>
+        </tr>`;
+    });
+  }).getTodayMyVisits(loggedInUser); // 전역 변수 loggedInUser 사용
+}
+
+/**
+ * [모바일 UI] 방문 버튼 클릭 핸들러 (수정본)
+ */
+function handleVisitSubmit(type) {
+  // ... (기존 GPS 정보 및 데이터 수집 코드) ...
+
+  google.script.run.withSuccessHandler(res => {
+    if (res.success) {
+      alert(res.msg);
+      
+      // ✅ 핵심: 저장 성공과 동시에 화면 목록을 다시 불러옵니다!
+      loadMyTodayVisitLog(); 
+      
+      // 버튼 상태 업데이트 (시작 <-> 종료 전환)
+      checkActiveVisitStatus(); 
+    } else {
+      alert(res.msg);
+    }
+  }).submitStoreVisit(visitData);
+}
+
+</script>

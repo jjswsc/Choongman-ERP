@@ -1,0 +1,51 @@
+<script>
+
+
+function submitLeave(){ var t=document.getElementById("leaveType").value, d=document.getElementById("leaveDate").value, r=document.getElementById("leaveReason").value; google.script.run.withSuccessHandler(res=>{alert(res);loadMyLeaveInfo();}).requestLeave({store:loggedInStore,name:loggedInUser,type:t,date:d,reason:r}); }
+
+function sendAttendance(t){ if(!confirm(t+"?")) return; var options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }; navigator.geolocation.getCurrentPosition( p => { sendData(t, p.coords.latitude, p.coords.longitude); }, e => { if(confirm("위치 확인 실패. 위치 없이 기록하시겠습니까?")) { sendData(t, "Unknown", "Unknown"); } }, options ); }
+
+/* [수정] 근태 기록 성공 시 화면 표에 즉시 추가하는 기능 포함 */
+function sendData(type, lat, lng) {
+  google.script.run.withSuccessHandler(res => {
+    
+    // 1. 서버 응답 메시지에 지각/조퇴/연장 단어가 포함된 경우 사유 입력창 띄우기
+    if (res.includes("지각") || res.includes("조퇴") || res.includes("연장")) {
+      var reason = prompt(res + "\n\n사유를 입력해주세요 (예: 교통체증, 업무마무리):");
+      if (reason) {
+        // 사유가 입력되었다면 서버 함수 updateLastReason을 호출하여 기록 업데이트
+        google.script.run.withSuccessHandler(r => console.log(r)).updateLastReason(reason, loggedInUser);
+      }
+    } else {
+      alert(res); // 정상인 경우 기존처럼 알림창 표시
+    }
+
+    // 2. 기록이 성공적으로 서버에 전달된 경우 (✅ 포함 시) 화면 하단 표 업데이트
+    if (res.includes("✅")) {
+      document.getElementById("attendance-status-msg").style.display = "none";
+      document.getElementById("attendance-log-table").style.display = "table";
+
+      var now = new Date();
+      var timeStr = now.getHours().toString().padStart(2, '0') + ":" + 
+                    now.getMinutes().toString().padStart(2, '0') + ":" + 
+                    now.getSeconds().toString().padStart(2, '0');
+      
+      var tbody = document.getElementById("attendance-log-body");
+      var row = tbody.insertRow(0); // 최신 기록을 맨 위에 추가
+      
+      row.style.borderBottom = "1px solid #ffe0b2";
+      
+      row.insertCell(0).innerHTML = `<span style="color:#888;">${timeStr}</span>`;
+      row.insertCell(1).innerHTML = `<b>${type}</b>`;
+      row.insertCell(2).innerHTML = `<span style="color:#4CAF50;">Success</span>`;
+    }
+  }).submitAttendance({
+    storeName: loggedInStore, 
+    name: loggedInUser, 
+    type: type, 
+    lat: lat, 
+    lng: lng
+  });
+}
+
+ </script>

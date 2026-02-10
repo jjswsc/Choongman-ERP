@@ -1,0 +1,17 @@
+# 의존성 (GitHub/Vercel에서 npm install 로 설치)
+node_modules/
+
+# Vercel 로컬 설정
+.vercel/
+
+# 환경 변수 (비밀키 포함)
+.env
+.env.local
+*.env
+
+# 로그/캐시
+*.log
+.DS_Store
+
+# 백업 폴더 (선택)
+# backup_before_680/

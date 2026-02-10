@@ -1,0 +1,990 @@
+<script>
+
+  /* =================================================================
+     시스템 엔진 & 전역 변수
+     ================================================================= */ 
+  /* =================================================================================
+     [CHOONGMAN ERP] 시스템 긴급 복구 및 통합 스크립트 (최종 안정화 버전)
+     ================================================================================= */
+  
+  // 1. 전역 변수 선언
+  var loginInfo={}, itemCache=[], vendorCache=[], employeeCache=[], orderListCache=[];
+  var allLeaveData={users:[], leaves:[]};
+  var userRole="", userStore="", userName="", finderMode="";
+  var inboundList=[], forceList=[], adjList=[];
+  var itemModal, orderDetailModal, vendorStatsModal;
+  var currentLang = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cm_lang')) || 'ko';
+  /** 인쇄/PDF/엑셀: 현재 보이는 페이지 id (go()에서 설정) */
+  var currentPrintPageId = '';
+
+  // 다국어 번역 맵 (ko, en, th, mm, la) - 탭/버튼/라벨/placeholder 전체
+  var I18N = {
+    ko: {
+      login_title: "CM ERP SYSTEM", btn_login: "로그인",
+      login_store_ph: "매장 선택", login_label_store: "소속", login_label_name: "성명", login_label_pw: "P/W", menu_dashboard: "📊 대시보드", menu_notices: "📢 공지사항 관리", menu_work_log: "📝 업무일지",
+      menu_header_logistics: "물류 관리", menu_item_manage: "📦 품목 관리", menu_vendor: "🏢 거래처 관리", menu_outbound: "🚚 주문 승인", menu_stock: "⚖️ 재고 현황", menu_inbound: "📦 입고 관리", menu_force: "📤 출고 관리",
+      menu_header_hr: "인사 관리", menu_hr_employee: "👥 직원 관리", menu_attendance: "📅 근태/스케줄 관리", menu_payroll: "💰 급여 관리", menu_hr_leave: "🏖️ 휴가 관리",
+      menu_header_store: "매장 관리", menu_store_check: "🏢 매장 점검", menu_store_visit: "📍 매장 방문 현황", menu_header_settings: "설정",
+      btn_logout: "로그아웃", btn_search: "검색", btn_query: "조회", btn_save: "저장", btn_query_go: "🔍 조회", btn_query_go2: "🔍 조회하기", btn_refresh: "🔄 새로고침",
+      in_nav_hist: "내역 조회", stock_nav_adjust: "🛠️ 재고 조정", stock_nav_status: "📊 현황 및 적정재고", stock_nav_history: "📋 조정 내역",
+      leave_tab_approval: "휴가 승인", leave_tab_stats: "휴가 통계", label_period: "기간", label_store: "매장", label_employee: "직원", label_date: "날짜", label_evaluator: "평가자",
+      tab_wl_personal: "👤 내 업무일지", tab_wl_manager: "👮‍♂️ 관리자 승인", tab_wl_report: "📊 주간 리포트",
+      tab_hr_list: "📋 직원 목록", tab_hr_eval: "📝 직원 평가", tab_eval_list: "📋 평가 목록", tab_eval_kitchen: "🍳 주방 직원 평가",
+      tab_att_status: "📊 근태 기록/승인", tab_att_schedule: "📝 스케줄 작성", tab_att_view: "🔍 스케줄 조회",
+      tab_pay_calc: "🧮 급여 계산 및 확정", tab_pay_hist: "📂 명세서 조회",
+      tab_store_check: "✅ 일일 점검", tab_store_history: "📋 점검 이력", tab_store_setting: "⚙️ 항목 설정",
+      tab_in_new: "신규 입고", tab_force_new: "✍️ 출고 입력", tab_force_hist: "📋 내역 조회",
+      tab_visit_list: "📋 방문 목록", tab_visit_stats: "📊 매장 방문 통계",
+      wl_title: "📝 오피스 업무일지", wl_label_date: "📅 날짜", wl_label_staff: "👤 직원", wl_save_progress: "💾 진행상황 저장",
+      wl_finish_work: "🏆 Finish Work (완료됨)", wl_continue_work: "⏳ Continue Work (진행 대기)", wl_today_work: "🚀 Today Work (오늘 진행 중)",
+      wl_task_content: "업무 내용", wl_importance: "중요도", wl_progress: "진행률", wl_status: "상태",
+      wl_add_item: "항목 추가 (Add Item)", wl_start_today: "⬇️ 선택한 업무 오늘 시작하기 (Start Today)", wl_finish_daily: "👋 업무 끝내기 (퇴근 처리)",
+      wl_query_period: "📅 조회 기간", wl_dept: "🏢 부서", wl_filter_all: "전체 보기",
+      eval_load_form: "🔄 양식 불러오기", eval_final_grade: "최종 등급", eval_total_comment: "💡 종합 의견 / 총평", eval_save: "💾 평가 저장",
+      eval_incident: "6) 사고 / 이슈 이력", eval_action_plan: "7) Next Action Plan", eval_setting: "⚙️ 주방 평가 항목 설정",
+      eval_training: "교육 필요", eval_coach: "코치/트레이너", eval_target_date: "목표일", eval_reeval_date: "재평가일",
+      placeholder_search: "검색", placeholder_pin: "PIN", placeholder_comment: "종합 의견을 입력하세요.",
+      notice_history: "📑 발송 내역", chk_memo: "전체적인 특이사항이 있다면 적어주세요.", chk_inspector_ph: "점검자 이름 (선택)",
+      label_all: "전체", stock_past: "과거 조회", stock_current: "현재고 조회", item_search_ph: "검색어 입력", modal_item_search: "📦 품목 검색",
+      status_finish: "완료", status_carry_over: "이월", status_today: "진행중", status_continue: "대기",
+      filter_reset: "필터 초기화", filter_status_multi: "상태 (중복선택)", filter_none: "선택 안함", filter_n_selected: "개 선택됨",
+      mgr_no_data: "조회된 데이터가 없습니다.", mgr_no_match: "조건에 맞는 내역이 없습니다.", mgr_loading: "데이터를 불러오는 중...",
+      mgr_approved: "승인됨", mgr_reject: "반려", mgr_approve_btn: "승인", mgr_prompt_date: "시작일과 종료일을 모두 선택해주세요.", mgr_prompt_order: "종료일이 시작일보다 빠를 수 없습니다.", mgr_hint: "날짜 구간을 선택하고 [🔍 조회] 버튼을 눌러주세요.",
+      item_title: "품목 관리", item_form_title: "품목 정보 입력", item_new: "신규 등록", item_code: "코드 (A열)", item_cat: "카테고리", item_vendor: "주거래처", item_vendor_ph: "매입처 선택/입력",
+      item_name: "품목명", item_image: "이미지 링크 (G열)", item_tax: "과세 구분", item_tax_vat: "과세(VAT 포함)", item_tax_free: "면세(VAT 없음)",
+      item_spec: "규격", item_price: "판매가", item_cost: "원가", item_save: "저장", item_cat_all: "전체 카테고리",
+      item_col_code: "코드", item_col_image: "이미지", item_col_name: "품목명", item_col_spec: "규격", item_col_price: "판매가", item_manage: "관리",
+      item_guide: "카테고리를 선택하거나 검색어를 입력 후 [검색] 버튼을 눌러주세요.", wl_approve_feedback: "승인/피드백",
+      stock_title: "재고 관리", stock_currency: "원",
+      notice_title: "📢 공지사항 관리", notice_send_new: "✏️ 새 공지 보내기", label_subject: "제목", label_content: "내용", label_role: "직급", notice_send_btn: "공지 발송하기", notice_attach: "📎 첨부파일",
+      notice_received_title: "📬 받은 공지", notice_received_hint: "날짜 범위를 선택하면 지나간 공지도 조회할 수 있습니다.", label_date_from: "시작일", label_date_to: "종료일",
+      dash_title: "대시보드", dash_welcome: "환영합니다", dash_user: "사용자",
+      dash_pending_orders: "미승인 주문", dash_inbound_month: "이번 달 입고", dash_outbound_month: "이번 달 출고", dash_leave_pending: "휴가 대기", dash_att_pending: "근태 승인 대기",
+      dash_store_kpi_title: "📊 매장별 KPI", dash_store_kpi_hint: "이번 달 기준 매장별 미승인 주문·출고·휴가 대기·근태 승인 대기 현황입니다.", dash_kpi_store: "매장", dash_kpi_no_data: "매장 데이터가 없습니다.", dash_kpi_error: "KPI를 불러올 수 없습니다.",
+      vendor_title: "🏢 거래처 관리", vendor_form: "🏢 거래처 입력", vendor_type: "구분", vendor_type_buy: "🔵 매입처", vendor_type_sell: "🔴 매출처", vendor_type_etc: "⚪ 기타", vendor_code: "코드", vendor_company: "회사명", vendor_manager: "담당자", vendor_phone: "연락처", vendor_taxno: "사업자번호", vendor_ceo: "대표자", vendor_addr: "주소", vendor_balance: "미수금", vendor_memo: "메모", vendor_col_type: "구분", vendor_col_company: "회사명", vendor_col_manager: "담당자", vendor_col_balance: "잔액",
+      hr_emp_title: "👥 직원 관리", hr_emp_form: "✏️ 직원 입력", hr_emp_new: "+ 신규", label_name: "이름", label_nickname: "닉네임", label_job: "직무", label_email: "이메일", label_birth: "생일", label_nation: "국적", label_join_date: "입사일", label_leave_date: "퇴사일", label_sal_type: "급여타입", label_amount: "금액", label_role_perm: "권한", emp_col_age: "나이", emp_col_salary: "급여", emp_photo: "사진", emp_photo_url: "사진 URL", eval_store_first: "매장 선택 후", eval_position: "직위", eval_date: "평가일", eval_shift: "시프트/역할", eval_weight: "가중치: 메뉴숙련 40% · 원가/정확도 20% · 위생 20% · 태도 20%", eval_total_score: "총점", eval_final_grade_label: "최종 등급", eval_issue_type: "이슈 유형", eval_occur: "발생 여부", eval_detail: "상세", eval_cat_main: "대분류", eval_cat_sub: "중분류", eval_item: "평가 항목", eval_use: "사용", eval_load_items: "항목 불러오기", eval_save_items: "항목 저장", eval_setting_desc: "평가 항목 내용을 수정하거나 사용 여부를 체크할 수 있습니다.",
+      eval_list_title: "📋 평가 이력 조회", eval_list_type: "평가 유형", eval_list_type_all: "📋 전체(ALL)", eval_list_type_kitchen: "🍳 주방", eval_list_type_service: "🍽 서비스", eval_list_start: "시작일", eval_list_end: "종료일", eval_list_evaluator: "작성자(평가자)", eval_list_th_date: "날짜", eval_list_th_employee: "직원", eval_list_th_score: "총점", eval_list_th_grade: "등급", eval_list_th_memo: "총평", eval_list_btn_view: "보기", eval_list_grade_all: "전체 등급", eval_list_loading: "조회 중...", eval_list_no_data: "조회된 평가 이력이 없습니다.", eval_list_count: "건", eval_list_fail: "조회 실패. 시트를 확인하세요.",
+      att_title: "📅 근태 시스템 관리", att_view_hint: "저장된 주간 스케줄을 조회만 할 수 있습니다. 수정은 스케줄 작성 탭에서 불러오기 후 편집하세요.", att_store_select: "매장 선택", att_week_monday: "기준 월요일 날짜", att_load_schedule: "📅 저장된 시간표 불러오기", att_start_date: "시작일", att_end_date: "종료일", att_all_stores: "전체 매장", att_select_store_first: "매장을 먼저 선택", att_datetime: "일시", att_type: "구분", att_late_extra: "지각/연장", att_reason: "사유", att_smart_tool: "스마트 일괄 입력 도구", att_work_hours: "총 근무(시간)", att_break_start: "휴게 시작", att_break_hours: "휴게(시간)", att_apply_day: "적용 요일", att_mon: "월요일", att_tue: "화요일", att_wed: "수요일", att_thu: "목요일", att_fri: "금요일", att_sat: "토요일", att_sun: "일요일", att_staff_select: "👥 직원 선택", att_display_time: "🕒 표시 시간:", att_reset: "🧹 초기화", att_copy_next: "⏭️ 다음 주로 복사", att_save_schedule: "💾 주간 스케줄 저장", att_load_saved: "📅 저장된 시간표 불러오기", att_query_please: "기록을 조회해 주세요.",
+      pay_title: "💰 급여 관리 (Payroll DB)", pay_month: "📅 급여 귀속월", pay_db_setup: "🛠️ DB 시트 생성 (최초 1회)", pay_calc_run: "🧮 계산 실행", pay_save_confirm: "💾 DB에 확정 저장", pay_col_store: "매장", pay_col_name: "이름", pay_col_base: "기본급", pay_allowance: "수당 (+)", pay_ot: "OT (+)", pay_deduct: "공제 (-)", pay_net: "실수령액", pay_edit: "수정", pay_col_role: "직책", pay_col_risk: "위험", pay_col_birth: "생일", pay_col_bonus: "보너스", pay_col_ot_hr: "시간", pay_col_ot_amt: "금액", pay_col_late: "지각", pay_col_sso: "SSO", pay_col_etc: "기타", pay_hist_month: "📅 조회월", pay_hist_store: "🏢 매장 필터", pay_total_amount: "총 지급액", pay_query_please: "위에서 날짜를 선택하고 [계산 실행]을 눌러주세요.", pay_hist_query_please: "조회 버튼을 눌러주세요.",
+      leave_title: "🏖️ 휴가 관리", leave_wait: "대기", leave_approved: "승인", leave_rejected: "거절", leave_used_period: "사용(기간)", leave_used_total: "사용(전체)", leave_remain: "잔여", leave_annual: "연차", leave_sick: "병가", leave_col_date: "날짜", leave_col_name: "이름", leave_col_type: "종류", leave_col_status: "상태",
+      store_title: "🏢 매장 관리", store_check_store: "매장", store_check_date: "날짜", store_check_inspector: "점검자", store_load_form: "🔄 양식 불러오기", store_no: "NO", store_cat_main: "대분류", store_cat_sub: "중분류", store_check_item: "점검 항목", store_check: "체크", store_remark: "비고 (특이사항)", store_load_hint: "상단 정보를 선택하고 '양식 불러오기'를 눌러주세요.", store_total_comment: "💡 종합 의견 / 총평", store_save_check: "💾 점검 완료 및 저장", store_hist_period: "기간", store_all_stores: "전체 매장", store_select_ph: "매장을 선택하세요", store_inspector_ph: "점검자 이름 (선택)", store_col_date: "날짜", store_col_inspector: "점검자", store_col_result: "결과", store_setting_title: "🛠 점검 항목 관리 (시트 연동)", store_refresh: "새로고침", store_setting_desc: "항목 추가/삭제는 점검항목 시트에서 직접 하시는 게 가장 빠릅니다.", store_save_settings: "⚙️ 변경사항 저장", store_preparing: "직원 시간표 기능 준비 중...",
+      print_btn: "🖨️ 인쇄/PDF", excel_btn: "📥 엑셀 다운로드",
+      ord_title: "🚚 주문 승인 관리", ord_summary: "요약", ord_total: "총액", ord_query_please: "조회하세요.", ord_pending: "대기", ord_approved: "승인", ord_rejected: "거절",
+      in_title: "📦 입고 관리", in_date: "날짜", in_vendor: "매입처", in_item: "품목", in_qty: "수량", in_wait_list: "입고 대기 목록", in_save: "💾 저장", in_find_item: "품목 찾기", in_add_list: "담기 ⬇️", in_col_item: "품목명", in_col_qty: "수량", in_col_del: "삭제",
+      force_title: "📤 출고 관리", force_date: "날짜", force_store: "출고처", force_item: "품목", force_qty: "수량", force_wait_list: "대기 목록", force_confirm: "🚀 출고 확정", force_add_list: "담기 ⬇️", force_col_store: "출고처", force_col_item: "품목명", force_col_qty: "수량", force_col_del: "삭제",       force_hist_type: "유형", visit_page_title: "📍 실시간 매장 방문 현황",
+      wl_check_today_hint: "* 오늘 할 일을 체크하세요", wl_finish_hint: "* 100%는 'Finish'로, 미완료는 기록 후 'Continue'로 이월됩니다.",
+      print_pdf_hint: "(조회된 내용만 인쇄됩니다. PDF는 인쇄 대화상자에서 「대상: PDF로 저장」 선택)",
+      visit_start_date: "시작일", visit_end_date: "종료일", visit_dept_col: "부서(E열)", visit_employee_office: "직원(오피스)", visit_col_date: "날짜", visit_col_visitor: "방문자", visit_col_store: "매장", visit_col_type: "구분", visit_col_purpose: "목적", visit_col_duration: "체류시간", visit_query_please: "기록을 조회해 주세요.",
+      settings_title: "⚙️ 설정", settings_head_office: "본사 정보 (인보이스 발행용)", settings_head_office_desc: "주문 승인·출고 인보이스 인쇄 시 사용되는 본사 정보입니다. 거래처 시트의 '본사' 행에 저장됩니다.", settings_company_name: "회사명", settings_tax_id: "사업자번호/Tax ID", settings_address: "주소", settings_phone: "연락처", settings_bank_info: "계좌/메모 (인보이스 하단)", settings_save_btn: "💾 본사 정보 저장", settings_permission_title: "권한 안내", settings_permission_hq: "• HQ(본사): 물류/인사/급여/설정 등 전체 메뉴 이용 가능", settings_permission_store: "• 매장: 소속 매장 관련 메뉴(근태, 점검, 방문 등) 이용", settings_permission_note: "권한은 직원정보 시트의 '권한' 열에서 관리됩니다."
+    },
+    en: {
+      login_title: "CM ERP SYSTEM", btn_login: "Login",
+      login_store_ph: "Select Store", login_label_store: "Store", login_label_name: "Name", login_label_pw: "P/W", menu_dashboard: "📊 Dashboard", menu_notices: "📢 Notices", menu_work_log: "📝 Work Log",
+      menu_header_logistics: "Logistics", menu_item_manage: "📦 Items", menu_vendor: "🏢 Vendors", menu_outbound: "🚚 Orders", menu_stock: "⚖️ Stock", menu_inbound: "📦 Inbound", menu_force: "📤 Outbound",
+      menu_header_hr: "HR", menu_hr_employee: "👥 Employees", menu_attendance: "📅 Attendance/Schedule", menu_payroll: "💰 Payroll", menu_hr_leave: "🏖️ Leave",
+      menu_header_store: "Stores", menu_store_check: "🏢 Store Check", menu_store_visit: "📍 Store Visit", menu_header_settings: "Settings",
+      btn_logout: "Logout", btn_search: "Search", btn_query: "Query", btn_save: "Save", btn_query_go: "🔍 Query", btn_query_go2: "🔍 Query", btn_refresh: "🔄 Refresh",
+      in_nav_hist: "History", stock_nav_adjust: "🛠️ Stock Adjust", stock_nav_status: "📊 Status", stock_nav_history: "📋 Adjust History",
+      leave_tab_approval: "Leave Approval", leave_tab_stats: "Leave Stats", label_period: "Period", label_store: "Store", label_employee: "Employee", label_date: "Date", label_evaluator: "Evaluator",
+      tab_wl_personal: "👤 My Work Log", tab_wl_manager: "👮‍♂️ Manager Approval", tab_wl_report: "📊 Weekly Report",
+      tab_hr_list: "📋 Employee List", tab_hr_eval: "📝 Evaluation", tab_eval_list: "📋 Eval History", tab_eval_kitchen: "🍳 Kitchen Evaluation",
+      tab_att_status: "📊 Attendance", tab_att_schedule: "📝 Schedule", tab_att_view: "🔍 View Schedule",
+      tab_pay_calc: "🧮 Payroll Calc", tab_pay_hist: "📂 Pay History", tab_store_check: "✅ Daily Check", tab_store_history: "📋 Check History", tab_store_setting: "⚙️ Settings",
+      tab_in_new: "New Inbound", tab_force_new: "✍️ Outbound", tab_force_hist: "📋 History", tab_visit_list: "📋 Visit List", tab_visit_stats: "📊 Visit Stats",
+      wl_title: "📝 Office Work Log", wl_label_date: "📅 Date", wl_label_staff: "👤 Staff", wl_save_progress: "💾 Save Progress",
+      wl_finish_work: "🏆 Finish Work", wl_continue_work: "⏳ Continue", wl_today_work: "🚀 Today", wl_task_content: "Task", wl_importance: "Priority", wl_progress: "Progress", wl_status: "Status",
+      wl_add_item: "Add Item", wl_start_today: "Start Today", wl_finish_daily: "👋 End Day", wl_query_period: "📅 Period", wl_dept: "🏢 Dept", wl_filter_all: "All",
+      eval_load_form: "🔄 Load Form", eval_final_grade: "Final Grade", eval_total_comment: "💡 Comment", eval_save: "💾 Save", eval_incident: "6) Incidents", eval_action_plan: "7) Action Plan", eval_setting: "⚙️ Eval Settings",
+      eval_training: "Training Needed", eval_coach: "Coach", eval_target_date: "Target", eval_reeval_date: "Re-eval",
+      placeholder_search: "Search", placeholder_pin: "PIN", placeholder_comment: "Enter comment.",
+      notice_history: "📑 Sent", chk_memo: "Remarks", chk_inspector_ph: "Inspector (optional)", label_all: "All", stock_past: "Past", stock_current: "Current", item_search_ph: "Search", modal_item_search: "📦 Item Search",
+      status_finish: "Finish", status_carry_over: "Carry Over", status_today: "Today", status_continue: "Continue",
+      filter_reset: "Reset filters", filter_status_multi: "Status (multi)", filter_none: "None", filter_n_selected: " selected",
+      mgr_no_data: "No data found.", mgr_no_match: "No matching records.", mgr_loading: "Loading...",
+      mgr_approved: "Approved", mgr_reject: "Rejected", mgr_approve_btn: "Approve", mgr_prompt_date: "Please select start and end date.", mgr_prompt_order: "End date cannot be before start date.", mgr_hint: "Select date range and click [Query].",
+      item_title: "Item Management", item_form_title: "Item Info", item_new: "New", item_code: "Code (Col A)", item_cat: "Category", item_vendor: "Vendor", item_vendor_ph: "Select/enter vendor",
+      item_name: "Item name", item_image: "Image URL (Col G)", item_tax: "Tax", item_tax_vat: "Taxable (VAT)", item_tax_free: "Exempt",
+      item_spec: "Spec", item_price: "Price", item_cost: "Cost", item_save: "Save", item_cat_all: "All categories",
+      item_col_code: "Code", item_col_image: "Image", item_col_name: "Name", item_col_spec: "Spec", item_col_price: "Price", item_manage: "Action",
+      item_guide: "Select category or enter keyword and click [Search].", wl_approve_feedback: "Approve/Feedback",
+      stock_title: "Stock", stock_currency: "",
+      notice_title: "📢 Notices", notice_send_new: "✏️ New Notice", label_subject: "Subject", label_content: "Content", label_role: "Role", notice_send_btn: "Send Notice", notice_attach: "📎 Attachments",
+      notice_received_title: "📬 Received Notices", notice_received_hint: "Select date range to view past notices.", label_date_from: "From", label_date_to: "To",
+      dash_title: "Dashboard", dash_welcome: "Welcome", dash_user: "User",
+      dash_pending_orders: "Pending Orders", dash_inbound_month: "Inbound (Month)", dash_outbound_month: "Outbound (Month)", dash_leave_pending: "Leave Pending", dash_att_pending: "Attendance Pending",
+      dash_store_kpi_title: "📊 Store KPIs", dash_store_kpi_hint: "This month: pending orders, outbound, leave pending, attendance pending by store.", dash_kpi_store: "Store", dash_kpi_no_data: "No store data.", dash_kpi_error: "Could not load KPIs.",
+      vendor_title: "🏢 Vendors", vendor_form: "🏢 Vendor Form", vendor_type: "Type", vendor_type_buy: "🔵 Buyer", vendor_type_sell: "🔴 Seller", vendor_type_etc: "⚪ Other", vendor_code: "Code", vendor_company: "Company", vendor_manager: "Manager", vendor_phone: "Phone", vendor_taxno: "Tax ID", vendor_ceo: "CEO", vendor_addr: "Address", vendor_balance: "Balance", vendor_memo: "Memo", vendor_col_type: "Type", vendor_col_company: "Company", vendor_col_manager: "Manager", vendor_col_balance: "Balance",
+      hr_emp_title: "👥 Employees", hr_emp_form: "✏️ Employee Form", hr_emp_new: "+ New", label_name: "Name", label_nickname: "Nickname", label_job: "Job", label_email: "Email", label_birth: "Birth", label_nation: "Nationality", label_join_date: "Join", label_leave_date: "Leave", label_sal_type: "Pay Type", label_amount: "Amount", label_role_perm: "Role", emp_col_age: "Age", emp_col_salary: "Salary", emp_photo: "Photo", emp_photo_url: "Photo URL", eval_store_first: "Select store first", eval_position: "Position", eval_date: "Eval Date", eval_shift: "Shift/Role", eval_weight: "Weight: Menu 40% · Cost 20% · Hygiene 20% · Attitude 20%", eval_total_score: "Total", eval_final_grade_label: "Grade", eval_issue_type: "Issue Type", eval_occur: "Occurred", eval_detail: "Detail", eval_cat_main: "Category", eval_cat_sub: "Sub", eval_item: "Item", eval_use: "Use", eval_load_items: "Load Items", eval_save_items: "Save Items", eval_setting_desc: "Edit items or toggle use.",
+      eval_list_title: "📋 Evaluation History", eval_list_type: "Type", eval_list_type_all: "📋 All", eval_list_type_kitchen: "🍳 Kitchen", eval_list_type_service: "🍽 Service", eval_list_start: "From", eval_list_end: "To", eval_list_evaluator: "Evaluator", eval_list_th_date: "Date", eval_list_th_employee: "Employee", eval_list_th_score: "Score", eval_list_th_grade: "Grade", eval_list_th_memo: "Memo", eval_list_btn_view: "View", eval_list_grade_all: "All grades", eval_list_loading: "Loading...", eval_list_no_data: "No evaluation history found.", eval_list_count: " items", eval_list_fail: "Query failed. Check sheet.",
+      att_title: "📅 Attendance", att_view_hint: "View saved schedule. Edit in Schedule tab.", att_store_select: "Store", att_week_monday: "Week (Mon)", att_load_schedule: "📅 Load Schedule", att_start_date: "Start", att_end_date: "End", att_all_stores: "All Stores", att_select_store_first: "Select store first", att_datetime: "DateTime", att_type: "Type", att_late_extra: "Late/OT", att_reason: "Reason", att_smart_tool: "Smart Batch", att_work_hours: "Work (hrs)", att_break_start: "Break Start", att_break_hours: "Break (hrs)", att_apply_day: "Apply Day", att_mon: "Mon", att_tue: "Tue", att_wed: "Wed", att_thu: "Thu", att_fri: "Fri", att_sat: "Sat", att_sun: "Sun", att_staff_select: "👥 Staff", att_display_time: "🕒 Display:", att_reset: "🧹 Reset", att_copy_next: "⏭️ Copy to Next", att_save_schedule: "💾 Save Schedule", att_load_saved: "📅 Load Saved", att_query_please: "Load records.",
+      pay_title: "💰 Payroll", pay_month: "📅 Pay Month", pay_db_setup: "🛠️ DB Setup (once)", pay_calc_run: "🧮 Calculate", pay_save_confirm: "💾 Save to DB", pay_col_store: "Store", pay_col_name: "Name", pay_col_base: "Base", pay_allowance: "Allowance", pay_ot: "OT", pay_deduct: "Deduct", pay_net: "Net", pay_edit: "Edit", pay_col_role: "Role", pay_col_risk: "Risk", pay_col_birth: "Birth", pay_col_bonus: "Bonus", pay_col_ot_hr: "Hrs", pay_col_ot_amt: "Amt", pay_col_late: "Late", pay_col_sso: "SSO", pay_col_etc: "Other", pay_hist_month: "📅 Month", pay_hist_store: "🏢 Store", pay_total_amount: "Total:", pay_query_please: "Select date and click [Calculate].", pay_hist_query_please: "Click Query.",
+      leave_title: "🏖️ Leave", leave_wait: "Pending", leave_approved: "Approved", leave_rejected: "Rejected", leave_used_period: "Used (Period)", leave_used_total: "Used (Total)", leave_remain: "Remain", leave_annual: "Annual", leave_sick: "Sick", leave_col_date: "Date", leave_col_name: "Name", leave_col_type: "Type", leave_col_status: "Status",
+      store_title: "🏢 Store Manage", store_check_store: "Store", store_check_date: "Date", store_check_inspector: "Inspector", store_load_form: "🔄 Load Form", store_no: "NO", store_cat_main: "Category", store_cat_sub: "Sub", store_check_item: "Item", store_check: "Check", store_remark: "Remark", store_load_hint: "Select info and click Load Form.", store_total_comment: "💡 Comment", store_save_check: "💾 Save Check", store_hist_period: "Period", store_all_stores: "All Stores", store_select_ph: "Select store", store_inspector_ph: "Inspector (opt)", store_col_date: "Date", store_col_inspector: "Inspector", store_col_result: "Result", store_setting_title: "🛠 Check Items", store_refresh: "Refresh", store_setting_desc: "Add/delete in sheet.", store_save_settings: "⚙️ Save", store_preparing: "Schedule coming soon...",
+      print_btn: "Print/PDF", excel_btn: "Excel Download",
+      ord_title: "🚚 Order Approval", ord_summary: "Summary", ord_total: "Total", ord_query_please: "Query.", ord_pending: "Pending", ord_approved: "Approved", ord_rejected: "Rejected",
+      in_title: "📦 Inbound", in_date: "Date", in_vendor: "Vendor", in_item: "Item", in_qty: "Qty", in_wait_list: "Inbound List", in_save: "💾 Save", in_find_item: "Find Item", in_add_list: "Add ⬇️", in_col_item: "Item", in_col_qty: "Qty", in_col_del: "Del",
+      force_title: "📤 Outbound", force_date: "Date", force_store: "Store", force_item: "Item", force_qty: "Qty", force_wait_list: "List", force_confirm: "🚀 Confirm", force_add_list: "Add ⬇️", force_col_store: "Store", force_col_item: "Item", force_col_qty: "Qty", force_col_del: "Del",       force_hist_type: "Type", visit_page_title: "📍 Store Visit (Live)",
+      wl_check_today_hint: "* Check today's tasks", wl_finish_hint: "* 100% → Finish; incomplete → Continue after recording.",
+      print_pdf_hint: "(Only searched content is printed. For PDF, select 'Save as PDF' in the print dialog.)",
+      visit_start_date: "Start", visit_end_date: "End", visit_dept_col: "Dept (Col E)", visit_employee_office: "Employee (Office)", visit_col_date: "Date", visit_col_visitor: "Visitor", visit_col_store: "Store", visit_col_type: "Type", visit_col_purpose: "Purpose", visit_col_duration: "Duration", visit_query_please: "Load records.",
+      settings_title: "⚙️ Settings", settings_head_office: "Head Office (Invoice)", settings_head_office_desc: "Company info used for order/outbound invoice printing. Saved to 'Head Office' row in Vendors sheet.", settings_company_name: "Company Name", settings_tax_id: "Tax ID", settings_address: "Address", settings_phone: "Phone", settings_bank_info: "Bank/Memo (Invoice footer)", settings_save_btn: "💾 Save", settings_permission_title: "Permissions", settings_permission_hq: "• HQ: Full access to logistics, HR, payroll, settings.", settings_permission_store: "• Store: Access to own store (attendance, check, visit).", settings_permission_note: "Permissions are managed in the 'Role' column of the Employee sheet."
+    },
+    th: {
+      login_title: "CM ERP SYSTEM", btn_login: "เข้าสู่ระบบ",
+      login_store_ph: "เลือกสาขา", login_label_store: "สาขา", login_label_name: "ชื่อ", login_label_pw: "P/W", menu_dashboard: "📊 แดชบอร์ด", menu_notices: "📢 ประกาศ", menu_work_log: "📝 บันทึกงาน",
+      menu_header_logistics: "โลจิสติกส์", menu_item_manage: "📦 สินค้า", menu_vendor: "🏢 ผู้ขาย", menu_outbound: "🚚 ออเดอร์", menu_stock: "⚖️ สต็อก", menu_inbound: "📦 รับเข้า", menu_force: "📤 จ่ายออก",
+      menu_header_hr: "บุคลากร", menu_hr_employee: "👥 พนักงาน", menu_attendance: "📅 เข้างาน/ตาราง", menu_payroll: "💰 เงินเดือน", menu_hr_leave: "🏖️ ลางาน",
+      menu_header_store: "สาขา", menu_store_check: "🏢 ตรวจสาขา", menu_store_visit: "📍 เยี่ยมสาขา", menu_header_settings: "ตั้งค่า",
+      btn_logout: "ออกจากระบบ", btn_search: "ค้นหา", btn_query: "ค้นหา", btn_save: "บันทึก", btn_query_go: "🔍 ค้นหา", btn_query_go2: "🔍 ค้นหา", btn_refresh: "🔄 รีเฟรช",
+      in_nav_hist: "ประวัติ", stock_nav_adjust: "🛠️ ปรับสต็อก", stock_nav_status: "📊 สถานะ", stock_nav_history: "📋 ประวัติ", leave_tab_approval: "อนุมัติลางาน", leave_tab_stats: "สถิติลางาน",
+      label_period: "ช่วง", label_store: "สาขา", label_employee: "พนักงาน", label_date: "วันที่", label_evaluator: "ผู้ประเมิน",
+      tab_wl_personal: "👤 บันทึกงานของฉัน", tab_wl_manager: "👮‍♂️ อนุมัติ", tab_wl_report: "📊 รายงาน", tab_hr_list: "📋 รายชื่อ", tab_hr_eval: "📝 ประเมิน", tab_eval_list: "📋 ประวัติการประเมิน", tab_eval_kitchen: "🍳 ประเมินครัว",
+      tab_att_status: "📊 เข้างาน", tab_att_schedule: "📝 ตาราง", tab_att_view: "🔍 ดูตาราง", tab_pay_calc: "🧮 คำนวณเงินเดือน", tab_pay_hist: "📂 ประวัติ",
+      tab_store_check: "✅ ตรวจรายวัน", tab_store_history: "📋 ประวัติ", tab_store_setting: "⚙️ ตั้งค่า", tab_in_new: "รับเข้าใหม่", tab_force_new: "✍️ จ่ายออก", tab_force_hist: "📋 ประวัติ",
+      tab_visit_list: "📋 รายการเยี่ยม", tab_visit_stats: "📊 สถิติ", wl_title: "📝 บันทึกงาน", wl_label_date: "📅 วันที่", wl_label_staff: "👤 พนักงาน", wl_save_progress: "💾 บันทึก",
+      wl_finish_work: "🏆 เสร็จ", wl_continue_work: "⏳ รอดำเนินการ", wl_today_work: "🚀 วันนี้", wl_task_content: "งาน", wl_importance: "ความสำคัญ", wl_progress: "ความคืบหน้า", wl_status: "สถานะ",
+      wl_add_item: "เพิ่มรายการ", wl_start_today: "เริ่มวันนี้", wl_finish_daily: "👋 จบวัน", wl_check_today_hint: "* เลือกงานที่ต้องทำวันนี้", wl_finish_hint: "* 100% → Finish; ที่ยังไม่เสร็จจะโอนเป็น Continue หลังบันทึก", wl_query_period: "📅 ช่วง", wl_dept: "🏢 แผนก", wl_filter_all: "ทั้งหมด",
+      print_pdf_hint: "(พิมพ์เฉพาะเนื้อหาที่ค้นหา สำหรับ PDF เลือก 'บันทึกเป็น PDF' ในกล่องพิมพ์)",
+      visit_start_date: "วันเริ่ม", visit_end_date: "วันสิ้นสุด", visit_dept_col: "แผนก (คอลัมน์ E)", visit_employee_office: "พนักงาน (ออฟฟิศ)", visit_col_date: "วันที่", visit_col_visitor: "ผู้เยี่ยม", visit_col_store: "สาขา", visit_col_type: "ประเภท", visit_col_purpose: "วัตถุประสงค์", visit_col_duration: "ระยะเวลาอยู่", visit_query_please: "กรุณาค้นหาบันทึก",
+      settings_title: "⚙️ ตั้งค่า", settings_head_office: "ข้อมูลสำนักงานใหญ่ (สำหรับออกใบแจ้งหนี้)", settings_head_office_desc: "ใช้สำหรับพิมพ์ใบแจ้งหนี้จากการอนุมัติคำสั่ง/การจัดส่ง บันทึกในแถว 'สำนักงานใหญ่' ในชีตลูกค้า", settings_company_name: "ชื่อบริษัท", settings_tax_id: "เลขประจำตัวผู้เสียภาษี", settings_address: "ที่อยู่", settings_phone: "โทรศัพท์", settings_bank_info: "บัญชี/หมายเหตุ (ท้ายใบแจ้งหนี้)", settings_save_btn: "💾 บันทึก", settings_permission_title: "สิทธิ์การใช้งาน", settings_permission_hq: "• HQ (สำนักงานใหญ่): ใช้เมนูได้ทั้งหมด เช่น โลจิสติกส์ บุคลากร เงินเดือน ตั้งค่า", settings_permission_store: "• สาขา: ใช้เมนูของสาขาของตน (เข้างาน ตรวจ สาขา)", settings_permission_note: "จัดการสิทธิ์ในคอลัมน์ 'สิทธิ์' ของชีตข้อมูลพนักงาน",
+      eval_load_form: "🔄 โหลดฟอร์ม", eval_final_grade: "ระดับ", eval_total_comment: "💡 ความคิดเห็น", eval_save: "💾 บันทึก", eval_incident: "6) เหตุการณ์", eval_action_plan: "7) แผนดำเนินการ", eval_setting: "⚙️ ตั้งค่า",
+      eval_training: "การฝึกอบรม", eval_coach: "โค้ช", eval_target_date: "เป้าหมาย", eval_reeval_date: "ประเมินซ้ำ",
+      placeholder_search: "ค้นหา", placeholder_pin: "PIN", placeholder_comment: "ความคิดเห็น", notice_history: "📑 ส่งแล้ว", chk_memo: "หมายเหตุ", chk_inspector_ph: "ผู้ตรวจ (ถ้ามี)", label_all: "ทั้งหมด", stock_past: "อดีต", stock_current: "ปัจจุบัน", item_search_ph: "ค้นหา", modal_item_search: "📦 ค้นหาสินค้า",
+      status_finish: "เสร็จ", status_carry_over: "โอนไปวันถัดไป", status_today: "วันนี้", status_continue: "รอดำเนินการ",
+      filter_reset: "ล้างตัวกรอง", filter_status_multi: "สถานะ (เลือกได้หลาย)", filter_none: "ไม่เลือก", filter_n_selected: " รายการ",
+      mgr_no_data: "ไม่พบข้อมูล", mgr_no_match: "ไม่มีรายการที่ตรงเงื่อนไข", mgr_loading: "กำลังโหลด...",
+      mgr_approved: "อนุมัติแล้ว", mgr_reject: "ปฏิเสธ", mgr_approve_btn: "อนุมัติ", mgr_prompt_date: "กรุณาเลือกวันเริ่มและวันสิ้นสุด", mgr_prompt_order: "วันสิ้นสุดต้องไม่ก่อนวันเริ่ม", mgr_hint: "เลือกช่วงวันที่ แล้วกด [ค้นหา]",
+      item_title: "จัดการสินค้า", item_form_title: "ข้อมูลสินค้า", item_new: "ลงทะเบียนใหม่", item_code: "รหัส (คอลัมน์ A)", item_cat: "หมวดหมู่", item_vendor: "ผู้ขายหลัก", item_vendor_ph: "เลือก/ใส่ผู้ขาย",
+      item_name: "ชื่อสินค้า", item_image: "ลิงก์รูป (คอลัมน์ G)", item_tax: "ภาษี", item_tax_vat: "มี VAT", item_tax_free: "ยกเว้น",
+      item_spec: "ขนาด", item_price: "ราคาขาย", item_cost: "ต้นทุน", item_save: "บันทึก", item_cat_all: "ทุกหมวด",
+      item_col_code: "รหัส", item_col_image: "รูป", item_col_name: "ชื่อ", item_col_spec: "ขนาด", item_col_price: "ราคา", item_manage: "จัดการ",
+      item_guide: "เลือกหมวดหรือพิมพ์คำค้น แล้วกด [ค้นหา]", wl_approve_feedback: "อนุมัติ/ความคิดเห็น",
+      stock_title: "สต็อก", stock_currency: "฿",
+      notice_title: "📢 ประกาศ", notice_send_new: "✏️ ส่งประกาศใหม่", label_subject: "หัวข้อ", label_content: "เนื้อหา", label_role: "ตำแหน่ง", notice_send_btn: "ส่งประกาศ", notice_attach: "📎 แนบไฟล์",
+      notice_received_title: "📬 ประกาศที่ได้รับ", notice_received_hint: "เลือกช่วงวันที่เพื่อดูประกาศที่ผ่านมา", label_date_from: "จาก", label_date_to: "ถึง",
+      dash_title: "แดชบอร์ด", dash_welcome: "ยินดีต้อนรับ", dash_user: "ผู้ใช้",
+      dash_pending_orders: "ออเดอร์รออนุมัติ", dash_inbound_month: "รับเข้า (เดือน)", dash_outbound_month: "จ่ายออก (เดือน)", dash_leave_pending: "ลารออนุมัติ", dash_att_pending: "เข้างานรออนุมัติ",
+      dash_store_kpi_title: "📊 KPI ตามสาขา", dash_store_kpi_hint: "รายเดือน: ออเดอร์รออนุมัติ, จ่ายออก, ลารอ, เข้างานรอ ตามสาขา", dash_kpi_store: "สาขา", dash_kpi_no_data: "ไม่มีข้อมูลสาขา", dash_kpi_error: "โหลด KPI ไม่ได้",
+      vendor_title: "🏢 ผู้ขาย", vendor_form: "🏢 ข้อมูลผู้ขาย", vendor_type: "ประเภท", vendor_type_buy: "🔵 ซื้อ", vendor_type_sell: "🔴 ขาย", vendor_type_etc: "⚪ อื่นๆ", vendor_code: "รหัส", vendor_company: "บริษัท", vendor_manager: "ผู้ติดต่อ", vendor_phone: "โทร", vendor_taxno: "เลขประจำตัว", vendor_ceo: "ผู้แทน", vendor_addr: "ที่อยู่", vendor_balance: "ยอดค้าง", vendor_memo: "หมายเหตุ", vendor_col_type: "ประเภท", vendor_col_company: "บริษัท", vendor_col_manager: "ผู้ติดต่อ", vendor_col_balance: "ยอด",
+      hr_emp_title: "👥 พนักงาน", hr_emp_form: "✏️ ข้อมูลพนักงาน", hr_emp_new: "+ ใหม่", label_name: "ชื่อ", label_nickname: "ชื่อเล่น", label_job: "หน้าที่", label_email: "อีเมล", label_birth: "วันเกิด", label_nation: "สัญชาติ", label_join_date: "เข้างาน", label_leave_date: "ออกงาน", label_sal_type: "ประเภทเงินเดือน", label_amount: "จำนวน", label_role_perm: "สิทธิ์", emp_col_age: "อายุ", emp_col_salary: "เงินเดือน", emp_photo: "รูป", emp_photo_url: "URL รูป", eval_store_first: "เลือกสาขาก่อน", eval_position: "ตำแหน่ง", eval_date: "วันที่ประเมิน", eval_shift: "กะ/บทบาท", eval_weight: "น้ำหนัก: เมนู 40% · ต้นทุน 20% · สุขาภิบาล 20% · ทัศนคติ 20%", eval_total_score: "รวม", eval_final_grade_label: "ระดับ", eval_issue_type: "ประเภทเหตุการณ์", eval_occur: "เกิด", eval_detail: "รายละเอียด", eval_cat_main: "หมวด", eval_cat_sub: "ย่อย", eval_item: "รายการ", eval_use: "ใช้", eval_load_items: "โหลดรายการ", eval_save_items: "บันทึกรายการ", eval_setting_desc: "แก้ไขหรือเปิด/ปิดการใช้งาน",
+      eval_list_title: "📋 ประวัติการประเมิน", eval_list_type: "ประเภท", eval_list_type_all: "📋 ทั้งหมด", eval_list_type_kitchen: "🍳 ครัว", eval_list_type_service: "🍽 บริการ", eval_list_start: "จาก", eval_list_end: "ถึง", eval_list_evaluator: "ผู้ประเมิน", eval_list_th_date: "วันที่", eval_list_th_employee: "พนักงาน", eval_list_th_score: "คะแนน", eval_list_th_grade: "ระดับ", eval_list_th_memo: "หมายเหตุ", eval_list_btn_view: "ดู", eval_list_grade_all: "ทุกระดับ", eval_list_loading: "กำลังโหลด...", eval_list_no_data: "ไม่พบประวัติการประเมิน", eval_list_count: " รายการ", eval_list_fail: "โหลดไม่สำเร็จ กรุณาตรวจสอบชีต",
+      att_title: "📅 เข้างาน", att_view_hint: "ดูตารางที่บันทึก แก้ไขในแท็บเขียนตาราง", att_store_select: "สาขา", att_week_monday: "สัปดาห์ (จ.)", att_load_schedule: "📅 โหลดตาราง", att_start_date: "เริ่ม", att_end_date: "สิ้นสุด", att_all_stores: "ทุกสาขา", att_select_store_first: "เลือกสาขาก่อน", att_datetime: "วันเวลา", att_type: "ประเภท", att_late_extra: "สาย/OT", att_reason: "เหตุผล", att_smart_tool: "ป้อนรวม", att_work_hours: "ทำงาน (ชม.)", att_break_start: "พักเริ่ม", att_break_hours: "พัก (ชม.)", att_apply_day: "วัน", att_mon: "จ.", att_tue: "อ.", att_wed: "พ.", att_thu: "พฤ.", att_fri: "ศ.", att_sat: "ส.", att_sun: "อา.", att_staff_select: "👥 พนักงาน", att_display_time: "🕒 แสดง:", att_reset: "🧹 รีเซ็ต", att_copy_next: "⏭️ คัดลอกสัปดาห์ถัดไป", att_save_schedule: "💾 บันทึกตาราง", att_load_saved: "📅 โหลดที่บันทึก", att_query_please: "โหลดบันทึก",
+      pay_title: "💰 เงินเดือน", pay_month: "📅 เดือน", pay_db_setup: "🛠️ สร้าง DB (ครั้งแรก)", pay_calc_run: "🧮 คำนวณ", pay_save_confirm: "💾 บันทึกลง DB", pay_col_store: "สาขา", pay_col_name: "ชื่อ", pay_col_base: "ฐาน", pay_allowance: "เบี้ยขยัน", pay_ot: "OT", pay_deduct: "หัก", pay_net: "สุทธิ", pay_edit: "แก้ไข", pay_col_role: "บทบาท", pay_col_risk: "ความเสี่ยง", pay_col_birth: "วันเกิด", pay_col_bonus: "โบนัส", pay_col_ot_hr: "ชม.", pay_col_ot_amt: "บาท", pay_col_late: "สาย", pay_col_sso: "SSO", pay_col_etc: "อื่นๆ", pay_hist_month: "📅 เดือน", pay_hist_store: "🏢 สาขา", pay_total_amount: "รวม:", pay_query_please: "เลือกวันที่ แล้วกด [คำนวณ]", pay_hist_query_please: "กด Query",
+      leave_title: "🏖️ ลางาน", leave_wait: "รอ", leave_approved: "อนุมัติ", leave_rejected: "ปฏิเสธ", leave_used_period: "ใช้ (ช่วง)", leave_used_total: "ใช้ (รวม)", leave_remain: "เหลือ", leave_annual: "ลาประจำปี", leave_sick: "ลาป่วย", leave_col_date: "วันที่", leave_col_name: "ชื่อ", leave_col_type: "ชนิด", leave_col_status: "สถานะ",
+      store_title: "🏢 จัดการสาขา", store_check_store: "สาขา", store_check_date: "วันที่", store_check_inspector: "ผู้ตรวจ", store_load_form: "🔄 โหลดฟอร์ม", store_no: "NO", store_cat_main: "หมวด", store_cat_sub: "ย่อย", store_check_item: "รายการ", store_check: "ตรวจ", store_remark: "หมายเหตุ", store_load_hint: "เลือกข้อมูล แล้วกด โหลดฟอร์ม", store_total_comment: "💡 ความคิดเห็น", store_save_check: "💾 บันทึกการตรวจ", store_hist_period: "ช่วง", store_all_stores: "ทุกสาขา", store_select_ph: "เลือกสาขา", store_inspector_ph: "ผู้ตรวจ (ถ้ามี)", store_col_date: "วันที่", store_col_inspector: "ผู้ตรวจ", store_col_result: "ผล", store_setting_title: "🛠 รายการตรวจ", store_refresh: "รีเฟรช", store_setting_desc: "เพิ่ม/ลบในชีต", store_save_settings: "⚙️ บันทึก", store_preparing: "ตารางกำลังเตรียม...",
+      print_btn: "🖨️ พิมพ์/PDF", excel_btn: "📥 ดาวน์โหลด Excel",
+      ord_title: "🚚 อนุมัติออเดอร์", ord_summary: "สรุป", ord_total: "รวม", ord_query_please: "ค้นหา", ord_pending: "รอ", ord_approved: "อนุมัติ", ord_rejected: "ปฏิเสธ",
+      in_title: "📦 รับเข้า", in_date: "วันที่", in_vendor: "ผู้ขาย", in_item: "สินค้า", in_qty: "จำนวน", in_wait_list: "รายการรับเข้า", in_save: "💾 บันทึก", in_find_item: "หาสินค้า", in_add_list: "เพิ่ม ⬇️", in_col_item: "สินค้า", in_col_qty: "จำนวน", in_col_del: "ลบ",
+      force_title: "📤 จ่ายออก", force_date: "วันที่", force_store: "สาขา", force_item: "สินค้า", force_qty: "จำนวน", force_wait_list: "รายการ", force_confirm: "🚀 ยืนยัน", force_add_list: "เพิ่ม ⬇️", force_col_store: "สาขา", force_col_item: "สินค้า", force_col_qty: "จำนวน", force_col_del: "ลบ", force_hist_type: "ประเภท", visit_page_title: "📍 สถานะเยี่ยมสาขาแบบเรียลไทม์",
+      print_pdf_hint: "(พิมพ์เฉพาะเนื้อหาที่ค้นหา สำหรับ PDF เลือก 'บันทึกเป็น PDF' ในกล่องพิมพ์)"
+    },
+    mm: {
+      login_title: "CM ERP SYSTEM", btn_login: "ဝင်ရောက်မည်",
+      login_store_ph: "ဆိုင်ရွေးပါ", login_label_store: "ဆိုင်", login_label_name: "အမည်", login_label_pw: "P/W", menu_dashboard: "📊 ပင်မစာမျက်နှာ", menu_notices: "📢 ကြေညာချက်များ", menu_work_log: "📝 အလုပ်မှတ်တမ်း",
+      menu_header_logistics: "ပစ္စည်းပို့ခြင်း", menu_item_manage: "📦 ပစ္စည်းများ", menu_vendor: "🏢 ရောင်းချသူများ", menu_outbound: "🚚 အော်ဒါ", menu_stock: "⚖️ လက်ကျန်", menu_inbound: "📦 လက်ခံ", menu_force: "📤 ထုတ်ပို့",
+      menu_header_hr: "အရပ်ဖက်", menu_hr_employee: "👥 ဝန်ထမ်းများ", menu_attendance: "📅 လာရောက်မှု/အချိန်ဇယား", menu_payroll: "💰 လစာ", menu_hr_leave: "🏖️ ခွင့်ယူ",
+      menu_header_store: "ဆိုင်များ", menu_store_check: "🏢 ဆိုင်စစ်ဆေးခြင်း", menu_store_visit: "📍 ဆိုင်သွားခြင်း", menu_header_settings: "ဆက်တင်များ",
+      btn_logout: "ထွက်မည်", btn_search: "ရှာမည်", btn_query: "ကြည့်မည်", btn_save: "သိမ်းမည်", btn_query_go: "🔍 ကြည့်မည်", btn_query_go2: "🔍 ကြည့်မည်", btn_refresh: "🔄 ပြန်စမည်",
+      in_nav_hist: "မှတ်တမ်း", stock_nav_adjust: "🛠️ လက်ကျန်ညှိ", stock_nav_status: "📊 အခြေအနေ", stock_nav_history: "📋 မှတ်တမ်း", leave_tab_approval: "ခွင့်အတည်ပြု", leave_tab_stats: "ခွင့်စာရင်း",
+      label_period: "ကာလ", label_store: "ဆိုင်", label_employee: "ဝန်ထမ်း", label_date: "ရက်စွဲ", label_evaluator: "အကဲဖြတ်သူ",
+      tab_wl_personal: "👤 ကျွန်ုပ်၏မှတ်တမ်း", tab_wl_manager: "👮‍♂️ မန်နေဂျာအတည်ပြု", tab_wl_report: "📊 သီတင်းပတ်အစီရင်", tab_hr_list: "📋 ဝန်ထမ်းစာရင်း", tab_hr_eval: "📝 အကဲဖြတ်ချက်", tab_eval_list: "📋 အကဲဖြတ်မှတ်တမ်း", tab_eval_kitchen: "🍳 ချက်ပြင်တိုက် အကဲဖြတ်",
+      tab_att_status: "📊 လာရောက်မှု", tab_att_schedule: "📝 အချိန်ဇယား", tab_att_view: "🔍 ကြည့်မည်", tab_pay_calc: "🧮 လစာတွက်", tab_pay_hist: "📂 မှတ်တမ်း", tab_store_check: "✅ နေ့စဉ်စစ်", tab_store_history: "📋 မှတ်တမ်း", tab_store_setting: "⚙️ ဆက်တင်",
+      tab_in_new: "လက်ခံအသစ်", tab_force_new: "✍️ ထုတ်ပို့", tab_force_hist: "📋 မှတ်တမ်း", tab_visit_list: "📋 သွားရောက်မှု", tab_visit_stats: "📊 စာရင်း",
+      wl_title: "📝 အလုပ်မှတ်တမ်း", wl_label_date: "📅 ရက်စွဲ", wl_label_staff: "👤 ဝန်ထမ်း", wl_save_progress: "💾 သိမ်းမည်", wl_finish_work: "🏆 ပြီး", wl_continue_work: "⏳ ဆိုင်းငံ့", wl_today_work: "🚀 ယနေ့", wl_task_content: "အကြောင်းအရာ", wl_importance: "အရေးကြီးမှု", wl_progress: "တိုးတက်မှု", wl_status: "အခြေအနေ",
+      wl_add_item: "အမျိုးအစားထည့်မည်", wl_start_today: "ယနေ့စမည်", wl_finish_daily: "👋 ပြီးဆုံး", wl_query_period: "📅 ကာလ", wl_dept: "🏢 ဌာန", wl_filter_all: "အားလုံး",
+      eval_load_form: "🔄 ဖောင်မ်မ", eval_final_grade: "အဆင့်", eval_total_comment: "💡 မှတ်ချက်", eval_save: "💾 သိမ်းမည်", eval_incident: "6) ဖြစ်ရပ်", eval_action_plan: "7) လုပ်ဆောင်ချက်", eval_setting: "⚙️ ဆက်တင်",
+      eval_training: "သင်တန်း", eval_coach: "ကတ်ချ်", eval_target_date: "ပစ်မှတ်", eval_reeval_date: "ပြန်အကဲဖြတ်",
+      placeholder_search: "ရှာမည်", placeholder_pin: "PIN", placeholder_comment: "မှတ်ချက်ထည့်ပါ", notice_history: "📑 ပို့ပြီး", chk_memo: "မှတ်ချက်", chk_inspector_ph: "စစ်ဆေးသူ", label_all: "အားလုံး", stock_past: "အတိတ်", stock_current: "လက်ရှိ", item_search_ph: "ရှာမည်", modal_item_search: "📦 ပစ္စည်းရှာမည်",
+      status_finish: "ပြီး", status_carry_over: "လွှဲပြောင်း", status_today: "ယနေ့", status_continue: "ဆိုင်းငံ့",
+      filter_reset: "ဖျက်မည်", filter_status_multi: "အခြေအနေ (အများရွေး)", filter_none: "မရွေး", filter_n_selected: " ရွေးပြီး",
+      mgr_no_data: "ဒေတာမရှိပါ။", mgr_no_match: "ကိုက်ညီသောမှတ်တမ်းမရှိပါ။", mgr_loading: "ဆောင်နေသည်...",
+      mgr_approved: "အတည်ပြုပြီး", mgr_reject: "ပယ်ချ", mgr_approve_btn: "အတည်ပြု", mgr_prompt_date: "စတင်နှင့်ဆုံးရက်ရွေးပါ။", mgr_prompt_order: "ဆုံးရက်သည် စတင်ရက်ထက် မစောနိုင်ပါ။", mgr_hint: "ရက်စွဲရွေးပြီး [ကြည့်မည်] နှိပ်ပါ။",
+      item_title: "ပစ္စည်းစီမံခန့်ခွဲမှု", item_form_title: "ပစ္စည်းအချက်အလက်", item_new: "အသစ်မှတ်ပုံတင်", item_code: "ကုဒ် (ကော်လံ A)", item_cat: "အမျိုးအစား", item_vendor: "ပင်မရောင်းသူ", item_vendor_ph: "ရွေးချယ်/ထည့်ပါ",
+      item_name: "ပစ္စည်းအမည်", item_image: "ပုံလင့် (ကော်လံ G)", item_tax: "အခွန်", item_tax_vat: "VAT ပါ", item_tax_free: "ကင်းလွတ်",
+      item_spec: "အရွယ်", item_price: "ဈေးနှုန်း", item_cost: "ကုန်ကျ", item_save: "သိမ်းမည်", item_cat_all: "အမျိုးအစားအားလုံး",
+      item_col_code: "ကုဒ်", item_col_image: "ပုံ", item_col_name: "အမည်", item_col_spec: "အရွယ်", item_col_price: "ဈေး", item_manage: "စီမံ",
+      item_guide: "အမျိုးအစားရွေးပါ သို့မဟုတ် စာသားထည့်ပြီး [ရှာမည်] နှိပ်ပါ။", wl_approve_feedback: "အတည်ပြု/ပြန်ကြား",
+      stock_title: "လက်ကျန်", stock_currency: "K",
+      notice_title: "📢 ကြေညာချက်များ", notice_send_new: "✏️ ကြေညာချက်အသစ်", label_subject: "ခေါင်းစဉ်", label_content: "အကြောင်းအရာ", label_role: "ရာထူး", notice_send_btn: "ကြေညာချက်ပို့မည်", notice_attach: "📎 ပူးတွဲဖိုင်",
+      notice_received_title: "📬 လက်ခံရရှိသော ကြေညာချက်များ", notice_received_hint: "အတိတ်ကြေညာချက်များ ကြည့်ရန် ရက်စွဲရွေးပါ။", label_date_from: "မှ", label_date_to: "အထိ",
+      dash_title: "ပင်မစာမျက်နှာ", dash_welcome: "ကြိုဆိုပါသည်", dash_user: "အသုံးပြုသူ",
+      dash_pending_orders: "အတည်မပြုရသေးသောအော်ဒါ", dash_inbound_month: "ဒီလလက်ခံ", dash_outbound_month: "ဒီလထုတ်ပို့", dash_leave_pending: "ခွင့်ဆိုင်းငံ့", dash_att_pending: "အချိန်မှတ်တမ်းဆိုင်းငံ့",
+      dash_store_kpi_title: "📊 ဆိုင်အလိုက် KPI", dash_store_kpi_hint: "ဒီလ: အတည်မပြုရသေးသောအော်ဒါ၊ ထုတ်ပို့၊ ခွင့်ဆိုင်းငံ့၊ အချိန်ဆိုင်းငံ့", dash_kpi_store: "ဆိုင်", dash_kpi_no_data: "ဆိုင်ဒေတာမရှိပါ။", dash_kpi_error: "KPI မမ၍မရပါ။",
+      vendor_title: "🏢 ရောင်းချသူများ", vendor_form: "🏢 ရောင်းချသူဖောင်မ်", vendor_type: "အမျိုးအစား", vendor_type_buy: "🔵 ဝယ်သူ", vendor_type_sell: "🔴 ရောင်းသူ", vendor_type_etc: "⚪ အခြား", vendor_code: "ကုဒ်", vendor_company: "ကုမ္ပဏီ", vendor_manager: "မန်နေဂျာ", vendor_phone: "ဖုန်း", vendor_taxno: "အခွန်နံပါတ်", vendor_ceo: "အကြီးအကဲ", vendor_addr: "လိပ်စာ", vendor_balance: "လက်ကျန်", vendor_memo: "မှတ်ချက်", vendor_col_type: "အမျိုးအစား", vendor_col_company: "ကုမ္ပဏီ", vendor_col_manager: "မန်နေဂျာ", vendor_col_balance: "လက်ကျန်",
+      hr_emp_title: "👥 ဝန်ထမ်းများ", hr_emp_form: "✏️ ဝန်ထမ်းဖောင်မ်", hr_emp_new: "+ အသစ်", label_name: "အမည်", label_nickname: "အမည်ပြောင်", label_job: "အလုပ်", label_email: "အီးမေးလ်", label_birth: "သက်တမ်း", label_nation: "နိုင်ငံသား", label_join_date: "အလုပ်ဝင်", label_leave_date: "အလုပ်ထွက်", label_sal_type: "လစာအမျိုးအစား", label_amount: "ပမာဏ", label_role_perm: "အခွင့်အရေး", emp_col_age: "အသက်", emp_col_salary: "လစာ", emp_photo: "ဓာတ်ပုံ", emp_photo_url: "ဓာတ်ပုံ URL", eval_store_first: "ဆိုင်ရွေးပြီးမှ", eval_position: "ရာထူး", eval_date: "အကဲဖြတ်ရက်", eval_shift: "အချိန်/အခန်းကဏ္ဍ", eval_weight: "အလေးချိန်: မီနူး 40% · ကုန်ကျ 20% · သန့်ရှင်း 20% · သဘောထား 20%", eval_total_score: "စုစုပေါင်း", eval_final_grade_label: "အဆင့်", eval_issue_type: "ပြဿနာအမျိုးအစား", eval_occur: "ဖြစ်ခဲ့", eval_detail: "အသေးစိတ်", eval_cat_main: "အမျိုးအစား", eval_cat_sub: "အမျိုးခွဲ", eval_item: "အမျိုးအစား", eval_use: "အသုံးပြု", eval_load_items: "အမျိုးအစားများမ", eval_save_items: "သိမ်းမည်", eval_setting_desc: "ပြင်ဆင်ခြင်း သို့မဟုတ် ဖွင့်/ပိတ်",
+      eval_list_title: "📋 အကဲဖြတ်မှတ်တမ်း", eval_list_type: "အမျိုးအစား", eval_list_type_all: "📋 အားလုံး", eval_list_type_kitchen: "🍳 ချက်ပြင်တိုက်", eval_list_type_service: "🍽 ဝန်ဆောင်မှု", eval_list_start: "စတင်", eval_list_end: "ပြီး", eval_list_evaluator: "အကဲဖြတ်သူ", eval_list_th_date: "ရက်စွဲ", eval_list_th_employee: "ဝန်ထမ်း", eval_list_th_score: "အမှတ်", eval_list_th_grade: "အဆင့်", eval_list_th_memo: "မှတ်ချက်", eval_list_btn_view: "ကြည့်မည်", eval_list_grade_all: "အဆင့်အားလုံး", eval_list_loading: "ဆောင်နေသည်...", eval_list_no_data: "အကဲဖြတ်မှတ်တမ်းမရှိပါ။", eval_list_count: " ခု", eval_list_fail: "ကြည့်ရှုမှုမအောင်မြင်ပါ။ စာရွက်စစ်ဆေးပါ။",
+      att_title: "📅 လာရောက်မှု", att_view_hint: "သိမ်းထားသောဇယားကြည့်မည်။ ဇယားတပ်မှုတပ်ဘတ်တွင်ပြင်မည်။", att_store_select: "ဆိုင်", att_week_monday: "သီတင်းပတ် (တနင်္လာ)", att_load_schedule: "📅 ဇယားမ", att_start_date: "စတင်", att_end_date: "ပြီး", att_all_stores: "ဆိုင်အားလုံး", att_select_store_first: "ဆိုင်ရွေးပြီးမှ", att_datetime: "ရက်စွဲအချိန်", att_type: "အမျိုးအစား", att_late_extra: "နောက်ကျ/OT", att_reason: "အကြောင်းရင်း", att_smart_tool: "အစုထည့်ခြင်း", att_work_hours: "အလုပ် (နာရီ)", att_break_start: "အနားစ", att_break_hours: "အနား (နာရီ)", att_apply_day: "အသုံးပြုရက်", att_mon: "တနင်္လာ", att_tue: "အင်္ဂါ", att_wed: "ဗုဒ္ဓဟူး", att_thu: "ကြာသပတေး", att_fri: "သောကြာ", att_sat: "စနေ", att_sun: "တနင်္ဂနွေ", att_staff_select: "👥 ဝန်ထမ်း", att_display_time: "🕒ြသချိန်:", att_reset: "🧹 ပြန်စမည်", att_copy_next: "⏭️ နောက်သီတင်းပတ်သို့ကူး", att_save_schedule: "💾 ဇယားသိမ်းမည်", att_load_saved: "📅 သိမ်းထားသည်မ", att_query_please: "မှတ်တမ်းမ",
+      pay_title: "💰 လစာ", pay_month: "📅 လစာလ", pay_db_setup: "🛠️ DB ပြင်ဆင် (တစ်ကြိမ်)", pay_calc_run: "🧮 တွက်မည်", pay_save_confirm: "💾 DB သို့သိမ်း", pay_col_store: "ဆိုင်", pay_col_name: "အမည်", pay_col_base: "အခြေခံ", pay_allowance: "အပိုချီးမြှင့်ငွေ", pay_ot: "OT", pay_deduct: "ဖြတ်မည်", pay_net: "အသားတင်", pay_edit: "ပြင်မည်", pay_col_role: "အခန်းကဏ္ဍ", pay_col_risk: "အန္တရာယ်", pay_col_birth: "သက်တမ်း", pay_col_bonus: "ဆုငွေ", pay_col_ot_hr: "နာရီ", pay_col_ot_amt: "ပမာဏ", pay_col_late: "နောက်ကျ", pay_col_sso: "SSO", pay_col_etc: "အခြား", pay_hist_month: "📅 လ", pay_hist_store: "🏢 ဆိုင်", pay_total_amount: "စုစုပေါင်း:", pay_query_please: "ရက်စွဲရွေးပြီး [တွက်မည်] နှိပ်ပါ။", pay_hist_query_please: "ကြည့်မည် နှိပ်ပါ။",
+      leave_title: "🏖️ ခွင့်ယူ", leave_wait: "ဆိုင်းငံ့", leave_approved: "အတည်ပြုပြီး", leave_rejected: "ပယ်ချ", leave_used_period: "အသုံးပြု (ကာလ)", leave_used_total: "အသုံးပြု (စုစုပေါင်း)", leave_remain: "ကျန်", leave_annual: "နှစ်စဉ်ခွင့်", leave_sick: "အဖျားခွင့်", leave_col_date: "ရက်စွဲ", leave_col_name: "အမည်", leave_col_type: "အမျိုးအစား", leave_col_status: "အခြေအနေ",
+      store_title: "🏢 ဆိုင်စီမံခန့်ခွဲမှု", store_check_store: "ဆိုင်", store_check_date: "ရက်စွဲ", store_check_inspector: "စစ်ဆေးသူ", store_load_form: "🔄 ဖောင်မ်မ", store_no: "NO", store_cat_main: "အမျိုးအစား", store_cat_sub: "အမျိုးခွဲ", store_check_item: "အမျိုးအစား", store_check: "စစ်ဆေး", store_remark: "မှတ်ချက်", store_load_hint: "အချက်အလက်ရွေးပြီး ဖောင်မ်မ နှိပ်ပါ။", store_total_comment: "💡 မှတ်ချက်", store_save_check: "💾 စစ်ဆေးမှုသိမ်းမည်", store_hist_period: "ကာလ", store_all_stores: "ဆိုင်အားလုံး", store_select_ph: "ဆိုင်ရွေးပါ", store_inspector_ph: "စစ်ဆေးသူ (ရွေး)", store_col_date: "ရက်စွဲ", store_col_inspector: "စစ်ဆေးသူ", store_col_result: "အခြေအနေ", store_setting_title: "🛠 စစ်ဆေးအမျိုးအစားများ", store_refresh: "ပြန်စမည်", store_setting_desc: "အမျိုးအစားထည့်/ဖျက်ကို စာရွက်တွင်ပြုမည်။", store_save_settings: "⚙️ သိမ်းမည်", store_preparing: "ဇယားပြင်ဆင်ဆဲ...",
+      print_btn: "🖨️ ပြန်နှိပ်/PDF", excel_btn: "📥 Excel ဒေါင်းလုဒ်",
+      ord_title: "🚚 အော်ဒါအတည်ပြု", ord_summary: "အကျဉ်းချုပ်", ord_total: "စုစုပေါင်း", ord_query_please: "ကြည့်မည်။", ord_pending: "ဆိုင်းငံ့", ord_approved: "အတည်ပြုပြီး", ord_rejected: "ပယ်ချ",
+      in_title: "📦 လက်ခံ", in_date: "ရက်စွဲ", in_vendor: "ရောင်းသူ", in_item: "ပစ္စည်း", in_qty: "အရေအတွက်", in_wait_list: "လက်ခံစာရင်း", in_save: "💾 သိမ်းမည်", in_find_item: "ပစ္စည်းရှာမည်", in_add_list: "ထည့်မည် ⬇️", in_col_item: "ပစ္စည်း", in_col_qty: "အရေ", in_col_del: "ဖျက်မည်",
+      force_title: "📤 ထုတ်ပို့", force_date: "ရက်စွဲ", force_store: "ဆိုင်", force_item: "ပစ္စည်း", force_qty: "အရေအတွက်", force_wait_list: "စာရင်း", force_confirm: "🚀 အတည်ပြု", force_add_list: "ထည့်မည် ⬇️", force_col_store: "ဆိုင်", force_col_item: "ပစ္စည်း", force_col_qty: "အရေ", force_col_del: "ဖျက်မည်",       force_hist_type: "အမျိုးအစား", visit_page_title: "📍 ဆိုင်သွားခြင်း (လိုင်းဖြစ်)",
+      wl_check_today_hint: "* ယနေ့လုပ်ရမည့်အရာကို ရွေးပါ", wl_finish_hint: "* 100% သည် Finish သို့၊ မပြီးသေးသည်များသည် မှတ်ပြီးနောက် Continue သို့ လွှဲပြောင်းသည်။",
+      print_pdf_hint: "(ရှာထားသည့်အကြောင်းအရာကိုသာ ပုံနှိပ်သည်။ PDF အတွက် ပုံနှိပ်ခြင်းတွင် 'PDF အဖြစ်သိမ်း' ရွေးပါ။)",
+      visit_start_date: "စတင်", visit_end_date: "ပြီး", visit_dept_col: "ဌာန (ကော်လံ E)", visit_employee_office: "ဝန်ထမ်း (အခြေစိုက်)", visit_col_date: "ရက်စွဲ", visit_col_visitor: "ဧည့်သည်", visit_col_store: "ဆိုင်", visit_col_type: "အမျိုးအစား", visit_col_purpose: "ရည်ရွယ်ချက်", visit_col_duration: "ကြာချိန်", visit_query_please: "မှတ်တမ်းမ",
+      settings_title: "⚙️ ဆက်တင်", settings_head_office: "ဌာနချုပ် (ပြေစာထုတ်ရန်)", settings_head_office_desc: "အမိန့်အတည်ပြု/ထုတ်ပို့ပြေစာထုတ်ရာတွင်အသုံးပြုသည်။", settings_company_name: "ကုမ္ပဏီအမည်", settings_tax_id: "အခွန်နံပါတ်", settings_address: "လိပ်စာ", settings_phone: "ဖုန်း", settings_bank_info: "ဘဏ်အကောင့်/မှတ်ချက်", settings_save_btn: "💾 သိမ်းမည်", settings_permission_title: "ခွင့်ပြုချက်", settings_permission_hq: "• HQ: လော့ဂျစ်တစ်၊ HR၊ လစာ၊ ဆက်တင် စသည်အားလုံးသုံးနိုင်", settings_permission_store: "• ဆိုင်: မိမိဆိုင်ဆိုင်းငံ့၊ စစ်ဆေး၊ သွားခြင်းစသည်သုံးနိုင်", settings_permission_note: "ဝန်ထမ်းစာရွက်ရှိ ခွင့်ပြုချက် ကော်လံတွင်စီမံသည်။",
+    },
+    la: {
+      login_title: "CM ERP SYSTEM", btn_login: "ເຂົ້າສູ່ລະບົບ",
+      login_store_ph: "ເລືອກສາຂາ", login_label_store: "ສາຂາ", login_label_name: "ຊື່", login_label_pw: "P/W", menu_dashboard: "📊 ແດັບບອດ", menu_notices: "📢 ປະກາດ", menu_work_log: "📝 ບັນທຶກວຽກ",
+      menu_header_logistics: "ຂົນສົ່ງ", menu_item_manage: "📦 ສິນຄ້າ", menu_vendor: "🏢 ຜູ້ຂາຍ", menu_outbound: "🚚 ອໍເດີ", menu_stock: "⚖️ ສະຕ໋ອກ", menu_inbound: "📦 ຮັບເຂົ້າ", menu_force: "📤 ສົ່ງອອກ",
+      menu_header_hr: "ບຸກຄະລາກອນ", menu_hr_employee: "👥 ພະນັກງານ", menu_attendance: "📅 ມາງານ/ຕາຕະລາງ", menu_payroll: "💰 ເງິນເດືອນ", menu_hr_leave: "🏖️ ລາພັກ",
+      menu_header_store: "ສາຂາ", menu_store_check: "🏢 ກວດສາຂາ", menu_store_visit: "📍 ໄປສາຂາ", menu_header_settings: "ຕັ້ງຄ່າ",
+      btn_logout: "ອອກຈາກລະບົບ", btn_search: "ຄົ້ນຫາ", btn_query: "ດູ", btn_save: "ບັນທຶກ", btn_query_go: "🔍 ດູ", btn_query_go2: "🔍 ດູ", btn_refresh: "🔄 ໂຫຼດໃໝ່",
+      in_nav_hist: "ປະຫວັດ", stock_nav_adjust: "🛠️ ປັບສະຕ໋ອກ", stock_nav_status: "📊 ສະຖານະ", stock_nav_history: "📋 ປະຫວັດ", leave_tab_approval: "ອະນຸມັດລາພັກ", leave_tab_stats: "ສະຖິຕິລາພັກ",
+      label_period: "ໄລຍະ", label_store: "ສາຂາ", label_employee: "ພະນັກງານ", label_date: "ວັນທີ", label_evaluator: "ຜູ້ປະເມີນ",
+      tab_wl_personal: "👤 ບັນທຶກວຽກ", tab_wl_manager: "👮‍♂️ ອະນຸມັດ", tab_wl_report: "📊 ລາຍງານ", tab_hr_list: "📋 ລາຍຊື່", tab_hr_eval: "📝 ປະເມີນ", tab_eval_list: "📋 ປະຫວັດປະເມີນ", tab_eval_kitchen: "🍳 ປະເມີນຫ້ອງຄົວ",
+      tab_att_status: "📊 ມາງານ", tab_att_schedule: "📝 ຕາຕະລາງ", tab_att_view: "🔍 ດູຕາຕະລາງ", tab_pay_calc: "🧮 ຄິດໄລ່ເງິນ", tab_pay_hist: "📂 ປະຫວັດ", tab_store_check: "✅ ກວດປະຈຳວັນ", tab_store_history: "📋 ປະຫວັດ", tab_store_setting: "⚙️ ຕັ້ງຄ່າ",
+      tab_in_new: "ຮັບເຂົ້າໃໝ່", tab_force_new: "✍️ ສົ່ງອອກ", tab_force_hist: "📋 ປະຫວັດ", tab_visit_list: "📋 ລາຍການໄປ", tab_visit_stats: "📊 ສະຖິຕິ",
+      wl_title: "📝 ບັນທຶກວຽກ", wl_label_date: "📅 ວັນທີ", wl_label_staff: "👤 ພະນັກງານ", wl_save_progress: "💾 ບັນທຶກ", wl_finish_work: "🏆 ສຳເລັດ", wl_continue_work: "⏳ ລໍຖ້າ", wl_today_work: "🚀 ມື້ນີ້", wl_task_content: "ເນື້ອໃນ", wl_importance: "ຄວາມສຳຄັນ", wl_progress: "ຄວາມຄືບໜ້າ", wl_status: "ສະຖານະ",
+      wl_add_item: "ເພີ່ມລາຍການ", wl_start_today: "ເລີ່ມມື້ນີ້", wl_finish_daily: "👋 ຈົບວັນ", wl_query_period: "📅 ໄລຍະ", wl_dept: "🏢 ພະແນກ", wl_filter_all: "ທັງໝົດ",
+      eval_load_form: "🔄 ໂຫຼດຟອມ", eval_final_grade: "ລະດັບ", eval_total_comment: "💡 ຄຳເຫັນ", eval_save: "💾 ບັນທຶກ", eval_incident: "6) ເຫດການ", eval_action_plan: "7) ແຜນດຳເນີນການ", eval_setting: "⚙️ ຕັ້ງຄ່າ",
+      eval_training: "ການຝຶກອົບຮົມ", eval_coach: "ຄູຝຶກ", eval_target_date: "ເປົ້າໝາຍ", eval_reeval_date: "ປະເມີນຄືນ",
+      placeholder_search: "ຄົ້ນຫາ", placeholder_pin: "PIN", placeholder_comment: "ໃສ່ຄຳເຫັນ", notice_history: "📑 ສົ່ງແລ້ວ", chk_memo: "ຫມາຍເຫດ", chk_inspector_ph: "ຜູ້ກວດ", label_all: "ທັງໝົດ", stock_past: "ອະດີດ", stock_current: "ປັດຈຸບັນ", item_search_ph: "ຄົ້ນຫາ", modal_item_search: "📦 ຄົ້ນຫາສິນຄ້າ",
+      status_finish: "ສຳເລັດ", status_carry_over: "ໂອນ", status_today: "ມື້ນີ້", status_continue: "ລໍຖ້າ",
+      filter_reset: "ລ້າງຕົວກອງ", filter_status_multi: "ສະຖານະ (ເລືອກໄດ້ຫຼາຍ)", filter_none: "ບໍ່ເລືອກ", filter_n_selected: " ລາຍການ",
+      mgr_no_data: "ບໍ່ພົບຂໍ້ມູນ", mgr_no_match: "ບໍ່ມີລາຍການທີ່ກົງກັບເງື່ອນໄຂ", mgr_loading: "ກຳລັງໂຫຼດ...",
+      mgr_approved: "ອະນຸມັດແລ້ວ", mgr_reject: "ປະຕິເສດ", mgr_approve_btn: "ອະນຸມັດ", mgr_prompt_date: "ກະລຸນາເລືອກວັນເລີ່ມ ແລະ ວັນສິ້ນສຸດ", mgr_prompt_order: "ວັນສິ້ນສຸດບໍ່ສາມາດກ່ອນວັນເລີ່ມໄດ້", mgr_hint: "ເລືອກໄລຍະວັນ ແລ້ວກົດ [ດູ]",
+      item_title: "ຈັດການສິນຄ້າ", item_form_title: "ຂໍ້ມູນສິນຄ້າ", item_new: "ລົງທະບຽນໃໝ່", item_code: "ລະຫັດ (ຄໍລຳ A)", item_cat: "ປະເພດ", item_vendor: "ຜູ້ຂາຍຫຼັກ", item_vendor_ph: "ເລືອກ/ປ້ອນຜູ້ຂາຍ",
+      item_name: "ຊື່ສິນຄ້າ", item_image: "ລິ້ງຮູບ (ຄໍລຳ G)", item_tax: "ພາສີ", item_tax_vat: "ມີ VAT", item_tax_free: "ຍົກເວັ້ນ",
+      item_spec: "ຂະໜາດ", item_price: "ລາຄາຂາຍ", item_cost: "ຕົ້ນທຶນ", item_save: "ບັນທຶກ", item_cat_all: "ທຸກປະເພດ",
+      item_col_code: "ລະຫັດ", item_col_image: "ຮູບ", item_col_name: "ຊື່", item_col_spec: "ຂະໜາດ", item_col_price: "ລາຄາ", item_manage: "ຈັດການ",
+      item_guide: "ເລືອກປະເພດ ຫຼື ປ້ອນຄຳສັ່ງ ແລ້ວກົດ [ຄົ້ນຫາ]", wl_approve_feedback: "ອະນຸມັດ/ຄຳເຫັນ",
+      stock_title: "ສະຕ໋ອກ", stock_currency: "₭",
+      notice_title: "📢 ປະກາດ", notice_send_new: "✏️ ປະກາດໃໝ່", label_subject: "ຫົວຂໍ້", label_content: "ເນື້ອໃນ", label_role: "ຕຳແໜ່ງ", notice_send_btn: "ສົ່ງປະກາດ", notice_attach: "📎 ແຟ້ມສະແກງ",
+      notice_received_title: "📬 ປະກາດທີ່ໄດ້ຮັບ", notice_received_hint: "ເລືອກຊ່ວງວັນທີເພື່ອເບິ່ງປະກາດທີ່ຜ່ານມາ", label_date_from: "ຈາກ", label_date_to: "ຫາ",
+      dash_title: "ແດັບບອດ", dash_welcome: "ຍິນດີຕ້ອນຮັບ", dash_user: "ຜູ້ໃຊ້",
+      dash_pending_orders: "ອໍເດີລໍຖ້າອະນຸມັດ", dash_inbound_month: "ຮັບເຂົ້າ (ເດືອນ)", dash_outbound_month: "ສົ່ງອອກ (ເດືອນ)", dash_leave_pending: "ລາລໍຖ້າ", dash_att_pending: "ມາງານລໍຖ້າອະນຸມັດ",
+      dash_store_kpi_title: "📊 KPI ຕາມສາຂາ", dash_store_kpi_hint: "ເດືອນນີ້: ອໍເດີລໍຖ້າ, ສົ່ງອອກ, ລາລໍຖ້າ, ມາງານລໍຖ້າ ຕາມສາຂາ", dash_kpi_store: "ສາຂາ", dash_kpi_no_data: "ບໍ່ມີຂໍ້ມູນສາຂາ", dash_kpi_error: "ໂຫຼດ KPI ບໍ່ໄດ້",
+      vendor_title: "🏢 ຜູ້ຂາຍ", vendor_form: "🏢 ຟອມຜູ້ຂາຍ", vendor_type: "ປະເພດ", vendor_type_buy: "🔵 ຜູ້ຊື້", vendor_type_sell: "🔴 ຜູ້ຂາຍ", vendor_type_etc: "⚪ ອື່ນ", vendor_code: "ລະຫັດ", vendor_company: "ບໍລິສັດ", vendor_manager: "ຜູ້ຕິດຕໍ່", vendor_phone: "ໂທ", vendor_taxno: "ເລກພາສີ", vendor_ceo: "ຜູ້ມີອຳນາດ", vendor_addr: "ທີ່ຢູ່", vendor_balance: "ຍອດ", vendor_memo: "ຫມາຍເຫດ", vendor_col_type: "ປະເພດ", vendor_col_company: "ບໍລິສັດ", vendor_col_manager: "ຜູ້ຕິດຕໍ່", vendor_col_balance: "ຍອດ",
+      hr_emp_title: "👥 ພະນັກງານ", hr_emp_form: "✏️ ຟອມພະນັກງານ", hr_emp_new: "+ ໃໝ່", label_name: "ຊື່", label_nickname: "ຊື່ຫຼິ້ນ", label_job: "ວຽກ", label_email: "ອີເມວ", label_birth: "ວັນເກີດ", label_nation: "ສັນຊາດ", label_join_date: "ເຂົ້າວຽກ", label_leave_date: "ອອກວຽກ", label_sal_type: "ປະເພດເງິນເດືອນ", label_amount: "ຈຳນວນ", label_role_perm: "ສິດ", emp_col_age: "ອາຍຸ", emp_col_salary: "ເງິນເດືອນ", emp_photo: "ຮູບ", emp_photo_url: "URL ຮູບ", eval_store_first: "ເລືອກສາຂາກ່ອນ", eval_position: "ຕຳແໜ່ງ", eval_date: "ວັນປະເມີນ", eval_shift: "ກົວ/ບົດບາດ", eval_weight: "ນ້ຳໜັກ: ເມນູ 40% · ຕົ້ນທຶນ 20% · ສຸຂາພິບານ 20% · ທັດສະນະ 20%", eval_total_score: "ລວມ", eval_final_grade_label: "ລະດັບ", eval_issue_type: "ປະເພດເຫດການ", eval_occur: "ເກີດ", eval_detail: "ລາຍລະອຽດ", eval_cat_main: "ປະເພດ", eval_cat_sub: "ຍ່ອຍ", eval_item: "ລາຍການ", eval_use: "ໃຊ້", eval_load_items: "ໂຫຼດລາຍການ", eval_save_items: "ບັນທຶກ", eval_setting_desc: "ແກ້ໄຂ ຫຼື ເປີດ/ປິດ",
+      eval_list_title: "📋 ປະຫວັດການປະເມີນ", eval_list_type: "ປະເພດ", eval_list_type_all: "📋 ທັງໝົດ", eval_list_type_kitchen: "🍳 ເຮືອນຄົວ", eval_list_type_service: "🍽 ບໍລິການ", eval_list_start: "ແຕ່", eval_list_end: "ເຖິງ", eval_list_evaluator: "ຜູ້ປະເມີນ", eval_list_th_date: "ວັນທີ", eval_list_th_employee: "ພະນັກງານ", eval_list_th_score: "ຄະແນນ", eval_list_th_grade: "ລະດັບ", eval_list_th_memo: "ຫມາຍເຫດ", eval_list_btn_view: "ເບິ່ງ", eval_list_grade_all: "ທຸກລະດັບ", eval_list_loading: "ກຳລັງໂຫຼດ...", eval_list_no_data: "ບໍ່ພົບປະຫວັດການປະເມີນ", eval_list_count: " ລາຍການ", eval_list_fail: "ຄອບຄົວບໍ່ສຳເລັດ ກວດເບິ່ງເຊັດ",
+      att_title: "📅 ມາງານ", att_view_hint: "ເບິ່ງຕາຕະລາງທີ່ບັນທຶກ. ແກ້ໃນແທັບຕາຕະລາງ.", att_store_select: "ສາຂາ", att_week_monday: "ອາທິດ (ຈັນ)", att_load_schedule: "📅 ໂຫຼດຕາຕະລາງ", att_start_date: "ເລີ່ມ", att_end_date: "ສິ້ນສຸດ", att_all_stores: "ທຸກສາຂາ", att_select_store_first: "ເລືອກສາຂາກ່ອນ", att_datetime: "ວັນທີເວລາ", att_type: "ປະເພດ", att_late_extra: "ສາວ/OT", att_reason: "ເຫດຜົນ", att_smart_tool: "ປ້ອນຮ່ວມ", att_work_hours: "ວຽກ (ຊມ.)", att_break_start: "ພັກເລີ່ມ", att_break_hours: "ພັກ (ຊມ.)", att_apply_day: "ວັນ", att_mon: "ຈັນ", att_tue: "ອັງຄານ", att_wed: "ພຸດ", att_thu: "ພະຫັດ", att_fri: "ສຸກ", att_sat: "ເສົາ", att_sun: "ອາທິດ", att_staff_select: "👥 ພະນັກງານ", att_display_time: "🕒 ສະແດງ:", att_reset: "🧹 ລ້າງ", att_copy_next: "⏭️ ຄັດລອກອາທິດຖັດ", att_save_schedule: "💾 ບັນທຶກຕາຕະລາງ", att_load_saved: "📅 ໂຫຼດທີ່ບັນທຶກ", att_query_please: "ໂຫຼດບັນທຶກ",
+      pay_title: "💰 ເງິນເດືອນ", pay_month: "📅 ເດືອນ", pay_db_setup: "🛠️ ຕັ້ງຄ່າ DB (ຄັ້ງດຽວ)", pay_calc_run: "🧮 ຄິດໄລ່", pay_save_confirm: "💾 ບັນທຶກລົງ DB", pay_col_store: "ສາຂາ", pay_col_name: "ຊື່", pay_col_base: "ພື້ນຖານ", pay_allowance: "ເງິນເສີມ", pay_ot: "OT", pay_deduct: "ຫັກ", pay_net: "ສຸດທິ", pay_edit: "ແກ້ໄຂ", pay_col_role: "ບົດບາດ", pay_col_risk: "ຄວາມສ່ຽງ", pay_col_birth: "ວັນເກີດ", pay_col_bonus: "ເງິນອຸທິດ", pay_col_ot_hr: "ຊມ.", pay_col_ot_amt: "ຈຳນວນ", pay_col_late: "ສາວ", pay_col_sso: "SSO", pay_col_etc: "ອື່ນ", pay_hist_month: "📅 ເດືອນ", pay_hist_store: "🏢 ສາຂາ", pay_total_amount: "ລວມ:", pay_query_please: "ເລືອກວັນທີ ແລ້ວກົດ [ຄິດໄລ່]", pay_hist_query_please: "ກົດ ດູ",
+      leave_title: "🏖️ ລາພັກ", leave_wait: "ລໍຖ້າ", leave_approved: "ອະນຸມັດ", leave_rejected: "ປະຕິເສດ", leave_used_period: "ໃຊ້ (ໄລຍະ)", leave_used_total: "ໃຊ້ (ລວມ)", leave_remain: "ເຫຼືອ", leave_annual: "ລາປະຈຳປີ", leave_sick: "ລາປ່ວຍ", leave_col_date: "ວັນທີ", leave_col_name: "ຊື່", leave_col_type: "ປະເພດ", leave_col_status: "ສະຖານະ",
+      store_title: "🏢 ຈັດການສາຂາ", store_check_store: "ສາຂາ", store_check_date: "ວັນທີ", store_check_inspector: "ຜູ້ກວດ", store_load_form: "🔄 ໂຫຼດຟອມ", store_no: "NO", store_cat_main: "ປະເພດ", store_cat_sub: "ຍ່ອຍ", store_check_item: "ລາຍການ", store_check: "ກວດ", store_remark: "ຫມາຍເຫດ", store_load_hint: "ເລືອກຂໍ້ມູນ ແລ້ວກົດ ໂຫຼດຟອມ", store_total_comment: "💡 ຄຳເຫັນ", store_save_check: "💾 ບັນທຶກການກວດ", store_hist_period: "ໄລຍະ", store_all_stores: "ທຸກສາຂາ", store_select_ph: "ເລືອກສາຂາ", store_inspector_ph: "ຜູ້ກວດ (ຖ້າມີ)", store_col_date: "ວັນທີ", store_col_inspector: "ຜູ້ກວດ", store_col_result: "ຜົນ", store_setting_title: "🛠 ລາຍການກວດ", store_refresh: "ໂຫຼດໃໝ່", store_setting_desc: "ເພີ່ມ/ລົບໃນເຊັດ", store_save_settings: "⚙️ ບັນທຶກ", store_preparing: "ຕາຕະລາງກຳລັງແຕ່ງ...",
+      print_btn: "🖨️ ພິມ/PDF", excel_btn: "📥 ດາວໂຫຼດ Excel",
+      ord_title: "🚚 ອະນຸມັດອໍເດີ", ord_summary: "ສະຫຼຸບ", ord_total: "ລວມ", ord_query_please: "ດູ", ord_pending: "ລໍຖ້າ", ord_approved: "ອະນຸມັດ", ord_rejected: "ປະຕິເສດ",
+      in_title: "📦 ຮັບເຂົ້າ", in_date: "ວັນທີ", in_vendor: "ຜູ້ຂາຍ", in_item: "ສິນຄ້າ", in_qty: "ຈຳນວນ", in_wait_list: "ລາຍການຮັບເຂົ້າ", in_save: "💾 ບັນທຶກ", in_find_item: "ຄົ້ນຫາສິນຄ້າ", in_add_list: "ເພີ່ມ ⬇️", in_col_item: "ສິນຄ້າ", in_col_qty: "ຈຳນວນ", in_col_del: "ລົບ",
+      force_title: "📤 ສົ່ງອອກ", force_date: "ວັນທີ", force_store: "ສາຂາ", force_item: "ສິນຄ້າ", force_qty: "ຈຳນວນ", force_wait_list: "ລາຍການ", force_confirm: "🚀 ຢືນຢັນ", force_add_list: "ເພີ່ມ ⬇️", force_col_store: "ສາຂາ", force_col_item: "ສິນຄ້າ", force_col_qty: "ຈຳນວນ", force_col_del: "ລົບ",       force_hist_type: "ປະເພດ", visit_page_title: "📍 ໄປສາຂາ (ຕົວຈິງ)",
+      wl_check_today_hint: "* ເລືອກວຽກທີ່ຕ້ອງເຮັດມື້ນີ້", wl_finish_hint: "* 100% → Finish; ທີ່ບໍ່ສຳເລັດຈະໂອນເປັນ Continue ຫຼັງບັນທຶກ",
+      print_pdf_hint: "(ພິມເອກະສານແຕ່ເນື້ອຫາທີ່ຄົ້ນຫາ. PDF ເລືອກ 'ບັນທຶກເປັນ PDF' ໃນກ່ອງພິມ)",
+      visit_start_date: "ເລີ່ມ", visit_end_date: "ສິ້ນສຸດ", visit_dept_col: "ພະແນກ (ຄໍລຳ E)", visit_employee_office: "ພະນັກງານ (ອອບຟິດ)", visit_col_date: "ວັນທີ", visit_col_visitor: "ຜູ້ໄປ", visit_col_store: "ສາຂາ", visit_col_type: "ປະເພດ", visit_col_purpose: "ຈຸດປະສົງ", visit_col_duration: "ເວລາຢູ່", visit_query_please: "ໂຫຼດບັນທຶກ",
+      settings_title: "⚙️ ຕັ້ງຄ່າ", settings_head_office: "ຂໍ້ມູນສຳນັກງານໃຫຍ່ (ສຳລັບໃບແຈ້ງໜີ້)", settings_head_office_desc: "ໃຊ້ໃນການພິມໃບແຈ້ງໜີ້ຈາກການອະນຸມັດ/ສົ່ງຂາຍ", settings_company_name: "ຊື່ບໍລິສັດ", settings_tax_id: "ເລກພາສີ", settings_address: "ທີ່ຢູ່", settings_phone: "ໂທລະສັບ", settings_bank_info: "ບັນຊີ/ຫມາຍເຫດ", settings_save_btn: "💾 ບັນທຶກ", settings_permission_title: "ສິດອະນຸຍາດ", settings_permission_hq: "• HQ: ໃຊ້ເມນູໄດ້ທັງໝົດ", settings_permission_store: "• ສາຂາ: ໃຊ້ເມນູຂອງສາຂາຕົນ", settings_permission_note: "ຈັດການສິດໃນຄໍລຳສິດຂອງເຊັດພະນັກງານ",
+    }
+  };
+  function changeLanguage() {
+    var sel = document.getElementById('langSelect');
+    if (!sel) return;
+    currentLang = sel.value || 'ko';
+    try { sessionStorage.setItem('cm_lang', currentLang); } catch (e) {}
+    applyTranslations();
+    // 관리자 업무일지 탭이 보일 때 테이블/버튼 문구도 언어에 맞게 다시 그리기
+    var mgrView = document.getElementById('wl-view-manager');
+    if (mgrView && mgrView.style.display !== 'none' && typeof globalManagerData !== 'undefined' && globalManagerData && globalManagerData.length > 0 && typeof renderManagerTable === 'function') {
+      renderManagerTable();
+    }
+  }
+  function applyTranslations() {
+    var lang = I18N[currentLang] || I18N.ko;
+    var placeholderKeys = { placeholder_search: 1, placeholder_pin: 1, placeholder_comment: 1, item_search_ph: 1 };
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      var text = lang[key] || I18N.ko[key];
+      if (text === undefined) return;
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+        if (key.indexOf('placeholder') >= 0 || placeholderKeys[key] || el.getAttribute('data-i18n-placeholder') === '1') el.placeholder = text;
+        else if (el.type === 'submit' || el.type === 'button') el.value = text;
+      } else {
+        el.textContent = text;
+      }
+    });
+  }
+
+  /** 사용자 입력 글 자동 번역용: UI 언어(ko,en,th,mm,la) → LanguageApp 코드(ko,en,th,my,lo) */
+  function getTranslationLang() {
+    var c = (typeof currentLang !== "undefined" ? currentLang : "ko") || "ko";
+    if (c === "mm") return "my";
+    if (c === "la") return "lo";
+    return c;
+  }
+
+  /* ===== 인쇄/PDF / 엑셀 공통 (조회된 내용만 인쇄, 엑셀은 모든 열/행 포함) ===== */
+  function printCurrentPage() {
+    var id = currentPrintPageId || "";
+    var el = id ? document.getElementById(id) : null;
+    if (!el) {
+      var pages = document.querySelectorAll('div[id^="page-"]');
+      for (var p = 0; p < pages.length; p++) { if (pages[p].style.display === "block") { el = pages[p]; break; } }
+    }
+    if (!el) { alert("인쇄할 페이지가 없습니다."); return; }
+    el.classList.add("print-show");
+    window.onafterprint = function() { el.classList.remove("print-show"); window.onafterprint = null; };
+    window.print();
+  }
+  /** 주문 승인·출고 등 인보이스 발행용 인쇄 (체크된 행만 인쇄 가능, 인보이스 제목 표시) */
+  function printInvoice(pageId) {
+    var id = "page-" + (pageId || "").replace(/^page-/, "");
+    var el = document.getElementById(id);
+    if (!el) { alert("인쇄할 페이지를 찾을 수 없습니다."); return; }
+    currentPrintPageId = id;
+    var hiddenRows = [];
+    if (pageId === "outbound") {
+      var list = el.querySelector("#order-list");
+      if (list) {
+        list.querySelectorAll("tr.ord-data-row").forEach(function(tr) {
+          var chk = tr.querySelector(".ord-invoice-chk");
+          if (chk && !chk.checked) { tr.classList.add("ord-no-print"); hiddenRows.push(tr); }
+        });
+        list.querySelectorAll("tr.ord-detail-row").forEach(function(tr) {
+          var prev = tr.previousElementSibling;
+          if (prev && prev.classList.contains("ord-data-row") && prev.classList.contains("ord-no-print"))
+            tr.classList.add("ord-no-print");
+        });
+      }
+    }
+    if (pageId === "force") {
+      var fhList = el.querySelector("#fh-list");
+      if (fhList) {
+        fhList.querySelectorAll("tr.fh-data-row").forEach(function(tr) {
+          var chk = tr.querySelector(".fh-invoice-chk");
+          if (chk && !chk.checked) {
+            tr.classList.add("ord-no-print");
+            var next = tr.nextElementSibling;
+            if (next && next.classList.contains("fh-detail-row")) next.classList.add("ord-no-print");
+          }
+        });
+      }
+    }
+    el.classList.add("print-show");
+    window.onafterprint = function() {
+      el.classList.remove("print-show");
+      document.querySelectorAll(".ord-no-print").forEach(function(tr) { tr.classList.remove("ord-no-print"); });
+      window.onafterprint = null;
+    };
+    window.print();
+  }
+  function exportCurrentPageToExcel() {
+    var id = currentPrintPageId || "";
+    var root = id ? document.getElementById(id) : document.querySelector('.main-content');
+    if (!root) { alert("엑셀 내보낼 영역을 찾을 수 없습니다."); return; }
+    var tables = root.querySelectorAll('table');
+    var table = null;
+    var maxBodyRows = 0;
+    for (var t = 0; t < tables.length; t++) {
+      var tb = tables[t].querySelector('tbody');
+      var bodyRows = tb ? tb.querySelectorAll('tr') : [];
+      if (bodyRows.length > maxBodyRows) { maxBodyRows = bodyRows.length; table = tables[t]; }
+    }
+    if (!table) table = root.querySelector('table');
+    if (!table) { alert("이 화면에는 엑셀으로 내보낼 테이블이 없습니다."); return; }
+    var rows = [];
+    var thead = table.querySelector('thead');
+    if (thead) rows = Array.prototype.slice.call(thead.querySelectorAll('tr'));
+    var tbody = table.querySelector('tbody');
+    if (tbody) rows = rows.concat(Array.prototype.slice.call(tbody.querySelectorAll('tr')));
+    if (rows.length === 0) rows = Array.prototype.slice.call(table.querySelectorAll('tr'));
+    var csv = [];
+    var maxCols = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var cells = rows[i].querySelectorAll('th, td');
+      var row = [];
+      for (var j = 0; j < cells.length; j++) {
+        var cell = cells[j];
+        var text = String(cell.innerText || cell.textContent || "").trim().replace(/"/g, '""');
+        var colspan = parseInt(cell.getAttribute('colspan'), 10) || 1;
+        row.push('"' + text + '"');
+        for (var k = 1; k < colspan; k++) row.push('""');
+      }
+      if (row.length > maxCols) maxCols = row.length;
+      csv.push(row);
+    }
+    for (var i = 0; i < csv.length; i++) {
+      while (csv[i].length < maxCols) csv[i].push('""');
+      csv[i] = csv[i].join(',');
+    }
+    if (maxBodyRows === 0) { alert("조회된 데이터가 없습니다. 먼저 조회 버튼으로 데이터를 불러온 뒤 엑셀 다운로드해 주세요."); return; }
+    var blob = new Blob(['\ufeff' + csv.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (id || 'export') + '_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+// [통합] 페이지 로드 시 실행 (기존 기능 + 공지사항 기능 합침)
+    window.onload = function() {
+      
+      // 1. 기존 기능: 로딩 끄기
+      if(typeof load === 'function') load(0); 
+
+      // 2. 기존 기능: 모달(팝업) 초기화
+      try { 
+          // (혹시 모달 변수들이 선언 안 되어 있을까봐 window. 붙임)
+          window.itemModal = new bootstrap.Modal(document.getElementById('itemModal'));
+          window.orderDetailModal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
+          window.vendorStatsModal = new bootstrap.Modal(document.getElementById('vendorStatsModal'));
+          // 공지사항 수신확인 모달도 여기서 미리 준비
+          if(document.getElementById('readStatsModal')) {
+             window.readStatsModal = new bootstrap.Modal(document.getElementById('readStatsModal'));
+          }
+      } catch(e) {}
+
+      // 3. 기존 기능: 날짜 입력창 오늘 날짜로 세팅
+      var today = new Date().toISOString().substring(0,10);
+      // 기존 ID들에 공지사항 조회용 날짜 등도 혹시 몰라 포함
+      var dateInputs = ["f-date","fh-start","fh-end","os-start","os-end","ord-start","ord-end","stock-date","leave-start","leave-end","i-date","ih-start","ih-end","stats-start","stats-end","adj-start","adj-end", "orderStart", "orderEnd", "notice-start", "notice-end"];
+      dateInputs.forEach(id => { 
+          var el = document.getElementById(id); 
+          if(el) el.value = today; 
+      });
+
+      // 4. [기존] 로그인 정보 가져오기 (로그인 화면용) + 언어 선택 복원 및 번역 적용
+      var langSel = document.getElementById("langSelect");
+      if (langSel && currentLang) { langSel.value = currentLang; }
+      var loginLangSel = document.getElementById("login-lang");
+      if (loginLangSel) { loginLangSel.value = currentLang; if (typeof applyLoginScreenTranslations === "function") applyLoginScreenTranslations(); }
+      if (typeof applyTranslations === "function") applyTranslations();
+      // 4-1. 날짜 선택 팝업(달력) - 일요일~토요일 주간 표시 (한글 요일 + firstDayOfWeek: 0)
+      setTimeout(function() {
+        if (typeof flatpickr !== "undefined") {
+          var localeKo = (typeof flatpickr !== "undefined" && flatpickr.l10ns && flatpickr.l10ns.ko) ? flatpickr.l10ns.ko : {};
+          var weekdaysShort = ["일", "월", "화", "수", "목", "금", "토"];
+          var monthNames = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+          var opt = { disableMobile: true, locale: Object.assign({}, localeKo, { firstDayOfWeek: 0, weekdaysShort: weekdaysShort, monthNames: monthNames }) };
+          document.querySelectorAll("input[type=date]").forEach(function(el) {
+            if (!el._flatpickr) try { flatpickr(el, opt); } catch (e) {}
+          });
+        }
+      }, 300);
+
+      google.script.run.withSuccessHandler(function(d){
+          loginInfo = d.users || {};
+          var s = document.getElementById("l-store");
+          var storeWrap = document.getElementById("l-store-wrap");
+          var storePh = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].login_store_ph) ? I18N[currentLang].login_store_ph : "매장 선택";
+          
+          // 로그인 화면의 매장 선택창 채우기 (선택 언어에 맞춰 "매장 선택" / "Select Store" 등)
+          if(s) {
+              s.innerHTML = "<option value=''>" + storePh + "</option>";
+              var officeKey = loginInfo["Office"]?"Office":(loginInfo["본사"]?"본사":null);
+              if(officeKey) s.add(new Option("Office (본사)", officeKey));
+              for (var k in loginInfo) { if (k !== officeKey) s.add(new Option(k, k)); }
+              
+              // 매장이 하나뿐이면 1단계(매장 선택) 숨기고 바로 2단계(이름/비밀번호)만 표시
+              var opts = s.options;
+              if (opts.length === 2) {
+                  s.value = opts[1].value;
+                  if (storeWrap) storeWrap.style.display = "none";
+              } else if (storeWrap) {
+                  storeWrap.style.display = "";
+              }
+              
+              // 기존에 쓰시던 드롭다운 채우기 함수 실행
+              if(typeof fillDropdowns === 'function') fillDropdowns(officeKey);
+          }
+          // 이름 목록 채우기 (매장 1개일 때도 즉시 2단계용 목록 표시)
+          if(typeof loadNames === 'function') loadNames();
+
+          // 관리자용 주문 목록 초기 로드
+          if(typeof loadOrders === 'function') loadOrders();
+
+          // 세션 복원: 새로고침 후에도 저장된 로그인 정보가 있으면 자동 로그인 후 마지막 페이지로
+          try {
+            var savedStore = sessionStorage.getItem("cm_store");
+            var savedName = sessionStorage.getItem("cm_name");
+            var savedPw = sessionStorage.getItem("cm_pw");
+            var savedPage = sessionStorage.getItem("cm_last_page") || "dashboard";
+            if (savedStore && savedName && savedPw) {
+              load(1);
+              google.script.run.withSuccessHandler(function(r) {
+                load(0);
+                if (r && r.success) {
+                  userRole = r.role;
+                  userStore = r.storeName;
+                  userName = r.userName || "";
+                  document.getElementById("login-screen").style.display = "none";
+                  document.getElementById("admin-screen").style.display = "block";
+                  document.getElementById("u-info").innerText = (r.storeName || "") + " " + (r.userName || "");
+                  var langEl = document.getElementById("langSelect");
+                  if (langEl) langEl.value = currentLang;
+                  if (typeof applyTranslations === "function") applyTranslations();
+                  document.querySelectorAll(".hq-only").forEach(function(e) { e.style.display = (userRole === "director" || userRole === "officer") ? "block" : "none"; });
+                  setTimeout(function() {
+                    if (typeof loadAdminItems === "function") loadAdminItems();
+                    if (typeof loadVendorDropdowns === "function") loadVendorDropdowns();
+                    if (typeof loadOutboundDropdowns === "function") loadOutboundDropdowns();
+                  }, 100);
+                  go(savedPage, null);
+                }
+              }).loginCheck(savedStore, savedName, savedPw);
+            }
+          } catch (e) {}
+      }).getLoginData();
+
+      // 5. [수정됨] 공지사항용 매장/직급 목록 (체크박스로 생성)
+      google.script.run.withSuccessHandler(function(opt){
+          
+          // (1) 매장 체크박스 만들기
+          var sBox = document.getElementById("storeCheckList");
+          if(sBox) {
+             sBox.innerHTML = "";
+             opt.stores.forEach(function(st) { 
+                sBox.innerHTML += `<div class="form-check"><input class="form-check-input store-chk" type="checkbox" value="${st}" id="s-${st}"><label class="form-check-label" for="s-${st}">${st}</label></div>`;
+             });
+          }
+          
+          // (2) 직급 체크박스 만들기
+          var rBox = document.getElementById("roleCheckList");
+          if(rBox) {
+             rBox.innerHTML = "";
+             opt.roles.forEach(function(rl) {
+                rBox.innerHTML += `<div class="form-check"><input class="form-check-input role-chk" type="checkbox" value="${rl}" id="r-${rl}"><label class="form-check-label" for="r-${rl}">${rl}</label></div>`;
+             });
+          }
+
+          // (3) 재고 현황 필터 (이건 하나만 선택하니 기존 유지) - 선택 언어에 맞춰 "전체 매장" 표시
+          var stockSel = document.getElementById("stockStoreFilter");
+          if(stockSel) {
+             var stockAllText = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].store_all_stores) ? I18N[currentLang].store_all_stores : "전체 매장";
+             stockSel.innerHTML = "<option value='전체'>" + stockAllText + "</option>";
+             opt.stores.forEach(function(st) { stockSel.add(new Option(st, st)); });
+          }
+
+      }).getNoticeOptions();
+    };
+
+  // =========================================================
+  // [핵심 기능 1] 로그인 및 기본 설정
+  // =========================================================
+  
+  function load(on) { var el=document.getElementById('loading'); if(el) el.style.display=(on?'flex':'none'); }
+  function toggleSidebar(){ document.getElementById("sidebar").classList.toggle("open"); document.querySelector(".overlay").classList.toggle("show"); }
+  function loadNames(){ var s=document.getElementById("l-store").value, n=document.getElementById("l-name"); n.innerHTML=""; if(loginInfo[s]) loginInfo[s].forEach(x=>n.add(new Option(x,x))); }
+  /** 로그아웃: 세션 삭제 후 로그인 화면 표시 */
+  function doLogout() {
+    try {
+      sessionStorage.removeItem("cm_store");
+      sessionStorage.removeItem("cm_name");
+      sessionStorage.removeItem("cm_pw");
+      sessionStorage.removeItem("cm_last_page");
+    } catch (e) {}
+    var loginEl = document.getElementById("login-screen");
+    var adminEl = document.getElementById("admin-screen");
+    if (loginEl) loginEl.style.display = "flex";
+    if (adminEl) adminEl.style.display = "none";
+  }
+
+  /** 로그인 화면 라벨/버튼을 선택 언어에 맞게 적용 (소속, 성명, P/W, 매장 선택, 로그인 버튼) */
+  function applyLoginScreenTranslations() {
+    var lang = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang] : {};
+    var lbStore = document.getElementById("login-label-store");
+    var lbName = document.getElementById("login-label-name");
+    var lbPw = document.getElementById("login-label-pw");
+    var s = document.getElementById("l-store");
+    var btnLogin = document.querySelector("#login-screen [data-i18n='btn_login']");
+    if (lbStore) lbStore.textContent = lang.login_label_store || "소속";
+    if (lbName) lbName.textContent = lang.login_label_name || "성명";
+    if (lbPw) lbPw.textContent = lang.login_label_pw || "P/W";
+    if (s && s.options[0]) s.options[0].textContent = lang.login_store_ph || "매장 선택";
+    if (btnLogin) btnLogin.textContent = lang.btn_login || "로그인";
+  }
+  /** 로그인 화면에서 언어 변경 시 */
+  function changeLoginLanguage() {
+    var sel = document.getElementById("login-lang");
+    if (!sel) return;
+    currentLang = sel.value;
+    if (typeof sessionStorage !== "undefined") sessionStorage.setItem("cm_lang", currentLang);
+    applyLoginScreenTranslations();
+  }
+
+  /* [최종 최적화] 로그인 함수 (속도 향상 + 데이터 미리 로딩 적용) */
+function login() {
+    var s = document.getElementById("l-store").value;
+    var n = document.getElementById("l-name").value;
+    var p = document.getElementById("l-pw").value;
+
+    if (!s || !n) return alert("매장과 이름을 선택해주세요.");
+
+    // 1. 로딩바 시작
+    load(1);
+
+    google.script.run.withSuccessHandler(r => {
+        load(0); // 로딩바 끝
+
+        if (r.success) {
+            // --- [로그인 성공] ---
+            userRole = r.role;
+            userStore = r.storeName;
+            userName = r.userName || "";
+            try {
+              sessionStorage.setItem("cm_store", s);
+              sessionStorage.setItem("cm_name", n);
+              sessionStorage.setItem("cm_pw", p);
+              sessionStorage.setItem("cm_last_page", "dashboard");
+            } catch (e) {}
+
+            // 1. 화면 전환
+            document.getElementById("login-screen").style.display = "none";
+            document.getElementById("admin-screen").style.display = "block";
+            document.getElementById("u-info").innerText = r.storeName + " " + r.userName;
+            var langEl = document.getElementById("langSelect");
+            if (langEl) langEl.value = currentLang;
+            if (typeof applyTranslations === "function") applyTranslations();
+
+            // 2. ★ [속도 핵심] 데이터 미리 로딩 (0.1초 뒤 실행)
+            // 사용자가 화면을 보는 동안, 뒤에서 목록을 미리 가져와서 나중에 메뉴 누를 때 '즉시' 뜨게 함
+            setTimeout(function() {
+                loadAdminItems();       // 품목 리스트
+                loadVendorDropdowns();  // 매입처 리스트
+                loadOutboundDropdowns();// 매출처 리스트
+            }, 100);
+
+            // 3. 권한별 화면 이동
+            if (userRole === 'director' || userRole === 'officer') {
+                // 본사 관리자 -> 대시보드
+                document.querySelectorAll('.hq-only').forEach(e => e.style.display = 'block');
+                
+                // (업그레이드) 대시보드 메뉴에 불 들어오게 설정
+                go('dashboard', document.getElementById('menu-dashboard')); 
+            } else {
+                // 일반 직원 / 매장 관리자 -> 첫 화면 대시보드
+                var ss = document.getElementById("stock-store-selector");
+                if (ss) {
+                    ss.value = userStore;
+                    ss.disabled = true;
+                }
+                go('dashboard', document.getElementById('menu-dashboard'));
+            }
+
+        } else {
+            // 로그인 실패
+            alert(r.message);
+        }
+    }).loginCheck(s, n, p);
+}
+
+  // 메뉴 이동 함수
+  function go(id, el){ 
+    document.querySelectorAll('.section-view').forEach(x=>x.classList.remove('active')); 
+    var target = document.getElementById(id+'-section'); 
+    if(target) target.classList.add('active');
+    
+    document.querySelectorAll('.sidebar a').forEach(x=>x.classList.remove('active')); 
+    if(el) el.classList.add('active'); 
+    
+    if(window.innerWidth <= 768) { 
+        document.getElementById("sidebar").classList.remove("open"); 
+        document.querySelector(".overlay").classList.remove("show"); 
+    }
+    
+    // 메뉴별 데이터 로드
+    if(id === 'force') initForceSection();
+    if(id === 'item-manage') loadAdminItems();
+    if(id === 'stock') loadStock(true);
+    if(id === 'outbound') loadOrders();
+    if(id === 'vendor-manage') loadVendors();
+    if(id === 'hr-employee') { loadEmployeeList(); if(typeof showHrEmployeeTab === 'function') showHrEmployeeTab('list'); }
+    if(id === 'hr-leave') loadLeaveData(filterLeaves);
+    if(id === 'hr-stats') loadLeaveData(filterStats);
+  }
+
+  // ★ 드롭다운 채우기 (가장 중요한 부분 - 중복 없이 하나만!)
+  function fillDropdowns(officeKey) {
+      // 모든 선택 박스 ID 목록
+      var targets = [
+          "emp-store", "filter-store-select", "stock-store-selector", "os-store", 
+          "hr-store-selector", "leave-store-select", "ord-store-selector", // 주문 승인용
+          "a-store", "adj-store-selector", "eval-store" // 재고 조정용, 직원 평가용
+      ];
+      
+      if(!loginInfo) return;
+      var keys = Object.keys(loginInfo);
+
+      var allStoresText = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].att_all_stores) ? I18N[currentLang].att_all_stores : "전체 매장";
+      targets.forEach(function(tid) {
+          var el = document.getElementById(tid);
+          if(el) {
+              el.innerHTML = "";
+              // 입력용이 아니면 '전체 매장' 옵션 추가
+              if(tid !== "emp-store" && tid !== "a-store") {
+                  el.add(new Option(allStoresText, "All"));
+              }
+              if(officeKey) el.add(new Option("Office (본사)", officeKey));
+              keys.forEach(function(k) { 
+                  if(k !== officeKey) el.add(new Option(k, k)); 
+              });
+          }
+      });
+
+      // 매입처 리스트 로딩 (입고 등록용)
+      if(typeof loadVendorDropdowns === 'function') loadVendorDropdowns();
+  }
+ /* 대시보드 요약 숫자 로드 */
+function loadDashboardSummary() {
+    var cards = document.getElementById("dash-summary-cards");
+    if (!cards) return;
+    var pendingEl = document.getElementById("dash-pending-orders");
+    var inEl = document.getElementById("dash-inbound");
+    var outEl = document.getElementById("dash-outbound");
+    var leaveEl = document.getElementById("dash-leave-pending");
+    var attEl = document.getElementById("dash-att-pending");
+    if (pendingEl) pendingEl.textContent = "-";
+    if (inEl) inEl.textContent = "-";
+    if (outEl) outEl.textContent = "-";
+    if (leaveEl) leaveEl.textContent = "-";
+    if (attEl) attEl.textContent = "-";
+    google.script.run.withSuccessHandler(function(res) {
+        if (!res) return;
+        if (pendingEl) pendingEl.textContent = res.pendingOrders != null ? res.pendingOrders : 0;
+        if (inEl) inEl.textContent = res.inboundCount != null ? res.inboundCount : 0;
+        if (outEl) outEl.textContent = res.outboundCount != null ? res.outboundCount : 0;
+        if (leaveEl) leaveEl.textContent = res.leavePending != null ? res.leavePending : 0;
+        if (attEl) attEl.textContent = res.attendancePending != null ? res.attendancePending : 0;
+    }).withFailureHandler(function() {
+        if (pendingEl) pendingEl.textContent = "0";
+        if (inEl) inEl.textContent = "0";
+        if (outEl) outEl.textContent = "0";
+        if (leaveEl) leaveEl.textContent = "0";
+        if (attEl) attEl.textContent = "0";
+    }).getDashboardSummary(typeof userStore !== "undefined" ? userStore : "", typeof userRole !== "undefined" ? userRole : "");
+}
+
+ /* [최종 통합] go 함수: 모든 메뉴의 초기화 및 연동 로직 포함 */
+function go(page, el) {
+    // 1. 모든 페이지 숨김
+    document.querySelectorAll('div[id^="page-"]').forEach(d => d.style.display = 'none');
+
+    // 2. 선택한 페이지 표시 (안전장치 포함)
+    var target = document.getElementById('page-' + page);
+    if (target) {
+        target.style.display = 'block';
+        currentPrintPageId = 'page-' + page;
+        try { sessionStorage.setItem("cm_last_page", page); } catch (e) {}
+    } else {
+        console.error("페이지를 찾을 수 없습니다: " + page);
+        currentPrintPageId = '';
+    }
+
+    // 3. 사이드바 버튼 활성화 상태 업데이트 (el 없으면 해당 페이지 링크 찾기)
+    if (!el && page) {
+        document.querySelectorAll('.sidebar a').forEach(function(a) {
+            var on = a.getAttribute('onclick') || '';
+            if (on.indexOf("'" + page + "'") !== -1 || on.indexOf('"' + page + '"') !== -1) { el = a; }
+        });
+    }
+    if (el) {
+        document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+        el.classList.add('active');
+    }
+
+    // 📱 모바일 환경에서 메뉴 선택 시 사이드바 닫기
+    if (window.innerWidth <= 768) {
+        var sidebar = document.getElementById("sidebar");
+        var overlay = document.querySelector(".overlay");
+        if (sidebar) sidebar.classList.remove("open");
+        if (overlay) overlay.classList.remove("show");
+    }
+
+    // ---------------------------------------------------------
+    // 4. 각 페이지별 데이터 로드 및 초기화 로직 (누락 방지)
+    // ---------------------------------------------------------
+
+    // [대시보드] 진입 시 요약 숫자 + 받은 공지 로드
+    if (page === 'dashboard') {
+        loadDashboardSummary();
+        var nrStart = document.getElementById("notice-received-start");
+        var nrEnd = document.getElementById("notice-received-end");
+        if (nrStart && !nrStart.value) {
+            var d = new Date();
+            nrStart.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-01";
+            nrEnd.value = d.toISOString().substring(0, 10);
+        }
+        if (typeof loadNoticeReceived === "function") loadNoticeReceived();
+    }
+
+    // [근태 관리] 진입 시
+    if (page === 'attendance-manage') {
+        // 1. 매장 선택 드롭다운 ID를 'sch-store-select'로 정확히 타겟팅하여 강제 로드
+        var attFilter = document.getElementById('att-store-filter');
+        var schSelect = document.getElementById('sch-store-select'); // ID 수정됨
+        
+        if (attFilter) attFilter.classList.remove('loaded');
+        if (schSelect) schSelect.classList.remove('loaded');
+
+        loadStoreOptions('att-store-filter'); 
+        loadStoreOptions('sch-store-select'); // 스마트 스케줄러용 매장 목록 로드
+
+        // ★ [추가] 조회 및 수정 탭의 매장 리스트도 강제로 불러옵니다.
+         const viewSelect = document.getElementById('view-store-select');
+    
+        if (viewSelect) {
+        viewSelect.classList.remove('loaded'); // 기존 로딩 기록 초기화
+        loadStoreOptions('view-store-select'); // 매장 목록 로드 함수 호출
+    }
+
+    showAttendanceTab('status'); // 기본 탭 설정
+
+        // 2. 탭 초기화 (기본적으로 첫 번째 '근태 현황' 탭 표시)
+        showAttendanceTab('status'); 
+
+        // 3. 날짜 자동 세팅 (오늘 날짜)
+        var today = new Date().toISOString().substring(0, 10);
+        if (document.getElementById('att-start')) document.getElementById('att-start').value = today;
+        if (document.getElementById('att-end')) document.getElementById('att-end').value = today;
+        
+        // 스마트 스케줄러 기준 날짜(해당 주 월요일) 세팅
+        if (document.getElementById('sch-week-monday')) {
+            var monday = (typeof getMondayOfWeek === 'function') ? getMondayOfWeek(today) : today;
+            document.getElementById('sch-week-monday').value = monday;
+            if (typeof initWeeklyGrid === 'function') initWeeklyGrid();
+        }
+    }
+    // [업무 일지] 진입 시
+    if (page === 'work-log') {
+        if (typeof showWorkLogTab === 'function') {
+            showWorkLogTab('personal');
+        } else {
+            var wlView = document.getElementById("wl-view-personal");
+            if (wlView) wlView.style.display = "block";
+            if (typeof initWorkLog === 'function') initWorkLog();
+        }
+    }
+
+    // [설정] 진입 시 본사 정보 폼 로드
+    if (page === 'settings') {
+        if (typeof applyTranslations === 'function') applyTranslations();
+        if (typeof loadHeadOfficeInfo === 'function') loadHeadOfficeInfo();
+    }
+
+    // [매장 점검] 진입 시
+    if (page === 'store-manage') {
+        if (typeof showStoreTab === 'function') showStoreTab('check');
+        
+        var chkStore = document.getElementById('chk-store');
+        var histStore = document.getElementById('hist-store');
+        if (chkStore) chkStore.classList.remove('loaded');
+        if (histStore) histStore.classList.remove('loaded');
+
+        loadStoreOptions('chk-store');
+        loadStoreOptions('hist-store');
+
+        // 점검자 및 날짜 자동 세팅
+        var uInfo = document.getElementById('u-info');
+        var chkInsp = document.getElementById('chk-inspector');
+        var chkDate = document.getElementById('chk-date');
+        if (chkInsp && uInfo) chkInsp.value = uInfo.innerText;
+        if (chkDate) chkDate.valueAsDate = new Date();
+    }
+
+    // [매장 방문 현황] 진입 시 - 매장, 부서(E열), 오피스 직원, 검색 날짜 오늘 기준
+    if (page === 'store-visit') {
+        var visitFilterStore = document.getElementById('visit-filter-store');
+        if (visitFilterStore) {
+            visitFilterStore.classList.remove('loaded');
+            if (typeof loadStoreOptions === 'function') loadStoreOptions('visit-filter-store');
+        }
+        var today = new Date().toISOString().substring(0, 10);
+        var visitStart = document.getElementById('visit-start');
+        var visitEnd = document.getElementById('visit-end');
+        if (visitStart) visitStart.value = today;
+        if (visitEnd) visitEnd.value = today;
+        var statsStart = document.getElementById('visit-stats-start');
+        var statsEnd = document.getElementById('visit-stats-end');
+        if (statsStart) statsStart.value = today;
+        if (statsEnd) statsEnd.value = today;
+        // 오피스 부서(E열) 드롭다운 채우기 - 선택 언어에 맞춰 "전체" 표시
+        var deptSel = document.getElementById('visit-filter-dept');
+        if (deptSel && typeof google !== 'undefined' && google.script && google.script.run) {
+            var allTxt = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].label_all) ? I18N[currentLang].label_all : "전체";
+            deptSel.innerHTML = '<option value="All">' + allTxt + '</option>';
+            google.script.run.withSuccessHandler(function(deptList) {
+                if (deptList && deptList.length) {
+                    deptList.forEach(function(dept) {
+                        deptSel.add(new Option(dept, dept));
+                    });
+                }
+            }).getOfficeDepartments();
+            // 직원(오피스) 드롭다운은 전체로 먼저 채우기
+            filterVisitEmployeeByDept();
+        }
+    }
+
+    // [직원 시간표] 진입 시 (별도 메뉴인 경우)
+    if (page === 'store-schedule') {
+        var schStore = document.getElementById('sch-store');
+        if (schStore) schStore.classList.remove('loaded');
+        loadStoreOptions('sch-store');
+        
+        // 주차(Week) 자동 계산 세팅
+        var weekInput = document.getElementById("sch-week");
+        if (weekInput && !weekInput.value) {
+            var today = new Date();
+            var year = today.getFullYear();
+            var onejan = new Date(year, 0, 1);
+            var week = Math.ceil((((today - onejan) / 86400000) + onejan.getDay() + 1) / 7);
+            weekInput.value = year + "-W" + (week < 10 ? "0" + week : week);
+        }
+    }
+
+    // [급여 관리] 진입 시
+    if (page === 'payroll') {
+        if (typeof showPayrollTab === 'function') showPayrollTab('calc');
+        var payMonth = document.getElementById("payroll-month");
+        if (payMonth && !payMonth.value) {
+            var d = new Date();
+            var m = String(d.getMonth() + 1).padStart(2, '0');
+            payMonth.value = d.getFullYear() + "-" + m;
+        }
+        if (typeof loadPayrollStoreOptions === 'function') loadPayrollStoreOptions();
+    }
+
+    // 기타 물류/인사 공통 로드
+    if (page === 'item-manage') { loadAdminItems(); loadVendorDropdowns(); }
+    if (page === 'inbound') { loadVendorDropdowns(); }
+    if (page === 'force') { loadOutboundDropdowns(); }
+    if (page === 'hr-employee') { loadEmployeeList(); }
+    if (page === 'hr-leave' || page === 'hr-stats') { loadLeaveData(); }
+}
+
+function filterVisitEmployeeByDept() {
+  var deptSel = document.getElementById("visit-filter-dept");
+  var empSel = document.getElementById("visit-filter-employee");
+  if (!empSel || !deptSel) return;
+  var dept = deptSel.value || "All";
+  var allTxt = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].label_all) ? I18N[currentLang].label_all : "전체";
+  empSel.innerHTML = '<option value="All">' + allTxt + '</option>';
+  if (typeof google === "undefined" || !google.script || !google.script.run) return;
+  google.script.run.withSuccessHandler(function(res) {
+    if (res && res.list && res.list.length) {
+      res.list.forEach(function(item) {
+        var name = item.name || item;
+        empSel.add(new Option(name, name));
+      });
+    }
+  }).getOfficeStaffListByDept(dept);
+}
+
+function loadVisitHistory() {
+  var s = document.getElementById("visit-start").value;
+  var e = document.getElementById("visit-end").value;
+  var st = document.getElementById("visit-filter-store").value;
+  var emp = document.getElementById("visit-filter-employee") ? document.getElementById("visit-filter-employee").value : "All";
+  var dept = document.getElementById("visit-filter-dept") ? document.getElementById("visit-filter-dept").value : "All";
+  
+  load(1);
+  google.script.run.withSuccessHandler(list => {
+    load(0);
+    var b = document.getElementById("visit-history-list");
+    b.innerHTML = "";
+    if(!list.length) { b.innerHTML = "<tr><td colspan='6'>내역 없음</td></tr>"; return; }
+    
+    list.forEach(r => {
+      b.innerHTML += `<tr><td>${r.date}</td><td>${r.name}</td><td>${r.store}</td><td>${r.type}</td><td>${r.purpose}</td><td>${r.duration || '-'}</td></tr>`;
+    });
+  }).getStoreVisitHistory(s, e, st, emp, dept);
+}
+
+</script>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+
+  <?!= include('Style_Mobile'); ?> 
+</head>
+<body>
+
+  <div id="loading"><div class="spinner-border text-warning" style="width: 3rem; height: 3rem;"></div></div>
+
+  <div id="login-screen">
+    <div class="brand-logo-large" data-i18n="login_title">CHOONGMAN ERP</div>
+    <div class="login-card">
+      <select id="langSelect" class="login-input" onchange="changeLanguage()">
+        <option value="ko">🇰🇷 한국어</option><option value="en">🇺🇸 English</option>
+        <option value="th">🇹🇭 ภาษาไทย</option><option value="mm">🇲🇲 မြန်မာ</option><option value="la">🇱🇦 ພາສາລາວ</option>
+      </select>
+      <select id="storeSelect" class="login-input" onchange="onStoreChange()"><option value="">Loading...</option></select>
+      <select id="loginName" class="login-input"><option value="">Select Name...</option></select>
+      <input type="password" id="loginPw" class="login-input" placeholder="Password (PIN)" data-i18n="m_pin_ph">
+      <button class="login-btn" onclick="tryLogin()" id="btn-login">Login</button>
+    </div>
+  </div>
+
+  <div id="app-screen" class="container" style="display:none;">
+    <div class="app-header">
+      <div class="app-title" id="txt-app-title" data-i18n="m_app_title">Choongman Chicken</div>
+      <button onclick="location.reload()" style="background:#eee;border:none;padding:5px 10px;border-radius:5px;" data-i18n="m_logout">Logout</button>
+    </div>
+    
+    <div class="nav-tabs">
+  <div class="nav-item active" onclick="switchTab('home')" id="tab-home" data-i18n="m_tab_home">Home</div>
+  <div class="nav-item" onclick="switchTab('order')" id="tab-order" data-i18n="m_tab_order">Order</div>
+  <div class="nav-item" onclick="switchTab('stock')" id="tab-stock" data-i18n="m_tab_stock">Usage</div>
+  <div class="nav-item" onclick="switchTab('hr')" id="tab-hr" data-i18n="m_tab_hr">HR</div>
+  
+  <div class="nav-item hidden" onclick="switchTab('store-visit')" id="tab-store-visit" data-i18n="m_tab_visit">Visit</div>
+  
+  <div class="nav-item hidden" onclick="switchTab('admin')" id="tab-admin" data-i18n="m_tab_admin">Admin</div>
+</div>
+
+    <div id="view-home">
+      <div style="background:#fff3e0; padding:20px; border-radius:15px; margin-bottom:20px;">
+        <h3 style="margin:0; color:#E65100;" data-i18n="m_welcome">Welcome!</h3>
+        <p style="margin:5px 0 0 0; color:#555;" data-i18n="m_welcome_sub">오늘도 안전하고 즐겁게 근무하세요!</p>
+      </div>
+
+      <div style="background:white; border:1px solid #eee; border-radius:15px; padding:15px; min-height:300px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:bold; color:#E65100; font-size:16px;" data-i18n="m_notice_board">📢 Notice Board</span>
+        </div>
+        <div style="display:flex; gap:5px; align-items:center; margin-bottom:15px; background:#f8f9fa; padding:10px; border-radius:8px;">
+          <input type="date" id="noticeStart" style="border:1px solid #ddd; border-radius:5px; padding:5px; font-size:11px; flex:1;">
+          <span style="color:#888;">~</span>
+          <input type="date" id="noticeEnd" style="border:1px solid #ddd; border-radius:5px; padding:5px; font-size:11px; flex:1;">
+          <button onclick="renderNotices()" style="border:none; background:#E65100; color:white; border-radius:5px; padding:5px 12px; cursor:pointer;">🔍</button>
+        </div>
+        <div id="notice-list-box" style="display:flex; flex-direction:column; gap:10px;">
+           <div id="notice-list-placeholder" style="text-align:center; color:#999; padding:20px;" data-i18n="m_loading_notices">Loading Notices...</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-order" class="hidden">
+      <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchOrderTab('new')" id="ord-sub-new" data-i18n="m_ord_new">New Order</div>
+        <div class="sub-tab" onclick="switchOrderTab('hist')" id="ord-sub-hist" data-i18n="m_ord_hist">Order History</div>
+      </div>
+      <div id="order-new-area">
+        <div id="orderMenuWrapper" style="padding-bottom:120px;" data-i18n="m_loading_items">Loading Items...</div>
+        <div class="input-area">
+          <div style="display:flex; align-items:center; background:#f5f5f5; border-radius:10px; padding:5px;">
+            <button class="stepper-btn" onclick="adjustQty('order', -1)">-</button>
+            <input type="number" id="qtyInputOrder" class="stepper-input" value="1" min="1" style="width:50px;">
+            <button class="stepper-btn" onclick="adjustQty('order', 1)">+</button>
+          </div>
+          <button class="btn-add" id="btn-add-order" onclick="addToCart('order')" data-i18n="m_add_cart">Add to Cart</button>
+        </div>
+        <div style="padding-bottom:50px;">
+          <table id="cartTable" style="width:100%;font-size:13px;margin-bottom:10px;"><thead><tr><th data-i18n="m_item">Item</th><th class="text-right" data-i18n="m_price">Price</th><th class="text-right" data-i18n="m_qty">Qty</th><th class="text-right" data-i18n="m_sub">Sub</th></tr></thead><tbody></tbody></table>
+          <div class="vat-row"><span data-i18n="m_subtotal">Subtotal:</span> <span id="displaySub">0 ฿</span></div>
+          <div class="vat-row"><span data-i18n="m_vat">VAT (7%):</span> <span id="displayVat">0 ฿</span></div>
+          <div class="grand-total"><span data-i18n="m_total">Total:</span> <span id="displayTotal">0 ฿</span></div>
+          <button onclick="submitOrder()" class="login-btn" id="btn-place-order" data-i18n="m_place_order">Place Order</button>
+        </div>
+      </div>
+      <div id="order-hist-area" style="display:none;">
+        <div style="margin-bottom:10px; display:flex; gap:5px;">
+          <input type="date" id="hist-start" class="login-input" style="padding:10px;" onchange="filterHistory()">
+          <input type="date" id="hist-end" class="login-input" style="padding:10px;" onchange="filterHistory()">
+        </div>
+        <button class="login-btn" style="padding:10px; margin-top:0; background:#607D8B;" onclick="loadHistory()" data-i18n="m_search_hist">Search History</button>
+        <div id="history-list-container" style="margin-top:10px;">Loading...</div>
+      </div>
+    </div>
+
+    <div id="view-stock" class="hidden">
+      <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchUsageTab('new')" id="sub-new" data-i18n="m_use_new">New Usage</div>
+        <div class="sub-tab" onclick="switchUsageTab('hist')" id="sub-hist" data-i18n="m_use_hist">History</div>
+      </div>
+      <div id="usage-new-area">
+        <div id="stockListWrapper" style="padding-bottom:120px;" data-i18n="m_loading_items">Loading Items...</div>
+        <div class="input-area">
+          <div style="display:flex; align-items:center; background:#f5f5f5; border-radius:10px; padding:5px;">
+            <button class="stepper-btn" onclick="adjustQty('usage', -1)">-</button>
+            <input type="number" id="qtyInputUsage" class="stepper-input" value="1" min="1">
+            <button class="stepper-btn" onclick="adjustQty('usage', 1)">+</button>
+          </div>
+          <button class="btn-add" id="btn-add-usage" style="background:#43a047;" onclick="addToCart('usage')" data-i18n="m_add_usage">Add Usage</button>
+        </div>
+        <div style="padding-bottom:50px;">
+          <div class="stock-total-box" style="margin-top:0; margin-bottom:10px;"><div class="stock-total-label" data-i18n="m_items_used">Items Used</div></div>
+          <table id="usageCartTable" style="width:100%;font-size:13px;margin-bottom:10px;"><thead><tr><th data-i18n="m_item">Item</th><th class="text-right" data-i18n="m_qty">Qty</th><th class="text-right">Del</th></tr></thead><tbody></tbody></table>
+          <button onclick="submitUsage()" class="login-btn" style="background:#43a047;" data-i18n="m_confirm_usage">Confirm Usage</button>
+        </div>
+      </div>
+      <div id="usage-hist-area" style="display:none;">
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+          <input type="date" id="use-start" class="login-input" style="padding:8px;">
+          <input type="date" id="use-end" class="login-input" style="padding:8px;">
+        </div>
+        <button class="login-btn" style="padding:10px; margin-bottom:10px; background:#607D8B;" onclick="loadUsageHistory()" data-i18n="m_search_period">Search Period</button>
+        <div style="background:white; border-radius:8px; border:1px solid #eee;">
+            <table class="usage-table">
+                <thead style="background:#f5f5f5;"><tr><th style="text-align:left; padding:10px;">Date/Item</th><th style="text-align:right; padding:10px;">Qty</th></tr></thead>
+                <tbody id="usage-history-list"><tr><td colspan="2" style="text-align:center; padding:20px; color:#999;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-hr" class="hidden">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div class="digital-clock" id="live-clock" style="font-size:32px; font-weight:900; color:#333;">00:00:00</div>
+        <div style="color:#666;"><span data-i18n="m_user">User</span>: <b id="hr-username" style="color:#E65100;">User</b></div>
+      </div>
+      <div style="display:flex; justify-content:center; gap:10px; margin-bottom:10px;">
+        <button onclick="sendAttendance('출근')" class="btn-attend" style="background:#4CAF50; flex:1;" data-i18n="m_att_in">☀️ IN (출근)</button>
+        <button onclick="sendAttendance('퇴근')" class="btn-attend" style="background:#F44336; flex:1;" data-i18n="m_att_out">🌙 OUT (퇴근)</button>
+      </div>
+      <div style="display:flex; justify-content:center; gap:10px; margin-bottom:20px;">
+        <button onclick="sendAttendance('휴식시작')" class="btn-attend" style="background:#FF9800; flex:1;" data-i18n="m_break">☕ Break</button>
+        <button onclick="sendAttendance('휴식종료')" class="btn-attend" style="background:#2196F3; flex:1;" data-i18n="m_resume">▶ Resume</button>
+      </div>
+      <div id="today-attendance-log" class="today-log-box">
+        <b style="font-size:14px; color:#E65100; display:block; margin-bottom:8px;" data-i18n="m_today_record">📅 Today's Record</b>
+        <div id="attendance-status-msg" style="text-align:center; font-size:12px; color:#999; padding:10px;" data-i18n="m_att_help">위 버튼을 눌러 출퇴근을 기록하세요.</div>
+        <table class="log-table" id="attendance-log-table" style="display:none;"><tbody id="attendance-log-body"></tbody></table>
+      </div>
+      <div style="background:#fff; padding:15px; border-radius:15px; border:1px solid #eee; margin-bottom:15px;">
+         <b style="font-size:15px; display:block; margin-bottom:10px;" data-i18n="m_leave_stats">📊 My Vacation Stats (This Year)</b>
+         <table class="leave-stats-table">
+            <thead><tr><th data-i18n="m_used_ann">Used Annual</th><th data-i18n="m_used_sick">Used Sick</th><th data-i18n="m_remain">Remaining</th></tr></thead>
+            <tbody><tr><td id="my-ann" style="font-size:16px;">0</td><td id="my-sick" style="font-size:16px;">0</td><td id="my-remain" style="color:#E65100; font-weight:bold; font-size:18px;">0</td></tr></tbody>
+         </table>
+      </div>
+      <div style="background:#fff; padding:20px; border-radius:15px; border:1px solid #eee; box-shadow:0 4px 10px rgba(0,0,0,0.05); margin-bottom:15px;">
+        <b style="font-size:16px;" data-i18n="m_leave_req">🏖️ Leave Request</b>
+        <select id="leaveType" class="login-input" style="margin-top:15px;"><option value="연차" data-i18n="m_annual">Annual Leave</option><option value="반차" data-i18n="m_half">Half-Day Leave</option><option value="병가" data-i18n="m_sick">Sick Leave</option></select>
+        <input type="date" id="leaveDate" class="login-input"><input type="text" id="leaveReason" class="login-input" placeholder="Reason (사유)" data-i18n="m_reason_ph">
+        <button onclick="submitLeave()" class="btn-attend" style="background:#5c6bc0; width:100%; margin-top:10px; box-shadow: 0 4px 0 #3f51b5;" data-i18n="m_submit_req">Submit Request</button>
+      </div>
+      <div style="background:#fff; padding:15px; border-radius:15px; border:1px solid #eee; margin-bottom:50px;">
+         <b style="font-size:15px;" data-i18n="m_req_hist">📑 Request History</b>
+         <div id="my-leave-list" class="my-leave-history" style="margin-top:10px;">Loading...</div>
+      </div>
+    </div>
+
+    <div id="view-store-visit" class="hidden">
+      <div style="background:#E3F2FD; padding:20px; border-radius:15px; margin-bottom:20px; border:1px solid #BBDEFB;">
+        <h3 style="margin:0; color:#1565C0;" data-i18n="m_visit_title">Store Visit</h3>
+        <p style="margin:5px 0 0 0; color:#546E7A; font-size:13px;" data-i18n="m_visit_sub">현장 지원 및 교육 활동을 기록하세요.</p>
+      </div>
+      <div class="card-box" style="padding:20px; border-radius:15px; box-shadow:0 4px 12px rgba(0,0,0,0.05); background:white;">
+        <label class="fw-bold small mb-2 d-block" data-i18n="m_visit_store">🏢 방문 매장 선택</label>
+        <select id="visit-store-select" class="login-input" style="margin-bottom:15px;"></select>
+        <label class="fw-bold small mb-2 d-block" data-i18n="m_visit_purpose">🎯 방문 목적</label>
+        <select id="visit-purpose" class="login-input" style="margin-bottom:20px;">
+          <option value="정기점검" data-i18n="m_purpose_inspect">🔍 정기 점검 (Inspection)</option>
+          <option value="직원교육" data-i18n="m_purpose_training">👨‍🏫 직원 교육 (Training)</option>
+          <option value="긴급지원" data-i18n="m_purpose_urgent">🚨 긴급 지원 (Urgent Support)</option>
+          <option value="매장미팅" data-i18n="m_purpose_meeting">🤝 매장 미팅 (Meeting)</option>
+          <option value="기타" data-i18n="m_purpose_etc">ETC</option>
+        </select>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+          <button onclick="handleVisit('방문시작')" id="btn-visit-in" class="btn-attend" style="background:#1976D2; flex:1;" data-i18n="m_visit_start">방문 시작 (Check-in)</button>
+          <button onclick="handleVisit('방문종료')" id="btn-visit-out" class="btn-attend" style="background:#455A64; flex:1; display:none;" data-i18n="m_visit_end">방문 종료 (Check-out)</button>
+        </div>
+        <div id="visit-status-msg" style="text-align:center; font-size:12px; color:#1E88E5; padding:10px; background:#E3F2FD; border-radius:8px; display:none;"></div>
+      </div>
+      <div style="margin-top:25px; padding-bottom:50px;">
+  <b style="font-size:14px; color:#546E7A;" data-i18n="m_today_visit_log"><i class="bi bi-clock-history"></i> Today's Visit Log</b>
+  <div id="visit-log-container" style="margin-top:10px; background:white; border-radius:10px; padding:10px; border: 1px solid #eee;">
+    <table class="table table-sm text-center align-middle" style="margin-bottom:0;">
+      <thead class="table-light" style="font-size: 11px; color: #666;">
+        <tr>
+          <th data-i18n="m_time">시간</th>
+          <th data-i18n="m_store">매장</th>
+          <th data-i18n="m_type">구분</th>
+          <th data-i18n="m_duration">체류</th>
+        </tr>
+      </thead>
+      <tbody id="visit-log-body">
+        <tr><td colspan="4" id="visit-loading-row" style="text-align:center; color:#999; padding:20px; font-size:12px;" data-i18n="m_loading_visit">기록을 조회 중입니다...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+    </div>
+
+    <div id="view-admin" class="hidden" style="padding-bottom:80px;">
+      <div style="background:#E3F2FD; padding:16px; border-radius:12px; margin-bottom:16px; border:1px solid #BBDEFB;">
+        <h4 style="margin:0; color:#1565C0;" data-i18n="m_tab_admin">Admin</h4>
+        <p style="margin:6px 0 0 0; color:#546E7A; font-size:13px;" data-i18n="m_admin_sub">공지 발송, 연차·근태 승인</p>
+      </div>
+
+      <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
+        <b style="font-size:15px; color:#E65100;" data-i18n="m_admin_notice">📢 공지사항 발송</b>
+        <input type="text" id="admin-notice-title" class="login-input" style="margin-top:12px;" placeholder="제목" data-i18n-ph="label_subject">
+        <textarea id="admin-notice-content" class="login-input" style="margin-top:8px; min-height:80px; resize:vertical;" placeholder="내용" data-i18n-ph="label_content"></textarea>
+        <label class="small fw-bold mt-2 d-block" data-i18n="label_store">대상 매장</label>
+        <select id="admin-notice-stores" class="login-input" style="margin-top:4px;"></select>
+        <label class="small fw-bold mt-2 d-block" data-i18n="label_role">대상 직급</label>
+        <select id="admin-notice-roles" class="login-input" style="margin-top:4px;"></select>
+        <button type="button" onclick="mobileSendNotice()" class="login-btn" style="margin-top:12px; background:#E65100;" data-i18n="notice_send_btn">공지 발송하기</button>
+      </div>
+
+      <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
+        <b style="font-size:15px; color:#5c6bc0;" data-i18n="leave_tab_approval">🏖️ 연차 신청 승인</b>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <select id="admin-leave-store" class="login-input" style="flex:1; min-width:100px;"></select>
+          <select id="admin-leave-status" class="login-input" style="width:90px;"><option value="대기" data-i18n="leave_wait">대기</option><option value="All" data-i18n="label_all">전체</option></select>
+          <button type="button" onclick="mobileLoadLeaveList()" class="login-btn" style="padding:8px 14px; background:#5c6bc0;" data-i18n="btn_query">조회</button>
+        </div>
+        <div id="admin-leave-list" style="margin-top:12px; max-height:240px; overflow-y:auto; font-size:13px;"></div>
+      </div>
+
+      <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
+        <b style="font-size:15px; color:#2e7d32;" data-i18n="m_admin_att">📅 근태 승인 (지각/OT)</b>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+          <input type="date" id="admin-att-start" class="login-input" style="flex:1; min-width:100px;">
+          <input type="date" id="admin-att-end" class="login-input" style="flex:1; min-width:100px;">
+          <select id="admin-att-store" class="login-input" style="min-width:100px;"></select>
+          <button type="button" onclick="mobileLoadAttendancePending()" class="login-btn" style="padding:8px 14px; background:#2e7d32;" data-i18n="btn_query">조회</button>
+        </div>
+        <div id="admin-att-list" style="margin-top:12px; max-height:240px; overflow-y:auto; font-size:13px;"></div>
+      </div>
+    </div>
+
+  </div> <div id="noticeModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+    <div style="background:white; width:85%; max-width:400px; border-radius:15px; padding:20px; box-shadow:0 5px 15px rgba(0,0,0,0.3); position:relative;">
+      <div id="modalDate" style="font-size:12px; color:#888; margin-bottom:5px;"></div>
+      <div id="modalTitle" style="font-size:18px; font-weight:bold; color:#E65100; margin-bottom:15px; border-bottom:2px solid #eee; padding-bottom:10px;"></div>
+      <div id="modalContent" style="font-size:14px; color:#333; line-height:1.6; min-height:100px; white-space:pre-wrap; margin-bottom:20px;"></div>
+      <div id="modalAttachments" style="margin-bottom:15px;"></div>
+      <input type="hidden" id="modalNoticeId">
+      <div style="display:flex; gap:10px;">
+        <button onclick="actNotice('다음에')" style="flex:1; padding:12px; border:1px solid #ddd; background:white; color:#555; border-radius:8px; font-weight:bold;" data-i18n="m_modal_later">다음에</button>
+        <button onclick="actNotice('확인')" style="flex:2; padding:12px; border:none; background:#E65100; color:white; border-radius:8px; font-weight:bold;" data-i18n="m_modal_confirm">확인함 (Confirm)</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <?!= include('JS_Mobile_Common'); ?>
+  <?!= include('JS_Mobile_Order'); ?>
+  <?!= include('JS_Mobile_HR'); ?>
+  <?!= include('JS_Mobile_Usage'); ?>
+  <?!= include('JS_Mobile_Visit'); ?>
+
+</body>
+</html>
