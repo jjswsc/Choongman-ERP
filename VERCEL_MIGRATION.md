@@ -209,3 +209,11 @@
   - `Page.html` + 포함 스크립트를 정적 파일로 복사하거나,  
   - `app.html`처럼 `runApi`만 쓰는 최소 페이지만 쓰고 나머지는 GAS에서 계속 사용.
 - 모바일 근태 승인: `getAttendancePendingForMobile`, `processAttendanceApprovalMobile`은 Vercel API에 없음. 필요 시 동일 패턴으로 API 추가 후 `JS_Mobile_Common.html`에 `runApi` 분기 추가.
+
+### Hobby 플랜 12개 함수 제한 대응
+- Vercel **Hobby 플랜**은 배포당 **서버리스 함수 최대 12개**만 허용합니다.
+- API가 70개 이상이므로, **단일 진입점**으로 묶었습니다.
+  - `vercel-app/api/[[...slug]].js`: `/api/getLoginData`, `/api/loginCheck` 등 **모든** `/api/*` 요청을 받아 해당 폴더의 `index.js`로 넘깁니다.
+  - `vercel.json`의 API 빌드는 **이 파일 하나만** 빌드하도록 설정 (`api/[[...slug]].js`).  
+  → 배포되는 서버리스 함수는 **1개**만 생기므로 Hobby 제한을 통과합니다.
+- Node 버전 경고를 줄이기 위해 `package.json`의 `engines.node`를 `18.x`로 고정해 두었습니다.

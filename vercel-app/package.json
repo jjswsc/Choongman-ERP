@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "충만치킨 ERP - Vercel 이전용 최소 예시",
-  "engines": { "node": ">=18" },
+  "engines": { "node": "18.x" },
   "scripts": {
     "dev": "vercel dev"
   },
