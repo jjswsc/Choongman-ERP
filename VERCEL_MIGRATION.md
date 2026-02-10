@@ -86,6 +86,90 @@
 
 ---
 
+## 📋 배포 후 할 일 (순서대로 자세히)
+
+**이미 "Vercel 이전 테스트" 화면이 보인다면**, 아래 순서대로만 하면 됩니다.
+
+---
+
+### ① Supabase에서 URL·Key 복사하기
+
+1. 브라우저에서 **[app.supabase.com](https://app.supabase.com)** 접속 후 로그인.
+2. 사용 중인 **프로젝트** 한 개 클릭.
+3. 왼쪽 아래 **⚙️ Project Settings** 클릭.
+4. 왼쪽 메뉴에서 **API** 클릭.
+5. 화면에서 두 값을 복사해 둡니다.
+   - **Project URL**  
+     → 예: `https://abcdefghijk.supabase.co`  
+     → 이 값을 **SUPABASE_URL** 로 씁니다.
+   - **Project API keys** 안에 있는 **anon public** (긴 문자열)  
+     → 이 값을 **SUPABASE_ANON_KEY** 로 씁니다.  
+   - **key** 옆 눈 아이콘 눌러서 표시한 뒤 **복사** 하면 됩니다.
+
+---
+
+### ② Vercel에 환경 변수 넣기
+
+1. **[vercel.com](https://vercel.com)** 접속 후 로그인.
+2. 대시보드에서 **Choongman-ERP** (또는 만든 프로젝트 이름) 클릭.
+3. 상단 탭에서 **Settings** 클릭.
+4. 왼쪽 메뉴에서 **Environment Variables** 클릭.
+5. **Key** 란에 `SUPABASE_URL` 입력, **Value** 란에 ①에서 복사한 Project URL 붙여넣기.
+   - **Environment**는 **Production**, **Preview**, **Development** 전부 체크해 두거나, 최소 **Production**은 체크.
+   - **Save** 클릭.
+6. 다시 **Add New** (또는 **Add**) 클릭.
+7. **Key** 에 `SUPABASE_ANON_KEY`, **Value** 에 ①에서 복사한 anon key 붙여넣기.
+   - **Save** 클릭.
+
+---
+
+### ③ 환경 변수 적용을 위해 다시 배포하기
+
+1. 같은 Vercel 프로젝트 안에서 상단 탭 **Deployments** 클릭.
+2. 맨 위에 있는 배포(가장 최신) 한 줄에서 **오른쪽 ⋯(점 세 개)** 클릭.
+3. **Redeploy** 클릭.
+4. **Redeploy** 확인 버튼 다시 클릭.
+5. 1~2분 정도 기다리면 상태가 **Ready** 로 바뀝니다.
+
+---
+
+### ④ 테스트 페이지에서 API 확인하기
+
+1. 배포가 **Ready** 가 되면 **Visit** 버튼을 누르거나, 주소창에 배포된 URL 입력 (예: `https://choongman-erp-xxx.vercel.app`).
+2. **"getLoginData 호출"** 버튼 클릭.
+   - 아래에 `users`, `vendors` 가 들어 있는 객체가 보이면 **정상**입니다.
+   - 에러 메시지나 `users: {}` 만 보이면 ②·③을 다시 확인하세요.
+3. **"loginCheck 호출"** 버튼 클릭.
+   - Supabase `employees` 테이블에 **매장명=테스트매장, 이름=테스트, 비밀번호=1234** 인 계정이 있으면 `success: true` 가 나옵니다.
+   - 없으면 테스트용 계정을 Supabase에서 하나 만들거나, 실제 매장/이름/PIN으로 **모바일 앱**에서 로그인 테스트를 하면 됩니다.
+
+---
+
+### ⑤ 모바일 앱(/app)으로 로그인 테스트하기
+
+1. 같은 페이지에서 **"모바일 앱 (로그인·공지·물류 연동)"** 링크 클릭  
+   → 또는 주소 끝에 `/app` 을 붙여서 이동 (예: `https://xxx.vercel.app/app`).
+2. **매장** 드롭다운에서 매장 선택.
+3. **이름** 드롭다운에서 이름 선택.
+4. **비밀번호(PIN)** 입력 후 **로그인** 버튼 클릭.
+5. 로그인에 성공하면 홈 화면으로 넘어가고, **공지 조회**·**물류 데이터** 문구가 보이면 정상입니다.
+
+---
+
+### ⑥ (선택) 홈 상단 공지 문구 바꾸기
+
+- Vercel **Settings** → **Environment Variables** 에서  
+  **Key**: `SYSTEM_NOTICE`  
+  **Value**: 원하는 공지 문구  
+  를 추가한 뒤 **Redeploy** 하면, 메인/모바일 앱 상단 공지가 그 문구로 바뀝니다.
+
+---
+
+**한 줄 요약 순서:**  
+**① Supabase에서 URL·anon key 복사** → **② Vercel Settings → Environment Variables 에 두 개 추가** → **③ Deployments → Redeploy** → **④ 테스트 페이지에서 getLoginData·loginCheck 버튼으로 확인** → **⑤ /app 에서 로그인 테스트**.
+
+---
+
 ## 1. 현재 구조 요약
 
 - **프론트**: HTML(Page.html, Logistics.html) + JS 조각(JS_*.html) → GAS가 `include()`로 합쳐서 서빙

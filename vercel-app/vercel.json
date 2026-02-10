@@ -7,7 +7,9 @@
   ],
   "routes": [
     { "src": "/", "dest": "/index.html" },
-    { "src": "/app", "dest": "/app.html" },
+    { "src": "/app", "dest": "/public/app.html" },
+    { "src": "/app.html", "dest": "/public/app.html" },
+    { "src": "/api-adapter.js", "dest": "/public/api-adapter.js" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
