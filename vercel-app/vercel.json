@@ -1,15 +1,2 @@
-{
-  "version": 2,
-  "builds": [
-    {"src": "api/handler/index.js", "use": "@vercel/node"},
-    {"src": "index.html", "use": "@vercel/static"},
-    {"src": "public/**", "use": "@vercel/static"}
-  ],
-  "routes": [
-    {"src": "/", "dest": "/index.html"},
-    {"src": "/app", "dest": "/app.html", "headers": {"Cache-Control": "no-cache, no-store, must-revalidate"}},
-    {"src": "/app.html", "dest": "/app.html", "headers": {"Cache-Control": "no-cache, no-store, must-revalidate"}},
-    {"src": "/api-adapter.js", "dest": "/api-adapter.js"},
-    {"src": "/(.*)", "dest": "/$1"}
-  ]
-}
+{"version":2,"builds":[{"src":"api/handler/index.js","use":"@vercel/node"},{"src":"index.html","use":"@vercel/static"},{"src":"app.html","use":"@vercel/static"},{"src":"login.html","use":"@vercel/static"},{"src":"public/**","use":"@vercel/static"}],"rewrites":[{"source":"/app","destination":"/public/app.html"},{"source":"/app/","destination":"/public/app.html"},{"source":"/login","destination":"/public/login.html"},{"source":"/login/","destination":"/public/login.html"},{"source":"/","destination":"/index.html"},{"source":"/api-adapter.js","destination":"/public/api-adapter.js"}],
+  "redirects":[{"source":"/app","destination":"/public/app.html","permanent":false},{"source":"/app/","destination":"/public/app.html","permanent":false}],"headers":[{"source":"/app","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/app.html","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]},{"source":"/login","headers":[{"key":"Cache-Control","value":"no-cache, no-store, must-revalidate"}]}]}

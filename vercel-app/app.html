@@ -5,13 +5,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1e40af">
+  <meta name="theme-color" content="#E65100">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="충만 ERP">
   <title>충만 ERP (Vercel)</title>
   <link href="/public/css/bootstrap.min.css" rel="stylesheet">
-  <link href="/public/css/style.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Noto Sans KR', sans-serif; background: #f5f5f5; margin: 0; padding: 0; color: #333; -webkit-tap-highlight-color: transparent; }
@@ -348,15 +347,9 @@
         <input type="text" id="admin-notice-title" class="login-input" style="margin-top:12px;" data-i18n-ph="admin_notice_subject" placeholder="제목">
         <textarea id="admin-notice-content" class="login-input" style="margin-top:8px;min-height:80px;resize:vertical;" data-i18n-ph="admin_notice_content" placeholder="내용"></textarea>
         <label class="small fw-bold mt-2 d-block" data-i18n="label_store">대상 매장</label>
-        <div class="notice-select-wrap">
-          <div id="admin-notice-stores-trigger" class="notice-select-trigger" onclick="toggleNoticeList('stores')"><span id="admin-notice-stores-text">선택...</span><span class="notice-select-arrow">▼</span></div>
-          <div id="admin-notice-stores-box" class="notice-select-dropdown border rounded p-2" style="display:none;max-height:160px;overflow-y:auto;background:#fff;"></div>
-        </div>
+        <div id="admin-notice-stores-box" class="border rounded p-2 mt-1" style="max-height:120px;overflow-y:auto;background:#f9f9f9;"></div>
         <label class="small fw-bold mt-2 d-block" data-i18n="label_dept">대상 부서</label>
-        <div class="notice-select-wrap">
-          <div id="admin-notice-roles-trigger" class="notice-select-trigger" onclick="toggleNoticeList('roles')"><span id="admin-notice-roles-text">선택...</span><span class="notice-select-arrow">▼</span></div>
-          <div id="admin-notice-roles-box" class="notice-select-dropdown border rounded p-2" style="display:none;max-height:160px;overflow-y:auto;background:#fff;"></div>
-        </div>
+        <div id="admin-notice-roles-box" class="border rounded p-2 mt-1" style="max-height:120px;overflow-y:auto;background:#f9f9f9;"></div>
         <button type="button" onclick="mobileSendNotice()" class="login-btn" style="margin-top:12px;padding:8px 14px;background:#E65100;" data-i18n="notice_send_btn">공지 발송</button>
       </div>
       <div class="card-box" style="margin-bottom:16px;">
@@ -1360,32 +1353,6 @@
     }
 
     // ----- Admin -----
-    function toggleNoticeList(which) {
-      var box = document.getElementById('admin-notice-' + which + '-box');
-      var other = which === 'stores' ? document.getElementById('admin-notice-roles-box') : document.getElementById('admin-notice-stores-box');
-      if (!box) return;
-      var isOpen = box.style.display !== 'none';
-      if (other) other.style.display = 'none';
-      box.style.display = isOpen ? 'none' : 'block';
-    }
-    function closeNoticeDropdowns(e) {
-      var w = e && e.target ? e.target.closest('.notice-select-wrap') : null;
-      if (!w) {
-        var sb = document.getElementById('admin-notice-stores-box');
-        var rb = document.getElementById('admin-notice-roles-box');
-        if (sb) sb.style.display = 'none';
-        if (rb) rb.style.display = 'none';
-      }
-    }
-    function updateNoticeTriggerText(which) {
-      var cbs = document.querySelectorAll('input[name="notice-' + which + '"]:checked');
-      var txt = document.getElementById('admin-notice-' + which + '-text');
-      if (!txt) return;
-      var n = cbs.length;
-      if (n === 0) txt.textContent = '선택...';
-      else if (n === 1) txt.textContent = [].map.call(cbs, function(c){ return c.value; })[0];
-      else txt.textContent = n + '개 선택';
-    }
     function loadAdminNoticeOptions() {
       runApi('POST', 'getNoticeOptionsForMobile', { userStore: loggedInStore, userRole: loggedInRole })
         .then(function(r) {
@@ -1393,29 +1360,19 @@
           var roles = (r && r.roles) ? r.roles : [];
           var sBox = document.getElementById('admin-notice-stores-box');
           var rBox = document.getElementById('admin-notice-roles-box');
-          function addCb(parent, value, label, name, which) {
-            var div = document.createElement('div');
-            div.className = 'notice-cb-item';
+          function addCb(parent, value, label, name) {
+            var lbl = document.createElement('label');
+            lbl.className = 'd-flex align-items-center mb-1';
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = value;
             cb.name = name;
-            cb.onchange = function() { updateNoticeTriggerText(which); };
-            var sp = document.createElement('span');
-            sp.textContent = label;
-            div.appendChild(cb);
-            div.appendChild(sp);
-            div.onclick = function(e) { if (e.target === cb) return; cb.checked = !cb.checked; updateNoticeTriggerText(which); };
-            parent.appendChild(div);
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + label));
+            parent.appendChild(lbl);
           }
-          if (sBox) { sBox.innerHTML = ''; addCb(sBox, '전체', t('label_all'), 'notice-store', 'stores'); stores.forEach(function(x) { addCb(sBox, x, x, 'notice-store', 'stores'); }); }
-          if (rBox) { rBox.innerHTML = ''; addCb(rBox, '전체', t('label_all'), 'notice-role', 'roles'); roles.forEach(function(x) { addCb(rBox, x, x, 'notice-role', 'roles'); }); }
-          updateNoticeTriggerText('stores');
-          updateNoticeTriggerText('roles');
-          if (!window._noticeDropdownBound) {
-            window._noticeDropdownBound = true;
-            document.addEventListener('click', closeNoticeDropdowns);
-          }
+          if (sBox) { sBox.innerHTML = ''; addCb(sBox, '전체', t('label_all'), 'notice-store'); stores.forEach(function(x) { addCb(sBox, x, x, 'notice-store'); }); }
+          if (rBox) { rBox.innerHTML = ''; addCb(rBox, '전체', t('label_all'), 'notice-role'); roles.forEach(function(x) { addCb(rBox, x, x, 'notice-role'); }); }
         })
         .catch(function() {});
     }
