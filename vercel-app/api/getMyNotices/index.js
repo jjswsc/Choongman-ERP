@@ -12,20 +12,24 @@ module.exports = async (req, res) => {
 
   try {
     let store = '';
-    let role = '';
     let name = '';
     if (req.method === 'GET') {
       store = String(req.query.store || '').trim();
-      role = String(req.query.role || '').trim();
       name = String(req.query.name || '').trim();
     } else {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
       store = String(body.store || '').trim();
-      role = String(body.role || '').trim().toLowerCase();
       name = String(body.name || '').trim();
     }
     const myStore = store;
-    const myRole = role.toLowerCase();
+    let myJob = '';
+    const empList = await supabaseSelect('employees', { order: 'id.asc' }) || [];
+    for (let i = 0; i < empList.length; i++) {
+      if (String(empList[i].store || '').trim() === myStore && String(empList[i].name || '').trim() === name) {
+        myJob = String(empList[i].job || empList[i].role || '').trim();
+        break;
+      }
+    }
 
     const readMap = {};
     try {
@@ -43,10 +47,11 @@ module.exports = async (req, res) => {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const targetStores = String(row.target_store || '전체').trim();
-      const targetRoles = String(row.target_role || '전체').trim();
+      const targetJobs = String(row.target_role || '전체').trim();
       const storeMatch = targetStores === '전체' || targetStores.indexOf(myStore) > -1;
-      const roleMatch = targetRoles === '전체' || targetRoles.toLowerCase().indexOf(myRole) > -1;
-      if (!storeMatch || !roleMatch) continue;
+      const jobList = String(targetJobs || '전체').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const jobMatch = (!targetJobs || targetJobs.trim() === '전체' || jobList.length === 0) || (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0);
+      if (!storeMatch || !jobMatch) continue;
       let att = [];
       if (row.attachments) {
         try { att = JSON.parse(row.attachments); } catch (_) {}

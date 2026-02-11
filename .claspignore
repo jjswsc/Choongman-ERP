@@ -4,3 +4,5 @@ backup_before_680/**
 node_modules/**
 # 아이콘 원본 파일 (배포에는 IconData.html만 사용)
 assets/**
+# Vercel 앱 (GAS 배포와 무관 - 70+개 파일로 인한 푸시 멈춤 방지)
+vercel-app/**

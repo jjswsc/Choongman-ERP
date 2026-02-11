@@ -902,3 +902,102 @@ function _upsertChunk(table, rows, chunkSize, onConflict) {
     }
   }
 }
+
+/**
+ * 재고 시트(구글 시트) → Supabase stock_logs 전부 교체
+ * 기존 stock_logs 전부 삭제 후, "재고" 시트 내용으로 다시 삽입.
+ * GAS 편집기에서 syncStockFromSheetToSupabase() 실행.
+ */
+function syncStockFromSheetToSupabase() {
+  var ss = null;
+  try {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    Logger.log("getActiveSpreadsheet 실패: " + e.message);
+  }
+  if (!ss) {
+    var sheetId = PropertiesService.getScriptProperties().getProperty("ERP_SPREADSHEET_ID");
+    if (sheetId) {
+      try {
+        ss = SpreadsheetApp.openById(sheetId.trim());
+      } catch (e2) {
+        return "스프레드시트 열기 실패. ERP_SPREADSHEET_ID를 확인하세요.";
+      }
+    }
+  }
+  if (!ss) {
+    return "스프레드시트를 찾을 수 없습니다. ERP_SPREADSHEET_ID를 설정하거나 시트를 연 상태에서 실행하세요.";
+  }
+
+  var stockSheet = ss.getSheetByName("재고") || ss.getSheetByName("Stock");
+  if (!stockSheet || stockSheet.getLastRow() < 2) {
+    return "재고(또는 Stock) 시트가 없거나 데이터가 없습니다.";
+  }
+
+  // 1) 기존 stock_logs 전부 삭제 (id로 한 건씩)
+  var deleted = 0;
+  var batchSize = 500;
+  while (true) {
+    var rows = supabaseSelect("stock_logs", { select: "id", limit: batchSize });
+    if (!rows || rows.length === 0) break;
+    for (var i = 0; i < rows.length; i++) {
+      try {
+        supabaseDelete("stock_logs", rows[i].id);
+        deleted++;
+      } catch (ex) {
+        Logger.log("stock_logs 삭제 실패 id=" + rows[i].id + ": " + ex.message);
+      }
+    }
+    if (rows.length < batchSize) break;
+  }
+  Logger.log("stock_logs 기존 " + deleted + "건 삭제 완료");
+
+  // 2) 재고 시트에서 읽어서 삽입 (migrateSheetsToSupabase와 동일 구조)
+  var sheetRowToOrderId = {};
+  var orderSheet = ss.getSheetByName("주문") || ss.getSheetByName("Orders");
+  if (orderSheet && orderSheet.getLastRow() >= 2) {
+    var oData = orderSheet.getRange(2, 1, orderSheet.getLastRow(), 1).getValues();
+    for (var oi = 0; oi < oData.length; oi++) {
+      var oRow = orderSheet.getRange(oi + 2, 1, oi + 2, 12).getValues()[0];
+      var sheetRow = String(oi + 2);
+      var orderId = null;
+      try {
+        var existing = supabaseSelectFilter("orders", "id=eq." + encodeURIComponent(String(oRow[0] || "").trim()), { limit: 1 });
+        if (existing && existing.length > 0) orderId = existing[0].id;
+      } catch (e) {}
+      if (orderId) sheetRowToOrderId[sheetRow] = orderId;
+    }
+  }
+
+  var stData = stockSheet.getRange(2, 1, stockSheet.getLastRow(), 10).getValues();
+  var stockRows = [];
+  for (var i = 0; i < stData.length; i++) {
+    var r = stData[i];
+    if (!r[0] && !r[1]) continue;
+    var logDate = r[5];
+    var logDateIso = logDate && (logDate instanceof Date || typeof logDate === "object") ? new Date(logDate).toISOString() : new Date().toISOString();
+    var orderId = null;
+    if (r[8] !== undefined && r[8] !== null && r[8] !== "") {
+      var sheetRow = String(Number(r[8]));
+      if (sheetRowToOrderId[sheetRow]) orderId = sheetRowToOrderId[sheetRow];
+    }
+    stockRows.push({
+      location: String(r[0] || "").trim(),
+      item_code: String(r[1] || "").trim(),
+      item_name: String(r[2] || "").trim(),
+      spec: String(r[3] || "").trim(),
+      qty: Number(r[4]) || 0,
+      log_date: logDateIso,
+      vendor_target: String(r[6] || "").trim(),
+      log_type: String(r[7] || "").trim(),
+      order_id: orderId,
+      delivery_status: (r[9] !== undefined && r[9] !== null && r[9] !== "") ? String(r[9]).trim() : null
+    });
+  }
+  if (stockRows.length === 0) {
+    return "재고 시트에서 읽은 데이터가 없습니다. (삭제는 완료됨: " + deleted + "건)";
+  }
+  _insertChunk("stock_logs", stockRows, 100);
+  Logger.log("재고 시트 → stock_logs " + stockRows.length + "건 삽입 완료");
+  return "완료: 기존 " + deleted + "건 삭제, 재고 시트 " + stockRows.length + "건 삽입.";
+}

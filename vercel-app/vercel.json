@@ -1,15 +1,15 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/handler/index.js", "use": "@vercel/node" },
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "public/**", "use": "@vercel/static" }
+    {"src": "api/handler/index.js", "use": "@vercel/node"},
+    {"src": "index.html", "use": "@vercel/static"},
+    {"src": "public/**", "use": "@vercel/static"}
   ],
   "routes": [
-    { "src": "/", "dest": "/index.html" },
-    { "src": "/app", "dest": "/public/app.html" },
-    { "src": "/app.html", "dest": "/public/app.html" },
-    { "src": "/api-adapter.js", "dest": "/public/api-adapter.js" },
-    { "src": "/(.*)", "dest": "/$1" }
+    {"src": "/", "dest": "/index.html"},
+    {"src": "/app", "dest": "/app.html", "headers": {"Cache-Control": "no-cache, no-store, must-revalidate"}},
+    {"src": "/app.html", "dest": "/app.html", "headers": {"Cache-Control": "no-cache, no-store, must-revalidate"}},
+    {"src": "/api-adapter.js", "dest": "/api-adapter.js"},
+    {"src": "/(.*)", "dest": "/$1"}
   ]
 }

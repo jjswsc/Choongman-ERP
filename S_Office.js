@@ -198,32 +198,21 @@ function adminGetNoticeStats(noticeId, storeFilter) {
   return result;
 }
 
-/* [추가] 공지사항 발송용 매장/직급 목록 불러오기 (Supabase employees) */
+/* [추가] 공지사항 발송용 매장/부서(job) 목록 불러오기 (Supabase employees - job 열 기준) */
 function getNoticeOptions() {
   var list = (typeof getEmployeesData === "function" ? getEmployeesData() : []) || [];
   var stores = {};
-  var roles = {};
+  var jobs = {};
   for (var i = 0; i < list.length; i++) {
     var store = String(list[i].store || "").trim();
-    var role = String(list[i].role || "").trim();
+    var job = String(list[i].job || list[i].role || "").trim();
     if (store && store !== "매장명" && store !== "Store") stores[store] = true;
-    if (role && role !== "직급" && role !== "Job") roles[role] = true;
+    if (job && job !== "직급" && job !== "Job" && job !== "부서") jobs[job] = true;
   }
-  var roleList = Object.keys(roles);
-  var priorityRoles = ["Assis Manager", "Assistant Manager", "Manager", "Service", "Kitchen", "Accounting"];
-  roleList.sort(function(a, b) {
-    var aLower = (a || "").toLowerCase();
-    var bLower = (b || "").toLowerCase();
-    var aIdx = priorityRoles.findIndex(function(r) { return (r || "").toLowerCase() === aLower; });
-    var bIdx = priorityRoles.findIndex(function(r) { return (r || "").toLowerCase() === bLower; });
-    if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-    if (aIdx !== -1) return -1;
-    if (bIdx !== -1) return 1;
-    return (a || "").localeCompare(b || "");
-  });
+  var jobList = Object.keys(jobs).sort(function(a, b) { return (a || "").localeCompare(b || ""); });
   return {
     stores: Object.keys(stores).sort(),
-    roles: roleList
+    roles: jobList
   };
 }
 
