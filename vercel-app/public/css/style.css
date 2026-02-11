@@ -5,8 +5,6 @@
 :root {
   --primary: #1e40af;
   --primary-hover: #1d4ed8;
-  --primary-light: #e0f2fe;
-  --sidebar-bg: #0f172a;
   --surface: #ffffff;
   --surface-alt: #f1f5f9;
   --border: #e2e8f0;
@@ -20,319 +18,265 @@
 }
 
 /* ============================================
-   로그인 페이지 - 픽셀 단위 구현 (첨부 이미지 기준)
+   로그인 페이지 (body.login-page 시에만 적용)
    ============================================ */
 
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 body.login-page {
-  font-family: 'Outfit', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
-  min-height: 100vh;
-  min-height: 100dvh;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  -webkit-tap-highlight-color: transparent;
+    font-family: 'Inter', sans-serif;
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #050505;
+    background: radial-gradient(circle at 50% 30%, #2a1b15 0%, #000000 70%);
+    overflow: hidden;
+    position: relative;
 }
 
-/* 1. [배경] radial-gradient + 빛 효과 placeholder */
-body.login-page .login-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
+body.login-page::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(255, 107, 0, 0.15) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
 }
 
-/* radial-gradient: 중앙 은은한 오렌지 → 외곽 딥 다크 네이비 #0a0a0a */
-body.login-page .login-bg-gradient {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 80% 80% at 50% 50%,
-    rgba(255, 100, 0, 0.12) 0%,
-    rgba(255, 80, 0, 0.05) 30%,
-    rgba(20, 15, 12, 0.8) 60%,
-    #0a0a0a 100%
-  );
+body.login-page .login-container {
+    width: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 1;
 }
 
-/* 스타워즈 빛 효과 - placeholder (이미지 나중에 넣을 곳)
-   사용법: 아래 한 줄 주석 해제 후 이미지 경로 지정
-   background-image: url('/public/img/light-streaks.png'); */
-body.login-page .login-bg-streaks {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  opacity: 0.9;
+body.login-page .glass-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 40px 30px;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
 }
 
-/* 2. [유리 질감 카드] 필수 속성 */
-body.login-page .login-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 32px 28px 24px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  border-radius: 20px;
-  box-sizing: border-box;
+body.login-page .logo-area {
+    text-align: center;
+    margin-bottom: 40px;
 }
 
-/* 3. [입력창] 투명 배경 + 테두리만 */
-body.login-page .login-input {
-  width: 100%;
-  min-height: 50px;
-  padding: 14px 18px;
-  margin-bottom: 14px;
-  font-size: 15px;
-  font-family: inherit;
-  color: #FFFFFF;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 10px;
-  box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  -webkit-appearance: none;
-  appearance: none;
+body.login-page .logo {
+    width: 140px;
+    height: auto;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 0 10px rgba(255, 100, 0, 0.3));
 }
 
-body.login-page .login-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+body.login-page .subtitle {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    font-weight: 300;
 }
 
-/* 포커스 시 #FF6B00 글로우 */
-body.login-page .login-input:focus {
-  outline: none;
-  border-color: #FF6B00;
-  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.35), 0 0 12px rgba(255, 107, 0, 0.2);
+body.login-page .input-group {
+    margin-bottom: 15px;
 }
 
-body.login-page select.login-input {
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23ffffff' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  padding-right: 42px;
+body.login-page .glass-input {
+    width: 100%;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s ease;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
-body.login-page .login-input option {
-  background: #1a1714;
-  color: #FFFFFF;
+body.login-page .glass-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
 }
 
-/* 4. [버튼] 오렌지→레드 그라데이션 + 네온 그림자 */
+body.login-page .glass-input:focus {
+    border-color: #FF6B00;
+    box-shadow: 0 0 10px rgba(255, 107, 0, 0.3);
+}
+
+body.login-page select.glass-input {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px top 50%;
+    background-size: 12px auto;
+    padding-right: 40px;
+}
+
+body.login-page select.glass-input option {
+    background: #1a1a1a;
+    color: #fff;
+}
+
 body.login-page .login-btn {
-  width: 100%;
-  min-height: 52px;
-  padding: 16px;
-  margin-top: 18px;
-  font-size: 16px;
-  font-weight: 700;
-  font-family: inherit;
-  letter-spacing: 0.06em;
-  color: #FFFFFF;
-  background: linear-gradient(90deg, #FF8C00, #FF0000);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 4px 24px rgba(255, 0, 0, 0.3), 0 0 40px rgba(255, 140, 0, 0.15);
-  transition: all 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
+    width: 100%;
+    padding: 16px;
+    margin-top: 20px;
+    background: linear-gradient(135deg, #FF8C00 0%, #FF0000 100%);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(255, 69, 0, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 body.login-page .login-btn:hover {
-  box-shadow: 0 6px 28px rgba(255, 0, 0, 0.4), 0 0 50px rgba(255, 140, 0, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 69, 0, 0.6);
+    filter: brightness(1.1);
 }
 
 body.login-page .login-btn:active {
-  transform: scale(0.99);
+    transform: translateY(0);
 }
 
 body.login-page .login-btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
 }
 
-/* 로고 - width 120px, 상단 중앙 */
-body.login-page .login-logo {
-  width: 120px;
-  max-width: 120px;
-  height: auto;
-  display: block;
+body.login-page .form-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
 }
 
-body.login-page .login-logo-wrap {
-  margin-bottom: 12px;
-  display: flex;
-  justify-content: center;
+body.login-page .form-footer label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-body.login-page .login-title {
-  font-size: clamp(18px, 4vw, 24px);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #FFFFFF;
-  margin: 0 0 4px;
-  text-align: center;
+body.login-page .form-footer input[type="checkbox"] {
+    cursor: pointer;
 }
 
-body.login-page .login-subtitle {
-  font-size: 13px;
-  font-weight: 400;
-  font-style: italic;
-  color: rgba(255, 255, 255, 0.65);
-  letter-spacing: 0.04em;
-  margin: 0 0 20px;
-  text-align: center;
+body.login-page .form-footer a {
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
 }
 
-body.login-page .login-footer {
-  margin-top: 20px;
-  text-align: center;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+body.login-page .form-footer a:hover {
+    color: #FF6B00;
 }
 
-body.login-page .login-pw-link {
-  display: block;
-  text-align: center;
-  margin-top: 12px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
-  text-decoration: none;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+body.login-page .copyright {
+    margin-top: 30px;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.75rem;
+    text-align: center;
 }
 
-body.login-page .login-pw-link:hover {
-  color: #FF6B00;
-  text-decoration: underline;
+body.login-page .pw-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
 }
 
-/* 5. [레이아웃] Flexbox 화면 정중앙 */
-body.login-page #login-screen {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: 24px 16px 32px;
-  box-sizing: border-box;
+body.login-page .pw-modal.show {
+    display: flex;
 }
 
-body.login-page .login-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  max-width: 420px;
+body.login-page .pw-modal-inner {
+    width: 100%;
+    max-width: 380px;
+    padding: 28px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
 }
 
-body.login-page #login-screen.login-exit {
-  opacity: 0;
-  transition: opacity 0.4s ease;
+body.login-page .pw-modal-inner h3 {
+    margin: 0 0 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
 }
 
-/* 비밀번호 변경 모달 */
-body.login-page .login-pw-modal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+body.login-page .pw-modal-close {
+    display: block;
+    margin-top: 12px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
 }
 
-body.login-page .login-pw-modal.show {
-  display: flex;
+body.login-page .pw-modal-close:hover {
+    color: #fff;
 }
 
-body.login-page .login-pw-modal-inner {
-  width: 100%;
-  max-width: 380px;
-  padding: 28px 24px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  border-radius: 20px;
-}
-
-body.login-page .login-pw-modal h3 {
-  margin: 0 0 20px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #FFFFFF;
-  text-align: center;
-}
-
-body.login-page .login-pw-modal .login-input {
-  margin-bottom: 12px;
-}
-
-body.login-page .login-pw-modal-close {
-  display: block;
-  margin-top: 12px;
-  text-align: center;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-}
-
-body.login-page .login-pw-modal-close:hover {
-  color: #FFFFFF;
-}
-
-/* 로딩 */
 body.login-page #loading {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 10, 10, 0.9);
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 5, 5, 0.9);
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
 }
 
 body.login-page #loading.show {
-  display: flex;
+    display: flex;
 }
 
 body.login-page #loading .spinner-border {
-  width: 3rem;
-  height: 3rem;
-  border: 3px solid rgba(255, 107, 0, 0.2);
-  border-top-color: #FF6B00;
-  border-radius: 50%;
-  animation: loginSpinner 0.8s linear infinite;
+    width: 3rem;
+    height: 3rem;
+    border: 3px solid rgba(255, 107, 0, 0.2);
+    border-top-color: #FF6B00;
+    border-radius: 50%;
+    animation: loginSpinner 0.8s linear infinite;
 }
 
 @keyframes loginSpinner {
-  to { transform: rotate(360deg); }
-}
-
-/* 반응형 - 모바일 */
-@media screen and (max-width: 480px) {
-  body.login-page #login-screen {
-    padding: 16px 12px 24px;
-  }
-
-  body.login-page .login-card {
-    padding: 24px 20px 20px;
-  }
-
-  body.login-page .login-logo {
-    width: 100px;
-    max-width: 100px;
-  }
+    to { transform: rotate(360deg); }
 }
 
 /* ============================================
