@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#050505">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="충만 ERP">
-    <title>Choongman Chicken ERP - Login</title>
+    <title>Chungman Chicken ERP</title>
     <link rel="stylesheet" href="/public/css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 </head>
@@ -15,16 +15,18 @@
         <div class="spinner-border" role="status"></div>
     </div>
 
-    <div class="login-container">
+    <div class="background-glow"></div>
+
+    <div class="login-wrapper">
         <div class="glass-card">
-            <div class="logo-area">
-                <img src="/public/img/logo.png" alt="Choongman Chicken Logo" class="logo">
-                <p class="subtitle">Integrated ERP System</p>
+            <div class="logo-section">
+                <img src="/public/img/logo.png" alt="Chungman Chicken" class="logo">
+                <p class="erp-text">Integrated ERP System</p>
             </div>
 
-            <form id="loginForm">
+            <form class="login-form" id="loginForm">
                 <div class="input-group">
-                    <select id="langSelect" class="glass-input" onchange="changeLanguage()">
+                    <select id="langSelect" onchange="changeLanguage()">
                         <option value="ko">KR 한국어</option>
                         <option value="en">EN English</option>
                         <option value="th">TH ภาษาไทย</option>
@@ -32,34 +34,28 @@
                         <option value="la">LA ພາສາລາວ</option>
                     </select>
                 </div>
-
                 <div class="input-group">
-                    <select id="storeSelect" class="glass-input" onchange="onStoreChange()">
+                    <select id="storeSelect" onchange="onStoreChange()">
                         <option value="" disabled selected>매장 선택...</option>
                     </select>
                 </div>
-
                 <div class="input-group">
-                    <select id="loginName" class="glass-input">
+                    <select id="loginName">
                         <option value="" disabled selected>이름 선택...</option>
                     </select>
                 </div>
-
                 <div class="input-group">
-                    <input type="password" id="loginPw" placeholder="비밀번호 (PIN)" class="glass-input" maxlength="20" autocomplete="off">
+                    <input type="password" id="loginPw" placeholder="비밀번호 (PIN)" autocomplete="off">
                 </div>
 
                 <button type="submit" class="login-btn" id="btn-login">LOGIN</button>
 
                 <div class="form-footer">
-                    <label>
-                        <input type="checkbox" id="rememberMe"> Remember Me
-                    </label>
-                    <a href="#" id="btn-pw-change" onclick="openPwModal(event)">Forgot Password?</a>
+                    <label><input type="checkbox" id="rememberMe"> Remember Me</label>
+                    <a href="#" id="btn-pw-change" onclick="openPwModal(event)">비밀번호 변경</a>
                 </div>
             </form>
         </div>
-
         <p class="copyright">Powered by Supabase & Vercel</p>
     </div>
 
@@ -68,13 +64,13 @@
         <div class="pw-modal-inner" onclick="event.stopPropagation()">
             <h3>🔐 비밀번호 변경</h3>
             <div class="input-group">
-                <input type="password" id="pwOld" class="glass-input" placeholder="현재 비밀번호" autocomplete="off">
+                <input type="password" id="pwOld" placeholder="현재 비밀번호" autocomplete="off">
             </div>
             <div class="input-group">
-                <input type="password" id="pwNew" class="glass-input" placeholder="새 비밀번호" autocomplete="new-password">
+                <input type="password" id="pwNew" placeholder="새 비밀번호" autocomplete="new-password">
             </div>
             <div class="input-group">
-                <input type="password" id="pwNew2" class="glass-input" placeholder="새 비밀번호 확인" autocomplete="new-password">
+                <input type="password" id="pwNew2" placeholder="새 비밀번호 확인" autocomplete="new-password">
             </div>
             <button type="button" class="login-btn" id="btn-pw-submit" onclick="submitPwChange()">변경하기</button>
             <span class="pw-modal-close" onclick="closePwModal()">닫기</span>
@@ -98,11 +94,7 @@
 
         function changeLanguage() {
             var sel = document.getElementById('langSelect');
-            if (sel) {
-                currentLang = sel.value || 'ko';
-                try { sessionStorage.setItem('cm_lang', currentLang); } catch (e) {}
-                applyTranslations();
-            }
+            if (sel) { currentLang = sel.value || 'ko'; try { sessionStorage.setItem('cm_lang', currentLang); } catch (e) {} applyTranslations(); }
         }
 
         function applyTranslations() {
@@ -110,36 +102,25 @@
             var n = document.getElementById('loginName');
             var pw = document.getElementById('loginPw');
             var pwLink = document.getElementById('btn-pw-change');
-            var pwOld = document.getElementById('pwOld');
-            var pwNew = document.getElementById('pwNew');
-            var pwNew2 = document.getElementById('pwNew2');
-            var btnPwSubmit = document.getElementById('btn-pw-submit');
-            var modalClose = document.querySelector('.pw-modal-close');
-            var rememberLabel = document.querySelector('.form-footer label');
             if (s && s.options[0]) s.options[0].text = t('m_select_store') + '...';
             if (n && n.options[0]) n.options[0].text = t('m_select_name') + '...';
             if (pw) pw.placeholder = t('m_pin_ph');
             if (pwLink) pwLink.textContent = t('forgot_pw');
-            if (pwOld) pwOld.placeholder = t('pw_current');
-            if (pwNew) pwNew.placeholder = t('pw_new');
-            if (pwNew2) pwNew2.placeholder = t('pw_new_confirm');
-            if (btnPwSubmit) btnPwSubmit.textContent = t('pw_btn_submit');
-            if (modalClose) modalClose.textContent = t('modal_close');
-            if (rememberLabel) rememberLabel.innerHTML = '<input type="checkbox" id="rememberMe"> ' + t('remember_me');
+            document.getElementById('pwOld').placeholder = t('pw_current');
+            document.getElementById('pwNew').placeholder = t('pw_new');
+            document.getElementById('pwNew2').placeholder = t('pw_new_confirm');
+            document.getElementById('btn-pw-submit').textContent = t('pw_btn_submit');
+            document.querySelector('.pw-modal-close').textContent = t('modal_close');
+            var lb = document.querySelector('.form-footer label'); if (lb) lb.innerHTML = '<input type="checkbox" id="rememberMe"> ' + t('remember_me');
         }
 
-        function load(show) {
-            var el = document.getElementById('loading');
-            if (el) el.classList.toggle('show', !!show);
-        }
+        function load(show) { var el = document.getElementById('loading'); if (el) el.classList.toggle('show', !!show); }
 
         function fillStoreSelect() {
             var s = document.getElementById('storeSelect');
             if (!s || !loginData) return;
             s.innerHTML = '<option value="" disabled selected>' + t('m_select_store') + '...</option>';
-            for (var k in loginData) {
-                if (loginData.hasOwnProperty(k)) s.add(new Option(k, k));
-            }
+            for (var k in loginData) { if (loginData.hasOwnProperty(k)) s.add(new Option(k, k)); }
         }
 
         function onStoreChange() {
@@ -147,9 +128,7 @@
             var n = document.getElementById('loginName');
             if (!n) return;
             n.innerHTML = '<option value="" disabled selected>' + t('m_select_name') + '...</option>';
-            if (loginData[store]) {
-                loginData[store].forEach(function(name) { n.add(new Option(name, name)); });
-            }
+            if (loginData[store]) loginData[store].forEach(function(name) { n.add(new Option(name, name)); });
         }
 
         function tryLogin(e) {
@@ -157,54 +136,33 @@
             var s = document.getElementById('storeSelect').value;
             var n = document.getElementById('loginName').value;
             var p = document.getElementById('loginPw').value;
-            if (!s || !n) {
-                alert(t('err_select_store_name'));
-                return;
-            }
+            if (!s || !n) { alert(t('err_select_store_name')); return; }
             var btn = document.getElementById('btn-login');
             if (btn) btn.disabled = true;
-
             window.runApi('POST', 'loginCheck', { store: s, name: n, pw: p, isAdminPage: false })
                 .then(function(res) {
                     if (btn) btn.disabled = false;
                     if (res && res.success) {
-                        try {
-                            sessionStorage.setItem('cm_store', res.storeName || s);
-                            sessionStorage.setItem('cm_user', res.userName || n);
-                            sessionStorage.setItem('cm_role', res.role || '');
-                        } catch (e) {}
+                        try { sessionStorage.setItem('cm_store', res.storeName || s); sessionStorage.setItem('cm_user', res.userName || n); sessionStorage.setItem('cm_role', res.role || ''); } catch (e) {}
                         window.location.href = '/app';
-                    } else {
-                        alert(t('err_login_fail'));
-                    }
+                    } else { alert(t('err_login_fail')); }
                 })
-                .catch(function(err) {
-                    if (btn) btn.disabled = false;
-                    alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
-                });
+                .catch(function(err) { if (btn) btn.disabled = false; alert(t('err_server') + ': ' + (err && err.message ? err.message : err)); });
         }
 
         function openPwModal(e) {
             if (e) e.preventDefault();
             var s = document.getElementById('storeSelect').value;
             var n = document.getElementById('loginName').value;
-            if (!s || !n) {
-                alert(t('pw_alert_store_name'));
-                return;
-            }
+            if (!s || !n) { alert(t('pw_alert_store_name')); return; }
             document.getElementById('pwOld').value = '';
             document.getElementById('pwNew').value = '';
             document.getElementById('pwNew2').value = '';
             document.getElementById('pwModal').classList.add('show');
         }
 
-        function closePwModal() {
-            document.getElementById('pwModal').classList.remove('show');
-        }
-
-        function closePwModalOnBackdrop(e) {
-            if (e.target.id === 'pwModal') closePwModal();
-        }
+        function closePwModal() { document.getElementById('pwModal').classList.remove('show'); }
+        function closePwModalOnBackdrop(e) { if (e.target.id === 'pwModal') closePwModal(); }
 
         function submitPwChange() {
             var s = document.getElementById('storeSelect').value;
@@ -220,17 +178,10 @@
             window.runApi('POST', 'changePassword', { store: s, name: n, oldPw: o, newPw: p1 })
                 .then(function(r) {
                     if (btn) btn.disabled = false;
-                    if (r && r.success) {
-                        alert(r.message || t('pw_success'));
-                        closePwModal();
-                    } else {
-                        alert(r && r.message ? r.message : t('pw_error_fail'));
-                    }
+                    if (r && r.success) { alert(r.message || t('pw_success')); closePwModal(); }
+                    else { alert(r && r.message ? r.message : t('pw_error_fail')); }
                 })
-                .catch(function(err) {
-                    if (btn) btn.disabled = false;
-                    alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
-                });
+                .catch(function(err) { if (btn) btn.disabled = false; alert(t('err_server') + ': ' + (err && err.message ? err.message : err)); });
         }
 
         document.getElementById('loginForm').onsubmit = tryLogin;
@@ -245,10 +196,7 @@
                 fillStoreSelect();
                 applyTranslations();
             })
-            .catch(function(err) {
-                load(false);
-                alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
-            });
+            .catch(function(err) { load(false); alert(t('err_server') + ': ' + (err && err.message ? err.message : err)); });
     </script>
 </body>
 </html>
