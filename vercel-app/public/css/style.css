@@ -1,10 +1,9 @@
 /* ============================================
-   충만치킨 ERP - 로그인 (Apps Script 관리자 페이지 색상 통일)
-   로고 유지 / 배경·상자·버튼: 관리자 페이지와 동일
+   충만치킨 ERP - 스타일
    ============================================ */
 
 :root {
-  /* Apps Script Style_Admin.html - 더 진한 파란색 */
+  /* 앱 공통 (공지사항 등) */
   --primary: #1e40af;
   --primary-hover: #1d4ed8;
   --primary-light: #e0f2fe;
@@ -19,159 +18,327 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --radius: 8px;
+  /* 로그인 페이지 전용 */
+  --login-glass-bg: rgba(255, 255, 255, 0.07);
+  --login-glass-border: rgba(255, 255, 255, 0.18);
+  --login-text-white: #ffffff;
+  --login-text-muted: rgba(255, 255, 255, 0.65);
+  --login-btn-gradient: linear-gradient(90deg, #FF6B35 0%, #E53935 100%);
+  --login-btn-gradient-hover: linear-gradient(90deg, #FF7F4D 0%, #EF5350 100%);
 }
 
-/* 로그인 화면 - 파란색 톤 배경 */
-#login-screen {
+/* ============================================
+   로그인 페이지 - 이미지 디자인 (글래스모피즘, 다크테마)
+   ============================================ */
+
+body.login-page {
+  font-family: 'Outfit', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+  background: #0a0a0f;
+  color: var(--login-text-white);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 배경: 어두운 식당 분위기 그라데이션 + 장식 */
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.login-bg-base {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(165deg,
+    #1a1512 0%,
+    #0f0d0b 25%,
+    #0a0908 50%,
+    #080707 75%,
+    #050504 100%
+  );
+}
+
+/* 펜던트 조명/실내 분위기 느낌의 빛점 */
+.login-bg-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 40% at 50% 20%, rgba(255, 107, 53, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse 60% 30% at 70% 70%, rgba(229, 57, 53, 0.06) 0%, transparent 50%);
+}
+
+/* 데이터 플로우 라인 (오렌지) */
+.login-bg-lines {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.login-bg-lines::before,
+.login-bg-lines::after {
+  content: '';
+  position: absolute;
+  left: -50%;
+  width: 200%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 107, 53, 0.4), rgba(229, 57, 53, 0.5), transparent);
+  animation: loginFlowLine 10s linear infinite;
+}
+
+.login-bg-lines::before { top: 25%; animation-delay: 0s; }
+.login-bg-lines::after { top: 65%; animation-delay: -5s; opacity: 0.7; }
+
+@keyframes loginFlowLine {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(25%); }
+}
+
+/* 메인 로그인 영역 */
+body.login-page #login-screen {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 24px;
+  padding: 20px 16px 32px;
   box-sizing: border-box;
-  background: linear-gradient(160deg, #dbeafe 0%, #bfdbfe 30%, #93c5fd 70%, #60a5fa 100%);
+  gap: 28px;
   transition: opacity 0.4s ease;
-  -webkit-tap-highlight-color: transparent;
 }
 
-#login-screen.login-exit {
+body.login-page #login-screen.login-exit {
   opacity: 0;
 }
 
-/* 로고 (유지) */
-.login-logo-wrap {
-  margin-bottom: 28px;
+/* 로고 - 상단 중앙 정렬 */
+body.login-page .login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.login-logo {
+body.login-page .login-logo-wrap {
+  margin-bottom: 14px;
+}
+
+body.login-page .login-logo {
   max-width: 200px;
-  width: 80%;
+  width: 85%;
   height: auto;
-  filter: drop-shadow(var(--shadow));
+  display: block;
+  filter: drop-shadow(0 4px 16px rgba(255, 107, 53, 0.25));
 }
 
-.brand-logo-large {
-  color: var(--text-primary);
-  font-size: clamp(26px, 6vw, 32px);
+body.login-page .login-title {
+  font-size: clamp(20px, 4.5vw, 26px);
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  color: var(--login-text-white);
+  margin: 0 0 4px;
 }
 
-/* 상자 - 관리자 페이지 카드 스타일 (흰 배경, 얇은 테두리) */
-.login-card {
+body.login-page .login-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--login-text-muted);
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+/* 글래스모피즘 카드 - 유리 질감 */
+body.login-page .login-card {
   width: 100%;
   max-width: 400px;
-  padding: 36px 28px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-md);
+  padding: 32px 24px 28px;
+  background: var(--login-glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--login-glass-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
-/* 입력창 */
-.login-input {
+/* 입력창 - 테두리만 있는 깔끔한 스타일 */
+body.login-page .login-input {
   width: 100%;
-  min-height: 52px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  font-size: 16px;
+  min-height: 50px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  font-size: 15px;
   font-family: inherit;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--login-text-white);
+  background: transparent;
+  border: 1px solid var(--login-glass-border);
+  border-radius: 10px;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
   -webkit-appearance: none;
   appearance: none;
 }
 
-@media screen and (max-width: 480px) {
-  .login-input {
-    min-height: 56px;
-    padding: 18px 20px;
-    font-size: 16px !important;
-  }
-  
-  select.login-input {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%231e40af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 18px center;
-    padding-right: 44px;
-  }
+body.login-page .login-input::placeholder {
+  color: var(--login-text-muted);
 }
 
-.login-input::placeholder {
-  color: var(--text-muted);
-}
-
-.login-input:focus {
+body.login-page .login-input:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.15);
+  border-color: rgba(255, 107, 53, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.12);
 }
 
-.login-input option {
-  background: var(--surface);
-  color: var(--text-primary);
-}
-
-/* 로그인 버튼 - 관리자 primary 색상 */
-.login-btn {
-  width: 100%;
-  min-height: 54px;
-  padding: 18px;
-  margin-top: 16px;
-  font-size: 17px;
-  font-weight: 800;
-  font-family: inherit;
-  color: white;
-  background: var(--primary);
-  border: none;
-  border-radius: 6px;
+body.login-page select.login-input {
   cursor: pointer;
-  box-shadow: var(--shadow);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23ffffff' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 42px;
+}
+
+body.login-page .login-input option {
+  background: #1a1714;
+  color: var(--login-text-white);
+}
+
+/* 로그인 버튼 - 오렌지/레드 그라데이션 */
+body.login-page .login-btn {
+  width: 100%;
+  min-height: 52px;
+  padding: 16px;
+  margin-top: 18px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  color: white;
+  background: var(--login-btn-gradient);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(229, 57, 53, 0.35);
   transition: all 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
-.login-btn:hover {
-  background: var(--primary-hover);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+body.login-page .login-btn:hover {
+  background: var(--login-btn-gradient-hover);
+  box-shadow: 0 6px 22px rgba(229, 57, 53, 0.45);
 }
 
-.login-btn:active {
-  box-shadow: none;
+body.login-page .login-btn:active {
+  transform: scale(0.99);
 }
 
-.login-btn:disabled {
-  opacity: 0.7;
+body.login-page .login-btn:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
 }
 
-/* 로딩 */
-#loading {
+body.login-page .login-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--login-text-muted);
+}
+
+/* 로그인 로딩 */
+body.login-page #loading {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(10, 10, 15, 0.92);
   align-items: center;
   justify-content: center;
   z-index: 9999;
 }
 
-#loading.show {
+body.login-page #loading.show {
   display: flex;
 }
 
-#loading .spinner-border {
-  color: var(--primary) !important;
+body.login-page #loading .spinner-border {
+  width: 3rem;
+  height: 3rem;
+  border: 3px solid rgba(255, 107, 53, 0.2);
+  border-top-color: #FF6B35;
+  border-radius: 50%;
+  animation: loginSpinner 0.8s linear infinite;
 }
 
-/* 공지사항 발송 - 매장/부서 선택 (작은 트리거 + 펼침 리스트) */
+@keyframes loginSpinner {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   반응형 - 모바일: 요소 겹침 없이 시원하게
+   ============================================ */
+
+@media screen and (max-width: 480px) {
+  body.login-page #login-screen {
+    padding: 16px 12px 28px;
+    gap: 24px;
+  }
+
+  body.login-page .login-logo {
+    max-width: 160px;
+  }
+
+  body.login-page .login-title {
+    font-size: 18px;
+  }
+
+  body.login-page .login-subtitle {
+    font-size: 12px;
+  }
+
+  body.login-page .login-card {
+    padding: 24px 18px 22px;
+    max-width: 100%;
+  }
+
+  body.login-page .login-input {
+    min-height: 52px;
+    padding: 15px 16px;
+    margin-bottom: 12px;
+  }
+
+  body.login-page .login-btn {
+    min-height: 54px;
+    margin-top: 16px;
+  }
+}
+
+@media screen and (max-height: 600px) {
+  body.login-page #login-screen {
+    padding: 12px 16px 20px;
+    gap: 16px;
+  }
+
+  body.login-page .login-logo-wrap {
+    margin-bottom: 8px;
+  }
+
+  body.login-page .login-logo {
+    max-width: 120px;
+  }
+
+  body.login-page .login-card {
+    padding: 20px 18px 18px;
+  }
+}
+
+/* ============================================
+   앱 공통 (공지사항 등) - 기존 유지
+   ============================================ */
+
 .notice-select-wrap { position: relative; margin-top: 4px; }
 .notice-select-trigger { min-height: 38px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--text-secondary); }
 .notice-select-trigger:hover { border-color: var(--border-strong); }
