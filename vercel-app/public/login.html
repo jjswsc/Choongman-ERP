@@ -25,8 +25,7 @@
         <div class="glass-card">
             <div class="logo-section">
                 <img src="/public/img/logo.png" alt="Chungman Chicken" class="logo">
-                <h1 class="logo-title">CHUNGMAN CHICKEN</h1>
-                <p class="erp-text">Global ERP System</p>
+                <p class="erp-text">CM ERP System</p>
             </div>
 
             <form class="login-form" id="loginForm">
@@ -56,8 +55,7 @@
                 <button type="submit" class="login-btn" id="btn-login">LOGIN</button>
 
                 <div class="form-footer">
-                    <label><input type="checkbox" id="rememberMe"> Remember Me</label>
-                    <a href="#" id="btn-pw-change" onclick="openPwModal(event)">비밀번호 변경</a>
+                    <a href="#" id="btn-pw-change" onclick="openPwModal(event)">Change Password</a>
                 </div>
             </form>
         </div>
@@ -88,8 +86,8 @@
         var currentLang = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cm_lang')) || 'ko';
 
         var I18N = {
-            ko: { m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류", pw_change: "비밀번호 변경", pw_current: "현재 비밀번호", pw_new: "새 비밀번호", pw_new_confirm: "새 비밀번호 확인", pw_btn_submit: "변경하기", pw_alert_store_name: "매장과 이름을 선택한 뒤 비밀번호 변경이 가능합니다.", pw_alert_current: "현재 비밀번호를 입력하세요.", pw_alert_new: "새 비밀번호를 입력하세요.", pw_alert_mismatch: "새 비밀번호가 일치하지 않습니다.", pw_success: "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", pw_error_fail: "변경 실패", modal_close: "닫기", forgot_pw: "비밀번호 찾기", remember_me: "로그인 유지" },
-            en: { m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error", pw_change: "Change Password", pw_current: "Current Password", pw_new: "New Password", pw_new_confirm: "Confirm New Password", pw_btn_submit: "Change", pw_alert_store_name: "Please select store and name first.", pw_alert_current: "Enter current password.", pw_alert_new: "Enter new password.", pw_alert_mismatch: "New passwords do not match.", pw_success: "Password changed. Please log in again.", pw_error_fail: "Change failed", modal_close: "Close", forgot_pw: "Forgot Password?", remember_me: "Remember Me" }
+            ko: { m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류", pw_change: "비밀번호 변경", pw_current: "현재 비밀번호", pw_new: "새 비밀번호", pw_new_confirm: "새 비밀번호 확인", pw_btn_submit: "변경하기", pw_alert_store_name: "매장과 이름을 선택한 뒤 비밀번호 변경이 가능합니다.", pw_alert_current: "현재 비밀번호를 입력하세요.", pw_alert_new: "새 비밀번호를 입력하세요.", pw_alert_mismatch: "새 비밀번호가 일치하지 않습니다.", pw_success: "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", pw_error_fail: "변경 실패", modal_close: "닫기", forgot_pw: "Change Password" },
+            en: { m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error", pw_change: "Change Password", pw_current: "Current Password", pw_new: "New Password", pw_new_confirm: "Confirm New Password", pw_btn_submit: "Change", pw_alert_store_name: "Please select store and name first.", pw_alert_current: "Enter current password.", pw_alert_new: "Enter new password.", pw_alert_mismatch: "New passwords do not match.", pw_success: "Password changed. Please log in again.", pw_error_fail: "Change failed", modal_close: "Close", forgot_pw: "Change Password" }
         };
 
         function t(key) {
@@ -116,7 +114,6 @@
             document.getElementById('pwNew2').placeholder = t('pw_new_confirm');
             document.getElementById('btn-pw-submit').textContent = t('pw_btn_submit');
             document.querySelector('.pw-modal-close').textContent = t('modal_close');
-            var lb = document.querySelector('.form-footer label'); if (lb) lb.innerHTML = '<input type="checkbox" id="rememberMe"> ' + t('remember_me');
         }
 
         function load(show) { var el = document.getElementById('loading'); if (el) el.classList.toggle('show', !!show); }
@@ -149,10 +146,22 @@
                     if (btn) btn.disabled = false;
                     if (res && res.success) {
                         try { sessionStorage.setItem('cm_store', res.storeName || s); sessionStorage.setItem('cm_user', res.userName || n); sessionStorage.setItem('cm_role', res.role || ''); } catch (e) {}
-                        window.location.href = '/app';
+                        playLoginTransition(function() { window.location.href = '/app'; });
                     } else { alert(t('err_login_fail')); }
                 })
                 .catch(function(err) { if (btn) btn.disabled = false; alert(t('err_server') + ': ' + (err && err.message ? err.message : err)); });
+        }
+
+        function playLoginTransition(callback) {
+            var overlay = document.getElementById('loginTransitionOverlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'loginTransitionOverlay';
+                overlay.className = 'login-transition-overlay';
+                document.body.appendChild(overlay);
+            }
+            overlay.classList.add('active');
+            setTimeout(function() { if (callback) callback(); }, 600);
         }
 
         function openPwModal(e) {
