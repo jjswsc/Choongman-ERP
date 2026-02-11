@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0a0a0f">
+  <meta name="theme-color" content="#0a0a0a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="충만 ERP">
   <title>충만치킨 ERP - 로그인</title>
@@ -15,12 +15,14 @@
     <div class="spinner-border" role="status"></div>
   </div>
 
+  <!-- 1. [배경] radial-gradient + 빛 효과 placeholder -->
   <div class="login-bg">
-    <div class="login-bg-base"></div>
-    <div class="login-bg-glow"></div>
-    <div class="login-bg-lines"></div>
+    <div class="login-bg-gradient"></div>
+    <!-- 스타워즈 빛 효과: 나중에 background-image URL로 이미지 추가 -->
+    <div class="login-bg-streaks"></div>
   </div>
 
+  <!-- 5. [레이아웃] Flexbox 화면 정중앙 -->
   <div id="login-screen">
     <div class="login-brand">
       <div class="login-logo-wrap">
@@ -46,7 +48,20 @@
       </select>
       <input type="password" id="loginPw" class="login-input" placeholder="비밀번호 (PIN)" autocomplete="off">
       <button class="login-btn" id="btn-login" onclick="tryLogin()">로그인</button>
+      <a href="#" class="login-pw-link" id="btn-pw-change" onclick="openPwModal(event)">비밀번호 변경</a>
       <p class="login-footer">Powered by Supabase & Vercel</p>
+    </div>
+  </div>
+
+  <!-- 비밀번호 변경 모달 -->
+  <div id="pwModal" class="login-pw-modal" onclick="closePwModalOnBackdrop(event)">
+    <div class="login-pw-modal-inner" onclick="event.stopPropagation()">
+      <h3>🔐 비밀번호 변경</h3>
+      <input type="password" id="pwOld" class="login-input" placeholder="현재 비밀번호" autocomplete="off">
+      <input type="password" id="pwNew" class="login-input" placeholder="새 비밀번호" autocomplete="new-password">
+      <input type="password" id="pwNew2" class="login-input" placeholder="새 비밀번호 확인" autocomplete="new-password">
+      <button class="login-btn" id="btn-pw-submit" onclick="submitPwChange()">변경하기</button>
+      <span class="login-pw-modal-close" onclick="closePwModal()">닫기</span>
     </div>
   </div>
 
@@ -56,11 +71,8 @@
     var currentLang = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cm_lang')) || 'ko';
 
     var I18N = {
-      ko: { m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", btn_login: "로그인", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류" },
-      en: { m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", btn_login: "Login", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error" },
-      th: { m_select_store: "เลือกสาขา", m_select_name: "เลือกชื่อ", m_pin_ph: "รหัสผ่าน (PIN)", btn_login: "เข้าสู่ระบบ", err_select_store_name: "เลือกสาขาและชื่อ", err_login_fail: "เข้าสู่ระบบไม่สำเร็จ", err_server: "ข้อผิดพลาดเซิร์ฟเวอร์" },
-      mm: { m_select_store: "ဆိုင်ရွေးပါ", m_select_name: "အမည်ရွေးပါ", m_pin_ph: "လျှို့ဝှက်နံပါတ် (PIN)", btn_login: "ဝင်ရောက်မည်", err_select_store_name: "ဆိုင်နှင့်အမည်ရွေးပါ", err_login_fail: "ဝင်မအောင်မြင်ပါ", err_server: "ဆာဗာ အမှား" },
-      la: { m_select_store: "ເລືອກສາຂາ", m_select_name: "ເລືອກຊື່", m_pin_ph: "ລະຫັດ (PIN)", btn_login: "ເຂົ້າສູ່ລະບົບ", err_select_store_name: "ເລືອກສາຂາແລະຊື່", err_login_fail: "ເຂົ້າບໍ່ສຳເລັດ", err_server: "ຂໍ້ຜິດພາດເຊີບເວີ" }
+      ko: { m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", btn_login: "로그인", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류", pw_change: "비밀번호 변경", pw_current: "현재 비밀번호", pw_new: "새 비밀번호", pw_new_confirm: "새 비밀번호 확인", pw_btn_submit: "변경하기", pw_alert_store_name: "매장과 이름을 선택한 뒤 비밀번호 변경이 가능합니다.", pw_alert_current: "현재 비밀번호를 입력하세요.", pw_alert_new: "새 비밀번호를 입력하세요.", pw_alert_mismatch: "새 비밀번호가 일치하지 않습니다.", pw_success: "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", pw_error_fail: "변경 실패", modal_close: "닫기" },
+      en: { m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", btn_login: "Login", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error", pw_change: "Change Password", pw_current: "Current Password", pw_new: "New Password", pw_new_confirm: "Confirm New Password", pw_btn_submit: "Change", pw_alert_store_name: "Please select store and name first.", pw_alert_current: "Enter current password.", pw_alert_new: "Enter new password.", pw_alert_mismatch: "New passwords do not match.", pw_success: "Password changed. Please log in again.", pw_error_fail: "Change failed", modal_close: "Close" }
     };
 
     function t(key) {
@@ -82,10 +94,22 @@
       var n = document.getElementById('loginName');
       var pw = document.getElementById('loginPw');
       var btn = document.getElementById('btn-login');
+      var pwLink = document.getElementById('btn-pw-change');
+      var pwOld = document.getElementById('pwOld');
+      var pwNew = document.getElementById('pwNew');
+      var pwNew2 = document.getElementById('pwNew2');
+      var btnPwSubmit = document.getElementById('btn-pw-submit');
+      var modalClose = document.querySelector('.login-pw-modal-close');
       if (s && s.options[0]) s.options[0].text = t('m_select_store') + '...';
       if (n && n.options[0]) n.options[0].text = t('m_select_name') + '...';
       if (pw) pw.placeholder = t('m_pin_ph');
       if (btn) btn.textContent = t('btn_login');
+      if (pwLink) pwLink.textContent = t('pw_change');
+      if (pwOld) pwOld.placeholder = t('pw_current');
+      if (pwNew) pwNew.placeholder = t('pw_new');
+      if (pwNew2) pwNew2.placeholder = t('pw_new_confirm');
+      if (btnPwSubmit) btnPwSubmit.textContent = t('pw_btn_submit');
+      if (modalClose) modalClose.textContent = t('modal_close');
     }
 
     function load(show) {
@@ -135,6 +159,55 @@
             window.location.href = '/app';
           } else {
             alert(t('err_login_fail'));
+          }
+        })
+        .catch(function(err) {
+          if (btn) btn.disabled = false;
+          alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
+        });
+    }
+
+    function openPwModal(e) {
+      e.preventDefault();
+      var s = document.getElementById('storeSelect').value;
+      var n = document.getElementById('loginName').value;
+      if (!s || !n) {
+        alert(t('pw_alert_store_name'));
+        return;
+      }
+      document.getElementById('pwOld').value = '';
+      document.getElementById('pwNew').value = '';
+      document.getElementById('pwNew2').value = '';
+      document.getElementById('pwModal').classList.add('show');
+    }
+
+    function closePwModal() {
+      document.getElementById('pwModal').classList.remove('show');
+    }
+
+    function closePwModalOnBackdrop(e) {
+      if (e.target.id === 'pwModal') closePwModal();
+    }
+
+    function submitPwChange() {
+      var s = document.getElementById('storeSelect').value;
+      var n = document.getElementById('loginName').value;
+      var o = (document.getElementById('pwOld').value || '').trim();
+      var p1 = (document.getElementById('pwNew').value || '').trim();
+      var p2 = (document.getElementById('pwNew2').value || '').trim();
+      if (!o) { alert(t('pw_alert_current')); return; }
+      if (!p1) { alert(t('pw_alert_new')); return; }
+      if (p1 !== p2) { alert(t('pw_alert_mismatch')); return; }
+      var btn = document.getElementById('btn-pw-submit');
+      if (btn) btn.disabled = true;
+      window.runApi('POST', 'changePassword', { store: s, name: n, oldPw: o, newPw: p1 })
+        .then(function(r) {
+          if (btn) btn.disabled = false;
+          if (r && r.success) {
+            alert(r.message || t('pw_success'));
+            closePwModal();
+          } else {
+            alert(r && r.message ? r.message : t('pw_error_fail'));
           }
         })
         .catch(function(err) {

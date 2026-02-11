@@ -3,7 +3,6 @@
    ============================================ */
 
 :root {
-  /* 앱 공통 (공지사항 등) */
   --primary: #1e40af;
   --primary-hover: #1d4ed8;
   --primary-light: #e0f2fe;
@@ -18,156 +17,69 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --radius: 8px;
-  /* 로그인 페이지 전용 */
-  --login-glass-bg: rgba(255, 255, 255, 0.07);
-  --login-glass-border: rgba(255, 255, 255, 0.18);
-  --login-text-white: #ffffff;
-  --login-text-muted: rgba(255, 255, 255, 0.65);
-  --login-btn-gradient: linear-gradient(90deg, #FF6B35 0%, #E53935 100%);
-  --login-btn-gradient-hover: linear-gradient(90deg, #FF7F4D 0%, #EF5350 100%);
 }
 
 /* ============================================
-   로그인 페이지 - 이미지 디자인 (글래스모피즘, 다크테마)
+   로그인 페이지 - 픽셀 단위 구현 (첨부 이미지 기준)
    ============================================ */
 
 body.login-page {
   font-family: 'Outfit', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
   min-height: 100vh;
   min-height: 100dvh;
-  overflow-x: hidden;
   margin: 0;
   padding: 0;
-  background: #0a0a0f;
-  color: var(--login-text-white);
+  overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 배경: 어두운 식당 분위기 그라데이션 + 장식 */
-.login-bg {
+/* 1. [배경] radial-gradient + 빛 효과 placeholder */
+body.login-page .login-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
 }
 
-.login-bg-base {
+/* radial-gradient: 중앙 은은한 오렌지 → 외곽 딥 다크 네이비 #0a0a0a */
+body.login-page .login-bg-gradient {
   position: absolute;
   inset: 0;
-  background: linear-gradient(165deg,
-    #1a1512 0%,
-    #0f0d0b 25%,
-    #0a0908 50%,
-    #080707 75%,
-    #050504 100%
+  background: radial-gradient(
+    ellipse 80% 80% at 50% 50%,
+    rgba(255, 100, 0, 0.12) 0%,
+    rgba(255, 80, 0, 0.05) 30%,
+    rgba(20, 15, 12, 0.8) 60%,
+    #0a0a0a 100%
   );
 }
 
-/* 펜던트 조명/실내 분위기 느낌의 빛점 */
-.login-bg-glow {
+/* 스타워즈 빛 효과 - placeholder (이미지 나중에 넣을 곳)
+   사용법: 아래 한 줄 주석 해제 후 이미지 경로 지정
+   background-image: url('/public/img/light-streaks.png'); */
+body.login-page .login-bg-streaks {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 80% 40% at 50% 20%, rgba(255, 107, 53, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse 60% 30% at 70% 70%, rgba(229, 57, 53, 0.06) 0%, transparent 50%);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.9;
 }
 
-/* 데이터 플로우 라인 (오렌지) */
-.login-bg-lines {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.login-bg-lines::before,
-.login-bg-lines::after {
-  content: '';
-  position: absolute;
-  left: -50%;
-  width: 200%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(255, 107, 53, 0.4), rgba(229, 57, 53, 0.5), transparent);
-  animation: loginFlowLine 10s linear infinite;
-}
-
-.login-bg-lines::before { top: 25%; animation-delay: 0s; }
-.login-bg-lines::after { top: 65%; animation-delay: -5s; opacity: 0.7; }
-
-@keyframes loginFlowLine {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(25%); }
-}
-
-/* 메인 로그인 영역 */
-body.login-page #login-screen {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: 20px 16px 32px;
-  box-sizing: border-box;
-  gap: 28px;
-  transition: opacity 0.4s ease;
-}
-
-body.login-page #login-screen.login-exit {
-  opacity: 0;
-}
-
-/* 로고 - 상단 중앙 정렬 */
-body.login-page .login-brand {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-}
-
-body.login-page .login-logo-wrap {
-  margin-bottom: 14px;
-}
-
-body.login-page .login-logo {
-  max-width: 200px;
-  width: 85%;
-  height: auto;
-  display: block;
-  filter: drop-shadow(0 4px 16px rgba(255, 107, 53, 0.25));
-}
-
-body.login-page .login-title {
-  font-size: clamp(20px, 4.5vw, 26px);
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  color: var(--login-text-white);
-  margin: 0 0 4px;
-}
-
-body.login-page .login-subtitle {
-  font-size: 13px;
-  font-weight: 400;
-  font-style: italic;
-  color: var(--login-text-muted);
-  letter-spacing: 0.06em;
-  margin: 0;
-}
-
-/* 글래스모피즘 카드 - 유리 질감 */
+/* 2. [유리 질감 카드] 필수 속성 */
 body.login-page .login-card {
   width: 100%;
-  max-width: 400px;
-  padding: 32px 24px 28px;
-  background: var(--login-glass-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--login-glass-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  max-width: 420px;
+  padding: 32px 28px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 20px;
+  box-sizing: border-box;
 }
 
-/* 입력창 - 테두리만 있는 깔끔한 스타일 */
+/* 3. [입력창] 투명 배경 + 테두리만 */
 body.login-page .login-input {
   width: 100%;
   min-height: 50px;
@@ -175,9 +87,9 @@ body.login-page .login-input {
   margin-bottom: 14px;
   font-size: 15px;
   font-family: inherit;
-  color: var(--login-text-white);
+  color: #FFFFFF;
   background: transparent;
-  border: 1px solid var(--login-glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 10px;
   box-sizing: border-box;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -186,13 +98,14 @@ body.login-page .login-input {
 }
 
 body.login-page .login-input::placeholder {
-  color: var(--login-text-muted);
+  color: rgba(255, 255, 255, 0.5);
 }
 
+/* 포커스 시 #FF6B00 글로우 */
 body.login-page .login-input:focus {
   outline: none;
-  border-color: rgba(255, 107, 53, 0.6);
-  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.12);
+  border-color: #FF6B00;
+  box-shadow: 0 0 0 2px rgba(255, 107, 0, 0.35), 0 0 12px rgba(255, 107, 0, 0.2);
 }
 
 body.login-page select.login-input {
@@ -205,10 +118,10 @@ body.login-page select.login-input {
 
 body.login-page .login-input option {
   background: #1a1714;
-  color: var(--login-text-white);
+  color: #FFFFFF;
 }
 
-/* 로그인 버튼 - 오렌지/레드 그라데이션 */
+/* 4. [버튼] 오렌지→레드 그라데이션 + 네온 그림자 */
 body.login-page .login-btn {
   width: 100%;
   min-height: 52px;
@@ -218,19 +131,18 @@ body.login-page .login-btn {
   font-weight: 700;
   font-family: inherit;
   letter-spacing: 0.06em;
-  color: white;
-  background: var(--login-btn-gradient);
+  color: #FFFFFF;
+  background: linear-gradient(90deg, #FF8C00, #FF0000);
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  box-shadow: 0 4px 18px rgba(229, 57, 53, 0.35);
+  box-shadow: 0 4px 24px rgba(255, 0, 0, 0.3), 0 0 40px rgba(255, 140, 0, 0.15);
   transition: all 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
 
 body.login-page .login-btn:hover {
-  background: var(--login-btn-gradient-hover);
-  box-shadow: 0 6px 22px rgba(229, 57, 53, 0.45);
+  box-shadow: 0 6px 28px rgba(255, 0, 0, 0.4), 0 0 50px rgba(255, 140, 0, 0.2);
 }
 
 body.login-page .login-btn:active {
@@ -242,19 +154,149 @@ body.login-page .login-btn:disabled {
   cursor: not-allowed;
 }
 
-body.login-page .login-footer {
-  margin-top: 24px;
-  text-align: center;
-  font-size: 11px;
-  color: var(--login-text-muted);
+/* 로고 - width 120px, 상단 중앙 */
+body.login-page .login-logo {
+  width: 120px;
+  max-width: 120px;
+  height: auto;
+  display: block;
 }
 
-/* 로그인 로딩 */
+body.login-page .login-logo-wrap {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+body.login-page .login-title {
+  font-size: clamp(18px, 4vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #FFFFFF;
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+body.login-page .login-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.04em;
+  margin: 0 0 20px;
+  text-align: center;
+}
+
+body.login-page .login-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+body.login-page .login-pw-link {
+  display: block;
+  text-align: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.login-page .login-pw-link:hover {
+  color: #FF6B00;
+  text-decoration: underline;
+}
+
+/* 5. [레이아웃] Flexbox 화면 정중앙 */
+body.login-page #login-screen {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 24px 16px 32px;
+  box-sizing: border-box;
+}
+
+body.login-page .login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+body.login-page #login-screen.login-exit {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* 비밀번호 변경 모달 */
+body.login-page .login-pw-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+body.login-page .login-pw-modal.show {
+  display: flex;
+}
+
+body.login-page .login-pw-modal-inner {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  border-radius: 20px;
+}
+
+body.login-page .login-pw-modal h3 {
+  margin: 0 0 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+  text-align: center;
+}
+
+body.login-page .login-pw-modal .login-input {
+  margin-bottom: 12px;
+}
+
+body.login-page .login-pw-modal-close {
+  display: block;
+  margin-top: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+body.login-page .login-pw-modal-close:hover {
+  color: #FFFFFF;
+}
+
+/* 로딩 */
 body.login-page #loading {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(10, 10, 15, 0.92);
+  background: rgba(10, 10, 10, 0.9);
   align-items: center;
   justify-content: center;
   z-index: 9999;
@@ -267,8 +309,8 @@ body.login-page #loading.show {
 body.login-page #loading .spinner-border {
   width: 3rem;
   height: 3rem;
-  border: 3px solid rgba(255, 107, 53, 0.2);
-  border-top-color: #FF6B35;
+  border: 3px solid rgba(255, 107, 0, 0.2);
+  border-top-color: #FF6B00;
   border-radius: 50%;
   animation: loginSpinner 0.8s linear infinite;
 }
@@ -277,66 +319,24 @@ body.login-page #loading .spinner-border {
   to { transform: rotate(360deg); }
 }
 
-/* ============================================
-   반응형 - 모바일: 요소 겹침 없이 시원하게
-   ============================================ */
-
+/* 반응형 - 모바일 */
 @media screen and (max-width: 480px) {
   body.login-page #login-screen {
-    padding: 16px 12px 28px;
-    gap: 24px;
-  }
-
-  body.login-page .login-logo {
-    max-width: 160px;
-  }
-
-  body.login-page .login-title {
-    font-size: 18px;
-  }
-
-  body.login-page .login-subtitle {
-    font-size: 12px;
+    padding: 16px 12px 24px;
   }
 
   body.login-page .login-card {
-    padding: 24px 18px 22px;
-    max-width: 100%;
-  }
-
-  body.login-page .login-input {
-    min-height: 52px;
-    padding: 15px 16px;
-    margin-bottom: 12px;
-  }
-
-  body.login-page .login-btn {
-    min-height: 54px;
-    margin-top: 16px;
-  }
-}
-
-@media screen and (max-height: 600px) {
-  body.login-page #login-screen {
-    padding: 12px 16px 20px;
-    gap: 16px;
-  }
-
-  body.login-page .login-logo-wrap {
-    margin-bottom: 8px;
+    padding: 24px 20px 20px;
   }
 
   body.login-page .login-logo {
-    max-width: 120px;
-  }
-
-  body.login-page .login-card {
-    padding: 20px 18px 18px;
+    width: 100px;
+    max-width: 100px;
   }
 }
 
 /* ============================================
-   앱 공통 (공지사항 등) - 기존 유지
+   앱 공통 (공지사항 등)
    ============================================ */
 
 .notice-select-wrap { position: relative; margin-top: 4px; }
