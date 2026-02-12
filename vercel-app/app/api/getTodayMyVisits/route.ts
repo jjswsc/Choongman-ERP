@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   try {
-    const data = (await request.json()) as { userName?: string }
+    const data = (await request.json()) as { userName?: string; name?: string }
     const userName = String(data?.userName || data?.name || '').trim()
 
     if (!userName) {
