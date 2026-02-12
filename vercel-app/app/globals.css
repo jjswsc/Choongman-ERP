@@ -1,0 +1,366 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 30 20% 97%;
+    --foreground: 20 10% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 20 10% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 10% 12%;
+    --primary: 20 85% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 15% 93%;
+    --secondary-foreground: 20 10% 20%;
+    --muted: 30 10% 94%;
+    --muted-foreground: 20 5% 46%;
+    --accent: 20 85% 52%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 10% 88%;
+    --input: 30 10% 88%;
+    --ring: 20 85% 52%;
+    --chart-1: 20 85% 52%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.75rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 20 10% 12%;
+    --sidebar-primary: 20 85% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 15% 95%;
+    --sidebar-accent-foreground: 20 10% 12%;
+    --sidebar-border: 30 10% 88%;
+    --sidebar-ring: 20 85% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ============================================
+   로그인 9 디자인
+   ============================================ */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(ellipse 80% 80% at 50% 40%, #1a1512 0%, #0d0c0b 40%, #050505 100%);
+  overflow: hidden;
+  color: white;
+  position: relative;
+}
+
+.login-page .login-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.login-page .background-cover {
+  position: absolute;
+  inset: 0;
+  background-image: url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2070&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.login-page .background-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1;
+}
+
+.login-page .background-glow {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 80, 0, 0.12) 0%, rgba(255, 50, 0, 0.04) 35%, transparent 65%);
+  z-index: 0;
+}
+
+.login-page .login-wrapper {
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.login-page .glass-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  border-radius: 24px;
+  box-shadow: 0 0 20px rgba(255, 107, 0, 0.2), 0 20px 40px -12px rgba(0, 0, 0, 0.5);
+}
+
+.login-page .logo-section {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.login-page .logo {
+  width: 120px;
+  height: auto;
+  display: block;
+  margin: 0 auto 12px;
+  filter: drop-shadow(0 0 15px rgba(255, 100, 0, 0.35));
+}
+
+.login-page .erp-text {
+  font-size: 1.4rem;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+  margin-top: 14px;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.login-page .glass-card select,
+.login-page .glass-card input {
+  width: 100%;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  transition: 0.3s;
+  margin-bottom: 12px;
+}
+
+.login-page .glass-card select:focus,
+.login-page .glass-card input:focus {
+  border-color: #FF6B00;
+  box-shadow: 0 0 12px rgba(255, 107, 0, 0.35);
+}
+
+.login-page .glass-card input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.login-page .glass-card select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+}
+
+.login-page .login-btn {
+  width: 100%;
+  padding: 16px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #FF4500 0%, #FF8C00 100%);
+  color: white;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+  letter-spacing: 2px;
+  box-shadow: 0 5px 25px rgba(255, 69, 0, 0.5);
+  transition: 0.3s;
+}
+
+.login-page .login-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 35px rgba(255, 69, 0, 0.6);
+}
+
+.login-page .login-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.login-page .login-change-pw-btn {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.login-page .login-change-pw-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 140, 0, 0.6);
+  color: white;
+}
+
+.login-page .login-loading {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 5, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.login-page .login-select-trigger {
+  width: 100%;
+  padding: 14px 40px 14px 14px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 2px solid rgba(255, 255, 255, 0.35) !important;
+  border-radius: 10px;
+  color: white !important;
+  font-size: 15px;
+}
+
+.login-page .login-select-trigger[data-state="open"] {
+  border-color: #FF6B00 !important;
+  box-shadow: 0 0 12px rgba(255, 107, 0, 0.35);
+}
+
+.login-page .login-input-field {
+  width: 100%;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  margin-bottom: 12px;
+}
+
+.login-page .login-input-field::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.login-page .login-input-field:focus {
+  border-color: #FF6B00;
+  box-shadow: 0 0 12px rgba(255, 107, 0, 0.35);
+}
+
+.login-page .login-pw-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.login-page .login-pw-modal-inner {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Select 드롭다운 - 포털에 렌더되므로 .login-page 밖에 스타일 */
+.login-select-content {
+  background: rgba(20, 18, 16, 0.98) !important;
+  border: 1px solid rgba(255, 140, 0, 0.4) !important;
+  color: white !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+  z-index: 9999 !important;
+}
+
+.login-select-content [data-radix-select-item] {
+  color: white !important;
+}
+
+.login-select-content [data-highlighted] {
+  background: rgba(255, 107, 0, 0.35) !important;
+  outline: none;
+}
+
+.login-select-content [data-radix-select-item] {
+  color: inherit;
+}
+
+/* 날짜 입력 - 달력 아이콘이 칸을 벗어나지 않도록, 날짜와 가깝게 배치 */
+.date-input-compact {
+  max-width: 130px;
+  padding-right: 2rem !important;
+  overflow: hidden;
+}
+
+.date-input-compact::-webkit-calendar-picker-indicator {
+  margin-left: -0.75rem;
+  padding: 0.2rem;
+  cursor: pointer;
+  opacity: 0.65;
+}

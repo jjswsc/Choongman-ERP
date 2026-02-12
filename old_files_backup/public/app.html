@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e40af">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="충만 ERP">
+  <title>충만 ERP (Vercel)</title>
+  <link href="/public/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/public/css/style.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans KR', -apple-system, sans-serif; background: #FAFAF9; margin: 0; padding: 0; color: #1c1917; -webkit-tap-highlight-color: transparent; }
+    #loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.95); align-items: center; justify-content: center; z-index: 9999; }
+    #loading.show { display: flex; }
+    #app-screen { display: none; opacity: 0; }
+    #app-screen.show { display: block; animation: appFadeIn 0.5s ease forwards; }
+    @keyframes appFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .container { background: white; max-width: 800px; margin: 0 auto; min-height: 100vh; padding: 20px; box-sizing: border-box; }
+    .app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
+    .app-title { font-size: 18px; font-weight: 800; color: #E65100; }
+    .nav-tabs { display: flex; margin-bottom: 20px; background: #FFF3E0; border-radius: 12px; padding: 4px; overflow-x: auto; }
+    .nav-item { flex: 1; text-align: center; padding: 12px; border-radius: 10px; font-weight: 700; cursor: pointer; color: #888; font-size: 12px; white-space: nowrap; }
+    .nav-item.active { background: white; color: #E65100; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .hidden { display: none !important; }
+    .notice-item { padding: 10px 0; border-bottom: 1px solid #eee; cursor: pointer; }
+    .notice-item:last-child { border-bottom: none; }
+    .notice-item:active { background: #f5f5f5; }
+    .view-placeholder { padding: 24px; text-align: center; color: #888; }
+    .sub-tabs { display:flex; margin-bottom:15px; border-bottom:2px solid #eee; }
+    .sub-tab { flex:1; text-align:center; padding:10px; cursor:pointer; color:#888; font-weight:bold; }
+    .sub-tab.active { color:#E65100; border-bottom:2px solid #E65100; }
+    .category-header { margin-top:15px; padding:15px; background:#FFF8E1; border:1px solid #FFE0B2; border-radius:12px; font-weight:700; display:flex; justify-content:space-between; color:#333; cursor:pointer; }
+    .menu-container { display:none; }
+    .menu-grid { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+    .menu-item { display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:white; border:1px solid #eee; border-radius:8px; box-shadow:0 1px 1px rgba(0,0,0,0.05); text-align:left; min-height:40px; cursor:pointer; }
+    .menu-item.selected { border:2px solid #E65100; background:#FFF3E0; }
+    .item-left { flex:1; padding-right:10px; display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+    .item-name { font-size:15px; font-weight:700; color:#333; margin:0; }
+    .item-spec { font-size:13px; color:#888; margin:0; }
+    .stock-badge { font-size:10px; padding:1px 5px; border-radius:4px; color:white; font-weight:bold; display:inline-block; white-space:nowrap; }
+    .item-right { text-align:right; display:flex; flex-direction:column; gap:5px; align-items:flex-end; min-width:80px; }
+    .item-price { font-size:15px; font-weight:800; color:#d32f2f; }
+    .item-photo-btn { flex-shrink:0; width:32px; height:32px; padding:0; border:1px solid #ddd; border-radius:6px; background:#f5f5f5; font-size:16px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+    .input-area { display:flex; align-items:center; gap:10px; background:white; padding:15px; position:sticky; bottom:20px; border-radius:15px; box-shadow:0 -5px 10px rgba(0,0,0,0.05); z-index:100; }
+    .btn-add { flex:1; background:#E65100; color:white; border:none; border-radius:10px; font-weight:bold; height:45px; }
+    .stepper-btn { width:40px; height:40px; background:#fff; border:1px solid #ddd; border-radius:8px; font-weight:bold; font-size:20px; color:#E65100; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .stepper-input { width:50px; text-align:center; border:none; font-size:18px; font-weight:bold; background:transparent; }
+    .vat-row { display:flex; justify-content:space-between; font-size:13px; color:#666; margin-bottom:3px; }
+    .grand-total { display:flex; justify-content:space-between; font-size:18px; font-weight:800; color:#E65100; border-top:1px dashed #ccc; padding-top:10px; }
+    .history-card { border:1px solid #eee; border-radius:12px; padding:15px; margin-bottom:10px; background:white; }
+    .history-header { display:flex; justify-content:space-between; margin-bottom:8px; font-weight:bold; font-size:14px; }
+    .status-badge { padding:3px 8px; border-radius:5px; font-size:11px; color:white; }
+    .detail-list { margin-top:10px; background:#f9f9f9; padding:10px; border-radius:8px; border:1px dashed #ddd; }
+    .detail-item { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; padding-bottom:4px; border-bottom:1px solid #eee; }
+    .usage-table { width:100%; font-size:13px; border-collapse:collapse; }
+    .usage-table td { padding:10px; border-bottom:1px solid #eee; }
+    .btn-attend { padding:15px; border:none; border-radius:12px; font-weight:800; color:white; width:48%; font-size:15px; cursor:pointer; }
+    .today-log-box { background:#fff3e0; border-radius:12px; padding:15px; margin-top:20px; margin-bottom:20px; }
+    .log-table { width:100%; font-size:13px; border-collapse:collapse; }
+    .log-table td { padding:8px; border-bottom:1px solid #ffe0b2; }
+    .leave-stats-table { width:100%; margin-top:10px; border-collapse:collapse; font-size:13px; }
+    .leave-stats-table th { background:#eee; padding:8px; border:1px solid #ddd; text-align:center; }
+    .leave-stats-table td { padding:8px; border:1px solid #ddd; text-align:center; font-weight:bold; }
+    .leave-item { padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center; }
+    .card-box { padding:16px; border-radius:12px; background:#fff; border:1px solid #eee; }
+    #pwa-add-banner { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(180deg, #1a1a1a, #333); color: #fff; padding: 14px 20px; z-index: 1500; box-shadow: 0 -4px 20px rgba(0,0,0,0.3); align-items: center; gap: 12px; }
+    #pwa-add-banner.show { display: flex; animation: slideUp 0.4s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    #pwa-add-banner .pwa-icon { width: 48px; height: 48px; border-radius: 10px; background: #E65100; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    #pwa-add-banner .pwa-text { flex: 1; font-size: 14px; line-height: 1.4; }
+    #pwa-add-banner .pwa-text strong { display: block; font-size: 15px; margin-bottom: 2px; }
+    #pwa-add-banner .pwa-btn { background: #E65100; color: white; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    #pwa-add-banner .pwa-close { background: transparent; border: none; color: #aaa; font-size: 20px; cursor: pointer; padding: 4px; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="show"><div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div></div>
+
+  <div id="login-screen">
+    <div class="login-logo-wrap">
+      <img src="/public/img/logo.png" alt="Choongman Chicken" class="login-logo">
+    </div>
+    <div class="login-card">
+      <select id="langSelect" class="login-input" onchange="changeLanguage()">
+        <option value="ko">🇰🇷 한국어</option>
+        <option value="en">🇺🇸 English</option>
+        <option value="th">🇹🇭 ภาษาไทย</option>
+        <option value="mm">🇲🇲 မြန်မာ</option>
+        <option value="la">🇱🇦 ພາສາລາວ</option>
+      </select>
+      <select id="storeSelect" class="login-input" onchange="onStoreChange()"><option value="">매장 선택...</option></select>
+      <select id="loginName" class="login-input"><option value="">이름 선택...</option></select>
+      <input type="password" id="loginPw" class="login-input" placeholder="Password (PIN)" data-i18n="m_pin_ph">
+      <button class="login-btn" id="btn-login" onclick="tryLogin()" data-i18n="btn_login">로그인</button>
+    </div>
+  </div>
+
+  <div id="app-screen" class="container app-theme">
+    <div class="app-header">
+      <div class="app-title" id="txt-app-title" data-i18n="m_app_title">Choongman Chicken</div>
+      <button onclick="location.reload()" style="background:#eee;border:none;padding:5px 10px;border-radius:5px;" data-i18n="m_logout">Logout</button>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-item active" onclick="switchTab('home')" id="tab-home" data-i18n="m_tab_home">Home</div>
+      <div class="nav-item" onclick="switchTab('order')" id="tab-order" data-i18n="m_tab_order">Order</div>
+      <div class="nav-item" onclick="switchTab('stock')" id="tab-stock" data-i18n="m_tab_stock">Usage</div>
+      <div class="nav-item" onclick="switchTab('hr')" id="tab-hr" data-i18n="m_tab_hr">HR</div>
+      <div class="nav-item" onclick="switchTab('schedule')" id="tab-schedule" data-i18n="m_tab_schedule">시간표</div>
+      <div class="nav-item hidden" onclick="switchTab('store-visit')" id="tab-store-visit" data-i18n="m_tab_visit">Visit</div>
+      <div class="nav-item hidden" onclick="switchTab('admin')" id="tab-admin" data-i18n="m_tab_admin">Admin</div>
+    </div>
+
+    <div id="view-home">
+      <div style="background:#fff3e0; padding:20px; border-radius:15px; margin-bottom:20px;">
+        <h3 style="margin:0; color:#E65100;" data-i18n="m_welcome">Welcome!</h3>
+        <p style="margin:5px 0 0 0; color:#555;" id="home-notice-content" data-i18n="m_welcome_sub">오늘도 안전하고 즐겁게 근무하세요!</p>
+      </div>
+      <div style="background:white; border:1px solid #eee; border-radius:15px; padding:15px; min-height:200px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-weight:bold; color:#E65100; font-size:16px;" data-i18n="m_notice_board">📢 Notice Board</span>
+        </div>
+        <div style="display:flex; flex-wrap:nowrap; gap:4px; align-items:center; margin-bottom:15px; background:#f8f9fa; padding:10px; border-radius:8px;">
+          <select id="noticeStatusFilter" style="border:1px solid #ddd; border-radius:5px; padding:4px 6px; font-size:12px; min-width:70px;">
+            <option value="All" data-i18n="notice_filter_all">전체</option>
+            <option value="Unread" selected data-i18n="notice_filter_unread">미확인</option>
+            <option value="Read" data-i18n="notice_filter_read">수신확인</option>
+          </select>
+          <input type="date" id="noticeStart" style="border:1px solid #ddd; border-radius:5px; padding:4px 6px; font-size:12px; max-width:100px;">
+          <span style="color:#888;flex-shrink:0;">~</span>
+          <input type="date" id="noticeEnd" style="border:1px solid #ddd; border-radius:5px; padding:4px 6px; font-size:12px; max-width:100px;">
+          <button onclick="loadNotices()" style="border:none; background:#E65100; color:white; border-radius:5px; padding:5px 10px; cursor:pointer;flex-shrink:0;">🔍</button>
+        </div>
+        <div id="notice-list-box" style="display:flex; flex-direction:column; gap:10px;">
+          <div id="notice-list-placeholder" style="text-align:center; color:#999; padding:20px;" data-i18n="m_loading_notices">Loading Notices...</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-order" class="hidden">
+      <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchOrderTab('new')" id="ord-sub-new" data-i18n="m_ord_new">신규 주문</div>
+        <div class="sub-tab" onclick="switchOrderTab('hist')" id="ord-sub-hist" data-i18n="m_ord_hist">주문 내역</div>
+      </div>
+      <div id="order-new-area">
+          <div id="orderMenuWrapper" style="padding-bottom:120px;" data-i18n="m_loading_items">불러오는 중...</div>
+        <div class="input-area">
+          <div style="display:flex;align-items:center;background:#f5f5f5;border-radius:10px;padding:5px;">
+            <button class="stepper-btn" type="button" onclick="adjustQty('order', -1)">-</button>
+            <input type="number" id="qtyInputOrder" class="stepper-input" value="1" min="1" style="width:50px;">
+            <button class="stepper-btn" type="button" onclick="adjustQty('order', 1)">+</button>
+          </div>
+          <button class="btn-add" id="btn-add-order" onclick="addToCart('order')" data-i18n="m_add_cart">담기</button>
+        </div>
+        <div style="padding-bottom:50px;">
+          <table id="cartTable" style="width:100%;font-size:13px;margin-bottom:10px;table-layout:fixed;"><colgroup><col style="width:35%"><col style="width:18%"><col style="width:15%"><col style="width:22%"><col style="width:10%"></colgroup><thead><tr><th data-i18n="m_item">품목</th><th class="text-right" data-i18n="m_price">단가</th><th class="text-right" data-i18n="m_qty">수량</th><th class="text-right" data-i18n="m_sub">소계</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="vat-row"><span data-i18n="m_subtotal">소계:</span> <span id="displaySub">0 ฿</span></div>
+          <div class="vat-row"><span data-i18n="m_vat">VAT (7%):</span> <span id="displayVat">0 ฿</span></div>
+          <div class="grand-total"><span data-i18n="m_total">합계:</span> <span id="displayTotal">0 ฿</span></div>
+          <button onclick="submitOrder()" class="login-btn" id="btn-place-order" data-i18n="m_place_order">주문하기</button>
+        </div>
+      </div>
+      <div id="order-hist-area" style="display:none;">
+        <div style="margin-bottom:10px;display:flex;gap:5px;">
+          <input type="date" id="hist-start" class="login-input" style="padding:10px;" onchange="filterHistory()">
+          <input type="date" id="hist-end" class="login-input" style="padding:10px;" onchange="filterHistory()">
+        </div>
+        <button class="login-btn" style="padding:10px;margin-top:0;background:#607D8B;" onclick="loadHistory()" data-i18n="m_search_hist">내역 조회</button>
+        <div id="history-list-container" style="margin-top:10px;" data-i18n="m_loading_items">불러오는 중...</div>
+      </div>
+    </div>
+    <div id="view-stock" class="hidden">
+      <div class="sub-tabs">
+        <div class="sub-tab active" onclick="switchUsageTab('new')" id="sub-new" data-i18n="m_use_new">사용 입력</div>
+        <div class="sub-tab" onclick="switchUsageTab('hist')" id="sub-hist" data-i18n="m_use_hist">내역</div>
+      </div>
+      <div id="usage-new-area">
+        <div id="stockListWrapper" style="padding-bottom:120px;" data-i18n="m_loading_items">불러오는 중...</div>
+        <div class="input-area">
+          <div style="display:flex;align-items:center;background:#f5f5f5;border-radius:10px;padding:5px;">
+            <button class="stepper-btn" type="button" onclick="adjustQty('usage', -1)">-</button>
+            <input type="number" id="qtyInputUsage" class="stepper-input" value="1" min="1">
+            <button class="stepper-btn" type="button" onclick="adjustQty('usage', 1)">+</button>
+          </div>
+          <button class="btn-add" onclick="addToCart('usage')" style="background:#43a047;" data-i18n="m_add_usage">사용 추가</button>
+        </div>
+        <div style="padding-bottom:50px;">
+          <div style="margin-bottom:10px;"><strong data-i18n="m_items_used">사용 품목</strong></div>
+          <table id="usageCartTable" style="width:100%;font-size:13px;margin-bottom:10px;table-layout:fixed;"><colgroup><col style="width:60%"><col style="width:25%"><col style="width:15%"></colgroup><thead><tr><th data-i18n="m_item">품목</th><th class="text-right" data-i18n="m_qty">수량</th><th class="text-right" data-i18n="m_delete">삭제</th></tr></thead><tbody></tbody></table>
+          <button onclick="submitUsage()" class="login-btn" style="background:#43a047;" data-i18n="m_confirm_usage">사용 확정</button>
+        </div>
+      </div>
+      <div id="usage-hist-area" style="display:none;">
+        <div style="display:flex;gap:5px;margin-bottom:10px;">
+          <input type="date" id="use-start" class="login-input" style="padding:8px;">
+          <input type="date" id="use-end" class="login-input" style="padding:8px;">
+        </div>
+        <button class="login-btn" style="padding:10px;margin-bottom:10px;background:#607D8B;" onclick="loadUsageHistory()" data-i18n="m_search_period">기간 조회</button>
+        <div style="background:white;border-radius:8px;border:1px solid #eee;">
+          <table class="usage-table">
+            <thead style="background:#f5f5f5;"><tr><th style="text-align:left;padding:10px;" data-i18n="m_date_item">날짜/품목</th><th style="text-align:right;padding:10px;" data-i18n="m_qty">수량</th></tr></thead>
+            <tbody id="usage-history-list"><tr><td colspan="2" style="text-align:center;padding:20px;color:#999;" data-i18n="m_loading_items">불러오는 중...</td></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div id="view-hr" class="hidden">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div id="live-clock" style="font-size:32px;font-weight:900;color:#333;">00:00:00</div>
+        <div style="color:#666;"><span data-i18n="m_user">사용자</span>: <b id="hr-username" style="color:#E65100;">User</b></div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-bottom:10px;">
+        <button id="att-btn-in" onclick="sendAttendance('출근')" class="btn-attend" style="background:#4CAF50;flex:1;" data-i18n="m_att_in">☀️ 출근</button>
+        <button id="att-btn-out" onclick="sendAttendance('퇴근')" class="btn-attend" style="background:#F44336;flex:1;" data-i18n="m_att_out">🌙 퇴근</button>
+      </div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-bottom:20px;">
+        <button id="att-btn-break" onclick="sendAttendance('휴식시작')" class="btn-attend" style="background:#FF9800;flex:1;" data-i18n="m_break">☕ 휴식</button>
+        <button id="att-btn-resume" onclick="sendAttendance('휴식종료')" class="btn-attend" style="background:#2196F3;flex:1;" data-i18n="m_resume">▶ 재개</button>
+      </div>
+      <div id="today-attendance-log" class="today-log-box">
+        <b style="font-size:14px;color:#E65100;display:block;margin-bottom:8px;" data-i18n="m_today_record">📅 오늘 기록</b>
+        <div id="attendance-status-msg" style="text-align:center;font-size:12px;color:#999;padding:10px;" data-i18n="m_att_help">위 버튼을 눌러 출퇴근을 기록하세요.</div>
+        <table class="log-table" id="attendance-log-table" style="display:none;width:100%;border-collapse:collapse;">
+          <thead><tr><th style="padding:8px;border:1px solid #ffe0b2;background:#fff3e0;text-align:left;" data-i18n="m_time">시간</th><th style="padding:8px;border:1px solid #ffe0b2;background:#fff3e0;" data-i18n="m_type">구분</th><th style="padding:8px;border:1px solid #ffe0b2;background:#fff3e0;" data-i18n="m_status">상태</th></tr></thead>
+          <tbody id="attendance-log-body"></tbody>
+        </table>
+      </div>
+      <div class="card-box" style="margin-bottom:15px;">
+        <b style="font-size:15px;display:block;margin-bottom:10px;" data-i18n="m_leave_stats">📊 휴가 현황 (올해)</b>
+        <table class="leave-stats-table">
+          <thead><tr><th data-i18n="m_used_ann">연차 사용</th><th data-i18n="m_used_sick">병가 사용</th><th data-i18n="m_remain">잔여</th></tr></thead>
+          <tbody><tr><td id="my-ann">0</td><td id="my-sick">0</td><td id="my-remain" style="color:#E65100;font-weight:bold;font-size:18px;">0</td></tr></tbody>
+        </table>
+      </div>
+      <div class="card-box" style="margin-bottom:15px;">
+        <b style="font-size:16px;" data-i18n="m_leave_req">🏖️ 휴가 신청</b>
+        <select id="leaveType" class="login-input" style="margin-top:15px;"><option value="연차" data-i18n="m_annual">연차</option><option value="반차" data-i18n="m_half">반차</option><option value="병가" data-i18n="m_sick">병가</option></select>
+        <input type="date" id="leaveDate" class="login-input"><input type="text" id="leaveReason" class="login-input" placeholder="사유" data-i18n-ph="m_reason_ph">
+        <button onclick="submitLeave()" class="btn-attend" style="background:#5c6bc0;width:100%;margin-top:10px;" data-i18n="m_submit_req">신청하기</button>
+      </div>
+      <div class="card-box" style="margin-bottom:50px;">
+        <b style="font-size:15px;" data-i18n="m_req_hist">📑 신청 내역</b>
+        <div id="my-leave-list" style="margin-top:10px;">
+          <table class="usage-table" style="margin-top:8px;font-size:13px;"><thead><tr><th style="text-align:left;padding:8px;" data-i18n="m_date">날짜</th><th style="padding:8px;" data-i18n="m_leave_type">유형</th><th style="text-align:left;padding:8px;" data-i18n="m_reason_ph">사유</th><th style="padding:8px;" data-i18n="m_status">상태</th></tr></thead><tbody id="my-leave-list-tbody"><tr><td colspan="4" style="text-align:center;color:#999;" data-i18n="m_loading_items">불러오는 중...</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div id="view-schedule" class="hidden" style="padding-bottom:60px;">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="text-nowrap" style="font-size:14px;font-weight:600;" data-i18n="m_schedule_store">매장</span>
+        <select id="schedule-today-store" class="form-select form-select-sm" style="max-width:160px;font-size:14px;"></select>
+        <button type="button" class="btn btn-primary btn-sm" onclick="loadScheduleStoreSearch()" data-i18n="m_schedule_btn_search">검색</button>
+      </div>
+      <div class="card-box mb-2" style="padding:10px;border-radius:12px;background:#E8F5E9;border:1px solid #C8E6C9;">
+        <b class="small d-block mb-2" data-i18n="m_schedule_today">당일 실시간 근무</b>
+        <div class="d-flex flex-nowrap align-items-center gap-2 mb-2">
+          <span class="text-nowrap" style="font-size:13px;" data-i18n="m_schedule_label_date">날짜</span>
+          <input type="date" id="schedule-today-date" class="form-control form-control-sm" style="max-width:115px;">
+          <span class="text-nowrap" style="font-size:13px;" data-i18n="m_schedule_label_area">구역</span>
+          <select id="schedule-today-area" class="form-select form-select-sm" style="width:72px;font-size:13px;">
+            <option value="All" data-i18n="m_schedule_area_all">전체</option>
+            <option value="Service" data-i18n="m_schedule_area_service">서비스</option>
+            <option value="Kitchen" data-i18n="m_schedule_area_kitchen">주방</option>
+          </select>
+          <button type="button" class="btn btn-primary btn-sm" onclick="loadScheduleToday()" data-i18n="m_schedule_btn_search">검색</button>
+        </div>
+        <div id="schedule-today-box" style="max-height:220px;overflow-y:auto;font-size:12px;">
+          <div class="text-center text-muted py-3 small" data-i18n="m_schedule_today_hint">날짜·구역 선택 후 검색</div>
+        </div>
+      </div>
+      <div class="card-box" style="padding:10px;border-radius:12px;margin-bottom:10px;">
+        <b class="small d-block mb-1" data-i18n="m_schedule_week">주간 시간표</b>
+        <p class="small text-muted mb-2" data-i18n="m_schedule_load_hint">관리자 페이지와 동일한 직원시간표를 조회합니다. 기준 월요일 선택 후 검색하세요.</p>
+        <div class="d-flex flex-nowrap align-items-center gap-2 mb-2">
+          <span class="text-nowrap" style="font-size:13px;" data-i18n="m_schedule_label_period">기간</span>
+          <input type="date" id="schedule-week-monday" class="form-control form-control-sm" style="max-width:120px;">
+          <span class="text-nowrap" style="font-size:13px;" data-i18n="m_schedule_label_area">구역</span>
+          <select id="schedule-week-area" class="form-select form-select-sm" style="width:72px;font-size:13px;">
+            <option value="All" data-i18n="m_schedule_area_all">전체</option>
+            <option value="Service" data-i18n="m_schedule_area_service">서비스</option>
+            <option value="Kitchen" data-i18n="m_schedule_area_kitchen">주방</option>
+            <option value="Office" data-i18n="m_schedule_area_office">오피스</option>
+          </select>
+          <button type="button" class="btn btn-primary btn-sm" onclick="loadScheduleWeek()" data-i18n="m_schedule_btn_search">검색</button>
+        </div>
+        <div id="schedule-week-box" style="max-height:360px;overflow-y:auto;font-size:12px;">
+          <div class="text-center text-muted py-4 small" data-i18n="m_schedule_load_hint">검색 버튼을 눌러 조회하세요</div>
+        </div>
+      </div>
+      <div class="card-box" style="padding:12px;border-radius:12px;margin-bottom:20px;background:#FFF3E0;border:1px solid #FFE0B2;">
+        <b class="small d-block mb-2" data-i18n="m_schedule_my_punch">내 출퇴근 기록</b>
+        <div class="d-flex flex-nowrap align-items-center gap-2 mb-2">
+          <select id="schedule-my-month-select" class="form-select form-select-sm" style="max-width:160px;font-size:14px;"></select>
+          <button type="button" class="btn btn-primary btn-sm" style="padding:6px 12px;" onclick="loadMobileMyAttendanceSummary()" data-i18n="m_schedule_btn_search">검색</button>
+        </div>
+        <div id="schedule-my-punch-box" style="max-height:220px;overflow-y:auto;font-size:12px;">
+          <div class="text-center text-muted py-3 small" data-i18n="m_schedule_my_punch_hint">월 선택 후 검색</div>
+        </div>
+      </div>
+    </div>
+    <div id="view-store-visit" class="hidden">
+      <div style="background:#E3F2FD;padding:20px;border-radius:15px;margin-bottom:20px;border:1px solid #BBDEFB;">
+        <h3 style="margin:0;color:#1565C0;" data-i18n="m_visit_title">매장 방문</h3>
+        <p style="margin:5px 0 0 0;color:#546E7A;font-size:13px;" data-i18n="m_visit_sub">현장 지원 및 교육 활동을 기록하세요.</p>
+      </div>
+      <div class="card-box" style="padding:20px;">
+        <label class="fw-bold small mb-2 d-block" data-i18n="m_visit_store">🏢 방문 매장</label>
+        <select id="visit-store-select" class="login-input" style="margin-bottom:15px;"></select>
+        <label class="fw-bold small mb-2 d-block" data-i18n="m_visit_purpose">🎯 방문 목적</label>
+        <select id="visit-purpose" class="login-input" style="margin-bottom:20px;">
+          <option value="정기점검" data-i18n="m_purpose_inspect">🔍 정기 점검</option>
+          <option value="직원교육" data-i18n="m_purpose_training">👨‍🏫 직원 교육</option>
+          <option value="긴급지원" data-i18n="m_purpose_urgent">🚨 긴급 지원</option>
+          <option value="매장미팅" data-i18n="m_purpose_meeting">🤝 매장 미팅</option>
+          <option value="기타" data-i18n="m_purpose_etc">기타</option>
+        </select>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <button onclick="handleVisit('방문시작')" id="btn-visit-in" class="btn-attend" style="background:#1976D2;flex:1;" data-i18n="m_visit_start">방문 시작</button>
+          <button onclick="handleVisit('방문종료')" id="btn-visit-out" class="btn-attend" style="background:#455A64;flex:1;display:none;" data-i18n="m_visit_end">방문 종료</button>
+        </div>
+        <div id="visit-status-msg" style="text-align:center;font-size:12px;color:#1E88E5;padding:10px;background:#E3F2FD;border-radius:8px;display:none;"></div>
+      </div>
+      <div style="margin-top:25px;padding-bottom:50px;">
+        <b style="font-size:14px;color:#546E7A;" data-i18n="m_today_visit_log">Today's Visit Log</b>
+        <div id="visit-log-container" style="margin-top:10px;background:white;border-radius:10px;padding:10px;border:1px solid #eee;">
+          <table class="table table-sm text-center align-middle" style="margin-bottom:0;width:100%;font-size:12px;">
+            <thead class="table-light"><tr><th data-i18n="m_time">시간</th><th data-i18n="m_schedule_store">매장</th><th data-i18n="m_type">구분</th><th data-i18n="m_duration">체류</th></tr></thead>
+            <tbody id="visit-log-body"><tr><td colspan="4" style="text-align:center;color:#999;padding:20px;" data-i18n="m_loading">조회 중...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="view-admin" class="hidden" style="padding-bottom:80px;">
+      <div class="card-box" style="margin-bottom:16px;">
+        <div style="font-size:18px;font-weight:700;color:#E65100;padding-bottom:8px;border-bottom:2px solid #E65100;margin-bottom:12px;" data-i18n="m_admin_notice">📢 공지사항 발송</div>
+        <input type="text" id="admin-notice-title" class="login-input" style="margin-top:12px;" data-i18n-ph="admin_notice_subject" placeholder="제목">
+        <textarea id="admin-notice-content" class="login-input" style="margin-top:8px;min-height:80px;resize:vertical;" data-i18n-ph="admin_notice_content" placeholder="내용"></textarea>
+        <label class="small fw-bold mt-2 d-block" data-i18n="label_store">대상 매장</label>
+        <div class="notice-select-wrap">
+          <div id="admin-notice-stores-trigger" class="notice-select-trigger" onclick="toggleNoticeList('stores')"><span id="admin-notice-stores-text">선택...</span><span class="notice-select-arrow">▼</span></div>
+          <div id="admin-notice-stores-box" class="notice-select-dropdown border rounded p-2" style="display:none;max-height:160px;overflow-y:auto;background:#fff;"></div>
+        </div>
+        <label class="small fw-bold mt-2 d-block" data-i18n="label_dept">대상 부서</label>
+        <div class="notice-select-wrap">
+          <div id="admin-notice-roles-trigger" class="notice-select-trigger" onclick="toggleNoticeList('roles')"><span id="admin-notice-roles-text">선택...</span><span class="notice-select-arrow">▼</span></div>
+          <div id="admin-notice-roles-box" class="notice-select-dropdown border rounded p-2" style="display:none;max-height:160px;overflow-y:auto;background:#fff;"></div>
+        </div>
+        <button type="button" onclick="mobileSendNotice()" class="login-btn" style="margin-top:12px;padding:8px 14px;background:#E65100;" data-i18n="notice_send_btn">공지 발송</button>
+      </div>
+      <div class="card-box" style="margin-bottom:16px;">
+        <div style="font-size:18px;font-weight:700;color:#5c6bc0;padding-bottom:8px;border-bottom:2px solid #5c6bc0;margin-bottom:12px;" data-i18n="m_admin_leave">연차 승인</div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <input type="date" id="admin-leave-start" class="login-input" style="flex:1;min-width:100px;">
+          <input type="date" id="admin-leave-end" class="login-input" style="flex:1;min-width:100px;">
+          <select id="admin-leave-store" class="login-input" style="flex:1;min-width:100px;"></select>
+          <select id="admin-leave-status" class="login-input" style="width:90px;"><option value="대기" data-i18n="leave_wait">대기</option><option value="All" data-i18n="label_all">전체</option></select>
+          <button type="button" onclick="mobileLoadLeaveList()" class="login-btn" style="padding:8px 14px;background:#5c6bc0;" data-i18n="btn_query">조회</button>
+        </div>
+        <div id="admin-leave-list" style="margin-top:12px;max-height:240px;overflow-y:auto;font-size:13px;"></div>
+      </div>
+      <div class="card-box" style="margin-bottom:16px;">
+        <div style="font-size:18px;font-weight:700;color:#2e7d32;padding-bottom:8px;border-bottom:2px solid #2e7d32;margin-bottom:12px;" data-i18n="m_admin_att">근태 승인</div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+          <input type="date" id="admin-att-start" class="login-input" style="flex:1;min-width:100px;">
+          <input type="date" id="admin-att-end" class="login-input" style="flex:1;min-width:100px;">
+          <select id="admin-att-store" class="login-input" style="min-width:100px;"></select>
+          <button type="button" onclick="mobileLoadAttendancePending()" class="login-btn" style="padding:8px 14px;background:#2e7d32;" data-i18n="btn_query">조회</button>
+        </div>
+        <div id="admin-att-list" style="margin-top:12px;max-height:240px;overflow-y:auto;font-size:13px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pwa-add-banner">
+    <div class="pwa-icon"><img src="/img/logo.png" alt="로고" style="width:40px;height:40px;object-fit:contain;"></div>
+    <div class="pwa-text">
+      <strong data-i18n="pwa_add_title">홈 화면에 추가</strong>
+      <span data-i18n="pwa_add_desc">자주 쓰시려면 홈 화면에 추가해 두세요!</span>
+    </div>
+    <button type="button" class="pwa-btn" onclick="doPwaAddOrGuide();" data-i18n="pwa_add_btn">추가하기</button>
+    <button type="button" class="pwa-close" onclick="closePwaBanner();dismissPwaPrompt();" aria-label="닫기">×</button>
+  </div>
+
+  <div id="itemImageModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:2000;align-items:center;justify-content:center;" onclick="closeItemImage()">
+    <div style="max-width:95%;max-height:90%;position:relative;" onclick="event.stopPropagation()">
+      <img id="itemImageImg" src="" alt="" style="max-width:100%;max-height:85vh;border-radius:8px;display:block;">
+      <div id="itemImageCaption" style="color:#fff;text-align:center;margin-top:8px;font-size:14px;"></div>
+      <button type="button" onclick="closeItemImage()" style="position:absolute;top:-36px;right:0;background:rgba(255,255,255,0.9);border:none;border-radius:50%;width:32px;height:32px;font-size:20px;line-height:1;cursor:pointer;color:#333;">×</button>
+    </div>
+  </div>
+  <div id="noticeModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;align-items:center;justify-content:center;">
+    <div style="background:white;width:90%;max-width:400px;border-radius:15px;padding:20px;box-shadow:0 5px 15px rgba(0,0,0,0.3);">
+      <div id="modalDate" style="font-size:12px;color:#888;margin-bottom:5px;"></div>
+      <div id="modalTitle" style="font-size:18px;font-weight:bold;color:#E65100;margin-bottom:15px;border-bottom:2px solid #eee;padding-bottom:10px;"></div>
+      <div id="modalContent" style="font-size:14px;color:#333;line-height:1.6;min-height:80px;white-space:pre-wrap;margin-bottom:20px;"></div>
+      <div id="modalAttachments" style="margin-bottom:15px;"></div>
+      <input type="hidden" id="modalNoticeId">
+      <div style="display:flex;gap:10px;">
+        <button type="button" onclick="actNotice('다음에')" style="flex:1;padding:12px;border:1px solid #ddd;background:white;color:#555;border-radius:8px;font-weight:bold;" data-i18n="m_modal_later">다음에</button>
+        <button type="button" onclick="actNotice('확인')" style="flex:2;padding:12px;border:none;background:#E65100;color:white;border-radius:8px;font-weight:bold;" data-i18n="m_modal_confirm">확인함</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/public/api-adapter.js"></script>
+  <script>
+    var loginData = {}, loggedInStore = '', loggedInUser = '', loggedInRole = '', myNotices = [];
+    var allItems = [], currentStock = {}, cart = [], usageCart = [], selectedItem = null, selectedUsageItem = null;
+    var currentLang = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cm_lang')) || 'ko';
+
+    var I18N = {
+      ko: { login_title: "CM ERP SYSTEM", m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", m_logout: "로그아웃", m_tab_home: "홈", m_tab_order: "주문", m_tab_stock: "사용", m_tab_hr: "인사", m_tab_schedule: "시간표", m_tab_visit: "방문", m_tab_admin: "관리", m_welcome: "환영합니다!", m_welcome_sub: "오늘도 안전하고 즐겁게 근무하세요!", m_notice_board: "공지사항", m_loading_notices: "공지 불러오는 중...", m_no_notices: "공지사항이 없습니다.", m_ord_new: "신규 주문", m_ord_hist: "주문 내역", m_loading_items: "불러오는 중...", m_add_cart: "담기", m_no_items: "등록된 품목이 없습니다.", m_item: "품목", m_price: "단가", m_qty: "수량", m_sub: "소계", m_subtotal: "소계:", m_vat: "VAT (7%):", m_total: "합계:", m_place_order: "주문하기", m_search_hist: "내역 조회", m_use_new: "사용 입력", m_use_hist: "내역", m_add_usage: "사용 추가", m_items_used: "사용 품목", m_confirm_usage: "사용 확정", m_search_period: "기간 조회", m_user: "사용자", m_att_in: "☀️ 출근", m_att_out: "🌙 퇴근", m_break: "☕ 휴식", m_resume: "▶ 재개", m_today_record: "📅 오늘 기록", m_att_help: "위 버튼을 눌러 출퇴근을 기록하세요.", m_leave_stats: "📊 휴가 현황 (올해)", m_used_ann: "연차 사용", m_used_sick: "병가 사용", m_remain: "잔여", m_leave_req: "🏖️ 휴가 신청", m_annual: "연차", m_half: "반차", m_sick: "병가", m_reason_ph: "사유", m_submit_req: "신청하기", m_req_hist: "📑 신청 내역", m_visit_title: "매장 방문", m_visit_sub: "현장 지원 및 교육 활동을 기록하세요.", m_visit_store: "방문 매장 선택", m_visit_purpose: "방문 목적", m_visit_start: "방문 시작", m_visit_end: "방문 종료", m_schedule_store: "매장", m_schedule_store_all: "전체 매장", m_schedule_week: "주간 시간표", m_schedule_btn_search: "검색", m_schedule_today: "당일 실시간 근무", m_schedule_today_hint: "날짜·구역 선택 후 검색", m_schedule_load_hint: "검색 버튼을 눌러 조회하세요", m_schedule_no_data: "데이터 없음", m_schedule_today_empty: "오늘 기록 없음", m_schedule_mon: "월", m_schedule_tue: "화", m_schedule_wed: "수", m_schedule_thu: "목", m_schedule_fri: "금", m_schedule_sat: "토", m_schedule_sun: "일", m_schedule_name: "이름", m_schedule_off: "휴무", m_schedule_working_day: "근무일", m_schedule_break_time: "휴식", m_schedule_daily_staff: "일일 근무 인원", m_schedule_my_punch: "내 출퇴근 기록", m_schedule_my_punch_hint: "월 선택 후 검색", m_schedule_normal_days: "정상 근무 일수", m_schedule_ot_hours: "O.T 시간", m_schedule_ot_days: "O.T 일수", m_schedule_late_min: "지각 시간", m_schedule_late_days: "지각 일수", m_schedule_label_area: "구역", m_schedule_label_period: "기간", m_schedule_label_date: "날짜", m_schedule_area_all: "전체", m_schedule_area_service: "서비스", m_schedule_area_kitchen: "주방", m_schedule_area_office: "오피스", notice_filter_all: "전체", notice_filter_unread: "미확인", notice_filter_read: "수신확인", m_app_title: "충만치킨", pw_change_title: "🔐 비밀번호 변경", pw_btn_change: "변경", pw_current: "현재 비밀번호", pw_new: "새 비밀번호", pw_new_confirm: "새 비밀번호 확인", pw_alert_current: "현재 비밀번호를 입력하세요.", pw_alert_new: "새 비밀번호를 입력하세요.", pw_alert_mismatch: "새 비밀번호가 일치하지 않습니다.", pw_success: "비밀번호가 변경되었습니다. 다시 로그인해 주세요.", pw_error_fail: "변경 실패", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류", err_select_item: "품목을 먼저 선택하세요.", err_select_store_visit: "매장을 선택해주세요.", err_gps: "GPS 권한을 확인해 주세요.", err_select_date: "날짜를 선택하세요.", notice_no_title: "(제목 없음)", msg_order_done: "주문 완료", msg_saved: "저장됨", msg_send_done: "발송됨", msg_processed: "처리됨", hist_no_data: "내역 없음", hist_fail: "조회 실패", admin_leave_wait_none: "대기 건 없음", admin_att_wait_none: "승인대기 건 없음", admin_btn_approve: "승인", admin_btn_reject: "반려", admin_notice_subject: "제목", admin_notice_content: "내용", admin_notice_subject_ph: "제목을 입력하세요.", label_store: "매장", label_all: "전체", label_dept: "대상 부서", btn_login: "로그인", m_delete: "삭제", m_time: "시간", m_type: "구분", m_status: "상태", m_date: "날짜", m_leave_type: "유형", m_date_item: "날짜/품목", m_admin_notice: "공지사항 발송", m_admin_leave: "연차 승인", m_admin_att: "근태 승인", notice_send_btn: "공지 발송", btn_query: "조회", leave_wait: "대기", m_today_visit_log: "오늘 방문 기록", m_duration: "체류", m_purpose_inspect: "🔍 정기 점검", m_purpose_training: "👨‍🏫 직원 교육", m_purpose_urgent: "🚨 긴급 지원", m_purpose_meeting: "🤝 매장 미팅", m_purpose_etc: "기타", m_usage_confirm: "재고를 반영할까요?", m_loading: "조회 중...", att_status_pending: "승인대기", att_status_done: "완료", m_visit_supporting: "지원 중...", m_stock_label: "재고", m_tax_free: "면세", m_order_prefix: "주문", m_delivery_prefix: "배송", m_min: "분", leave_status_approved: "승인", leave_status_rejected: "반려", att_confirm_in: "출근 기록할까요?", att_confirm_out: "퇴근 기록할까요?", att_confirm_break: "휴식 시작 기록할까요?", att_confirm_resume: "재개 기록할까요?", att_gps_fail_confirm: "위치를 확인할 수 없습니다. 위치 없이 기록하시겠습니까?", date_format_ymd: "날짜 (년-월-일)", notice_dept_multi_hint: "Ctrl+클릭으로 여러 개 선택", m_modal_later: "다음에", m_modal_confirm: "확인함", label_from: "발신", label_admin: "관리자", notice_attach: "첨부파일", pwa_add_title: "홈 화면에 추가", pwa_add_desc: "자주 쓰시려면 홈 화면에 추가해 두세요!", pwa_add_btn: "추가하기", m_force_visit_start: "강제 방문", m_force_visit_end: "강제 종료", pwa_ios_hint: "Safari에서 공유(↑) 버튼 → 홈 화면에 추가를 선택하세요.", pwa_manual_hint: "브라우저 메뉴에서 홈 화면에 추가 또는 앱 설치를 선택하세요." },
+      en: { login_title: "CM ERP SYSTEM", m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", m_logout: "Logout", m_tab_home: "Home", m_tab_order: "Order", m_tab_stock: "Usage", m_tab_hr: "HR", m_tab_schedule: "Schedule", m_tab_visit: "Visit", m_tab_admin: "Admin", m_welcome: "Welcome!", m_welcome_sub: "Work safe and enjoy your day!", m_notice_board: "Notice Board", m_loading_notices: "Loading...", m_no_notices: "No notices.", m_ord_new: "New Order", m_ord_hist: "Order History", m_loading_items: "Loading...", m_add_cart: "Add to Cart", m_no_items: "No items registered.", m_item: "Item", m_price: "Price", m_qty: "Qty", m_sub: "Sub", m_subtotal: "Subtotal:", m_vat: "VAT (7%):", m_total: "Total:", m_place_order: "Place Order", m_search_hist: "Search History", m_use_new: "New Usage", m_use_hist: "History", m_add_usage: "Add Usage", m_items_used: "Items Used", m_confirm_usage: "Confirm Usage", m_search_period: "Search Period", m_user: "User", m_att_in: "☀️ IN", m_att_out: "🌙 OUT", m_break: "☕ Break", m_resume: "▶ Resume", m_today_record: "📅 Today's Record", m_att_help: "Tap buttons to record attendance.", m_leave_stats: "📊 My Vacation Stats", m_used_ann: "Used Annual", m_used_sick: "Used Sick", m_remain: "Remaining", m_leave_req: "🏖️ Leave Request", m_annual: "Annual Leave", m_half: "Half-Day", m_sick: "Sick Leave", m_reason_ph: "Reason", m_submit_req: "Submit Request", m_req_hist: "📑 Request History", m_visit_title: "Store Visit", m_visit_sub: "Record support and training.", m_visit_store: "Select Store", m_visit_purpose: "Purpose", m_visit_start: "Check-in", m_visit_end: "Check-out", m_schedule_store: "Store", m_schedule_store_all: "All Stores", m_schedule_week: "Weekly Schedule", m_schedule_btn_search: "Search", m_schedule_today: "Today's Attendance", m_schedule_today_hint: "Select date and area", m_schedule_load_hint: "Tap Search to load", m_schedule_no_data: "No data", m_schedule_today_empty: "No records today", m_schedule_mon: "Mon", m_schedule_tue: "Tue", m_schedule_wed: "Wed", m_schedule_thu: "Thu", m_schedule_fri: "Fri", m_schedule_sat: "Sat", m_schedule_sun: "Sun", m_schedule_name: "Name", m_schedule_off: "OFF", m_schedule_working_day: "Working day", m_schedule_break_time: "Break", m_schedule_daily_staff: "Daily Staff", m_schedule_my_punch: "My Punch Record", m_schedule_my_punch_hint: "Select month then search", m_schedule_normal_days: "Normal days", m_schedule_ot_hours: "O.T hours", m_schedule_ot_days: "O.T days", m_schedule_late_min: "Late (min)", m_schedule_late_days: "Late days", m_schedule_label_area: "Area", m_schedule_label_period: "Period", m_schedule_label_date: "Date", m_schedule_area_all: "All", m_schedule_area_service: "Service", m_schedule_area_kitchen: "Kitchen", m_schedule_area_office: "Office", notice_filter_all: "All", notice_filter_unread: "Unread", notice_filter_read: "Read", m_app_title: "Choongman Chicken", pw_change_title: "🔐 Change Password", pw_btn_change: "Change", pw_current: "Current password", pw_new: "New password", pw_new_confirm: "Confirm new password", pw_alert_current: "Please enter current password.", pw_alert_new: "Please enter new password.", pw_alert_mismatch: "New passwords do not match.", pw_success: "Password changed. Please log in again.", pw_error_fail: "Change failed", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error", err_select_item: "Please select an item first.", err_select_store_visit: "Please select a store.", err_gps: "Please allow GPS access.", err_select_date: "Please select a date.", notice_no_title: "(No title)", msg_order_done: "Order completed", msg_saved: "Saved", msg_send_done: "Sent", msg_processed: "Processed", hist_no_data: "No history", hist_fail: "Load failed", admin_leave_wait_none: "No pending leave", admin_att_wait_none: "No pending attendance", admin_btn_approve: "Approve", admin_btn_reject: "Reject", admin_notice_subject: "Subject", admin_notice_content: "Content", admin_notice_subject_ph: "Please enter subject.", label_store: "Store", label_all: "All", label_dept: "Target Dept", btn_login: "Login", m_delete: "Delete", m_time: "Time", m_type: "Type", m_status: "Status", m_date: "Date", m_leave_type: "Type", m_date_item: "Date/Item", m_admin_notice: "Send Notice", m_admin_leave: "Leave Approval", m_admin_att: "Attendance Approval", notice_send_btn: "Send Notice", btn_query: "Query", leave_wait: "Pending", m_today_visit_log: "Today's Visit Log", m_duration: "Duration", m_purpose_inspect: "🔍 Inspection", m_purpose_training: "👨‍🏫 Training", m_purpose_urgent: "🚨 Urgent", m_purpose_meeting: "🤝 Meeting", m_purpose_etc: "ETC", m_usage_confirm: "Confirm usage?", m_loading: "Loading...", att_status_pending: "Pending", att_status_done: "Done", m_visit_supporting: "Supporting...", m_stock_label: "Stock", m_tax_free: "Tax-free", m_order_prefix: "Order", m_delivery_prefix: "Delivery", m_min: " min", leave_status_approved: "Approved", leave_status_rejected: "Rejected", att_confirm_in: "Record check-in?", att_confirm_out: "Record check-out?", att_confirm_break: "Record break start?", att_confirm_resume: "Record resume?", att_gps_fail_confirm: "Location could not be verified. Record without location?", date_format_ymd: "Date (YYYY-MM-DD)", notice_dept_multi_hint: "Ctrl+click to select multiple", m_modal_later: "Later", m_modal_confirm: "Confirm", label_from: "From", label_admin: "Administrator", notice_attach: "Attachments", pwa_add_title: "Add to Home Screen", pwa_add_desc: "Add for quick access!", pwa_add_btn: "Add" },
+      th: { login_title: "CM ERP SYSTEM", m_select_store: "เลือกสาขา", m_select_name: "เลือกชื่อ", m_pin_ph: "รหัสผ่าน (PIN)", m_logout: "ออกจากระบบ", m_tab_home: "หน้าแรก", m_tab_order: "ออเดอร์", m_tab_stock: "การใช้งาน", m_tab_hr: "บุคลากร", m_tab_schedule: "ตารางเวลา", m_tab_visit: "เยี่ยมสาขา", m_tab_admin: "แอดมิน", m_welcome: "ยินดีต้อนรับ!", m_welcome_sub: "ทำงานอย่างปลอดภัยและสนุก!", m_notice_board: "ประกาศ", m_loading_notices: "กำลังโหลด...", m_no_notices: "ไม่มีประกาศ", m_ord_new: "ออเดอร์ใหม่", m_ord_hist: "ประวัติ", m_loading_items: "กำลังโหลด...", m_add_cart: "เพิ่มลงตะกร้า", m_no_items: "ไม่มีสินค้าลงทะเบียน", m_item: "รายการ", m_price: "ราคา", m_qty: "จำนวน", m_sub: "ยอด", m_subtotal: "ยอดรวม:", m_vat: "VAT (7%):", m_total: "รวม:", m_place_order: "สั่งซื้อ", m_search_hist: "ค้นหาประวัติ", m_use_new: "ใช้ใหม่", m_use_hist: "ประวัติ", m_add_usage: "เพิ่มการใช้งาน", m_items_used: "ที่ใช้แล้ว", m_confirm_usage: "ยืนยัน", m_search_period: "ค้นหาช่วง", m_user: "ผู้ใช้", m_att_in: "☀️ เข้างาน", m_att_out: "🌙 ออกงาน", m_break: "☕ พัก", m_resume: "▶ กลับทำงาน", m_today_record: "📅 บันทึกวันนี้", m_att_help: "กดปุ่มเพื่อบันทึกการเข้างาน", m_leave_stats: "📊 สถิติลางาน (ปีนี้)", m_used_ann: "ใช้ลาประจำปี", m_used_sick: "ใช้ลาป่วย", m_remain: "เหลือ", m_leave_req: "🏖️ ขอลางาน", m_annual: "ลาประจำปี", m_half: "ล half-day", m_sick: "ลาป่วย", m_reason_ph: "เหตุผล", m_submit_req: "ส่งคำขอ", m_req_hist: "📑 ประวัติคำขอ", m_visit_title: "เยี่ยมสาขา", m_visit_sub: "บันทึกการสนับสนุนและฝึกอบรม", m_visit_store: "เลือกสาขา", m_visit_purpose: "วัตถุประสงค์", m_visit_start: "เช็คอิน", m_visit_end: "เช็คเอาท์", m_schedule_store: "สาขา", m_schedule_store_all: "ทุกสาขา", m_schedule_week: "ตารางสัปดาห์", m_schedule_btn_search: "ค้นหา", m_schedule_today: "การมาวันนี้", m_schedule_today_hint: "เข้า/ออกวันนี้", m_schedule_load_hint: "กดค้นหาเพื่อโหลด", m_schedule_no_data: "ไม่มีข้อมูล", m_schedule_today_empty: "ไม่มีบันทึกวันนี้", m_schedule_mon: "จ.", m_schedule_tue: "อ.", m_schedule_wed: "พ.", m_schedule_thu: "พฤ.", m_schedule_fri: "ศ.", m_schedule_sat: "ส.", m_schedule_sun: "อา.", m_schedule_name: "ชื่อ", m_schedule_off: "หยุด", m_schedule_working_day: "วันทำงาน", m_schedule_break_time: "พัก", m_schedule_daily_staff: "จำนวนพนักงานต่อวัน", m_schedule_my_punch: "บันทึกเข้า-ออกของฉัน", m_schedule_my_punch_hint: "สัปดาห์นี้", m_schedule_normal_days: "วันทำงานปกติ", m_schedule_ot_hours: "โอที ชม.", m_schedule_ot_days: "วันโอที", m_schedule_late_min: "มาสาย (นาที)", m_schedule_late_days: "วันมาสาย", m_schedule_label_area: "โซน", m_schedule_label_period: "ช่วง", m_schedule_label_date: "วันที่", m_schedule_area_all: "ทั้งหมด", m_schedule_area_service: "เซอร์วิส", m_schedule_area_kitchen: "ครัว", m_schedule_area_office: "ออฟฟิศ", notice_filter_all: "ทั้งหมด", notice_filter_unread: "ยังไม่อ่าน", notice_filter_read: "อ่านแล้ว", m_app_title: "Choongman Chicken", pw_change_title: "🔐 เปลี่ยนรหัสผ่าน", pw_btn_change: "เปลี่ยน", pw_current: "รหัสปัจจุบัน", pw_new: "รหัสใหม่", pw_new_confirm: "ยืนยันรหัสใหม่", pw_alert_current: "กรุณาป้อนรหัสปัจจุบัน", pw_alert_new: "กรุณาป้อนรหัสใหม่", pw_alert_mismatch: "รหัสใหม่ไม่ตรงกัน", pw_success: "เปลี่ยนรหัสแล้ว กรุณาเข้าสู่ระบบใหม่", pw_error_fail: "เปลี่ยนไม่สำเร็จ", err_select_store_name: "เลือกสาขาและชื่อ", err_login_fail: "เข้าสู่ระบบไม่สำเร็จ: ตรวจสอบ PIN", err_server: "ข้อผิดพลาดเซิร์ฟเวอร์", err_select_item: "เลือกรายการก่อน!", err_select_store_visit: "เลือกสาขา", err_gps: "อนุญาต GPS", err_select_date: "เลือกวันที่", notice_no_title: "(ไม่มีหัวข้อ)", msg_order_done: "สั่งซื้อเสร็จ", msg_saved: "บันทึกแล้ว", msg_send_done: "ส่งแล้ว", msg_processed: "ดำเนินการแล้ว", hist_no_data: "ไม่มีประวัติ", hist_fail: "โหลดไม่สำเร็จ", admin_leave_wait_none: "ไม่มีการรอ", admin_att_wait_none: "ไม่มีการรออนุมัติ", admin_btn_approve: "อนุมัติ", admin_btn_reject: "ปฏิเสธ", admin_notice_subject: "หัวข้อ", admin_notice_content: "เนื้อหา", admin_notice_subject_ph: "กรุณาใส่หัวข้อ", label_store: "สาขา", label_all: "ทั้งหมด", label_dept: "ฝ่ายเป้าหมาย", btn_login: "เข้าสู่ระบบ", m_delete: "ลบ", m_time: "เวลา", m_type: "ประเภท", m_status: "สถานะ", m_date: "วันที่", m_leave_type: "ประเภท", m_date_item: "วันที่/รายการ", m_admin_notice: "ส่งประกาศ", m_admin_leave: "อนุมัติลางาน", m_admin_att: "อนุมัติเข้างาน", notice_send_btn: "ส่งประกาศ", btn_query: "ค้นหา", leave_wait: "รอ", m_today_visit_log: "บันทึกเยี่ยมวันนี้", m_duration: "ระยะเวลา", m_purpose_inspect: "🔍 ตรวจสอบ", m_purpose_training: "👨‍🏫 ฝึกอบรม", m_purpose_urgent: "🚨 ด่วน", m_purpose_meeting: "🤝 ประชุม", m_purpose_etc: "อื่นๆ", m_usage_confirm: "ยืนยันการใช้งาน?", m_loading: "กำลังโหลด...", att_status_pending: "รออนุมัติ", att_status_done: "เสร็จสิ้น", m_visit_supporting: "กำลังสนับสนุน...", m_stock_label: "สต็อก", m_tax_free: "ยกเว้นภาษี", m_order_prefix: "สั่งซื้อ", m_delivery_prefix: "จัดส่ง", m_min: " นาที", leave_status_approved: "อนุมัติ", leave_status_rejected: "ปฏิเสธ", att_confirm_in: "บันทึกเข้างาน?", att_confirm_out: "บันทึกออกงาน?", att_confirm_break: "บันทึกเริ่มพัก?", att_confirm_resume: "บันทึกกลับทำงาน?", att_gps_fail_confirm: "ยืนยันตำแหน่งไม่ได้ บันทึกโดยไม่มีตำแหน่ง?", date_format_ymd: "วันที่ (ปี-เดือน-วัน)", notice_dept_multi_hint: "Ctrl+คลิกเพื่อเลือกหลายรายการ", m_modal_later: "ภายหลัง", m_modal_confirm: "ยืนยัน", label_from: "จาก", label_admin: "ผู้ดูแลระบบ", notice_attach: "ไฟล์แนบ", pwa_add_title: "เพิ่มไปที่หน้าหลัก", pwa_add_desc: "เพิ่มเพื่อเข้าถึงได้เร็ว!", pwa_add_btn: "เพิ่ม" },
+      mm: { login_title: "CM ERP SYSTEM", m_select_store: "ဆိုင်ရွေးပါ", m_select_name: "အမည်ရွေးပါ", m_pin_ph: "လျှို့ဝှက်နံပါတ် (PIN)", m_logout: "ထွက်မည်", m_tab_home: "ပင်မ", m_tab_order: "အော်ဒါ", m_tab_stock: "အသုံး", m_tab_hr: "အရပ်", m_tab_schedule: "အချိန်ဇယား", m_tab_visit: "သွားရောက်", m_tab_admin: "အက်ဒ်မင်", m_welcome: "ကြိုဆိုပါသည်!", m_welcome_sub: "ဘေးကင်းစွာအလုပ်လုပ်ပါ!", m_notice_board: "ကြေညာချက်", m_loading_notices: "ချိတ်ဆောင်နေသည်...", m_no_notices: "ကြေညာချက်မရှိ", m_ord_new: "အော်ဒါအသစ်", m_ord_hist: "မှတ်တမ်း", m_loading_items: "ချိတ်ဆောင်နေသည်...", m_add_cart: "ခြင်းတောင်းထည့်မည်", m_no_items: "မှတ်ပုံတင်ပစ္စည်းမရှိပါ", m_item: "ပစ္စည်း", m_price: "ဈေးနှုန်း", m_qty: "အရေအတွက်", m_sub: "ပေါင်း", m_subtotal: "စုစုပေါင်း:", m_vat: "VAT (7%):", m_total: "စုစုပေါင်း:", m_place_order: "အော်ဒါမှာမည်", m_search_hist: "မှတ်တမ်းရှာမည်", m_use_new: "အသုံးအသစ်", m_use_hist: "မှတ်တမ်း", m_add_usage: "အသုံးထည့်မည်", m_items_used: "သုံးပြီး", m_confirm_usage: "အတည်ပြုမည်", m_search_period: "ကာလရှာမည်", m_user: "အသုံးပြုသူ", m_att_in: "☀️ ဝင်ရောက်", m_att_out: "🌙 ထွက်", m_break: "☕ နားမည်", m_resume: "▶ ပြန်စမည်", m_today_record: "📅 ယနေ့မှတ်တမ်း", m_att_help: "ခလုတ်နှိပ်ပြီးမှတ်တမ်းတင်ပါ", m_leave_stats: "📊 ခွင့်စာရင်း (ဤနှစ်)", m_used_ann: "ခွင့်နှစ်သုံး", m_used_sick: "အပျော့ခွင့်သုံး", m_remain: "ကျန်", m_leave_req: "🏖️ ခွင့်တောင်းမည်", m_annual: "နှစ်စဉ်ခွင့်", m_half: "တစ်ဝက်ခွင့်", m_sick: "အပျော့ခွင့်", m_reason_ph: "အကြောင်းပြချက်", m_submit_req: "တင်မည်", m_req_hist: "📑 တောင်းခံမှတ်တမ်း", m_visit_title: "ဆိုင်သွားခြင်း", m_visit_sub: "ပံ့ပိုးမှုမှတ်တမ်း", m_visit_store: "ဆိုင်ရွေးပါ", m_visit_purpose: "ရည်ရွယ်ချက်", m_visit_start: "စတင်မည်", m_visit_end: "ပြီးဆုံးမည်", m_schedule_store: "ဆိုင်", m_schedule_store_all: "ဆိုင်အားလုံး", m_schedule_week: "သီတင်းပတ်ဇယား", m_schedule_btn_search: "ရှာမည်", m_schedule_today: "ယနေ့လာရောက်မှု", m_schedule_today_hint: "ယနေ့ဝင်/ထွက်", m_schedule_load_hint: "ရှာမှတို့ကိုနှိပ်ပါ", m_schedule_no_data: "အချက်အလက်မရှိ", m_schedule_today_empty: "ယနေ့မှတ်တမ်းမရှိ", m_schedule_mon: "တနင်္လာ", m_schedule_tue: "အင်္ဂါ", m_schedule_wed: "ဗုဒ္ဓဟူး", m_schedule_thu: "ကြာသပတေး", m_schedule_fri: "သောကြာ", m_schedule_sat: "စနေ", m_schedule_sun: "တနင်္ဂနွေ", m_schedule_name: "အမည်", m_schedule_off: "ပိတ်", m_schedule_working_day: "အလုပ်ရက်", m_schedule_break_time: "နားချိန်", m_schedule_daily_staff: "နေ့စဉ်ဝန်ထမ်းအရေအတွက်", m_schedule_my_punch: "ကျွန်ုပ်မှတ်တမ်း", m_schedule_my_punch_hint: "ဤသီတင်းပတ်", m_schedule_normal_days: "ပုံမှန်အလုပ်ရက်", m_schedule_ot_hours: "OT နာရီ", m_schedule_ot_days: "OT ရက်", m_schedule_late_min: "နောက်ကျချိန်", m_schedule_late_days: "နောက်ကျသည့်ရက်", m_schedule_label_area: "ဧရိယာ", m_schedule_label_period: "ကာလ", m_schedule_label_date: "ရက်စွဲ", m_schedule_area_all: "အားလုံး", m_schedule_area_service: "ဝန်ဆောင်မှု", m_schedule_area_kitchen: "မီးဖိုချောင်", m_schedule_area_office: "ပ္ပါဖီး", notice_filter_all: "အားလုံး", notice_filter_unread: "မဖတ်ရသေး", notice_filter_read: "ဖတ်ပြီး", m_app_title: "Choongman Chicken", pw_change_title: "🔐 လျှို့ဝှက်နံပါတ်ပြောင်းမည်", pw_btn_change: "ပြောင်းမည်", pw_current: "လက်ရှိလျှို့ဝှက်နံပါတ်", pw_new: "လျှို့ဝှက်နံပါတ်အသစ်", pw_new_confirm: "အသစ်ထပ်ရိုက်ပါ", pw_alert_current: "လက်ရှိလျှို့ဝှက်နံပါတ်ရိုက်ပါ။", pw_alert_new: "လျှို့ဝှက်နံပါတ်အသစ်ရိုက်ပါ။", pw_alert_mismatch: "အသစ်နှစ်ခုမကိုက်ပါ။", pw_success: "ပြောင်းပြီးပါပြီ။ ပြန်ဝင်ပါ။", pw_error_fail: "ပြောင်းမအောင်မြင်ပါ", err_select_store_name: "ဆိုင်နှင့်အမည်ရွေးပါ", err_login_fail: "ဝင်မအောင်မြင်ပါ: PIN စစ်ပါ", err_server: "ဆာဗာ အမှား", err_select_item: "ပစ္စည်းရွေးပါ!", err_select_store_visit: "ဆိုင်ရွေးပါ", err_gps: "GPS ခွင့်ပြုပါ", err_select_date: "ရက်စွဲရွေးပါ", notice_no_title: "(ခေါင်းစဉ်မရှိ)", msg_order_done: "အော်ဒါပြီး", msg_saved: "သိမ်းပြီး", msg_send_done: "ပို့ပြီး", msg_processed: "ဆောင်ရွက်ပြီး", hist_no_data: "မှတ်တမ်းမရှိ", hist_fail: "ချိတ်ဆောင်မရ", admin_leave_wait_none: "ဆိုင်းငံ့မရှိ", admin_att_wait_none: "အတည်ပြုဆိုင်းငံ့မရှိ", admin_btn_approve: "အတည်ပြု", admin_btn_reject: "ငြင်းပယ်", admin_notice_subject: "ခေါင်းစဉ်", admin_notice_content: "အကြောင်းအရာ", admin_notice_subject_ph: "ခေါင်းစဉ်ရိုက်ပါ", label_store: "ဆိုင်", label_all: "အားလုံး", label_dept: "ဌာနပစ်မှတ်", btn_login: "ဝင်ရောက်မည်", m_delete: "ဖျက်မည်", m_time: "အချိန်", m_type: "အမျိုးအစား", m_status: "အခြေအနေ", m_date: "ရက်စွဲ", m_leave_type: "အမျိုးအစား", m_date_item: "ရက်စွဲ/ပစ္စည်း", m_admin_notice: "ကြေညာချက်ပို့မည်", m_admin_leave: "ခွင့်အတည်ပြု", m_admin_att: "အချိန်မှတ်တမ်းအတည်ပြု", notice_send_btn: "ကြေညာချက်ပို့မည်", btn_query: "ရှာမည်", leave_wait: "ဆိုင်းငံ့", m_today_visit_log: "ယနေ့သွားခြင်းမှတ်တမ်း", m_duration: "ကြာချိန်", m_purpose_inspect: "🔍 စစ်ဆေးခြင်း", m_purpose_training: "👨‍🏫 သင်တန်း", m_purpose_urgent: "🚨 အရေးပေါ်", m_purpose_meeting: "🤝 အစည်းအဝေး", m_purpose_etc: "အခြား", m_usage_confirm: "အသုံးအတည်ပြုမလား?", m_loading: "ချိတ်ဆောင်နေသည်...", att_status_pending: "ဆိုင်းငံ့အတည်ပြု", att_status_done: "ပြီးမြောက်", m_visit_supporting: "ပံ့ပိုးနေသည်...", m_stock_label: "ပစ္စည်းရရှိမှု", m_tax_free: "အခွန်ကင်းလွတ်", m_order_prefix: "အော်ဒါ", m_delivery_prefix: "ပို့ဆောင်", m_min: " မိနစ်", leave_status_approved: "အတည်ပြု", leave_status_rejected: "ငြင်းပယ်", att_confirm_in: "ဝင်ရောက်မှတ်တမ်းတင်မလား?", att_confirm_out: "ထွက်မှတ်တမ်းတင်မလား?", att_confirm_break: "နားချိန်စမှတ်တမ်းတင်မလား?", att_confirm_resume: "ပြန်စမှတ်တမ်းတင်မလား?", att_gps_fail_confirm: "တည်နေရာမအတည်ပြုနိုင်ပါ။ တည်နေရာမပါဘဲသိမ်းမလား?", date_format_ymd: "ရက်စွဲ (ခုနှစ်-လ-နေ့)", notice_dept_multi_hint: "အများရွေးရန် Ctrl+ကလစ်", m_modal_later: "နောက်မှ", m_modal_confirm: "အတည်ပြု", label_from: "မှ", label_admin: "အက်ဒ်မင်", notice_attach: "ပူးတွဲဖိုင်", pwa_add_title: "ပင်မစခရင်၌ထည့်ပါ", pwa_add_desc: "အသုံးများရန်ထည့်ထားပါ!", pwa_add_btn: "ထည့်မည်" },
+      la: { login_title: "CM ERP SYSTEM", m_select_store: "ເລືອກສາຂາ", m_select_name: "ເລືອກຊື່", m_pin_ph: "ລະຫັດ (PIN)", m_logout: "ອອກຈາກລະບົບ", m_tab_home: "ໜ້າຫຼັກ", m_tab_order: "ອໍເດີ", m_tab_stock: "ການໃຊ້", m_tab_hr: "ບຸກຄະລາກອນ", m_tab_schedule: "ຕາຕະລາງເວລາ", m_tab_visit: "ໄປສາຂາ", m_tab_admin: "ແອດມິນ", m_welcome: "ຍິນດີຕ້ອນຮັບ!", m_welcome_sub: "ເຮັດວຽກຢ່າງປອດໄພ!", m_notice_board: "ປະກາດ", m_loading_notices: "ກຳລັງໂຫຼດ...", m_no_notices: "ບໍ່ມີປະກາດ", m_ord_new: "ອໍເດີໃໝ່", m_ord_hist: "ປະຫວັດ", m_loading_items: "ກຳລັງໂຫຼດ...", m_add_cart: "ເພີ່ມໃສ່ກະຕ່າ", m_no_items: "ບໍ່ມີລາຍການລົງທະບຽນ", m_item: "ລາຍການ", m_price: "ລາຄາ", m_qty: "ຈຳນວນ", m_sub: "ຍ່ອຍ", m_subtotal: "ຍ່ອຍ:", m_vat: "VAT (7%):", m_total: "ລວມ:", m_place_order: "ສັ່ງຊື້", m_search_hist: "ຄົ້ນຫາປະຫວັດ", m_use_new: "ໃຊ້ໃໝ່", m_use_hist: "ປະຫວັດ", m_add_usage: "ເພີ່ມການໃຊ້", m_items_used: "ໃຊ້ແລ້ວ", m_confirm_usage: "ຢືນຢັນ", m_search_period: "ຄົ້ນຫາໄລຍະ", m_user: "ຜູ້ໃຊ້", m_att_in: "☀️ ເຂົ້າງານ", m_att_out: "🌙 ອອກງານ", m_break: "☕ ພັກ", m_resume: "▶ ກັບມາ", m_today_record: "📅 ບັນທຶກມື້ນີ້", m_att_help: "ກົດປຸ່ມເພື່ອບັນທຶກ", m_leave_stats: "📊 ສະຖິຕິລາພັກ (ປີນີ້)", m_used_ann: "ໃຊ້ລາປະຈຳປີ", m_used_sick: "ໃຊ້ລາປ່ວຍ", m_remain: "ເຫຼືອ", m_leave_req: "🏖️ ຂໍລາພັກ", m_annual: "ລາປະຈຳປີ", m_half: "ລາຄົວມື້", m_sick: "ລາປ່ວຍ", m_reason_ph: "ເຫດຜົນ", m_submit_req: "ສົ່ງຄຳຂໍ", m_req_hist: "📑 ປະຫວັດຄຳຂໍ", m_visit_title: "ໄປສາຂາ", m_visit_sub: "ບັນທຶກການຊ່ວຍເຫຼືອ", m_visit_store: "ເລືອກສາຂາ", m_visit_purpose: "ຈຸດປະສົງ", m_visit_start: "ເຂົ້າມາ", m_visit_end: "ອອກໄປ", m_schedule_store: "ສາຂາ", m_schedule_store_all: "ທຸກສາຂາ", m_schedule_week: "ຕາຕະລາງອາທິດ", m_schedule_btn_search: "ຄົ້ນຫາ", m_schedule_today: "ມາງານມື້ນີ້", m_schedule_today_hint: "ເຂົ້າ/ອອກມື້ນີ້", m_schedule_load_hint: "ກົດຄົ້ນຫາເພື່ອໂຫຼດ", m_schedule_no_data: "ບໍ່ມີຂໍ້ມູນ", m_schedule_today_empty: "ບໍ່ມີບັນທຶກມື້ນີ້", m_schedule_mon: "ຈັນ", m_schedule_tue: "ອັງຄານ", m_schedule_wed: "ພຸດ", m_schedule_thu: "ພະຫັດ", m_schedule_fri: "ສຸກ", m_schedule_sat: "ເສົາ", m_schedule_sun: "ອາທິດ", m_schedule_name: "ຊື່", m_schedule_off: "ພັກ", m_schedule_working_day: "ວັນເຮັດວຽກ", m_schedule_break_time: "ພັກ", m_schedule_daily_staff: "ຈຳນວນພະນັກງານຕໍ່ວັນ", m_schedule_my_punch: "ບັນທຶກເຂົ້າ-ອອກຂອງຂ້ອຍ", m_schedule_my_punch_hint: "ອາທິດນີ້", m_schedule_normal_days: "ວັນເຮັດວຽກປົກກະຕິ", m_schedule_ot_hours: "OT ຊົ່ວໂມງ", m_schedule_ot_days: "ວັນ OT", m_schedule_late_min: "ມາສາຍ (ນາທີ)", m_schedule_late_days: "ວັນມາສາຍ", m_schedule_label_area: "ເຂດ", m_schedule_label_period: "ໄລຍະ", m_schedule_label_date: "ວັນທີ", m_schedule_area_all: "ທັງໝົດ", m_schedule_area_service: "ບໍລິການ", m_schedule_area_kitchen: "ເຮືອນຄົວ", m_schedule_area_office: "ອຳນາດ", notice_filter_all: "ທັງໝົດ", notice_filter_unread: "ຍັງບໍ່ໄດ້ອ່ານ", notice_filter_read: "ອ່ານແລ້ວ", m_app_title: "Choongman Chicken", pw_change_title: "🔐 ປ່ຽນລະຫັດຜ່ານ", pw_btn_change: "ປ່ຽນ", pw_current: "ລະຫັດປັດຈຸບັນ", pw_new: "ລະຫັດໃໝ່", pw_new_confirm: "ຢືນຢັນລະຫັດໃໝ່", pw_alert_current: "ກະລຸນາປ້ອນລະຫັດປັດຈຸບັນ.", pw_alert_new: "ກະລຸນາປ້ອນລະຫັດໃໝ່.", pw_alert_mismatch: "ລະຫັດໃໝ່ບໍ່ກົງກັນ.", pw_success: "ປ່ຽນລະຫັດແລ້ວ. ກະລຸນາເຂົ້າສູ່ລະບົບໃໝ່.", pw_error_fail: "ປ່ຽນບໍ່ສຳເລັດ", err_select_store_name: "ເລືອກສາຂາແລະຊື່", err_login_fail: "ເຂົ້າບໍ່ສຳເລັດ: ກວດ PIN", err_server: "ຂໍ້ຜິດພາດເຊີບເວີ", err_select_item: "ເລືອກລາຍການກ່ອນ!", err_select_store_visit: "ເລືອກສາຂາ", err_gps: "ອະນຸຍາດ GPS", err_select_date: "ເລືອກວັນທີ", notice_no_title: "(ບໍ່ມີຫົວຂໍ້)", msg_order_done: "ສັ່ງສຳເລັດ", msg_saved: "ບັນທຶກແລ້ວ", msg_send_done: "ສົ່ງແລ້ວ", msg_processed: "ດຳເນີນການແລ້ວ", hist_no_data: "ບໍ່ມີປະຫວັດ", hist_fail: "ໂຫຼດບໍ່ສຳເລັດ", admin_leave_wait_none: "ບໍ່ມີລໍຖ້າ", admin_att_wait_none: "ບໍ່ມີລໍຖ້າອະນຸມັດ", admin_btn_approve: "ອະນຸມັດ", admin_btn_reject: "ປະຕິເສດ", admin_notice_subject: "ຫົວຂໍ້", admin_notice_content: "ເນື້ອໃນ", admin_notice_subject_ph: "ກະລຸນາໃສ່ຫົວຂໍ້", label_store: "ສາຂາ", label_all: "ທັງໝົດ", label_dept: "ພະແນກປະເທດ", btn_login: "ເຂົ້າສູ່ລະບົບ", m_delete: "ລຶບ", m_time: "ເວລາ", m_type: "ປະເພດ", m_status: "ສະຖານະ", m_date: "ວັນທີ", m_leave_type: "ປະເພດ", m_date_item: "ວັນທີ/ລາຍການ", m_admin_notice: "ສົ່ງປະກາດ", m_admin_leave: "ອະນຸມັດລາພັກ", m_admin_att: "ອະນຸມັດມາງານ", notice_send_btn: "ສົ່ງປະກາດ", btn_query: "ຄົ້ນຫາ", leave_wait: "ລໍຖ້າ", m_today_visit_log: "ບັນທຶກການໄປມື້ນີ້", m_duration: "ໄລຍະ", m_purpose_inspect: "🔍 ກວດສອບ", m_purpose_training: "👨‍🏫 ຝຶກອົບຮົມ", m_purpose_urgent: "🚨 ດ່ວນ", m_purpose_meeting: "🤝 ປະຊຸມ", m_purpose_etc: "ອື່ນໆ", m_usage_confirm: "ຢືນຢັນການໃຊ້?", m_loading: "ກຳລັງໂຫຼດ...", att_status_pending: "ລໍຖ້າອະນຸມັດ", att_status_done: "ສຳເລັດ", m_visit_supporting: "ກຳລັງຊ່ວຍເຫຼືອ...", m_stock_label: "ສິນຄ້າຄົງເຫຼືອ", m_tax_free: "ຍົກເວັ້ນພາສີ", m_order_prefix: "ອໍເດີ", m_delivery_prefix: "ສົ່ງ", m_min: " ນາທີ", leave_status_approved: "ອະນຸມັດ", leave_status_rejected: "ປະຕິເສດ", att_confirm_in: "ບັນທຶກເຂົ້າງານ?", att_confirm_out: "ບັນທຶກອອກງານ?", att_confirm_break: "ບັນທຶກເລີ່ມພັກ?", att_confirm_resume: "ບັນທຶກກັບມາ?", att_gps_fail_confirm: "ຢືນຢັນຕຳແໜ່ງບໍ່ໄດ້. ບັນທຶກໂດຍບໍ່ມີຕຳແໜ່ງ?", date_format_ymd: "ວັນທີ (ປີ-ເດືອນ-ວັນ)", notice_dept_multi_hint: "Ctrl+ກົດເພື່ອເລືອກຫຼາຍລາຍການ", m_modal_later: "ພາຍຫຼັງ", m_modal_confirm: "ຢືນຢັນ", label_from: "ຈາກ", label_admin: "ແອດມິນ", notice_attach: "ໄຟລໃສ່", pwa_add_title: "ເພີ່ມໃສ່ໜ້າຫຼັກ", pwa_add_desc: "ເພີ່ມເພື່ອເຂົ້າເບິ່ງງ່າຍ!", pwa_add_btn: "ເພີ່ມ" }
+    };
+    function t(key) { var L = I18N[currentLang]; return (L && L[key]) ? L[key] : (I18N.ko && I18N.ko[key]) ? I18N.ko[key] : key; }
+    function tv(val, map) { if (!val) return val; var key = map[String(val).trim()]; return key ? t(key) : val; }
+    function changeLanguage() { var sel = document.getElementById('langSelect'); if (sel) { currentLang = sel.value || 'ko'; try { sessionStorage.setItem('cm_lang', currentLang); } catch (e) {} applyTranslations(); } }
+    var visitTypeMap = { '정기점검':'m_purpose_inspect','직원교육':'m_purpose_training','긴급지원':'m_purpose_urgent','매장미팅':'m_purpose_meeting','기타':'m_purpose_etc','방문시작':'m_visit_start','방문종료':'m_visit_end','강제 방문시작':'m_force_visit_start','강제 방문종료':'m_force_visit_end' };
+    var leaveTypeMap = { '연차':'m_annual','반차':'m_half','병가':'m_sick' };
+    var leaveStatusMap = { '승인':'leave_status_approved','반려':'leave_status_rejected','대기':'leave_wait' };
+    function applyTranslations() {
+      try { document.documentElement.setAttribute('lang', currentLang === 'ko' ? 'ko' : currentLang === 'en' ? 'en' : currentLang); } catch (e) {}
+      var lang = (I18N[currentLang] || I18N.ko) || {};
+      var list = document.querySelectorAll ? document.querySelectorAll('[data-i18n]') : [];
+      for (var i = 0; i < list.length; i++) {
+        var el = list[i], key = el.getAttribute('data-i18n');
+        if (!key) continue;
+        var text = lang[key] != null ? lang[key] : (I18N.ko[key] || '');
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') { if (el.placeholder !== undefined) el.placeholder = text; } else el.textContent = text;
+      }
+      var phList = document.querySelectorAll ? document.querySelectorAll('[data-i18n-ph]') : [];
+      for (var j = 0; j < phList.length; j++) {
+        var phEl = phList[j], phKey = phEl.getAttribute('data-i18n-ph');
+        if (phKey && phEl.placeholder !== undefined) phEl.placeholder = lang[phKey] != null ? lang[phKey] : (I18N.ko[phKey] || '');
+      }
+      var s = document.getElementById('storeSelect'); if (s && s.options[0]) s.options[0].text = t('m_select_store') || '매장 선택...';
+      var n = document.getElementById('loginName'); if (n && n.options[0]) n.options[0].text = t('m_select_name') || '이름 선택...';
+      var pw = document.getElementById('mobile-pw-btn'); if (pw) pw.textContent = t('pw_btn_change');
+      var btnLogin = document.getElementById('btn-login'); if (btnLogin) btnLogin.textContent = t('btn_login');
+      var nf = document.getElementById('noticeStatusFilter'); if (nf) { for (var o = 0; o < nf.options.length; o++) { var opt = nf.options[o]; if (opt.getAttribute('data-i18n')) opt.text = t(opt.getAttribute('data-i18n')); } }
+      var leaveStatus = document.getElementById('admin-leave-status'); if (leaveStatus) { for (var o = 0; o < leaveStatus.options.length; o++) { var opt = leaveStatus.options[o]; if (opt.getAttribute('data-i18n')) opt.text = t(opt.getAttribute('data-i18n')); } }
+      var leaveType = document.getElementById('leaveType'); if (leaveType) { for (var o = 0; o < leaveType.options.length; o++) { var opt = leaveType.options[o]; if (opt.getAttribute('data-i18n')) opt.text = t(opt.getAttribute('data-i18n')); } }
+      var visitPurpose = document.getElementById('visit-purpose'); if (visitPurpose) { for (var o = 0; o < visitPurpose.options.length; o++) { var opt = visitPurpose.options[o]; if (opt.getAttribute('data-i18n')) opt.text = t(opt.getAttribute('data-i18n')); } }
+    }
+
+    function load(show) {
+      var el = document.getElementById('loading');
+      if (el) el.classList.toggle('show', !!show);
+    }
+
+    function fillStoreSelect() {
+      var s = document.getElementById('storeSelect');
+      if (!s || !loginData) return;
+      s.innerHTML = '<option value="">' + t('m_select_store') + '</option>';
+      for (var k in loginData) { if (loginData.hasOwnProperty(k)) s.add(new Option(k, k)); }
+    }
+    function onStoreChange() {
+      var store = document.getElementById('storeSelect').value;
+      var n = document.getElementById('loginName');
+      if (!n) return;
+      n.innerHTML = '<option value="">' + t('m_select_name') + '</option>';
+      if (loginData[store]) loginData[store].forEach(function(name) { n.add(new Option(name, name)); });
+    }
+
+    function switchTab(name) {
+      var views = ['home', 'order', 'stock', 'hr', 'schedule', 'store-visit', 'admin'];
+      views.forEach(function(x) {
+        var v = document.getElementById('view-' + x);
+        var t = document.getElementById('tab-' + x);
+        if (v) { v.classList.add('hidden'); v.classList.remove('view-panel'); }
+        if (t) t.classList.remove('active');
+      });
+      var v = document.getElementById('view-' + name);
+      var t = document.getElementById('tab-' + name);
+      if (v) { v.classList.remove('hidden'); v.classList.remove('view-panel'); requestAnimationFrame(function() { v.classList.add('view-panel'); }); }
+      if (t) t.classList.add('active');
+      if (name === 'hr') { updateAttendanceButtonState(); loadTodayAttendanceLog(); loadMyLeaveInfo(); startHrClock(); }
+      if (name === 'order') setOrderHistDatesToday();
+      if (name === 'stock') setUsageDatesToday();
+      if (name === 'home') { setNoticeDatesToday(); loadNotices(); }
+      if (name === 'schedule') { fillScheduleStoreSelect(); setScheduleDefaultDates(); fillScheduleMyMonthSelect(); var storeSel = document.getElementById('schedule-today-store'); if (storeSel && storeSel.options.length) storeSel.selectedIndex = 0; loadMobileMyAttendanceSummary(); }
+      if (name === 'store-visit') { fillVisitStoreSelect(); checkActiveVisitStatus(); loadTodayVisitLog(); }
+      if (name === 'admin') { fillAdminStoreSelects(); setAdminDatesToday(); loadAdminNoticeOptions(); }
+    }
+    function todayStr() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function setOrderHistDatesToday() { var t = todayStr(); var s = document.getElementById('hist-start'); var e = document.getElementById('hist-end'); if (s && !s.value) s.value = t; if (e && !e.value) e.value = t; }
+    function setUsageDatesToday() { var t = todayStr(); var s = document.getElementById('use-start'); var e = document.getElementById('use-end'); if (s && !s.value) s.value = t; if (e && !e.value) e.value = t; }
+    function setAdminDatesToday() { var t = todayStr(); ['admin-leave-start','admin-leave-end','admin-att-start','admin-att-end'].forEach(function(id) { var el = document.getElementById(id); if (el && !el.value) el.value = t; }); }
+    function setNoticeDatesToday() { var t = todayStr(); var s = document.getElementById('noticeStart'); var e = document.getElementById('noticeEnd'); if (s) s.value = t; if (e) e.value = t; }
+    function closePwaBanner() { var b = document.getElementById('pwa-add-banner'); if (b) b.classList.remove('show'); }
+    function dismissPwaPrompt() { try { localStorage.setItem('cm_pwa_dismiss', Date.now().toString()); } catch (e) {} }
+    var deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) { e.preventDefault(); deferredPrompt = e; });
+    function doPwaAddOrGuide() {
+      closePwaBanner(); dismissPwaPrompt();
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(r) { deferredPrompt = null; });
+      } else {
+        var ua = navigator.userAgent || '';
+        if (/iPhone|iPad|iPod/.test(ua)) alert(t('pwa_ios_hint') || 'Safari에서 공유(↑) 버튼 → "홈 화면에 추가"를 선택하세요.');
+        else alert(t('pwa_manual_hint') || '브라우저 메뉴에서 "홈 화면에 추가" 또는 "앱 설치"를 선택하세요.');
+      }
+    }
+    function showPwaBannerIfNeeded() {
+      var b = document.getElementById('pwa-add-banner');
+      if (!b) return;
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isStandalone) return;
+      try {
+        var d = localStorage.getItem('cm_pwa_dismiss');
+        if (d && (Date.now() - parseInt(d, 10)) < 7 * 24 * 60 * 60 * 1000) return;
+      } catch (e) {}
+      b.classList.add('show');
+    }
+
+    runApi('GET', 'getNotice', {}).then(function(r) {
+      var txt = typeof r === 'string' ? r : (r && r.notice != null ? r.notice : '');
+      var el = document.getElementById('home-notice-content');
+      if (el) el.innerText = txt || '공지사항 없음';
+    }).catch(function() {});
+
+    function initFromSessionOrRedirect() {
+      try {
+        var stored = sessionStorage.getItem('cm_store');
+        var user = sessionStorage.getItem('cm_user');
+        if (stored && user) {
+          loggedInStore = stored;
+          loggedInUser = user;
+          loggedInRole = sessionStorage.getItem('cm_role') || '';
+          var loginEl = document.getElementById('login-screen');
+          var appEl = document.getElementById('app-screen');
+          if (loginEl) loginEl.style.display = 'none';
+          if (appEl) appEl.classList.add('show');
+          var visitTab = document.getElementById('tab-store-visit');
+          if (visitTab) {
+            if (loggedInStore === 'Office' || loggedInStore === '본사') visitTab.classList.remove('hidden');
+            else visitTab.classList.add('hidden');
+          }
+          var role = (loggedInRole || '').toLowerCase();
+          var adminRoles = ['manager', 'ceo', 'hr', 'director', 'officer'];
+          if (adminRoles.some(function(r) { return role.indexOf(r) !== -1; })) {
+            var at = document.getElementById('tab-admin');
+            if (at) at.classList.remove('hidden');
+          }
+          if (document.getElementById('hr-username')) document.getElementById('hr-username').innerText = loggedInUser;
+          applyTranslations();
+          setNoticeDatesToday();
+          loadNotices();
+          setTimeout(showPwaBannerIfNeeded, 1500);
+          runApi('POST', 'getAppData', { storeName: loggedInStore }).then(function(appRes) {
+            allItems = (appRes && appRes.items) ? appRes.items : [];
+            var raw = (appRes && appRes.stock) ? appRes.stock : {};
+            var n = {};
+            for (var k in raw) { if (raw.hasOwnProperty(k)) n[String(k).trim()] = Number(raw[k]) || 0; }
+            currentStock = n;
+            renderOrderStockLists();
+          }).catch(function() { allItems = []; currentStock = {}; });
+          load(false);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    if (!initFromSessionOrRedirect()) {
+      window.location.replace('/login');
+    }
+
+    function loadNotices() {
+      if (!loggedInStore) return;
+      var ph = document.getElementById('notice-list-placeholder');
+      var box = document.getElementById('notice-list-box');
+      var filter = (document.getElementById('noticeStatusFilter') || {}).value || 'Unread';
+      var startVal = (document.getElementById('noticeStart') || {}).value || '';
+      var endVal = (document.getElementById('noticeEnd') || {}).value || '';
+      if (ph) ph.style.display = 'none';
+      if (box) box.innerHTML = '<div style="text-align:center;color:#999;">' + t('m_loading_notices') + '</div>';
+      runApi('POST', 'getMyNotices', { store: loggedInStore, role: loggedInRole, name: loggedInUser })
+        .then(function(list) {
+          myNotices = list || [];
+          var filtered = myNotices.filter(function(n) {
+            if (filter === 'Unread') { var st = (n.status || '').toString(); if (st === '확인' || st === 'Read' || st === '확인함') return false; }
+            else if (filter === 'Read') { var st = (n.status || '').toString(); if (st !== '확인' && st !== 'Read' && st !== '확인함') return false; }
+            if (filter !== 'Unread') { if (startVal && (n.date || '').slice(0, 10) < startVal) return false; if (endVal && (n.date || '').slice(0, 10) > endVal) return false; }
+            return true;
+          });
+          filtered.sort(function(a, b) {
+            var aUnread = !/^(확인|Read|확인함)$/.test(String(a.status || '').trim());
+            var bUnread = !/^(확인|Read|확인함)$/.test(String(b.status || '').trim());
+            if (aUnread && !bUnread) return -1;
+            if (!aUnread && bUnread) return 1;
+            return (b.date || '').localeCompare(a.date || '');
+          });
+          if (!box) return;
+          if (!filtered.length) { box.innerHTML = '<div class="text-muted">' + t('m_no_notices') + '</div>'; return; }
+          var noTitle = t('notice_no_title');
+          var senderLabel = function(s) { return (s === '관리자' ? t('label_admin') : (s || '')); };
+          function renderList(translatedTitles, translatedContents) {
+            var html = filtered.map(function(n, idx) {
+              var titleText = (translatedTitles && translatedTitles[idx] !== undefined) ? translatedTitles[idx] : (n.title || noTitle);
+              var contentFull = (translatedContents && translatedContents[idx] !== undefined) ? translatedContents[idx] : (n.content || '').toString();
+              var content = contentFull.slice(0, 200);
+              if (contentFull.length > 200) content += '…';
+              var senderText = senderLabel(n.sender || '');
+              return '<div class="notice-item" data-notice-id="' + n.id + '" onclick="openNoticeModal(' + n.id + ')"><strong class="notice-title">' + escapeHtml(titleText || noTitle) + '</strong>' + (content ? '<br><span class="notice-content text-muted" style="font-size:13px;">' + escapeHtml(content) + '</span>' : '') + '<br><small class="text-muted">' + (n.date || '') + ' · ' + t('label_from') + ': ' + escapeHtml(senderText) + '</small></div>';
+            }).join('');
+            box.innerHTML = html;
+          }
+          function escapeHtml(s) { if (s == null || s === '') return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+          if (currentLang === 'ko' || filtered.every(function(n) { return !(n.title || '').toString().trim() && !(n.content || '').toString().trim(); })) {
+            renderList(null, null);
+            return;
+          }
+          var textsToTranslate = [];
+          filtered.forEach(function(n) {
+            textsToTranslate.push((n.title || '').toString());
+            textsToTranslate.push((n.content || '').toString().slice(0, 500));
+          });
+          runApi('POST', 'translate', { texts: textsToTranslate, targetLang: currentLang })
+            .then(function(r) {
+              var all = (r && r.translated) ? r.translated : [];
+              var titles = [], contents = [];
+              for (var i = 0; i < filtered.length; i++) {
+                titles.push(all[i * 2] !== undefined ? all[i * 2] : (filtered[i].title || ''));
+                contents.push(all[i * 2 + 1] !== undefined ? all[i * 2 + 1] : (filtered[i].content || '').toString());
+              }
+              renderList(titles, contents);
+            })
+            .catch(function() { renderList(null, null); });
+        })
+        .catch(function() {
+          if (box) box.innerHTML = '<div class="text-muted">' + t('hist_fail') + '</div>';
+        });
+    }
+
+    function openNoticeModal(noticeId) {
+      var n = myNotices.find(function(x) { return x.id == noticeId; });
+      if (!n) return;
+      document.getElementById('modalNoticeId').value = n.id;
+      document.getElementById('modalDate').textContent = (n.date || '') + ' (' + t('label_from') + ': ' + (n.sender === '관리자' ? t('label_admin') : (n.sender || '')) + ')';
+      document.getElementById('modalTitle').textContent = n.title || '';
+      document.getElementById('modalContent').textContent = n.content || '';
+      renderNoticeAttachments(n);
+      var modalEl = document.getElementById('noticeModal');
+      modalEl.style.display = 'flex';
+      if (currentLang !== 'ko' && ((n.title || '').toString().trim() || (n.content || '').toString().trim())) {
+        var mTitle = document.getElementById('modalTitle');
+        var mContent = document.getElementById('modalContent');
+        runApi('POST', 'translate', { texts: [(n.title || '').toString(), (n.content || '').toString()], targetLang: currentLang })
+          .then(function(r) {
+            if (r && r.translated) {
+              if (r.translated[0] !== undefined) mTitle.textContent = r.translated[0] || (n.title || '');
+              if (r.translated[1] !== undefined) mContent.textContent = r.translated[1] !== undefined ? r.translated[1] : (n.content || '');
+            }
+          })
+          .catch(function() {});
+      }
+    }
+
+    function renderNoticeAttachments(n) {
+      var el = document.getElementById('modalAttachments');
+      if (!el) return;
+      el.innerHTML = '';
+      if (!n.attachments || !Array.isArray(n.attachments) || n.attachments.length === 0) return;
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'border-top:1px solid #eee;padding-top:10px;margin-top:10px;';
+      wrap.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;">📎 ' + (t('notice_attach') || '첨부파일') + '</div>';
+      n.attachments.forEach(function(a) {
+        if (a.error) return;
+        var url = a.url || (a.id ? 'https://drive.google.com/uc?export=view&id=' + a.id : '');
+        var name = a.name || '파일';
+        if ((a.mime || '').indexOf('image/') === 0 || (a.type || '').indexOf('image/') === 0) {
+          var img = document.createElement('img');
+          img.src = url || ('https://drive.google.com/uc?export=view&id=' + (a.id || ''));
+          img.alt = name;
+          img.style.cssText = 'max-width:100%;max-height:180px;object-fit:contain;border-radius:8px;margin-bottom:8px;';
+          wrap.appendChild(img);
+        } else {
+          var link = document.createElement('a');
+          link.href = url || ('https://drive.google.com/uc?export=download&id=' + (a.id || ''));
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = name;
+          link.style.cssText = 'display:block;margin-bottom:6px;color:#E65100;';
+          wrap.appendChild(link);
+        }
+      });
+      el.appendChild(wrap);
+    }
+
+    function actNotice(action) {
+      var id = document.getElementById('modalNoticeId').value;
+      document.getElementById('noticeModal').style.display = 'none';
+      var target = myNotices.find(function(x) { return x.id == id; });
+      if (target) target.status = action;
+      runApi('POST', 'logNoticeRead', { id: id, store: loggedInStore, name: loggedInUser, action: action }).catch(function() {});
+      loadNotices();
+    }
+
+    function mobileChangePassword() {
+      var oldPw = document.getElementById('mobile-pw-old');
+      var newPw = document.getElementById('mobile-pw-new');
+      var newPw2 = document.getElementById('mobile-pw-new2');
+      if (!oldPw || !newPw || !newPw2) return;
+      var o = (oldPw.value || '').trim();
+      var n = (newPw.value || '').trim();
+      var n2 = (newPw2.value || '').trim();
+      if (!o) { alert(t('pw_alert_current')); return; }
+      if (!n) { alert(t('pw_alert_new')); return; }
+      if (n !== n2) { alert(t('pw_alert_mismatch')); return; }
+      runApi('POST', 'changePassword', { store: loggedInStore, name: loggedInUser, oldPw: o, newPw: n })
+        .then(function(r) {
+          if (r && r.success) { alert(t('pw_success')); location.reload(); }
+          else { alert(r && r.message ? r.message : t('pw_error_fail')); }
+        }).catch(function(e) { alert(t('err_server') + ': ' + (e && e.message ? e.message : e)); });
+    }
+
+    function showItemImage(imgUrl, itemName) {
+      var m = document.getElementById('itemImageModal');
+      var img = document.getElementById('itemImageImg');
+      var cap = document.getElementById('itemImageCaption');
+      if (!m || !img) return;
+      img.src = imgUrl || '';
+      img.alt = itemName || '';
+      if (cap) cap.textContent = itemName || '';
+      m.style.display = 'flex';
+    }
+    function closeItemImage() {
+      var m = document.getElementById('itemImageModal');
+      if (m) m.style.display = 'none';
+    }
+    function showItemImageByCode(code, name) {
+      var it = (allItems || []).find(function(x) { return (Array.isArray(x) ? x[0] : x.code) === code; });
+      var imgUrl = it ? (Array.isArray(it) ? it[6] : (it.image || it.img || '')) : '';
+      showItemImage(imgUrl, name || '');
+    }
+    // ----- Order -----
+    function renderOrderStockLists() {
+      renderCategoryView('orderMenuWrapper', 'order');
+      renderCategoryView('stockListWrapper', 'stock');
+    }
+    function renderCategoryView(target, mode) {
+      var w = document.getElementById(target);
+      if (!w) return;
+      if (!allItems || allItems.length === 0) { w.innerHTML = '<div class="text-center text-muted py-4">' + t('m_no_items') + '</div>'; return; }
+      w.innerHTML = '';
+      var g = {};
+      allItems.forEach(function(r) {
+        var cat = (Array.isArray(r) ? r[1] : (r.category || '')) || '';
+        if (!g[cat]) g[cat] = [];
+        g[cat].push(r);
+      });
+      Object.keys(g).sort().forEach(function(c) {
+        var h = document.createElement('div');
+        h.className = 'category-header';
+        h.innerHTML = '<span>' + c + '</span><span>▼</span>';
+        var con = document.createElement('div');
+        con.className = 'menu-container';
+        con.style.display = 'none';
+        var grid = document.createElement('div');
+        grid.className = 'menu-grid';
+        g[c].forEach(function(r) {
+          var code = (Array.isArray(r) ? r[0] : r.code) || '';
+          var name = (Array.isArray(r) ? r[2] : r.name) || '';
+          var spec = (Array.isArray(r) ? r[3] : r.spec) || '';
+          var price = (Array.isArray(r) ? r[4] : r.price) || 0;
+          var safe = (Array.isArray(r) ? r[8] : r.safeQty) || 0;
+          var tax = (Array.isArray(r) ? r[9] : r.taxType) || '과세';
+          var imgUrl = (Array.isArray(r) ? r[6] : (r.image || r.img || '')) || '';
+          var hasImg = (typeof imgUrl === 'string' && imgUrl.trim().length > 10 && (imgUrl.indexOf('http') === 0 || imgUrl.indexOf('data:image') === 0));
+          var qty = Number(currentStock[String(code)] != null ? currentStock[String(code)] : 0) || 0;
+          var isLow = qty <= Number(safe || 0);
+          var badgeColor = isLow ? '#F44336' : '#4CAF50';
+          var badgeText = isLow ? 'Low:' + qty : t('m_stock_label') + ':' + qty;
+          var rightHtml = (mode === 'order') ? '<div class="item-price">' + Number(price).toLocaleString() + ' ฿</div>' : '';
+          var photoBtn = hasImg ? '<button type="button" class="item-photo-btn" data-img="' + (String(imgUrl).replace(/"/g,'&quot;').replace(/&/g,'&amp;').replace(/</g,'&lt;')) + '" data-name="' + (String(name||'').replace(/"/g,'&quot;').replace(/&/g,'&amp;').replace(/</g,'&lt;')) + '" onclick="event.stopPropagation();showItemImage(this.dataset.img,this.dataset.name)" title="' + (t('notice_attach') || '사진') + '">📷</button>' : '';
+          var i = document.createElement('div');
+          i.className = 'menu-item';
+          i.innerHTML = '<div class="item-left">' + photoBtn + '<span class="item-name">' + (name || '') + '</span><span class="item-spec">' + (spec ? '(' + spec + ')' : '') + '</span><span class="stock-badge" style="background:' + badgeColor + '">' + badgeText + '</span>' + (tax === '면세' ? '<span class="stock-badge" style="background:#9E9E9E">' + t('m_tax_free') + '</span>' : '') + '</div><div class="item-right">' + rightHtml + '</div>';
+          i.onclick = (function(cc, nn, pp, tx) {
+            return function() {
+              document.querySelectorAll('#' + target + ' .menu-item').forEach(function(e) { e.classList.remove('selected'); });
+              i.classList.add('selected');
+              if (mode === 'order') selectedItem = { code: cc, name: nn, price: pp, tax: tx || '과세' };
+              else selectedUsageItem = { code: cc, name: nn };
+            };
+          })(code, name, price, tax);
+          grid.appendChild(i);
+        });
+        con.appendChild(grid);
+        h.onclick = (function(ct) { return function() { ct.style.display = ct.style.display === 'none' ? 'block' : 'none'; }; })(con);
+        w.appendChild(h);
+        w.appendChild(con);
+      });
+    }
+    function switchOrderTab(t) {
+      document.getElementById('order-new-area').style.display = t === 'new' ? 'block' : 'none';
+      document.getElementById('order-hist-area').style.display = t === 'hist' ? 'block' : 'none';
+      document.getElementById('ord-sub-new').classList.toggle('active', t === 'new');
+      document.getElementById('ord-sub-hist').classList.toggle('active', t === 'hist');
+      if (t === 'hist') { setOrderHistDatesToday(); loadHistory(); }
+    }
+    function adjustQty(type, delta) {
+      var id = type === 'order' ? 'qtyInputOrder' : 'qtyInputUsage';
+      var el = document.getElementById(id);
+      if (el) { var val = Number(el.value) + delta; if (val < 1) val = 1; el.value = val; }
+    }
+    function addToCart(type) {
+      if (type === 'order') {
+        if (!selectedItem) { alert(t('err_select_item')); return; }
+        var q = document.getElementById('qtyInputOrder').value;
+        cart.push({ code: selectedItem.code, name: selectedItem.name, price: selectedItem.price, tax: selectedItem.tax, qty: q });
+        updateCart('order');
+      } else {
+        if (!selectedUsageItem) { alert(t('err_select_item')); return; }
+        var q = document.getElementById('qtyInputUsage').value;
+        usageCart.push({ code: selectedUsageItem.code, name: selectedUsageItem.name, qty: q });
+        updateCart('usage');
+      }
+    }
+    function updateCart(type) {
+      if (type === 'order') {
+        var b = document.querySelector('#cartTable tbody');
+        b.innerHTML = '';
+        var sub = 0, vatTotal = 0;
+        cart.forEach(function(i, idx) {
+          var t = i.price * i.qty;
+          sub += t;
+          var itemTax = (i.tax === '면세') ? 0 : Math.round(t * 0.07);
+          vatTotal += itemTax;
+          var it = (allItems || []).find(function(x) { return (Array.isArray(x) ? x[0] : x.code) === i.code; });
+          var imgUrl = it ? (Array.isArray(it) ? it[6] : (it.image || it.img || '')) : '';
+          var hasImg = (typeof imgUrl === 'string' && imgUrl.trim().length > 10);
+          var photoBtn = hasImg ? '<button type="button" class="item-photo-btn" style="margin-right:4px;padding:2px 6px;font-size:11px;border-radius:4px;background:#E65100;color:white;border:none;cursor:pointer;" onclick="event.stopPropagation();showItemImageByCode(\'' + String(i.code||'').replace(/'/g,"\\'") + '\',\'' + String(i.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;') + '\')" title="' + (t('notice_attach') || '사진') + '">📷</button>' : '';
+          b.innerHTML += '<tr><td style="overflow:hidden;text-overflow:ellipsis;"><span style="display:inline-flex;align-items:center;gap:4px;">' + photoBtn + '<span>' + i.name + '</span></span><br><small style="color:#999">' + (i.tax || 'VAT') + '</small></td><td class="text-right">' + Number(i.price).toLocaleString() + '</td><td class="text-right">' + i.qty + '</td><td class="text-right">' + t.toLocaleString() + '</td><td onclick="cart.splice(' + idx + ',1);updateCart(\'order\')">❌</td></tr>';
+        });
+        document.getElementById('displaySub').textContent = sub.toLocaleString() + ' ฿';
+        document.getElementById('displayVat').textContent = vatTotal.toLocaleString() + ' ฿';
+        document.getElementById('displayTotal').textContent = (sub + vatTotal).toLocaleString() + ' ฿';
+      } else {
+        var b = document.querySelector('#usageCartTable tbody');
+        b.innerHTML = '';
+        usageCart.forEach(function(i, idx) {
+          var it = (allItems || []).find(function(x) { return (Array.isArray(x) ? x[0] : x.code) === i.code; });
+          var imgUrl = it ? (Array.isArray(it) ? it[6] : (it.image || it.img || '')) : '';
+          var hasImg = (typeof imgUrl === 'string' && imgUrl.trim().length > 10);
+          var photoBtn = hasImg ? '<button type="button" class="item-photo-btn" style="margin-right:4px;padding:2px 6px;font-size:11px;border-radius:4px;background:#43a047;color:white;border:none;cursor:pointer;" onclick="event.stopPropagation();showItemImageByCode(\'' + String(i.code||'').replace(/'/g,"\\'") + '\',\'' + String(i.name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;') + '\')" title="' + (t('notice_attach') || '사진') + '">📷</button>' : '';
+          b.innerHTML += '<tr><td style="overflow:hidden;text-overflow:ellipsis;"><span style="display:inline-flex;align-items:center;gap:4px;">' + photoBtn + '<span>' + i.name + '</span></span></td><td class="text-right">' + i.qty + '</td><td class="text-right" onclick="usageCart.splice(' + idx + ',1);updateCart(\'usage\')">❌</td></tr>';
+        });
+      }
+    }
+    function submitOrder() {
+      if (!cart.length) return;
+      runApi('POST', 'processOrder', { storeName: loggedInStore, userName: loggedInUser, cart: cart })
+        .then(function(r) {
+          alert(r && r.message ? r.message : (r && r.success ? t('msg_order_done') : t('err_server')));
+          if (r && r.success) { cart = []; updateCart('order'); runApi('POST', 'getAppData', { storeName: loggedInStore }).then(function(appRes) { currentStock = (appRes && appRes.stock) ? appRes.stock : {}; renderOrderStockLists(); }); }
+        })
+        .catch(function(e) { alert(t('err_server') + ': ' + (e && e.message ? e.message : e)); });
+    }
+    function loadHistory() {
+      var s = document.getElementById('hist-start').value || new Date().toISOString().slice(0, 10);
+      var e = document.getElementById('hist-end').value || new Date().toISOString().slice(0, 10);
+      document.getElementById('history-list-container').innerHTML = t('m_loading_items');
+      runApi('POST', 'getMyOrderHistory', { store: loggedInStore, startStr: s, endStr: e })
+        .then(function(l) {
+          var c = document.getElementById('history-list-container');
+          c.innerHTML = '';
+          if (!l || !l.length) { c.innerHTML = t('hist_no_data'); return; }
+          l.forEach(function(o) {
+            var items = '<div class="detail-list">';
+            (o.items || []).forEach(function(it) {
+              var iname = (it.name != null ? it.name : it.item_name) || '-';
+              var iqty = (it.qty != null ? it.qty : it.quantity) != null ? (it.qty != null ? it.qty : it.quantity) : '-';
+              items += '<div class="detail-item"><span>' + iname + '</span><span>x' + iqty + '</span></div>';
+            });
+            items += '</div>';
+            var deliveryStr = (o.deliveryDate || '').toString().slice(0, 10);
+            c.innerHTML += '<div class="history-card"><div class="history-header"><span>' + t('m_order_prefix') + ' ' + o.date + '</span> <span>' + t('m_delivery_prefix') + ' ' + deliveryStr + '</span><span class="status-badge" style="background:#2196F3">' + (o.status || '') + '</span></div>' + items + '<div style="text-align:right;font-weight:bold;color:#E65100;">' + Number(o.total).toLocaleString() + ' ฿</div></div>';
+          });
+        })
+        .catch(function() { var h = document.getElementById('history-list-container'); if (h) h.innerHTML = t('hist_fail'); });
+    }
+    function filterHistory() {}
+
+    // ----- Usage -----
+    function switchUsageTab(t) {
+      document.getElementById('usage-new-area').style.display = t === 'new' ? 'block' : 'none';
+      document.getElementById('usage-hist-area').style.display = t === 'hist' ? 'block' : 'none';
+      document.getElementById('sub-new').classList.toggle('active', t === 'new');
+      document.getElementById('sub-hist').classList.toggle('active', t === 'hist');
+      if (t === 'hist') { setUsageDatesToday(); loadUsageHistory(); }
+    }
+    function submitUsage() {
+      if (!usageCart.length) return;
+      if (!confirm(t('m_usage_confirm'))) return;
+      var items = usageCart.map(function(i) { return { code: i.code, name: i.name, qty: i.qty }; });
+      runApi('POST', 'processUsage', { storeName: loggedInStore, userName: loggedInUser, items: items })
+        .then(function(r) {
+          alert(r && r.message ? r.message : t('msg_saved'));
+          if (r && r.success) { usageCart = []; updateCart('usage'); runApi('POST', 'getAppData', { storeName: loggedInStore }).then(function(appRes) { currentStock = (appRes && appRes.stock) ? appRes.stock : {}; renderOrderStockLists(); }); }
+        })
+        .catch(function(e) { alert(t('msg_saved') + ': ' + (e && e.message ? e.message : e)); });
+    }
+    function loadUsageHistory() {
+      var s = document.getElementById('use-start').value || new Date().toISOString().slice(0, 10);
+      var e = document.getElementById('use-end').value || new Date().toISOString().slice(0, 10);
+      document.getElementById('usage-history-list').innerHTML = '<tr><td colspan="2" style="text-align:center;">' + t('m_loading_items') + '</td></tr>';
+      runApi('POST', 'getMyUsageHistory', { store: loggedInStore, startStr: s, endStr: e })
+        .then(function(l) {
+          var c = document.getElementById('usage-history-list');
+          c.innerHTML = '';
+          if (!l || !l.length) { c.innerHTML = '<tr><td colspan="2" style="text-align:center;">' + t('hist_no_data') + '</td></tr>'; return; }
+          l.forEach(function(i) {
+            c.innerHTML += '<tr><td><span style="font-size:11px;color:#999">' + i.date + '</span><br><b>' + i.item + '</b></td><td style="text-align:right;font-weight:bold;color:#E65100;">-' + i.qty + '</td></tr>';
+          });
+        })
+        .catch(function() { var u = document.getElementById('usage-history-list'); if (u) u.innerHTML = '<tr><td colspan="2" style="text-align:center;">' + t('hist_fail') + '</td></tr>'; });
+    }
+
+    // ----- HR -----
+    var attTypeToBtn = { '출근': 'att-btn-in', '퇴근': 'att-btn-out', '휴식시작': 'att-btn-break', '휴식종료': 'att-btn-resume' };
+    function setAttendanceButtonDisabled(type, disabled) {
+      var id = attTypeToBtn[type];
+      if (id) { var b = document.getElementById(id); if (b) b.disabled = !!disabled; }
+    }
+    function updateAttendanceButtonState() {
+      if (!loggedInStore || !loggedInUser) return;
+      runApi('POST', 'getTodayAttendanceTypes', { storeName: loggedInStore, name: loggedInUser })
+        .then(function(types) {
+          var hasClockIn = (types && types.indexOf('출근') !== -1);
+          setAttendanceButtonDisabled('출근', hasClockIn);
+          setAttendanceButtonDisabled('휴식시작', !hasClockIn || (types && types.indexOf('휴식시작') !== -1));
+          setAttendanceButtonDisabled('휴식종료', !hasClockIn || (types && types.indexOf('휴식종료') !== -1));
+          setAttendanceButtonDisabled('퇴근', !hasClockIn || (types && types.indexOf('퇴근') !== -1));
+        })
+        .catch(function() {});
+    }
+    function loadTodayAttendanceLog() {
+      if (!loggedInStore || !loggedInUser) return;
+      var todayStr = new Date().toISOString().slice(0, 10);
+      var tbody = document.getElementById('attendance-log-body');
+      var statusMsg = document.getElementById('attendance-status-msg');
+      var logTable = document.getElementById('attendance-log-table');
+      if (!tbody) return;
+      runApi('GET', 'getAttendanceLogs', {})
+        .then(function(rows) {
+          tbody.innerHTML = '';
+          var list = (rows || []).filter(function(r) {
+            var rowDate = r[0] ? new Date(r[0]).toISOString().slice(0, 10) : '';
+            return rowDate === todayStr && String(r[1] || '').trim() === loggedInStore && String(r[2] || '').trim() === loggedInUser;
+          });
+          if (!list.length) {
+            if (statusMsg) statusMsg.style.display = 'block';
+            if (logTable) logTable.style.display = 'none';
+            return;
+          }
+          if (statusMsg) statusMsg.style.display = 'none';
+          if (logTable) logTable.style.display = 'table';
+          list.reverse().forEach(function(r) {
+            var ts = r[0] ? new Date(r[0]).toISOString() : '';
+            var timePart = ts.indexOf('T') !== -1 ? ts.substring(ts.indexOf('T') + 1, ts.indexOf('T') + 9) : '';
+            var status = String(r[12] || '').indexOf('승인대기') !== -1 ? '<span style="color:#ff9800">' + t('att_status_pending') + '</span>' : '<span style="color:#4CAF50">' + t('att_status_done') + '</span>';
+            tbody.innerHTML += '<tr><td style="color:#888">' + timePart + '</td><td><b>' + (r[3] || '') + '</b></td><td>' + status + '</td></tr>';
+          });
+        })
+        .catch(function() { tbody.innerHTML = '<tr><td colspan="3">' + t('hist_fail') + '</td></tr>'; });
+    }
+    function sendAttendance(type) {
+      var typeLabels = { '출근':'att_confirm_in','퇴근':'att_confirm_out','휴식시작':'att_confirm_break','휴식종료':'att_confirm_resume' };
+      if (!confirm(t(typeLabels[type] || 'att_confirm_in'))) return;
+      var gpsFail = t('att_gps_fail_confirm');
+      function sendData(lat, lng) {
+        runApi('POST', 'submitAttendance', { storeName: loggedInStore, name: loggedInUser, type: type, lat: lat, lng: lng })
+          .then(function(res) {
+            var msg = (res && res.message) ? res.message : '';
+            if (res && res.success) {
+              if (msg.indexOf('오늘 이미') !== -1 || msg.indexOf('Already') !== -1) { setAttendanceButtonDisabled(type, true); alert(msg); return; }
+              alert(msg);
+              updateAttendanceButtonState();
+              loadTodayAttendanceLog();
+            } else alert(msg || '실패');
+          })
+          .catch(function(e) { alert(t('err_server') + ': ' + (e && e.message ? e.message : e)); });
+      }
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(p) { sendData(p.coords.latitude, p.coords.longitude); },
+          function() { if (confirm(gpsFail)) sendData('Unknown', 'Unknown'); },
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      } else { sendData('Unknown', 'Unknown'); }
+    }
+    function startHrClock() {
+      function tick() {
+        var el = document.getElementById('live-clock');
+        if (el) { var d = new Date(); el.textContent = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2); }
+      }
+      tick();
+      if (window._hrClockInterval) clearInterval(window._hrClockInterval);
+      window._hrClockInterval = setInterval(tick, 1000);
+    }
+    function loadMyLeaveInfo() {
+      if (!loggedInStore || !loggedInUser) return;
+      runApi('POST', 'getMyLeaveInfo', { store: loggedInStore, name: loggedInUser })
+        .then(function(d) {
+          if (d && d.stats) {
+            document.getElementById('my-ann').innerText = d.stats.usedAnn || 0;
+            document.getElementById('my-sick').innerText = d.stats.usedSick || 0;
+            document.getElementById('my-remain').innerText = d.stats.remain != null ? d.stats.remain : 0;
+          }
+          var tbody = document.getElementById('my-leave-list-tbody');
+          if (!tbody) return;
+          tbody.innerHTML = '';
+          if (!d || !d.history || !d.history.length) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:10px">' + t('hist_no_data') + '</td></tr>'; return; }
+          d.history.forEach(function(item) {
+            var badgeColor = item.status === '승인' ? '#4CAF50' : (item.status === '반려' ? '#F44336' : '#9E9E9E');
+            tbody.innerHTML += '<tr><td style="padding:8px">' + (item.date || '') + '</td><td style="padding:8px">' + tv(item.type, leaveTypeMap) + '</td><td style="padding:8px">' + (item.reason || '-') + '</td><td style="padding:8px"><span style="background:' + badgeColor + ';color:white;padding:2px 6px;border-radius:4px;font-size:11px">' + tv(item.status, leaveStatusMap) + '</span></td></tr>';
+          });
+        })
+        .catch(function() { var tb = document.getElementById('my-leave-list-tbody'); if (tb) tb.innerHTML = '<tr><td colspan="4" style="color:#999">' + t('hist_fail') + '</td></tr>'; });
+    }
+    function submitLeave() {
+      var t = document.getElementById('leaveType').value;
+      var d = document.getElementById('leaveDate').value;
+      var r = document.getElementById('leaveReason').value;
+      if (!d) { alert(t('err_select_date')); return; }
+      runApi('POST', 'requestLeave', { store: loggedInStore, name: loggedInUser, type: t, date: d, reason: r })
+        .then(function(res) {
+          alert(res && res.message ? res.message : (res && res.success ? t('msg_processed') : t('hist_fail')));
+          if (res && res.success) loadMyLeaveInfo();
+        })
+        .catch(function(e) { alert(t('hist_fail') + ': ' + (e && e.message ? e.message : e)); });
+    }
+
+    // ----- Schedule -----
+    function getMondayOfWeek(d) {
+      var date = d ? new Date(d) : new Date();
+      var day = date.getDay();
+      var diff = date.getDate() - day + (day === 0 ? -6 : 1);
+      var mon = new Date(date);
+      mon.setDate(diff);
+      return mon.getFullYear() + '-' + String(mon.getMonth() + 1).padStart(2, '0') + '-' + String(mon.getDate()).padStart(2, '0');
+    }
+    function fillScheduleStoreSelect() {
+      var sel = document.getElementById('schedule-today-store');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">' + (t('m_schedule_store_all') || '전체 매장') + '</option>';
+      var isOffice = (loggedInStore === 'Office' || loggedInStore === '본사');
+      for (var k in loginData) {
+        if (loginData.hasOwnProperty(k)) {
+          if (!isOffice && k !== loggedInStore) continue;
+          sel.innerHTML += '<option value="' + k + '">' + k + '</option>';
+        }
+      }
+    }
+    function scheduleT(key) { return t(key); }
+    function escapeHtml(s) { if (s == null) return ''; var x = document.createElement('span'); x.textContent = s; return x.innerHTML; }
+    function scheduleTimeOnly(v) {
+      if (v == null || v === '') return '';
+      var s = String(v).trim();
+      var match = s.match(/(\d{1,2}):(\d{2})/);
+      if (match) return ('0' + match[1]).slice(-2) + ':' + match[2];
+      if (s.indexOf('T') !== -1) { var tPart = s.split('T')[1]; if (tPart && (match = tPart.match(/(\d{1,2}):(\d{2})/))) return ('0' + match[1]).slice(-2) + ':' + match[2]; }
+      return s.length >= 5 && s.charAt(2) === ':' ? s.substring(0, 5) : s;
+    }
+    function parseTimeToDecimal(s) {
+      if (!s || typeof s !== 'string') return null;
+      var match = s.match(/(\d{1,2}):(\d{2})/);
+      return match ? parseInt(match[1], 10) + parseInt(match[2], 10) / 60 : null;
+    }
+    function toScheduleList(rows) {
+      return (rows || []).map(function(r) {
+        return { date: (r[0] || '').toString().slice(0, 10), store: String(r[1] || '').trim(), name: String(r[2] || '').trim(), pIn: r[3], pOut: r[4], pBS: r[5], pBE: r[6], area: 'Service', nick: (r[2] || '').toString().trim() };
+      });
+    }
+    function renderScheduleWeek(list, areaFilter) {
+      areaFilter = areaFilter || 'All';
+      var box = document.getElementById('schedule-week-box');
+      if (!box) return;
+      if (!list || list.length === 0) {
+        box.innerHTML = '<div class="text-center text-muted py-4 small">' + (t('m_schedule_no_data') || '데이터 없음') + '</div>';
+        return;
+      }
+      var dayLabels = [t('m_schedule_mon'), t('m_schedule_tue'), t('m_schedule_wed'), t('m_schedule_thu'), t('m_schedule_fri'), t('m_schedule_sat'), t('m_schedule_sun')];
+      var mondayStr = (document.getElementById('schedule-week-monday') && document.getElementById('schedule-week-monday').value) ? document.getElementById('schedule-week-monday').value.slice(0, 10) : getMondayOfWeek();
+      var monDate = new Date(mondayStr + 'T12:00:00');
+      var dayStrs = [];
+      for (var i = 0; i < 7; i++) {
+        var d = new Date(monDate.getTime());
+        d.setDate(monDate.getDate() + i);
+        dayStrs.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'));
+      }
+      var byPerson = {};
+      list.forEach(function(r) {
+        var key = (r.store || '') + '|' + (r.name || '');
+        if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || '', store: r.store || '', area: r.area || 'Service', byDate: {} };
+        byPerson[key].byDate[r.date] = r;
+      });
+      var personKeys = Object.keys(byPerson).sort();
+      var dailyCount = [0, 0, 0, 0, 0, 0, 0];
+      var persons = [];
+      var multiArea = (function() { var a = {}; list.forEach(function(x) { a[x.area || 'Service'] = 1; }); return Object.keys(a).length > 1; })();
+      var showArea = (areaFilter === 'All' && multiArea);
+      personKeys.forEach(function(key) {
+        var p = byPerson[key];
+        var workDays = [], breakDays = [];
+        var offCount = 0;
+        for (var i = 0; i < 7; i++) {
+          var row = p.byDate[dayStrs[i]];
+          var pIn = row && row.pIn ? scheduleTimeOnly(row.pIn) : '';
+          var pOut = row && row.pOut ? scheduleTimeOnly(row.pOut) : '';
+          var workStr = row && (pIn || pOut) ? (pIn || '-') + '-' + (pOut || '-') : 'OFF';
+          var pBS = row && row.pBS ? scheduleTimeOnly(row.pBS) : '';
+          var pBE = row && row.pBE ? scheduleTimeOnly(row.pBE) : '';
+          var breakStr = row && pBS && pBE ? (pBS + '-' + pBE) : '-';
+          workDays.push(workStr);
+          breakDays.push(breakStr);
+          if (workStr === 'OFF') offCount++; else dailyCount[i]++;
+        }
+        persons.push({ name: p.name, store: p.store, area: p.area, workDays: workDays, breakDays: breakDays, offCount: offCount, workCount: 7 - offCount });
+      });
+      var nameLabel = t('m_schedule_name'), offLabel = t('m_schedule_off'), workDayLabel = t('m_schedule_working_day'), breakLabel = t('m_schedule_break_time'), dailyStaffLabel = t('m_schedule_daily_staff');
+      var areaLabelT = function(area) { return area === 'Service' ? t('m_schedule_area_service') : area === 'Kitchen' ? t('m_schedule_area_kitchen') : t('m_schedule_area_office') || area; };
+      var tc = 'text-align:center;';
+      var areaColHeader = showArea ? "<th style='min-width:42px;padding:4px 2px;" + tc + "'>" + t('m_schedule_label_area') + "</th>" : '';
+      var cellWork = 'background:#E3F2FD;';
+      var cellBreak = 'background:#e8e8e8;';
+      var html = "<div style='overflow-x:auto;-webkit-overflow-scrolling:touch;margin:-4px;'><table class='table table-bordered table-sm mb-0' style='font-size:13px;min-width:520px;border-collapse:collapse;'>";
+      html += "<thead><tr style='background:#f5f5f5;'>" + areaColHeader + "<th style='min-width:52px;padding:6px 4px;" + tc + "'>" + nameLabel + "</th>";
+      for (var i = 0; i < 7; i++) html += "<th style='min-width:58px;padding:6px 4px;" + tc + "'>" + dayLabels[i] + "</th>";
+      html += "<th style='min-width:36px;padding:6px 4px;" + tc + "'>" + offLabel + "</th><th style='min-width:48px;padding:6px 4px;" + tc + "'>" + workDayLabel + "</th></tr></thead><tbody>";
+      persons.forEach(function(p) {
+        var areaCell = showArea ? "<td style='padding:4px 2px;" + tc + ";" + cellWork + "'>" + (areaLabelT(p.area) || p.area) + "</td>" : '';
+        html += "<tr>" + areaCell + "<td style='padding:4px;font-weight:600;" + tc + ";" + cellWork + "'>" + escapeHtml(p.name || '') + "</td>";
+        for (var i = 0; i < 7; i++) html += "<td style='padding:4px;" + tc + ";" + cellWork + "'>" + escapeHtml(p.workDays[i]) + "</td>";
+        html += "<td style='padding:4px;" + tc + ";" + cellWork + "'>" + p.offCount + "</td><td style='padding:4px;" + tc + ";" + cellWork + "'>" + p.workCount + "</td></tr>";
+        html += "<tr>" + (showArea ? "<td style='padding:2px;" + tc + ";" + cellBreak + "'></td>" : '') + "<td style='padding:2px 4px;font-size:12px;color:#555;" + tc + ";" + cellBreak + "'>" + breakLabel + "</td>";
+        for (var i = 0; i < 7; i++) html += "<td style='padding:2px 4px;font-size:12px;" + tc + ";" + cellBreak + "'>" + escapeHtml(p.breakDays[i]) + "</td>";
+        html += "<td style='" + tc + ";" + cellBreak + "'></td><td style='" + tc + ";" + cellBreak + "'></td></tr>";
+      });
+      html += "</tbody><tfoot><tr style='background:#E8EAF6;font-weight:600;'>" + (showArea ? "<td style='padding:4px;" + tc + "'></td>" : '') + "<td style='padding:4px;" + tc + "'>" + dailyStaffLabel + "</td>";
+      for (var i = 0; i < 7; i++) html += "<td style='padding:4px;" + tc + "'>" + dailyCount[i] + "</td>";
+      html += "<td style='" + tc + "'></td><td style='" + tc + "'></td></tr></tfoot></table></div>";
+      box.innerHTML = html;
+    }
+    function renderScheduleToday(todaySchedule, attendanceList, areaFilter) {
+      var box = document.getElementById('schedule-today-box');
+      if (!box) return;
+      var attByKey = {};
+      (attendanceList || []).forEach(function(r) { var k = (r.store || '') + '|' + (r.name || ''); attByKey[k] = r; });
+      var tc = 'text-align:center;';
+      var multiArea = (function() { var a = {}; (todaySchedule || []).forEach(function(x) { a[x.area || 'Service'] = 1; }); return Object.keys(a).length > 1; })();
+      var showArea = (areaFilter === 'All' && multiArea);
+      var areaLabelT = function(area) { return area === 'Service' ? t('m_schedule_area_service') : area === 'Kitchen' ? t('m_schedule_area_kitchen') : t('m_schedule_area_office') || area; };
+      if (!todaySchedule || todaySchedule.length === 0) {
+        box.innerHTML = "<div class='text-center text-muted py-3 small'>" + (t('m_schedule_today_empty') || '오늘 기록 없음') + "</div>";
+        return;
+      }
+      var byPerson = {};
+      todaySchedule.forEach(function(r) {
+        var key = (r.store || '') + '|' + (r.name || '');
+        if (!byPerson[key]) byPerson[key] = { name: r.nick || r.name || '', store: r.store || '', area: r.area || 'Service', pIn: r.pIn, pOut: r.pOut, pBS: r.pBS, pBE: r.pBE };
+      });
+      var minDec = 24, maxDec = 0;
+      Object.keys(byPerson).forEach(function(k) {
+        var p = byPerson[k];
+        var inD = parseTimeToDecimal(p.pIn), outD = parseTimeToDecimal(p.pOut), bsD = parseTimeToDecimal(p.pBS), beD = parseTimeToDecimal(p.pBE);
+        if (inD != null && inD < minDec) minDec = inD;
+        if (bsD != null && bsD < minDec) minDec = bsD;
+        if (outD != null && outD > maxDec) maxDec = outD;
+        if (beD != null && beD > maxDec) maxDec = beD;
+      });
+      var hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6;
+      var hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24;
+      if (hourEnd <= hourStart) { hourStart = 6; hourEnd = 24; }
+      var hours = [];
+      for (var h = hourStart; h < hourEnd; h++) hours.push(h);
+      var areaOrder = { Service: 0, Kitchen: 1, Office: 2 };
+      var personKeys = Object.keys(byPerson).sort(function(a, b) {
+        var pA = byPerson[a], pB = byPerson[b];
+        var oA = areaOrder[pA.area] !== undefined ? areaOrder[pA.area] : 3;
+        var oB = areaOrder[pB.area] !== undefined ? areaOrder[pB.area] : 3;
+        if (oA !== oB) return oA - oB;
+        var inA = parseTimeToDecimal(pA.pIn), inB = parseTimeToDecimal(pB.pIn);
+        return (inA || 0) - (inB || 0);
+      });
+      var nowrap = 'white-space:nowrap;';
+      var areaColHeader = showArea ? "<th style='min-width:52px;padding:4px 6px;" + tc + ";" + nowrap + "'>" + t('m_schedule_label_area') + "</th>" : '';
+      var html = "<div style='overflow-x:auto;-webkit-overflow-scrolling:touch;'><table class='table table-bordered table-sm mb-0' style='font-size:12px;border-collapse:collapse;'>";
+      html += "<thead><tr style='background:#f5f5f5;'>" + areaColHeader + "<th style='min-width:80px;padding:4px 6px;" + tc + ";" + nowrap + "'>" + t('m_schedule_name') + "</th>";
+      hours.forEach(function(h) { html += "<th style='min-width:26px;padding:2px;font-size:11px;" + tc + "'>" + h + "</th>"; });
+      html += "</tr></thead><tbody>";
+      personKeys.forEach(function(key) {
+        var p = byPerson[key];
+        var att = attByKey[key];
+        var inDec = parseTimeToDecimal(p.pIn), outDec = parseTimeToDecimal(p.pOut), bsDec = parseTimeToDecimal(p.pBS), beDec = parseTimeToDecimal(p.pBE);
+        var hasProblem = !att ? true : (att.lateMin && att.lateMin > 0) || att.onlyIn === true || (att.status && (att.status.indexOf('지각') !== -1 || att.status.indexOf('결석') !== -1 || att.status.indexOf('미기록') !== -1));
+        var rowBg = hasProblem ? '#FFCDD2' : '#E3F2FD';
+        var areaCell = showArea ? "<td style='padding:4px 6px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + areaLabelT(p.area) + "</td>" : '';
+        html += "<tr>" + areaCell + "<td style='padding:4px 6px;font-weight:600;min-width:80px;" + tc + ";" + nowrap + ";background:" + rowBg + ";'>" + escapeHtml(p.name || '') + "</td>";
+        hours.forEach(function(h) {
+          var h0 = h, h05 = h + 0.5, h1 = h + 1;
+          var breakFirst = (bsDec != null && beDec != null && bsDec < h05 && beDec > h0);
+          var breakSecond = (bsDec != null && beDec != null && bsDec < h1 && beDec > h05);
+          var workFirst = (inDec != null && outDec != null && inDec < h05 && outDec > h0) && !breakFirst;
+          var workSecond = (inDec != null && outDec != null && inDec < h1 && outDec > h05) && !breakSecond;
+          var fullBreak = breakFirst && breakSecond;
+          var fullWork = workFirst && workSecond;
+          var mark = '';
+          if (fullBreak) mark = "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;border:1px solid #555;background:transparent;'></span>";
+          else if (fullWork) mark = "<span style='color:#000;'>●</span>";
+          else if (breakFirst && workSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border:1px solid #555;border-right:none;border-radius:50% 0 0 50%;background:transparent;box-sizing:border-box;'></span><span style='position:absolute;right:0;top:0;width:6px;height:12px;border-radius:0 50% 50% 0;background:#000;'></span></span>";
+          else if (workFirst && breakSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border-radius:50% 0 0 50%;background:#000;'></span><span style='position:absolute;right:0;top:0;width:6px;height:12px;border:1px solid #555;border-left:none;border-radius:0 50% 50% 0;background:transparent;box-sizing:border-box;'></span></span>";
+          else if (workFirst && !workSecond) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;left:0;top:0;width:6px;height:12px;border-radius:50% 0 0 50%;background:#000;'></span></span>";
+          else if (workSecond && !workFirst) mark = "<span style='display:inline-block;width:12px;height:12px;position:relative;'><span style='position:absolute;right:0;top:0;width:6px;height:12px;border-radius:0 50% 50% 0;background:#000;'></span></span>";
+          var inAny = fullBreak || fullWork || (breakFirst && workSecond) || (workFirst && breakSecond) || (workFirst && !workSecond) || (workSecond && !workFirst);
+          html += "<td style='padding:2px;min-width:26px;" + tc + ";background:" + (inAny ? rowBg : 'transparent') + "'>" + mark + "</td>";
+        });
+        html += "</tr>";
+      });
+      html += "</tbody></table></div>";
+      box.innerHTML = html;
+    }
+    function loadScheduleStoreSearch() { loadScheduleToday(); loadScheduleWeek(); }
+    function fillScheduleMyMonthSelect() {
+      var sel = document.getElementById('schedule-my-month-select');
+      if (!sel) return;
+      sel.innerHTML = '';
+      var d = new Date();
+      for (var i = 0; i < 24; i++) {
+        var y = d.getFullYear(), m = d.getMonth() + 1;
+        var val = y + '-' + String(m).padStart(2, '0');
+        sel.add(new Option(y + '-' + String(m).padStart(2, '0'), val));
+        d.setMonth(d.getMonth() - 1);
+      }
+      sel.value = (new Date().getFullYear()) + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+    }
+    function loadMobileMyAttendanceSummary() {
+      var box = document.getElementById('schedule-my-punch-box');
+      var sel = document.getElementById('schedule-my-month-select');
+      var yearMonth = (sel && sel.value) ? sel.value : (function() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+      if (!loggedInStore || !loggedInUser || !box) return;
+      box.innerHTML = '<div class="text-center text-muted py-3 small">' + t('m_loading') + '</div>';
+      runApi('POST', 'getMobileMyAttendanceSummary', { storeName: loggedInStore, userName: loggedInUser, yearMonth: yearMonth })
+        .then(function(data) { renderMyAttendanceSummary(data || {}); })
+        .catch(function() { if (box) box.innerHTML = '<div class="text-center text-muted py-3 small">' + (t('m_schedule_no_data') || '데이터 없음') + '</div>'; });
+    }
+    function renderMyAttendanceSummary(data) {
+      var box = document.getElementById('schedule-my-punch-box');
+      if (!box) return;
+      var tc = 'text-align:center;';
+      var normalDays = Number(data.normalDays) || 0, otHours = Number(data.otHours) || 0, otDays = Number(data.otDays) || 0, lateMin = Number(data.lateMinutes) || 0, lateDays = Number(data.lateDays) || 0;
+      var html = "<table class='table table-sm table-bordered mb-0' style='font-size:12px;'>";
+      html += "<tr style='background:#f9f9f9;'><td style='padding:8px;" + tc + "'>" + (t('m_schedule_normal_days') || '정상 근무 일수') + "</td><td style='padding:8px;" + tc + "'><strong>" + normalDays + "</strong></td></tr>";
+      html += "<tr><td style='padding:8px;" + tc + "'>" + (t('m_schedule_ot_hours') || 'O.T 시간') + " / " + (t('m_schedule_ot_days') || 'O.T 일수') + "</td><td style='padding:8px;" + tc + "'><strong>" + otHours + " h / " + otDays + "</strong></td></tr>";
+      html += "<tr style='background:#f9f9f9;'><td style='padding:8px;" + tc + "'>" + (t('m_schedule_late_min') || '지각 시간') + " / " + (t('m_schedule_late_days') || '지각 일수') + "</td><td style='padding:8px;" + tc + "'><strong>" + lateMin + " min / " + lateDays + "</strong></td></tr>";
+      html += "</table>";
+      box.innerHTML = html;
+    }
+    function setScheduleDefaultDates() {
+      var today = new Date();
+      var todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      var monEl = document.getElementById('schedule-week-monday');
+      var todayEl = document.getElementById('schedule-today-date');
+      if (monEl && !monEl.value) monEl.value = getMondayOfWeek();
+      if (todayEl && !todayEl.value) todayEl.value = todayStr;
+    }
+    function loadScheduleToday() {
+      var dateEl = document.getElementById('schedule-today-date');
+      var storeSel = document.getElementById('schedule-today-store');
+      var areaSel = document.getElementById('schedule-today-area');
+      var dateStr = (dateEl && dateEl.value) ? dateEl.value.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      var storeFilter = (storeSel && storeSel.value) ? storeSel.value : '';
+      var areaFilter = (areaSel && areaSel.value) ? areaSel.value : 'All';
+      var box = document.getElementById('schedule-today-box');
+      box.innerHTML = '<div class="text-center text-muted py-3 small">' + t('m_loading') + '</div>';
+      runApi('GET', 'getSchedulesData', {})
+        .then(function(rows) {
+          var list = toScheduleList(rows).filter(function(r) {
+            return r.date === dateStr && (r.store === storeFilter || !storeFilter) && (areaFilter === 'All' || (r.area || 'Service') === areaFilter);
+          });
+          renderScheduleToday(list, [], areaFilter);
+        })
+        .catch(function() { box.innerHTML = '<div class="text-center text-muted py-3 small">' + t('hist_fail') + '</div>'; });
+    }
+    function loadScheduleWeek() {
+      var mondayEl = document.getElementById('schedule-week-monday');
+      var storeSel = document.getElementById('schedule-today-store');
+      var areaSel = document.getElementById('schedule-week-area');
+      var mondayStr = (mondayEl && mondayEl.value) ? mondayEl.value.slice(0, 10) : getMondayOfWeek();
+      var storeFilter = (storeSel && storeSel.value) ? storeSel.value : '';
+      var areaFilter = (areaSel && areaSel.value) ? areaSel.value : 'All';
+      var box = document.getElementById('schedule-week-box');
+      box.innerHTML = '<div class="text-center text-muted py-4 small">' + t('m_loading') + '</div>';
+      runApi('GET', 'getSchedulesData', {})
+        .then(function(rows) {
+          var sun = new Date(mondayStr + 'T12:00:00');
+          sun.setDate(sun.getDate() + 6);
+          var sundayStr = sun.toISOString().slice(0, 10);
+          var list = toScheduleList(rows).filter(function(r) {
+            return r.date >= mondayStr && r.date <= sundayStr && (r.store === storeFilter || !storeFilter) && (areaFilter === 'All' || (r.area || 'Service') === areaFilter);
+          });
+          renderScheduleWeek(list, areaFilter);
+        })
+        .catch(function() { box.innerHTML = '<div class="text-center text-muted py-4 small">' + t('hist_fail') + '</div>'; });
+    }
+
+    // ----- Visit (방문 매장 = 로그인 매장 목록, 거래처 아님) -----
+    function fillVisitStoreSelect() {
+      var sel = document.getElementById('visit-store-select');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">' + t('m_visit_store') + '</option>';
+      for (var k in loginData) { if (loginData.hasOwnProperty(k)) sel.innerHTML += '<option value="' + k + '">' + k + '</option>'; }
+    }
+    function handleVisit(type) {
+      var store = document.getElementById('visit-store-select').value;
+      var purpose = document.getElementById('visit-purpose').value;
+      if ((type === '방문시작' || type === '강제 방문시작') && !store) { alert(t('err_select_store_visit')); return; }
+      if (!confirm(store + ' ' + type + ' 기록할까요?')) return;
+      function doSubmit(lat, lng, visitType) {
+        runApi('POST', 'submitStoreVisit', { userName: loggedInUser, storeName: store, type: visitType, purpose: purpose, lat: lat, lng: lng })
+          .then(function(res) {
+            alert(res && res.msg ? res.msg : (res && res.success ? '완료' : '실패'));
+            if (res && res.success) {
+              var uiType = (visitType === '강제 방문시작') ? '방문시작' : (visitType === '강제 방문종료') ? '방문종료' : visitType;
+              updateVisitUI(uiType, store);
+              loadTodayVisitLog();
+            }
+          })
+          .catch(function(e) { alert(t('err_server') + ': ' + (e && e.message ? e.message : e)); });
+      }
+      var forceType = type === '방문시작' ? '강제 방문시작' : (type === '방문종료' ? '강제 방문종료' : type);
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(p) { doSubmit(p.coords.latitude, p.coords.longitude, type); },
+          function() {
+            if (confirm(t('att_gps_fail_confirm') || '위치를 확인할 수 없습니다. 강제 방문/종료로 기록할까요?')) {
+              doSubmit('', '', forceType);
+            }
+          },
+          { enableHighAccuracy: true, timeout: 7000 }
+        );
+      } else {
+        doSubmit('', '', forceType);
+      }
+    }
+    function updateVisitUI(type, store) {
+      var inBtn = document.getElementById('btn-visit-in');
+      var outBtn = document.getElementById('btn-visit-out');
+      var msgBox = document.getElementById('visit-status-msg');
+      var storeSel = document.getElementById('visit-store-select');
+      if (type === '방문시작') {
+        if (inBtn) inBtn.style.display = 'none';
+        if (outBtn) outBtn.style.display = 'block';
+        if (msgBox) { msgBox.style.display = 'block'; msgBox.innerHTML = '📍 <b>[' + store + ']</b> ' + t('m_visit_supporting'); }
+        if (storeSel) storeSel.disabled = true;
+      } else {
+        if (inBtn) inBtn.style.display = 'block';
+        if (outBtn) outBtn.style.display = 'none';
+        if (msgBox) msgBox.style.display = 'none';
+        if (storeSel) { storeSel.disabled = false; storeSel.value = ''; }
+      }
+    }
+    function loadTodayVisitLog() {
+      if (!loggedInUser) return;
+      var logBody = document.getElementById('visit-log-body');
+      if (!logBody) return;
+      runApi('POST', 'getTodayMyVisits', { userName: loggedInUser })
+        .then(function(list) {
+          logBody.innerHTML = '';
+          if (!list || !list.length) { logBody.innerHTML = '<tr><td colspan="4" style="padding:20px;color:#999">' + t('hist_no_data') + '</td></tr>'; return; }
+          list.forEach(function(r) {
+            var durationHtml = (r.duration != null && r.duration !== '') ? '<span style="background:#E1F5FE;padding:3px 6px;border-radius:4px;font-size:11px">' + r.duration + t('m_min') + '</span>' : '-';
+            logBody.innerHTML += '<tr style="border-bottom:1px solid #f2f2f2"><td style="padding:12px 5px;font-size:11px">' + (r.time || '') + '</td><td style="padding:12px 5px;font-weight:bold">' + (r.store || '-') + '</td><td style="padding:12px 5px;font-weight:bold">' + tv(r.type, visitTypeMap) + '</td><td>' + durationHtml + '</td></tr>';
+          });
+        })
+        .catch(function() { logBody.innerHTML = '<tr><td colspan="4" style="color:#999">' + t('hist_fail') + '</td></tr>'; });
+    }
+    function checkActiveVisitStatus() {
+      runApi('POST', 'checkUserVisitStatus', { userName: loggedInUser })
+        .then(function(res) {
+          if (res && res.active && res.storeName) updateVisitUI('방문시작', res.storeName);
+          loadTodayVisitLog();
+        })
+        .catch(function() { loadTodayVisitLog(); });
+    }
+
+    // ----- Admin -----
+    function toggleNoticeList(which) {
+      var box = document.getElementById('admin-notice-' + which + '-box');
+      var other = which === 'stores' ? document.getElementById('admin-notice-roles-box') : document.getElementById('admin-notice-stores-box');
+      if (!box) return;
+      var isOpen = box.style.display !== 'none';
+      if (other) other.style.display = 'none';
+      box.style.display = isOpen ? 'none' : 'block';
+    }
+    function closeNoticeDropdowns(e) {
+      var w = e && e.target ? e.target.closest('.notice-select-wrap') : null;
+      if (!w) {
+        var sb = document.getElementById('admin-notice-stores-box');
+        var rb = document.getElementById('admin-notice-roles-box');
+        if (sb) sb.style.display = 'none';
+        if (rb) rb.style.display = 'none';
+      }
+    }
+    function updateNoticeTriggerText(which) {
+      var cbs = document.querySelectorAll('input[name="notice-' + which + '"]:checked');
+      var txt = document.getElementById('admin-notice-' + which + '-text');
+      if (!txt) return;
+      var n = cbs.length;
+      if (n === 0) txt.textContent = '선택...';
+      else if (n === 1) txt.textContent = [].map.call(cbs, function(c){ return c.value; })[0];
+      else txt.textContent = n + '개 선택';
+    }
+    function loadAdminNoticeOptions() {
+      runApi('POST', 'getNoticeOptionsForMobile', { userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) {
+          var stores = (r && r.stores) ? r.stores : [];
+          var roles = (r && r.roles) ? r.roles : [];
+          var sBox = document.getElementById('admin-notice-stores-box');
+          var rBox = document.getElementById('admin-notice-roles-box');
+          function addCb(parent, value, label, name, which) {
+            var div = document.createElement('div');
+            div.className = 'notice-cb-item';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = value;
+            cb.name = name;
+            cb.onchange = function() { updateNoticeTriggerText(which); };
+            var sp = document.createElement('span');
+            sp.textContent = label;
+            div.appendChild(cb);
+            div.appendChild(sp);
+            div.onclick = function(e) { if (e.target === cb) return; cb.checked = !cb.checked; updateNoticeTriggerText(which); };
+            parent.appendChild(div);
+          }
+          if (sBox) { sBox.innerHTML = ''; addCb(sBox, '전체', t('label_all'), 'notice-store', 'stores'); stores.forEach(function(x) { addCb(sBox, x, x, 'notice-store', 'stores'); }); }
+          if (rBox) { rBox.innerHTML = ''; addCb(rBox, '전체', t('label_all'), 'notice-role', 'roles'); roles.forEach(function(x) { addCb(rBox, x, x, 'notice-role', 'roles'); }); }
+          updateNoticeTriggerText('stores');
+          updateNoticeTriggerText('roles');
+          if (!window._noticeDropdownBound) {
+            window._noticeDropdownBound = true;
+            document.addEventListener('click', closeNoticeDropdowns);
+          }
+        })
+        .catch(function() {});
+    }
+    function fillAdminStoreSelects() {
+      var leaveStore = document.getElementById('admin-leave-store');
+      var attStore = document.getElementById('admin-att-store');
+      if (leaveStore) { leaveStore.innerHTML = '<option value="">' + t('label_store') + '</option>'; for (var k in loginData) { if (loginData.hasOwnProperty(k)) leaveStore.innerHTML += '<option value="' + k + '">' + k + '</option>'; } }
+      if (attStore) { attStore.innerHTML = '<option value="">' + t('label_store') + '</option>'; for (var k in loginData) { if (loginData.hasOwnProperty(k)) attStore.innerHTML += '<option value="' + k + '">' + k + '</option>'; } }
+    }
+    function mobileSendNotice() {
+      var title = (document.getElementById('admin-notice-title') || {}).value || '';
+      var content = (document.getElementById('admin-notice-content') || {}).value || '';
+      var storeCbs = document.querySelectorAll('input[name="notice-store"]:checked');
+      var roleCbs = document.querySelectorAll('input[name="notice-role"]:checked');
+      var storeVals = [].map.call(storeCbs, function(c) { return c.value; });
+      var roleVals = [].map.call(roleCbs, function(c) { return c.value; });
+      var targetStore = (storeVals.indexOf('전체') >= 0 || storeVals.length === 0) ? '전체' : storeVals.join(',');
+      var targetRole = (roleVals.indexOf('전체') >= 0 || roleVals.length === 0) ? '전체' : roleVals.join(',');
+      if (!title.trim()) { alert(t('admin_notice_subject_ph')); return; }
+      runApi('POST', 'adminSaveNotice', { userRole: loggedInRole, data: { title: title, content: content, targetStore: targetStore, target_role: targetRole, sender: loggedInUser } })
+        .then(function(r) {
+          alert(r && r.message ? r.message : (r && r.success ? t('msg_send_done') : t('hist_fail')));
+          if (r && r.success) { document.getElementById('admin-notice-title').value = ''; document.getElementById('admin-notice-content').value = ''; }
+        })
+        .catch(function(e) { alert(t('err_server') + ': ' + (e && e.message ? e.message : e)); });
+    }
+    function mobileLoadLeaveList() {
+      var startStr = (document.getElementById('admin-leave-start') || {}).value || '';
+      var endStr = (document.getElementById('admin-leave-end') || {}).value || '';
+      var storeFilter = (document.getElementById('admin-leave-store') || {}).value || '';
+      var statusFilter = (document.getElementById('admin-leave-status') || {}).value || '대기';
+      var box = document.getElementById('admin-leave-list');
+      box.innerHTML = t('m_loading_notices');
+      runApi('POST', 'getLeaveAllDataForMobile', { userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) {
+          var leaves = (r && r.leaves) ? r.leaves : [];
+          if (statusFilter !== 'All') leaves = leaves.filter(function(l) { return l.status === statusFilter; });
+          if (storeFilter) leaves = leaves.filter(function(l) { return l.store === storeFilter; });
+          if (startStr) leaves = leaves.filter(function(l) { return l.date >= startStr; });
+          if (endStr) leaves = leaves.filter(function(l) { return l.date <= endStr; });
+          box.innerHTML = '';
+          if (!leaves.length) { box.innerHTML = '<div class="text-muted">' + t('admin_leave_wait_none') + '</div>'; return; }
+          leaves.forEach(function(l) {
+            box.innerHTML += '<div style="padding:8px;border-bottom:1px solid #eee"><span>' + l.date + ' ' + l.store + ' ' + l.name + ' (' + tv(l.type, leaveTypeMap) + ')</span> <button type="button" class="btn btn-sm btn-success" onclick="mobileLeaveApprove(' + l.row + ')">' + t('admin_btn_approve') + '</button> <button type="button" class="btn btn-sm btn-danger" onclick="mobileLeaveReject(' + l.row + ')">' + t('admin_btn_reject') + '</button></div>';
+          });
+        })
+        .catch(function() { box.innerHTML = t('hist_fail'); });
+    }
+    function mobileLeaveApprove(row) {
+      runApi('POST', 'processLeaveDecisionMobile', { row: row, decision: '승인', userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) { alert(r && r.message ? r.message : t('msg_processed')); if (r && r.success) mobileLoadLeaveList(); })
+        .catch(function(e) { alert(e && e.message ? e.message : e); });
+    }
+    function mobileLeaveReject(row) {
+      runApi('POST', 'processLeaveDecisionMobile', { row: row, decision: '반려', userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) { alert(r && r.message ? r.message : t('msg_processed')); if (r && r.success) mobileLoadLeaveList(); })
+        .catch(function(e) { alert(e && e.message ? e.message : e); });
+    }
+    function mobileLoadAttendancePending() {
+      var startStr = (document.getElementById('admin-att-start') || {}).value || '';
+      var endStr = (document.getElementById('admin-att-end') || {}).value || '';
+      var storeFilter = (document.getElementById('admin-att-store') || {}).value || '';
+      var box = document.getElementById('admin-att-list');
+      box.innerHTML = t('m_loading_notices');
+      runApi('GET', 'getAttendanceLogs', {})
+        .then(function(rows) {
+          var list = (rows || []).filter(function(r) {
+            var approved = (r[13] || '').toString();
+            if (approved !== '대기') return false;
+            var rowDate = r[0] ? new Date(r[0]).toISOString().slice(0, 10) : '';
+            if (startStr && rowDate < startStr) return false;
+            if (endStr && rowDate > endStr) return false;
+            var rStore = String(r[1] || '').trim();
+            if (storeFilter && rStore !== storeFilter) return false;
+            return true;
+          });
+          box.innerHTML = '';
+          if (!list.length) { box.innerHTML = '<div class="text-muted">' + t('admin_att_wait_none') + '</div>'; return; }
+          list.forEach(function(r) {
+            var id = r[14];
+            var ts = r[0] ? new Date(r[0]).toISOString() : '';
+            var timePart = ts.slice(0, 19).replace('T', ' ');
+            box.innerHTML += '<div style="padding:8px;border-bottom:1px solid #eee"><span>' + timePart + ' ' + (r[1] || '') + ' ' + (r[2] || '') + ' ' + (r[3] || '') + '</span> <button type="button" class="btn btn-sm btn-success" onclick="mobileAttApprove(' + id + ')">' + t('admin_btn_approve') + '</button> <button type="button" class="btn btn-sm btn-danger" onclick="mobileAttReject(' + id + ')">' + t('admin_btn_reject') + '</button></div>';
+          });
+        })
+        .catch(function() { box.innerHTML = t('hist_fail'); });
+    }
+    function mobileAttApprove(id) {
+      runApi('POST', 'processAttendanceApproval', { row: id, decision: '승인완료', userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) { alert(r && r.message ? r.message : '처리됨'); if (r && r.success) mobileLoadAttendancePending(); })
+        .catch(function(e) { alert(e && e.message ? e.message : e); });
+    }
+    function mobileAttReject(id) {
+      runApi('POST', 'processAttendanceApproval', { row: id, decision: '반려', userStore: loggedInStore, userRole: loggedInRole })
+        .then(function(r) { alert(r && r.message ? r.message : '처리됨'); if (r && r.success) mobileLoadAttendancePending(); })
+        .catch(function(e) { alert(e && e.message ? e.message : e); });
+    }
+  </script>
+</body>
+</html>

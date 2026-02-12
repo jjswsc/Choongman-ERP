@@ -1,0 +1,19 @@
+{
+  "name": "choongman-erp-vercel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "충만치킨 ERP - Vercel 이전용 최소 예시",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "create-next-app": "^16.1.6",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "vercel": "^39.0.0"
+  }
+}

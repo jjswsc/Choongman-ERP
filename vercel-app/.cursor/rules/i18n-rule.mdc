@@ -1,0 +1,30 @@
+# i18n (다국어) 규칙
+
+**모든 UI 업데이트 시 반드시 번역을 포함하세요.** 단어나 내용이 번역 기능에서 빠지면 안 됩니다.
+
+## 적용 방법
+1. `lib/i18n.ts`에 새 문자열을 **ko, en, th, mm, la 5개 언어 모두** 추가
+2. `useLang()` + `useT(lang)`로 번역 적용: `t('키이름')`
+3. 컴포넌트에서 `const { lang } = useLang()` 및 `const t = useT(lang)` 사용
+
+## 지원 언어
+| 코드 | 언어 |
+|------|------|
+| ko | 한국어 |
+| en | English |
+| th | ภาษาไทย |
+| mm | မြန်မာ |
+| la | ພາສາລາວ |
+
+## 예시
+```ts
+// i18n.ts에 추가 - 5개 언어 모두
+myNewLabel: '새 라벨',   // ko
+myNewLabel: 'New Label', // en
+myNewLabel: '...',       // th, mm, la
+
+// 컴포넌트에서
+const { lang } = useLang()
+const t = useT(lang)
+<span>{t('myNewLabel')}</span>
+```

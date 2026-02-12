@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>충만치킨 ERP (Vercel 테스트)</title>
+</head>
+<body>
+  <h1>Vercel 이전 테스트</h1>
+  <p><a href="/app">모바일 앱 (로그인·공지·물류 연동)</a> <small>(<a href="/public/app.html">직접 링크</a>)</small> | 아래 버튼으로 API 테스트</p>
+  <button id="btn-debug-env">1. 환경 변수 확인 (debug-env)</button>
+  <button id="btn-login-data">2. getLoginData 호출</button>
+  <button id="btn-login-check">3. loginCheck 호출 (store: 테스트매장, name: 테스트, pw: 1234)</button>
+  <pre id="out"></pre>
+
+  <script>
+    const out = document.getElementById('out');
+    function log(msg) {
+      out.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    }
+
+    document.getElementById('btn-debug-env').onclick = async () => {
+      try {
+        const r = await fetch('/api/handler?path=debug-env');
+        const text = await r.text();
+        const data = text.startsWith('{') ? JSON.parse(text) : { raw: text };
+        log(data);
+      } catch (e) {
+        log('Error: ' + e.message);
+      }
+    };
+
+    document.getElementById('btn-login-data').onclick = async () => {
+      try {
+        const r = await fetch('/api/handler?path=getLoginData');
+        const text = await r.text();
+        if (!r.ok) {
+          log('HTTP ' + r.status + '\n' + text);
+          return;
+        }
+        try {
+          const data = JSON.parse(text);
+          log(data);
+        } catch (_) {
+          log('(JSON 아님) HTTP ' + r.status + '\n' + text);
+        }
+      } catch (e) {
+        log('Error: ' + e.message);
+      }
+    };
+
+    document.getElementById('btn-login-check').onclick = async () => {
+      try {
+        const r = await fetch('/api/handler?path=loginCheck', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            store: '테스트매장',
+            name: '테스트',
+            pw: '1234',
+            isAdminPage: false
+          })
+        });
+        const text = await r.text();
+        if (!r.ok) {
+          log('HTTP ' + r.status + '\n' + text);
+          return;
+        }
+        try {
+          const data = JSON.parse(text);
+          log(data);
+        } catch (_) {
+          log('(JSON 아님) HTTP ' + r.status + '\n' + text);
+        }
+      } catch (e) {
+        log('Error: ' + e.message);
+      }
+    };
+  </script>
+</body>
+</html>

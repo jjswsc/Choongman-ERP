@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#E65100">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="충만 ERP">
+  <title>충만 ERP - 로그인</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+  <link href="/public/css/style.css" rel="stylesheet">
+  <link href="/public/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; margin: 0; padding: 0; background: #E65100; color: #f0f0f0; -webkit-tap-highlight-color: transparent; }
+    #loading { display: none; position: fixed; inset: 0; background: rgba(230,81,0,0.9); align-items: center; justify-content: center; z-index: 9999; }
+    #loading.show { display: flex; }
+    #loading .spinner-border { color: #E65100 !important; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="show">
+    <div class="spinner-border text-warning" style="width:3rem;height:3rem;"></div>
+  </div>
+
+  <div id="login-screen">
+    <div class="login-logo-wrap">
+      <img src="/public/img/logo.png" alt="Choongman Chicken" class="login-logo">
+    </div>
+    <div class="login-card">
+      <select id="langSelect" class="login-input" onchange="changeLanguage()">
+        <option value="ko">🇰🇷 한국어</option>
+        <option value="en">🇺🇸 English</option>
+        <option value="th">🇹🇭 ภาษาไทย</option>
+        <option value="mm">🇲🇲 မြန်မာ</option>
+        <option value="la">🇱🇦 ພາສາລາວ</option>
+      </select>
+      <select id="storeSelect" class="login-input" onchange="onStoreChange()">
+        <option value="">매장 선택...</option>
+      </select>
+      <select id="loginName" class="login-input">
+        <option value="">이름 선택...</option>
+      </select>
+      <input type="password" id="loginPw" class="login-input" placeholder="비밀번호 (PIN)" autocomplete="off">
+      <button class="login-btn" id="btn-login" onclick="tryLogin()">로그인</button>
+    </div>
+  </div>
+
+  <script src="/public/api-adapter.js"></script>
+  <script>
+    var loginData = {};
+    var currentLang = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('cm_lang')) || 'ko';
+
+    var I18N = {
+      ko: { m_select_store: "매장 선택", m_select_name: "이름 선택", m_pin_ph: "비밀번호 (PIN)", btn_login: "로그인", err_select_store_name: "매장과 이름을 선택하세요.", err_login_fail: "로그인 실패: PIN을 확인하세요.", err_server: "서버 오류" },
+      en: { m_select_store: "Select Store", m_select_name: "Select Name", m_pin_ph: "Password (PIN)", btn_login: "Login", err_select_store_name: "Please select store and name.", err_login_fail: "Login failed: Check PIN.", err_server: "Server error" },
+      th: { m_select_store: "เลือกสาขา", m_select_name: "เลือกชื่อ", m_pin_ph: "รหัสผ่าน (PIN)", btn_login: "เข้าสู่ระบบ", err_select_store_name: "เลือกสาขาและชื่อ", err_login_fail: "เข้าสู่ระบบไม่สำเร็จ", err_server: "ข้อผิดพลาดเซิร์ฟเวอร์" },
+      mm: { m_select_store: "ဆိုင်ရွေးပါ", m_select_name: "အမည်ရွေးပါ", m_pin_ph: "လျှို့ဝှက်နံပါတ် (PIN)", btn_login: "ဝင်ရောက်မည်", err_select_store_name: "ဆိုင်နှင့်အမည်ရွေးပါ", err_login_fail: "ဝင်မအောင်မြင်ပါ", err_server: "ဆာဗာ အမှား" },
+      la: { m_select_store: "ເລືອກສາຂາ", m_select_name: "ເລືອກຊື່", m_pin_ph: "ລະຫັດ (PIN)", btn_login: "ເຂົ້າສູ່ລະບົບ", err_select_store_name: "ເລືອກສາຂາແລະຊື່", err_login_fail: "ເຂົ້າບໍ່ສຳເລັດ", err_server: "ຂໍ້ຜິດພາດເຊີບເວີ" }
+    };
+
+    function t(key) {
+      var L = I18N[currentLang];
+      return (L && L[key]) ? L[key] : (I18N.ko && I18N.ko[key]) ? I18N.ko[key] : key;
+    }
+
+    function changeLanguage() {
+      var sel = document.getElementById('langSelect');
+      if (sel) {
+        currentLang = sel.value || 'ko';
+        try { sessionStorage.setItem('cm_lang', currentLang); } catch (e) {}
+        applyTranslations();
+      }
+    }
+
+    function applyTranslations() {
+      var s = document.getElementById('storeSelect');
+      var n = document.getElementById('loginName');
+      var pw = document.getElementById('loginPw');
+      var btn = document.getElementById('btn-login');
+      if (s && s.options[0]) s.options[0].text = t('m_select_store') + '...';
+      if (n && n.options[0]) n.options[0].text = t('m_select_name') + '...';
+      if (pw) pw.placeholder = t('m_pin_ph');
+      if (btn) btn.textContent = t('btn_login');
+    }
+
+    function load(show) {
+      var el = document.getElementById('loading');
+      if (el) el.classList.toggle('show', !!show);
+    }
+
+    function fillStoreSelect() {
+      var s = document.getElementById('storeSelect');
+      if (!s || !loginData) return;
+      s.innerHTML = '<option value="">' + t('m_select_store') + '...</option>';
+      for (var k in loginData) {
+        if (loginData.hasOwnProperty(k)) s.add(new Option(k, k));
+      }
+    }
+
+    function onStoreChange() {
+      var store = document.getElementById('storeSelect').value;
+      var n = document.getElementById('loginName');
+      if (!n) return;
+      n.innerHTML = '<option value="">' + t('m_select_name') + '...</option>';
+      if (loginData[store]) {
+        loginData[store].forEach(function(name) { n.add(new Option(name, name)); });
+      }
+    }
+
+    function tryLogin() {
+      var s = document.getElementById('storeSelect').value;
+      var n = document.getElementById('loginName').value;
+      var p = document.getElementById('loginPw').value;
+      if (!s || !n) {
+        alert(t('err_select_store_name'));
+        return;
+      }
+      var btn = document.getElementById('btn-login');
+      if (btn) btn.disabled = true;
+
+      window.runApi('POST', 'loginCheck', { store: s, name: n, pw: p, isAdminPage: false })
+        .then(function(res) {
+          if (btn) btn.disabled = false;
+          if (res && res.success) {
+            try {
+              sessionStorage.setItem('cm_store', res.storeName || s);
+              sessionStorage.setItem('cm_user', res.userName || n);
+              sessionStorage.setItem('cm_role', res.role || '');
+            } catch (e) {}
+            window.location.href = '/app';
+          } else {
+            alert(t('err_login_fail'));
+          }
+        })
+        .catch(function(err) {
+          if (btn) btn.disabled = false;
+          alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
+        });
+    }
+
+    load(true);
+    var langSel = document.getElementById('langSelect');
+    if (langSel && currentLang) langSel.value = currentLang;
+    window.runApi('GET', 'getLoginData', {})
+      .then(function(d) {
+        load(false);
+        loginData = (d && d.users) ? d.users : (d || {});
+        fillStoreSelect();
+        applyTranslations();
+      })
+      .catch(function(err) {
+        load(false);
+        alert(t('err_server') + ': ' + (err && err.message ? err.message : err));
+      });
+  </script>
+</body>
+</html>
