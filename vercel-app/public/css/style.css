@@ -75,29 +75,9 @@ body.login-page .background-glow {
     z-index: 0;
 }
 
-/* 2. 주황색 레이저 광선 (중앙에서 8방향으로 펼쳐지는 효과) */
+/* 2. 주황색 광선 - 제거됨 */
 body.login-page .data-streams {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    opacity: 0.55;
-    background:
-        linear-gradient(0deg, transparent 48%, rgba(255, 110, 0, 0.4) 50%, transparent 52%),
-        linear-gradient(45deg, transparent 48%, rgba(255, 100, 0, 0.35) 50%, transparent 52%),
-        linear-gradient(90deg, transparent 48%, rgba(255, 110, 0, 0.4) 50%, transparent 52%),
-        linear-gradient(135deg, transparent 48%, rgba(255, 100, 0, 0.35) 50%, transparent 52%),
-        linear-gradient(180deg, transparent 48%, rgba(255, 110, 0, 0.4) 50%, transparent 52%),
-        linear-gradient(225deg, transparent 48%, rgba(255, 100, 0, 0.35) 50%, transparent 52%),
-        linear-gradient(270deg, transparent 48%, rgba(255, 110, 0, 0.4) 50%, transparent 52%),
-        linear-gradient(315deg, transparent 48%, rgba(255, 100, 0, 0.35) 50%, transparent 52%);
-    background-size: 100% 100%;
-    background-position: center;
-    animation: laserBeamFlow 5s ease-in-out infinite;
-}
-
-@keyframes laserBeamFlow {
-    0%, 100% { opacity: 0.45; }
-    50% { opacity: 0.7; }
+    display: none;
 }
 
 /* 로그인 래퍼 */
@@ -111,42 +91,38 @@ body.login-page .login-wrapper {
     z-index: 1;
 }
 
-/* 2. 유리 질감 카드 (훨씬 투명) + 동서남북 중심 파란 빛 */
+/* 2. 유리 질감 카드 (매우 투명) + 얇은 파란 테두리 글로우 */
 body.login-page .glass-card {
     width: 100%;
     max-width: 400px;
     padding: 40px;
-    background: rgba(255, 255, 255, 0.02);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(96, 165, 250, 0.25);
+    background: rgba(255, 255, 255, 0.015);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(96, 165, 250, 0.5);
     border-radius: 24px;
-    /* 동서남북 가운데를 중심으로 빛 (전체 파란 테두리 대신) */
     box-shadow:
-        0 -25px 50px -15px rgba(59, 130, 246, 0.5),
-        0 25px 50px -15px rgba(59, 130, 246, 0.5),
-        -25px 0 50px -15px rgba(59, 130, 246, 0.5),
-        25px 0 50px -15px rgba(59, 130, 246, 0.5),
-        0 20px 40px -12px rgba(0, 0, 0, 0.5);
-    animation: blueEdgeGlow 3s ease-in-out infinite;
+        0 0 12px rgba(59, 130, 246, 0.25),
+        0 0 24px rgba(59, 130, 246, 0.12),
+        inset 0 0 20px rgba(59, 130, 246, 0.03),
+        0 20px 40px -12px rgba(0, 0, 0, 0.4);
+    animation: blueBorderGlow 3s ease-in-out infinite;
 }
 
-@keyframes blueEdgeGlow {
+@keyframes blueBorderGlow {
     0%, 100% {
         box-shadow:
-            0 -25px 50px -15px rgba(59, 130, 246, 0.45),
-            0 25px 50px -15px rgba(59, 130, 246, 0.45),
-            -25px 0 50px -15px rgba(59, 130, 246, 0.45),
-            25px 0 50px -15px rgba(59, 130, 246, 0.45),
-            0 20px 40px -12px rgba(0, 0, 0, 0.5);
+            0 0 12px rgba(59, 130, 246, 0.25),
+            0 0 24px rgba(59, 130, 246, 0.12),
+            inset 0 0 20px rgba(59, 130, 246, 0.03),
+            0 20px 40px -12px rgba(0, 0, 0, 0.4);
     }
     50% {
         box-shadow:
-            0 -30px 60px -12px rgba(59, 130, 246, 0.7),
-            0 30px 60px -12px rgba(59, 130, 246, 0.7),
-            -30px 0 60px -12px rgba(59, 130, 246, 0.7),
-            30px 0 60px -12px rgba(59, 130, 246, 0.7),
-            0 20px 40px -12px rgba(0, 0, 0, 0.5);
+            0 0 16px rgba(59, 130, 246, 0.35),
+            0 0 30px rgba(59, 130, 246, 0.15),
+            inset 0 0 24px rgba(59, 130, 246, 0.04),
+            0 20px 40px -12px rgba(0, 0, 0, 0.4);
     }
 }
 
