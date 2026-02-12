@@ -9,6 +9,7 @@ export interface AppItem {
   price: number
   taxType: string
   safeQty: number
+  image: string
 }
 
 async function getItems(storeName: string): Promise<AppItem[]> {
@@ -19,6 +20,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
     spec?: string
     price?: number
     tax?: string
+    image?: string
   }[] | null
   let safeMap: Record<string, number> = {}
   if (storeName) {
@@ -45,9 +47,30 @@ async function getItems(storeName: string): Promise<AppItem[]> {
       price: Number(row.price) || 0,
       taxType,
       safeQty: safeMap[row.code] || 0,
+      image: String(row.image || ''),
     })
   }
   return list
+}
+
+async function getStoreStock(store: string): Promise<Record<string, number>> {
+  try {
+    const storeNorm = String(store || '').toLowerCase().trim()
+    if (!storeNorm) return {}
+    const rows = (await supabaseSelectFilter(
+      'stock_logs',
+      `location=ilike.${encodeURIComponent(storeNorm)}`
+    )) as { item_code?: string; qty?: number }[] | null
+    const m: Record<string, number> = {}
+    for (let i = 0; i < (rows || []).length; i++) {
+      const code = rows![i].item_code
+      if (!code) continue
+      m[code] = (m[code] || 0) + Number(rows![i].qty || 0)
+    }
+    return m
+  } catch {
+    return {}
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -57,8 +80,8 @@ export async function GET(request: NextRequest) {
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
 
   try {
-    const items = await getItems(storeName)
-    return NextResponse.json({ items, stock: {} }, { headers })
+    const [items, stock] = await Promise.all([getItems(storeName), getStoreStock(storeName)])
+    return NextResponse.json({ items, stock }, { headers })
   } catch (e) {
     console.error('getAppData:', e)
     return NextResponse.json({ items: [], stock: {} }, { headers })

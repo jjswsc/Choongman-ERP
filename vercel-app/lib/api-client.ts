@@ -64,6 +64,7 @@ export interface AppItem {
   price: number
   taxType: string
   safeQty: number
+  image?: string
 }
 
 export async function getAppData(storeName: string) {
@@ -92,6 +93,7 @@ export interface OrderHistoryItem {
   summary: string
   total: number
   status: string
+  deliveryStatus?: string
   items: { name?: string; qty?: number; price?: number }[]
 }
 
@@ -103,4 +105,61 @@ export async function getMyOrderHistory(params: {
   const q = new URLSearchParams(params)
   const res = await fetch(`/api/getMyOrderHistory?${q}`)
   return res.json() as Promise<OrderHistoryItem[]>
+}
+
+export async function processOrderReceive(params: {
+  orderRowId: number
+  imageUrl?: string
+}) {
+  const res = await fetch('/api/processOrderReceive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface AdminOrderItem {
+  row: number
+  orderId: number
+  date: string
+  store: string
+  total: number
+  status: string
+  deliveryStatus: string
+  deliveryDate: string
+  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
+  summary: string
+}
+
+export async function getAdminOrders(params: { startStr: string; endStr: string }) {
+  const q = new URLSearchParams(params)
+  const res = await fetch(`/api/getAdminOrders?${q}`)
+  const data = await res.json()
+  return (data.list || []) as AdminOrderItem[]
+}
+
+export async function updateOrderDeliveryStatus(params: {
+  orderId: number
+  deliveryStatus: string
+}) {
+  const res = await fetch('/api/updateOrderDeliveryStatus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateOrderCart(params: {
+  orderId: number
+  updatedCart: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
+  deliveryStatus?: string
+}) {
+  const res = await fetch('/api/updateOrderCart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }

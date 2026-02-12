@@ -91,3 +91,41 @@ export async function supabaseSelectFilter(
   if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))
   return res.json()
 }
+
+export async function supabaseUpdateByFilter(
+  table: string,
+  filter: string,
+  patch: Record<string, unknown>
+) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?${filter}`
+  const res = await fetch(pathStr, {
+    method: 'PATCH',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error('Supabase update by filter failed: ' + (await res.text()))
+  return true
+}
+
+export async function supabaseInsertMany(table: string, rows: Record<string, unknown>[]) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
+  const res = await fetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(rows),
+  })
+  if (!res.ok) throw new Error('Supabase insert many failed: ' + (await res.text()))
+  const text = await res.text()
+  return text ? (JSON.parse(text) as unknown) : []
+}
