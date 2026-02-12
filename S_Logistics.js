@@ -557,7 +557,7 @@ function saveHeadOfficeInfoToSheet(d) {
   }
 }
 
-var _menuPermissionMenuIds = ["dashboard", "notices", "work-log", "item-manage", "vendor-manage", "outbound", "stock", "inbound", "force", "hr-employee", "attendance-manage", "payroll", "hr-leave", "store-manage", "store-visit", "store-complaint", "settings"];
+var _menuPermissionMenuIds = ["dashboard", "notices", "work-log", "item-manage", "vendor-manage", "outbound", "stock", "inbound", "force", "hr-employee", "attendance-manage", "payroll", "hr-leave", "petty-cash", "store-manage", "store-visit", "store-complaint", "settings"];
 
 /** 메뉴권한 시트 헤더: 매장, 이름, 각 메뉴별 _view, _edit 컬럼 */
 function _menuPermissionHeaders() {
@@ -914,7 +914,11 @@ function getCombinedOutboundHistory(startStr, endStr, vendorFilter, typeFilter) 
         var ords = supabaseSelectFilter('orders', "id=eq." + oid);
         if (ords && ords.length > 0) {
           var o = ords[0];
-          orderMap[String(oid)] = { delivery_status: o.delivery_status, image_url: o.image_url, delivery_date: o.delivery_date, order_date: o.order_date };
+          var recIdx = [];
+          try { if (o.received_indices) recIdx = JSON.parse(o.received_indices); } catch (e) {}
+          var cart = [];
+          try { if (o.cart_json) cart = JSON.parse(o.cart_json); } catch (e2) {}
+          orderMap[String(oid)] = { delivery_status: o.delivery_status, image_url: o.image_url, delivery_date: o.delivery_date, order_date: o.order_date, received_indices: recIdx, cart: cart };
         }
       }
       list.forEach(function(r) {
@@ -922,10 +926,36 @@ function getCombinedOutboundHistory(startStr, endStr, vendorFilter, typeFilter) 
         if (!key || !orderMap[key]) return;
         var o = orderMap[key];
         if (o.order_date) r.orderDate = o.order_date.substring(0, 10);
-        if (o.delivery_status === "배송완료") r.deliveryStatus = "배송완료";
+        if (o.delivery_status === "배송완료" || o.delivery_status === "일부배송완료" || o.delivery_status === "일부 배송 완료") r.deliveryStatus = (o.delivery_status === "일부 배송 완료" ? "일부배송완료" : o.delivery_status);
         if (o.image_url && (o.image_url.indexOf("http") === 0 || o.image_url.indexOf("data:image") === 0)) r.receiveImageUrl = o.image_url;
         if (o.delivery_date) r.deliveryDate = o.delivery_date.substring(0, 16);
+        if (o.received_indices && o.received_indices.length > 0) { r.receivedIndices = o.received_indices; r.totalOrderItems = (o.cart && o.cart.length) ? o.cart.length : o.received_indices.length; }
       });
+      if (orderRowIds.length > 0) {
+        var filteredList = [];
+        var usedByOrder = {};
+        list.forEach(function(r) {
+          var key = r.orderRowId != null ? String(r.orderRowId) : "";
+          if (!key || !orderMap[key]) { filteredList.push(r); return; }
+          var o = orderMap[key];
+          if (!o.received_indices || o.received_indices.length === 0) { filteredList.push(r); return; }
+          var cart = o.cart || [];
+          var code = String(r.code || "").trim();
+          var name = String(r.name || "").trim();
+          var matchIdx = -1;
+          for (var ci = 0; ci < cart.length; ci++) {
+            if (String(cart[ci].code || "").trim() === code && String(cart[ci].name || "").trim() === name) {
+              if (o.received_indices.indexOf(ci) !== -1) { matchIdx = ci; break; }
+            }
+          }
+          if (matchIdx === -1) return;
+          var uk = key + "_" + matchIdx;
+          if (usedByOrder[uk]) return;
+          usedByOrder[uk] = true;
+          filteredList.push(r);
+        });
+        list = filteredList;
+      }
     }
     return list;
   } catch (e) {

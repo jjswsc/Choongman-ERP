@@ -76,6 +76,9 @@
     <a onclick="go('payroll',this)" class="hq-only manager-hide" data-i18n="menu_payroll">💰 급여 관리</a>
     <a role="button" tabindex="0" onclick="go('hr-leave',this)" data-i18n="menu_hr_leave">🏖️ 휴가 관리</a>
     
+    <div class="sidebar-header" data-i18n="menu_header_accounting">회계 관리</div>
+    <a role="button" tabindex="0" id="menu-petty-cash" onclick="go('petty-cash', this)" data-i18n="menu_petty_cash"><span class="icon">💵</span> 패티 캐쉬</a>
+
     <div class="sidebar-header" data-i18n="menu_header_store">매장 관리</div>
 
 <a role="button" tabindex="0" id="menu-store-check" onclick="go('store-manage', this)" data-i18n="menu_store_check"><span class="icon">🏢</span> 매장 점검</a>
@@ -203,6 +206,25 @@
           <div class="modal-body text-center p-3">
             <img id="receivePhotoModalImg" src="" alt="수령 사진" class="img-fluid" style="max-height:70vh; border-radius:8px;" onerror="this.style.display='none'; document.getElementById('receivePhotoModalLink').style.display='block';">
             <a id="receivePhotoModalLink" href="#" target="_blank" rel="noopener" class="btn btn-outline-primary mt-2" style="display:none;" data-i18n="force_hist_open_in_tab">새 탭에서 보기</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 패티캐시 영수증 보기/저장 모달 -->
+    <div class="modal fade" id="pettyReceiptModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title fw-bold" data-i18n="petty_col_receipt">영수증</h6>
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body text-center p-3">
+            <img id="pettyReceiptModalImg" src="" alt="영수증" class="img-fluid" style="max-height:70vh; border-radius:8px; cursor:pointer;">
+          </div>
+          <div class="modal-footer py-2">
+            <button type="button" class="btn btn-primary btn-sm" id="pettyReceiptSaveBtn" onclick="savePettyReceiptImage()" data-i18n="petty_receipt_save">저장</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal" data-i18n="btn_close">닫기</button>
           </div>
         </div>
       </div>
@@ -1104,6 +1126,77 @@
         </div>
         <div id="leave-panel-stats" style="display:none;">
             <div class="card-box p-0"><div class="search-toolbar m-3"><div class="input-group"><span class="input-group-text" data-i18n="label_period">기간</span><input type="date" id="stats-start" class="form-control"><input type="date" id="stats-end" class="form-control"><select id="hr-store-selector" class="form-select" style="max-width:150px;"></select><button class="btn btn-primary" onclick="filterStats()" data-i18n="btn_search">검색</button></div></div><div class="table-responsive"><table class="table table-bordered mb-0 text-center align-middle"><thead class="table-dark"><tr><th rowspan="2" data-i18n="label_store">매장</th><th rowspan="2" data-i18n="leave_col_name">이름</th><th colspan="2" data-i18n="leave_used_period">사용(기간)</th><th colspan="2" data-i18n="leave_used_total">사용(전체)</th><th rowspan="2" data-i18n="leave_remain">잔여</th></tr><tr><th data-i18n="leave_annual">연차</th><th data-i18n="leave_sick">병가</th><th data-i18n="leave_annual">연차</th><th data-i18n="leave_sick">병가</th></tr></thead><tbody id="stats-list"></tbody></table></div></div>
+        </div>
+    </div>
+
+    <div id="page-petty-cash" style="display:none;">
+        <h4 class="fw-bold mb-3" data-i18n="petty_cash_title">💵 패티 캐쉬</h4>
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <a id="petty-nav-list" class="nav-link active" onclick="showPettyCashTab('list')" data-i18n="petty_tab_list">📋 내역</a>
+            </li>
+            <li class="nav-item">
+                <a id="petty-nav-monthly" class="nav-link" onclick="showPettyCashTab('monthly')" data-i18n="petty_tab_monthly">📊 월별 현황</a>
+            </li>
+        </ul>
+
+        <div id="petty-tab-list">
+        <div class="card-box mb-3">
+            <div class="row mb-3 align-items-end">
+                <div class="col-md-2"><label class="fw-bold" data-i18n="label_store">매장</label><select id="petty-cash-store" class="form-select"></select></div>
+                <div class="col-md-2"><label class="fw-bold" data-i18n="label_period">기간</label><input type="date" id="petty-cash-start" class="form-control"></div>
+                <div class="col-md-2"><label class="fw-bold">&nbsp;</label><input type="date" id="petty-cash-end" class="form-control"></div>
+                <div class="col-md-2"><label class="fw-bold">&nbsp;</label><button class="btn btn-primary w-100" onclick="loadPettyCashList()" data-i18n="btn_query">조회</button></div>
+            </div>
+        </div>
+        <div class="card-box p-0 mb-3">
+            <div class="table-responsive" style="max-height:400px;">
+                <table class="table mb-0 text-center align-middle">
+                    <thead class="table-header-dark"><tr><th data-i18n="petty_col_date">날짜</th><th data-i18n="label_store">매장</th><th data-i18n="petty_col_type">유형</th><th data-i18n="petty_col_amount">금액</th><th data-i18n="petty_col_balance">잔액</th><th data-i18n="petty_col_memo">내용</th><th data-i18n="petty_col_receipt">영수증</th><th data-i18n="petty_col_user">등록자</th></tr></thead>
+                    <tbody id="petty-cash-list"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-box">
+            <h5 class="mb-3" data-i18n="petty_add_title">등록</h5>
+            <div class="row mb-2 align-items-end">
+                <div class="col-md-2"><label class="fw-bold" data-i18n="label_store">매장</label><select id="petty-add-store" class="form-select"></select></div>
+                <div class="col-md-2"><label class="fw-bold" data-i18n="petty_col_date">날짜</label><input type="date" id="petty-add-date" class="form-control"></div>
+                <div class="col-md-2"><label class="fw-bold" data-i18n="petty_col_type">유형</label><select id="petty-add-type" class="form-select"><option value="receive" data-i18n="petty_type_receive">수령</option><option value="expense" data-i18n="petty_type_expense" selected>지출</option><option value="replenish" data-i18n="petty_type_replenish">보충</option><option value="settle" data-i18n="petty_type_settle">정산</option></select></div>
+                <div class="col-md-2"><label class="fw-bold" data-i18n="petty_col_amount">금액</label><input type="number" id="petty-add-amount" class="form-control" data-i18n-placeholder="petty_amount_ph" placeholder="0" min="0"></div>
+                <div class="col-md-2"><label class="fw-bold" data-i18n="petty_col_memo">내용</label><input type="text" id="petty-add-memo" class="form-control" data-i18n-placeholder="petty_memo_ph" placeholder=""></div>
+                <div class="col-md-2"><label class="fw-bold">&nbsp;</label><button class="btn btn-success w-100" onclick="savePettyCash()" data-i18n="btn_save">저장</button></div>
+            </div>
+        </div>
+        </div>
+
+        <div id="petty-tab-monthly" style="display:none;">
+            <div class="card-box mb-3">
+                <div class="row mb-3 align-items-end">
+                    <div class="col-md-2"><label class="fw-bold" data-i18n="label_store">매장</label><select id="petty-monthly-store" class="form-select"></select></div>
+                    <div class="col-md-2"><label class="fw-bold" data-i18n="petty_year_month">연월</label><select id="petty-monthly-ym" class="form-select"></select></div>
+                    <div class="col-md-2"><label class="fw-bold">&nbsp;</label><button class="btn btn-primary w-100" onclick="loadPettyCashMonthDetail()" data-i18n="btn_query">조회</button></div>
+                </div>
+            </div>
+            <div class="card-box p-0">
+                <div class="table-responsive" style="max-height:400px;">
+                    <table class="table mb-0 text-center align-middle table-bordered">
+                        <thead class="table-header-dark">
+                            <tr>
+                                <th data-i18n="petty_col_date">날짜</th>
+                                <th data-i18n="label_store">매장</th>
+                                <th data-i18n="petty_col_type">유형</th>
+                                <th data-i18n="petty_col_amount">금액</th>
+                                <th data-i18n="petty_col_balance">잔액</th>
+                                <th data-i18n="petty_col_memo">내용</th>
+                                <th data-i18n="petty_col_receipt">영수증</th>
+                                <th data-i18n="petty_col_user">등록자</th>
+                            </tr>
+                        </thead>
+                        <tbody id="petty-monthly-list"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 

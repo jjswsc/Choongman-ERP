@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "clasp-push": "clasp push"
+    "clasp-push": "clasp push",
+    "clasp-clean-remote": "node scripts/clasp-clean-remote.js"
   },
   "devDependencies": {
-    "@google/clasp": "^3.0.0"
+    "@google/clasp": "^3.0.0",
+    "@google-cloud/local-auth": "^2.1.0",
+    "googleapis": "^128.0.0"
   }
 }

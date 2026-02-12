@@ -6,6 +6,7 @@ node_modules/
 
 # 환경 변수 (비밀키 포함)
 .env
+credentials.json
 .env.local
 *.env
 

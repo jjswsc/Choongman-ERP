@@ -11,6 +11,7 @@ export interface OrderHistoryItem {
   status: string
   deliveryStatus: string
   items: { name?: string; qty?: number; price?: number }[]
+  receivedIndices?: number[]
 }
 
 export async function GET(request: NextRequest) {
@@ -42,12 +43,17 @@ export async function GET(request: NextRequest) {
       total?: number
       status?: string
       delivery_status?: string
+      received_indices?: string
     }[]
 
     const list: OrderHistoryItem[] = (rows || []).map((o) => {
       let cart: { name?: string; qty?: number; price?: number }[] = []
       try {
         cart = JSON.parse(o.cart_json || '[]')
+      } catch {}
+      let receivedIndices: number[] = []
+      try {
+        if (o.received_indices) receivedIndices = JSON.parse(o.received_indices)
       } catch {}
       const summary =
         cart.length > 0
@@ -62,8 +68,9 @@ export async function GET(request: NextRequest) {
         summary,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
-        deliveryStatus: o.delivery_status || (o.status === 'Approved' ? '배송중' : ''),
+        deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? (o.delivery_status === '일부 배송 완료' ? '일부배송완료' : o.delivery_status) ?? (o.status === 'Approved' ? '배송중' : ''),
         items: cart,
+        receivedIndices,
       }
     })
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
-const ALLOWED_STATUS = ['배송중', '배송완료', '일부 배송 완료']
+const ALLOWED_STATUS = ['배송중', '배송완료', '일부배송완료']
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()

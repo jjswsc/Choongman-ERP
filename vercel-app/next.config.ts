@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import webpack from "webpack";
 
 const vercelAppDir = __dirname;
 
@@ -9,13 +10,22 @@ const nextConfig: NextConfig = {
     root: vercelAppDir,
   },
   // webpack(PostCSS 등) 모듈 해석을 vercel-app 기준으로 (상위 lockfile로 인한 충돌 방지)
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.context = vercelAppDir;
     config.resolve = config.resolve || {};
     config.resolve.modules = [
       path.join(vercelAppDir, "node_modules"),
       "node_modules",
     ];
+    // self is not defined 오류 방지 (interception-route-rewrite-manifest 등)
+    if (isServer) {
+      config.plugins = config.plugins || [];
+      config.plugins.push(
+        new webpack.DefinePlugin({
+          self: "globalThis",
+        })
+      );
+    }
     return config;
   },
 };

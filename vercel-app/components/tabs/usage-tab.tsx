@@ -1,10 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { Input } from "@/components/ui/input"
 import {
   Accordion,
   AccordionContent,
@@ -13,53 +12,157 @@ import {
 } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import { getAppData, processUsage, getMyUsageHistory, type AppItem } from "@/lib/api-client"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 
-const categories = [
-  { id: "chicken", name: "Chicken", items: ["후라이드 치킨", "양념 치킨", "간장 치킨", "마늘 치킨"] },
-  { id: "kitchen", name: "Kitchen", items: ["위생장갑", "앞치마", "헤어캡", "수세미"] },
-  { id: "packaging", name: "Packaging", items: ["치킨박스 (대)", "치킨박스 (소)", "비닐봉투", "소스컵"] },
-  { id: "sauce", name: "Sauce & Powder", items: ["양념소스", "간장소스", "마늘파우더", "후추"] },
-  { id: "noodles", name: "Sauce & Noodles", items: ["떡볶이 소스", "우동면", "라면", "쫄면"] },
-  { id: "uniform", name: "Uniform", items: ["상의 (M)", "상의 (L)", "하의 (M)", "하의 (L)"] },
-]
+function hasValidImage(url: string | undefined): boolean {
+  if (!url || typeof url !== "string") return false
+  const s = url.trim()
+  return s.length > 10 && (s.startsWith("http") || s.startsWith("data:image"))
+}
+
+function formatStock(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1)
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function daysAgoStr(days: number) {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
+}
 
 interface CartItem {
+  code: string
   name: string
   qty: number
 }
 
 export function UsageTab() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const [items, setItems] = useState<AppItem[]>([])
+  const [stock, setStock] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
   const [quantity, setQuantity] = useState(1)
-  const [selectedItem, setSelectedItem] = useState<string | null>(null)
-  const [cart, setCart] = useState<CartItem[]>([
-    { name: "후라이드 치킨", qty: 2 },
-    { name: "양념소스", qty: 1 },
-  ])
+  const [selectedItem, setSelectedItem] = useState<AppItem | null>(null)
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [submitting, setSubmitting] = useState(false)
+  const [history, setHistory] = useState<{ date: string; dateTime: string; item: string; qty: number; amount: number }[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [histStart, setHistStart] = useState(() => daysAgoStr(7))
+  const [histEnd, setHistEnd] = useState(todayStr)
+  const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
+
+  const categories = useMemo(() => {
+    const cats = new Map<string, AppItem[]>()
+    for (const item of items) {
+      const cat = item.category || t('all')
+      if (!cats.has(cat)) cats.set(cat, [])
+      cats.get(cat)!.push(item)
+    }
+    return Array.from(cats.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [items, t])
+
+  useEffect(() => {
+    if (!auth?.store) return
+    setLoading(true)
+    getAppData(auth.store)
+      .then((r) => {
+        setItems(r.items)
+        setStock(r.stock || {})
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false))
+  }, [auth?.store])
+
+  const loadHistory = useCallback(() => {
+    if (!auth?.store) return
+    setHistoryLoading(true)
+    getMyUsageHistory({ store: auth.store, startStr: histStart, endStr: histEnd })
+      .then(setHistory)
+      .finally(() => setHistoryLoading(false))
+  }, [auth?.store, histStart, histEnd])
+
+  useEffect(() => {
+    if (auth?.store) loadHistory()
+  }, [auth?.store, loadHistory])
 
   const addToCart = () => {
     if (!selectedItem) return
     setCart((prev) => {
-      const existing = prev.find((item) => item.name === selectedItem)
+      const existing = prev.find((x) => x.code === selectedItem.code)
       if (existing) {
-        return prev.map((item) =>
-          item.name === selectedItem ? { ...item, qty: item.qty + quantity } : item
+        return prev.map((x) =>
+          x.code === selectedItem.code ? { ...x, qty: x.qty + quantity } : x
         )
       }
-      return [...prev, { name: selectedItem, qty: quantity }]
+      return [...prev, { code: selectedItem.code, name: selectedItem.name, qty: quantity }]
     })
     setSelectedItem(null)
     setQuantity(1)
   }
 
-  const removeFromCart = (name: string) => {
-    setCart((prev) => prev.filter((item) => item.name !== name))
+  const removeFromCart = (code: string) => {
+    setCart((prev) => prev.filter((x) => x.code !== code))
+  }
+
+  const handleConfirmUsage = async () => {
+    if (!auth?.store || cart.length === 0) return
+    setSubmitting(true)
+    try {
+      const res = await processUsage({
+        storeName: auth.store,
+        userName: auth.user,
+        items: cart.map((c) => ({ code: c.code, name: c.name, qty: c.qty })),
+      })
+      if (res.success) {
+        alert(t('confirmUsage') + ' ✓')
+        setCart([])
+        loadHistory()
+        getAppData(auth.store).then((r) => setStock(r.stock || {}))
+      } else {
+        alert((res.message || t('orderFail')) as string)
+      }
+    } catch (e) {
+      alert((t('orderFail') as string) + ': ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!auth?.store) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 p-8">
+        <Package className="h-12 w-12 text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">매장을 선택해 주세요.</p>
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col gap-4 p-4">
+      {imageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setImageModal(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <img src={imageModal.url} alt={imageModal.name} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>
+            <Button variant="ghost" size="sm" className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70" onClick={() => setImageModal(null)}>
+              ✕
+            </Button>
+          </div>
+        </div>
+      )}
       <Tabs defaultValue="input" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="input" className="text-sm font-medium">{t('useInput')}</TabsTrigger>
@@ -69,36 +172,74 @@ export function UsageTab() {
         <TabsContent value="input" className="mt-4 flex flex-col gap-4">
           <Card className="shadow-sm">
             <CardContent className="p-0">
-              <Accordion type="single" collapsible className="w-full">
-                {categories.map((category) => (
-                  <AccordionItem key={category.id} value={category.id} className="border-b border-border/60 last:border-0">
-                    <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
-                      <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-primary" />
-                        {category.name}
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 pb-3">
-                      <div className="flex flex-col gap-1.5">
-                        {category.items.map((item) => (
-                          <button
-                            key={item}
-                            type="button"
-                            onClick={() => setSelectedItem(item)}
-                            className={`rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                              selectedItem === item
-                                ? "bg-primary/10 font-medium text-primary"
-                                : "text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            {item}
-                          </button>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+              {loading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">{t('loading')}</div>
+              ) : (
+                <Accordion type="single" collapsible className="w-full">
+                  {categories.map(([catName, catItems]) => (
+                    <AccordionItem key={catName} value={catName} className="border-b border-border/60 last:border-0">
+                      <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4 text-primary" />
+                          {catName}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-3">
+                        <div className="flex flex-col gap-1.5">
+                          {catItems.map((item) => {
+                            const st = stock[item.code] ?? 0
+                            const isLow = item.safeQty != null && st <= item.safeQty
+                            const hasImg = hasValidImage(item.image)
+                            return (
+                              <div
+                                key={item.code}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setSelectedItem(item)}
+                                onKeyDown={(e) => e.key === "Enter" && setSelectedItem(item)}
+                                className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                                  selectedItem?.code === item.code
+                                    ? "bg-primary/10 font-medium text-primary"
+                                    : "text-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <span
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-border bg-muted/50 text-base hover:bg-muted"
+                                  title={hasImg ? t("photo") : t("noImage")}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (hasImg) setImageModal({ url: item.image!, name: item.name })
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && hasImg) {
+                                      e.stopPropagation()
+                                      setImageModal({ url: item.image!, name: item.name })
+                                    }
+                                  }}
+                                  role="button"
+                                  tabIndex={hasImg ? 0 : -1}
+                                  aria-disabled={!hasImg}
+                                >
+                                  📷
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="font-semibold">{item.name}</span>
+                                    <span className="text-xs text-muted-foreground">({item.spec || "-"})</span>
+                                    <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${isLow ? "bg-destructive" : "bg-[#16a34a]"}`}>
+                                      {isLow ? t("stockLow") + ":" + formatStock(st) : t("stock") + ":" + formatStock(st)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
 
@@ -129,12 +270,12 @@ export function UsageTab() {
               ) : (
                 <div className="flex flex-col gap-2">
                   {cart.map((item) => (
-                    <div key={item.name} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
+                    <div key={item.code} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-medium text-foreground">{item.name}</span>
                         <Badge variant="outline" className="text-xs">{item.qty}</Badge>
                       </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => removeFromCart(item.name)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => removeFromCart(item.code)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -144,14 +285,46 @@ export function UsageTab() {
             </CardContent>
           </Card>
 
-          <Button className="h-12 w-full text-base font-bold">{t('confirmUsage')}</Button>
+          <Button
+            className="h-12 w-full text-base font-bold"
+            onClick={handleConfirmUsage}
+            disabled={cart.length === 0 || submitting}
+          >
+            {submitting ? t('loading') : t('confirmUsage')}
+          </Button>
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
           <Card className="shadow-sm">
-            <CardContent className="py-10 text-center">
-              <Package className="mx-auto h-10 w-10 text-muted-foreground/40" />
-              <p className="mt-3 text-sm text-muted-foreground">{t('useHistoryEmpty')}</p>
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 text-sm max-w-[140px]" />
+                <span className="text-sm text-muted-foreground">~</span>
+                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 text-sm max-w-[140px]" />
+                <Button size="sm" onClick={loadHistory} disabled={historyLoading}>
+                  {historyLoading ? t('loading') : t('search') || '조회'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {history.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Package className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm text-muted-foreground">{t('useHistoryEmpty')}</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {history.map((h, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+                      <div>
+                        <p className="text-xs text-muted-foreground">{h.dateTime}</p>
+                        <p className="font-medium">{h.item}</p>
+                      </div>
+                      <span className="font-bold text-primary">-{formatStock(h.qty)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

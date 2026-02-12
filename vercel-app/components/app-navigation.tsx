@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
 import {
   Home,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   Users,
   Clock,
   MapPin,
+  Banknote,
   Settings,
 } from "lucide-react"
 
@@ -19,7 +21,8 @@ const tabs = [
   { id: "usage", labelKey: "tabUsage" as const, icon: Package },
   { id: "hr", labelKey: "tabHr" as const, icon: Users },
   { id: "timesheet", labelKey: "tabTimesheet" as const, icon: Clock },
-  { id: "visit", labelKey: "tabVisit" as const, icon: MapPin },
+  { id: "visit", labelKey: "tabVisit" as const, icon: MapPin, officeOnly: true },
+  { id: "pettycash", labelKey: "tabPettyCash" as const, icon: Banknote, adminOnly: true },
   { id: "admin", labelKey: "tabAdmin" as const, icon: Settings },
 ]
 
@@ -30,12 +33,29 @@ interface AppNavigationProps {
 
 export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
   const { lang } = useLang()
+  const { auth } = useAuth()
   const t = useT(lang)
+
+  const isOffice =
+    auth?.store &&
+    (auth.store.toLowerCase() === "office" || auth.store === "본사")
+  const isAdmin =
+    auth?.role &&
+    ["director", "officer", "ceo", "hr", "manager"].some((r) =>
+      String(auth.role || "").toLowerCase().includes(r)
+    )
+
+  const visibleTabs = tabs.filter((tab) => {
+    const t = tab as { officeOnly?: boolean; adminOnly?: boolean }
+    if (t.officeOnly && !isOffice) return false
+    if (t.adminOnly && !isAdmin) return false
+    return true
+  })
 
   return (
     <nav className="sticky top-[57px] z-40 border-b border-border/60 bg-card/90 backdrop-blur-md">
       <div className="flex overflow-x-auto scrollbar-hide">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
           return (

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const orderId = Number(body.orderId ?? body.row ?? body.orderRowId)
     const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
     const deliveryStatus = body.deliveryStatus ? String(body.deliveryStatus).trim() : undefined
+    const receivedIndices = Array.isArray(body.receivedIndices) ? body.receivedIndices as number[] : null
 
     if (!orderId || isNaN(orderId)) {
       return NextResponse.json(
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '❌ 해당 주문이 없습니다.' }, { headers })
     }
 
-    const o = orders[0] as { status?: string }
+    const o = orders[0] as { status?: string; cart_json?: string }
     if (o.status !== 'Approved') {
       return NextResponse.json(
         { success: false, message: '❌ 승인된 주문만 수정할 수 있습니다.' },
@@ -40,21 +41,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let subtotal = 0
-    const validCart = updatedCart
-      .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
-      .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string }) => {
-        const qty = Number(i.qty) || 0
-        const price = Number(i.price) || 0
-        subtotal += price * qty
-        return {
-          code: String(i.code ?? ''),
-          name: String(i.name ?? ''),
-          price,
-          qty,
-          spec: String(i.spec ?? '-'),
+    let validCart: { code: string; name: string; price: number; qty: number; spec: string }[]
+    if (receivedIndices && receivedIndices.length > 0) {
+      let origCart: { code?: string; name?: string; price?: number; qty?: number; spec?: string }[] = []
+      try {
+        origCart = JSON.parse(o.cart_json || '[]')
+      } catch {}
+      const merged = [...origCart]
+      updatedCart.forEach((item: { code?: string; name?: string; price?: number; qty?: number; spec?: string }, i: number) => {
+        const idx = receivedIndices[i]
+        if (idx !== undefined && idx >= 0 && idx < merged.length) {
+          merged[idx] = {
+            code: String(item.code ?? merged[idx].code ?? ''),
+            name: String(item.name ?? merged[idx].name ?? ''),
+            price: Number(item.price ?? merged[idx].price ?? 0),
+            qty: Number(item.qty ?? merged[idx].qty ?? 0),
+            spec: String(item.spec ?? merged[idx].spec ?? '-'),
+          }
         }
       })
+      validCart = merged.map((i) => ({
+        code: String(i.code ?? ''),
+        name: String(i.name ?? ''),
+        price: Number(i.price ?? 0),
+        qty: Number(i.qty ?? 0),
+        spec: String(i.spec ?? '-'),
+      }))
+    } else {
+      validCart = updatedCart
+        .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
+        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string }) => ({
+          code: String(i.code ?? ''),
+          name: String(i.name ?? ''),
+          price: Number(i.price ?? 0),
+          qty: Number(i.qty ?? 0),
+          spec: String(i.spec ?? '-'),
+        }))
+    }
+    let subtotal = 0
+    validCart.forEach((i) => { subtotal += i.price * i.qty })
 
     if (validCart.length === 0) {
       return NextResponse.json(

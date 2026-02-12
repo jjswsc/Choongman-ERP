@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+globalThis.__REACT_LOADABLE_MANIFEST="{}"

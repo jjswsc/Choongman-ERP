@@ -1340,6 +1340,8 @@ function loadForceHistory() {
             if (item.deliveryDate) groups[key].deliveryDate = item.deliveryDate;
             if (item.orderDate) groups[key].orderDate = item.orderDate;
             if (item.receiveImageUrl) groups[key].receiveImageUrl = item.receiveImageUrl;
+            if (item.receivedIndices) groups[key].receivedIndices = item.receivedIndices;
+            if (item.totalOrderItems) groups[key].totalOrderItems = item.totalOrderItems;
             if (item.orderRowId != null) groups[key].orderRowId = item.orderRowId;
             groups[key].totalQty += Math.abs(Number(item.qty));
             groups[key].totalAmt += Math.abs(Number(item.amount));
@@ -1356,12 +1358,12 @@ function loadForceHistory() {
             if (g.receiveImageUrl) window._receivePhotoUrlByIndex[idx] = g.receiveImageUrl;
             var typeLabel = (g.type === "Outbound") ? (typeof invT !== "undefined" ? invT("type_order_approval") : "주문승인") : (typeof invT !== "undefined" ? invT("type_force_out") : "강제출고");
             var badgeClass = (g.type === "Force") ? "bg-danger" : "bg-success";
-            var summary = g.items[0].name + (g.items.length > 1 ? ` 외 ${g.items.length - 1}건` : "");
+            var summary = (g.receivedIndices && g.receivedIndices.length > 0 && g.items.length > 0) ? g.items.map(function(it){ return it.name; }).join(", ") + " (" + g.items.length + "/" + (g.totalOrderItems || g.items.length) + ")" : (g.items[0].name + (g.items.length > 1 ? " 외 " + (g.items.length - 1) + "건" : ""));
             var rowId = "force-row-" + idx;
             var invDisplay = g.invoiceNo || "-";
-            var statusLabel = (g.deliveryStatus === "배송완료") ? (typeof invT !== "undefined" ? invT("status_delivered") : "배송 완료") : (g.type === "Outbound" ? (typeof invT !== "undefined" ? invT("status_in_transit") : "배송중") : "-");
-            var statusBadge = (g.deliveryStatus === "배송완료") ? "bg-success" : (g.type === "Outbound" ? "bg-info" : "");
-            var showPhotoBtn = (g.type === "Outbound" && g.deliveryStatus === "배송완료" && (g.receiveImageUrl || g.orderRowId));
+            var statusLabel = (g.deliveryStatus === "배송완료") ? (typeof invT !== "undefined" ? invT("status_delivered") : "배송완료") : (g.deliveryStatus === "일부배송완료" || g.deliveryStatus === "일부 배송 완료") ? "일부배송완료" : (g.type === "Outbound" ? (typeof invT !== "undefined" ? invT("status_in_transit") : "배송중") : "-");
+            var statusBadge = (g.deliveryStatus === "배송완료") ? "bg-success" : (g.deliveryStatus === "일부배송완료" || g.deliveryStatus === "일부 배송 완료") ? "bg-warning text-dark" : (g.type === "Outbound" ? "bg-info" : "");
+            var showPhotoBtn = (g.type === "Outbound" && (g.deliveryStatus === "배송완료" || g.deliveryStatus === "일부배송완료" || g.deliveryStatus === "일부 배송 완료") && (g.receiveImageUrl || g.orderRowId));
             var photoBtn = "";
             if (showPhotoBtn) {
               photoBtn = "<button type=\"button\" class=\"btn btn-sm btn-outline-secondary ms-1\" title=\"" + (typeof invT !== "undefined" ? invT("force_hist_view_photo") : "수령 사진 보기") + "\" onclick=\"event.stopPropagation(); openReceivePhotoModalByIndex(" + idx + ")\">📷</button>";
@@ -1966,11 +1968,11 @@ function loadStoreOptions(elementId) {
         select.innerHTML = "";
         var isManager = (typeof userRole !== "undefined") && userRole === "manager";
         var managerStoreOnly = (typeof userStore !== "undefined") && userStore;
-        var restrictStores = (isManager && managerStoreOnly && (elementId === "sch-store-select" || elementId === "complaint-store" || elementId === "complaint-list-store" || elementId === "att-store-filter"));
+        var restrictStores = (isManager && managerStoreOnly && (elementId === "sch-store-select" || elementId === "complaint-store" || elementId === "complaint-list-store" || elementId === "att-store-filter" || elementId === "petty-cash-store" || elementId === "petty-add-store" || elementId === "petty-monthly-store"));
         var listToUse = restrictStores ? [userStore] : (list || []);
         var allStoresText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].store_all_stores) ? I18N[currentLang].store_all_stores : "전체 매장";
         var selectPhText = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].store_select_ph) ? I18N[currentLang].store_select_ph : "매장을 선택하세요";
-        var addAll = elementId.includes('filter') || elementId.includes('hist') || elementId === 'eval-list-store' || elementId === 'complaint-list-store' || elementId === 'att-today-store' || elementId === 'sch-store-select' || elementId === 'sch-store' || elementId === 'chk-store' || elementId === 'hist-store' || elementId === 'complaint-store' || elementId === 'complaint-list-store' || elementId === 'visit-filter-store' || elementId === 'ord-store-selector' || elementId === 'stock-store-selector' || elementId === 'adj-store-selector' || elementId === 'filter-store-select' || elementId === 'hr-store-selector' || elementId === 'leave-store-select' || elementId === 'emp-store' || elementId === 'os-store' || elementId === 'a-store';
+        var addAll = elementId.includes('filter') || elementId.includes('hist') || elementId === 'eval-list-store' || elementId === 'complaint-list-store' || elementId === 'att-today-store' || elementId === 'sch-store-select' || elementId === 'sch-store' || elementId === 'chk-store' || elementId === 'hist-store' || elementId === 'complaint-store' || elementId === 'complaint-list-store' || elementId === 'visit-filter-store' || elementId === 'ord-store-selector' || elementId === 'stock-store-selector' || elementId === 'adj-store-selector' || elementId === 'filter-store-select' || elementId === 'hr-store-selector' || elementId === 'leave-store-select' || elementId === 'emp-store' || elementId === 'os-store' || elementId === 'a-store' || elementId === 'petty-cash-store' || elementId === 'petty-add-store' || elementId === 'petty-monthly-store';
         if (!restrictStores && addAll) {
             var allStoresLabel = (elementId === 'att-today-store' && typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].att_all_stores) ? I18N[currentLang].att_all_stores : allStoresText;
             select.add(new Option(allStoresLabel, "All"));
@@ -2065,6 +2067,7 @@ var MENU_PERMISSION_ITEMS = [
     { id: 'attendance-manage', labelKey: 'menu_attendance' },
     { id: 'payroll', labelKey: 'menu_payroll' },
     { id: 'hr-leave', labelKey: 'menu_hr_leave' },
+    { id: 'petty-cash', labelKey: 'menu_petty_cash' },
     { id: 'store-manage', labelKey: 'menu_store_check' },
     { id: 'store-visit', labelKey: 'menu_store_visit' },
     { id: 'store-complaint', labelKey: 'menu_store_complaint' },
@@ -2146,6 +2149,190 @@ function saveMenuPermission() {
         .withSuccessHandler(function(msg) { alert(msg || '저장되었습니다.'); })
         .withFailureHandler(function(err) { alert('저장 실패: ' + (err && err.message ? err.message : err)); })
         .setMenuPermission(store, name, perm);
+}
+
+/** 패티 캐쉬 탭 전환 (list | monthly) */
+function showPettyCashTab(tabId) {
+    var listTab = document.getElementById('petty-tab-list');
+    var monthlyTab = document.getElementById('petty-tab-monthly');
+    var navList = document.getElementById('petty-nav-list');
+    var navMonthly = document.getElementById('petty-nav-monthly');
+    if (listTab) listTab.style.display = (tabId === 'list' ? 'block' : 'none');
+    if (monthlyTab) monthlyTab.style.display = (tabId === 'monthly' ? 'block' : 'none');
+    if (navList) { navList.classList.remove('active'); if (tabId === 'list') navList.classList.add('active'); }
+    if (navMonthly) { navMonthly.classList.remove('active'); if (tabId === 'monthly') navMonthly.classList.add('active'); }
+    if (tabId === 'monthly') {
+        var ms = document.getElementById('petty-monthly-store');
+        if (ms && (ms.options.length <= 1 || !ms.classList.contains('loaded'))) {
+            ms.classList.remove('loaded');
+            loadStoreOptions('petty-monthly-store');
+        }
+        var ymSel = document.getElementById('petty-monthly-ym');
+        if (ymSel && ymSel.options.length === 0) {
+            var now = new Date();
+            var y = now.getFullYear();
+            var m = now.getMonth() + 1;
+            for (var i = 0; i < 24; i++) {
+                var d = new Date(y, m - 1 - i, 1);
+                var yy = d.getFullYear();
+                var mm = d.getMonth() + 1;
+                var ym = yy + '-' + String(mm).padStart(2, '0');
+                var label = yy + '년 ' + mm + '월';
+                ymSel.add(new Option(label, ym));
+            }
+            ymSel.value = y + '-' + String(m).padStart(2, '0');
+        }
+        loadPettyCashMonthDetail();
+    }
+}
+
+/** 패티 캐쉬 월별 현황 - 해당 월 거래 전체 + 실시간 잔액 */
+function loadPettyCashMonthDetail() {
+    var storeEl = document.getElementById('petty-monthly-store');
+    var ymEl = document.getElementById('petty-monthly-ym');
+    var store = storeEl ? storeEl.value || '' : '';
+    var yearMonth = ymEl ? ymEl.value || '' : '';
+    if (!yearMonth) {
+        var n = new Date();
+        yearMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0');
+    }
+    var us = typeof userStore !== 'undefined' ? userStore : '';
+    var ur = typeof userRole !== 'undefined' ? userRole : '';
+    google.script.run
+        .withSuccessHandler(function(list) {
+            var tbody = document.getElementById('petty-monthly-list');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            if (!list || list.length === 0) {
+                var noData = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_no_data) ? I18N[currentLang].petty_no_data : '데이터가 없습니다';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">' + noData + '</td></tr>';
+                return;
+            }
+            var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
+            if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
+                typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
+            }
+            var fmt = function(n) { return (Number(n) || 0).toLocaleString(); };
+            var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
+            list.forEach(function(r) {
+                var tr = document.createElement('tr');
+                var receiptCell = (r.receipt_url && r.receipt_url.length > 0)
+                    ? '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>'
+                    : '<td>-</td>';
+                tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + fmt(Math.abs(r.amount)) + '</td><td class="text-end fw-bold">' + fmt(r.balance_after) + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                var btn = tr.querySelector('.petty-receipt-btn');
+                if (btn && r.receipt_url) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
+                tbody.appendChild(tr);
+            });
+        })
+        .withFailureHandler(function(err) {
+            var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {};
+            alert((lang.petty_query_fail || '조회 실패') + ': ' + (err && err.message ? err.message : err));
+        })
+        .getPettyCashMonthDetail(us, ur, store, yearMonth);
+}
+
+/** 패티 캐쉬 내역 조회 */
+function loadPettyCashList() {
+    var storeEl = document.getElementById('petty-cash-store');
+    var startEl = document.getElementById('petty-cash-start');
+    var endEl = document.getElementById('petty-cash-end');
+    var store = storeEl ? storeEl.value || '' : '';
+    var startStr = startEl ? startEl.value || '' : '';
+    var endStr = endEl ? endEl.value || '' : '';
+    var us = typeof userStore !== 'undefined' ? userStore : '';
+    var ur = typeof userRole !== 'undefined' ? userRole : '';
+    google.script.run
+        .withSuccessHandler(function(list) {
+            var tbody = document.getElementById('petty-cash-list');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            if (!list || list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-muted">' + ((typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_no_data) ? I18N[currentLang].petty_no_data : '데이터가 없습니다') + '</td></tr>';
+                return;
+            }
+            var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
+            if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
+                typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
+            }
+            list.forEach(function(r) {
+                var tr = document.createElement('tr');
+                var bal = r.balance_after != null ? r.balance_after.toLocaleString() : '-';
+                var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
+                var receiptCell;
+                if (r.receipt_url && r.receipt_url.length > 0) {
+                    receiptCell = '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>';
+                    tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                    var btn = tr.querySelector('.petty-receipt-btn');
+                    if (btn) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
+                } else {
+                    receiptCell = '<td>-</td>';
+                    tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                }
+                tbody.appendChild(tr);
+            });
+        })
+        .withFailureHandler(function(err) { var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {}; alert((lang.petty_query_fail || '조회 실패') + ': ' + (err && err.message ? err.message : err)); })
+        .getPettyCashList(us, ur, startStr, endStr, store);
+}
+
+/** 패티 캐쉬 거래 등록 */
+function savePettyCash() {
+    var storeEl = document.getElementById('petty-add-store');
+    var dateEl = document.getElementById('petty-add-date');
+    var typeEl = document.getElementById('petty-add-type');
+    var amountEl = document.getElementById('petty-add-amount');
+    var memoEl = document.getElementById('petty-add-memo');
+    var store = storeEl ? storeEl.value || '' : '';
+    var transDate = dateEl ? dateEl.value || '' : '';
+    var transType = typeEl ? typeEl.value || 'expense' : 'expense';
+    var amount = amountEl ? Number(amountEl.value) || 0 : 0;
+    var memo = memoEl ? memoEl.value || '' : '';
+    var userName = (typeof userName !== 'undefined' && userName) ? userName : (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('cm_name') || '' : '');
+    var us = typeof userStore !== 'undefined' ? userStore : '';
+    var ur = typeof userRole !== 'undefined' ? userRole : '';
+    var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {};
+    if (!store) { alert(lang.petty_alert_store || '매장을 선택하세요.'); return; }
+    if (!transDate) { alert(lang.petty_alert_date || '날짜를 선택하세요.'); return; }
+    if (amount <= 0) { alert(lang.petty_alert_amount || '금액을 입력하세요.'); return; }
+    google.script.run
+        .withSuccessHandler(function(msg) {
+            alert(msg || '저장되었습니다.');
+            if (amountEl) amountEl.value = '';
+            if (memoEl) memoEl.value = '';
+            loadPettyCashList();
+        })
+        .withFailureHandler(function(err) { var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {}; alert((lang.petty_save_fail || '등록 실패') + ': ' + (err && err.message ? err.message : err)); })
+        .addPettyCashTransaction(store, transDate, transType, amount, memo, userName, us, ur);
+}
+
+/** 패티캐시 영수증 모달 표시 (클릭 시) */
+function showPettyReceiptModal(url) {
+    if (!url || url.length === 0) return;
+    var modal = document.getElementById('pettyReceiptModal');
+    var img = document.getElementById('pettyReceiptModalImg');
+    if (!modal || !img) return;
+    img.src = url;
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        var m = new bootstrap.Modal(modal);
+        m.show();
+    } else {
+        modal.classList.add('show');
+        modal.style.display = 'block';
+    }
+}
+
+/** 패티캐시 영수증 저장(다운로드) */
+function savePettyReceiptImage() {
+    var img = document.getElementById('pettyReceiptModalImg');
+    if (!img || !img.src || img.src.length < 20) return;
+    var url = img.src;
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'petty_receipt_' + new Date().toISOString().slice(0, 10) + '_' + Date.now() + '.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 </script>

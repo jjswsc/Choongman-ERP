@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +17,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
+import { compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList } from "lucide-react"
 
 function todayStr() {
@@ -57,7 +59,7 @@ export function OrderTab() {
   const [histStart, setHistStart] = useState(() => daysAgoStr(7))
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
-  const [receiveModal, setReceiveModal] = useState<{ orderId: number } | null>(null)
+  const [receiveModal, setReceiveModal] = useState<{ orderId: number; order: OrderHistoryItem } | null>(null)
   const [receivePhotoFile, setReceivePhotoFile] = useState<File | null>(null)
   const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
@@ -155,21 +157,22 @@ export function OrderTab() {
   const translateDeliveryStatus = (d: string) => {
     if (d === "배송중") return t("statusInTransit")
     if (d === "배송완료" || d === "배송 완료") return t("statusDelivered")
-    if (d === "일부 배송 완료") return t("statusPartialDelivered")
+    if (d === "일부배송완료" || d === "일부 배송 완료") return t("statusPartialDelivered")
     return d
   }
 
   const deliveryStatusColor = (d: string) => {
     if (d === "배송중") return "bg-[#2563eb] text-white"
     if (d === "배송완료" || d === "배송 완료") return "bg-[#16a34a] text-white"
-    if (d === "일부 배송 완료") return "bg-[#d97706] text-white"
+    if (d === "일부배송완료" || d === "일부 배송 완료") return "bg-[#d97706] text-white"
     return ""
   }
 
   const canReceive = (o: OrderHistoryItem) =>
     o.status === "Approved" &&
     o.deliveryStatus !== "배송완료" &&
-    o.deliveryStatus !== "배송 완료"
+    o.deliveryStatus !== "배송 완료" &&
+    o.deliveryStatus !== "일부배송완료" && o.deliveryStatus !== "일부 배송 완료"
 
   const receiveCameraRef = useRef<HTMLInputElement>(null)
   const receiveFileRef = useRef<HTMLInputElement>(null)
@@ -193,11 +196,7 @@ export function OrderTab() {
   }
 
   const openReceiveModal = (orderId: number, o: OrderHistoryItem) => {
-    if (!isAllInspected(o)) {
-      alert(t("inspectRequired"))
-      return
-    }
-    setReceiveModal({ orderId })
+    setReceiveModal({ orderId, order: o })
     setReceivePhotoFile(null)
     setReceivePhotoPreview(null)
   }
@@ -226,43 +225,62 @@ export function OrderTab() {
   }
 
   const handleReceiveSubmit = async () => {
-    if (!receiveModal || !receivePhotoFile) {
+    if (!receiveModal) return
+    if (!receivePhotoFile) {
       alert(t("receivePhotoRequired"))
       return
     }
-    setReceiveSubmitting(true)
-    try {
-      const reader = new FileReader()
-      reader.onload = async (ev) => {
-        const dataUrl = ev.target?.result as string
-        if (!dataUrl?.startsWith("data:image")) {
-          alert(t("orderFail"))
-          setReceiveSubmitting(false)
-          return
-        }
-        try {
-          const res = await processOrderReceive({
-            orderRowId: receiveModal.orderId,
-            imageUrl: dataUrl,
-          })
-          if (res.success) {
-            alert(t("receiveDone"))
-            closeReceiveModal()
-            loadHistory()
-            if (auth?.store) {
-              getAppData(auth.store).then((r) => setStock(r.stock || {}))
-            }
-          } else {
-            alert(res.message || t("orderFail"))
-          }
-        } catch (err) {
-          alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
-        } finally {
-          setReceiveSubmitting(false)
-        }
+    const isPartial = receiveModal.order && !isAllInspected(receiveModal.order)
+    if (isPartial) {
+      const inspectedSet = inspectedItems[receiveModal.order!.id] ?? new Set<number>()
+      if (inspectedSet.size === 0) {
+        alert(t("inspectPartialMinItems"))
+        return
       }
-      reader.readAsDataURL(receivePhotoFile)
-    } catch {
+    }
+    setReceiveSubmitting(true)
+    const modal = receiveModal
+    try {
+      const dataUrl = await compressImageForUpload(receivePhotoFile)
+      if (!dataUrl?.startsWith("data:image")) {
+        alert(t("orderFail"))
+        setReceiveSubmitting(false)
+        return
+      }
+      try {
+        const isPartial = modal.order && !isAllInspected(modal.order)
+        const inspectedSet = modal.order ? (inspectedItems[modal.order.id] ?? new Set<number>()) : new Set<number>()
+        const inspectedIndices = Array.from(inspectedSet).sort((a, b) => a - b)
+        const res = await processOrderReceive({
+            orderRowId: modal.orderId,
+            imageUrl: dataUrl,
+            isPartialReceive: isPartial,
+            inspectedIndices: isPartial ? inspectedIndices : undefined,
+          })
+        if (res && res.success === true) {
+          receiveCameraRef.current && (receiveCameraRef.current.value = "")
+          receiveFileRef.current && (receiveFileRef.current.value = "")
+          loadHistory()
+          if (auth?.store) {
+            getAppData(auth.store).then((r) => setStock(r.stock || {}))
+          }
+          setReceivePhotoPreview((p) => { if (p) URL.revokeObjectURL(p); return null })
+          setReceiveModal(null)
+          setReceivePhotoFile(null)
+          setReceiveSubmitting(false)
+          setTimeout(() => alert(t("receiveDone")), 50)
+        } else {
+          alert(res.message || t("orderFail"))
+        }
+      } catch (err) {
+        console.error("processOrderReceive error:", err)
+        alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
+      } finally {
+        setReceiveSubmitting(false)
+      }
+    } catch (err) {
+      console.error("compressImage error:", err)
+      alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       setReceiveSubmitting(false)
     }
   }
@@ -284,9 +302,9 @@ export function OrderTab() {
         </div>
       )}
 
-      {receiveModal && (
+      {receiveModal && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
           onClick={closeReceiveModal}
         >
           <div
@@ -295,6 +313,9 @@ export function OrderTab() {
           >
             <h3 className="mb-2 font-semibold">{t("receivePhotoTitle")}</h3>
             <p className="mb-3 text-sm text-muted-foreground">{t("receivePhotoHint")}</p>
+            {receiveModal.order && !isAllInspected(receiveModal.order) && (
+              <p className="mb-3 rounded-lg bg-amber-500/15 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">{t("inspectPartialWarning")}</p>
+            )}
             <input
               ref={receiveCameraRef}
               type="file"
@@ -346,7 +367,8 @@ export function OrderTab() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       <Tabs defaultValue="new" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
@@ -538,11 +560,14 @@ export function OrderTab() {
                       <AccordionTrigger className="py-3 hover:no-underline [&[data-state=open]>svg]:rotate-180">
                         <div className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-semibold">{o.date}</span>
+                            <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
+                            {o.deliveryDate && (
+                              <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
+                            )}
                             <Badge variant="outline" className="text-xs">
                               {translateOrderStatus(o.status || "")}
                             </Badge>
-                            {(o.deliveryStatus === "배송중" || o.deliveryStatus === "배송 완료" || o.deliveryStatus === "배송완료" || o.deliveryStatus === "일부 배송 완료") && (
+                            {(o.deliveryStatus === "배송중" || o.deliveryStatus === "배송 완료" || o.deliveryStatus === "배송완료" || o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
                               <Badge className={`text-xs ${deliveryStatusColor(o.deliveryStatus)}`}>
                                 {translateDeliveryStatus(o.deliveryStatus)}
                               </Badge>
@@ -560,6 +585,9 @@ export function OrderTab() {
                             {(o.items || []).map((it, idx) => {
                               const showCheck = canReceive(o)
                               const checked = (inspectedItems[o.id] ?? new Set<number>()).has(idx)
+                              const isReceived = o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
+                                ? (o.receivedIndices ?? []).includes(idx)
+                                : o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료"
                               return (
                                 <div key={idx} className="flex items-center gap-2 border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
                                   {showCheck && (
@@ -571,8 +599,12 @@ export function OrderTab() {
                                       aria-label={it.name ?? ""}
                                     />
                                   )}
-                                  <span className="flex-1">{it.name ?? "-"}</span>
+                                  {!showCheck && isReceived && (
+                                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
+                                  )}
+                                  <span className={`flex-1 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
                                   <span className="text-muted-foreground shrink-0">× {it.qty ?? "-"}</span>
+                                  {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
                                 </div>
                               )
                             })}

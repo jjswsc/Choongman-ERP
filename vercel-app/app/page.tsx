@@ -9,8 +9,10 @@ import { HomeTab } from "@/components/tabs/home-tab"
 import { OrderTab } from "@/components/tabs/order-tab"
 import { UsageTab } from "@/components/tabs/usage-tab"
 import { TimesheetTab } from "@/components/tabs/timesheet-tab"
+import { HrTab } from "@/components/tabs/hr-tab"
 import { AdminTab } from "@/components/tabs/admin-tab"
-import { PlaceholderTab } from "@/components/tabs/placeholder-tab"
+import { VisitTab } from "@/components/tabs/visit-tab"
+import { PettyCashTab } from "@/components/tabs/petty-cash-tab"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -41,9 +43,10 @@ export default function DashboardPage() {
         {activeTab === "home" && <HomeTab />}
         {activeTab === "orders" && <OrderTab />}
         {activeTab === "usage" && <UsageTab />}
-        {activeTab === "hr" && <PlaceholderTab title="인사" />}
+        {activeTab === "hr" && <HrTab />}
         {activeTab === "timesheet" && <TimesheetTab />}
-        {activeTab === "visit" && <PlaceholderTab title="방문" />}
+        {activeTab === "visit" && <VisitTab />}
+        {activeTab === "pettycash" && <PettyCashTab />}
         {activeTab === "admin" && <AdminTab />}
       </main>
     </div>

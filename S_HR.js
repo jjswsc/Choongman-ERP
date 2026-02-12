@@ -1195,7 +1195,8 @@ function getLeaveAllData() {
       var reqName = String(r.name || '').trim();
       var userKey = reqStore + "|" + reqName;
       var dateStr = r.leave_date ? (typeof r.leave_date === 'string' ? r.leave_date.slice(0, 10) : Utilities.formatDate(new Date(r.leave_date), "GMT+7", "yyyy-MM-dd")) : "";
-      leaves.push({ row: r.id, store: reqStore, name: reqName, nick: nickMap[userKey] || "", type: r.type || "", date: dateStr, reason: r.reason || "", status: r.status || "" });
+      var reqDate = (r.request_at || r.created_at) ? (typeof (r.request_at || r.created_at) === 'string' ? String(r.request_at || r.created_at).slice(0, 10) : Utilities.formatDate(new Date(r.request_at || r.created_at), "GMT+7", "yyyy-MM-dd")) : "";
+      leaves.push({ row: r.id, store: reqStore, name: reqName, nick: nickMap[userKey] || "", type: r.type || "", date: dateStr, requestDate: reqDate, reason: r.reason || "", status: r.status || "" });
     }
     return { users: users, leaves: leaves };
   } catch (e) {

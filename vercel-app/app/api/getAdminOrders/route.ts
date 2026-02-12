@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
+  const storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
+  const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || searchParams.get('statusFilter') || '').trim()
 
   let s = startStr
   let e = endStr
@@ -20,12 +22,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const endIso = e + 'T23:59:59.999Z'
-    const filter =
+    let filter =
       `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
-    const rows = (await supabaseSelectFilter('orders', filter, {
-      order: 'order_date.desc',
-      limit: 300,
-    })) as {
+    if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체') {
+      filter += `&store_name=eq.${encodeURIComponent(storeFilter)}`
+    }
+    const baseFilter = `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
+    const [rows, storeRows] = await Promise.all([
+      supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 }),
+      supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 500 }),
+    ])
+
+    const rowsTyped = rows as {
       id: number
       order_date?: string
       store_name?: string
@@ -34,12 +42,17 @@ export async function GET(request: NextRequest) {
       status?: string
       delivery_status?: string
       delivery_date?: string
+      received_indices?: string
     }[]
 
-    const list = (rows || []).map((o) => {
+    const list = (rowsTyped || []).map((o) => {
       let items: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
       try {
         items = JSON.parse(o.cart_json || '[]')
+      } catch {}
+      let receivedIndices: number[] = []
+      try {
+        if (o.received_indices) receivedIndices = JSON.parse(o.received_indices)
       } catch {}
       const summary =
         items.length > 0
@@ -54,14 +67,22 @@ export async function GET(request: NextRequest) {
         store: o.store_name || '',
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
-        deliveryStatus: o.delivery_status || (o.status === 'Approved' ? '배송중' : ''),
+        deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),
         deliveryDate: String(o.delivery_date || '').trim(),
         items,
         summary,
+        receivedIndices,
       }
     })
 
-    return NextResponse.json({ list }, { headers })
+    let filteredList = list
+    if (deliveryStatusFilter && deliveryStatusFilter !== 'All' && deliveryStatusFilter !== '전체') {
+      const norm = (s: string) => (s || '').replace(/\s/g, '')
+      filteredList = list.filter((o) => norm(o.deliveryStatus || '') === norm(deliveryStatusFilter))
+    }
+
+    const storesForDropdown = [...new Set((storeRows || []).map((r: { store_name?: string }) => r.store_name || '').filter(Boolean))].sort()
+    return NextResponse.json({ list: filteredList, stores: storesForDropdown }, { headers })
   } catch (err) {
     console.error('getAdminOrders:', err)
     return NextResponse.json({ list: [] }, { headers })

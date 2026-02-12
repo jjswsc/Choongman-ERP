@@ -1,0 +1,89 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+
+function toDateStr(val: string | Date | null | undefined): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val.slice(0, 10)
+  const d = new Date(val)
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+/** 직원의 연차일 수 계산: employees.annual_leave_days 사용, 없으면 1년+ 근무 시 6일 */
+function getAnnualLeaveDays(
+  emp: { annual_leave_days?: number | null; join_date?: string | Date | null } | null
+): number {
+  if (!emp) return 0
+  const stored = Number(emp.annual_leave_days)
+  if (stored > 0) return stored
+  const joinStr = emp.join_date ? toDateStr(emp.join_date) : ''
+  if (!joinStr) return 0
+  const joinDate = new Date(joinStr + 'T12:00:00')
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  return joinDate <= oneYearAgo ? 6 : 0
+}
+
+export async function GET(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+  const { searchParams } = new URL(request.url)
+  const store = String(searchParams.get('store') || '').trim()
+  const name = String(searchParams.get('name') || '').trim()
+
+  if (!store || !name) {
+    return NextResponse.json(
+      { history: [], stats: { usedAnn: 0, usedSick: 0, remain: 0 } },
+      { headers }
+    )
+  }
+
+  try {
+    const empRows = (await supabaseSelectFilter(
+      'employees',
+      `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`,
+      { limit: 1 }
+    )) as { annual_leave_days?: number | null; join_date?: string | null }[]
+    const annualTotal = getAnnualLeaveDays(empRows?.[0] ?? null)
+
+    const filter = `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`
+    const rows = (await supabaseSelectFilter(
+      'leave_requests',
+      filter,
+      { order: 'leave_date.desc', limit: 100 }
+    )) as { leave_date?: string; status?: string; type?: string; reason?: string }[]
+
+    const thisYear = new Date().getFullYear()
+    let usedAnn = 0,
+      usedSick = 0
+    const history = (rows || []).map((r) => {
+      const dateStr = toDateStr(r.leave_date)
+      const status = String(r.status || '').trim()
+      const type = String(r.type || '').trim()
+      if (
+        (status === '승인' || status === 'Approved') &&
+        dateStr &&
+        parseInt(dateStr.slice(0, 4), 10) === thisYear
+      ) {
+        const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
+        if (type.indexOf('병가') !== -1) usedSick += val
+        else usedAnn += val
+      }
+      return { date: dateStr, type, reason: r.reason || '', status }
+    })
+
+    const remain = Math.max(0, annualTotal - usedAnn)
+    return NextResponse.json(
+      {
+        history,
+        stats: { usedAnn, usedSick, remain, annualTotal },
+      },
+      { headers }
+    )
+  } catch (e) {
+    console.error('getMyLeaveInfo:', e)
+    return NextResponse.json(
+      { history: [], stats: { usedAnn: 0, usedSick: 0, remain: 0, annualTotal: 0 } },
+      { headers }
+    )
+  }
+}

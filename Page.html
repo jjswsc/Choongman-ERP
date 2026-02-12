@@ -47,6 +47,7 @@
   <div class="nav-item" onclick="switchTab('schedule')" id="tab-schedule" data-i18n="m_tab_schedule">시간표</div>
   <div class="nav-item hidden" onclick="switchTab('store-visit')" id="tab-store-visit" data-i18n="m_tab_visit">Visit</div>
   <div class="nav-item hidden" onclick="switchTab('admin')" id="tab-admin" data-i18n="m_tab_admin">Admin</div>
+  <div class="nav-item hidden" onclick="switchTab('petty-cash')" id="tab-petty-cash" data-i18n="menu_accounting">회계</div>
 </div>
 
     <div id="view-home">
@@ -302,6 +303,7 @@
       <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
         <div style="font-size:18px; font-weight:700; color:#5c6bc0; letter-spacing:-0.02em; padding-bottom:8px; border-bottom:2px solid #5c6bc0; margin-bottom:12px;" data-i18n="m_admin_leave">연차 승인</div>
         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+          <select id="admin-leave-date-type" class="login-input" style="min-width:110px;"><option value="request">신청일 기준</option><option value="leave" selected>휴가일 기준</option></select>
           <input type="date" id="admin-leave-start" class="login-input" style="flex:1; min-width:100px;">
           <input type="date" id="admin-leave-end" class="login-input" style="flex:1; min-width:100px;">
           <select id="admin-leave-store" class="login-input" style="flex:1; min-width:100px;"></select>
@@ -319,6 +321,30 @@
           <button type="button" onclick="mobileLoadAttendancePending()" class="login-btn" style="padding:8px 14px; background:#2e7d32;" data-i18n="btn_query">조회</button>
         </div>
         <div id="admin-att-list" style="margin-top:12px; max-height:240px; overflow-y:auto; font-size:13px;"></div>
+      </div>
+    </div>
+
+    <div id="view-petty-cash" class="hidden" style="padding-bottom:80px;">
+      <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
+        <div style="font-size:18px; font-weight:700; color:#6a1b9a; letter-spacing:-0.02em; padding-bottom:8px; border-bottom:2px solid #6a1b9a; margin-bottom:12px;" data-i18n="petty_cash_title">💵 패티 캐쉬</div>
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
+          <select id="mobile-petty-store" class="login-input" style="min-width:100px;"></select>
+          <input type="date" id="mobile-petty-start" class="login-input" style="flex:1; min-width:100px;">
+          <input type="date" id="mobile-petty-end" class="login-input" style="flex:1; min-width:100px;">
+          <button type="button" onclick="mobileLoadPettyCashList()" class="login-btn" style="padding:8px 14px; background:#6a1b9a;" data-i18n="btn_query">조회</button>
+        </div>
+        <div id="mobile-petty-list" style="margin-top:12px; max-height:220px; overflow-y:auto; font-size:13px;"></div>
+      </div>
+      <div class="card-box" style="padding:16px; border-radius:12px; margin-bottom:16px; background:#fff; border:1px solid #eee;">
+        <div style="font-size:15px; font-weight:700; color:#333; margin-bottom:10px;" data-i18n="petty_add_title">등록</div>
+        <select id="mobile-petty-add-store" class="login-input" style="margin-bottom:8px;"></select>
+        <input type="date" id="mobile-petty-add-date" class="login-input" style="margin-bottom:8px;">
+        <select id="mobile-petty-add-type" class="login-input" style="margin-bottom:8px;">
+          <option value="receive" data-i18n="petty_type_receive">수령</option><option value="expense" data-i18n="petty_type_expense" selected>지출</option><option value="replenish" data-i18n="petty_type_replenish">보충</option><option value="settle" data-i18n="petty_type_settle">정산</option>
+        </select>
+        <input type="number" id="mobile-petty-add-amount" class="login-input" data-i18n-ph="petty_amount_ph" placeholder="금액" min="0" style="margin-bottom:8px;">
+        <input type="text" id="mobile-petty-add-memo" class="login-input" data-i18n-ph="petty_memo_ph" placeholder="비고" style="margin-bottom:10px;">
+        <button type="button" onclick="mobileSavePettyCash()" class="login-btn" style="padding:10px; background:#6a1b9a; width:100%;" data-i18n="btn_save">저장</button>
       </div>
     </div>
 
