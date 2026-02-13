@@ -281,9 +281,9 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                 const outDec = parseTimeToDecimal(p.pOut)
                 const bsDec = parseTimeToDecimal(p.pBS)
                 const beDec = parseTimeToDecimal(p.pBE)
-                const hasProblem = !att
+                const hasProblem: boolean = !att
                   ? true
-                  : (att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status))
+                  : Boolean((att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status)))
                 const rowBg = hasProblem ? "bg-red-50/50 dark:bg-red-950/30" : "bg-card"
 
                 return (
