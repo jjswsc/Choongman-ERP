@@ -232,11 +232,12 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         </div>
       ) : (
         <>
-          {/* Day headers + headcount */}
-          <div className="px-4 pt-3 pb-1">
-            <div className="grid grid-cols-7 gap-1">
+          {/* 요일 헤더 - 시간표와 같은 8열 그리드로 정렬 */}
+          <div className="px-4 pt-3 pb-2">
+            <div className="grid grid-cols-8 gap-1">
+              <div className="min-w-0" />
               {dayLabels.map((day, i) => (
-                <div key={day} className="flex flex-col items-center gap-0.5">
+                <div key={day} className="flex flex-col items-center gap-0.5 min-w-0">
                   <span
                     className={cn(
                       "text-[10px] font-bold",
@@ -246,17 +247,14 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
                     {day}
                   </span>
                   <span className="text-[9px] text-muted-foreground/70 tabular-nums">{daysFull[i]}</span>
-                  <span className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[hsl(215,80%,50%)]/10 text-[10px] font-bold tabular-nums text-[hsl(215,80%,50%)]">
-                    {dailyCount[i]}
-                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* 서비스 | 이름 | 시간대 - 시간 먼저, 클릭 시 점 */}
-          <div className="flex flex-col gap-2 px-4 pt-2 pb-4">
-            {persons.map((p, idx) => {
+          {/* 이름+부서 | 시간표 2줄 - 8열 그리드 */}
+          <div className="flex flex-col gap-2 px-4 pt-0 pb-4">
+            {persons.map((p) => {
               const key = `${p.store}|${p.name}`
               const isCollapsed = collapsedRows.has(key)
               return (
@@ -264,50 +262,42 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
                   <button
                     type="button"
                     onClick={() => toggleRow(key)}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left active:bg-muted/30 transition-colors"
+                    className="grid grid-cols-8 gap-1 w-full items-stretch px-3 py-2 text-left active:bg-muted/30 transition-colors"
                   >
-                    {/* 서비스 */}
-                    {showArea && (
-                      <span
-                        className={cn(
-                          "shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold leading-none",
-                          zoneStyle[p.area] || "bg-muted text-muted-foreground"
-                        )}
-                      >
+                    {/* 이름 + 부서 */}
+                    <div className="flex flex-col items-start justify-center min-w-0">
+                      <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
+                      <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
                         {areaLabel(p.area)}
                       </span>
-                    )}
-                    {/* 이름 */}
-                    <span className="shrink-0 min-w-[44px] text-[13px] font-bold text-card-foreground">{p.name}</span>
-                    {/* 시간대 - 시간 먼저, 클릭 시 점 */}
-                    <div className="grid flex-1 grid-cols-7 gap-1 min-w-0">
-                      {p.workDays.map((workStr, dayIdx) => (
-                        <div key={dayIdx} className="flex items-center justify-center min-w-0">
-                          {workStr ? (
-                            isCollapsed ? (
-                              <div className="h-[22px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10">
-                                <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-0.5 rounded-lg bg-[hsl(215,80%,50%)]/10 px-1 py-1 w-full min-w-0">
-                                <span className="text-[8px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-none truncate w-full text-center">
-                                  {workStr}
-                                </span>
-                                {p.breakDays[dayIdx] && (
-                                  <span className="text-[7px] text-muted-foreground leading-none truncate w-full text-center">
-                                    R {p.breakDays[dayIdx].split("-")[0]}
-                                  </span>
-                                )}
-                              </div>
-                            )
-                          ) : (
-                            <div className="h-[22px] w-full rounded-md flex items-center justify-center bg-muted/50">
-                              <span className="text-[9px] font-medium text-muted-foreground">{t("scheduleOff")}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
                     </div>
+                    {/* 시간표 7열 - 2줄 */}
+                    {p.workDays.map((workStr, dayIdx) => (
+                      <div key={dayIdx} className="flex items-center justify-center min-w-0">
+                        {workStr ? (
+                          isCollapsed ? (
+                            <div className="h-[36px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10">
+                              <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-0.5 rounded-lg bg-[hsl(215,80%,50%)]/10 px-1 py-1.5 w-full min-h-[36px] min-w-0">
+                              <span className="text-[10px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-tight text-center break-all">
+                                {workStr}
+                              </span>
+                              {p.breakDays[dayIdx] && (
+                                <span className="text-[9px] text-muted-foreground leading-tight text-center break-all">
+                                  R {p.breakDays[dayIdx].split("-")[0]}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        ) : (
+                          <div className="h-[36px] w-full rounded-md flex items-center justify-center bg-muted/50">
+                            <span className="text-[10px] font-medium text-muted-foreground">{t("scheduleOff")}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </button>
                 </div>
               )

@@ -22,10 +22,12 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
 import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
   getWorkLogOfficeOptions,
+  translateTexts,
   type WorkLogManagerItem,
 } from "@/lib/api-client"
 
@@ -41,7 +43,9 @@ function todayStr() {
 
 export function WorklogApproval() {
   const { auth } = useAuth()
+  const { lang } = useLang()
   const canReject = (auth?.role || "").toLowerCase() === "director"
+  const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [startStr, setStartStr] = React.useState(defaultStartStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [deptFilter, setDeptFilter] = React.useState("all")
@@ -81,6 +85,24 @@ export function WorklogApproval() {
   React.useEffect(() => {
     loadData()
   }, [loadData])
+
+  React.useEffect(() => {
+    const texts = [...new Set(list.map((it) => it.content).filter(Boolean))]
+    if (texts.length === 0) {
+      setContentTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setContentTransMap(map)
+    }).catch(() => setContentTransMap({}))
+    return () => { cancelled = true }
+  }, [list, lang])
+
+  const getTransContent = (content: string) => (content && contentTransMap[content]) || content || "-"
 
   const handleApprove = async (id: string) => {
     setUpdating(id)
@@ -255,7 +277,7 @@ export function WorklogApproval() {
                             <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5">
                               <td className="px-5 py-2 text-xs tabular-nums">{it.date}</td>
                               <td className="px-5 py-2">
-                                <p className="text-sm text-foreground">{it.content || "-"}</p>
+                                <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
                                   <p className="mt-0.5 text-[10px] text-muted-foreground">{it.managerComment}</p>
                                 )}

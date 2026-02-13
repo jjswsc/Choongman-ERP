@@ -387,8 +387,8 @@ body {
 .date-input-compact::-webkit-calendar-picker-indicator {
   position: absolute;
   right: 0.5rem;
-  width: 2rem;
-  height: 2rem;
+  width: 1.4rem;
+  height: 1.4rem;
   margin: 0;
   padding: 0;
   cursor: pointer;

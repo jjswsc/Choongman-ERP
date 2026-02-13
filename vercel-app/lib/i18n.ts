@@ -308,6 +308,7 @@ export const i18n = {
     adminSectionSettings: '설정',
     workLogCarriedOver: '이월됨',
     workLogFrom: '부터',
+    workLogStartToday: '선택한 업무 오늘 시작하기',
   },
   en: {
     all: 'All',
@@ -603,6 +604,7 @@ export const i18n = {
     adminSectionSettings: 'Settings',
     workLogCarriedOver: 'Carried over',
     workLogFrom: 'from',
+    workLogStartToday: 'Start selected tasks today',
   },
   th: {
     all: 'ทั้งหมด',
@@ -848,6 +850,7 @@ export const i18n = {
     adminSectionSettings: 'ตั้งค่า',
     workLogCarriedOver: 'โอนย้าย',
     workLogFrom: 'ตั้งแต่',
+    workLogStartToday: 'เริ่มงานที่เลือกวันนี้',
   },
   mm: {
     all: 'အားလုံး',
@@ -1093,6 +1096,7 @@ export const i18n = {
     adminSectionSettings: 'ဆက်တင်များ',
     workLogCarriedOver: 'လွှဲပြောင်း',
     workLogFrom: 'မှ',
+    workLogStartToday: 'ရွေးချယ်ထားသည့်အလုပ်ကို ယနေ့စတင်မည်',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -1338,6 +1342,7 @@ export const i18n = {
     adminSectionSettings: 'ຕັ້ງຄ່າ',
     workLogCarriedOver: 'ໂອນ',
     workLogFrom: 'ຈາກ',
+    workLogStartToday: 'ເລີ່ມວຽກທີ່ເລືອກມື້ນີ້',
   },
 } as const
 

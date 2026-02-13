@@ -15,13 +15,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -30,6 +23,7 @@ import {
   getWorkLogData,
   saveWorkLogData,
   submitDailyClose,
+  translateTexts,
   type WorkLogItem,
   type WorkLogData,
 } from "@/lib/api-client"
@@ -55,6 +49,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const [localContinue, setLocalContinue] = React.useState<WorkLogItem[]>([])
   const [localToday, setLocalToday] = React.useState<WorkLogItem[]>([])
   const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
+  const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
 
   React.useEffect(() => {
     if (userName) setSelectedStaff(userName)
@@ -71,6 +66,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
   }, [])
 
+  // 직원은 로그인 사용자로 고정
+  React.useEffect(() => {
+    if (userName) setSelectedStaff(userName)
+  }, [userName])
+
   const loadData = React.useCallback(async () => {
     if (!selectedStaff) return
     setLoading(true)
@@ -78,7 +78,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       const res = await getWorkLogData({ dateStr, name: selectedStaff })
       setData(res)
       setLocalFinish(res.finish || [])
-      setLocalContinue(res.continueItems || [])
+      setLocalContinue((res.continueItems || []).map((it) => ({ ...it, progress: 0 })))
       setLocalToday(res.todayItems || [])
     } catch {
       setData(null)
@@ -93,6 +93,31 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   React.useEffect(() => {
     if (selectedStaff) loadData()
   }, [selectedStaff, dateStr, loadData])
+
+  const contentsToTranslate = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const it of localFinish) if (it.content?.trim()) set.add(it.content.trim())
+    for (const it of localContinue) if (it.content?.trim()) set.add(it.content.trim())
+    for (const it of localToday) if (it.content?.trim()) set.add(it.content.trim())
+    return Array.from(set)
+  }, [localFinish, localContinue, localToday])
+
+  React.useEffect(() => {
+    if (contentsToTranslate.length === 0) {
+      setContentTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(contentsToTranslate, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      contentsToTranslate.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setContentTransMap(map)
+    }).catch(() => setContentTransMap({}))
+    return () => { cancelled = true }
+  }, [contentsToTranslate.join("\u241E"), lang])
+
+  const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || "(내용 없음)"
 
   const updateProgress = (
     list: WorkLogItem[],
@@ -136,7 +161,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     setLocalContinue(toKeep)
     setLocalToday((prev) => [
       ...prev,
-      ...toMove.map((it) => ({ ...it, status: "Today" })),
+      ...toMove.map((it) => ({ ...it, status: "Today", progress: 0 })),
     ])
     setSelectedContinueIds(new Set())
   }
@@ -191,7 +216,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     try {
       const allLogs: WorkLogItem[] = [
         ...localFinish.map((it) => ({ ...it, type: undefined })),
-        ...localContinue.map((it) => ({ ...it, type: "continue" as const })),
+        ...localContinue.map((it) => ({ ...it, type: "continue" as const, progress: 0 })),
         ...localToday.map((it) => ({ ...it, type: undefined })),
       ].filter((it) => it.content || it.id)
       const res = await saveWorkLogData({
@@ -257,23 +282,9 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               <User className="h-3.5 w-3.5 text-primary" />
               직원
             </label>
-            <Select value={selectedStaff || undefined} onValueChange={setSelectedStaff}>
-              <SelectTrigger className="h-9 w-40 text-xs">
-                <SelectValue placeholder="직원 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {userName && !staffList.some((s) => s.name === userName || s.displayName === userName) && (
-                  <SelectItem key="_me" value={userName}>
-                    {userName}
-                  </SelectItem>
-                )}
-                {staffList.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>
-                    {s.displayName || s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs font-medium">
+              {staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)?.displayName || selectedStaff || userName}
+            </div>
           </div>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
@@ -309,7 +320,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               ) : (
                 localFinish.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
-                    <p className="font-medium text-foreground whitespace-pre-wrap">{it.content || "(내용 없음)"}</p>
+                    <p className="font-medium text-foreground whitespace-pre-wrap">{getTransContent(it.content || "")}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {it.progress}% · {formatManagerComment(it.managerComment || "")}
                     </p>
@@ -332,7 +343,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b">
                 <Button size="sm" className="h-7 text-xs" onClick={moveSelectedToToday}>
                   <Play className="mr-1 h-3 w-3" />
-                  선택한 업무 오늘 시작하기 ({selectedContinueIds.size})
+                  {t("workLogStartToday")} ({selectedContinueIds.size})
                 </Button>
               </div>
             )}
@@ -357,17 +368,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                         rows={1}
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={it.progress}
-                        onChange={(e) => updateProgress(localContinue, setLocalContinue, it.id, Number(e.target.value))}
-                        className="h-2 flex-1"
-                      />
-                      <span className="text-xs font-bold w-8">{it.progress}%</span>
-                    </div>
+                    <p className="text-xs font-bold text-muted-foreground">0% (Today Work에서 조정)</p>
                     <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment || "")}</p>
                   </div>
                 ))

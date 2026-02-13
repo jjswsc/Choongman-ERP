@@ -19,21 +19,19 @@ export function TimesheetTab() {
 
   React.useEffect(() => {
     if (auth?.store) {
-      setStoreFilter(auth.store)
       getLoginData().then((r) => {
-        const stores = Object.keys(r.users || {}).filter(Boolean)
+        const stores = Object.keys(r.users || {}).filter(Boolean).sort()
         const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
-        const allLabel = t("scheduleStoreAll") || "전체"
         if (isOffice) {
-          setStoreList([allLabel, ...stores].filter(Boolean))
-          setStoreFilter(allLabel)
+          setStoreList(stores)
+          setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)
         } else {
-          setStoreList([auth.store, ...stores].filter(Boolean))
+          setStoreList([auth.store])
           setStoreFilter(auth.store || "")
         }
       })
     }
-  }, [auth?.store, auth?.role, t])
+  }, [auth?.store, auth?.role])
 
   return (
     <div className="min-h-dvh bg-background">
@@ -64,10 +62,14 @@ export function TimesheetTab() {
           )}
         </div>
 
-        {/* Content */}
+        {/* Content - 선택한 매장만 조회, 로딩 완료 후 표시 */}
         <div className="flex flex-col gap-4 p-4">
-          <RealtimeWork storeFilter={storeFilter} storeList={storeList} />
-          <WeeklySchedule storeFilter={storeFilter} storeList={storeList} />
+          {storeFilter ? (
+            <>
+              <RealtimeWork storeFilter={storeFilter} storeList={storeList} />
+              <WeeklySchedule storeFilter={storeFilter} storeList={storeList} />
+            </>
+          ) : null}
           <MyAttendance />
         </div>
       </div>
