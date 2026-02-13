@@ -73,6 +73,38 @@ export async function getAppData(storeName: string) {
   return { items: (data.items || []) as AppItem[], stock: data.stock || {} }
 }
 
+// ─── 재고 현황 (Stock) ───
+export interface StockStatusItem {
+  code: string
+  name: string
+  spec: string
+  qty: number
+  safeQty: number
+  store: string
+}
+
+export async function getStockStores() {
+  const res = await fetch('/api/getStockStores')
+  return res.json() as Promise<string[]>
+}
+
+export async function adjustStock(params: {
+  store: string
+  itemCode: string
+  itemName?: string
+  spec?: string
+  diffQty: number
+  memo?: string
+  userRole?: string
+}) {
+  const res = await fetch('/api/adjustStock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function processOrder(params: {
   storeName: string
   userName: string
