@@ -4,13 +4,14 @@ import path from "path";
 const vercelAppDir = __dirname;
 
 const nextConfig: NextConfig = {
+  // outputFileTracingRoot와 turbopack.root 동일하게 맞춤 (Vercel 빌드 경고 해결)
+  outputFileTracingRoot: vercelAppDir,
+  turbopack: {
+    root: vercelAppDir,
+  },
   // /app 접속 시 / 로 리다이렉트 (예전 문서의 모바일 앱 URL)
   async redirects() {
     return [{ source: "/app", destination: "/", permanent: false }]
-  },
-  // vercel-app을 프로젝트 루트로 고정 (상위 lockfile 충돌 방지)
-  turbopack: {
-    root: vercelAppDir,
   },
   // webpack(PostCSS 등) 모듈 해석을 vercel-app 기준으로 (상위 lockfile로 인한 충돌 방지)
   webpack: (config, { isServer, webpack }) => {
