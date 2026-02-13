@@ -1,14 +1,39 @@
 "use client"
 
+import * as React from "react"
 import { RealtimeWork } from "@/components/erp/realtime-work"
 import { WeeklySchedule } from "@/components/erp/weekly-schedule"
 import { MyAttendance } from "@/components/erp/my-attendance"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getLoginData } from "@/lib/api-client"
 
 export function TimesheetTab() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const [storeList, setStoreList] = React.useState<string[]>([])
+  const [storeFilter, setStoreFilter] = React.useState("")
+
+  React.useEffect(() => {
+    if (auth?.store) {
+      setStoreFilter(auth.store)
+      getLoginData().then((r) => {
+        const stores = Object.keys(r.users || {}).filter(Boolean)
+        const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+        const allLabel = t("scheduleStoreAll") || "전체"
+        if (isOffice) {
+          setStoreList([allLabel, ...stores].filter(Boolean))
+          setStoreFilter(allLabel)
+        } else {
+          setStoreList([auth.store, ...stores].filter(Boolean))
+          setStoreFilter(auth.store || "")
+        }
+      })
+    }
+  }, [auth?.store, auth?.role, t])
 
   return (
     <div className="min-h-dvh bg-background">
@@ -19,12 +44,30 @@ export function TimesheetTab() {
           <p className="text-[11px] text-muted-foreground">
             {t("scheduleToday")}, {t("scheduleWeek")}, {t("scheduleMyPunch")}
           </p>
+          {/* 매장 검색 - 당일 실시간 근무 & 주간 시간표 공통 */}
+          {storeList.length > 0 && (
+            <div className="mt-3">
+              <label className="text-[11px] font-medium text-muted-foreground block mb-1.5">
+                {t("store") || "매장"}
+              </label>
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={t("scheduleStorePlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {storeList.map((st) => (
+                    <SelectItem key={st} value={st}>{st}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex flex-col gap-4 p-4">
-          <RealtimeWork />
-          <WeeklySchedule />
+          <RealtimeWork storeFilter={storeFilter} storeList={storeList} />
+          <WeeklySchedule storeFilter={storeFilter} storeList={storeList} />
           <MyAttendance />
         </div>
       </div>

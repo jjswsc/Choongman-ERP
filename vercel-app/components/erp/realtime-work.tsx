@@ -89,12 +89,18 @@ const zoneStyle: Record<string, string> = {
   Office: "bg-muted text-muted-foreground",
 }
 
-export function RealtimeWork() {
+interface RealtimeWorkProps {
+  storeFilter?: string
+  storeList?: string[]
+}
+
+export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: storeListProp = [] }: RealtimeWorkProps) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const [storeList, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
+  const storeFilterFinal = storeFilterProp || storeFilter
   const [date, setDate] = React.useState(todayStr)
   const [areaFilter, setAreaFilter] = React.useState("all")
   const [schedule, setSchedule] = React.useState<TodayScheduleItem[]>([])
@@ -102,7 +108,7 @@ export function RealtimeWork() {
   const [loading, setLoading] = React.useState(false)
 
   React.useEffect(() => {
-    if (auth?.store) {
+    if (auth?.store && storeListProp.length === 0) {
       setStoreFilter(auth.store)
       getLoginData().then((r) => {
         const stores = Object.keys(r.users || {}).filter(Boolean)
@@ -110,11 +116,12 @@ export function RealtimeWork() {
         setStoreList(unique)
       })
     }
-  }, [auth?.store])
+  }, [auth?.store, storeListProp.length])
 
   const loadTodayData = React.useCallback(() => {
-    const store = storeFilter || auth?.store
+    let store = storeFilterFinal || auth?.store
     if (!store) return
+    store = (store === t("scheduleStoreAll") || store === "All" || store === "전체") ? "All" : store
     setLoading(true)
     Promise.all([getTodaySchedule({ store, date }), getTodayAttendanceSummary({ store, date })])
       .then(([sch, att]) => {
@@ -126,11 +133,11 @@ export function RealtimeWork() {
         setAttendance([])
       })
       .finally(() => setLoading(false))
-  }, [storeFilter, auth?.store, date])
+  }, [storeFilterFinal, auth?.store, date])
 
   React.useEffect(() => {
-    if (storeFilter || auth?.store) loadTodayData()
-  }, [storeFilter, auth?.store, loadTodayData])
+    if (storeFilterFinal || auth?.store) loadTodayData()
+  }, [storeFilterFinal, auth?.store, loadTodayData])
 
   const filteredSchedule =
     areaFilter === "all"
@@ -218,7 +225,7 @@ export function RealtimeWork() {
 
       {/* Filters */}
       <div className="flex items-center gap-2 px-4 pb-3">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 flex-1 rounded-lg text-xs" />
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 flex-1 rounded-lg text-xs" />
         <Select value={areaFilter} onValueChange={setAreaFilter}>
           <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
             <SelectValue />
