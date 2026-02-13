@@ -421,6 +421,14 @@ body {
   opacity: 0.8;
 }
 
+/* 모바일: 기간 검색·필터 한 줄 배치용 (날짜 입력 축소) */
+@media (max-width: 639px) {
+  .date-input-compact.date-input-mobile-shrink {
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 :root {
   --sidebar: hsl(30 25% 97%);
   --sidebar-foreground: hsl(25 15% 28%);

@@ -6,13 +6,8 @@ import { VendorForm, type VendorFormData } from "@/components/erp/vendor-form"
 import { VendorTable } from "@/components/erp/vendor-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getAdminVendors } from "@/lib/api-client"
 import type { Vendor } from "@/components/erp/vendor-table"
-
-const initialVendors: Vendor[] = [
-  { code: "V001", name: "ABC Trading Co.", contact: "John Lee", phone: "02-1234-5678", email: "john@abc.com", address: "Bangkok 10110", type: "purchase", memo: "" },
-  { code: "V002", name: "Global Food Supply", contact: "Kim Park", phone: "02-2345-6789", email: "kim@global.co.th", address: "Samut Prakan", type: "purchase", memo: "" },
-  { code: "V003", name: "Fresh Ingredients Ltd.", contact: "Sarah Chen", phone: "081-xxx-xxxx", email: "sarah@fresh.com", address: "Pathum Thani", type: "both", memo: "" },
-]
 
 const emptyForm: VendorFormData = {
   code: "",
@@ -28,12 +23,20 @@ const emptyForm: VendorFormData = {
 export default function VendorsPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [vendors, setVendors] = React.useState<Vendor[]>(initialVendors)
+  const [vendors, setVendors] = React.useState<Vendor[]>([])
+  const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState<VendorFormData>(emptyForm)
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState("all")
+
+  React.useEffect(() => {
+    getAdminVendors()
+      .then((list) => setVendors(list))
+      .catch(() => setVendors([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -142,6 +145,11 @@ export default function VendorsPage() {
           </div>
         </div>
 
+        {loading && (
+          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {t("loading")}
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <VendorForm
             formData={formData}

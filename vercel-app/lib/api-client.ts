@@ -737,3 +737,38 @@ export async function addPettyCashTransaction(params: {
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
+
+// ─── 품목/거래처 관리 (Admin) ───
+export interface AdminItem {
+  code: string
+  name: string
+  category: string
+  vendor: string
+  spec: string
+  price: number
+  cost: number
+  taxType: 'taxable' | 'exempt' | 'zero'
+  imageUrl: string
+  hasImage: boolean
+}
+
+export interface AdminVendor {
+  code: string
+  name: string
+  contact: string
+  phone: string
+  email: string
+  address: string
+  type: 'purchase' | 'sales' | 'both'
+  memo: string
+}
+
+export async function getAdminItems() {
+  const res = await fetch('/api/getItems')
+  return res.json() as Promise<AdminItem[]>
+}
+
+export async function getAdminVendors() {
+  const res = await fetch('/api/getVendors')
+  return res.json() as Promise<AdminVendor[]>
+}

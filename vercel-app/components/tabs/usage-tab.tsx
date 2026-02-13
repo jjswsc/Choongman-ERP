@@ -297,11 +297,11 @@ export function UsageTab() {
         <TabsContent value="history" className="mt-4">
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="date-input-compact h-9 text-sm" />
-                <span className="text-sm text-muted-foreground">~</span>
-                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="date-input-compact h-9 text-sm" />
-                <Button size="sm" onClick={loadHistory} disabled={historyLoading}>
+              <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
+                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px] sm:text-sm" />
+                <span className="text-xs text-muted-foreground shrink-0 sm:text-sm">~</span>
+                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px] sm:text-sm" />
+                <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3 sm:text-sm" onClick={loadHistory} disabled={historyLoading}>
                   {historyLoading ? t('loading') : t('search') || '조회'}
                 </Button>
               </div>

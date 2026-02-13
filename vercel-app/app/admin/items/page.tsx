@@ -6,34 +6,9 @@ import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getAdminItems, type AdminItem } from "@/lib/api-client"
 
-export interface Product {
-  code: string
-  name: string
-  category: string
-  vendor: string
-  spec: string
-  price: number
-  cost: number
-  taxType: "taxable" | "exempt" | "zero"
-  imageUrl: string
-  hasImage: boolean
-}
-
-const initialProducts: Product[] = [
-  { code: "CM001", name: "TIGUDAK MIX SAUCE", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 1640, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM001", hasImage: true },
-  { code: "CM002", name: "CHOONGMAN SPICY GARLIC SAUCE", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 1520, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM002", hasImage: true },
-  { code: "CM004", name: "TIGUDAK CURRY SAUCE", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 1700, cost: 0, taxType: "taxable", imageUrl: "", hasImage: false },
-  { code: "CM005", name: "WHITE SNOW SAUCE", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 1900, cost: 0, taxType: "taxable", imageUrl: "", hasImage: false },
-  { code: "CM006", name: "TIGUDAK GARLIC SAUCE", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 2600, cost: 0, taxType: "taxable", imageUrl: "", hasImage: false },
-  { code: "CM007", name: "HOT GREEN SAUCE (2.5kg*4ea/Box)", category: "소스류", vendor: "", spec: "2.5kg*1ea", price: 2400, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM007", hasImage: true },
-  { code: "CM015", name: "CHOONGMAN KOREA SEASOINING", category: "파우더류", vendor: "", spec: "2kg*13ea", price: 0, cost: 0, taxType: "taxable", imageUrl: "", hasImage: false },
-  { code: "CM016", name: "CHOONGMAN CHICKEN DRESSING POWDER (1kg*6ea/Box)", category: "파우더류", vendor: "", spec: "1kg*1ea", price: 1100, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM016", hasImage: true },
-  { code: "CM017", name: "CHOONGMAN BATTER MIX FOR CHICKEN", category: "파우더류", vendor: "", spec: "5kg*4ea", price: 2100, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM017", hasImage: true },
-  { code: "CM018", name: "BASE POWDER FOR SALTED RADISH", category: "파우더류", vendor: "", spec: "5kg*1ea", price: 2055, cost: 0, taxType: "taxable", imageUrl: "", hasImage: false },
-  { code: "CM019", name: "CHOONGMAN TTEOKBOKKI SOUP POWDER", category: "파우더류", vendor: "", spec: "2kg*5ea", price: 3550, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM019", hasImage: true },
-  { code: "CM020", name: "NEW REDMIX", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 2020, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM020", hasImage: true },
-]
+export type Product = AdminItem
 
 const emptyForm: ItemFormData = {
   code: "",
@@ -50,12 +25,20 @@ const emptyForm: ItemFormData = {
 export default function ItemsPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  const [products, setProducts] = React.useState<Product[]>(initialProducts)
+  const [products, setProducts] = React.useState<Product[]>([])
+  const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState<ItemFormData>(emptyForm)
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
+
+  React.useEffect(() => {
+    getAdminItems()
+      .then((list) => setProducts(list))
+      .catch(() => setProducts([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -175,6 +158,11 @@ export default function ItemsPage() {
           </div>
         </div>
 
+        {loading && (
+          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {t("loading")}
+          </div>
+        )}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <ItemForm
             formData={formData}

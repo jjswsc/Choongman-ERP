@@ -109,9 +109,9 @@ export function HomeTab() {
           <CardTitle className="text-base font-semibold">{t('noticeBoard')}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'All' | 'Unread' | 'Read')}>
-              <SelectTrigger className="h-9 w-24 text-xs">
+              <SelectTrigger className="h-9 w-16 shrink-0 text-xs sm:w-24">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -124,7 +124,7 @@ export function HomeTab() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="date-input-compact h-9 flex-1 min-w-[120px] text-xs"
+              className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[100px]"
               aria-label={t('dateFrom')}
             />
             <span className="text-xs text-muted-foreground shrink-0">~</span>
@@ -132,7 +132,7 @@ export function HomeTab() {
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="date-input-compact h-9 flex-1 min-w-[120px] text-xs"
+              className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[100px]"
               aria-label={t('dateTo')}
             />
             <Button size="icon" className="h-9 w-9 shrink-0" type="button" onClick={() => fetchNotices()} title={t('search')}>
