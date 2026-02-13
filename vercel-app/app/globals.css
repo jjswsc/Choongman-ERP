@@ -62,46 +62,46 @@ body {
 
 @layer base {
   :root {
-    /* 부드러운 오렌지(파스텔) 테마 */
-    --background: 30 25% 98%;
-    --foreground: 25 20% 15%;
+    /* 실무적 블루/그레이 테마 */
+    --background: 220 14% 98%;
+    --foreground: 220 14% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 25 20% 15%;
+    --card-foreground: 220 14% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 25 20% 15%;
-    --primary: 28 85% 62%;
+    --popover-foreground: 220 14% 12%;
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 30 25% 94%;
-    --secondary-foreground: 25 20% 25%;
-    --muted: 30 25% 94%;
-    --muted-foreground: 25 15% 45%;
-    --accent: 28 85% 62%;
-    --accent-foreground: 0 0% 100%;
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 220 14% 25%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 217 91% 96%;
+    --accent-foreground: 217 91% 40%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 30 20% 90%;
-    --input: 30 20% 90%;
-    --ring: 28 85% 62%;
-    --chart-1: 28 85% 62%;
+    --border: 220 14% 90%;
+    --input: 220 14% 90%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%;
     --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
+    --chart-3: 220 70% 50%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem;
-    /* sidebar */
-    --sidebar-background: 25 30% 14%;
-    --sidebar-foreground: 30 20% 90%;
-    --sidebar-primary: 28 85% 58%;
+    /* sidebar - 검정 바탕, 실무적 회색/흰색 */
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 25 30% 20%;
-    --sidebar-accent-foreground: 30 20% 95%;
-    --sidebar-border: 25 25% 22%;
-    --sidebar-ring: 28 85% 58%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 217 91% 60%;
     --success: 152 60% 42%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --info: 28 85% 62%;
+    --info: 217 91% 60%;
     --info-foreground: 0 0% 100%;
   }
 }
@@ -113,6 +113,13 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* 사이드바 검정 배경 강제 */
+.sidebar-dark,
+.sidebar-dark [data-sidebar="sidebar"],
+.sidebar-dark .bg-sidebar {
+  background-color: #0a0a0a !important;
 }
 
 /* ============================================

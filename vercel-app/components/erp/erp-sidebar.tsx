@@ -126,7 +126,7 @@ export function ErpSidebar() {
   }
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
+    <Sidebar collapsible="icon" className="border-r-0 sidebar-dark">
       {/* Header / Logo */}
       <SidebarHeader className="px-4 py-5">
         <div className="flex items-center gap-3">
@@ -177,8 +177,8 @@ export function ErpSidebar() {
             <SidebarGroup key={section.titleKey}>
               <Collapsible defaultOpen={section.defaultOpen} className="group/collapsible">
                 <SidebarGroupLabel asChild>
-                  <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg border-l-4 border-amber-400 bg-amber-400/10 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground hover:bg-amber-400/20 transition-colors group-data-[collapsible=icon]:px-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                  <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg border-l-4 border-slate-500 bg-white/5 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground hover:bg-white/10 transition-colors group-data-[collapsible=icon]:px-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
                     <span className="flex-1 text-left">{t(section.titleKey)}</span>
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                   </CollapsibleTrigger>
@@ -226,8 +226,8 @@ export function ErpSidebar() {
 
           {/* Settings - 바 형식 */}
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-3 rounded-lg border-l-4 border-amber-400 bg-amber-400/10 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground group-data-[collapsible=icon]:px-2">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+            <SidebarGroupLabel className="flex items-center gap-3 rounded-lg border-l-4 border-slate-500 bg-white/5 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground group-data-[collapsible=icon]:px-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
               {t("adminSectionSettings")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
