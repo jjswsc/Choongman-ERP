@@ -105,6 +105,12 @@ export function WorklogApproval() {
   }, [list, lang])
 
   const getTransContent = (content: string) => (content && contentTransMap[content]) || content || "-"
+  const formatManagerComment = (comment: string) => {
+    if (!comment) return ""
+    return comment
+      .replace(/이월됨/g, t("workLogCarriedOver"))
+      .replace(/부터/g, t("workLogFrom"))
+  }
   const getTransStatus = (status: string) => {
     if (status === "승인") return t("statusApproved")
     if (status === "반려") return t("statusRejected")
@@ -287,7 +293,7 @@ export function WorklogApproval() {
                               <td className="px-5 py-2">
                                 <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{it.managerComment}</p>
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
                                 )}
                               </td>
                               <td className="px-5 py-2 text-center">

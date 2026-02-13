@@ -28,7 +28,11 @@ function parseTimeToDecimal(s: string | null | undefined): number | null {
   return parseInt(match[1], 10) + parseInt(match[2], 10) / 60
 }
 
-/** 휴계·근무 반원 (30분 단위) */
+/** 근무=파란(정상)/빨간(문제), 휴게=테두리만 */
+const WORK_NORMAL = "bg-blue-500"
+const WORK_PROBLEM = "bg-red-500"
+
+/** 휴계·근무 반원 (30분 단위) - 시간표 정상이면 파란, 문제면 빨간 */
 function ScheduleCellMark({
   fullBreak,
   fullWork,
@@ -36,6 +40,7 @@ function ScheduleCellMark({
   breakSecond,
   workFirst,
   workSecond,
+  hasProblem,
 }: {
   fullBreak: boolean
   fullWork: boolean
@@ -43,44 +48,46 @@ function ScheduleCellMark({
   breakSecond: boolean
   workFirst: boolean
   workSecond: boolean
+  hasProblem: boolean
 }) {
+  const workClass = hasProblem ? WORK_PROBLEM : WORK_NORMAL
   if (fullBreak) {
-    return <span className="inline-block h-[14px] w-[14px] rounded-full border-[2px] border-muted-foreground/30 flex-shrink-0" />
+    return <span className="inline-block h-[18px] w-[18px] rounded-sm border border-muted-foreground/40 flex-shrink-0 bg-transparent" />
   }
   if (fullWork) {
-    return <span className="inline-block h-[14px] w-[14px] rounded-full bg-foreground flex-shrink-0" />
+    return <span className={cn("inline-block h-[18px] w-[18px] rounded-sm flex-shrink-0", workClass)} />
   }
   if (breakFirst && workSecond) {
     return (
-      <span className="relative inline-block h-[14px] w-[14px] flex-shrink-0">
-        <span className="absolute left-0 top-0 h-[14px] w-[7px] rounded-l-full border-[2px] border-muted-foreground/30 border-r-0 bg-transparent box-border" />
-        <span className="absolute right-0 top-0 h-[14px] w-[7px] rounded-r-full bg-foreground" />
+      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
+        <span className="absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm border border-muted-foreground/40 border-r-0 bg-transparent box-border" />
+        <span className={cn("absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm", workClass)} />
       </span>
     )
   }
   if (workFirst && breakSecond) {
     return (
-      <span className="relative inline-block h-[14px] w-[14px] flex-shrink-0">
-        <span className="absolute left-0 top-0 h-[14px] w-[7px] rounded-l-full bg-foreground" />
-        <span className="absolute right-0 top-0 h-[14px] w-[7px] rounded-r-full border-[2px] border-muted-foreground/30 border-l-0 bg-transparent box-border" />
+      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
+        <span className={cn("absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm", workClass)} />
+        <span className="absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm border border-muted-foreground/40 border-l-0 bg-transparent box-border" />
       </span>
     )
   }
   if (workFirst && !workSecond) {
     return (
-      <span className="relative inline-block h-[14px] w-[14px] flex-shrink-0">
-        <span className="absolute left-0 top-0 h-[14px] w-[7px] rounded-l-full bg-foreground" />
+      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
+        <span className={cn("absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm", workClass)} />
       </span>
     )
   }
   if (workSecond && !workFirst) {
     return (
-      <span className="relative inline-block h-[14px] w-[14px] flex-shrink-0">
-        <span className="absolute right-0 top-0 h-[14px] w-[7px] rounded-r-full bg-foreground" />
+      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
+        <span className={cn("absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm", workClass)} />
       </span>
     )
   }
-  return <span className="inline-block h-[14px] w-[14px] flex-shrink-0" />
+  return <span className="inline-block h-[18px] w-[18px] flex-shrink-0 rounded-sm bg-muted/30" />
 }
 
 const zoneStyle: Record<string, string> = {
@@ -255,13 +262,13 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         ) : (
           <div className="overflow-x-auto overscroll-x-contain">
             <div className="min-w-max">
-              {/* 시간 기준 - 상단 고정 */}
-              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 bg-muted/30 px-2 py-2">
+              {/* 시간 기준 - 상단 고정 (시간별 칸) */}
+              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 bg-muted/40 px-2 py-2.5">
                 <div className="w-[68px] shrink-0" />
-                <div className="flex gap-0.5 shrink-0">
+                <div className="flex shrink-0">
                   {hours.map((h) => (
-                    <div key={h} className="flex flex-col items-center justify-center w-[14px] shrink-0">
-                      <span className="text-[9px] font-bold tabular-nums text-muted-foreground">{h}</span>
+                    <div key={h} className="flex flex-col items-center justify-center w-[18px] min-w-[18px] shrink-0 border-r border-border last:border-r-0">
+                      <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{h}</span>
                     </div>
                   ))}
                 </div>
@@ -277,7 +284,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                 const hasProblem = !att
                   ? true
                   : (att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status))
-                const rowBg = hasProblem ? "bg-red-50 dark:bg-red-950/20" : "bg-card"
+                const rowBg = hasProblem ? "bg-red-50/50 dark:bg-red-950/30" : "bg-card"
 
                 return (
                   <div
@@ -303,8 +310,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                         {p.name}
                       </span>
                     </div>
-                    {/* 시간대 슬롯 - 가로 스크롤 */}
-                    <div className="flex gap-0.5 shrink-0">
+                    {/* 시간대 슬롯 - 시간별 칸, 파란(정상) 빨간(문제) */}
+                    <div className="flex shrink-0">
                       {hours.map((h) => {
                         const h0 = h,
                           h05 = h + 0.5,
@@ -318,7 +325,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                         const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
 
                         return (
-                          <div key={h} className="flex flex-col items-center justify-center shrink-0 w-[14px]">
+                          <div key={h} className="flex flex-col items-center justify-center shrink-0 w-[18px] min-w-[18px] border-r border-border last:border-r-0 py-1">
                             {inAny ? (
                               <ScheduleCellMark
                                 fullBreak={fullBreak}
@@ -327,10 +334,11 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                                 breakSecond={breakSecond}
                                 workFirst={workFirst}
                                 workSecond={workSecond}
+                                hasProblem={hasProblem}
                               />
                             ) : (
-                              <div className="h-[14px] w-[14px] flex items-center justify-center shrink-0">
-                                <div className="h-[3px] w-[8px] rounded-full bg-border" />
+                              <div className="h-[18px] w-[18px] flex items-center justify-center shrink-0 rounded-sm bg-muted/20">
+                                <div className="h-[2px] w-[6px] rounded-full bg-border" />
                               </div>
                             )}
                           </div>
@@ -345,18 +353,22 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         )}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-5 rounded-b-2xl border-t bg-muted/20 px-4 py-3">
+      {/* Legend - 파란=정상, 빨간=문제 */}
+      <div className="flex flex-wrap items-center justify-center gap-4 rounded-b-2xl border-t bg-muted/20 px-4 py-3">
         <div className="flex items-center gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-full bg-foreground" />
-          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")}</span>
+          <div className="h-3 w-3 rounded-sm bg-blue-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} · {t("scheduleTodayNormal")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-full border-2 border-muted-foreground/30" />
+          <div className="h-3 w-3 rounded-sm bg-red-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} · {t("scheduleTodayProblem")}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-3 w-3 rounded-sm border border-muted-foreground/40 shrink-0" />
           <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleBreak")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-[3px] w-2.5 rounded-full bg-border" />
+          <div className="h-[2px] w-2 rounded-full bg-border shrink-0" />
           <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleNotWorking")}</span>
         </div>
       </div>
