@@ -78,10 +78,14 @@ export async function GET(request: NextRequest) {
     for (const row of rows || []) {
       const targetStores = String(row.target_store || '전체').trim()
       const targetRoles = String(row.target_role || '전체').trim()
-      const roleList = targetRoles
-        .split(',')
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean)
+      const isAllStores = targetStores === '전체' || targetStores.trim() === ''
+      const isAllRoles = targetRoles === '전체' || targetRoles.trim() === ''
+      const roleList = isAllRoles
+        ? []
+        : targetRoles
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean)
 
       let totalCount = 0
       const recipientSet = new Set<string>()
@@ -90,10 +94,10 @@ export async function GET(request: NextRequest) {
         const eName = String(e.name || '').trim()
         const resignDate = String(e.resign_date || '').trim()
         if (!eName || (resignDate && resignDate !== '')) continue
-        if (!eStore || eStore === '매장명') continue
+        if (!eStore || eStore === '매장명' || eStore === 'Store') continue
         const eRole = (String(e.job || e.role || '').trim() || 'Staff').toLowerCase()
-        const storeMatch = targetStores === '전체' || targetStores.split(',').map((s) => s.trim()).includes(eStore)
-        const roleMatch = roleList.length === 0 || roleList.some((r) => eRole === r || eRole.indexOf(r) >= 0 || r.indexOf(eRole) >= 0)
+        const storeMatch = isAllStores || targetStores.split(',').map((s) => s.trim()).includes(eStore)
+        const roleMatch = isAllRoles || roleList.length === 0 || roleList.some((r) => eRole === r || eRole.indexOf(r) >= 0 || r.indexOf(eRole) >= 0)
         if (storeMatch && roleMatch) {
           totalCount += 1
           recipientSet.add(eStore)
@@ -102,11 +106,16 @@ export async function GET(request: NextRequest) {
 
       const readCount = readCountByNotice[row.id] || 0
 
-      const recipients = Array.from(recipientSet).sort()
-      if (targetStores !== '전체' && recipients.length === 0) {
-        recipients.push(...targetStores.split(',').map((s) => s.trim()).filter(Boolean))
+      let recipients: string[]
+      if (isAllStores) {
+        recipients = ['전체']
+      } else {
+        recipients = Array.from(recipientSet).sort()
+        if (recipients.length === 0) {
+          recipients = targetStores.split(',').map((s) => s.trim()).filter(Boolean)
+        }
+        if (recipients.length === 0) recipients = ['전체']
       }
-      if (recipients.length === 0) recipients.push('전체')
 
       list.push({
         id: String(row.id),

@@ -23,6 +23,7 @@ import {
   getAttendancePendingList,
   processAttendanceApproval,
 } from "@/lib/api-client"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
 
@@ -120,9 +121,23 @@ export function AdminTab() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* 공지 발송 + 발송 내역 (v0 디자인) */}
-      <NoticeCompose />
-      <NoticeHistory />
+      {/* 공지사항 (탭: 새 공지 보내기 | 발송 내역) */}
+      <Tabs defaultValue="compose" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-3">
+          <TabsTrigger value="compose" className="text-sm font-medium">
+            {t("noticeNewTitle")}
+          </TabsTrigger>
+          <TabsTrigger value="history" className="text-sm font-medium">
+            {t("noticeHistoryTitle")}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="compose">
+          <NoticeCompose />
+        </TabsContent>
+        <TabsContent value="history">
+          <NoticeHistory />
+        </TabsContent>
+      </Tabs>
 
       {/* Leave Approval */}
       <Card className="shadow-sm">

@@ -189,7 +189,7 @@ export function NoticeHistory() {
                           key={r}
                           className="inline-flex items-center rounded-md bg-[hsl(215,80%,50%)]/10 px-1.5 py-0.5 text-[9px] font-bold text-[hsl(215,80%,50%)]"
                         >
-                          {r}
+                          {r === "전체" ? t("noticeFilterAll") : r}
                         </span>
                       ))}
                     </div>
