@@ -6,7 +6,7 @@ import { VendorForm, type VendorFormData } from "@/components/erp/vendor-form"
 import { VendorTable } from "@/components/erp/vendor-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getAdminVendors } from "@/lib/api-client"
+import { getAdminVendors, saveVendor, deleteVendor } from "@/lib/api-client"
 import type { Vendor } from "@/components/erp/vendor-table"
 
 const emptyForm: VendorFormData = {
@@ -63,11 +63,30 @@ export default function VendorsPage() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const code = formData.code.trim()
     const name = formData.name.trim()
     if (!code || !name) {
       alert(t("vendorAlertCodeName"))
+      return
+    }
+    if (!editingCode && vendors.some((v) => v.code === code)) {
+      alert(t("vendorAlertCodeExists"))
+      return
+    }
+    const res = await saveVendor({
+      code,
+      name,
+      contact: formData.contact.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim(),
+      address: formData.address.trim(),
+      type: formData.type,
+      memo: formData.memo.trim(),
+      editingCode: editingCode || undefined,
+    })
+    if (!res.success) {
+      alert(res.message || "저장에 실패했습니다.")
       return
     }
     const newVendor: Vendor = {
@@ -84,10 +103,6 @@ export default function VendorsPage() {
       setVendors((prev) => prev.map((v) => (v.code === editingCode ? newVendor : v)))
       alert(t("vendorAlertUpdated"))
     } else {
-      if (vendors.some((v) => v.code === code)) {
-        alert(t("vendorAlertCodeExists"))
-        return
-      }
       setVendors((prev) => [...prev, newVendor])
       alert(t("vendorAlertSaved"))
     }
@@ -109,8 +124,13 @@ export default function VendorsPage() {
     setEditingCode(vendor.code)
   }
 
-  const handleDelete = (vendor: Vendor) => {
+  const handleDelete = async (vendor: Vendor) => {
     if (!confirm(`"${vendor.name}" ${t("vendorConfirmDelete")}`)) return
+    const res = await deleteVendor({ code: vendor.code })
+    if (!res.success) {
+      alert(res.message || "삭제에 실패했습니다.")
+      return
+    }
     setVendors((prev) => prev.filter((v) => v.code !== vendor.code))
     if (editingCode === vendor.code) {
       setFormData(emptyForm)

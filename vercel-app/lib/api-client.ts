@@ -772,3 +772,60 @@ export async function getAdminVendors() {
   const res = await fetch('/api/getVendors')
   return res.json() as Promise<AdminVendor[]>
 }
+
+export async function saveItem(params: {
+  code: string
+  name: string
+  category?: string
+  vendor?: string
+  spec?: string
+  price?: number
+  cost?: number
+  taxType?: string
+  imageUrl?: string
+  editingCode?: string
+}) {
+  const res = await fetch('/api/saveItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteItem(params: { code: string }) {
+  const res = await fetch('/api/deleteItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function saveVendor(params: {
+  code: string
+  name: string
+  contact?: string
+  phone?: string
+  email?: string
+  address?: string
+  type?: string
+  memo?: string
+  editingCode?: string
+}) {
+  const res = await fetch('/api/saveVendor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteVendor(params: { code: string }) {
+  const res = await fetch('/api/deleteVendor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}

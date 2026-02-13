@@ -6,7 +6,7 @@ import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getAdminItems, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
 
@@ -66,23 +66,41 @@ export default function ItemsPage() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const code = formData.code.trim()
     const name = formData.name.trim()
     if (!code || !name) {
       alert(t("itemsAlertCodeName"))
       return
     }
-    const price = Number(formData.price) || 0
-    const cost = Number(formData.cost) || 0
+    if (!editingCode && products.some((p) => p.code === code)) {
+      alert(t("itemsAlertCodeExists"))
+      return
+    }
+    const res = await saveItem({
+      code,
+      name,
+      category: formData.category.trim(),
+      vendor: formData.vendor.trim(),
+      spec: formData.spec.trim(),
+      price: Number(formData.price) || 0,
+      cost: Number(formData.cost) || 0,
+      taxType: formData.taxType,
+      imageUrl: formData.imageUrl.trim(),
+      editingCode: editingCode || undefined,
+    })
+    if (!res.success) {
+      alert(res.message || "저장에 실패했습니다.")
+      return
+    }
     const newItem: Product = {
       code,
       name,
       category: formData.category.trim(),
       vendor: formData.vendor.trim(),
       spec: formData.spec.trim(),
-      price,
-      cost,
+      price: Number(formData.price) || 0,
+      cost: Number(formData.cost) || 0,
       taxType: formData.taxType,
       imageUrl: formData.imageUrl.trim(),
       hasImage: !!formData.imageUrl.trim(),
@@ -91,10 +109,6 @@ export default function ItemsPage() {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
       alert(t("itemsAlertUpdated"))
     } else {
-      if (products.some((p) => p.code === code)) {
-        alert(t("itemsAlertCodeExists"))
-        return
-      }
       setProducts((prev) => [...prev, newItem])
       alert(t("itemsAlertSaved"))
     }
@@ -117,8 +131,13 @@ export default function ItemsPage() {
     setEditingCode(product.code)
   }
 
-  const handleDelete = (product: Product) => {
+  const handleDelete = async (product: Product) => {
     if (!confirm(`"${product.name}" ${t("itemsConfirmDelete")}`)) return
+    const res = await deleteItem({ code: product.code })
+    if (!res.success) {
+      alert(res.message || "삭제에 실패했습니다.")
+      return
+    }
     setProducts((prev) => prev.filter((p) => p.code !== product.code))
     if (editingCode === product.code) {
       setFormData(emptyForm)
