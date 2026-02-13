@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Tags } from "lucide-react"
-import { ItemForm } from "@/components/erp/item-form"
+import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -35,13 +35,13 @@ const initialProducts: Product[] = [
   { code: "CM020", name: "NEW REDMIX", category: "소스류", vendor: "", spec: "2.5kg*4ea", price: 2020, cost: 0, taxType: "taxable", imageUrl: "https://placehold.co/200x200?text=CM020", hasImage: true },
 ]
 
-const emptyForm = {
+const emptyForm: ItemFormData = {
   code: "",
   category: "",
   vendor: "",
   name: "",
   imageUrl: "",
-  taxType: "taxable" as const,
+  taxType: "taxable",
   spec: "",
   price: "",
   cost: "",
@@ -51,7 +51,7 @@ export default function ItemsPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const [products, setProducts] = React.useState<Product[]>(initialProducts)
-  const [formData, setFormData] = React.useState(emptyForm)
+  const [formData, setFormData] = React.useState<ItemFormData>(emptyForm)
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
