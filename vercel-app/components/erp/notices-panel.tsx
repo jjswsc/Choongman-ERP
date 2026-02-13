@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
-import { getMyNotices, type NoticeItem } from "@/lib/api-client"
+import { getMyNotices, translateTexts, type NoticeItem } from "@/lib/api-client"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -32,6 +32,7 @@ export function NoticesPanel() {
   const [endDate, setEndDate] = React.useState(todayStr)
   const [notices, setNotices] = React.useState<NoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [transMap, setTransMap] = React.useState<Record<string, string>>({})
 
   const fetchNotices = React.useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -52,6 +53,24 @@ export function NoticesPanel() {
       return d >= startDate && d <= endDate
     })
   }, [notices, startDate, endDate])
+
+  React.useEffect(() => {
+    const texts = [...new Set(filtered.flatMap((n) => [n.title, n.content].filter(Boolean)))]
+    if (texts.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setTransMap(map)
+    }).catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [filtered, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   return (
     <div className="rounded-xl border bg-card">
@@ -87,7 +106,7 @@ export function NoticesPanel() {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="h-9 w-40 pl-8 text-xs"
+                className="date-input-compact h-9 w-40 pl-8 text-xs"
               />
             </div>
           </div>
@@ -101,7 +120,7 @@ export function NoticesPanel() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="h-9 w-40 pl-8 text-xs"
+                className="date-input-compact h-9 w-40 pl-8 text-xs"
               />
             </div>
           </div>
@@ -148,7 +167,7 @@ export function NoticesPanel() {
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{n.title}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{getTrans(n.title)}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {n.date} · {n.sender}
                   </p>

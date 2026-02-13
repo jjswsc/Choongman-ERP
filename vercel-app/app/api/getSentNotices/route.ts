@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
       date: string
       recipients: string[]
       preview: string
+      content: string
       readCount: number
       totalCount: number
     }[] = []
@@ -123,6 +124,7 @@ export async function GET(request: NextRequest) {
         date: toDateStr(row.created_at),
         recipients,
         preview: (row.content || '').slice(0, 100),
+        content: row.content || '',
         readCount,
         totalCount,
       })

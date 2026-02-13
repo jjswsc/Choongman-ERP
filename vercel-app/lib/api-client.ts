@@ -326,6 +326,7 @@ export interface SentNoticeItem {
   date: string
   recipients: string[]
   preview: string
+  content?: string
   readCount: number
   totalCount: number
 }

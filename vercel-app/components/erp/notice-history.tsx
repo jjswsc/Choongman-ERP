@@ -22,6 +22,7 @@ import { useT } from "@/lib/i18n"
 import {
   getSentNotices,
   deleteNoticeAdmin,
+  translateTexts,
   type SentNoticeItem,
 } from "@/lib/api-client"
 
@@ -44,6 +45,7 @@ export function NoticeHistory() {
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [notices, setNotices] = React.useState<SentNoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [transMap, setTransMap] = React.useState<Record<string, string>>({})
 
   const loadNotices = React.useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -69,6 +71,24 @@ export function NoticeHistory() {
     window.addEventListener("notice-sent", onSent)
     return () => window.removeEventListener("notice-sent", onSent)
   }, [loadNotices])
+
+  React.useEffect(() => {
+    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
+    if (texts.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setTransMap(map)
+    }).catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [notices, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   const handleDelete = async (id: string) => {
     if (!confirm(t("noticeDeleteConfirm"))) return
@@ -100,23 +120,23 @@ export function NoticeHistory() {
       </div>
 
       <div className="flex items-center gap-2 px-4 pb-3">
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="h-9 pl-8 text-xs rounded-lg"
+            className="date-input-compact h-9 pl-8 text-xs rounded-lg"
           />
         </div>
         <span className="text-xs text-muted-foreground font-medium">~</span>
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-0">
           <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="h-9 pl-8 text-xs rounded-lg"
+            className="date-input-compact h-9 pl-8 text-xs rounded-lg"
           />
         </div>
         <Button
@@ -172,7 +192,7 @@ export function NoticeHistory() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="text-[13px] font-bold text-card-foreground leading-tight truncate flex-1 min-w-0">
-                        {notice.title}
+                        {getTrans(notice.title)}
                       </h4>
                       {isExpanded ? (
                         <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
@@ -181,7 +201,7 @@ export function NoticeHistory() {
                       )}
                     </div>
                     <p className="mt-0.5 text-[11px] text-muted-foreground truncate">
-                      {notice.preview}
+                      {getTrans(notice.preview)}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
@@ -229,8 +249,8 @@ export function NoticeHistory() {
                           {t("noticePreview")}
                         </span>
                       </div>
-                      <p className="text-xs text-card-foreground leading-relaxed">
-                        {notice.preview}
+                      <p className="text-xs text-card-foreground leading-relaxed whitespace-pre-wrap">
+                        {getTrans(notice.content || notice.preview || "") || "(내용 없음)"}
                       </p>
                     </div>
                     <div className="mb-3 rounded-lg bg-card border px-3 py-2.5">

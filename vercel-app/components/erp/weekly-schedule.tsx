@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
+import { getLoginData, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 function getMondayOfWeek(d?: Date): string {
@@ -45,22 +45,41 @@ export function WeeklySchedule() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const [storeList, setStoreList] = React.useState<string[]>([])
+  const [storeFilter, setStoreFilter] = React.useState("")
   const [date, setDate] = React.useState(getMondayOfWeek)
   const [areaFilter, setAreaFilter] = React.useState("all")
   const [schedule, setSchedule] = React.useState<WeeklyScheduleItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
 
+  React.useEffect(() => {
+    if (auth?.store) {
+      getLoginData().then((r) => {
+        const stores = Object.keys(r.users || {}).filter(Boolean)
+        const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+        if (isOffice) {
+          setStoreList([t("scheduleStoreAll"), ...stores].filter(Boolean))
+          setStoreFilter(t("scheduleStoreAll"))
+        } else {
+          setStoreList([auth.store!])
+          setStoreFilter(auth.store)
+        }
+      })
+    }
+  }, [auth?.store, auth?.role, t])
+
   const loadWeekData = React.useCallback(() => {
-    const store = auth?.store
+    const store = storeFilter || auth?.store
     if (!store) return
     setLoading(true)
     const area = areaFilter === "all" ? undefined : areaFilter === "service" ? "Service" : areaFilter === "kitchen" ? "Kitchen" : "Office"
-    getWeeklySchedule({ store, monday: date, area })
+    const storeParam = (store === t("scheduleStoreAll") || store === "All" || store === "전체") ? "All" : store
+    getWeeklySchedule({ store: storeParam, monday: date, area })
       .then((list) => setSchedule(list || []))
       .catch(() => setSchedule([]))
       .finally(() => setLoading(false))
-  }, [auth?.store, date, areaFilter])
+  }, [auth?.store, storeFilter, date, areaFilter])
 
   React.useEffect(() => {
     if (auth?.store) loadWeekData()
@@ -167,8 +186,20 @@ export function WeeklySchedule() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-2 px-4 pb-3">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 flex-1 rounded-lg text-xs" />
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        {storeList.length > 1 && (
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className="h-9 min-w-[100px] rounded-lg text-xs">
+              <SelectValue placeholder={t("scheduleStorePlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              {storeList.map((st) => (
+                <SelectItem key={st} value={st}>{st}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 flex-1 min-w-[120px] rounded-lg text-xs" />
         <Select value={areaFilter} onValueChange={setAreaFilter}>
           <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
             <SelectValue />

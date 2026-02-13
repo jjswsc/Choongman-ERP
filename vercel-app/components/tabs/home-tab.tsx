@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getMyNotices, type NoticeItem } from "@/lib/api-client"
+import { getMyNotices, translateTexts, type NoticeItem } from "@/lib/api-client"
 import { Megaphone, Bell, Search } from "lucide-react"
 
 function todayStr() {
@@ -37,9 +37,11 @@ export function HomeTab() {
   const t = useT(lang)
   const [notices, setNotices] = useState<NoticeItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 첫화면: 미확인 기본
   const [dateFrom, setDateFrom] = useState(() => daysAgoStr(30)) // 기본: 최근 30일
   const [dateTo, setDateTo] = useState(todayStr)
+  const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const fetchNotices = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -71,6 +73,24 @@ export function HomeTab() {
       return (b.date || '').localeCompare(a.date || '')
     })
   }, [notices, statusFilter, dateFrom, dateTo])
+
+  useEffect(() => {
+    const texts = [...new Set(filteredNotices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
+    if (texts.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setTransMap(map)
+    }).catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [filteredNotices, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -104,7 +124,7 @@ export function HomeTab() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="date-input-compact h-9 flex-1 min-w-0 text-xs"
+              className="date-input-compact h-9 flex-1 min-w-[120px] text-xs"
               aria-label={t('dateFrom')}
             />
             <span className="text-xs text-muted-foreground shrink-0">~</span>
@@ -112,7 +132,7 @@ export function HomeTab() {
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="date-input-compact h-9 flex-1 min-w-0 text-xs"
+              className="date-input-compact h-9 flex-1 min-w-[120px] text-xs"
               aria-label={t('dateTo')}
             />
             <Button size="icon" className="h-9 w-9 shrink-0" type="button" onClick={() => fetchNotices()} title={t('search')}>
@@ -126,24 +146,41 @@ export function HomeTab() {
             <div className="py-6 text-center text-sm text-muted-foreground">{t('noNotices')}</div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filteredNotices.map((n) => (
-                <div
-                  key={n.id}
-                  className="flex items-start gap-3 rounded-lg border border-border/60 p-3 transition-colors hover:bg-muted/50"
-                >
+              {filteredNotices.map((n) => {
+                const isExpanded = expandedId === n.id
+                return (
                   <div
-                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                      n.status === "New" || !isRead(n.status) ? "bg-destructive/10" : "bg-primary/10"
-                    }`}
+                    key={n.id}
+                    className="rounded-lg border border-border/60 overflow-hidden transition-colors hover:bg-muted/50"
                   >
-                    <Bell className={`h-3 w-3 ${n.status === "New" || !isRead(n.status) ? "text-destructive" : "text-primary"}`} />
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : n.id)}
+                      className="flex w-full items-start gap-3 p-3 text-left active:bg-muted/30"
+                    >
+                      <div
+                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                          n.status === "New" || !isRead(n.status) ? "bg-destructive/10" : "bg-primary/10"
+                        }`}
+                      >
+                        <Bell className={`h-3 w-3 ${n.status === "New" || !isRead(n.status) ? "text-destructive" : "text-primary"}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{getTrans(n.title)}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{n.date}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground shrink-0">{isExpanded ? "▲" : "▼"}</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-border/60 bg-muted/20 px-3 py-3">
+                        <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                          {n.content ? getTrans(n.content) : "(내용 없음)"}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{n.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{n.date}</p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>

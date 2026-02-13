@@ -20,6 +20,7 @@ import { useT } from "@/lib/i18n"
 import {
   getSentNotices,
   deleteNoticeAdmin,
+  translateTexts,
   type SentNoticeItem,
 } from "@/lib/api-client"
 
@@ -42,6 +43,7 @@ export function AdminNoticeHistory() {
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [notices, setNotices] = React.useState<SentNoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [transMap, setTransMap] = React.useState<Record<string, string>>({})
 
   const loadNotices = React.useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -67,6 +69,24 @@ export function AdminNoticeHistory() {
     window.addEventListener("notice-sent", onSent)
     return () => window.removeEventListener("notice-sent", onSent)
   }, [loadNotices])
+
+  React.useEffect(() => {
+    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
+    if (texts.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+      setTransMap(map)
+    }).catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [notices, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -107,7 +127,7 @@ export function AdminNoticeHistory() {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="h-9 w-40 pl-9 text-xs"
+            className="date-input-compact h-9 w-40 pl-9 text-xs"
           />
         </div>
         <span className="text-xs font-medium text-muted-foreground">~</span>
@@ -117,7 +137,7 @@ export function AdminNoticeHistory() {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="h-9 w-40 pl-9 text-xs"
+            className="date-input-compact h-9 w-40 pl-9 text-xs"
           />
         </div>
         <Button
@@ -177,7 +197,7 @@ export function AdminNoticeHistory() {
                   {/* Title + meta */}
                   <div className="min-w-0 flex-1">
                     <h4 className="text-sm font-bold text-card-foreground truncate block">
-                      {notice.title}
+                      {getTrans(notice.title)}
                     </h4>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                       {notice.recipients.map((r) => (
@@ -190,7 +210,7 @@ export function AdminNoticeHistory() {
                       ))}
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {notice.preview}
+                      {getTrans(notice.preview)}
                     </p>
                   </div>
 
@@ -253,7 +273,7 @@ export function AdminNoticeHistory() {
                 {isExpanded && (
                   <div className="border-t bg-muted/10 px-6 py-4">
                     <div className="grid grid-cols-2 gap-4">
-                      {/* Preview */}
+                      {/* 전체 내용 */}
                       <div className="rounded-lg border bg-card px-4 py-3">
                         <div className="flex items-center gap-2 mb-2">
                           <FileText className="h-3.5 w-3.5 text-muted-foreground" />
@@ -261,8 +281,8 @@ export function AdminNoticeHistory() {
                             {t("noticePreview")}
                           </span>
                         </div>
-                        <p className="text-sm text-card-foreground leading-relaxed">
-                          {notice.preview}
+                        <p className="text-sm text-card-foreground leading-relaxed whitespace-pre-wrap">
+                          {getTrans(notice.content || notice.preview || "") || "(내용 없음)"}
                         </p>
                       </div>
 

@@ -62,46 +62,46 @@ body {
 
 @layer base {
   :root {
-    /* v0 admin theme - main / sidebar */
-    --background: 210 20% 98%;
-    --foreground: 220 20% 10%;
+    /* 부드러운 오렌지(파스텔) 테마 */
+    --background: 30 25% 98%;
+    --foreground: 25 20% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card-foreground: 25 20% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
-    --primary: 215 80% 50%;
+    --popover-foreground: 25 20% 15%;
+    --primary: 28 85% 62%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 15% 95%;
-    --secondary-foreground: 220 20% 20%;
-    --muted: 210 15% 95%;
-    --muted-foreground: 215 10% 45%;
-    --accent: 215 80% 50%;
+    --secondary: 30 25% 94%;
+    --secondary-foreground: 25 20% 25%;
+    --muted: 30 25% 94%;
+    --muted-foreground: 25 15% 45%;
+    --accent: 28 85% 62%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 90%;
-    --input: 214 20% 90%;
-    --ring: 215 80% 50%;
-    --chart-1: 215 80% 50%;
+    --border: 30 20% 90%;
+    --input: 30 20% 90%;
+    --ring: 28 85% 62%;
+    --chart-1: 28 85% 62%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem;
-    /* v0 sidebar - dark */
-    --sidebar-background: 220 25% 12%;
-    --sidebar-foreground: 210 20% 88%;
-    --sidebar-primary: 215 80% 55%;
+    /* sidebar */
+    --sidebar-background: 25 30% 14%;
+    --sidebar-foreground: 30 20% 90%;
+    --sidebar-primary: 28 85% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 25% 18%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 220 20% 20%;
-    --sidebar-ring: 215 80% 55%;
+    --sidebar-accent: 25 30% 20%;
+    --sidebar-accent-foreground: 30 20% 95%;
+    --sidebar-border: 25 25% 22%;
+    --sidebar-ring: 28 85% 58%;
     --success: 152 60% 42%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --info: 215 80% 50%;
+    --info: 28 85% 62%;
     --info-foreground: 0 0% 100%;
   }
 }
@@ -375,40 +375,43 @@ body {
   color: inherit;
 }
 
-/* 날짜 입력 - 달력 아이콘이 칸을 벗어나지 않도록, 날짜와 가깝게 배치 */
+/* 날짜 입력 - 사용 메뉴 간격 기준, 달력 아이콘과 숫자 겹침 방지 */
 .date-input-compact {
-  max-width: 130px;
-  padding-right: 2rem !important;
+  min-width: 120px;
+  max-width: 140px;
+  padding-right: 2.75rem !important;
+  padding-left: 0.5rem;
   overflow: hidden;
 }
 
 .date-input-compact::-webkit-calendar-picker-indicator {
-  margin-left: -0.75rem;
-  padding: 0.2rem;
+  margin-left: 0;
+  padding: 0.25rem;
   cursor: pointer;
-  opacity: 0.65;
+  opacity: 0.7;
+  position: relative;
 }
 
 :root {
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --sidebar: hsl(30 25% 97%);
+  --sidebar-foreground: hsl(25 15% 28%);
+  --sidebar-primary: hsl(28 85% 62%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(30 25% 94%);
+  --sidebar-accent-foreground: hsl(25 20% 15%);
+  --sidebar-border: hsl(30 20% 90%);
+  --sidebar-ring: hsl(28 85% 62%);
 }
 
 .dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar: hsl(25 30% 12%);
+  --sidebar-foreground: hsl(30 20% 90%);
+  --sidebar-primary: hsl(28 85% 58%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --sidebar-accent: hsl(25 30% 18%);
+  --sidebar-accent-foreground: hsl(30 20% 95%);
+  --sidebar-border: hsl(25 25% 22%);
+  --sidebar-ring: hsl(28 85% 58%);
 }
 
 @layer base {

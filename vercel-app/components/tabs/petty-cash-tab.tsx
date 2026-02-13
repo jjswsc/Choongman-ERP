@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Banknote, Search, Plus, Camera, Printer, FileSpreadsheet } from "lucide-react"
+import { Banknote, Search, Plus, Camera } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -221,53 +221,6 @@ export function PettyCashTab() {
 
   const fmt = (n: number) => (n || 0).toLocaleString()
 
-  const handlePrintMonthly = () => {
-    if (monthlyData.length === 0) {
-      alert(t("pettyPrintHint"))
-      return
-    }
-    const w = window.open("", "_blank")
-    if (!w) {
-      alert(t("pettyAllowPopup"))
-      return
-    }
-    const headers = [t("pettyColDate") || "날짜", t("store") || "매장", t("pettyColType") || "유형", t("pettyColAmount") || "금액", t("pettyColBalance") || "잔액", t("pettyColMemo") || "내용"]
-    const rows = monthlyData.map(
-      (r) =>
-        `<tr><td>${r.trans_date}</td><td>${r.store}</td><td>${t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td><td class="text-end">${r.amount >= 0 ? "" : "-"}${fmt(Math.abs(r.amount))}</td><td class="text-end fw-bold">${fmt(r.balance_after ?? 0)}</td><td>${getMemo(r.memo || "").replace(/</g, "&lt;")}</td></tr>`
-    )
-    w.document.write(
-      `<html><head><meta charset="utf-8"><style>table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ddd;text-align:left}.text-end{text-align:right}</style></head><body class="p-3"><h4 class="mb-3">${t("pettyCashTitle") || "패티 캐쉬"} - ${monthlyYm}</h4><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></body></html>`
-    )
-    w.document.close()
-    w.onload = () => {
-      w.print()
-      w.close()
-    }
-  }
-
-  const handleDownloadMonthlyExcel = () => {
-    if (monthlyData.length === 0) {
-      alert(t("pettyExcelHint"))
-      return
-    }
-    const headers = [t("pettyColDate") || "날짜", t("store") || "매장", t("pettyColType") || "유형", t("pettyColAmount") || "금액", t("pettyColBalance") || "잔액", t("pettyColMemo") || "내용"]
-    const csvEscape = (s: string) => {
-      const t = String(s ?? "").trim().replace(/\r?\n/g, " ")
-      return t.indexOf(",") !== -1 || t.indexOf('"') !== -1 ? `"${t.replace(/"/g, '""')}"` : t
-    }
-    const rows = monthlyData.map((r) =>
-      [r.trans_date, r.store, t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type, (r.amount >= 0 ? "" : "-") + fmt(Math.abs(r.amount)), fmt(r.balance_after ?? 0), getMemo(r.memo || "")].map(csvEscape).join(",")
-    )
-    const csv = "\uFEFF" + [headers.map(csvEscape).join(","), ...rows].join("\r\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(blob)
-    a.download = `petty_cash_monthly_${monthlyYm}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }
-
   return (
     <div className="flex flex-col gap-4 p-4">
       <Card className="shadow-sm">
@@ -298,13 +251,13 @@ export function PettyCashTab() {
                     ))}
                   </SelectContent>
                 </Select>
-                <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="h-9 flex-1 text-xs w-28" />
-                <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 flex-1 text-xs w-28" />
+                <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact h-9 flex-1 text-xs min-w-[100px]" />
+                <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact h-9 flex-1 text-xs min-w-[100px]" />
+                <Button size="sm" className="h-9 shrink-0 px-3" onClick={loadList} disabled={listLoading}>
+                  <Search className="mr-1 h-3.5 w-3.5" />
+                  {listLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
+                </Button>
               </div>
-              <Button className="h-10 w-full font-medium" onClick={loadList} disabled={listLoading}>
-                <Search className="mr-1.5 h-3.5 w-3.5" />
-                {listLoading ? (t("loading") || "조회중...") : (t("search") || "조회")}
-              </Button>
               <div className="rounded-lg border border-border/60 max-h-[240px] overflow-y-auto">
                 {listData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
@@ -448,19 +401,9 @@ export function PettyCashTab() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button className="h-10 flex-1 font-medium" onClick={loadMonthly} disabled={monthlyLoading}>
-                  <Search className="mr-1.5 h-3.5 w-3.5" />
-                  {monthlyLoading ? (t("loading") || "조회중...") : (t("search") || "조회")}
-                </Button>
-                <Button variant="outline" size="sm" className="h-10" onClick={handlePrintMonthly} disabled={monthlyData.length === 0}>
-                  <Printer className="mr-1.5 h-3.5 w-3.5" />
-                  {t("printBtn") || "인쇄"}
-                </Button>
-                <Button variant="outline" size="sm" className="h-10" onClick={handleDownloadMonthlyExcel} disabled={monthlyData.length === 0}>
-                  <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
-                  {t("excelBtn") || "엑셀"}
+                <Button size="sm" className="h-9 shrink-0 px-3" onClick={loadMonthly} disabled={monthlyLoading}>
+                  <Search className="mr-1 h-3.5 w-3.5" />
+                  {monthlyLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
                 </Button>
               </div>
               <div className="rounded-lg border border-border/60 max-h-[320px] overflow-x-auto overflow-y-auto">

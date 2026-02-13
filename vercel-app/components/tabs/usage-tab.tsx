@@ -298,9 +298,9 @@ export function UsageTab() {
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 text-sm max-w-[140px]" />
+                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="date-input-compact h-9 text-sm" />
                 <span className="text-sm text-muted-foreground">~</span>
-                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 text-sm max-w-[140px]" />
+                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="date-input-compact h-9 text-sm" />
                 <Button size="sm" onClick={loadHistory} disabled={historyLoading}>
                   {historyLoading ? t('loading') : t('search') || '조회'}
                 </Button>
