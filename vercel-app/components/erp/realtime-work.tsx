@@ -28,11 +28,11 @@ function parseTimeToDecimal(s: string | null | undefined): number | null {
   return parseInt(match[1], 10) + parseInt(match[2], 10) / 60
 }
 
-/** 근무=파란(정상)/빨간(문제), 휴게=테두리만 */
+/** 근무=● 파란(정상)/빨간(문제), 휴게=○ 테두리만 */
 const WORK_NORMAL = "bg-blue-500"
 const WORK_PROBLEM = "bg-red-500"
 
-/** 휴계·근무 반원 (30분 단위) - 시간표 정상이면 파란, 문제면 빨간 */
+/** ●/○ 원형 마크 - 시간표 정상=파란, 문제=빨간 */
 function ScheduleCellMark({
   fullBreak,
   fullWork,
@@ -52,42 +52,42 @@ function ScheduleCellMark({
 }) {
   const workClass = hasProblem ? WORK_PROBLEM : WORK_NORMAL
   if (fullBreak) {
-    return <span className="inline-block h-[18px] w-[18px] rounded-sm border border-muted-foreground/40 flex-shrink-0 bg-transparent" />
+    return <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50 flex-shrink-0 bg-transparent" />
   }
   if (fullWork) {
-    return <span className={cn("inline-block h-[18px] w-[18px] rounded-sm flex-shrink-0", workClass)} />
+    return <span className={cn("inline-block h-4 w-4 rounded-full flex-shrink-0", workClass)} />
   }
   if (breakFirst && workSecond) {
     return (
-      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
-        <span className="absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm border border-muted-foreground/40 border-r-0 bg-transparent box-border" />
-        <span className={cn("absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm", workClass)} />
+      <span className="relative inline-block h-4 w-4 flex-shrink-0">
+        <span className="absolute left-0 top-0 h-4 w-[8px] rounded-l-full border-2 border-muted-foreground/50 border-r-0 bg-transparent box-border" />
+        <span className={cn("absolute right-0 top-0 h-4 w-[8px] rounded-r-full", workClass)} />
       </span>
     )
   }
   if (workFirst && breakSecond) {
     return (
-      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
-        <span className={cn("absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm", workClass)} />
-        <span className="absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm border border-muted-foreground/40 border-l-0 bg-transparent box-border" />
+      <span className="relative inline-block h-4 w-4 flex-shrink-0">
+        <span className={cn("absolute left-0 top-0 h-4 w-[8px] rounded-l-full", workClass)} />
+        <span className="absolute right-0 top-0 h-4 w-[8px] rounded-r-full border-2 border-muted-foreground/50 border-l-0 bg-transparent box-border" />
       </span>
     )
   }
   if (workFirst && !workSecond) {
     return (
-      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
-        <span className={cn("absolute left-0 top-0 h-[18px] w-[9px] rounded-l-sm", workClass)} />
+      <span className="relative inline-block h-4 w-4 flex-shrink-0">
+        <span className={cn("absolute left-0 top-0 h-4 w-[8px] rounded-l-full", workClass)} />
       </span>
     )
   }
   if (workSecond && !workFirst) {
     return (
-      <span className="relative inline-block h-[18px] w-[18px] flex-shrink-0">
-        <span className={cn("absolute right-0 top-0 h-[18px] w-[9px] rounded-r-sm", workClass)} />
+      <span className="relative inline-block h-4 w-4 flex-shrink-0">
+        <span className={cn("absolute right-0 top-0 h-4 w-[8px] rounded-r-full", workClass)} />
       </span>
     )
   }
-  return <span className="inline-block h-[18px] w-[18px] flex-shrink-0 rounded-sm bg-muted/30" />
+  return <span className="inline-block h-4 w-4 flex-shrink-0" />
 }
 
 const zoneStyle: Record<string, string> = {
@@ -230,27 +230,33 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 px-4 pb-3">
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 flex-1 rounded-lg text-xs" />
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
-          <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("noticeFilterAll")}</SelectItem>
-            <SelectItem value="service">{areaLabel("Service")}</SelectItem>
-            <SelectItem value="kitchen">{areaLabel("Kitchen")}</SelectItem>
-            <SelectItem value="office">{areaLabel("Office")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button size="sm" className="h-9 rounded-lg px-3 text-xs font-semibold" onClick={loadTodayData} disabled={loading}>
-          <Search className="mr-1 h-3.5 w-3.5" />
+      {/* Filters - 날짜, 구역, 검색 (사진과 동일) */}
+      <div className="flex flex-wrap items-end gap-3 px-4 pb-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-muted-foreground">{t("dateFrom") || "날짜"}</label>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 w-32 rounded-lg text-xs" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-medium text-muted-foreground">{t("scheduleArea") || "구역"}</label>
+          <Select value={areaFilter} onValueChange={setAreaFilter}>
+            <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("noticeFilterAll")}</SelectItem>
+              <SelectItem value="service">{areaLabel("Service")}</SelectItem>
+              <SelectItem value="kitchen">{areaLabel("Kitchen")}</SelectItem>
+              <SelectItem value="office">{areaLabel("Office")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button size="sm" className="h-9 rounded-lg px-4 text-xs font-semibold" onClick={loadTodayData} disabled={loading}>
+          <Search className="mr-1.5 h-3.5 w-3.5" />
           {loading ? t("loading") : t("search")}
         </Button>
       </div>
 
-      {/* 시간 상단 + 가로 스크롤 */}
+      {/* 테이블 - 구역 | 이름 | 9시~21시 (사진과 동일 레이아웃) */}
       <div className="px-4 pb-4">
         {loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
@@ -260,58 +266,48 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto overscroll-x-contain">
-            <div className="min-w-max">
-              {/* 시간 기준 - 상단 고정 (시간별 칸) */}
-              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 bg-muted/40 px-2 py-2.5">
-                <div className="w-[68px] shrink-0" />
-                <div className="flex shrink-0">
+          <div className="overflow-x-auto overscroll-x-contain rounded-xl border">
+            <table className="w-full border-collapse text-left">
+              {/* 헤더: 구역 | 이름 | 9 | 10 | ... | 21 */}
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="border-b border-r border-border px-3 py-2.5 text-[11px] font-bold text-muted-foreground w-[72px]">{t("scheduleArea") || "구역"}</th>
+                  <th className="border-b border-r border-border px-3 py-2.5 text-[11px] font-bold text-muted-foreground w-[80px]">{t("scheduleName") || "이름"}</th>
                   {hours.map((h) => (
-                    <div key={h} className="flex flex-col items-center justify-center w-[18px] min-w-[18px] shrink-0 border-r border-border last:border-r-0">
-                      <span className="text-[10px] font-bold tabular-nums text-muted-foreground">{h}</span>
-                    </div>
+                    <th key={h} className="border-b border-r border-border px-0 py-2 text-center text-[10px] font-bold tabular-nums text-muted-foreground w-[28px] min-w-[28px] last:border-r-0">
+                      {h}
+                    </th>
                   ))}
-                </div>
-              </div>
-              {/* 직원별 행 */}
-              {personKeys.map((key) => {
-                const p = byPerson[key]
-                const att = attByKey[key]
-                const inDec = parseTimeToDecimal(p.pIn)
-                const outDec = parseTimeToDecimal(p.pOut)
-                const bsDec = parseTimeToDecimal(p.pBS)
-                const beDec = parseTimeToDecimal(p.pBE)
-                const hasProblem: boolean = !att
-                  ? true
-                  : Boolean((att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status)))
-                const rowBg = hasProblem ? "bg-red-50/50 dark:bg-red-950/30" : "bg-card"
+                </tr>
+              </thead>
+              <tbody>
+                {personKeys.map((key) => {
+                  const p = byPerson[key]
+                  const att = attByKey[key]
+                  const inDec = parseTimeToDecimal(p.pIn)
+                  const outDec = parseTimeToDecimal(p.pOut)
+                  const bsDec = parseTimeToDecimal(p.pBS)
+                  const beDec = parseTimeToDecimal(p.pBE)
+                  const hasProblem: boolean = !att
+                    ? true
+                    : Boolean((att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status)))
+                  const rowBg = hasProblem ? "bg-red-50/60 dark:bg-red-950/40" : "bg-card"
 
-                return (
-                  <div
-                    key={key}
-                    className={cn(
-                      "flex items-center gap-2 rounded-none border border-b last:rounded-b-xl p-2 min-w-0",
-                      rowBg
-                    )}
-                  >
-                    {/* 서비스 + 이름 */}
-                    <div className="flex items-center gap-1.5 shrink-0 min-w-[68px]">
-                      {showArea && (
+                  return (
+                    <tr key={key} className={cn("border-b border-border last:border-b-0", rowBg)}>
+                      <td className="border-r border-border px-2 py-2 align-middle">
                         <span
                           className={cn(
-                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none shrink-0",
+                            "inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold",
                             zoneStyle[p.area] || "bg-muted text-muted-foreground"
                           )}
                         >
                           {areaLabel(p.area)}
                         </span>
-                      )}
-                      <span className="text-[13px] font-bold text-card-foreground truncate">
+                      </td>
+                      <td className="border-r border-border px-2 py-2 text-[13px] font-bold text-foreground align-middle">
                         {p.name}
-                      </span>
-                    </div>
-                    {/* 시간대 슬롯 - 시간별 칸, 파란(정상) 빨간(문제) */}
-                    <div className="flex shrink-0">
+                      </td>
                       {hours.map((h) => {
                         const h0 = h,
                           h05 = h + 0.5,
@@ -325,50 +321,49 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                         const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
 
                         return (
-                          <div key={h} className="flex flex-col items-center justify-center shrink-0 w-[18px] min-w-[18px] border-r border-border last:border-r-0 py-1">
+                          <td key={h} className="border-r border-border px-0 py-1.5 text-center align-middle last:border-r-0 w-[28px] min-w-[28px]">
                             {inAny ? (
-                              <ScheduleCellMark
-                                fullBreak={fullBreak}
-                                fullWork={fullWork}
-                                breakFirst={breakFirst}
-                                breakSecond={breakSecond}
-                                workFirst={workFirst}
-                                workSecond={workSecond}
-                                hasProblem={hasProblem}
-                              />
-                            ) : (
-                              <div className="h-[18px] w-[18px] flex items-center justify-center shrink-0 rounded-sm bg-muted/20">
-                                <div className="h-[2px] w-[6px] rounded-full bg-border" />
+                              <div className="flex justify-center">
+                                <ScheduleCellMark
+                                  fullBreak={fullBreak}
+                                  fullWork={fullWork}
+                                  breakFirst={breakFirst}
+                                  breakSecond={breakSecond}
+                                  workFirst={workFirst}
+                                  workSecond={workSecond}
+                                  hasProblem={hasProblem}
+                                />
                               </div>
+                            ) : (
+                              <span className="inline-block h-4 w-4" />
                             )}
-                          </div>
+                          </td>
                         )
                       })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Legend - 파란=정상, 빨간=문제 */}
+      {/* Legend - ● 파란=정상, ● 빨간=문제, ○ 휴게 */}
       <div className="flex flex-wrap items-center justify-center gap-4 rounded-b-2xl border-t bg-muted/20 px-4 py-3">
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-blue-500 shrink-0" />
-          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} · {t("scheduleTodayNormal")}</span>
+          <div className="h-3.5 w-3.5 rounded-full bg-blue-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} ● {t("scheduleTodayNormal")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm bg-red-500 shrink-0" />
-          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} · {t("scheduleTodayProblem")}</span>
+          <div className="h-3.5 w-3.5 rounded-full bg-red-500 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleWork")} ● {t("scheduleTodayProblem")}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-sm border border-muted-foreground/40 shrink-0" />
-          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleBreak")}</span>
+          <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/50 shrink-0" />
+          <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleBreak")} ○</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-[2px] w-2 rounded-full bg-border shrink-0" />
           <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleNotWorking")}</span>
         </div>
       </div>

@@ -54,13 +54,12 @@ export function AdminSidebar() {
             return (
               <div
                 key={i}
-                className="mb-1 mt-4 flex items-center gap-2 px-4 first:mt-0"
+                className="mx-2 mb-1 mt-5 flex items-center gap-3 rounded-lg border-l-4 border-amber-400/70 bg-white/5 px-3 py-2.5"
               >
-                <span className="h-px flex-1 bg-white/20" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-white/90">
                   {item.header}
                 </span>
-                <span className="h-px flex-1 bg-white/20" />
               </div>
             )
           }
