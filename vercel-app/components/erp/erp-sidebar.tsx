@@ -172,14 +172,15 @@ export function ErpSidebar() {
             </SidebarMenu>
           </SidebarGroup>
 
-          {/* Grouped sections */}
+          {/* Grouped sections - 바 형식 섹션 헤더 */}
           {menuSections.map((section) => (
             <SidebarGroup key={section.titleKey}>
               <Collapsible defaultOpen={section.defaultOpen} className="group/collapsible">
                 <SidebarGroupLabel asChild>
-                  <CollapsibleTrigger className="flex w-full items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors">
-                    <span>{t(section.titleKey)}</span>
-                    <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                  <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg border-l-4 border-amber-400 bg-amber-400/10 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground hover:bg-amber-400/20 transition-colors group-data-[collapsible=icon]:px-2">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                    <span className="flex-1 text-left">{t(section.titleKey)}</span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                   </CollapsibleTrigger>
                 </SidebarGroupLabel>
                 <CollapsibleContent>
@@ -223,9 +224,10 @@ export function ErpSidebar() {
             </SidebarGroup>
           ))}
 
-          {/* Settings */}
+          {/* Settings - 바 형식 */}
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+            <SidebarGroupLabel className="flex items-center gap-3 rounded-lg border-l-4 border-amber-400 bg-amber-400/10 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground group-data-[collapsible=icon]:px-2">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
               {t("adminSectionSettings")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
