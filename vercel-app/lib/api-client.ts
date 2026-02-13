@@ -409,6 +409,137 @@ export async function processAttendanceApproval(params: { id: number; decision: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 업무일지 (Work Log) ───
+export interface WorkLogItem {
+  id: string
+  content: string
+  progress: number
+  status: string
+  priority: string
+  managerCheck?: string
+  managerComment?: string
+}
+
+export interface WorkLogData {
+  finish: WorkLogItem[]
+  continueItems: WorkLogItem[]
+  todayItems: WorkLogItem[]
+}
+
+export async function getWorkLogStaffList() {
+  const res = await fetch('/api/getWorkLogStaffList')
+  return res.json() as Promise<{ staff: { name: string; displayName: string }[] }>
+}
+
+export async function getWorkLogData(params: { dateStr: string; name: string }) {
+  const q = new URLSearchParams({
+    dateStr: params.dateStr,
+    name: params.name,
+  })
+  const res = await fetch(`/api/getWorkLogData?${q}`)
+  return res.json() as Promise<WorkLogData>
+}
+
+export async function saveWorkLogData(params: {
+  date: string
+  name: string
+  logs: WorkLogItem[]
+}) {
+  const res = await fetch('/api/saveWorkLogData', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function submitDailyClose(params: {
+  date: string
+  name: string
+  logs: WorkLogItem[]
+}) {
+  const res = await fetch('/api/submitDailyClose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateWorkLogManagerCheck(params: {
+  id: string
+  status: string
+  comment?: string
+}) {
+  const res = await fetch('/api/updateManagerCheck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface WorkLogManagerItem {
+  id: string
+  date: string
+  dept: string
+  name: string
+  content: string
+  progress: number
+  status: string
+  priority: string
+  managerCheck: string
+  managerComment: string
+}
+
+export async function getWorkLogManagerReport(params: {
+  startStr: string
+  endStr: string
+  dept?: string
+  employee?: string
+  status?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
+  if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
+  if (params.status && params.status !== 'all') q.set('status', params.status)
+  const res = await fetch(`/api/getWorkLogManagerReport?${q}`)
+  return res.json() as Promise<WorkLogManagerItem[]>
+}
+
+export interface WorkLogWeeklySummary {
+  employee: string
+  role: string
+  totalTasks: number
+  completed: number
+  carried: number
+  inProgress: number
+  avgProgress: number
+}
+
+export async function getWorkLogWeekly(params: {
+  startStr: string
+  endStr: string
+  dept?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
+  const res = await fetch(`/api/getWorkLogWeekly?${q}`)
+  return res.json() as Promise<{
+    summaries: WorkLogWeeklySummary[]
+    totalTasks: number
+    totalCompleted: number
+    totalCarried: number
+    overallAvg: number
+  }>
+}
+
 // ─── 시간표 (Timesheet) ───
 export interface TodayScheduleItem {
   date: string

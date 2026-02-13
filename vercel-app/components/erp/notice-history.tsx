@@ -171,7 +171,7 @@ export function NoticeHistory() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-[13px] font-bold text-card-foreground leading-tight">
+                      <h4 className="text-[13px] font-bold text-card-foreground leading-tight truncate flex-1 min-w-0">
                         {notice.title}
                       </h4>
                       {isExpanded ? (
@@ -180,8 +180,11 @@ export function NoticeHistory() {
                         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
                       )}
                     </div>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground truncate">
+                      {notice.preview}
+                    </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                      <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
                         {notice.date}
                       </span>
                       {notice.recipients.map((r) => (
