@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Banknote, Search, Plus, Camera } from "lucide-react"
+import { Banknote, Search, Plus, Camera, Printer, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -21,6 +21,7 @@ import {
   getPettyCashList,
   getPettyCashMonthDetail,
   addPettyCashTransaction,
+  translateTexts,
   type PettyCashItem,
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
@@ -29,11 +30,11 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-const typeLabels: Record<string, string> = {
-  receive: "수령",
-  expense: "지출",
-  replenish: "보충",
-  settle: "정산",
+const typeKeys: Record<string, string> = {
+  receive: "pettyTypeReceive",
+  expense: "pettyTypeExpense",
+  replenish: "pettyTypeReplenish",
+  settle: "pettyTypeSettle",
 }
 
 export function PettyCashTab() {
@@ -64,6 +65,9 @@ export function PettyCashTab() {
   const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null)
   const [addReceiptPreview, setAddReceiptPreview] = useState<string | null>(null)
   const [addSaving, setAddSaving] = useState(false)
+  const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
+  const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
+  const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!auth?.store) return
@@ -83,6 +87,30 @@ export function PettyCashTab() {
       }
     })
   }, [auth])
+
+  // 내용(memo) 로그인 언어로 번역
+  useEffect(() => {
+    const items = [...listData, ...monthlyData]
+    const memos = [...new Set(items.map((r) => (r.memo || "").trim()).filter(Boolean))]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [listData, monthlyData, lang])
+
+  const getMemo = (memo: string) => (memo && memoTransMap[memo]) || memo || "-"
 
   const loadList = () => {
     if (!auth?.store) return
@@ -187,11 +215,58 @@ export function PettyCashTab() {
       loadList()
       alert(t("pettySaved") || "저장되었습니다.")
     } else {
-      alert(res.message || "등록 실패")
+      alert(res.message || t("pettyAddFail"))
     }
   }
 
   const fmt = (n: number) => (n || 0).toLocaleString()
+
+  const handlePrintMonthly = () => {
+    if (monthlyData.length === 0) {
+      alert(t("pettyPrintHint"))
+      return
+    }
+    const w = window.open("", "_blank")
+    if (!w) {
+      alert(t("pettyAllowPopup"))
+      return
+    }
+    const headers = [t("pettyColDate") || "날짜", t("store") || "매장", t("pettyColType") || "유형", t("pettyColAmount") || "금액", t("pettyColBalance") || "잔액", t("pettyColMemo") || "내용"]
+    const rows = monthlyData.map(
+      (r) =>
+        `<tr><td>${r.trans_date}</td><td>${r.store}</td><td>${t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td><td class="text-end">${r.amount >= 0 ? "" : "-"}${fmt(Math.abs(r.amount))}</td><td class="text-end fw-bold">${fmt(r.balance_after ?? 0)}</td><td>${getMemo(r.memo || "").replace(/</g, "&lt;")}</td></tr>`
+    )
+    w.document.write(
+      `<html><head><meta charset="utf-8"><style>table{width:100%;border-collapse:collapse}th,td{padding:6px;border:1px solid #ddd;text-align:left}.text-end{text-align:right}</style></head><body class="p-3"><h4 class="mb-3">${t("pettyCashTitle") || "패티 캐쉬"} - ${monthlyYm}</h4><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></body></html>`
+    )
+    w.document.close()
+    w.onload = () => {
+      w.print()
+      w.close()
+    }
+  }
+
+  const handleDownloadMonthlyExcel = () => {
+    if (monthlyData.length === 0) {
+      alert(t("pettyExcelHint"))
+      return
+    }
+    const headers = [t("pettyColDate") || "날짜", t("store") || "매장", t("pettyColType") || "유형", t("pettyColAmount") || "금액", t("pettyColBalance") || "잔액", t("pettyColMemo") || "내용"]
+    const csvEscape = (s: string) => {
+      const t = String(s ?? "").trim().replace(/\r?\n/g, " ")
+      return t.indexOf(",") !== -1 || t.indexOf('"') !== -1 ? `"${t.replace(/"/g, '""')}"` : t
+    }
+    const rows = monthlyData.map((r) =>
+      [r.trans_date, r.store, t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type, (r.amount >= 0 ? "" : "-") + fmt(Math.abs(r.amount)), fmt(r.balance_after ?? 0), getMemo(r.memo || "")].map(csvEscape).join(",")
+    )
+    const csv = "\uFEFF" + [headers.map(csvEscape).join(","), ...rows].join("\r\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = `petty_cash_monthly_${monthlyYm}.csv`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -241,18 +316,33 @@ export function PettyCashTab() {
                         <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center w-10">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {listData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2">{r.trans_date}</td>
-                          <td className="p-2">{typeLabels[r.trans_type] || r.trans_type}</td>
+                          <td className="p-2">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`p-2 text-right ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{r.memo || "-"}</td>
+                          <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center">
+                            {r.receipt_url ? (
+                              <button
+                                type="button"
+                                className="h-7 w-7 rounded border border-border bg-muted/50 hover:bg-muted text-xs"
+                                onClick={() => setReceiptModalUrl(r.receipt_url!)}
+                                title={t("pettyColReceipt") || "영수증"}
+                              >
+                                📷
+                              </button>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -279,30 +369,41 @@ export function PettyCashTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="receive">{typeLabels.receive}</SelectItem>
-                      <SelectItem value="expense">{typeLabels.expense}</SelectItem>
-                      <SelectItem value="replenish">{typeLabels.replenish}</SelectItem>
-                      <SelectItem value="settle">{typeLabels.settle}</SelectItem>
+                      <SelectItem value="receive">{t("pettyTypeReceive")}</SelectItem>
+                      <SelectItem value="expense">{t("pettyTypeExpense")}</SelectItem>
+                      <SelectItem value="replenish">{t("pettyTypeReplenish")}</SelectItem>
+                      <SelectItem value="settle">{t("pettyTypeSettle")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Input type="number" placeholder={t("pettyAmountPh") || "금액"} value={addAmount} onChange={(e) => setAddAmount(e.target.value)} className="h-9 text-xs" min={0} />
                   <Input type="text" placeholder={t("pettyMemoPh") || "내용"} value={addMemo} onChange={(e) => setAddMemo(e.target.value)} className="h-9 text-xs" />
                   <div className="space-y-1">
-                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs font-medium">
                       <Camera className="h-3.5 w-3.5" />
-                      {t("pettyReceiptPhoto") || "영수증 사진"} <span className="text-muted-foreground">({t("optional") || "선택"})</span>
+                      {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
                     </label>
                     <div className="flex items-center gap-2">
                       <input
+                        ref={receiptFileInputRef}
                         type="file"
                         accept="image/*"
                         capture="environment"
                         onChange={handleReceiptChange}
-                        className="block text-xs file:mr-2 file:rounded file:border-0 file:bg-purple-100 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-purple-700 hover:file:bg-purple-200"
+                        className="sr-only"
                       />
+                      <button
+                        type="button"
+                        onClick={() => receiptFileInputRef.current?.click()}
+                        className="rounded border-0 bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200"
+                      >
+                        {addReceiptFile ? addReceiptFile.name : t("chooseFile")}
+                      </button>
+                      {!addReceiptFile && (
+                        <span className="text-xs text-muted-foreground">{t("noFileChosen")}</span>
+                      )}
                       {addReceiptPreview && (
                         <div className="relative shrink-0">
-                          <img src={addReceiptPreview} alt="영수증 미리보기" className="h-12 w-12 object-cover rounded border" />
+                          <img src={addReceiptPreview} alt={t("pettyReceiptPreview")} className="h-12 w-12 object-cover rounded border" />
                           <button
                             type="button"
                             className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-destructive-foreground text-[10px] flex items-center justify-center"
@@ -348,10 +449,20 @@ export function PettyCashTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button className="h-10 w-full font-medium" onClick={loadMonthly} disabled={monthlyLoading}>
-                <Search className="mr-1.5 h-3.5 w-3.5" />
-                {monthlyLoading ? (t("loading") || "조회중...") : (t("search") || "조회")}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button className="h-10 flex-1 font-medium" onClick={loadMonthly} disabled={monthlyLoading}>
+                  <Search className="mr-1.5 h-3.5 w-3.5" />
+                  {monthlyLoading ? (t("loading") || "조회중...") : (t("search") || "조회")}
+                </Button>
+                <Button variant="outline" size="sm" className="h-10" onClick={handlePrintMonthly} disabled={monthlyData.length === 0}>
+                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                  {t("printBtn") || "인쇄"}
+                </Button>
+                <Button variant="outline" size="sm" className="h-10" onClick={handleDownloadMonthlyExcel} disabled={monthlyData.length === 0}>
+                  <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                  {t("excelBtn") || "엑셀"}
+                </Button>
+              </div>
               <div className="rounded-lg border border-border/60 max-h-[320px] overflow-x-auto overflow-y-auto">
                 {monthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
@@ -365,6 +476,7 @@ export function PettyCashTab() {
                         <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-right font-medium">{t("pettyColBalance") || "잔액"}</th>
                         <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center w-10">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -372,13 +484,27 @@ export function PettyCashTab() {
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2">{r.trans_date}</td>
                           <td className="p-2">{r.store}</td>
-                          <td className="p-2">{typeLabels[r.trans_type] || r.trans_type}</td>
+                          <td className="p-2">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`p-2 text-right ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="p-2 text-right font-medium">{fmt(r.balance_after ?? 0)}</td>
-                          <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{r.memo || "-"}</td>
+                          <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center">
+                            {r.receipt_url ? (
+                              <button
+                                type="button"
+                                className="h-7 w-7 rounded border border-border bg-muted/50 hover:bg-muted text-xs"
+                                onClick={() => setReceiptModalUrl(r.receipt_url!)}
+                                title={t("pettyColReceipt") || "영수증"}
+                              >
+                                📷
+                              </button>
+                            ) : (
+                              "-"
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -389,6 +515,26 @@ export function PettyCashTab() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* 영수증 사진 모달 - 출고 관리 order-tab imageModal과 동일한 구조 */}
+      {receiptModalUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setReceiptModalUrl(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <img src={receiptModalUrl} alt={t("pettyColReceipt")} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+              onClick={() => setReceiptModalUrl(null)}
+            >
+              ✕
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

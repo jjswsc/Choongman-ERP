@@ -73,10 +73,10 @@
     <div class="sidebar-header" data-i18n="menu_header_hr">인사 관리</div>
     <a onclick="go('hr-employee',this)" data-i18n="menu_hr_employee">👥 직원 관리</a>
     <a role="button" tabindex="0" onclick="go('attendance-manage',this)" data-i18n="menu_attendance">📅 근태/스케줄 관리</a>
-    <a onclick="go('payroll',this)" class="hq-only manager-hide" data-i18n="menu_payroll">💰 급여 관리</a>
     <a role="button" tabindex="0" onclick="go('hr-leave',this)" data-i18n="menu_hr_leave">🏖️ 휴가 관리</a>
     
     <div class="sidebar-header" data-i18n="menu_header_accounting">회계 관리</div>
+    <a onclick="go('payroll',this)" class="hq-only manager-hide" data-i18n="menu_payroll">💰 급여 관리</a>
     <a role="button" tabindex="0" id="menu-petty-cash" onclick="go('petty-cash', this)" data-i18n="menu_petty_cash"><span class="icon">💵</span> 패티 캐쉬</a>
 
     <div class="sidebar-header" data-i18n="menu_header_store">매장 관리</div>
@@ -211,8 +211,8 @@
       </div>
     </div>
 
-    <!-- 패티캐시 영수증 보기/저장 모달 -->
-    <div class="modal fade" id="pettyReceiptModal" tabindex="-1">
+    <!-- 패티캐시 영수증 보기/저장 모달: 출고 수령 사진과 동일하게 data-bs-backdrop="false" (배경 차단 없음) -->
+    <div class="modal fade" id="pettyReceiptModal" tabindex="-1" data-bs-backdrop="false" data-bs-keyboard="true">
       <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
           <div class="modal-header py-2">
@@ -220,7 +220,7 @@
             <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body text-center p-3">
-            <img id="pettyReceiptModalImg" src="" alt="영수증" class="img-fluid" style="max-height:70vh; border-radius:8px; cursor:pointer;">
+            <img id="pettyReceiptModalImg" src="" alt="영수증" data-i18n-alt="petty_col_receipt" class="img-fluid" style="max-height:70vh; border-radius:8px; cursor:pointer;">
           </div>
           <div class="modal-footer py-2">
             <button type="button" class="btn btn-primary btn-sm" id="pettyReceiptSaveBtn" onclick="savePettyReceiptImage()" data-i18n="petty_receipt_save">저장</button>
@@ -1176,9 +1176,11 @@
                     <div class="col-md-2"><label class="fw-bold" data-i18n="label_store">매장</label><select id="petty-monthly-store" class="form-select"></select></div>
                     <div class="col-md-2"><label class="fw-bold" data-i18n="petty_year_month">연월</label><select id="petty-monthly-ym" class="form-select"></select></div>
                     <div class="col-md-2"><label class="fw-bold">&nbsp;</label><button class="btn btn-primary w-100" onclick="loadPettyCashMonthDetail()" data-i18n="btn_query">조회</button></div>
+                    <div class="col-auto"><button type="button" class="btn btn-outline-primary btn-sm" onclick="printPettyMonthly()" data-i18n="print_btn">🖨️ 인쇄/PDF</button></div>
+                    <div class="col-auto"><button type="button" class="btn btn-outline-success btn-sm" onclick="downloadPettyMonthlyExcel()" data-i18n="excel_btn">📥 엑셀 다운로드</button></div>
                 </div>
             </div>
-            <div class="card-box p-0">
+            <div class="card-box p-0" id="petty-monthly-print-area">
                 <div class="table-responsive" style="max-height:400px;">
                     <table class="table mb-0 text-center align-middle table-bordered">
                         <thead class="table-header-dark">

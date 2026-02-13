@@ -105,6 +105,7 @@ export function AdminTab() {
       return next.includes(v) ? next.filter((x) => x !== v) : [...next, v]
     })
   }
+  const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
 
   const handleSendNotice = async () => {
     if (!noticeTitle.trim()) {
@@ -188,26 +189,26 @@ export function AdminTab() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
             <Megaphone className="h-3.5 w-3.5 text-primary" />
           </div>
-          <CardTitle className="text-base font-semibold">공지사항 발송</CardTitle>
+          <CardTitle className="text-base font-semibold">{t("adminNoticeSend")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notice-title" className="text-xs text-muted-foreground">제목</Label>
-            <Input id="notice-title" placeholder="제목" className="h-10" value={noticeTitle} onChange={(e) => setNoticeTitle(e.target.value)} />
+            <Label htmlFor="notice-title" className="text-xs text-muted-foreground">{t("labelSubject")}</Label>
+            <Input id="notice-title" placeholder={t("labelSubject")} className="h-10" value={noticeTitle} onChange={(e) => setNoticeTitle(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notice-content" className="text-xs text-muted-foreground">내용</Label>
-            <Textarea id="notice-content" placeholder="내용" className="min-h-[100px] resize-none" value={noticeContent} onChange={(e) => setNoticeContent(e.target.value)} />
+            <Label htmlFor="notice-content" className="text-xs text-muted-foreground">{t("labelContent")}</Label>
+            <Textarea id="notice-content" placeholder={t("labelContent")} className="min-h-[100px] resize-none" value={noticeContent} onChange={(e) => setNoticeContent(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs text-muted-foreground">대상 매장 (복수 선택 가능)</Label>
+            <Label className="text-xs text-muted-foreground">{t("adminTargetStores")}</Label>
             <div className="flex flex-wrap gap-1.5 rounded-lg border border-input p-2.5 min-h-[42px] bg-background">
               <button
                 type="button"
                 onClick={() => toggleNoticeStore("전체")}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${noticeStoreSelected.includes("전체") ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
               >
-                전체
+                {t("all")}
               </button>
               {noticeStores.map((st) => (
                 <button
@@ -222,14 +223,14 @@ export function AdminTab() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs text-muted-foreground">대상 (부서/직무, 복수 선택 가능)</Label>
+            <Label className="text-xs text-muted-foreground">{t("adminTargetRoles")}</Label>
             <div className="flex flex-wrap gap-1.5 rounded-lg border border-input p-2.5 min-h-[42px] bg-background">
               <button
                 type="button"
                 onClick={() => toggleNoticeRole("전체")}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${noticeRoleSelected.includes("전체") ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
               >
-                전체
+                {t("all")}
               </button>
               {noticeRoles.map((role) => (
                 <button
@@ -245,7 +246,7 @@ export function AdminTab() {
           </div>
           <Button className="mt-1 h-11 w-full font-semibold" onClick={handleSendNotice} disabled={noticeSending}>
             <Send className="mr-2 h-4 w-4" />
-            {noticeSending ? (t("loading") || "처리중...") : "공지 발송하기"}
+            {noticeSending ? t("loading") : t("adminSendNoticeBtn")}
           </Button>
         </CardContent>
       </Card>
@@ -256,7 +257,7 @@ export function AdminTab() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
             <CalendarCheck className="h-3.5 w-3.5 text-primary" />
           </div>
-          <CardTitle className="text-base font-semibold">연차 승인</CardTitle>
+          <CardTitle className="text-base font-semibold">{t("adminLeaveApproval")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -265,8 +266,8 @@ export function AdminTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="request">신청일 기준</SelectItem>
-                <SelectItem value="leave">휴가일 기준</SelectItem>
+                <SelectItem value="request">{t("adminLeaveByRequest")}</SelectItem>
+                <SelectItem value="leave">{t("adminLeaveByLeave")}</SelectItem>
               </SelectContent>
             </Select>
             <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className="h-9 flex-1 text-xs" />
@@ -275,7 +276,7 @@ export function AdminTab() {
           <div className="flex items-center gap-2">
             <Select value={leaveStoreFilter} onValueChange={setLeaveStoreFilter}>
               <SelectTrigger className="h-9 flex-1 text-xs">
-                <SelectValue placeholder="매장" />
+                <SelectValue placeholder={t("store")} />
               </SelectTrigger>
               <SelectContent>
                 {leaveStores.map((st) => (
@@ -288,36 +289,36 @@ export function AdminTab() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="대기">대기</SelectItem>
-                <SelectItem value="승인">승인</SelectItem>
-                <SelectItem value="반려">반려</SelectItem>
-                <SelectItem value="All">전체</SelectItem>
+                <SelectItem value="대기">{t("statusPending")}</SelectItem>
+                <SelectItem value="승인">{t("statusApproved")}</SelectItem>
+                <SelectItem value="반려">{t("statusRejected")}</SelectItem>
+                <SelectItem value="All">{t("all")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <Button className="h-10 w-full font-medium" onClick={loadLeaveList} disabled={leaveLoading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            {leaveLoading ? (t("loading") || "조회중...") : "조회"}
+            {leaveLoading ? t("loading") : t("search")}
           </Button>
           <div className="flex flex-col gap-2">
             {leaveList.length === 0 ? (
-              <p className="py-6 text-center text-xs text-muted-foreground">조회 결과가 없습니다</p>
+              <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
             ) : (
               leaveList.map((item) => (
                 <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{item.name}{item.nick ? ` (${item.nick})` : ""} · {item.store}</p>
-                    <p className="text-xs text-muted-foreground">신청 {item.requestDate} · 휴가 {item.date} · {item.type} {item.reason ? `· ${item.reason}` : ""}</p>
+                    <p className="text-xs text-muted-foreground">{t("adminLeaveRequest")} {item.requestDate} · {t("adminLeaveDate")} {item.date} · {item.type} {item.reason ? `· ${item.reason}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {item.status === "대기" && (
                       <>
-                        <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>승인</Button>
-                        <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>반려</Button>
+                        <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
+                        <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
                       </>
                     )}
                     {item.status !== "대기" && (
-                      <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{item.status}</Badge>
+                      <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
                     )}
                   </div>
                 </div>
@@ -333,7 +334,7 @@ export function AdminTab() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
             <UserCog className="h-3.5 w-3.5 text-primary" />
           </div>
-          <CardTitle className="text-base font-semibold">근태 승인</CardTitle>
+          <CardTitle className="text-base font-semibold">{t("adminAttApproval")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -343,7 +344,7 @@ export function AdminTab() {
           <div className="flex items-center gap-2">
             <Select value={attStoreFilter} onValueChange={setAttStoreFilter}>
               <SelectTrigger className="h-9 flex-1 text-xs">
-                <SelectValue placeholder="전체" />
+                <SelectValue placeholder={t("all")} />
               </SelectTrigger>
               <SelectContent>
                 {attStores.map((st) => (
@@ -354,13 +355,13 @@ export function AdminTab() {
           </div>
           <Button className="h-10 w-full font-medium" onClick={loadAttList} disabled={attLoading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            {attLoading ? (t("loading") || "조회중...") : "조회"}
+            {attLoading ? t("loading") : t("search")}
           </Button>
           <div className="flex flex-col gap-2">
             {attList.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border py-8 text-center">
                 <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
-                <p className="mt-2 text-xs text-muted-foreground">승인 대기 항목이 없습니다</p>
+                <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
               </div>
             ) : (
               attList.map((item) => (
@@ -370,8 +371,8 @@ export function AdminTab() {
                     <p className="text-xs text-muted-foreground">{item.log_at} · {item.log_type}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "승인완료")}>승인</Button>
-                    <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "반려")}>반려</Button>
+                    <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "승인완료")}>{t("adminApproved")}</Button>
+                    <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "반려")}>{t("adminRejected")}</Button>
                   </div>
                 </div>
               ))

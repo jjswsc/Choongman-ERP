@@ -528,6 +528,19 @@ export async function getPettyCashMonthDetail(params: {
   return res.json() as Promise<PettyCashItem[]>
 }
 
+/** 사용자 입력 내용(memo 등) 번역 - 로그인 언어로 표시 */
+export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
+  const filtered = texts.filter((s) => s && String(s).trim())
+  if (filtered.length === 0) return []
+  const res = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texts: filtered, targetLang }),
+  })
+  const data = (await res.json()) as { translated?: string[] }
+  return data.translated || []
+}
+
 export async function addPettyCashTransaction(params: {
   store: string
   transDate: string

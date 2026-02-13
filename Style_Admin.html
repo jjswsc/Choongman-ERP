@@ -162,6 +162,11 @@
   div[id^="page-"] { margin-left: 0 !important; }
   #evalDetailModal.modal { z-index: 1060 !important; }
   #evalDetailModal.modal .modal-dialog { z-index: 1061; }
+  /* 패티캐시 영수증 모달: 출고 수령 사진과 동일하게 backdrop 없음, 사진+버튼만 표시 */
+  #pettyReceiptModal.modal { z-index: 1070 !important; background: transparent !important; }
+  #pettyReceiptModal.modal .modal-dialog { z-index: 1071; position: relative; box-shadow: 0 4px 24px rgba(0,0,0,0.15); }
+  #pettyReceiptModal .modal-content { background: #fff !important; position: relative; z-index: 1; border-radius: 12px; }
+  #pettyReceiptModal.modal.show { display: flex !important; align-items: center; justify-content: center; }
   /* 수령 사진 보기: 검정 배경 없음, 사진만 흰 박스로 표시 */
   #receivePhotoModal.modal { z-index: 1070 !important; background: transparent !important; }
   #receivePhotoModal.modal .modal-dialog { z-index: 1071; position: relative; box-shadow: 0 4px 24px rgba(0,0,0,0.15); }

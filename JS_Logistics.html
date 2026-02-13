@@ -2208,22 +2208,38 @@ function loadPettyCashMonthDetail() {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-muted">' + noData + '</td></tr>';
                 return;
             }
-            var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
-            if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
-                typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
+            var memos = [], seen = {};
+            list.forEach(function(r) { var m = (r.memo || '').trim(); if (m && !seen[m]) { seen[m] = true; memos.push(m); } });
+            var targetLang = typeof getTranslationLang === 'function' ? getTranslationLang() : 'ko';
+            function renderRows(memoMap) {
+                var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
+                if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
+                    typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
+                }
+                var fmt = function(n) { return (Number(n) || 0).toLocaleString(); };
+                var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
+                var getMemo = function(m) { return (m && memoMap[m]) ? memoMap[m] : (m || ''); };
+                window.pettyMonthlyDataCache = list;
+                list.forEach(function(r) {
+                    var tr = document.createElement('tr');
+                    tr.className = 'petty-monthly-data-row';
+                    if (r.receipt_url && r.receipt_url.length > 0) tr.setAttribute('data-receipt', 'Y');
+                    var memoDisp = getMemo((r.memo || '').trim());
+                    var receiptCell = (r.receipt_url && r.receipt_url.length > 0)
+                        ? '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>'
+                        : '<td>-</td>';
+                    tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + fmt(Math.abs(r.amount)) + '</td><td class="text-end fw-bold">' + fmt(r.balance_after) + '</td><td>' + (memoDisp || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                    var btn = tr.querySelector('.petty-receipt-btn');
+                    if (btn && r.receipt_url) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
+                    tbody.appendChild(tr);
+                });
             }
-            var fmt = function(n) { return (Number(n) || 0).toLocaleString(); };
-            var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
-            list.forEach(function(r) {
-                var tr = document.createElement('tr');
-                var receiptCell = (r.receipt_url && r.receipt_url.length > 0)
-                    ? '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>'
-                    : '<td>-</td>';
-                tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + fmt(Math.abs(r.amount)) + '</td><td class="text-end fw-bold">' + fmt(r.balance_after) + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
-                var btn = tr.querySelector('.petty-receipt-btn');
-                if (btn && r.receipt_url) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
-                tbody.appendChild(tr);
-            });
+            if (memos.length === 0) { renderRows({}); return; }
+            google.script.run.withSuccessHandler(function(translated) {
+                var map = {};
+                memos.forEach(function(m, i) { map[m] = (translated && translated[i] !== undefined) ? translated[i] : m; });
+                renderRows(map);
+            }).withFailureHandler(function() { renderRows({}); }).translateBatch(memos, targetLang);
         })
         .withFailureHandler(function(err) {
             var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {};
@@ -2251,26 +2267,39 @@ function loadPettyCashList() {
                 tbody.innerHTML = '<tr><td colspan="8" class="text-muted">' + ((typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_no_data) ? I18N[currentLang].petty_no_data : '데이터가 없습니다') + '</td></tr>';
                 return;
             }
-            var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
-            if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
-                typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
-            }
-            list.forEach(function(r) {
-                var tr = document.createElement('tr');
-                var bal = r.balance_after != null ? r.balance_after.toLocaleString() : '-';
-                var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
-                var receiptCell;
-                if (r.receipt_url && r.receipt_url.length > 0) {
-                    receiptCell = '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>';
-                    tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
-                    var btn = tr.querySelector('.petty-receipt-btn');
-                    if (btn) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
-                } else {
-                    receiptCell = '<td>-</td>';
-                    tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (r.memo || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+            var memos = [], seen = {};
+            list.forEach(function(r) { var m = (r.memo || '').trim(); if (m && !seen[m]) { seen[m] = true; memos.push(m); } });
+            var targetLang = typeof getTranslationLang === 'function' ? getTranslationLang() : 'ko';
+            function renderRows(memoMap) {
+                var typeLabels = { receive: '수령', expense: '지출', replenish: '보충', settle: '정산' };
+                if (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) {
+                    typeLabels = { receive: I18N[currentLang].petty_type_receive || '수령', expense: I18N[currentLang].petty_type_expense || '지출', replenish: I18N[currentLang].petty_type_replenish || '보충', settle: I18N[currentLang].petty_type_settle || '정산' };
                 }
-                tbody.appendChild(tr);
-            });
+                var receiptTitle = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
+                var getMemo = function(m) { return (m && memoMap[m]) ? memoMap[m] : (m || ''); };
+                list.forEach(function(r) {
+                    var tr = document.createElement('tr');
+                    var bal = r.balance_after != null ? r.balance_after.toLocaleString() : '-';
+                    var memoDisp = getMemo((r.memo || '').trim());
+                    var receiptCell;
+                    if (r.receipt_url && r.receipt_url.length > 0) {
+                        receiptCell = '<td class="p-1"><button type="button" class="btn btn-sm btn-outline-secondary petty-receipt-btn" title="' + receiptTitle + '">📷</button></td>';
+                        tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (memoDisp || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                        var btn = tr.querySelector('.petty-receipt-btn');
+                        if (btn) { (function(url) { btn.onclick = function() { showPettyReceiptModal(url); }; })(r.receipt_url); }
+                    } else {
+                        receiptCell = '<td>-</td>';
+                        tr.innerHTML = '<td>' + (r.trans_date || '-') + '</td><td>' + (r.store || '-') + '</td><td>' + (typeLabels[r.trans_type] || r.trans_type) + '</td><td class="text-end">' + (r.amount >= 0 ? '' : '-') + Math.abs(r.amount).toLocaleString() + '</td><td class="text-end">' + bal + '</td><td>' + (memoDisp || '') + '</td>' + receiptCell + '<td>' + (r.user_name || '-') + '</td>';
+                    }
+                    tbody.appendChild(tr);
+                });
+            }
+            if (memos.length === 0) { renderRows({}); return; }
+            google.script.run.withSuccessHandler(function(translated) {
+                var map = {};
+                memos.forEach(function(m, i) { map[m] = (translated && translated[i] !== undefined) ? translated[i] : m; });
+                renderRows(map);
+            }).withFailureHandler(function() { renderRows({}); }).translateBatch(memos, targetLang);
         })
         .withFailureHandler(function(err) { var lang = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang]) ? I18N[currentLang] : {}; alert((lang.petty_query_fail || '조회 실패') + ': ' + (err && err.message ? err.message : err)); })
         .getPettyCashList(us, ur, startStr, endStr, store);
@@ -2313,6 +2342,8 @@ function showPettyReceiptModal(url) {
     var img = document.getElementById('pettyReceiptModalImg');
     if (!modal || !img) return;
     img.src = url;
+    var altText = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_col_receipt) ? I18N[currentLang].petty_col_receipt : '영수증';
+    img.alt = altText;
     if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
         var m = new bootstrap.Modal(modal);
         m.show();
@@ -2320,6 +2351,73 @@ function showPettyReceiptModal(url) {
         modal.classList.add('show');
         modal.style.display = 'block';
     }
+}
+
+/** 패티캐시 월별 현황 인쇄 */
+function printPettyMonthly() {
+    var tbody = document.getElementById('petty-monthly-list');
+    if (!tbody || tbody.querySelectorAll('tr.petty-monthly-data-row').length === 0) {
+        var msg = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_no_data) ? I18N[currentLang].petty_no_data : '데이터가 없습니다';
+        alert((typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].ord_query_please) ? I18N[currentLang].ord_query_please : '조회 후 인쇄해 주세요.');
+        return;
+    }
+    var table = tbody.closest('table');
+    if (!table) return;
+    var ymEl = document.getElementById('petty-monthly-ym');
+    var ymLabel = ymEl && ymEl.options[ymEl.selectedIndex] ? ymEl.options[ymEl.selectedIndex].text : '';
+    var printDiv = document.createElement('div');
+    printDiv.className = 'p-3';
+    var title = document.createElement('div');
+    title.className = 'mb-2 fw-bold fs-5';
+    title.textContent = (typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].petty_cash_title) ? I18N[currentLang].petty_cash_title + ' - ' + ymLabel : '패티 캐쉬 월별 현황 - ' + ymLabel;
+    printDiv.appendChild(title);
+    printDiv.appendChild(table.cloneNode(true));
+    var w = window.open('', '_blank');
+    if (!w) { alert('팝업을 허용해 주세요.'); return; }
+    w.document.write('<html><head><meta charset="utf-8"><link href="https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css" rel="stylesheet"></head><body>' + printDiv.outerHTML + '</body></html>');
+    w.document.close();
+    w.onload = function() { w.print(); w.close(); };
+}
+
+/** 패티캐시 월별 현황 엑셀(CSV) 다운로드 */
+function downloadPettyMonthlyExcel() {
+    var tbody = document.getElementById('petty-monthly-list');
+    if (!tbody) return;
+    var dataRows = tbody.querySelectorAll('tr.petty-monthly-data-row');
+    if (dataRows.length === 0) {
+        alert((typeof I18N !== 'undefined' && currentLang && I18N[currentLang] && I18N[currentLang].ord_query_please) ? I18N[currentLang].ord_query_please : '조회 후 다운로드해 주세요.');
+        return;
+    }
+    var table = tbody.closest('table');
+    var thead = table ? table.querySelector('thead tr') : null;
+    var headers = [];
+    if (thead) {
+        thead.querySelectorAll('th').forEach(function(th) { headers.push((th.textContent || '').trim()); });
+    } else {
+        headers = ['날짜', '매장', '유형', '금액', '잔액', '내용', '영수증', '등록자'];
+    }
+    function csvEscape(s) {
+        if (s == null) return '';
+        var t = String(s).trim().replace(/\r?\n/g, ' ');
+        return t.indexOf(',') !== -1 || t.indexOf('"') !== -1 ? '"' + t.replace(/"/g, '""') + '"' : t;
+    }
+    var rows = [headers.map(csvEscape).join(',')];
+    dataRows.forEach(function(tr) {
+        var cells = [];
+        tr.querySelectorAll('td').forEach(function(td, i) {
+            var btn = td.querySelector('.petty-receipt-btn');
+            if (btn) cells.push(tr.getAttribute('data-receipt') === 'Y' ? '있음' : '-');
+            else cells.push(td.textContent || '');
+        });
+        rows.push(cells.map(csvEscape).join(','));
+    });
+    var csv = '\uFEFF' + rows.join('\r\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'petty_cash_monthly_' + (document.getElementById('petty-monthly-ym') ? document.getElementById('petty-monthly-ym').value : '') + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 /** 패티캐시 영수증 저장(다운로드) */

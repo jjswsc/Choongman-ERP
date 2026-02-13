@@ -1,16 +1,36 @@
 {
   "scriptId": "1Grs6j32xg85gJyFUg2lNKAlAsiSWpnVh1IsBBzR6UEB3pzYvcYu_PXvC",
-  "rootDir": "",
-  "scriptExtensions": [
-    ".js",
-    ".gs"
+  "rootDir": ".",
+  "scriptExtensions": [".js", ".gs"],
+  "htmlExtensions": [".html"],
+  "jsonExtensions": [".json"],
+  "filePushOrder": [
+    "appsscript.json",
+    "Code.js",
+    "S_Common.js",
+    "S_Supabase.js",
+    "S_PettyCash.js",
+    "S_HR.js",
+    "S_Logistics.js",
+    "S_Office.js",
+    "S_Store.js",
+    "S_Visit.js",
+    "MigrateToSupabase.js",
+    "Page.html",
+    "IconData.html",
+    "Logistics.html",
+    "JS_Logistics.html",
+    "JS_Common.html",
+    "JS_Office.html",
+    "JS_Store.html",
+    "JS_HR.html",
+    "JS_Mobile_Common.html",
+    "JS_Mobile_Order.html",
+    "JS_Mobile_Usage.html",
+    "JS_Mobile_Visit.html",
+    "JS_Mobile_HR.html",
+    "Style_Admin.html",
+    "Style_Mobile.html"
   ],
-  "htmlExtensions": [
-    ".html"
-  ],
-  "jsonExtensions": [
-    ".json"
-  ],
-  "filePushOrder": [],
   "skipSubdirectories": false
 }
