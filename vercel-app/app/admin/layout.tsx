@@ -2,7 +2,9 @@
 
 import { useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { AdminSidebar } from "@/components/admin/admin-sidebar"
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
+import { ErpSidebar } from "@/components/erp/erp-sidebar"
+import { ErpHeader } from "@/components/erp/erp-header"
 import { useAuth } from "@/lib/auth-context"
 
 export default function AdminLayout({
@@ -38,11 +40,12 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <AdminSidebar />
-      <main className="pl-64 min-h-screen">
+    <SidebarProvider>
+      <ErpSidebar />
+      <SidebarInset>
+        <ErpHeader />
         {children}
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }

@@ -1,23 +1,27 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
-import { Noto_Sans_KR } from "next/font/google"
+import { Inter, Geist_Mono } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 
 import "./globals.css"
 
-const notoSansKR = Noto_Sans_KR({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+})
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
 })
 
 export const metadata: Metadata = {
-  title: "충만치킨 - Integrated ERP",
-  description: "충만치킨 Integrated ERP System",
+  title: "CHOONGMAN ERP",
+  description: "CHOONGMAN ERP Manager - Enterprise Resource Planning System",
 }
 
 export const viewport: Viewport = {
-  themeColor: "#f9f6f2",
+  themeColor: "#1a2332",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -31,10 +35,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className={`${notoSansKR.className} antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} font-sans antialiased`}>
         <AuthProvider>
-        <LangProvider>{children}</LangProvider>
-      </AuthProvider>
+          <LangProvider>{children}</LangProvider>
+        </AuthProvider>
       </body>
     </html>
   )
