@@ -21,11 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
-  getNoticeOptions,
-  getWorkLogStaffList,
+  getWorkLogOfficeOptions,
   type WorkLogManagerItem,
 } from "@/lib/api-client"
 
@@ -40,6 +40,8 @@ function todayStr() {
 }
 
 export function WorklogApproval() {
+  const { auth } = useAuth()
+  const canReject = (auth?.role || "").toLowerCase() === "director"
   const [startStr, setStartStr] = React.useState(defaultStartStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [deptFilter, setDeptFilter] = React.useState("all")
@@ -52,8 +54,10 @@ export function WorklogApproval() {
   const [updating, setUpdating] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    getNoticeOptions().then((r) => setDepts(r.roles || []))
-    getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
+    getWorkLogOfficeOptions().then((r) => {
+      setDepts(r.depts || [])
+      setStaffList(r.staff || [])
+    })
   }, [])
 
   const loadData = React.useCallback(async () => {
@@ -179,7 +183,7 @@ export function WorklogApproval() {
               <SelectContent>
                 <SelectItem value="all">전체</SelectItem>
                 {staffList.map((s) => (
-                  <SelectItem key={s.name} value={s.name}>
+                  <SelectItem key={s.name} value={s.displayName || s.name}>
                     {s.displayName || s.name}
                   </SelectItem>
                 ))}
@@ -234,7 +238,7 @@ export function WorklogApproval() {
                   {Object.entries(byName).map(([name, items]) => (
                     <div key={`${dept}-${name}`} className="border-b last:border-b-0">
                       <div className="bg-muted/20 px-5 py-2 text-xs font-bold text-muted-foreground">
-                        {dept} · {staffList.find((s) => s.name === name)?.displayName || name}
+                        {dept} · {staffList.find((s) => s.name === name || s.displayName === name)?.displayName || name}
                       </div>
                       <table className="w-full text-left text-sm">
                         <thead>
@@ -284,16 +288,18 @@ export function WorklogApproval() {
                                       <CheckCircle2 className="mr-1 h-3 w-3" />
                                       승인
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 px-2 text-[10px] text-destructive"
-                                      onClick={() => handleReject(it.id)}
-                                      disabled={updating === it.id}
-                                    >
-                                      <XCircle className="mr-1 h-3 w-3" />
-                                      반려
-                                    </Button>
+                                    {canReject && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[10px] text-destructive"
+                                        onClick={() => handleReject(it.id)}
+                                        disabled={updating === it.id}
+                                      >
+                                        <XCircle className="mr-1 h-3 w-3" />
+                                        반려
+                                      </Button>
+                                    )}
                                   </div>
                                 )}
                               </td>

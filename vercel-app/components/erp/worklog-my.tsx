@@ -23,6 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   getWorkLogStaffList,
   getWorkLogData,
@@ -41,6 +43,8 @@ interface WorklogMyProps {
 }
 
 export function WorklogMy({ userName }: WorklogMyProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [dateStr, setDateStr] = React.useState(todayStr)
   const [selectedStaff, setSelectedStaff] = React.useState(userName)
   const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
@@ -160,6 +164,13 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       }
       return prev.map((it) => (it.id === idOrIndex ? { ...it, content } : it))
     })
+  }
+
+  const formatManagerComment = (comment: string) => {
+    if (!comment) return ""
+    return comment
+      .replace(/이월됨/g, t("workLogCarriedOver") || "Carried over")
+      .replace(/부터/g, t("workLogFrom") || "from")
   }
 
   const updateProgressByIndex = (
@@ -284,13 +295,13 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : (
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-          {/* 직렬 배치: Finish → Continue → Today (업무 흐름) */}
+        <div className="flex flex-col gap-6">
+          {/* 직렬 배치: Finish → Continue → Today */}
           {/* Finish Work */}
-          <div>
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-success/5 px-5 py-3">
               <CheckCircle2 className="h-4 w-4 text-success" />
-              <h3 className="text-sm font-bold text-foreground">Finish Work (완료)</h3>
+              <h3 className="text-sm font-bold text-foreground">Finish Work</h3>
             </div>
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localFinish.length === 0 ? (
@@ -300,7 +311,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
                     <p className="font-medium text-foreground whitespace-pre-wrap">{it.content || "(내용 없음)"}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {it.progress}% · {it.managerComment || ""}
+                      {it.progress}% · {formatManagerComment(it.managerComment || "")}
                     </p>
                   </div>
                 ))
@@ -308,16 +319,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
             </div>
           </div>
 
-          {/* 연결선 */}
-          <div className="flex justify-center py-1.5 bg-muted/30 border-y">
-            <ArrowRightFromLine className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
-          </div>
-
           {/* Continue Work */}
-          <div>
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-warning/5 px-5 py-3">
               <ArrowRightFromLine className="h-4 w-4 text-warning" />
-              <h3 className="text-sm font-bold text-foreground">Continue Work (이월)</h3>
+              <h3 className="text-sm font-bold text-foreground">Continue Work</h3>
               <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewContinue} title="업무 추가">
                 <Plus className="h-3.5 w-3.5" />
               </Button>
@@ -347,8 +353,8 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                         value={it.content}
                         onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
                         placeholder="업무 내용 (엔터로 줄바꿈)"
-                        className="min-h-[60px] text-xs flex-1 resize-y"
-                        rows={2}
+                        className="min-h-[36px] text-xs flex-1 resize-y"
+                        rows={1}
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -362,23 +368,18 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                       />
                       <span className="text-xs font-bold w-8">{it.progress}%</span>
                     </div>
-                    <p className="mt-1 text-[10px] text-muted-foreground">{it.managerComment || ""}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment || "")}</p>
                   </div>
                 ))
               )}
             </div>
           </div>
 
-          {/* 연결선 */}
-          <div className="flex justify-center py-1.5 bg-muted/30 border-y">
-            <ArrowRightFromLine className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
-          </div>
-
           {/* Today Work */}
-          <div>
+          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-primary/5 px-5 py-3">
               <Play className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold text-foreground">Today Work (오늘 진행)</h3>
+              <h3 className="text-sm font-bold text-foreground">Today Work</h3>
             </div>
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localToday.length === 0 ? (
@@ -390,8 +391,8 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                       value={it.content}
                       onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
                       placeholder="업무 내용 (엔터로 줄바꿈)"
-                      className="mb-2 min-h-[60px] text-xs resize-y"
-                      rows={2}
+                      className="mb-2 min-h-[36px] text-xs resize-y"
+                      rows={1}
                     />
                     <div className="flex items-center gap-2">
                       <input

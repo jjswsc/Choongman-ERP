@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { getWorkLogWeekly, getNoticeOptions, getWorkLogStaffList, type WorkLogWeeklySummary } from "@/lib/api-client"
+import { getWorkLogWeekly, getWorkLogOfficeOptions, type WorkLogWeeklySummary } from "@/lib/api-client"
 
 function getWeekRange(date: Date): { start: string; end: string; label: string } {
   const d = new Date(date)
@@ -78,8 +78,10 @@ export function WorklogWeekly() {
   }, [periodType, periodOffset])
 
   React.useEffect(() => {
-    getNoticeOptions().then((r) => setDepts(r.roles || []))
-    getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
+    getWorkLogOfficeOptions().then((r) => {
+      setDepts(r.depts || [])
+      setStaffList(r.staff || [])
+    })
   }, [])
 
   const loadData = React.useCallback(async () => {

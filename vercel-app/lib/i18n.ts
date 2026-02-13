@@ -306,6 +306,8 @@ export const i18n = {
     adminSectionAccounting: '회계 관리',
     adminSectionStore: '매장 관리',
     adminSectionSettings: '설정',
+    workLogCarriedOver: '이월됨',
+    workLogFrom: '부터',
   },
   en: {
     all: 'All',
@@ -599,6 +601,8 @@ export const i18n = {
     adminSectionAccounting: 'Accounting',
     adminSectionStore: 'Store',
     adminSectionSettings: 'Settings',
+    workLogCarriedOver: 'Carried over',
+    workLogFrom: 'from',
   },
   th: {
     all: 'ทั้งหมด',
@@ -842,6 +846,8 @@ export const i18n = {
     adminSectionAccounting: 'บัญชี',
     adminSectionStore: 'ร้านค้า',
     adminSectionSettings: 'ตั้งค่า',
+    workLogCarriedOver: 'โอนย้าย',
+    workLogFrom: 'ตั้งแต่',
   },
   mm: {
     all: 'အားလုံး',
@@ -1085,6 +1091,8 @@ export const i18n = {
     adminSectionAccounting: 'စာရင်းကိုင်',
     adminSectionStore: 'ဆိုင်',
     adminSectionSettings: 'ဆက်တင်များ',
+    workLogCarriedOver: 'လွှဲပြောင်း',
+    workLogFrom: 'မှ',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -1328,6 +1336,8 @@ export const i18n = {
     adminSectionAccounting: 'ບັນຊີ',
     adminSectionStore: 'ຮ້ານ',
     adminSectionSettings: 'ຕັ້ງຄ່າ',
+    workLogCarriedOver: 'ໂອນ',
+    workLogFrom: 'ຈາກ',
   },
 } as const
 

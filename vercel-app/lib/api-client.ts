@@ -432,6 +432,11 @@ export async function getWorkLogStaffList() {
   return res.json() as Promise<{ staff: { name: string; displayName: string }[] }>
 }
 
+export async function getWorkLogOfficeOptions() {
+  const res = await fetch('/api/getWorkLogOfficeOptions')
+  return res.json() as Promise<{ staff: { name: string; displayName: string }[]; depts: string[] }>
+}
+
 export async function getWorkLogData(params: { dateStr: string; name: string }) {
   const q = new URLSearchParams({
     dateStr: params.dateStr,
