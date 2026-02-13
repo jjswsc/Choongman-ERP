@@ -13,13 +13,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 export interface Vendor {
@@ -35,8 +28,6 @@ export interface Vendor {
 
 export interface VendorTableProps {
   vendors: Vendor[]
-  typeFilter: string
-  setTypeFilter: (v: string) => void
   hasSearched: boolean
   searchTerm: string
   setSearchTerm: (v: string) => void
@@ -45,16 +36,8 @@ export interface VendorTableProps {
   onDelete: (vendor: Vendor) => void
 }
 
-const typeLabels: Record<string, string> = {
-  purchase: "vendorTypePurchase",
-  sales: "vendorTypeSales",
-  both: "vendorTypeBoth",
-}
-
 export function VendorTable({
   vendors,
-  typeFilter,
-  setTypeFilter,
   hasSearched,
   searchTerm,
   setSearchTerm,
@@ -78,17 +61,6 @@ export function VendorTable({
       </div>
 
       <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="h-9 w-40 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("vendorTypeAll")}</SelectItem>
-            <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
-            <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
-            <SelectItem value="both">{t("vendorTypeBoth")}</SelectItem>
-          </SelectContent>
-        </Select>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -109,24 +81,22 @@ export function VendorTable({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("vendorColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">{t("vendorColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28">{t("vendorColContact")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32">{t("vendorColPhone")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("vendorColType")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("vendorColAction")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28">{t("vendorColPhone")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
             </tr>
           </thead>
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={4} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorSearchHint")}
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={4} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorNoResults")}
                 </td>
               </tr>
@@ -144,36 +114,30 @@ export function VendorTable({
                       {vendor.code}
                     </span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 min-w-[140px]">
                     <span className="text-sm font-medium text-foreground">{vendor.name}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="text-xs text-muted-foreground">{vendor.contact || "-"}</span>
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-xs text-muted-foreground">{vendor.phone || "-"}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-xs">{t(typeLabels[vendor.type] ?? "vendorTypePurchase")}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2.5 text-[11px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                        className="h-6 px-2 text-[10px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(vendor)}
                       >
-                        <Pencil className="mr-1 h-3 w-3" />
+                        <Pencil className="mr-1 h-2.5 w-2.5" />
                         {t("vendorBtnEdit")}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2.5 text-[11px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        className="h-6 px-2 text-[10px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(vendor)}
                       >
-                        <Trash2 className="mr-1 h-3 w-3" />
+                        <Trash2 className="mr-1 h-2.5 w-2.5" />
                         {t("vendorBtnDelete")}
                       </Button>
                     </div>

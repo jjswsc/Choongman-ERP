@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const startStr = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
   const storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
-  const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || searchParams.get('statusFilter') || '').trim()
+  const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || '').trim()
+  const statusFilter = String(searchParams.get('status') || searchParams.get('statusFilter') || '').trim()
 
   let s = startStr
   let e = endStr
@@ -78,7 +79,17 @@ export async function GET(request: NextRequest) {
     let filteredList = list
     if (deliveryStatusFilter && deliveryStatusFilter !== 'All' && deliveryStatusFilter !== '전체') {
       const norm = (s: string) => (s || '').replace(/\s/g, '')
-      filteredList = list.filter((o) => norm(o.deliveryStatus || '') === norm(deliveryStatusFilter))
+      filteredList = filteredList.filter((o) => norm(o.deliveryStatus || '') === norm(deliveryStatusFilter))
+    }
+    if (statusFilter && statusFilter !== 'all' && statusFilter !== 'All' && statusFilter !== '전체') {
+      const statusMap: Record<string, string> = {
+        pending: 'Pending',
+        approved: 'Approved',
+        rejected: 'Rejected',
+        hold: 'Hold',
+      }
+      const target = statusMap[statusFilter.toLowerCase()] || statusFilter
+      filteredList = filteredList.filter((o) => (o.status || '') === target)
     }
 
     const storesForDropdown = [...new Set((storeRows || []).map((r: { store_name?: string }) => r.store_name || '').filter(Boolean))].sort()

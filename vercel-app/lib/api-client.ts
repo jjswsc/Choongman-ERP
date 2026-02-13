@@ -176,6 +176,7 @@ export async function getAdminOrders(params: {
   endStr: string
   store?: string
   deliveryStatus?: string
+  status?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -183,6 +184,7 @@ export async function getAdminOrders(params: {
   })
   if (params.store) q.set('store', params.store)
   if (params.deliveryStatus) q.set('deliveryStatus', params.deliveryStatus)
+  if (params.status) q.set('status', params.status)
   const res = await fetch(`/api/getAdminOrders?${q}`)
   const data = await res.json()
   return {

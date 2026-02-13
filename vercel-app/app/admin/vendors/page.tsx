@@ -29,7 +29,6 @@ export default function VendorsPage() {
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [typeFilter, setTypeFilter] = React.useState("all")
 
   React.useEffect(() => {
     getAdminVendors()
@@ -147,10 +146,9 @@ export default function VendorsPage() {
     if (!hasSearched) return []
     return vendors.filter((v) => {
       const matchTerm = !searchTerm || v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.code.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchType = typeFilter === "all" || v.type === typeFilter
-      return matchTerm && matchType
+      return matchTerm
     })
-  }, [vendors, hasSearched, searchTerm, typeFilter])
+  }, [vendors, hasSearched, searchTerm])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -181,8 +179,6 @@ export default function VendorsPage() {
           />
           <VendorTable
             vendors={filteredVendors}
-            typeFilter={typeFilter}
-            setTypeFilter={setTypeFilter}
             hasSearched={hasSearched}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}

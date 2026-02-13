@@ -102,12 +102,12 @@ export function ItemTable({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("itemsColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center">{t("itemsColImage")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">{t("itemsColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-right">{t("itemsColPrice")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("itemsColImage")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("itemsColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("itemsColPrice")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +133,7 @@ export function ItemTable({
                   )}
                 >
                   <td className="px-5 py-3">
-                    <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary">
+                    <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
                       {product.code}
                     </span>
                   </td>
@@ -142,21 +142,21 @@ export function ItemTable({
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2 text-[11px] font-semibold gap-1"
+                        className="h-6 px-1.5 text-[10px] font-semibold gap-0.5"
                         onClick={() => setImagePreview({ url: product.imageUrl!, name: product.name })}
                       >
-                        <ImageIcon className="h-3 w-3" />
+                        <ImageIcon className="h-2.5 w-2.5" />
                         {t("photo")}
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
+                      <span className="text-[10px] text-muted-foreground">-</span>
                     )}
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 min-w-[120px]">
                     <span className="text-sm font-medium text-foreground">{product.name}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-xs text-muted-foreground">{product.spec}</span>
+                    <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
                   <td className="px-5 py-3 text-right">
                     <span className="text-sm font-bold tabular-nums text-foreground">
@@ -164,23 +164,23 @@ export function ItemTable({
                     </span>
                   </td>
                   <td className="px-5 py-3">
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2.5 text-[11px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                        className="h-6 px-2 text-[10px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(product)}
                       >
-                        <Pencil className="mr-1 h-3 w-3" />
+                        <Pencil className="mr-1 h-2.5 w-2.5" />
                         {t("itemsBtnEdit")}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 px-2.5 text-[11px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        className="h-6 px-2 text-[10px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(product)}
                       >
-                        <Trash2 className="mr-1 h-3 w-3" />
+                        <Trash2 className="mr-1 h-2.5 w-2.5" />
                         {t("itemsBtnDelete")}
                       </Button>
                     </div>
