@@ -4,6 +4,10 @@ import path from "path";
 const vercelAppDir = __dirname;
 
 const nextConfig: NextConfig = {
+  // /app 접속 시 / 로 리다이렉트 (예전 문서의 모바일 앱 URL)
+  async redirects() {
+    return [{ source: "/app", destination: "/", permanent: false }]
+  },
   // vercel-app을 프로젝트 루트로 고정 (상위 lockfile 충돌 방지)
   turbopack: {
     root: vercelAppDir,
