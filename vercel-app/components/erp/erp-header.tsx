@@ -7,6 +7,13 @@ import { Separator } from "@/components/ui/separator"
 import { Bell, Search, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -15,33 +22,47 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import type { LangCode } from "@/lib/lang-context"
 
-const PATH_TITLES: Record<string, string> = {
-  "/admin": "대시보드",
-  "/admin/notices": "공지사항 관리",
-  "/admin/work-log": "업무일지",
-  "/admin/items": "품목 관리",
-  "/admin/vendors": "거래처 관리",
-  "/admin/orders": "주문 승인",
-  "/admin/stock": "재고 현황",
-  "/admin/inbound": "입고 관리",
-  "/admin/outbound": "출고 관리",
-  "/admin/employees": "직원 관리",
-  "/admin/attendance": "근태/스케줄 관리",
-  "/admin/payroll": "급여 관리",
-  "/admin/leave": "휴가 관리",
-  "/admin/petty-cash": "페티 캐쉬",
-  "/admin/store-check": "매장 점검",
-  "/admin/store-visit": "매장 방문 현황",
-  "/admin/complaints": "컴플레인 일지",
-  "/admin/settings": "시스템 설정",
+const PATH_KEYS: Record<string, string> = {
+  "/admin": "adminDashboard",
+  "/admin/notices": "adminNotices",
+  "/admin/work-log": "adminWorkLog",
+  "/admin/items": "adminItems",
+  "/admin/vendors": "adminVendors",
+  "/admin/orders": "adminOrders",
+  "/admin/stock": "adminStock",
+  "/admin/inbound": "adminInbound",
+  "/admin/outbound": "adminOutbound",
+  "/admin/employees": "adminEmployees",
+  "/admin/attendance": "adminAttendance",
+  "/admin/payroll": "adminPayroll",
+  "/admin/leave": "adminLeave",
+  "/admin/petty-cash": "adminPettyCash",
+  "/admin/store-check": "adminStoreCheck",
+  "/admin/store-visit": "adminStoreVisit",
+  "/admin/complaints": "adminComplaints",
+  "/admin/settings": "adminSettings",
 }
+
+const LANG_OPTIONS: { value: LangCode; label: string }[] = [
+  { value: "ko", label: "한국어" },
+  { value: "en", label: "English" },
+  { value: "th", label: "ไทย" },
+  { value: "mm", label: "မြန်မာ" },
+  { value: "la", label: "ລາວ" },
+]
 
 export function ErpHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { auth, logout } = useAuth()
-  const title = PATH_TITLES[pathname] ?? "관리자"
+  const { lang, setLang } = useLang()
+  const t = useT(lang)
+  const pathKey = PATH_KEYS[pathname]
+  const title = pathKey ? t(pathKey) : t("adminDashboard")
 
   const handleLogout = () => {
     logout()
@@ -59,6 +80,20 @@ export function ErpHeader() {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Language */}
+        <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
+          <SelectTrigger className="h-8 w-[7rem] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LANG_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Separator orientation="vertical" className="mx-1 h-5" />
         {/* Search */}
         <Button
           variant="ghost"
@@ -102,20 +137,20 @@ export function ErpHeader() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="text-xs">내 계정</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs">{t("adminMyAccount")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
-              <Link href="/admin/settings">프로필 설정</Link>
+              <Link href="/admin/settings">{t("adminProfile")}</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
-              <Link href="/admin/settings">비밀번호 변경</Link>
+              <Link href="/admin/settings">{t("adminChangePw")}</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-xs text-destructive cursor-pointer"
               onClick={handleLogout}
             >
-              로그아웃
+              {t("logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

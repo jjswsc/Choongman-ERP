@@ -15,29 +15,31 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const filter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}`
+    const startD = new Date(startDate + 'T12:00:00')
+    const endD = new Date(endDate + 'T12:00:00')
+    const endExclusive = new Date(endD)
+    endExclusive.setDate(endExclusive.getDate() + 1)
+    const startStr = startD.toISOString().slice(0, 10)
+    const endStr = endExclusive.toISOString().slice(0, 10)
+
+    const filter = `store_name=ilike.${encodeURIComponent(storeFilter)}&name=ilike.${encodeURIComponent(employeeFilter)}&log_at=gte.${startStr}&log_at=lt.${endStr}`
     const rows = (await supabaseSelectFilter(
       'attendance_logs',
       filter,
-      { order: 'log_at.desc', limit: 100 }
-    )) as { log_at?: string; log_type?: string; status?: string }[]
+      { order: 'log_at.asc', limit: 500 }
+    )) as { log_at?: string; log_type?: string; status?: string; late_min?: number; ot_min?: number }[]
 
-    const startD = new Date(startDate)
-    startD.setHours(0, 0, 0, 0)
-    const endD = new Date(endDate)
-    endD.setHours(23, 59, 59, 999)
-
-    const list: { timestamp: string; type: string; status: string }[] = []
+    const list: { timestamp: string; type: string; status: string; late_min?: number; ot_min?: number }[] = []
     for (const r of rows || []) {
-      const rowDate = new Date(r.log_at || '')
-      if (isNaN(rowDate.getTime()) || rowDate < startD || rowDate > endD) continue
       list.push({
         timestamp: r.log_at || '',
         type: String(r.log_type || '').trim(),
         status: String(r.status || '').trim(),
+        late_min: r.late_min != null ? Number(r.late_min) : undefined,
+        ot_min: r.ot_min != null ? Number(r.ot_min) : undefined,
       })
     }
-    list.sort((a, b) => (b.timestamp > a.timestamp ? 1 : -1))
+    list.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1))
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getAttendanceList:', e)

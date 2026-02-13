@@ -9,11 +9,13 @@ import {
   Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 interface Activity {
   id: string
   type: "receiving" | "shipping" | "order" | "leave" | "employee"
-  title: string
+  titleKey: string
   description: string
   time: string
 }
@@ -22,35 +24,35 @@ const activities: Activity[] = [
   {
     id: "1",
     type: "shipping",
-    title: "출고 완료",
+    titleKey: "adminActOutboundDone",
     description: "서울점 - 24건 출고 처리됨",
     time: "10분 전",
   },
   {
     id: "2",
     type: "receiving",
-    title: "입고 등록",
+    titleKey: "adminActInboundReg",
     description: "본사 창고 - 신규 입고 12건",
     time: "25분 전",
   },
   {
     id: "3",
     type: "order",
-    title: "주문 승인 완료",
+    titleKey: "adminActOrderApproved",
     description: "부산점 주문 #2841 승인됨",
     time: "1시간 전",
   },
   {
     id: "4",
     type: "leave",
-    title: "휴가 신청",
+    titleKey: "adminActLeaveReq",
     description: "김민수 - 연차 (02/15 ~ 02/16)",
     time: "2시간 전",
   },
   {
     id: "5",
     type: "employee",
-    title: "신규 직원 등록",
+    titleKey: "adminActEmployeeReg",
     description: "이지은 - 영업부 배정",
     time: "3시간 전",
   },
@@ -85,13 +87,16 @@ const typeConfig = {
 }
 
 export function RecentActivity() {
+  const { lang } = useLang()
+  const t = useT(lang)
+
   return (
     <div className="rounded-xl border bg-card">
       <div className="flex items-center gap-3 border-b px-5 py-4">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <Clock className="h-4 w-4" />
         </div>
-        <h3 className="text-sm font-semibold text-card-foreground">최근 활동</h3>
+        <h3 className="text-sm font-semibold text-card-foreground">{t("adminRecentActivity")}</h3>
       </div>
       <div className="divide-y">
         {activities.map((activity) => {
@@ -113,7 +118,7 @@ export function RecentActivity() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-card-foreground">
-                  {activity.title}
+                  {t(activity.titleKey)}
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {activity.description}

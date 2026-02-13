@@ -112,6 +112,23 @@ export async function supabaseUpdateByFilter(
   return true
 }
 
+export async function supabaseDeleteByFilter(
+  table: string,
+  filter: string
+) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?${filter}`
+  const res = await fetch(pathStr, {
+    method: 'DELETE',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+  })
+  if (!res.ok) throw new Error('Supabase delete failed: ' + (await res.text()))
+  return true
+}
+
 export async function supabaseInsertMany(table: string, rows: Record<string, unknown>[]) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`

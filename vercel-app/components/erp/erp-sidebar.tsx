@@ -49,9 +49,11 @@ import {
 } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 interface MenuItem {
-  title: string
+  titleKey: string
   icon: React.ElementType
   href: string
   badge?: number | string
@@ -59,54 +61,54 @@ interface MenuItem {
 }
 
 interface MenuSection {
-  title: string
+  titleKey: string
   items: MenuItem[]
   defaultOpen?: boolean
 }
 
 const mainItems: MenuItem[] = [
-  { title: "대시보드", icon: LayoutDashboard, href: "/admin" },
-  { title: "공지사항 관리", icon: Megaphone, href: "/admin/notices" },
-  { title: "업무일지", icon: ClipboardList, href: "/admin/work-log" },
+  { titleKey: "adminDashboard", icon: LayoutDashboard, href: "/admin" },
+  { titleKey: "adminNotices", icon: Megaphone, href: "/admin/notices" },
+  { titleKey: "adminWorkLog", icon: ClipboardList, href: "/admin/work-log" },
 ]
 
 const menuSections: MenuSection[] = [
   {
-    title: "물류 관리",
+    titleKey: "adminSectionLogistics",
     defaultOpen: true,
     items: [
-      { title: "품목 관리", icon: Tags, href: "/admin/items" },
-      { title: "거래처 관리", icon: Building2, href: "/admin/vendors" },
-      { title: "주문 승인", icon: ShieldCheck, href: "/admin/orders", badge: 0, badgeVariant: "destructive" },
-      { title: "재고 현황", icon: BarChart3, href: "/admin/stock" },
-      { title: "입고 관리", icon: ArrowDownToLine, href: "/admin/inbound" },
-      { title: "출고 관리", icon: ArrowUpFromLine, href: "/admin/outbound" },
+      { titleKey: "adminItems", icon: Tags, href: "/admin/items" },
+      { titleKey: "adminVendors", icon: Building2, href: "/admin/vendors" },
+      { titleKey: "adminOrders", icon: ShieldCheck, href: "/admin/orders", badge: 0, badgeVariant: "destructive" },
+      { titleKey: "adminStock", icon: BarChart3, href: "/admin/stock" },
+      { titleKey: "adminInbound", icon: ArrowDownToLine, href: "/admin/inbound" },
+      { titleKey: "adminOutbound", icon: ArrowUpFromLine, href: "/admin/outbound" },
     ],
   },
   {
-    title: "인사 관리",
+    titleKey: "adminSectionHr",
     defaultOpen: true,
     items: [
-      { title: "직원 관리", icon: Users, href: "/admin/employees" },
-      { title: "근태/스케줄 관리", icon: CalendarClock, href: "/admin/attendance" },
-      { title: "급여 관리", icon: Wallet, href: "/admin/payroll" },
-      { title: "휴가 관리", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
+      { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
+      { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
+      { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
+      { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
     ],
   },
   {
-    title: "회계 관리",
+    titleKey: "adminSectionAccounting",
     defaultOpen: true,
     items: [
-      { title: "페티 캐쉬", icon: Receipt, href: "/admin/petty-cash" },
+      { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
     ],
   },
   {
-    title: "매장 관리",
+    titleKey: "adminSectionStore",
     defaultOpen: true,
     items: [
-      { title: "매장 점검", icon: Store, href: "/admin/store-check" },
-      { title: "매장 방문 현황", icon: MapPin, href: "/admin/store-visit" },
-      { title: "컴플레인 일지", icon: MessageSquareWarning, href: "/admin/complaints" },
+      { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
+      { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
+      { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
     ],
   },
 ]
@@ -115,6 +117,8 @@ export function ErpSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { logout } = useAuth()
+  const { lang } = useLang()
+  const t = useT(lang)
 
   const handleLogout = () => {
     logout()
@@ -133,8 +137,8 @@ export function ErpSidebar() {
             <span className="text-sm font-bold tracking-tight text-sidebar-primary-foreground">
               CHOONGMAN
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-widest text-sidebar-foreground/50">
-              ERP Manager
+            <span className="text-[10px] font-semibold tracking-[0.2em] text-sidebar-foreground/70">
+              CM ERP SYSTEM
             </span>
           </div>
         </div>
@@ -150,7 +154,7 @@ export function ErpSidebar() {
             <SidebarMenu>
               {mainItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild isActive={pathname === item.href} tooltip={item.title}>
+                  <SidebarMenuButton asChild isActive={pathname === item.href} tooltip={t(item.titleKey)}>
                     <Link
                       href={item.href}
                       className={cn(
@@ -160,7 +164,7 @@ export function ErpSidebar() {
                       )}
                     >
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      <span>{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -170,11 +174,11 @@ export function ErpSidebar() {
 
           {/* Grouped sections */}
           {menuSections.map((section) => (
-            <SidebarGroup key={section.title}>
+            <SidebarGroup key={section.titleKey}>
               <Collapsible defaultOpen={section.defaultOpen} className="group/collapsible">
                 <SidebarGroupLabel asChild>
                   <CollapsibleTrigger className="flex w-full items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors">
-                    <span>{section.title}</span>
+                    <span>{t(section.titleKey)}</span>
                     <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                   </CollapsibleTrigger>
                 </SidebarGroupLabel>
@@ -183,7 +187,7 @@ export function ErpSidebar() {
                     <SidebarMenu>
                       {section.items.map((item) => (
                         <SidebarMenuItem key={item.href}>
-                          <SidebarMenuButton asChild isActive={pathname === item.href} tooltip={item.title}>
+                          <SidebarMenuButton asChild isActive={pathname === item.href} tooltip={t(item.titleKey)}>
                             <Link
                               href={item.href}
                               className={cn(
@@ -193,7 +197,7 @@ export function ErpSidebar() {
                               )}
                             >
                               <item.icon className="h-4 w-4" />
-                              <span className="flex-1">{item.title}</span>
+                              <span className="flex-1">{t(item.titleKey)}</span>
                               {item.badge !== undefined && Number(item.badge) > 0 && (
                                 <span
                                   className={cn(
@@ -222,15 +226,15 @@ export function ErpSidebar() {
           {/* Settings */}
           <SidebarGroup>
             <SidebarGroupLabel className="text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-              설정
+              {t("adminSectionSettings")}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip="설정">
+                  <SidebarMenuButton asChild tooltip={t("adminSettings")}>
                     <Link href="/admin/settings">
                       <Settings className="h-4 w-4" />
-                      <span>시스템 설정</span>
+                      <span>{t("adminSettings")}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -246,21 +250,21 @@ export function ErpSidebar() {
       <SidebarFooter className="px-3 py-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="비밀번호 변경" className="h-9">
+            <SidebarMenuButton asChild tooltip={t("adminChangePw")} className="h-9">
               <Link href="/admin/settings">
                 <Lock className="h-4 w-4" />
-                <span>비밀번호 변경</span>
+                <span>{t("adminChangePw")}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
-              tooltip="로그아웃"
+              tooltip={t("logout")}
               className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />
-              <span>로그아웃</span>
+              <span>{t("logout")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

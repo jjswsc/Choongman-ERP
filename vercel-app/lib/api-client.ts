@@ -231,6 +231,8 @@ export interface AttendanceLogItem {
   timestamp: string
   type: string
   status: string
+  late_min?: number
+  ot_min?: number
 }
 
 export async function getAttendanceList(params: {
@@ -314,6 +316,43 @@ export async function sendNotice(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface SentNoticeItem {
+  id: string
+  title: string
+  date: string
+  recipients: string[]
+  preview: string
+  readCount: number
+  totalCount: number
+}
+
+export async function getSentNotices(params: {
+  sender: string
+  startDate: string
+  endDate: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams({
+    sender: params.sender,
+    startDate: params.startDate,
+    endDate: params.endDate,
+  })
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await fetch(`/api/getSentNotices?${q}`)
+  return res.json() as Promise<SentNoticeItem[]>
+}
+
+export async function deleteNoticeAdmin(params: { id: number }) {
+  const res = await fetch('/api/deleteNoticeAdmin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

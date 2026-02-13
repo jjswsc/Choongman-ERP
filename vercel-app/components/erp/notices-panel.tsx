@@ -3,6 +3,8 @@
 import * as React from "react"
 import Link from "next/link"
 import { CalendarIcon, Search, Megaphone, FileText, Bell } from "lucide-react"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
@@ -24,6 +26,8 @@ function isRead(status: string) {
 
 export function NoticesPanel() {
   const { auth } = useAuth()
+  const { lang } = useLang()
+  const t = useT(lang)
   const [startDate, setStartDate] = React.useState(() => daysAgoStr(30))
   const [endDate, setEndDate] = React.useState(todayStr)
   const [notices, setNotices] = React.useState<NoticeItem[]>([])
@@ -57,9 +61,9 @@ export function NoticesPanel() {
             <Megaphone className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-card-foreground">받은 공지</h3>
+            <h3 className="text-sm font-semibold text-card-foreground">{t("adminReceivedNotices")}</h3>
             <p className="text-[11px] text-muted-foreground">
-              날짜 범위를 선택하면 지나간 공지도 조회할 수 있습니다.
+              {t("adminNoticeDateHint")}
             </p>
           </div>
         </div>
@@ -67,7 +71,7 @@ export function NoticesPanel() {
           href="/admin/notices"
           className="text-xs font-medium text-primary hover:underline shrink-0"
         >
-          전체 보기
+          {t("adminViewAll")}
         </Link>
       </div>
 
@@ -75,7 +79,7 @@ export function NoticesPanel() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-muted-foreground">
-              시작일
+              {t("adminStartDate")}
             </label>
             <div className="relative">
               <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -89,7 +93,7 @@ export function NoticesPanel() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-muted-foreground">
-              종료일
+              {t("adminEndDate")}
             </label>
             <div className="relative">
               <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -103,7 +107,7 @@ export function NoticesPanel() {
           </div>
           <Button size="sm" className="h-9 px-4 text-xs" onClick={fetchNotices}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            조회
+            {t("search")}
           </Button>
         </div>
       </div>
@@ -111,7 +115,7 @@ export function NoticesPanel() {
       <div className="border-t">
         {loading ? (
           <div className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-muted-foreground">불러오는 중...</p>
+            <p className="text-sm text-muted-foreground">{t("loading")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
@@ -119,10 +123,10 @@ export function NoticesPanel() {
               <FileText className="h-5 w-5 text-muted-foreground" />
             </div>
             <p className="mt-3 text-sm font-medium text-muted-foreground">
-              조회된 공지가 없습니다.
+              {t("adminNoNoticesFound")}
             </p>
             <p className="mt-1 text-xs text-muted-foreground/60">
-              날짜 범위를 변경하여 다시 조회해 보세요.
+              {t("adminNoticeDateHint2")}
             </p>
           </div>
         ) : (
