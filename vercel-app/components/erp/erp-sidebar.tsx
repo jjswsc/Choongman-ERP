@@ -126,7 +126,7 @@ export function ErpSidebar() {
   }
 
   return (
-    <Sidebar collapsible="icon" className="border-r-0 sidebar-dark">
+    <Sidebar collapsible="icon" className="border-r-0 sidebar-dark print:hidden">
       {/* Header / Logo */}
       <SidebarHeader className="px-4 py-5">
         <div className="flex items-center gap-3">
@@ -164,7 +164,7 @@ export function ErpSidebar() {
                       )}
                     >
                       <item.icon className="h-4 w-4" />
-                      <span>{t(item.titleKey)}</span>
+                      <span className="font-semibold">{t(item.titleKey)}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -198,7 +198,7 @@ export function ErpSidebar() {
                               )}
                             >
                               <item.icon className="h-4 w-4" />
-                              <span className="flex-1">{t(item.titleKey)}</span>
+                              <span className="flex-1 font-semibold">{t(item.titleKey)}</span>
                               {item.badge !== undefined && Number(item.badge) > 0 && (
                                 <span
                                   className={cn(
@@ -236,7 +236,7 @@ export function ErpSidebar() {
                   <SidebarMenuButton asChild tooltip={t("adminSettings")}>
                     <Link href="/admin/settings">
                       <Settings className="h-4 w-4" />
-                      <span>{t("adminSettings")}</span>
+                      <span className="font-semibold">{t("adminSettings")}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -255,7 +255,7 @@ export function ErpSidebar() {
             <SidebarMenuButton asChild tooltip={t("adminChangePw")} className="h-9">
               <Link href="/admin/settings">
                 <Lock className="h-4 w-4" />
-                <span>{t("adminChangePw")}</span>
+                <span className="font-semibold">{t("adminChangePw")}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -266,7 +266,7 @@ export function ErpSidebar() {
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4" />
-              <span>{t("logout")}</span>
+              <span className="font-semibold">{t("logout")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

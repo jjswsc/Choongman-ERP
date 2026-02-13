@@ -27,6 +27,7 @@ export default function StockPage() {
   const [list, setList] = React.useState<StockStatusItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [storeFilter, setStoreFilter] = React.useState("")
+  const [stockDateFilter, setStockDateFilter] = React.useState("")
   const [searchTerm, setSearchTerm] = React.useState("")
   const [adjustItem, setAdjustItem] = React.useState<StockStatusItem | null>(null)
   const [adjustOpen, setAdjustOpen] = React.useState(false)
@@ -54,7 +55,8 @@ export default function StockPage() {
     }
     setLoading(true)
     try {
-      const { items, stock } = await getAppData(store)
+      const asOfDate = stockDateFilter.trim() || undefined
+      const { items, stock } = await getAppData(store, asOfDate)
       const mapped: StockStatusItem[] = items.map((i) => ({
         code: i.code,
         name: i.name,
@@ -71,7 +73,7 @@ export default function StockPage() {
     } finally {
       setLoading(false)
     }
-  }, [storeFilter])
+  }, [storeFilter, stockDateFilter])
 
   React.useEffect(() => {
     fetchStores()
@@ -148,6 +150,8 @@ export default function StockPage() {
               loading={loading}
               storeFilter={storeFilter}
               setStoreFilter={setStoreFilter}
+              stockDateFilter={stockDateFilter}
+              setStockDateFilter={setStockDateFilter}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onSearch={fetchStock}

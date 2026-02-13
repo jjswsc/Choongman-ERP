@@ -103,12 +103,12 @@ export function StockAdjustmentHistory() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("stockHistColDate")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("stockHistColStore")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("stockHistColItem")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 min-w-[100px] whitespace-nowrap">{t("stockHistColDate")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 min-w-[80px]">{t("stockHistColStore")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[80px]">{t("stockHistColItem")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16">{t("stockHistColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-right">{t("stockHistColDiff")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[80px]">{t("stockHistColReason")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 text-center">{t("stockHistColReason")}</th>
             </tr>
           </thead>
           <tbody>
@@ -130,9 +130,9 @@ export function StockAdjustmentHistory() {
                   key={`${row.date}-${row.store}-${row.item}-${idx}`}
                   className={`border-b last:border-b-0 ${idx % 2 === 1 ? "bg-muted/5" : ""}`}
                 >
-                  <td className="px-5 py-3 text-xs">{row.date}</td>
-                  <td className="px-5 py-3 text-xs font-medium">{row.store}</td>
-                  <td className="px-5 py-3 text-sm">{row.item}</td>
+                  <td className="px-5 py-3 text-xs whitespace-nowrap">{row.date}</td>
+                  <td className="px-5 py-3 text-xs font-medium w-32">{row.store}</td>
+                  <td className="px-5 py-3 text-sm max-w-[140px] truncate" title={row.item}>{row.item}</td>
                   <td className="px-5 py-3 text-[11px] text-muted-foreground">{row.spec}</td>
                   <td className={cn(
                     "px-5 py-3 text-right font-semibold tabular-nums",
@@ -140,7 +140,7 @@ export function StockAdjustmentHistory() {
                   )}>
                     {row.diff > 0 ? "+" : ""}{row.diff}
                   </td>
-                  <td className="px-5 py-3 text-xs text-muted-foreground">{row.reason || "-"}</td>
+                  <td className="px-5 py-3 text-xs text-muted-foreground text-center">{row.reason || "-"}</td>
                 </tr>
               ))
             )}

@@ -207,9 +207,13 @@ export function OrderApproval() {
 
   const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
     const idStr = String(orderId)
+    const deliveryDate = deliveryDateByOrder[idStr] || ""
+    if (decision === "Approved" && !deliveryDate.trim()) {
+      alert(t("orderDeliveryDateRequired") || "승인하려면 배송일을 선택해 주세요.")
+      return
+    }
     setSubmittingId(idStr)
     try {
-      const deliveryDate = deliveryDateByOrder[idStr] || ""
       const res = await processOrderDecision({
         orderId,
         decision,
@@ -447,10 +451,10 @@ export function OrderApproval() {
                                 <thead>
                                   <tr className="border-b bg-muted/30">
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-10 text-center">V</th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground">
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground min-w-[120px]">
                                       {t("orderItemName")}
                                     </th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20">
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-36 min-w-[80px] whitespace-nowrap">
                                       {t("orderItemSpec")}
                                     </th>
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 text-right">
@@ -485,10 +489,10 @@ export function OrderApproval() {
                                           className="h-3.5 w-3.5"
                                         />
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs font-medium text-foreground">
+                                      <td className="px-3 py-2.5 text-xs font-medium text-foreground min-w-[120px]">
                                         {item.name}
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                      <td className="px-3 py-2.5 text-xs text-muted-foreground w-36 min-w-[80px] whitespace-nowrap">
                                         {item.spec || "-"}
                                       </td>
                                       <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-foreground text-right">

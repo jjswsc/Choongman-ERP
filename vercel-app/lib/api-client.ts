@@ -68,8 +68,10 @@ export interface AppItem {
   image?: string
 }
 
-export async function getAppData(storeName: string) {
-  const res = await fetch(`/api/getAppData?storeName=${encodeURIComponent(storeName)}`)
+export async function getAppData(storeName: string, asOfDate?: string) {
+  const params = new URLSearchParams({ storeName })
+  if (asOfDate && asOfDate.trim()) params.set('asOfDate', asOfDate.trim())
+  const res = await fetch(`/api/getAppData?${params}`)
   const data = await res.json()
   return { items: (data.items || []) as AppItem[], stock: data.stock || {} }
 }

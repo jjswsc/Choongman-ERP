@@ -29,6 +29,8 @@ export interface StockTableProps {
   loading: boolean
   storeFilter: string
   setStoreFilter: (v: string) => void
+  stockDateFilter?: string
+  setStockDateFilter?: (v: string) => void
   searchTerm: string
   setSearchTerm: (v: string) => void
   onSearch: () => void
@@ -43,6 +45,8 @@ export function StockTable({
   loading,
   storeFilter,
   setStoreFilter,
+  stockDateFilter = "",
+  setStockDateFilter,
   searchTerm,
   setSearchTerm,
   onSearch,
@@ -92,35 +96,34 @@ export function StockTable({
   }
 
   const handleExcel = () => {
-    const headers = [
-      t("stockColCode"),
-      t("stockColName"),
-      t("stockColSpec"),
-      t("stockColQty"),
-      t("stockColSafeQty"),
-      t("stockColAmount"),
-      t("stockColStatus"),
+    const dateStr = stockDateFilter || new Date().toISOString().slice(0, 10)
+    const rows: string[][] = [
+      [t("stockColDate") || "날짜", dateStr],
+      [t("stockFilterStore") || "매장", storeFilter || t("stockFilterStoreAll") || "전체"],
+      [t("stockTotalAmount") || "총 재고금액", totalAmount.toLocaleString()],
+      [],
+      [t("stockColCode"), t("stockColName"), t("stockColSpec"), t("stockColQty"), t("stockColSafeQty"), t("stockColAmount"), t("stockColStatus")],
+      ...filteredList.map((r) => {
+        const cost = r.cost ?? r.price ?? 0
+        const amount = cost * r.qty
+        const isLow = r.safeQty > 0 && r.qty < r.safeQty
+        return [
+          r.code,
+          r.name,
+          r.spec,
+          String(r.qty),
+          r.safeQty > 0 ? String(r.safeQty) : "",
+          amount.toLocaleString(),
+          isLow ? t("stockLow") : "-",
+        ]
+      }),
     ]
-    const rows = filteredList.map((r) => {
-      const cost = r.cost ?? r.price ?? 0
-      const amount = cost * r.qty
-      const isLow = r.safeQty > 0 && r.qty < r.safeQty
-      return [
-        r.code,
-        r.name,
-        r.spec,
-        r.qty,
-        r.safeQty > 0 ? r.safeQty : "",
-        amount.toLocaleString(),
-        isLow ? t("stockLow") : "-",
-      ]
-    })
-    const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))].join("\n")
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n")
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `stock_${storeFilter || "all"}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `stock_${storeFilter || "all"}_${dateStr}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -128,7 +131,7 @@ export function StockTable({
   const colCount = 7 + (canAdjust ? 1 : 0)
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+    <div id="stock-print-area" className="rounded-xl border bg-card shadow-sm overflow-hidden">
       <div className="flex items-center gap-3 border-b px-6 py-4">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/10">
           <BarChart3 className="h-[18px] w-[18px] text-warning" />
@@ -139,8 +142,25 @@ export function StockTable({
         </span>
       </div>
 
-      {/* 일렬 배치: 매장 Select + 검색 Input(축소) + 조회 + 인쇄 + 엑셀 */}
-      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-6 py-3">
+      {/* 인쇄 시에만 보이는 요약 */}
+      <div className="hidden print:block border-b px-6 py-3 text-sm">
+        <span className="font-semibold">{t("stockFilterDate")}:</span> {stockDateFilter || "-"} |{" "}
+        <span className="font-semibold">{t("stockFilterStore")}:</span> {storeFilter || t("stockFilterStoreAll")} |{" "}
+        <span className="font-semibold">{t("stockTotalAmount")}:</span> {totalAmount.toLocaleString()}
+      </div>
+      {/* 일렬 배치: 날짜 + 매장 Select + 검색 Input + 조회 + 인쇄 + 엑셀 */}
+      <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-6 py-3 print:hidden">
+        {setStockDateFilter && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold whitespace-nowrap">{t("stockFilterDate")}</label>
+            <Input
+              type="date"
+              value={stockDateFilter}
+              onChange={(e) => setStockDateFilter(e.target.value)}
+              className="h-9 w-36 text-xs"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground whitespace-nowrap">
             <Package className="h-3.5 w-3.5 text-primary" />
@@ -253,13 +273,13 @@ export function StockTable({
                     <td className="px-5 py-3 text-right">
                       {onSaveSafeQty && (
                         isEditing ? (
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-2">
                             <Input
                               type="number"
                               min={0}
                               value={safeInput}
                               onChange={(e) => setSafeInput(e.target.value)}
-                              className="h-7 w-16 text-xs"
+                              className="h-9 w-24 text-sm"
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") handleSaveSafeQty(row)
                                 if (e.key === "Escape") setEditingSafe(null)
@@ -267,7 +287,7 @@ export function StockTable({
                             />
                             <Button
                               size="sm"
-                              className="h-7 px-2 text-[10px]"
+                              className="h-9 px-3 text-xs"
                               onClick={() => handleSaveSafeQty(row)}
                               disabled={savingSafe}
                             >

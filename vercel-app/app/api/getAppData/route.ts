@@ -56,13 +56,18 @@ async function getItems(storeName: string): Promise<AppItem[]> {
   return list
 }
 
-async function getStoreStock(store: string): Promise<Record<string, number>> {
+async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
   try {
     const storeNorm = String(store || '').toLowerCase().trim()
     if (!storeNorm) return {}
+    let filter = `location=ilike.${encodeURIComponent(storeNorm)}`
+    if (asOfDate && asOfDate.trim()) {
+      const endOfDay = asOfDate.trim() + 'T23:59:59.999Z'
+      filter += `&log_date=lte.${encodeURIComponent(endOfDay)}`
+    }
     const rows = (await supabaseSelectFilter(
       'stock_logs',
-      `location=ilike.${encodeURIComponent(storeNorm)}`
+      filter
     )) as { item_code?: string; qty?: number }[] | null
     const m: Record<string, number> = {}
     for (let i = 0; i < (rows || []).length; i++) {
@@ -81,9 +86,13 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
+  const asOfDate = String(searchParams.get('asOfDate') || searchParams.get('date') || '').trim()
 
   try {
-    const [items, stock] = await Promise.all([getItems(storeName), getStoreStock(storeName)])
+    const [items, stock] = await Promise.all([
+      getItems(storeName),
+      getStoreStock(storeName, asOfDate || undefined),
+    ])
     return NextResponse.json({ items, stock }, { headers })
   } catch (e) {
     console.error('getAppData:', e)
