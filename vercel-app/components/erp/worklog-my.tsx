@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -49,6 +50,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const [localFinish, setLocalFinish] = React.useState<WorkLogItem[]>([])
   const [localContinue, setLocalContinue] = React.useState<WorkLogItem[]>([])
   const [localToday, setLocalToday] = React.useState<WorkLogItem[]>([])
+  const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
 
   React.useEffect(() => {
     if (userName) setSelectedStaff(userName)
@@ -101,17 +103,38 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     )
   }
 
-  const addNewToday = () => {
-    setLocalToday((prev) => [
+  const addNewContinue = () => {
+    setLocalContinue((prev) => [
       ...prev,
       {
-        id: "",
+        id: `_temp_${Date.now()}`,
         content: "",
         progress: 0,
-        status: "Today",
+        status: "Continue",
         priority: "",
       },
     ])
+  }
+
+  const toggleSelectContinue = (id: string) => {
+    setSelectedContinueIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const moveSelectedToToday = () => {
+    if (selectedContinueIds.size === 0) return
+    const toMove = localContinue.filter((it) => selectedContinueIds.has(it.id || ""))
+    const toKeep = localContinue.filter((it) => !selectedContinueIds.has(it.id || ""))
+    setLocalContinue(toKeep)
+    setLocalToday((prev) => [
+      ...prev,
+      ...toMove.map((it) => ({ ...it, status: "Today" })),
+    ])
+    setSelectedContinueIds(new Set())
   }
 
   const removeItem = (
@@ -179,7 +202,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const handleDailyClose = async () => {
     if (!selectedStaff) return
-    if (!confirm("업무를 마감하시겠습니까?\n진행 중인 항목은 이월되거나 완료 처리됩니다.")) return
+    if (!confirm("업무를 마감하시겠습니까?\n• 100% 완료 업무 → Finish Work로 이동\n• 미완료 업무 → 다음날 Continue Work로 자동 이월")) return
     setSaving(true)
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
@@ -261,20 +284,21 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          {/* 직렬 배치: Finish → Continue → Today (업무 흐름) */}
           {/* Finish Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div>
             <div className="flex items-center gap-2.5 border-b bg-success/5 px-5 py-3">
               <CheckCircle2 className="h-4 w-4 text-success" />
               <h3 className="text-sm font-bold text-foreground">Finish Work (완료)</h3>
             </div>
-            <div className="max-h-64 overflow-y-auto p-4 space-y-2">
+            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localFinish.length === 0 ? (
                 <p className="text-xs text-muted-foreground">완료된 업무가 없습니다.</p>
               ) : (
                 localFinish.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
-                    <p className="font-medium text-foreground">{it.content || "(내용 없음)"}</p>
+                    <p className="font-medium text-foreground whitespace-pre-wrap">{it.content || "(내용 없음)"}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {it.progress}% · {it.managerComment || ""}
                     </p>
@@ -284,24 +308,49 @@ export function WorklogMy({ userName }: WorklogMyProps) {
             </div>
           </div>
 
+          {/* 연결선 */}
+          <div className="flex justify-center py-1.5 bg-muted/30 border-y">
+            <ArrowRightFromLine className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
+          </div>
+
           {/* Continue Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div>
             <div className="flex items-center gap-2.5 border-b bg-warning/5 px-5 py-3">
               <ArrowRightFromLine className="h-4 w-4 text-warning" />
               <h3 className="text-sm font-bold text-foreground">Continue Work (이월)</h3>
+              <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewContinue} title="업무 추가">
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
             </div>
-            <div className="max-h-64 overflow-y-auto p-4 space-y-2">
+            {selectedContinueIds.size > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-warning/10 border-b">
+                <Button size="sm" className="h-7 text-xs" onClick={moveSelectedToToday}>
+                  <Play className="mr-1 h-3 w-3" />
+                  선택한 업무 오늘 시작하기 ({selectedContinueIds.size})
+                </Button>
+              </div>
+            )}
+            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localContinue.length === 0 ? (
-                <p className="text-xs text-muted-foreground">이월된 업무가 없습니다.</p>
+                <p className="text-xs text-muted-foreground">이월된 업무가 없습니다. + 버튼으로 추가하세요.</p>
               ) : (
                 localContinue.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3">
-                    <Input
-                      value={it.content}
-                      onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
-                      placeholder="업무 내용"
-                      className="mb-2 h-8 text-xs"
-                    />
+                    <div className="flex items-start gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedContinueIds.has(it.id || "")}
+                        onChange={() => toggleSelectContinue(it.id || "")}
+                        className="mt-2.5 h-4 w-4 shrink-0"
+                      />
+                      <Textarea
+                        value={it.content}
+                        onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
+                        placeholder="업무 내용 (엔터로 줄바꿈)"
+                        className="min-h-[60px] text-xs flex-1 resize-y"
+                        rows={2}
+                      />
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="range"
@@ -320,26 +369,29 @@ export function WorklogMy({ userName }: WorklogMyProps) {
             </div>
           </div>
 
+          {/* 연결선 */}
+          <div className="flex justify-center py-1.5 bg-muted/30 border-y">
+            <ArrowRightFromLine className="h-5 w-5 text-muted-foreground rotate-[-90deg]" />
+          </div>
+
           {/* Today Work */}
-          <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+          <div>
             <div className="flex items-center gap-2.5 border-b bg-primary/5 px-5 py-3">
               <Play className="h-4 w-4 text-primary" />
               <h3 className="text-sm font-bold text-foreground">Today Work (오늘 진행)</h3>
-              <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewToday}>
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
             </div>
-            <div className="max-h-64 overflow-y-auto p-4 space-y-2">
+            <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localToday.length === 0 ? (
-                <p className="text-xs text-muted-foreground">새 항목을 추가하세요.</p>
+                <p className="text-xs text-muted-foreground">Continue Work에서 선택 후 &quot;오늘 시작하기&quot;로 가져오세요.</p>
               ) : (
                 localToday.map((it, idx) => (
                   <div key={it.id || `new-${idx}`} className="rounded-lg border bg-background p-3">
-                    <Input
+                    <Textarea
                       value={it.content}
                       onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
-                      placeholder="업무 내용"
-                      className="mb-2 h-8 text-xs"
+                      placeholder="업무 내용 (엔터로 줄바꿈)"
+                      className="mb-2 min-h-[60px] text-xs resize-y"
+                      rows={2}
                     />
                     <div className="flex items-center gap-2">
                       <input

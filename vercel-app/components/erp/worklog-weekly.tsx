@@ -20,13 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { getWorkLogWeekly, getNoticeOptions, type WorkLogWeeklySummary } from "@/lib/api-client"
+import { getWorkLogWeekly, getNoticeOptions, getWorkLogStaffList, type WorkLogWeeklySummary } from "@/lib/api-client"
 
 function getWeekRange(date: Date): { start: string; end: string; label: string } {
   const d = new Date(date)
   const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  const monday = new Date(d.setDate(diff))
+  const monday = new Date(d)
+  monday.setDate(diff)
   const start = monday.toISOString().slice(0, 10)
   const sunday = new Date(monday)
   sunday.setDate(sunday.getDate() + 6)
@@ -36,11 +37,26 @@ function getWeekRange(date: Date): { start: string; end: string; label: string }
   return { start, end, label: `${fmt(monday)} ~ ${fmt(sunday)}` }
 }
 
+function getMonthRange(date: Date): { start: string; end: string; label: string } {
+  const d = new Date(date)
+  const y = d.getFullYear()
+  const m = d.getMonth()
+  const first = new Date(y, m, 1)
+  const last = new Date(y, m + 1, 0)
+  const start = first.toISOString().slice(0, 10)
+  const end = last.toISOString().slice(0, 10)
+  const fmt = `${y}.${String(m + 1).padStart(2, "0")}`
+  return { start, end, label: `${fmt} (${first.getDate()} ~ ${last.getDate()}일)` }
+}
+
 export function WorklogWeekly() {
   const today = new Date()
-  const [weekOffset, setWeekOffset] = React.useState(0)
+  const [periodType, setPeriodType] = React.useState<"week" | "month">("week")
+  const [periodOffset, setPeriodOffset] = React.useState(0)
   const [deptFilter, setDeptFilter] = React.useState("all")
+  const [employeeFilter, setEmployeeFilter] = React.useState("all")
   const [depts, setDepts] = React.useState<string[]>([])
+  const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
   const [data, setData] = React.useState<{
     summaries: WorkLogWeeklySummary[]
     totalTasks: number
@@ -50,23 +66,30 @@ export function WorklogWeekly() {
   } | null>(null)
   const [loading, setLoading] = React.useState(false)
 
-  const week = React.useMemo(() => {
+  const dateRange = React.useMemo(() => {
     const d = new Date(today)
-    d.setDate(d.getDate() + weekOffset * 7)
-    return getWeekRange(d)
-  }, [weekOffset])
+    if (periodType === "week") {
+      d.setDate(d.getDate() + periodOffset * 7)
+      return getWeekRange(d)
+    } else {
+      d.setMonth(d.getMonth() + periodOffset)
+      return getMonthRange(d)
+    }
+  }, [periodType, periodOffset])
 
   React.useEffect(() => {
     getNoticeOptions().then((r) => setDepts(r.roles || []))
+    getWorkLogStaffList().then((r) => setStaffList(r.staff || []))
   }, [])
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
       const res = await getWorkLogWeekly({
-        startStr: week.start,
-        endStr: week.end,
+        startStr: dateRange.start,
+        endStr: dateRange.end,
         dept: deptFilter,
+        employee: employeeFilter,
       })
       setData(res)
     } catch {
@@ -74,7 +97,7 @@ export function WorklogWeekly() {
     } finally {
       setLoading(false)
     }
-  }, [week.start, week.end, deptFilter])
+  }, [dateRange.start, dateRange.end, deptFilter, employeeFilter])
 
   React.useEffect(() => {
     loadData()
@@ -92,27 +115,39 @@ export function WorklogWeekly() {
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-foreground">구간</label>
+            <Select value={periodType} onValueChange={(v) => { setPeriodType(v as "week" | "month"); setPeriodOffset(0) }}>
+              <SelectTrigger className="h-9 w-28 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="week">주간</SelectItem>
+                <SelectItem value="month">월간</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              주간 선택
+              {periodType === "week" ? "주간" : "월간"} 선택
             </label>
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => setWeekOffset((o) => o - 1)}
+                onClick={() => setPeriodOffset((o) => o - 1)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <div className="flex h-9 items-center rounded-md border bg-card px-4 text-xs font-bold">
-                {week.label}
+              <div className="flex h-9 min-w-[180px] items-center justify-center rounded-md border bg-card px-4 text-xs font-bold">
+                {dateRange.label}
               </div>
               <Button
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => setWeekOffset((o) => o + 1)}
+                onClick={() => setPeriodOffset((o) => o + 1)}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -129,6 +164,22 @@ export function WorklogWeekly() {
                 {depts.map((d) => (
                   <SelectItem key={d} value={d}>
                     {d}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-foreground">직원</label>
+            <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+              <SelectTrigger className="h-9 w-36 text-xs">
+                <SelectValue placeholder="전체" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체</SelectItem>
+                {staffList.map((s) => (
+                  <SelectItem key={s.name} value={s.displayName || s.name}>
+                    {s.displayName || s.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -185,7 +236,7 @@ export function WorklogWeekly() {
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center gap-2.5 border-b bg-muted/30 px-6 py-3">
           <BarChart3 className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-bold text-foreground">직원별 주간 실적</h3>
+          <h3 className="text-sm font-bold text-foreground">직원별 {periodType === "week" ? "주간" : "월간"} 실적</h3>
         </div>
         <div className="overflow-x-auto">
           {loading ? (

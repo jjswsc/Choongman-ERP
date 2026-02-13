@@ -525,12 +525,14 @@ export async function getWorkLogWeekly(params: {
   startStr: string
   endStr: string
   dept?: string
+  employee?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
     endStr: params.endStr,
   })
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
+  if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   const res = await fetch(`/api/getWorkLogWeekly?${q}`)
   return res.json() as Promise<{
     summaries: WorkLogWeeklySummary[]

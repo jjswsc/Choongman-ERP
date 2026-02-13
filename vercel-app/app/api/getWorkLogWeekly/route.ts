@@ -18,12 +18,12 @@ export async function GET(req: NextRequest) {
     const startStr = searchParams.get('startStr') || searchParams.get('start') || ''
     const endStr = searchParams.get('endStr') || searchParams.get('end') || ''
     const dept = searchParams.get('dept') || ''
+    const employee = searchParams.get('employee') || ''
 
-    const filter =
+    let fullFilter =
       `log_date=gte.${encodeURIComponent(startStr)}&log_date=lte.${encodeURIComponent(endStr)}`
-    const fullFilter = dept && dept !== 'all'
-      ? filter + `&dept=eq.${encodeURIComponent(dept)}`
-      : filter
+    if (dept && dept !== 'all') fullFilter += `&dept=eq.${encodeURIComponent(dept)}`
+    if (employee && employee !== 'all') fullFilter += `&name=eq.${encodeURIComponent(employee)}`
 
     const rows =
       (await supabaseSelectFilter('work_logs', fullFilter, {

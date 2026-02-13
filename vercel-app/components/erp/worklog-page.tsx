@@ -28,7 +28,7 @@ export function WorklogPage() {
             {t("adminWorkLog")}
           </h1>
           <p className="text-xs text-muted-foreground">
-            업무일지 작성, 승인 및 주간 리포트
+            업무일지 작성, 승인 및 주간/월간 리포트
           </p>
         </div>
       </div>
@@ -55,7 +55,7 @@ export function WorklogPage() {
             className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
             <BarChart3 className="h-4 w-4" />
-            <span className="text-sm font-semibold">주간 리포트</span>
+            <span className="text-sm font-semibold">주간/월간 리포트</span>
           </TabsTrigger>
         </TabsList>
 
