@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -23,6 +23,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const endIso = e + 'T23:59:59.999Z'
+
+    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000 })) as {
+      code?: string
+      name?: string
+      spec?: string
+    }[] | null
+    const itemSpecMap: Record<string, string> = {}
+    for (const row of itemsRows || []) {
+      const code = String(row.code || '').trim()
+      if (code) itemSpecMap[code] = String(row.spec || '').trim()
+    }
+
     let filter =
       `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
     if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체') {
@@ -51,6 +63,10 @@ export async function GET(request: NextRequest) {
       try {
         items = JSON.parse(o.cart_json || '[]')
       } catch {}
+      items = items.map((it) => ({
+        ...it,
+        spec: it.spec || itemSpecMap[it.code || ''] || '',
+      }))
       let receivedIndices: number[] = []
       try {
         if (o.received_indices) receivedIndices = JSON.parse(o.received_indices)

@@ -25,16 +25,21 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getAdminOrders, getAppData, type AdminOrderItem } from "@/lib/api-client"
+import { getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
+
+const HQ_STORES = ["본사", "Office", "오피스", "본점"]
 
 interface OrderItem {
   name: string
   spec: string
   unitPrice: number
   qty: number
-  stock: number
+  hqStock: number
+  storeStock: number
+  hqSafeQty: number
+  storeSafeQty: number
   total: number
   checked: boolean
   code?: string
@@ -52,27 +57,41 @@ interface Order {
   items: OrderItem[]
 }
 
-const statusConfig: Record<OrderStatus, { label: string; bg: string; text: string }> = {
-  Pending: { label: "Pending", bg: "bg-warning/10", text: "text-warning" },
-  Approved: { label: "Approved", bg: "bg-success/10", text: "text-success" },
-  Rejected: { label: "Rejected", bg: "bg-destructive/10", text: "text-destructive" },
-  Hold: { label: "Hold", bg: "bg-muted", text: "text-muted-foreground" },
+const statusConfig: Record<OrderStatus, { labelKey: string; bg: string; text: string }> = {
+  Pending: { labelKey: "orderStatusPending", bg: "bg-warning/10", text: "text-warning" },
+  Approved: { labelKey: "orderStatusApproved", bg: "bg-success/10", text: "text-success" },
+  Rejected: { labelKey: "orderStatusRejected", bg: "bg-destructive/10", text: "text-destructive" },
+  Hold: { labelKey: "orderStatusHold", bg: "bg-muted", text: "text-muted-foreground" },
 }
 
-function mapApiToOrder(api: AdminOrderItem, stockByCode: Record<string, number>): Order {
+function mapApiToOrder(
+  api: AdminOrderItem,
+  hqStock: Record<string, number>,
+  storeStock: Record<string, number>,
+  hqItems: { code: string; safeQty: number }[],
+  storeItems: { code: string; safeQty: number }[]
+): Order {
+  const hqSafeMap: Record<string, number> = {}
+  for (const i of hqItems) hqSafeMap[i.code] = i.safeQty
+  const storeSafeMap: Record<string, number> = {}
+  for (const i of storeItems) storeSafeMap[i.code] = i.safeQty
+
   const items: OrderItem[] = (api.items || []).map((it) => {
     const price = Number(it.price) || 0
     const qty = Number(it.qty) || 0
-    const stock = it.code ? (stockByCode[it.code] ?? 0) : 0
+    const code = it.code || ""
     return {
       name: it.name || "-",
       spec: it.spec || "",
       unitPrice: price,
       qty,
-      stock,
+      hqStock: code ? (hqStock[code] ?? 0) : 0,
+      storeStock: code ? (storeStock[code] ?? 0) : 0,
+      hqSafeQty: hqSafeMap[code] ?? 0,
+      storeSafeQty: storeSafeMap[code] ?? 0,
       total: price * qty,
       checked: true,
-      code: it.code,
+      code,
     }
   })
   const status = (api.status || "Pending") as OrderStatus
@@ -110,6 +129,8 @@ export function OrderApproval() {
   })
   const [statusFilter, setStatusFilter] = React.useState("pending")
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
+  const [submittingId, setSubmittingId] = React.useState<string | null>(null)
 
   const fetchOrders = React.useCallback(async () => {
     setLoading(true)
@@ -123,17 +144,27 @@ export function OrderApproval() {
       setStores(s || [])
 
       const storesInList = [...new Set(list.map((o) => o.store).filter(Boolean))]
-      const stockMap: Record<string, Record<string, number>> = {}
+      const hqStore = HQ_STORES[0]
+      const [{ items: hqItemsArr, stock: hqStockData }] = await Promise.all([
+        getAppData(hqStore),
+      ])
+      const hqStock = hqStockData || {}
+      const hqSafeItems = (hqItemsArr || []).map((i) => ({ code: i.code, safeQty: i.safeQty ?? 0 }))
+
+      const storeDataMap: Record<string, { stock: Record<string, number>; items: { code: string; safeQty: number }[] }> = {}
       await Promise.all(
         storesInList.map(async (store) => {
-          const { stock } = await getAppData(store)
-          stockMap[store] = stock || {}
+          const { items: itms, stock } = await getAppData(store)
+          storeDataMap[store] = {
+            stock: stock || {},
+            items: (itms || []).map((i) => ({ code: i.code, safeQty: i.safeQty ?? 0 })),
+          }
         })
       )
 
       const mapped: Order[] = list.map((o) => {
-        const stockByCode = stockMap[o.store] || {}
-        return mapApiToOrder(o, stockByCode)
+        const data = storeDataMap[o.store] || { stock: {}, items: [] }
+        return mapApiToOrder(o, hqStock, data.stock, hqSafeItems, data.items)
       })
       setOrders(mapped)
       setCheckedOrders(new Set(mapped.map((o) => o.id)))
@@ -174,6 +205,29 @@ export function OrderApproval() {
     setExpandedId(expandedId === id ? null : id)
   }
 
+  const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
+    const idStr = String(orderId)
+    setSubmittingId(idStr)
+    try {
+      const deliveryDate = deliveryDateByOrder[idStr] || ""
+      const res = await processOrderDecision({
+        orderId,
+        decision,
+        deliveryDate: deliveryDate || undefined,
+      })
+      if (!res.success) {
+        alert(res.message || t("orderDecisionFailed"))
+        return
+      }
+      alert(t("orderDecisionSuccess"))
+      setOrders((prev) =>
+        prev.map((o) => (o.orderId === orderId ? { ...o, status: decision } : o))
+      )
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
   const filteredOrders = React.useMemo(() => {
     if (!searchTerm.trim()) return orders
     const q = searchTerm.toLowerCase()
@@ -193,14 +247,14 @@ export function OrderApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <Package className="h-3.5 w-3.5 text-primary" />
-              {t("orderFilterStore") || "매장"}
+              {t("orderFilterStore")}
             </label>
             <Select value={storeFilter} onValueChange={setStoreFilter}>
               <SelectTrigger className="h-9 w-40 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("orderFilterStoreAll") || "전체 매장"}</SelectItem>
+                <SelectItem value="all">{t("orderFilterStoreAll")}</SelectItem>
                 {stores.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
@@ -213,7 +267,7 @@ export function OrderApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              {t("orderFilterPeriod") || "기간"}
+              {t("orderFilterPeriod")}
             </label>
             <div className="flex items-center gap-2">
               <Input
@@ -234,7 +288,7 @@ export function OrderApproval() {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">
-              {t("orderFilterStatus") || "상태"}
+              {t("orderFilterStatus")}
             </label>
             <div className="flex items-center gap-2">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -242,15 +296,15 @@ export function OrderApproval() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">{t("orderStatusPending") || "대기"}</SelectItem>
-                  <SelectItem value="approved">{t("orderStatusApproved") || "승인"}</SelectItem>
-                  <SelectItem value="rejected">{t("orderStatusRejected") || "거절"}</SelectItem>
-                  <SelectItem value="hold">{t("orderStatusHold") || "보류"}</SelectItem>
-                  <SelectItem value="all">{t("orderStatusAll") || "전체"}</SelectItem>
+                  <SelectItem value="pending">{t("orderStatusPending")}</SelectItem>
+                  <SelectItem value="approved">{t("orderStatusApproved")}</SelectItem>
+                  <SelectItem value="rejected">{t("orderStatusRejected")}</SelectItem>
+                  <SelectItem value="hold">{t("orderStatusHold")}</SelectItem>
+                  <SelectItem value="all">{t("orderStatusAll")}</SelectItem>
                 </SelectContent>
               </Select>
               <Input
-                placeholder={t("search") || "검색"}
+                placeholder={t("search")}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="h-9 w-28 text-xs"
@@ -260,7 +314,7 @@ export function OrderApproval() {
 
           <Button size="sm" className="h-9 px-5 text-xs font-bold" onClick={fetchOrders}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            {t("orderBtnSearch") || "조회"}
+            {t("orderBtnSearch")}
           </Button>
         </div>
       </div>
@@ -273,22 +327,22 @@ export function OrderApproval() {
           </div>
           <div />
           <span className="text-[11px] font-bold text-muted-foreground">
-            {t("orderColDate") || "주문 일자"}
+            {t("orderColDate")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
-            {t("orderColDeliveryDate") || "배송 일자"}
+            {t("orderColDeliveryDate")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
-            {t("orderColStore") || "매장"}
+            {t("orderColStore")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
-            {t("orderColSummary") || "요약"}
+            {t("orderColSummary")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground text-right">
-            {t("orderColTotal") || "총액"}
+            {t("orderColTotal")}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground text-center">
-            {t("orderColStatus") || "상태"}
+            {t("orderColStatus")}
           </span>
         </div>
 
@@ -361,7 +415,7 @@ export function OrderApproval() {
                           sCfg.text
                         )}
                       >
-                        {sCfg.label}
+                        {t(sCfg.labelKey)}
                       </span>
                     </div>
                   </div>
@@ -380,10 +434,10 @@ export function OrderApproval() {
                           <div className="flex items-center gap-2 pb-3 pt-1">
                             <Package className="h-3.5 w-3.5 text-primary" />
                             <span className="text-xs font-bold text-foreground">
-                              {t("orderDetailTitle") || "주문 상세 (부가세 포함)"}
+                              {t("orderDetailTitle")}
                             </span>
                             <span className="ml-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
-                              {order.items.length}{t("orderDetailCount") || "건"}
+                              {order.items.length}{t("orderDetailCount")}
                             </span>
                           </div>
 
@@ -394,22 +448,25 @@ export function OrderApproval() {
                                   <tr className="border-b bg-muted/30">
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-10 text-center">V</th>
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground">
-                                      {t("orderItemName") || "품목명"}
+                                      {t("orderItemName")}
                                     </th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-24">
-                                      {t("orderItemSpec") || "규격"}
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20">
+                                      {t("orderItemSpec")}
+                                    </th>
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 text-right">
+                                      {t("orderItemUnitPrice")}
+                                    </th>
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-14 text-center">
+                                      {t("orderItemQty")}
+                                    </th>
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 text-right">
+                                      {t("orderStockHq")}
+                                    </th>
+                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 text-right">
+                                      {order.store} {t("orderItemStock")}
                                     </th>
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-24 text-right">
-                                      {t("orderItemUnitPrice") || "단가(세전)"}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-16 text-center">
-                                      {t("orderItemQty") || "수량"}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-24 text-right">
-                                      {order.store} {t("orderItemStock") || "재고"}
-                                    </th>
-                                    <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-28 text-right">
-                                      {t("orderItemTotal") || "합계(세후)"}
+                                      {t("orderItemTotal")}
                                     </th>
                                   </tr>
                                 </thead>
@@ -432,7 +489,7 @@ export function OrderApproval() {
                                         {item.name}
                                       </td>
                                       <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                                        {item.spec}
+                                        {item.spec || "-"}
                                       </td>
                                       <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-foreground text-right">
                                         {item.unitPrice > 0
@@ -446,16 +503,32 @@ export function OrderApproval() {
                                         <span
                                           className={cn(
                                             "text-xs font-bold tabular-nums",
-                                            item.stock < 0
+                                            item.hqSafeQty > 0
+                                              ? item.hqStock >= item.hqSafeQty
+                                                ? "text-primary"
+                                                : "text-destructive"
+                                              : item.hqStock < 0
                                               ? "text-destructive"
-                                              : item.stock === 0
-                                              ? "text-muted-foreground"
                                               : "text-foreground"
                                           )}
                                         >
-                                          {item.stock === 0
-                                            ? "-"
-                                            : item.stock.toLocaleString()}
+                                          {item.hqStock === 0 ? "-" : item.hqStock.toLocaleString()}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-right">
+                                        <span
+                                          className={cn(
+                                            "text-xs font-bold tabular-nums",
+                                            item.storeSafeQty > 0
+                                              ? item.storeStock >= item.storeSafeQty
+                                                ? "text-primary"
+                                                : "text-destructive"
+                                              : item.storeStock < 0
+                                              ? "text-destructive"
+                                              : "text-foreground"
+                                          )}
+                                        >
+                                          {item.storeStock === 0 ? "-" : item.storeStock.toLocaleString()}
                                         </span>
                                       </td>
                                       <td className="px-3 py-2.5 text-right">
@@ -476,37 +549,47 @@ export function OrderApproval() {
                             <div className="flex items-center gap-2">
                               <Truck className="h-3.5 w-3.5 text-muted-foreground" />
                               <span className="text-xs font-semibold text-foreground">
-                                {t("orderDeliveryDate") || "배송 일자"}
+                                {t("orderDeliveryDate")}
                               </span>
                             </div>
                             <Input
                               type="date"
                               className="h-8 w-40 text-xs"
-                              placeholder="년-월-일"
+                              placeholder={t("orderDeliveryDatePh")}
+                              value={deliveryDateByOrder[order.id] || ""}
+                              onChange={(e) =>
+                                setDeliveryDateByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))
+                              }
                             />
                             <div className="ml-auto flex items-center gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-8 px-4 text-[11px] font-semibold"
+                                disabled={submittingId !== null || order.status !== "Pending"}
+                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Hold", order) }}
                               >
                                 <Pause className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnHold") || "보류"}
+                                {t("orderBtnHold")}
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-8 px-4 text-[11px] font-bold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                disabled={submittingId !== null || order.status !== "Pending"}
+                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Rejected", order) }}
                               >
                                 <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnReject") || "거절"}
+                                {t("orderBtnReject")}
                               </Button>
                               <Button
                                 size="sm"
                                 className="h-8 px-5 text-[11px] font-bold bg-success text-success-foreground hover:bg-success/90"
+                                disabled={submittingId !== null || order.status !== "Pending"}
+                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Approved", order) }}
                               >
                                 <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnApprove") || "승인"}
+                                {t("orderBtnApprove")}
                               </Button>
                             </div>
                           </div>
@@ -522,7 +605,7 @@ export function OrderApproval() {
 
         {!loading && filteredOrders.length === 0 && (
           <div className="py-16 text-center text-sm text-muted-foreground">
-            {t("orderNoData") || "조회된 주문이 없습니다."}
+            {t("orderNoData")}
           </div>
         )}
       </div>

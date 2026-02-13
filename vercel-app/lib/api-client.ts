@@ -62,6 +62,7 @@ export interface AppItem {
   name: string
   spec: string
   price: number
+  cost: number
   taxType: string
   safeQty: number
   image?: string
@@ -81,6 +82,44 @@ export interface StockStatusItem {
   qty: number
   safeQty: number
   store: string
+  price?: number
+  cost?: number
+}
+
+export interface AdjustmentHistoryItem {
+  date: string
+  store: string
+  item: string
+  spec: string
+  diff: number
+  reason: string
+}
+
+export async function saveSafetyStock(params: {
+  store: string
+  code: string
+  qty: number
+}) {
+  const res = await fetch('/api/saveSafetyStock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getAdjustmentHistory(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+    ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
+  })
+  const res = await fetch(`/api/getAdjustmentHistory?${q}`)
+  return res.json() as Promise<AdjustmentHistoryItem[]>
 }
 
 export async function getStockStores() {
@@ -223,6 +262,19 @@ export async function getAdminOrders(params: {
     list: (data.list || []) as AdminOrderItem[],
     stores: (data.stores || []) as string[],
   }
+}
+
+export async function processOrderDecision(params: {
+  orderId: number
+  decision: 'Approved' | 'Rejected' | 'Hold'
+  deliveryDate?: string
+}) {
+  const res = await fetch('/api/processOrderDecision', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function updateOrderDeliveryStatus(params: {

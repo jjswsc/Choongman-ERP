@@ -4,6 +4,8 @@ import * as React from "react"
 import { BarChart3 } from "lucide-react"
 import { StockTable } from "@/components/erp/stock-table"
 import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
+import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -11,6 +13,7 @@ import {
   getStockStores,
   getAppData,
   adjustStock,
+  saveSafetyStock,
   type StockStatusItem,
 } from "@/lib/api-client"
 
@@ -59,6 +62,8 @@ export default function StockPage() {
         qty: stock[i.code] ?? 0,
         safeQty: i.safeQty ?? 0,
         store,
+        price: i.price ?? 0,
+        cost: i.cost ?? i.price ?? 0,
       }))
       setList(mapped)
     } catch {
@@ -79,6 +84,20 @@ export default function StockPage() {
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
     setAdjustOpen(true)
+  }
+
+  const handleSaveSafeQty = async (item: StockStatusItem, newSafeQty: number) => {
+    const res = await saveSafetyStock({
+      store: item.store,
+      code: item.code,
+      qty: newSafeQty,
+    })
+    if (!res.success) {
+      alert(res.message || "저장 실패")
+      return
+    }
+    alert(t("stockSafeSaveSuccess"))
+    fetchStock()
   }
 
   const handleAdjustConfirm = async (diffQty: number, memo?: string) => {
@@ -117,18 +136,30 @@ export default function StockPage() {
           </div>
         </div>
 
-        <StockTable
-          list={list}
-          stores={stores}
-          loading={loading}
-          storeFilter={storeFilter}
-          setStoreFilter={setStoreFilter}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          onSearch={fetchStock}
-          canAdjust={canAdjust}
-          onAdjust={handleAdjust}
-        />
+        <Tabs defaultValue="list" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="list">{t("stockTabList")}</TabsTrigger>
+            <TabsTrigger value="history">{t("stockTabHistory")}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="list">
+            <StockTable
+              list={list}
+              stores={stores}
+              loading={loading}
+              storeFilter={storeFilter}
+              setStoreFilter={setStoreFilter}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              onSearch={fetchStock}
+              canAdjust={canAdjust}
+              onAdjust={handleAdjust}
+              onSaveSafeQty={handleSaveSafeQty}
+            />
+          </TabsContent>
+          <TabsContent value="history">
+            <StockAdjustmentHistory />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <StockAdjustDialog

@@ -7,6 +7,7 @@ export interface AppItem {
   name: string
   spec: string
   price: number
+  cost: number
   taxType: string
   safeQty: number
   image: string
@@ -19,6 +20,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
     name?: string
     spec?: string
     price?: number
+    cost?: number
     tax?: string
     image?: string
   }[] | null
@@ -45,6 +47,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
       name: String(row.name || ''),
       spec: String(row.spec || ''),
       price: Number(row.price) || 0,
+      cost: Number(row.cost) || 0,
       taxType,
       safeQty: safeMap[row.code] || 0,
       image: String(row.image || ''),
