@@ -404,7 +404,7 @@ export function TimesheetTab() {
   }
   const hourStart = minDec <= maxDec ? Math.max(0, Math.floor(minDec)) : 6
   const hourEnd = minDec <= maxDec ? Math.min(24, Math.ceil(maxDec) + 1) : 24
-  const hours = []
+  const hours: number[] = []
   for (let h = hourStart; h < hourEnd; h++) hours.push(h)
 
   const areaOrder: Record<string, number> = { Service: 0, Kitchen: 1, Office: 2 }

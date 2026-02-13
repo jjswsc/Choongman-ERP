@@ -15,6 +15,7 @@ export const i18n = {
     noticeBoard: '공지사항',
     loadingNotices: '공지 불러오는 중...',
     noNotices: '공지사항이 없습니다.',
+    adminNoticeSubjectRequired: '제목을 입력해 주세요.',
     noticeFilterAll: '전체',
     noticeFilterUnread: '미확인',
     noticeFilterRead: '수신확인',
@@ -198,6 +199,7 @@ export const i18n = {
     noticeBoard: 'Notice Board',
     loadingNotices: 'Loading notices...',
     noNotices: 'No notices.',
+    adminNoticeSubjectRequired: 'Please enter a subject.',
     noticeFilterAll: 'All',
     noticeFilterUnread: 'Unread',
     noticeFilterRead: 'Read',
@@ -370,6 +372,7 @@ export const i18n = {
     noticeBoard: 'ประกาศ',
     loadingNotices: 'กำลังโหลดประกาศ...',
     noNotices: 'ไม่มีประกาศ',
+    adminNoticeSubjectRequired: 'กรุณาป้อนหัวข้อ',
     noticeFilterAll: 'ทั้งหมด',
     noticeFilterUnread: 'ยังไม่อ่าน',
     noticeFilterRead: 'อ่านแล้ว',
@@ -503,6 +506,7 @@ export const i18n = {
     noticeBoard: 'ကြေညာချက်',
     loadingNotices: 'ကြေညာချက်ချိတ်ဆောင်နေသည်...',
     noNotices: 'ကြေညာချက်မရှိ',
+    adminNoticeSubjectRequired: 'ခေါင်းစဉ်ထည့်ပါ။',
     noticeFilterAll: 'အားလုံး',
     noticeFilterUnread: 'မဖတ်ရသေး',
     noticeFilterRead: 'ဖတ်ပြီး',
@@ -636,6 +640,7 @@ export const i18n = {
     noticeBoard: 'ປະກາດ',
     loadingNotices: 'ກຳລັງໂຫຼດປະກາດ...',
     noNotices: 'ບໍ່ມີປະກາດ',
+    adminNoticeSubjectRequired: 'ກະລຸນາປ້ອນຫົວຂໍ້',
     noticeFilterAll: 'ທັງໝົດ',
     noticeFilterUnread: 'ຍັງບໍ່ໄດ້ອ່ານ',
     noticeFilterRead: 'ອ່ານແລ້ວ',
@@ -763,8 +768,8 @@ export const i18n = {
 
 export type I18nKeys = keyof typeof i18n.ko
 
-export function useT(lang: string) {
+export function useT(lang: string): (k: string) => string {
   const key = (lang in i18n ? lang : 'ko') as keyof typeof i18n
   const dict = i18n[key] || i18n.ko
-  return (k: I18nKeys) => (dict as Record<I18nKeys, string>)[k] ?? (i18n.ko as Record<I18nKeys, string>)[k] ?? k
+  return (k: string) => (dict as Record<string, string>)[k] ?? (i18n.ko as Record<string, string>)[k] ?? k
 }

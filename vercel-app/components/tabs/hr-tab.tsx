@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
-import { useT } from "@/lib/i18n"
+import { useT, type I18nKeys } from "@/lib/i18n"
 import {
   getTodayAttendanceTypes,
   getAttendanceList,
@@ -28,9 +28,9 @@ const ATT_TYPE_TO_KEY: Record<string, string> = {
   휴식종료: "attResume",
 }
 
-function translateAttType(type: string, t: (k: string) => string): string {
+function translateAttType(type: string, t: (k: I18nKeys) => string): string {
   const key = ATT_TYPE_TO_KEY[type]
-  return key ? t(key) : type
+  return key ? t(key as I18nKeys) : type
 }
 
 const LEAVE_TYPE_TO_KEY: Record<string, string> = {
@@ -49,14 +49,14 @@ const LEAVE_STATUS_TO_KEY: Record<string, string> = {
   Pending: "statusPending",
 }
 
-function translateLeaveType(type: string, t: (k: string) => string): string {
+function translateLeaveType(type: string, t: (k: I18nKeys) => string): string {
   const key = LEAVE_TYPE_TO_KEY[type] || LEAVE_TYPE_TO_KEY[type.trim()]
-  return key ? t(key) : type
+  return key ? t(key as I18nKeys) : type
 }
 
-function translateLeaveStatus(status: string, t: (k: string) => string): string {
+function translateLeaveStatus(status: string, t: (k: I18nKeys) => string): string {
   const key = LEAVE_STATUS_TO_KEY[status] || LEAVE_STATUS_TO_KEY[status.trim()]
-  return key ? t(key) : status
+  return key ? t(key as I18nKeys) : status
 }
 
 export function HrTab() {
