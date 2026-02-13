@@ -917,3 +917,53 @@ export async function deleteVendor(params: { code: string }) {
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
+
+// ─── 입고 관리 (Inbound) ───
+export interface InboundHistoryItem {
+  date: string
+  vendor: string
+  name: string
+  spec: string
+  qty: number
+  amount: number
+}
+
+export async function registerInboundBatch(list: {
+  date?: string
+  vendor: string
+  code: string
+  name?: string
+  spec?: string
+  qty: number | string
+}[]) {
+  const res = await fetch('/api/registerInboundBatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(list),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getInboundHistory(params: {
+  startStr: string
+  endStr: string
+  vendorFilter?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+    ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
+  })
+  const res = await fetch(`/api/getInboundHistory?${q}`)
+  return res.json() as Promise<InboundHistoryItem[]>
+}
+
+export async function getInboundForStore(params: {
+  storeName: string
+  startStr: string
+  endStr: string
+}) {
+  const q = new URLSearchParams(params)
+  const res = await fetch(`/api/getInboundForStore?${q}`)
+  return res.json() as Promise<InboundHistoryItem[]>
+}

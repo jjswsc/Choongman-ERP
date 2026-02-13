@@ -76,6 +76,10 @@ export default function StockPage() {
   }, [storeFilter, stockDateFilter])
 
   React.useEffect(() => {
+    setStockDateFilter(new Date().toISOString().slice(0, 10))
+  }, [])
+
+  React.useEffect(() => {
     fetchStores()
   }, [fetchStores])
 

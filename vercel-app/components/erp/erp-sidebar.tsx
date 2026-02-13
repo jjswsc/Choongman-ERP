@@ -177,8 +177,8 @@ export function ErpSidebar() {
             <SidebarGroup key={section.titleKey}>
               <Collapsible defaultOpen={section.defaultOpen} className="group/collapsible">
                 <SidebarGroupLabel asChild>
-                  <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg border-l-4 border-slate-500 bg-white/5 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground hover:bg-white/10 transition-colors group-data-[collapsible=icon]:px-2">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+                  <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg border-l-4 border-sidebar-primary/60 bg-white/5 px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-sidebar-primary/90 hover:bg-white/10 hover:text-sidebar-primary transition-colors group-data-[collapsible=icon]:px-2">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-sidebar-primary" />
                     <span className="flex-1 text-left">{t(section.titleKey)}</span>
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-180" />
                   </CollapsibleTrigger>
@@ -226,8 +226,8 @@ export function ErpSidebar() {
 
           {/* Settings - 바 형식 */}
           <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center gap-3 rounded-lg border-l-4 border-slate-500 bg-white/5 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-sidebar-foreground group-data-[collapsible=icon]:px-2">
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+            <SidebarGroupLabel className="flex items-center gap-3 rounded-lg border-l-4 border-sidebar-primary/60 bg-white/5 px-3 py-2.5 text-xs font-bold uppercase tracking-wider text-sidebar-primary/90 group-data-[collapsible=icon]:px-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-sidebar-primary" />
               {t("adminSectionSettings")}
             </SidebarGroupLabel>
             <SidebarGroupContent>

@@ -97,33 +97,34 @@ export function StockTable({
 
   const handleExcel = () => {
     const dateStr = stockDateFilter || new Date().toISOString().slice(0, 10)
-    const rows: string[][] = [
-      [t("stockColDate") || "날짜", dateStr],
-      [t("stockFilterStore") || "매장", storeFilter || t("stockFilterStoreAll") || "전체"],
-      [t("stockTotalAmount") || "총 재고금액", totalAmount.toLocaleString()],
-      [],
-      [t("stockColCode"), t("stockColName"), t("stockColSpec"), t("stockColQty"), t("stockColSafeQty"), t("stockColAmount"), t("stockColStatus")],
-      ...filteredList.map((r) => {
-        const cost = r.cost ?? r.price ?? 0
-        const amount = cost * r.qty
-        const isLow = r.safeQty > 0 && r.qty < r.safeQty
-        return [
-          r.code,
-          r.name,
-          r.spec,
-          String(r.qty),
-          r.safeQty > 0 ? String(r.safeQty) : "",
-          amount.toLocaleString(),
-          isLow ? t("stockLow") : "-",
-        ]
-      }),
-    ]
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n")
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })
+    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    const colWidths = [80, 180, 70, 70, 70, 100, 55]
+    const headerCells = [t("stockColCode"), t("stockColName"), t("stockColSpec"), t("stockColQty"), t("stockColSafeQty"), t("stockColAmount"), t("stockColStatus")]
+    let html = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+<tr><td class="head">${escapeXml(t("stockColDate") || "날짜")}</td><td colspan="6">${escapeXml(dateStr)}</td></tr>
+<tr><td class="head">${escapeXml(t("stockFilterStore") || "매장")}</td><td colspan="6">${escapeXml(storeFilter || t("stockFilterStoreAll") || "전체")}</td></tr>
+<tr><td class="head">${escapeXml(t("stockTotalAmount") || "총 재고금액")}</td><td colspan="6">${escapeXml(totalAmount.toLocaleString())}</td></tr>
+<tr></tr>
+<tr class="head">${headerCells.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
+${filteredList.map((r) => {
+  const cost = r.cost ?? r.price ?? 0
+  const amount = cost * r.qty
+  const isLow = r.safeQty > 0 && r.qty < r.safeQty
+  return `<tr><td>${escapeXml(r.code)}</td><td>${escapeXml(r.name)}</td><td>${escapeXml(r.spec)}</td><td>${r.qty}</td><td>${r.safeQty > 0 ? r.safeQty : ""}</td><td>${amount.toLocaleString()}</td><td>${escapeXml(isLow ? t("stockLow") : "-")}</td></tr>`
+}).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `stock_${storeFilter || "all"}_${dateStr}.csv`
+    a.download = `stock_${storeFilter || "all"}_${dateStr}.xls`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -279,7 +280,7 @@ export function StockTable({
                               min={0}
                               value={safeInput}
                               onChange={(e) => setSafeInput(e.target.value)}
-                              className="h-9 w-24 text-sm"
+                              className="h-10 w-28 text-base"
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") handleSaveSafeQty(row)
                                 if (e.key === "Escape") setEditingSafe(null)
@@ -287,7 +288,7 @@ export function StockTable({
                             />
                             <Button
                               size="sm"
-                              className="h-9 px-3 text-xs"
+                              className="h-10 px-4 text-sm"
                               onClick={() => handleSaveSafeQty(row)}
                               disabled={savingSafe}
                             >
@@ -297,7 +298,7 @@ export function StockTable({
                         ) : (
                           <button
                             type="button"
-                            className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
+                            className="text-sm py-1.5 px-2.5 rounded min-w-[2.5rem] text-muted-foreground hover:text-foreground hover:bg-muted/50 underline cursor-pointer transition-colors"
                             onClick={() => {
                               setEditingSafe(key)
                               setSafeInput(String(row.safeQty > 0 ? row.safeQty : ""))

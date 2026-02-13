@@ -47,7 +47,11 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* 인쇄 시 사이드바/헤더 숨김, 재고 테이블만 출력 */
+/* 인쇄 시 사이드바/헤더 숨김, 재고 테이블만 A4에 맞게 출력 */
+@page {
+  size: A4;
+  margin: 12mm;
+}
 @media print {
   [data-slot="sidebar-container"],
   [data-slot="sidebar-gap"],
@@ -60,6 +64,22 @@ body {
   [data-slot="sidebar-inset"] {
     margin-left: 0 !important;
     padding-left: 0 !important;
+  }
+  #stock-print-area {
+    width: 100% !important;
+    max-width: 210mm !important;
+    font-size: 10px !important;
+  }
+  #stock-print-area table {
+    font-size: 9px !important;
+    table-layout: fixed;
+    width: 100%;
+  }
+  #stock-print-area th,
+  #stock-print-area td {
+    padding: 2px 4px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
