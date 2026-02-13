@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CHOONGMAN ERP",
   description: "CHOONGMAN ERP Manager - Enterprise Resource Planning System",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-512.png",
+  },
 }
 
 export const viewport: Viewport = {
