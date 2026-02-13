@@ -31,10 +31,10 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-card/80 px-4 py-3 backdrop-blur-md">
       <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-          <span className="text-xs font-bold text-primary-foreground">CM</span>
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500">
+          <span className="text-xs font-bold text-white">CM</span>
         </div>
-        <span className="text-lg font-bold text-primary">충만치킨</span>
+        <span className="text-lg font-bold text-orange-500">충만치킨</span>
       </div>
       <div className="flex items-center gap-2">
         <Link

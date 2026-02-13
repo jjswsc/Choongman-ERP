@@ -88,15 +88,15 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
     --radius: 0.5rem;
-    /* sidebar - 검정 바탕, 실무적 회색/흰색 */
+    /* sidebar - 검정 바탕, 오렌지 액센트 */
     --sidebar-background: 0 0% 3%;
     --sidebar-foreground: 0 0% 92%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 24 95% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 12%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 14%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 24 95% 53%;
     --success: 152 60% 42%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
@@ -115,11 +115,30 @@ body {
   }
 }
 
-/* 사이드바 검정 배경 강제 */
+/* 사이드바 검정 배경 + 흰색 글씨 */
 .sidebar-dark,
 .sidebar-dark [data-sidebar="sidebar"],
 .sidebar-dark .bg-sidebar {
   background-color: #0a0a0a !important;
+}
+.sidebar-dark .text-sidebar-foreground,
+.sidebar-dark [data-sidebar="group-label"],
+.sidebar-dark [data-slot="sidebar-group-label"],
+.sidebar-dark span,
+.sidebar-dark [data-slot="sidebar-menu-button"] {
+  color: #ffffff !important;
+}
+.sidebar-dark a,
+.sidebar-dark a span {
+  color: #ffffff !important;
+}
+.sidebar-dark svg {
+  color: #ffffff !important;
+}
+.sidebar-dark [data-slot="sidebar-menu-button"].text-destructive,
+.sidebar-dark [data-slot="sidebar-menu-button"].text-destructive span,
+.sidebar-dark .text-destructive {
+  color: hsl(0 72% 51%) !important;
 }
 
 /* ============================================
