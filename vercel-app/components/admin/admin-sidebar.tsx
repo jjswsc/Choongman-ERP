@@ -38,13 +38,13 @@ export function AdminSidebar() {
   const { logout } = useAuth()
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-slate-700/50 bg-slate-900">
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r-2 border-primary/20 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 shadow-xl shadow-primary/5">
       {/* Logo / Title */}
-      <div className="flex h-14 items-center gap-2 border-b border-slate-700/50 px-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-          <span className="text-xs font-bold text-primary-foreground">CM</span>
+      <div className="flex h-14 items-center gap-2.5 border-b border-primary/30 bg-primary/5 px-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/40">
+          <span className="text-sm font-bold text-primary-foreground">CM</span>
         </div>
-        <span className="truncate font-semibold text-white">충만치킨 ERP</span>
+        <span className="truncate font-bold text-white drop-shadow-sm">충만치킨 ERP</span>
       </div>
 
       {/* Menu */}
@@ -54,9 +54,13 @@ export function AdminSidebar() {
             return (
               <div
                 key={i}
-                className="mb-1 mt-4 px-4 text-xs font-medium uppercase tracking-wider text-slate-500 first:mt-0"
+                className="mb-1 mt-4 flex items-center gap-2 px-4 first:mt-0"
               >
-                {item.header}
+                <span className="h-px flex-1 bg-primary/30" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-primary/90">
+                  {item.header}
+                </span>
+                <span className="h-px flex-1 bg-primary/30" />
               </div>
             )
           }
@@ -66,10 +70,10 @@ export function AdminSidebar() {
               key={i}
               href={item.href}
               className={cn(
-                "block px-4 py-2.5 text-sm transition-colors",
+                "mx-2 block rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                 isActive
-                  ? "border-l-2 border-primary bg-slate-800/80 text-primary"
-                  : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                  ? "border-l-4 border-primary bg-primary/15 text-primary shadow-inner"
+                  : "border-l-4 border-transparent text-slate-400 hover:bg-primary/5 hover:text-primary hover:border-primary/30"
               )}
             >
               {item.label}
@@ -79,11 +83,11 @@ export function AdminSidebar() {
       </nav>
 
       {/* Bottom */}
-      <div className="border-t border-slate-700/50 p-4">
+      <div className="border-t border-primary/20 bg-slate-950/80 p-4">
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+          className="w-full justify-start gap-2 rounded-lg text-slate-400 hover:bg-primary/10 hover:text-primary"
           onClick={logout}
         >
           <LogOut className="h-4 w-4" />

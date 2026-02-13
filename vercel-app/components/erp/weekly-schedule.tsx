@@ -232,76 +232,82 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         </div>
       ) : (
         <>
-          {/* 요일 헤더 - 시간표와 같은 8열 그리드로 정렬 */}
-          <div className="px-4 pt-3 pb-2">
-            <div className="grid grid-cols-8 gap-1">
-              <div className="min-w-0" />
-              {dayLabels.map((day, i) => (
-                <div key={day} className="flex flex-col items-center gap-0.5 min-w-0">
-                  <span
-                    className={cn(
-                      "text-[10px] font-bold",
-                      i === 5 ? "text-[hsl(215,80%,50%)]" : i === 6 ? "text-[hsl(0,72%,51%)]" : "text-muted-foreground"
-                    )}
-                  >
-                    {day}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground/70 tabular-nums">{daysFull[i]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
+          <div className="overflow-x-auto overscroll-x-contain px-4 pb-4">
+            <div className="min-w-max">
+              {/* 요일 헤더 */}
+              <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
+                <div className="shrink-0" />
+                {dayLabels.map((day, i) => (
+                  <div key={day} className="flex flex-col items-center gap-0.5 shrink-0 min-w-[72px]">
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold",
+                        i === 5 ? "text-[hsl(215,80%,50%)]" : i === 6 ? "text-[hsl(0,72%,51%)]" : "text-muted-foreground"
+                      )}
+                    >
+                      {day}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground/70 tabular-nums">{daysFull[i]}</span>
+                  </div>
+                ))}
+              </div>
 
-          {/* 이름+부서 | 시간표 2줄 - 8열 그리드 */}
-          <div className="flex flex-col gap-2 px-4 pt-0 pb-4">
-            {persons.map((p) => {
-              const key = `${p.store}|${p.name}`
-              const isCollapsed = collapsedRows.has(key)
-              return (
-                <div key={key} className="overflow-hidden rounded-xl border bg-card">
-                  <button
-                    type="button"
-                    onClick={() => toggleRow(key)}
-                    className="grid grid-cols-8 gap-1 w-full items-stretch px-3 py-2 text-left active:bg-muted/30 transition-colors"
-                  >
-                    {/* 이름 + 부서 */}
-                    <div className="flex flex-col items-start justify-center min-w-0">
-                      <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
-                      <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
-                        {areaLabel(p.area)}
-                      </span>
-                    </div>
-                    {/* 시간표 7열 - 2줄 */}
-                    {p.workDays.map((workStr, dayIdx) => (
-                      <div key={dayIdx} className="flex items-center justify-center min-w-0">
-                        {workStr ? (
-                          isCollapsed ? (
-                            <div className="h-[36px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10">
-                              <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
-                            </div>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center gap-0.5 rounded-lg bg-[hsl(215,80%,50%)]/10 px-1 py-1.5 w-full min-h-[36px] min-w-0">
-                              <span className="text-[10px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-tight text-center break-all">
-                                {workStr}
-                              </span>
-                              {p.breakDays[dayIdx] && (
-                                <span className="text-[9px] text-muted-foreground leading-tight text-center break-all">
-                                  R {p.breakDays[dayIdx].split("-")[0]}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        ) : (
-                          <div className="h-[36px] w-full rounded-md flex items-center justify-center bg-muted/50">
-                            <span className="text-[10px] font-medium text-muted-foreground">{t("scheduleOff")}</span>
+              {/* 이름+부서 | 시간표 - 근무시간/쉬는시간 각각 한 줄 */}
+              <div className="flex flex-col gap-2">
+                {persons.map((p) => {
+                  const key = `${p.store}|${p.name}`
+                  const isCollapsed = collapsedRows.has(key)
+                  return (
+                    <div key={key} className="rounded-xl border bg-card overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleRow(key)}
+                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors"
+                        style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
+                      >
+                        {/* 이름 + 부서 */}
+                        <div className="flex flex-col items-start justify-center shrink-0 min-w-[72px]">
+                          <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
+                          <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
+                            {areaLabel(p.area)}
+                          </span>
+                        </div>
+                        {/* 시간표 7열 - 근무 1줄, 쉬는 1줄 */}
+                        {p.workDays.map((workStr, dayIdx) => (
+                          <div key={dayIdx} className="flex flex-col items-center justify-center shrink-0 min-w-[72px]">
+                            {workStr ? (
+                              isCollapsed ? (
+                                <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10">
+                                  <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[hsl(215,80%,50%)]/10 px-2 py-2 w-full min-h-[44px]">
+                                  <span className="text-[12px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-tight whitespace-nowrap">
+                                    {workStr}
+                                  </span>
+                                  {p.breakDays[dayIdx] ? (
+                                    <span className="text-[11px] text-muted-foreground leading-tight whitespace-nowrap">
+                                      R {p.breakDays[dayIdx]}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] text-muted-foreground/50 leading-tight">-</span>
+                                  )}
+                                </div>
+                              )
+                            ) : (
+                              <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-muted/50">
+                                <span className="text-[11px] font-medium text-muted-foreground">{t("scheduleOff")}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </button>
-                </div>
-              )
-            })}
+                        ))}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </>
       )}

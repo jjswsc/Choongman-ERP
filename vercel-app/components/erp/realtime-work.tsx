@@ -243,8 +243,8 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </Button>
       </div>
 
-      {/* 서비스 | 이름 | 시간대 일렬 */}
-      <div className="flex flex-col gap-2 px-4 pb-4">
+      {/* 시간 상단 + 가로 스크롤 */}
+      <div className="px-4 pb-4">
         {loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
         ) : filteredSchedule.length === 0 ? (
@@ -253,77 +253,95 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
             <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
           </div>
         ) : (
-          personKeys.map((key) => {
-            const p = byPerson[key]
-            const att = attByKey[key]
-            const inDec = parseTimeToDecimal(p.pIn)
-            const outDec = parseTimeToDecimal(p.pOut)
-            const bsDec = parseTimeToDecimal(p.pBS)
-            const beDec = parseTimeToDecimal(p.pBE)
-            const hasProblem = !att
-              ? true
-              : (att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status))
-            const rowBg = hasProblem ? "bg-red-50 dark:bg-red-950/20" : "bg-card"
-
-            return (
-              <div
-                key={key}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl border p-2.5 min-w-0",
-                  rowBg
-                )}
-              >
-                {/* 서비스 */}
-                <span
-                  className={cn(
-                    "shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold leading-none",
-                    zoneStyle[p.area] || "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {areaLabel(p.area)}
-                </span>
-                {/* 이름 */}
-                <span className="shrink-0 min-w-[48px] text-[13px] font-bold text-card-foreground truncate">
-                  {p.name}
-                </span>
-                {/* 시간대 - 반원(30분) 슬롯 */}
-                <div className="flex flex-1 min-w-0 overflow-x-auto gap-0.5 items-center">
-                  {hours.map((h) => {
-                    const h0 = h,
-                      h05 = h + 0.5,
-                      h1 = h + 1
-                    const breakFirst = bsDec != null && beDec != null && bsDec < h05 && beDec > h0
-                    const breakSecond = bsDec != null && beDec != null && bsDec < h1 && beDec > h05
-                    const workFirst = inDec != null && outDec != null && inDec < h05 && outDec > h0 && !breakFirst
-                    const workSecond = inDec != null && outDec != null && inDec < h1 && outDec > h05 && !breakSecond
-                    const fullBreak = breakFirst && breakSecond
-                    const fullWork = workFirst && workSecond
-                    const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
-
-                    return (
-                      <div key={h} className="flex flex-col items-center gap-0.5 shrink-0">
-                        {inAny ? (
-                          <ScheduleCellMark
-                            fullBreak={fullBreak}
-                            fullWork={fullWork}
-                            breakFirst={breakFirst}
-                            breakSecond={breakSecond}
-                            workFirst={workFirst}
-                            workSecond={workSecond}
-                          />
-                        ) : (
-                          <div className="h-[14px] w-[14px] flex items-center justify-center shrink-0">
-                            <div className="h-[3px] w-[8px] rounded-full bg-border" />
-                          </div>
-                        )}
-                        <span className="text-[9px] font-medium tabular-nums text-muted-foreground">{h}</span>
-                      </div>
-                    )
-                  })}
+          <div className="overflow-x-auto overscroll-x-contain">
+            <div className="min-w-max">
+              {/* 시간 기준 - 상단 고정 */}
+              <div className="flex items-center gap-2 rounded-t-xl border border-b-0 bg-muted/30 px-2 py-2">
+                <div className="w-[68px] shrink-0" />
+                <div className="flex gap-0.5 shrink-0">
+                  {hours.map((h) => (
+                    <div key={h} className="flex flex-col items-center justify-center w-[14px] shrink-0">
+                      <span className="text-[9px] font-bold tabular-nums text-muted-foreground">{h}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )
-          })
+              {/* 직원별 행 */}
+              {personKeys.map((key) => {
+                const p = byPerson[key]
+                const att = attByKey[key]
+                const inDec = parseTimeToDecimal(p.pIn)
+                const outDec = parseTimeToDecimal(p.pOut)
+                const bsDec = parseTimeToDecimal(p.pBS)
+                const beDec = parseTimeToDecimal(p.pBE)
+                const hasProblem = !att
+                  ? true
+                  : (att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status))
+                const rowBg = hasProblem ? "bg-red-50 dark:bg-red-950/20" : "bg-card"
+
+                return (
+                  <div
+                    key={key}
+                    className={cn(
+                      "flex items-center gap-2 rounded-none border border-b last:rounded-b-xl p-2 min-w-0",
+                      rowBg
+                    )}
+                  >
+                    {/* 서비스 + 이름 */}
+                    <div className="flex items-center gap-1.5 shrink-0 min-w-[68px]">
+                      {showArea && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none shrink-0",
+                            zoneStyle[p.area] || "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {areaLabel(p.area)}
+                        </span>
+                      )}
+                      <span className="text-[13px] font-bold text-card-foreground truncate">
+                        {p.name}
+                      </span>
+                    </div>
+                    {/* 시간대 슬롯 - 가로 스크롤 */}
+                    <div className="flex gap-0.5 shrink-0">
+                      {hours.map((h) => {
+                        const h0 = h,
+                          h05 = h + 0.5,
+                          h1 = h + 1
+                        const breakFirst = bsDec != null && beDec != null && bsDec < h05 && beDec > h0
+                        const breakSecond = bsDec != null && beDec != null && bsDec < h1 && beDec > h05
+                        const workFirst = inDec != null && outDec != null && inDec < h05 && outDec > h0 && !breakFirst
+                        const workSecond = inDec != null && outDec != null && inDec < h1 && outDec > h05 && !breakSecond
+                        const fullBreak = breakFirst && breakSecond
+                        const fullWork = workFirst && workSecond
+                        const inAny = fullBreak || fullWork || breakFirst || breakSecond || workFirst || workSecond
+
+                        return (
+                          <div key={h} className="flex flex-col items-center justify-center shrink-0 w-[14px]">
+                            {inAny ? (
+                              <ScheduleCellMark
+                                fullBreak={fullBreak}
+                                fullWork={fullWork}
+                                breakFirst={breakFirst}
+                                breakSecond={breakSecond}
+                                workFirst={workFirst}
+                                workSecond={workSecond}
+                              />
+                            ) : (
+                              <div className="h-[14px] w-[14px] flex items-center justify-center shrink-0">
+                                <div className="h-[3px] w-[8px] rounded-full bg-border" />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
       </div>
 

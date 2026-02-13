@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { getWorkLogWeekly, getWorkLogOfficeOptions, type WorkLogWeeklySummary } from "@/lib/api-client"
 
 function getWeekRange(date: Date): { start: string; end: string; label: string } {
@@ -50,6 +52,8 @@ function getMonthRange(date: Date): { start: string; end: string; label: string 
 }
 
 export function WorklogWeekly() {
+  const { lang } = useLang()
+  const t = useT(lang)
   const today = new Date()
   const [periodType, setPeriodType] = React.useState<"week" | "month">("week")
   const [periodOffset, setPeriodOffset] = React.useState(0)
@@ -117,21 +121,21 @@ export function WorklogWeekly() {
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">구간</label>
+            <label className="text-xs font-semibold text-foreground">{t("workLogPeriodType")}</label>
             <Select value={periodType} onValueChange={(v) => { setPeriodType(v as "week" | "month"); setPeriodOffset(0) }}>
               <SelectTrigger className="h-9 w-28 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="week">주간</SelectItem>
-                <SelectItem value="month">월간</SelectItem>
+                <SelectItem value="week">{t("workLogWeek")}</SelectItem>
+                <SelectItem value="month">{t("workLogMonth")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              {periodType === "week" ? "주간" : "월간"} 선택
+              {periodType === "week" ? t("workLogWeek") : t("workLogMonth")} {t("workLogPeriodSelect")}
             </label>
             <div className="flex items-center gap-2">
               <Button
@@ -156,13 +160,13 @@ export function WorklogWeekly() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">부서</label>
+            <label className="text-xs font-semibold text-foreground">{t("workLogDept")}</label>
             <Select value={deptFilter} onValueChange={setDeptFilter}>
               <SelectTrigger className="h-9 w-36 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
                 {depts.map((d) => (
                   <SelectItem key={d} value={d}>
                     {d}
@@ -172,13 +176,13 @@ export function WorklogWeekly() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">직원</label>
+            <label className="text-xs font-semibold text-foreground">{t("workLogEmployee")}</label>
             <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
               <SelectTrigger className="h-9 w-36 text-xs">
-                <SelectValue placeholder="전체" />
+                <SelectValue placeholder={t("all")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
                 {staffList.map((s) => (
                   <SelectItem key={s.name} value={s.displayName || s.name}>
                     {s.displayName || s.name}
@@ -189,7 +193,7 @@ export function WorklogWeekly() {
           </div>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            조회
+            {t("workLogSearch")}
           </Button>
         </div>
       </div>
@@ -201,7 +205,7 @@ export function WorklogWeekly() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
               <BarChart3 className="h-4 w-4 text-primary" />
             </div>
-            <span className="text-xs font-semibold text-muted-foreground">총 업무</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("workLogTotalTasks")}</span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums text-foreground">{totalTasks}</p>
         </div>
@@ -210,7 +214,7 @@ export function WorklogWeekly() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-success/10">
               <CheckCircle2 className="h-4 w-4 text-success" />
             </div>
-            <span className="text-xs font-semibold text-muted-foreground">완료</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("workLogCompleted")}</span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums text-success">{totalCompleted}</p>
         </div>
@@ -219,7 +223,7 @@ export function WorklogWeekly() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
               <ArrowRightFromLine className="h-4 w-4 text-warning" />
             </div>
-            <span className="text-xs font-semibold text-muted-foreground">이월</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("workLogCarried")}</span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums text-warning">{totalCarried}</p>
         </div>
@@ -228,7 +232,7 @@ export function WorklogWeekly() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </div>
-            <span className="text-xs font-semibold text-muted-foreground">평균 진행률</span>
+            <span className="text-xs font-semibold text-muted-foreground">{t("workLogAvgProgress")}</span>
           </div>
           <p className="text-2xl font-extrabold tabular-nums text-foreground">{overallAvg}%</p>
         </div>
@@ -238,7 +242,7 @@ export function WorklogWeekly() {
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center gap-2.5 border-b bg-muted/30 px-6 py-3">
           <BarChart3 className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-bold text-foreground">직원별 {periodType === "week" ? "주간" : "월간"} 실적</h3>
+          <h3 className="text-sm font-bold text-foreground">{t("workLogColEmployee")} {periodType === "week" ? t("workLogWeek") : t("workLogMonth")} {t("workLogWeeklyTitle")}</h3>
         </div>
         <div className="overflow-x-auto">
           {loading ? (
@@ -247,19 +251,19 @@ export function WorklogWeekly() {
             </div>
           ) : weeklyData.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              조회된 데이터가 없습니다.
+              {t("workLogNoWeeklyData")}
             </div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b bg-muted/20">
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">직원</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">직급</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">총 업무</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">완료</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">이월</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">진행중</th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-48">평균 진행률</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">{t("workLogColEmployee")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground">{t("workLogColRole")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogTotalTasks")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogCompleted")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogCarried")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogInProgress")}</th>
+                  <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-48">{t("workLogAvgProgress")}</th>
                 </tr>
               </thead>
               <tbody>

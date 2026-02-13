@@ -28,7 +28,7 @@ export function WorklogPage() {
             {t("adminWorkLog")}
           </h1>
           <p className="text-xs text-muted-foreground">
-            업무일지 작성, 승인 및 주간/월간 리포트
+            {t("workLogSubtitle")}
           </p>
         </div>
       </div>
@@ -41,21 +41,21 @@ export function WorklogPage() {
             className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
             <User className="h-4 w-4" />
-            <span className="text-sm font-semibold">내 업무일지</span>
+            <span className="text-sm font-semibold">{t("workLogTabMy")}</span>
           </TabsTrigger>
           <TabsTrigger
             value="approval"
             className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
             <ShieldCheck className="h-4 w-4" />
-            <span className="text-sm font-semibold">관리자 승인</span>
+            <span className="text-sm font-semibold">{t("workLogTabApproval")}</span>
           </TabsTrigger>
           <TabsTrigger
             value="weekly"
             className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
           >
             <BarChart3 className="h-4 w-4" />
-            <span className="text-sm font-semibold">주간/월간 리포트</span>
+            <span className="text-sm font-semibold">{t("workLogTabWeekly")}</span>
           </TabsTrigger>
         </TabsList>
 
@@ -64,7 +64,7 @@ export function WorklogPage() {
             <WorklogMy userName={auth.user} />
           ) : (
             <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
-              로그인이 필요합니다.
+              {t("workLogLoginRequired")}
             </div>
           )}
         </TabsContent>

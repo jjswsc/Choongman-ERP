@@ -117,7 +117,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     return () => { cancelled = true }
   }, [contentsToTranslate.join("\u241E"), lang])
 
-  const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || "(내용 없음)"
+  const getTransContent = (content: string) => (content?.trim() && contentTransMap[content.trim()]) || content || t("workLogNoContent")
 
   const updateProgress = (
     list: WorkLogItem[],
@@ -227,10 +227,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       if (res.success) {
         loadData()
       } else {
-        alert(res.message || "저장 실패")
+        alert(res.message || t("workLogSaveFail"))
       }
     } catch (e) {
-      alert("저장 중 오류 발생")
+      alert(t("workLogSaveError"))
     } finally {
       setSaving(false)
     }
@@ -238,7 +238,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const handleDailyClose = async () => {
     if (!selectedStaff) return
-    if (!confirm("업무를 마감하시겠습니까?\n• 100% 완료 업무 → Finish Work로 이동\n• 미완료 업무 → 다음날 Continue Work로 자동 이월")) return
+        if (!confirm(t("workLogDailyCloseConfirm"))) return
     setSaving(true)
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
@@ -249,12 +249,12 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       })
       if (res.success) {
         loadData()
-        alert(res.message || "마감 완료!")
+        alert(res.message || t("workLogCloseDone"))
       } else {
-        alert(res.message || "마감 실패")
+        alert(res.message || t("workLogCloseFail"))
       }
     } catch (e) {
-      alert("마감 중 오류 발생")
+      alert(t("workLogCloseError"))
     } finally {
       setSaving(false)
     }
@@ -268,7 +268,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              날짜
+              {t("workLogDate")}
             </label>
             <Input
               type="date"
@@ -280,7 +280,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <User className="h-3.5 w-3.5 text-primary" />
-              직원
+              {t("workLogEmployee")}
             </label>
             <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-xs font-medium">
               {staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)?.displayName || selectedStaff || userName}
@@ -288,15 +288,15 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           </div>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            조회
+            {t("workLogSearch")}
           </Button>
           <Button size="sm" variant="outline" className="h-9 px-4 text-xs font-semibold" onClick={handleSaveProgress} disabled={saving}>
             <Save className="mr-1.5 h-3.5 w-3.5" />
-            진행상황 저장
+            {t("workLogSaveProgress")}
           </Button>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleDailyClose} disabled={saving}>
             <LogOut className="mr-1.5 h-3.5 w-3.5" />
-            업무 끝내기
+            {t("workLogDailyClose")}
           </Button>
         </div>
       </div>
@@ -312,11 +312,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-success/5 px-5 py-3">
               <CheckCircle2 className="h-4 w-4 text-success" />
-              <h3 className="text-sm font-bold text-foreground">Finish Work</h3>
+              <h3 className="text-sm font-bold text-foreground">{t("workLogFinishWork")}</h3>
             </div>
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localFinish.length === 0 ? (
-                <p className="text-xs text-muted-foreground">완료된 업무가 없습니다.</p>
+                <p className="text-xs text-muted-foreground">{t("workLogNoFinish")}</p>
               ) : (
                 localFinish.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
@@ -334,8 +334,8 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-warning/5 px-5 py-3">
               <ArrowRightFromLine className="h-4 w-4 text-warning" />
-              <h3 className="text-sm font-bold text-foreground">Continue Work</h3>
-              <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewContinue} title="업무 추가">
+              <h3 className="text-sm font-bold text-foreground">{t("workLogContinueWork")}</h3>
+              <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={addNewContinue} title={t("workLogAddTask")}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -349,7 +349,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
             )}
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localContinue.length === 0 ? (
-                <p className="text-xs text-muted-foreground">이월된 업무가 없습니다. + 버튼으로 추가하세요.</p>
+                <p className="text-xs text-muted-foreground">{t("workLogNoContinue")}</p>
               ) : (
                 localContinue.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3">
@@ -363,12 +363,12 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                       <Textarea
                         value={it.content}
                         onChange={(e) => updateContent(setLocalContinue, it.id, e.target.value)}
-                        placeholder="업무 내용 (엔터로 줄바꿈)"
+                        placeholder={t("workLogTaskPlaceholder")}
                         className="min-h-[36px] text-xs flex-1 resize-y"
                         rows={1}
                       />
                     </div>
-                    <p className="text-xs font-bold text-muted-foreground">0% (Today Work에서 조정)</p>
+                    <p className="text-xs font-bold text-muted-foreground">{t("workLogProgressHint")}</p>
                     <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment || "")}</p>
                   </div>
                 ))
@@ -380,11 +380,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
           <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
             <div className="flex items-center gap-2.5 border-b bg-primary/5 px-5 py-3">
               <Play className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-bold text-foreground">Today Work</h3>
+              <h3 className="text-sm font-bold text-foreground">{t("workLogTodayWork")}</h3>
             </div>
             <div className="min-h-[80px] max-h-64 overflow-y-auto p-4 space-y-2">
               {localToday.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Continue Work에서 선택 후 &quot;오늘 시작하기&quot;로 가져오세요.</p>
+                <p className="text-xs text-muted-foreground">{t("workLogNoToday")}</p>
               ) : (
                 localToday.map((it, idx) => (
                   <div key={it.id || `new-${idx}`} className="rounded-lg border bg-background p-3">

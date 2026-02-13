@@ -1,19 +1,13 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
-/** 업무일지용 - 오피스 소속 전 부서·전 직원 (store 비어있거나 본사/오피스인 경우 + job 기준) */
-const OFFICE_STORES = ['', '본사', '오피스', 'office', 'hq', 'headquarters']
-const OFFICE_JOBS = [
-  'director', 'officer', 'ceo', 'hr', 'office', 'manager', 'admin', 'marketing', 'accounting',
-  '이사', '임원', '인사', '오피스', '매니저', '관리자', '직원', 'staff', 'assistant',
-]
+/** 업무일지용 - 오피스 소속 부서·직원만 (store 비었거나 본사/오피스인 경우, 매장명 있으면 제외) */
+const OFFICE_STORE_PATTERNS = ['본사', '오피스', 'office', 'hq', 'headquarters', '본점']
 
-function isOfficeStaff(store: string, job: string): boolean {
-  const s = String(store || '').toLowerCase().trim()
-  const j = String(job || '').toLowerCase().trim()
-  const storeOffice = !s || OFFICE_STORES.some((o) => s.includes(o))
-  const jobOffice = !j || OFFICE_JOBS.some((o) => j.includes(o) || o.includes(j))
-  return storeOffice || jobOffice
+function isOfficeStaff(store: string): boolean {
+  const s = String(store || '').trim().toLowerCase()
+  if (!s || s === '-' || s === 'null') return true
+  return OFFICE_STORE_PATTERNS.some((o) => s.includes(o.toLowerCase()))
 }
 
 export async function GET() {
@@ -23,8 +17,8 @@ export async function GET() {
   try {
     const list = (await supabaseSelect('employees', { order: 'name.asc' })) || []
     const all = list as { name?: string; nick?: string; job?: string; store?: string }[]
-    const officeOnly = all.filter((e) => isOfficeStaff(e.store || '', e.job || ''))
-    const useList = officeOnly.length > 0 ? officeOnly : all
+    const officeOnly = all.filter((e) => isOfficeStaff(e.store || ''))
+    const useList = officeOnly
     const staff = useList.map((e) => {
       const n = String(e.name || '').trim()
       const nick = String(e.nick || '').trim()

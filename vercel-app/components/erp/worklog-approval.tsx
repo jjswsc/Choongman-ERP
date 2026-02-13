@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
@@ -44,6 +45,7 @@ function todayStr() {
 export function WorklogApproval() {
   const { auth } = useAuth()
   const { lang } = useLang()
+  const t = useT(lang)
   const canReject = (auth?.role || "").toLowerCase() === "director"
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [startStr, setStartStr] = React.useState(defaultStartStr)
@@ -103,22 +105,28 @@ export function WorklogApproval() {
   }, [list, lang])
 
   const getTransContent = (content: string) => (content && contentTransMap[content]) || content || "-"
+  const getTransStatus = (status: string) => {
+    if (status === "승인") return t("statusApproved")
+    if (status === "반려") return t("statusRejected")
+    if (status === "대기") return t("statusPending")
+    return status
+  }
 
   const handleApprove = async (id: string) => {
     setUpdating(id)
     try {
       const res = await updateWorkLogManagerCheck({ id, status: "승인" })
       if (res.success) loadData()
-      else alert(res.message || "승인 실패")
+      else alert(res.message || t("workLogApproveFail"))
     } catch {
-      alert("처리 중 오류 발생")
+      alert(t("workLogProcessError"))
     } finally {
       setUpdating(null)
     }
   }
 
   const handleReject = async (id: string) => {
-    const comment = prompt("반려 사유를 입력하세요 (선택)")
+    const comment = prompt(t("workLogRejectPrompt"))
     setUpdating(id)
     try {
       const res = await updateWorkLogManagerCheck({
@@ -127,9 +135,9 @@ export function WorklogApproval() {
         comment: comment || undefined,
       })
       if (res.success) loadData()
-      else alert(res.message || "반려 처리 실패")
+      else alert(res.message || t("workLogRejectFail"))
     } catch {
-      alert("처리 중 오류 발생")
+      alert(t("workLogProcessError"))
     } finally {
       setUpdating(null)
     }
@@ -156,7 +164,7 @@ export function WorklogApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-              기간
+              {t("workLogPeriod")}
             </label>
             <div className="flex items-center gap-2">
               <Input
@@ -177,14 +185,14 @@ export function WorklogApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <Building2 className="h-3.5 w-3.5 text-primary" />
-              부서
+              {t("workLogDept")}
             </label>
             <Select value={deptFilter} onValueChange={setDeptFilter}>
               <SelectTrigger className="h-9 w-32 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
                 {depts.map((d) => (
                   <SelectItem key={d} value={d}>
                     {d}
@@ -196,14 +204,14 @@ export function WorklogApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <User className="h-3.5 w-3.5 text-primary" />
-              직원
+              {t("workLogEmployee")}
             </label>
             <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
               <SelectTrigger className="h-9 w-36 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
                 {staffList.map((s) => (
                   <SelectItem key={s.name} value={s.displayName || s.name}>
                     {s.displayName || s.name}
@@ -213,22 +221,22 @@ export function WorklogApproval() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-foreground">상태</label>
+            <label className="text-xs font-semibold text-foreground">{t("workLogStatus")}</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-28 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">전체</SelectItem>
-                <SelectItem value="대기">대기</SelectItem>
-                <SelectItem value="승인">승인</SelectItem>
-                <SelectItem value="반려">반려</SelectItem>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                <SelectItem value="대기">{t("statusPending")}</SelectItem>
+                <SelectItem value="승인">{t("statusApproved")}</SelectItem>
+                <SelectItem value="반려">{t("statusRejected")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
-            조회
+            {t("workLogSearch")}
           </Button>
         </div>
       </div>
@@ -237,10 +245,10 @@ export function WorklogApproval() {
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center gap-2.5 border-b bg-muted/30 px-6 py-3">
           <ShieldCheck className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-bold text-foreground">업무일지 승인</h3>
+          <h3 className="text-sm font-bold text-foreground">{t("workLogApprovalTitle")}</h3>
           {pendingItems.length > 0 && (
             <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-bold text-warning">
-              대기 {pendingItems.length}건
+              {t("workLogPendingCount")} {pendingItems.length}
             </span>
           )}
         </div>
@@ -251,7 +259,7 @@ export function WorklogApproval() {
             </div>
           ) : list.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              조회된 업무일지가 없습니다.
+              {t("workLogNoResult")}
             </div>
           ) : (
             <div className="divide-y">
@@ -260,16 +268,16 @@ export function WorklogApproval() {
                   {Object.entries(byName).map(([name, items]) => (
                     <div key={`${dept}-${name}`} className="border-b last:border-b-0">
                       <div className="bg-muted/20 px-5 py-2 text-xs font-bold text-muted-foreground">
-                        {dept} · {staffList.find((s) => s.name === name || s.displayName === name)?.displayName || name}
+                        {(dept === "기타" ? t("workLogOther") : dept)} · {staffList.find((s) => s.name === name || s.displayName === name)?.displayName || name}
                       </div>
                       <table className="w-full text-left text-sm">
                         <thead>
                           <tr className="border-b bg-muted/10">
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-24">날짜</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground">업무 내용</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">진행률</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">승인상태</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-32">작업</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-24">{t("workLogColDate")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogColContent")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColApproval")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-32">{t("workLogColAction")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -294,7 +302,7 @@ export function WorklogApproval() {
                                     it.managerCheck === "대기" && "bg-warning/10 text-warning"
                                   )}
                                 >
-                                  {it.managerCheck}
+                                  {getTransStatus(it.managerCheck || "")}
                                 </span>
                               </td>
                               <td className="px-5 py-2">
@@ -308,7 +316,7 @@ export function WorklogApproval() {
                                       disabled={updating === it.id}
                                     >
                                       <CheckCircle2 className="mr-1 h-3 w-3" />
-                                      승인
+                                      {t("statusApproved")}
                                     </Button>
                                     {canReject && (
                                       <Button
@@ -319,7 +327,7 @@ export function WorklogApproval() {
                                         disabled={updating === it.id}
                                       >
                                         <XCircle className="mr-1 h-3 w-3" />
-                                        반려
+                                        {t("statusRejected")}
                                       </Button>
                                     )}
                                   </div>
