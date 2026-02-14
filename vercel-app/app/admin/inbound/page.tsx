@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { ArrowDownToLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -26,7 +25,12 @@ import {
   type InboundHistoryItem,
 } from "@/lib/api-client"
 import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
-import { cn } from "@/lib/utils"
+import {
+  InboundHeader,
+  InboundFilterBar,
+  InboundTable,
+  type InboundTableRow,
+} from "@/components/inbound"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -77,11 +81,9 @@ export default function InboundPage() {
   }, [])
 
   React.useEffect(() => {
-    const now = new Date()
-    const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
-    setHistStart(first)
-    setHistEnd(last)
+    const today = new Date().toISOString().slice(0, 10)
+    setHistStart(today)
+    setHistEnd(today)
   }, [])
 
   React.useEffect(() => {
@@ -221,32 +223,61 @@ export default function InboundPage() {
     return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
   }, [historyList])
 
+  const inboundTableRows = React.useMemo((): InboundTableRow[] => {
+    if (!isOffice) return []
+    return groupedHistory.map((g, i) => {
+      const first = g.items[0]
+      const itemsSummary =
+        g.items.length === 1
+          ? `${first?.name || ""}${first?.spec ? ` (${first.spec})` : ""}`
+          : `${g.items[0]?.name || ""} ${t("inEtcCount")} ${g.items.length - 1}`
+      return {
+        id: `g-${i}-${g.date}-${g.vendor}`,
+        date: g.date,
+        vendor: g.vendor,
+        items: g.items.map((it) => ({
+          name: it.name || "",
+          spec: it.spec || "",
+          qty: it.qty || 0,
+          amount: it.amount || 0,
+        })),
+        itemsSummary,
+        totalQty: g.totalQty,
+        totalAmt: g.totalAmt,
+      }
+    })
+  }, [groupedHistory, isOffice, t])
+
+  const storeRows = React.useMemo(
+    () =>
+      historyList.map((i) => ({
+        date: i.date,
+        vendor: i.vendor,
+        item: `${i.name || ""}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
+        qty: i.qty,
+        amount: i.amount || 0,
+      })),
+    [historyList]
+  )
+
+  const [tabValue, setTabValue] = React.useState<"new" | "hist">(isOffice ? "new" : "hist")
+
+  React.useEffect(() => {
+    setTabValue(isOffice ? "new" : "hist")
+  }, [isOffice])
+
+  const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-            <ArrowDownToLine className="h-5 w-5 text-success" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("adminInbound")}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {isOffice
-                ? (t("inPageSubOffice") || "입고 등록 및 내역을 관리합니다.")
-                : (t("inPageSubStore") || "본사에서 보낸 입고 수령 내역을 조회합니다.")}
-            </p>
-          </div>
-        </div>
+      <div className="p-6 space-y-4">
+        <InboundHeader
+          value={tabValue}
+          onValueChange={(v) => setTabValue(v)}
+          showNewTab={isOffice}
+        />
 
-        <Tabs defaultValue={isOffice ? "new" : "hist"} className="space-y-4">
-          <TabsList>
-            {isOffice && (
-              <TabsTrigger value="new">{t("inTabNew")}</TabsTrigger>
-            )}
-            <TabsTrigger value="hist">{t("inTabHist")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
 
           {isOffice && (
             <TabsContent value="new">
@@ -369,73 +400,31 @@ export default function InboundPage() {
           )}
 
           <TabsContent value="hist">
-            <div className="rounded-xl border bg-card p-5">
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-36" />
-                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-36" />
-                <Input type="month" value={histMonth} onChange={(e) => setHistMonth(e.target.value)} className="h-9 w-36" title={t("inMonthHint")} />
-                {isOffice && (
-                    <Select value={histVendor || "__all__"} onValueChange={(v) => setHistVendor(v === "__all__" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-40">
-                        <SelectValue placeholder={t("inVendorAll")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">{t("inVendorAll")}</SelectItem>
-                      {purchaseVendors.map((v) => (
-                        <SelectItem key={v.code} value={v.name}>{v.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <Button size="sm" className="h-9" onClick={fetchHistory}>
-                  {t("stockBtnSearch")}
-                </Button>
-                <span className="text-sm font-bold text-primary ml-2">
-                  {t("inPeriodTotal")}: {periodTotal.toLocaleString()}
-                </span>
-              </div>
-              <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-2 text-left w-24">{t("stockColDate")}</th>
-                      <th className="px-4 py-2 text-left">{t("inVendor")}</th>
-                      <th className="px-4 py-2 text-left">{t("inColItem")}</th>
-                      <th className="px-4 py-2 text-right w-20">{t("inColQty")}</th>
-                      <th className="px-4 py-2 text-right w-24">{t("inColAmount")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyLoading ? (
-                      <tr><td colSpan={5} className="py-12 text-center">{t("loading")}</td></tr>
-                    ) : groupedHistory.length === 0 ? (
-                      <tr><td colSpan={5} className="py-12 text-center text-muted-foreground">{t("inNoData")}</td></tr>
-                    ) : (
-                      groupedHistory.flatMap((g, gi) => [
-                        <tr key={gi} className="border-b font-medium">
-                          <td className="px-4 py-2">{g.date}</td>
-                          <td className="px-4 py-2">{g.vendor}</td>
-                          <td className="px-4 py-2">
-                            {g.items[0].name}
-                            {g.items.length > 1 ? ` ${t("inEtcCount")} ${g.items.length - 1}` : ""}
-                          </td>
-                          <td className="px-4 py-2 text-right">{g.totalQty.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right text-primary">{g.totalAmt.toLocaleString()}</td>
-                        </tr>,
-                        ...g.items.slice(1).map((i, ii) => (
-                          <tr key={`${gi}-${ii}`} className="border-b bg-muted/5">
-                            <td className="px-4 py-2"></td>
-                            <td className="px-4 py-2"></td>
-                            <td className="px-4 py-2 pl-8 text-muted-foreground text-xs">{i.name} {i.spec ? `(${i.spec})` : ""}</td>
-                            <td className="px-4 py-2 text-right">{i.qty.toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right">{(i.amount || 0).toLocaleString()}</td>
-                          </tr>
-                        )),
-                      ])
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <InboundFilterBar
+              totalAmount={periodTotalFormatted}
+              isOffice={isOffice}
+              histStart={histStart}
+              histEnd={histEnd}
+              histMonth={histMonth}
+              onHistStartChange={setHistStart}
+              onHistEndChange={setHistEnd}
+              onHistMonthChange={setHistMonth}
+              onMonthClick={() => {
+                const now = new Date()
+                setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
+              }}
+              histVendor={histVendor}
+              vendors={purchaseVendors.map((v) => v.name)}
+              onHistVendorChange={setHistVendor}
+              onSearch={fetchHistory}
+            />
+            <div className="overflow-x-auto max-h-[500px]">
+              <InboundTable
+                isOffice={isOffice}
+                rows={inboundTableRows}
+                loading={historyLoading}
+                storeRows={!isOffice ? storeRows : undefined}
+              />
             </div>
           </TabsContent>
         </Tabs>

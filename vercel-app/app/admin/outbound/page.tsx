@@ -81,6 +81,7 @@ export default function OutboundPage() {
   const [histStore, setHistStore] = React.useState("")
   const [histType, setHistType] = React.useState("")
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
+  const [itemSearch, setItemSearch] = React.useState("")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
   const [photoModalUrl, setPhotoModalUrl] = React.useState<string | null>(null)
 
@@ -95,11 +96,9 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
-    const now = new Date()
-    const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
-    setHistStart(first)
-    setHistEnd(last)
+    const today = new Date().toISOString().slice(0, 10)
+    setHistStart(today)
+    setHistEnd(today)
   }, [])
 
   React.useEffect(() => {
@@ -185,13 +184,13 @@ export default function OutboundPage() {
       }))
       const res = await forceOutboundBatch(list)
       if (res.success) {
-        alert(res.message || "출고 완료")
+        alert(res.message || t("outSaveSuccess"))
         setCart([])
       } else {
-        alert(res.message || "출고 실패")
+        alert(res.message || t("outSaveFailed"))
       }
     } catch {
-      alert("출고 처리 실패")
+      alert(t("outProcessFail"))
     } finally {
       setSaving(false)
     }
@@ -271,10 +270,24 @@ export default function OutboundPage() {
   }, [historyList, isOffice])
 
   const filteredGroupedHistory = React.useMemo(() => {
-    if (!isOffice || !invoiceSearch.trim()) return groupedHistory
-    const q = invoiceSearch.trim().toLowerCase()
-    return groupedHistory.filter((g) => (g.invoiceNo || "").toLowerCase().includes(q))
-  }, [groupedHistory, invoiceSearch, isOffice])
+    if (!isOffice) return groupedHistory
+    let result = groupedHistory
+    if (invoiceSearch.trim()) {
+      const qInv = invoiceSearch.trim().toLowerCase()
+      result = result.filter((g) => (g.invoiceNo || "").toLowerCase().includes(qInv))
+    }
+    if (itemSearch.trim()) {
+      const qItem = itemSearch.trim().toLowerCase()
+      result = result.filter((g) =>
+        g.items.some(
+          (it) =>
+            (it.name || "").toLowerCase().includes(qItem) ||
+            (it.code || "").toLowerCase().includes(qItem)
+        )
+      )
+    }
+    return result
+  }, [groupedHistory, invoiceSearch, itemSearch, isOffice])
 
   const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
     if (!isOffice) return []
@@ -322,7 +335,7 @@ export default function OutboundPage() {
 
   React.useEffect(() => {
     setSelectedForPrint(new Set())
-  }, [invoiceSearch])
+  }, [invoiceSearch, itemSearch])
 
   const togglePrintSelect = (idx: number) => {
     setSelectedForPrint((prev) => {
@@ -407,10 +420,49 @@ export default function OutboundPage() {
 </div>`
   }
 
+  const handleExcelDownload = () => {
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    if (checked.length === 0) {
+      alert(t("outSelectForExcel"))
+      return
+    }
+    const header = [
+      t("orderColDate") || "주문 일자",
+      t("orderColDeliveryDate") || "배송 일자",
+      t("outColInvNo") || "인보이스",
+      t("outFilterType") || "유형",
+      t("outColStore") || "출고처",
+      t("outColItem") || "품목명",
+      t("spec") || "규격",
+      t("outColQty") || "수량",
+      t("inColAmount") || "금액",
+    ].join("\t")
+    const rows: string[] = [header]
+    for (const g of checked) {
+      const orderDate = g.date?.slice(0, 10) || ""
+      const deliveryDate = (g.items[0]?.deliveryDate || "").slice(0, 10) || "-"
+      const type = g.type || "Force"
+      const target = g.target || "-"
+      for (const it of g.items) {
+        const name = (it.name || "").replace(/\t/g, " ")
+        const spec = (it.spec || "").replace(/\t/g, " ")
+        rows.push([orderDate, deliveryDate, g.invoiceNo || "-", type, target, name, spec, it.qty, it.amount].join("\t"))
+      }
+    }
+    const bom = "\uFEFF"
+    const blob = new Blob([bom + rows.join("\n")], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `outbound_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handlePrintInvoice = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
-      alert(t("outSelectForPrint") || "인쇄할 출고 내역을 선택해 주세요.")
+      alert(t("outSelectForPrint"))
       return
     }
     try {
@@ -437,7 +489,7 @@ export default function OutboundPage() {
       document.head.removeChild(style)
     } catch (e) {
       console.error(e)
-      alert("인보이스 로드 실패")
+      alert(t("invLoadFailed"))
     }
   }
 
@@ -467,7 +519,7 @@ export default function OutboundPage() {
       <div className="p-6 space-y-4">
         <ShipmentHeader
           value={tabValue}
-          onValueChange={(v) => v !== "order" && setTabValue(v)}
+          onValueChange={(v) => setTabValue(v)}
           showNewTab={isOffice}
         />
 
@@ -625,9 +677,12 @@ export default function OutboundPage() {
               onHistStoreChange={setHistStore}
               invoiceSearch={invoiceSearch}
               onInvoiceSearchChange={setInvoiceSearch}
+              itemSearch={itemSearch}
+              onItemSearchChange={setItemSearch}
               onSearch={fetchHistory}
               onPrintInvoice={isOffice ? handlePrintInvoice : undefined}
-              onExcelDownload={isOffice ? () => { /* TODO: implement excel export */ } : undefined}
+              onExcelDownload={isOffice ? handleExcelDownload : undefined}
+              selectedCount={selectedForPrint.size}
             />
             <div className="overflow-x-auto max-h-[500px]">
               <ShipmentTable

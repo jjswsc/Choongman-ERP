@@ -25,10 +25,15 @@ interface ShipmentFilterBarProps {
   // Invoice search (client-side filter)
   invoiceSearch?: string
   onInvoiceSearchChange?: (v: string) => void
+  // Item search (client-side filter)
+  itemSearch?: string
+  onItemSearchChange?: (v: string) => void
   // Actions
   onSearch: () => void
   onPrintInvoice?: () => void
   onExcelDownload?: () => void
+  /** 선택된 행 수 (0이면 인쇄/엑셀 버튼 비활성화) */
+  selectedCount?: number
 }
 
 export function ShipmentFilterBar({
@@ -48,9 +53,12 @@ export function ShipmentFilterBar({
   onHistStoreChange,
   invoiceSearch = "",
   onInvoiceSearchChange,
+  itemSearch = "",
+  onItemSearchChange,
   onSearch,
   onPrintInvoice,
   onExcelDownload,
+  selectedCount = 0,
 }: ShipmentFilterBarProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -136,6 +144,18 @@ export function ShipmentFilterBar({
               />
               <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             </div>
+
+            {/* Item Search */}
+            <div className="relative">
+              <input
+                type="text"
+                value={itemSearch}
+                onChange={(e) => onItemSearchChange?.(e.target.value)}
+                placeholder={t("outItemSearchPh")}
+                className="h-8 w-[120px] rounded border border-input bg-card px-2 pr-7 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            </div>
           </>
         )}
 
@@ -152,10 +172,12 @@ export function ShipmentFilterBar({
           <button
             type="button"
             onClick={onPrintInvoice}
-            className="h-8 flex items-center gap-1.5 rounded border border-primary bg-card px-3 text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+            disabled={selectedCount === 0}
+            className="h-8 flex items-center gap-1.5 rounded border border-primary bg-card px-3 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card"
           >
             <Printer className="h-3.5 w-3.5" />
             {t("outPrintInvoice")}
+            {selectedCount > 0 && ` (${selectedCount})`}
           </button>
         )}
 
@@ -163,10 +185,12 @@ export function ShipmentFilterBar({
           <button
             type="button"
             onClick={onExcelDownload}
-            className="h-8 flex items-center gap-1.5 rounded border border-success bg-success px-3 text-xs font-medium text-success-foreground hover:opacity-90 transition-colors"
+            disabled={selectedCount === 0}
+            className="h-8 flex items-center gap-1.5 rounded border border-success bg-success px-3 text-xs font-medium text-success-foreground hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-3.5 w-3.5" />
             {t("outExcelDownload")}
+            {selectedCount > 0 && ` (${selectedCount})`}
           </button>
         )}
 

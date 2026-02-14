@@ -570,25 +570,25 @@ export function OrderTab() {
                   {history.map((o) => (
                     <AccordionItem key={o.id} value={`hist-${o.id}`} className="border-b-0 rounded-lg border border-border/60 px-3 data-[state=open]:rounded-b-lg">
                       <AccordionTrigger className="py-3 hover:no-underline [&[data-state=open]>svg]:rotate-180">
-                        <div className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
-                            {o.deliveryDate && (
-                              <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
-                            )}
-                            <Badge variant="outline" className="text-xs">
-                              {translateOrderStatus(o.status || "")}
-                            </Badge>
-                            {(o.deliveryStatus === "배송중" || o.deliveryStatus === "배송 완료" || o.deliveryStatus === "배송완료" || o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
-                              <Badge className={`text-xs ${deliveryStatusColor(o.deliveryStatus)}`}>
-                                {translateDeliveryStatus(o.deliveryStatus)}
+                        <div className="flex w-full items-start gap-3 text-left">
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
+                              {o.deliveryDate && (
+                                <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
+                              )}
+                              <Badge variant="outline" className="text-xs">
+                                {translateOrderStatus(o.status || "")}
                               </Badge>
-                            )}
+                              {(o.deliveryStatus === "배송중" || o.deliveryStatus === "배송 완료" || o.deliveryStatus === "배송완료" || o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
+                                <Badge className={`text-xs ${deliveryStatusColor(o.deliveryStatus)}`}>
+                                  {translateDeliveryStatus(o.deliveryStatus)}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{o.summary}</div>
                           </div>
-                          <div className="flex items-center gap-3 text-sm">
-                            <span className="text-muted-foreground">{o.summary}</span>
-                            <span className="font-bold text-primary">{o.total} ฿</span>
-                          </div>
+                          <span className="shrink-0 font-bold text-primary">{o.total} ฿</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="pb-3 pt-0">

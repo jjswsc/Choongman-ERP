@@ -1,25 +1,25 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { PenLine, Search, ArrowUpFromLine } from "lucide-react"
+import { PenLine, Search, ArrowDownToLine } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-export type ShipmentTabValue = "new" | "hist"
+export type InboundTabValue = "new" | "hist"
 
-interface ShipmentHeaderProps {
-  value?: ShipmentTabValue
-  onValueChange?: (value: ShipmentTabValue) => void
-  /** 본사 권한이 있으면 출고 입력 탭 표시 */
+interface InboundHeaderProps {
+  value?: InboundTabValue
+  onValueChange?: (value: InboundTabValue) => void
+  /** 본사 권한이 있으면 입고 입력 탭 표시 */
   showNewTab?: boolean
 }
 
-const TAB_CONFIG: { value: ShipmentTabValue; icon: typeof PenLine; labelKey: string }[] = [
-  { value: "new", icon: PenLine, labelKey: "outTabNew" },
-  { value: "hist", icon: Search, labelKey: "outTabHist" },
+const TAB_CONFIG: { value: InboundTabValue; icon: typeof PenLine; labelKey: string }[] = [
+  { value: "new", icon: PenLine, labelKey: "inTabNew" },
+  { value: "hist", icon: Search, labelKey: "inTabHist" },
 ]
 
-export function ShipmentHeader({ value = "hist", onValueChange, showNewTab = true }: ShipmentHeaderProps) {
+export function InboundHeader({ value = "hist", onValueChange, showNewTab = true }: InboundHeaderProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
@@ -29,8 +29,8 @@ export function ShipmentHeader({ value = "hist", onValueChange, showNewTab = tru
     <div>
       {/* Page Title */}
       <div className="flex items-center gap-2 mb-4">
-        <ArrowUpFromLine className="h-5 w-5 text-primary" />
-        <h1 className="text-lg font-bold text-foreground">{t("adminOutbound")}</h1>
+        <ArrowDownToLine className="h-5 w-5 text-primary" />
+        <h1 className="text-lg font-bold text-foreground">{t("adminInbound")}</h1>
       </div>
 
       {/* Tabs */}
