@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -26,7 +26,6 @@ import {
 } from "@/lib/api-client"
 import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 import {
-  InboundHeader,
   InboundFilterBar,
   InboundTable,
   type InboundTableRow,
@@ -270,14 +269,16 @@ export default function InboundPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="p-6 space-y-4">
-        <InboundHeader
-          value={tabValue}
-          onValueChange={(v) => setTabValue(v)}
-          showNewTab={isOffice}
-        />
-
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminInbound")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStore")}</p>
+        </div>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
+          <TabsList className={`grid w-full max-w-md mb-4 ${isOffice ? "grid-cols-2" : "grid-cols-1"}`}>
+            {isOffice && <TabsTrigger value="new" className="text-sm font-medium">{t("inTabNew")}</TabsTrigger>}
+            <TabsTrigger value="hist" className="text-sm font-medium">{t("inTabHist")}</TabsTrigger>
+          </TabsList>
 
           {isOffice && (
             <TabsContent value="new">

@@ -254,7 +254,7 @@ export function AdminPayrollHolidays() {
                         />
                       </td>
                       <td className="p-2">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-row gap-1">
                           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={cancelEdit}>
                             {t("cancel")}
                           </Button>
@@ -269,7 +269,7 @@ export function AdminPayrollHolidays() {
                       <td className="p-2">{r.date}</td>
                       <td className="p-2">{r.name}</td>
                       <td className="p-2">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-row gap-1">
                           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(r)} disabled={saving}>
                             {t("emp_edit")}
                           </Button>

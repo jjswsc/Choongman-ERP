@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -37,7 +37,6 @@ import {
 } from "@/lib/api-client"
 import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 import {
-  ShipmentHeader,
   ShipmentFilterBar,
   ShipmentTable,
   type ShipmentTableRow,
@@ -613,14 +612,16 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="p-6 space-y-4">
-        <ShipmentHeader
-          value={tabValue}
-          onValueChange={(v) => setTabValue(v)}
-          showNewTab={isOffice}
-        />
-
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminOutbound")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("outPageSub")}</p>
+        </div>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
+          <TabsList className={`grid w-full max-w-md mb-4 ${isOffice ? "grid-cols-2" : "grid-cols-1"}`}>
+            {isOffice && <TabsTrigger value="new" className="text-sm font-medium">{t("outTabNew")}</TabsTrigger>}
+            <TabsTrigger value="hist" className="text-sm font-medium">{t("outTabHist")}</TabsTrigger>
+          </TabsList>
 
           {isOffice && (
             <TabsContent value="new">

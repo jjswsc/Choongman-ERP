@@ -371,7 +371,7 @@ export function PettyCashTab() {
                       )}
                     </div>
                   </div>
-                  <Button className="h-10 w-full font-medium bg-purple-600 hover:bg-purple-700" onClick={handleAdd} disabled={addSaving}>
+                  <Button className="h-10 w-full font-medium" onClick={handleAdd} disabled={addSaving}>
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
                     {addSaving ? (t("loading") || "저장중...") : (t("btnSave") || "저장")}
                   </Button>
