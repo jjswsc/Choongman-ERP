@@ -29,7 +29,7 @@ export async function GET(req: Request) {
     const rows = (await supabaseSelectFilter('evaluation_items', filter, {
       order: 'item_id.asc',
       limit: 500,
-    })) as { item_id?: number; main_cat?: string; sub_cat?: string; name?: string; use_flag?: boolean }[] | null
+    })) as { item_id?: number; main_cat?: string; sub_cat?: string; name?: string; use_flag?: boolean | number }[] | null
 
     const list: EvaluationItem[] = (rows || []).map((r) => ({
       id: r.item_id ?? '',
