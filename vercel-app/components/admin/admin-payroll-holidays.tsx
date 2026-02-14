@@ -231,7 +231,7 @@ export function AdminPayrollHolidays() {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-left font-medium">{t("holiday_date")}</th>
                   <th className="p-2 text-left font-medium">{t("holiday_name")}</th>
-                  <th className="p-2 text-right font-medium w-24">{t("pay_actions")}</th>
+                  <th className="p-2 text-center font-medium w-20">{t("pay_actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,32 +253,36 @@ export function AdminPayrollHolidays() {
                           className="h-8 text-xs"
                         />
                       </td>
-                      <td className="p-2 text-right">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs mr-1" onClick={cancelEdit}>
-                          {t("cancel")}
-                        </Button>
-                        <Button size="sm" className="h-7 text-xs" onClick={handleUpdate} disabled={saving}>
-                          {t("holiday_save")}
-                        </Button>
+                      <td className="p-2">
+                        <div className="flex flex-col gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={cancelEdit}>
+                            {t("cancel")}
+                          </Button>
+                          <Button size="sm" className="h-7 text-xs" onClick={handleUpdate} disabled={saving}>
+                            {t("holiday_save")}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     <tr key={r.id} className="border-b border-border/60 hover:bg-muted/30">
                       <td className="p-2">{r.date}</td>
                       <td className="p-2">{r.name}</td>
-                      <td className="p-2 text-right">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs mr-1" onClick={() => startEdit(r)} disabled={saving}>
-                          {t("emp_edit")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(r.id)}
-                          disabled={saving}
-                        >
-                          {t("holiday_delete")}
-                        </Button>
+                      <td className="p-2">
+                        <div className="flex flex-col gap-1">
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(r)} disabled={saving}>
+                            {t("emp_edit")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => handleDelete(r.id)}
+                            disabled={saving}
+                          >
+                            {t("holiday_delete")}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )

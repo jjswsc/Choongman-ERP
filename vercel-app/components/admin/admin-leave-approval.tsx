@@ -31,6 +31,7 @@ export function AdminLeaveApproval() {
   const [leaveStart, setLeaveStart] = useState(todayStr)
   const [leaveEnd, setLeaveEnd] = useState(todayStr)
   const [leaveStoreFilter, setLeaveStoreFilter] = useState("All")
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState("All")
   const [leaveStatusFilter, setLeaveStatusFilter] = useState("대기")
   const [leaveStores, setLeaveStores] = useState<string[]>([])
   const [leaveList, setLeaveList] = useState<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string }[]>([])
@@ -72,6 +73,7 @@ export function AdminLeaveApproval() {
       startStr: leaveStart,
       endStr: leaveEnd,
       store: leaveStoreFilter === "All" ? undefined : leaveStoreFilter,
+      typeFilter: leaveTypeFilter === "All" ? undefined : leaveTypeFilter,
       status: leaveStatusFilter,
       userStore: auth.store,
       userRole: auth.role,
@@ -111,12 +113,10 @@ export function AdminLeaveApproval() {
               <SelectItem value="leave">{t("adminLeaveByLeave")}</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className="h-9 flex-1 text-xs" />
-          <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className="h-9 flex-1 text-xs" />
-        </div>
-        <div className="flex items-center gap-2">
+          <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className="h-9 w-[130px] text-xs" />
+          <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
           <Select value={leaveStoreFilter} onValueChange={setLeaveStoreFilter}>
-            <SelectTrigger className="h-9 flex-1 text-xs">
+            <SelectTrigger className="h-9 w-[100px] text-xs">
               <SelectValue placeholder={t("store")} />
             </SelectTrigger>
             <SelectContent>
@@ -125,8 +125,20 @@ export function AdminLeaveApproval() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={leaveTypeFilter} onValueChange={setLeaveTypeFilter}>
+            <SelectTrigger className="h-9 w-[90px] text-xs">
+              <SelectValue placeholder={t("leave_col_type")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">{t("all")}</SelectItem>
+              <SelectItem value="연차">{t("annual")}</SelectItem>
+              <SelectItem value="반차">{t("half")}</SelectItem>
+              <SelectItem value="병가">{t("sick")}</SelectItem>
+              <SelectItem value="무급휴가">{t("unpaid")}</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={leaveStatusFilter} onValueChange={setLeaveStatusFilter}>
-            <SelectTrigger className="h-9 w-24 text-xs">
+            <SelectTrigger className="h-9 w-20 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -136,11 +148,11 @@ export function AdminLeaveApproval() {
               <SelectItem value="All">{t("all")}</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <Button className="h-10 w-full font-medium" onClick={loadLeaveList} disabled={leaveLoading}>
+          <Button className="h-9 shrink-0 px-4 font-medium" onClick={loadLeaveList} disabled={leaveLoading}>
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {leaveLoading ? t("loading") : t("search")}
-        </Button>
+          </Button>
+        </div>
         <div className="overflow-x-auto -mx-2">
           {leaveList.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
@@ -148,27 +160,27 @@ export function AdminLeaveApproval() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="p-2 text-left font-medium">{t("store")}</th>
-                  <th className="p-2 text-left font-medium">{t("leave_col_name")}</th>
-                  <th className="p-2 text-left font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
-                  <th className="p-2 text-left font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
-                  <th className="p-2 text-left font-medium">{t("leave_col_type")}</th>
-                  <th className="p-2 text-left font-medium min-w-[120px]">{t("leave_col_reason")}</th>
-                  <th className="p-2 text-right font-medium w-28">{t("leave_col_action")}</th>
+                  <th className="p-2 text-center font-medium">{t("store")}</th>
+                  <th className="p-2 text-center font-medium">{t("leave_col_name")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
+                  <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
+                  <th className="p-2 text-center font-medium min-w-[120px]">{t("leave_col_reason")}</th>
+                  <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
                 </tr>
               </thead>
               <tbody>
                 {leaveList.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
-                    <td className="p-2">{item.store}</td>
-                    <td className="p-2">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
-                    <td className="p-2 whitespace-nowrap">{item.requestDate}</td>
-                    <td className="p-2 whitespace-nowrap">{item.date}</td>
-                    <td className="p-2">{translateLeaveType(item.type)}</td>
-                    <td className="p-2">{item.reason || "-"}</td>
-                    <td className="p-2 text-right">
+                    <td className="p-2 text-center">{item.store}</td>
+                    <td className="p-2 text-center">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
+                    <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
+                    <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
+                    <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
+                    <td className="p-2 text-center">{item.reason || "-"}</td>
+                    <td className="p-2 text-center">
                       {item.status === "대기" && (
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5">
                           <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
                         </div>

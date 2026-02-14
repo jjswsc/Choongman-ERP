@@ -1,7 +1,11 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import { PettyCashTab } from "@/components/tabs/petty-cash-tab"
 
 export default function Page() {
-  return <AdminPlaceholder title="패티 캐쉬" />
+  return (
+    <div className="flex-1 overflow-auto">
+      <PettyCashTab />
+    </div>
+  )
 }

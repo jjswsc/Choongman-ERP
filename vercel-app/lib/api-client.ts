@@ -451,6 +451,7 @@ export async function getLeavePendingList(params: {
   endStr: string
   store?: string
   status?: string
+  typeFilter?: string
   userStore?: string
   userRole?: string
   dateFilterType?: 'request' | 'leave'
@@ -460,6 +461,7 @@ export async function getLeavePendingList(params: {
   if (params.endStr) clean.endStr = params.endStr
   if (params.store != null && params.store !== '') clean.store = params.store
   if (params.status) clean.status = params.status
+  if (params.typeFilter != null && params.typeFilter !== '') clean.typeFilter = params.typeFilter
   if (params.userStore) clean.userStore = params.userStore
   if (params.userRole) clean.userRole = params.userRole
   if (params.dateFilterType) clean.dateFilterType = params.dateFilterType

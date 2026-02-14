@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   let store = String(searchParams.get('store') || '').trim()
   const status = String(searchParams.get('status') || '대기').trim()
+  const typeFilter = String(searchParams.get('type') || searchParams.get('typeFilter') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
   const dateFilterType = String(searchParams.get('dateFilterType') || 'leave').trim() as 'request' | 'leave'
@@ -50,6 +51,9 @@ export async function GET(request: NextRequest) {
     for (const r of rows || []) {
       const rowStatus = String(r.status || '').trim()
       if (status !== 'All' && status !== '전체' && rowStatus !== status) continue
+
+      const rowType = String(r.type || '').trim()
+      if (typeFilter && typeFilter !== 'All' && typeFilter !== '전체' && rowType !== typeFilter) continue
 
       const dateStr = toDateStr(r.leave_date)
       const requestDateStr = toDateStr(r.request_at || r.created_at)
