@@ -1,6 +1,8 @@
 "use client"
 
 import { AdminLeaveApproval } from "@/components/admin/admin-leave-approval"
+import { AdminLeaveStats } from "@/components/admin/admin-leave-stats"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -15,7 +17,22 @@ export default function AdminLeavePage() {
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminLeave")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("adminLeaveApproval")}</p>
         </div>
-        <AdminLeaveApproval />
+        <Tabs defaultValue="approval" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
+            <TabsTrigger value="approval" className="text-sm font-medium">
+              {t("adminLeaveApproval")}
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="text-sm font-medium">
+              {t("leave_tab_stats")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="approval">
+            <AdminLeaveApproval />
+          </TabsContent>
+          <TabsContent value="stats">
+            <AdminLeaveStats />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

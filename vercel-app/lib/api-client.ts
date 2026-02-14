@@ -468,6 +468,24 @@ export async function getLeavePendingList(params: {
   return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string }[]>
 }
 
+export async function getLeaveStats(params: {
+  startStr?: string
+  endStr?: string
+  store?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const clean: Record<string, string> = {}
+  if (params.startStr) clean.startStr = params.startStr
+  if (params.endStr) clean.endStr = params.endStr
+  if (params.store != null && params.store !== '') clean.store = params.store
+  if (params.userStore) clean.userStore = params.userStore
+  if (params.userRole) clean.userRole = params.userRole
+  const q = new URLSearchParams(clean)
+  const res = await fetch(`/api/getLeaveStats?${q}`)
+  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedTotalAnnual: number; usedTotalSick: number; remain: number }[]>
+}
+
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string }) {
   const res = await fetch('/api/processLeaveApproval', {
     method: 'POST',
@@ -1114,6 +1132,7 @@ export interface AdminEmployeeItem {
   bankName: string
   accountNumber: string
   positionAllowance: number
+  riskAllowance: number
   grade: string
   photo: string
 }

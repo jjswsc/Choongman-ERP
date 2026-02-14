@@ -65,6 +65,7 @@ export async function GET(req: Request) {
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
         positionAllowance: r.position_allowance != null ? Number(r.position_allowance) : 0,
+        riskAllowance: r.haz_allow != null ? Number(r.haz_allow) : 0,
         grade: r.grade != null && r.grade !== '' ? String(r.grade).trim() : '',
         photo: r.photo != null && r.photo !== '' ? String(r.photo).trim() : '',
       })

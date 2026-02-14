@@ -39,6 +39,7 @@ export interface EmployeeFormData {
   bankName: string
   accountNumber: string
   positionAllowance: number
+  riskAllowance: number
   grade: string
   photo: string
 }
@@ -63,6 +64,7 @@ const emptyForm: EmployeeFormData = {
   bankName: "",
   accountNumber: "",
   positionAllowance: 0,
+  riskAllowance: 0,
   grade: "",
   photo: "",
 }
@@ -320,6 +322,18 @@ export function EmployeeForm({
             onChange={(e) => update("positionAllowance", e.target.value ? Number(e.target.value) : 0)}
             className="h-8 text-xs"
           />
+          <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_position_allowance_hint")}</p>
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1">{t("emp_risk_allowance")}</label>
+          <Input
+            type="number"
+            min={0}
+            value={form.riskAllowance || ""}
+            onChange={(e) => update("riskAllowance", e.target.value ? Number(e.target.value) : 0)}
+            className="h-8 text-xs"
+          />
+          <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_risk_allowance_hint")}</p>
         </div>
       </div>
 

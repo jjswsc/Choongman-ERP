@@ -46,6 +46,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",
     positionAllowance: e.positionAllowance ?? 0,
+    riskAllowance: e.riskAllowance ?? 0,
     grade: e.grade || "",
     photo: e.photo || "",
   }

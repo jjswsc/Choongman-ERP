@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS employees (
   bank_name TEXT DEFAULT '',
   account_number TEXT DEFAULT '',
   position_allowance NUMERIC(12,2) DEFAULT 0,
+  haz_allow NUMERIC(12,2) DEFAULT 0,
   grade TEXT DEFAULT '',
   photo TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -130,6 +131,7 @@ ALTER TABLE employees ADD COLUMN IF NOT EXISTS annual_leave_days NUMERIC(5,2) DE
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT '';
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS account_number TEXT DEFAULT '';
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS haz_allow NUMERIC(12,2) DEFAULT 0;
 -- (선택) 기존에 photo 열에 연차 일수가 들어가 있던 경우, 숫자만 있는 행은 annual_leave_days로 복사
 -- Supabase SQL Editor에서 1회 실행 후 주석 해제 유지 또는 삭제 가능:
 -- UPDATE employees SET annual_leave_days = NULLIF(REGEXP_REPLACE(TRIM(photo), '[^0-9.]', '', 'g'), '')::NUMERIC WHERE photo IS NOT NULL AND photo <> '' AND TRIM(photo) ~ '^[0-9]+\.?[0-9]*$';

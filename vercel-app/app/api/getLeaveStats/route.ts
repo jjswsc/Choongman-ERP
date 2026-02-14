@@ -1,0 +1,134 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+
+function toDateStr(val: string | Date | null | undefined): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val.slice(0, 10)
+  const d = new Date(val)
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+/** 직원의 연차일 수: employees.annual_leave_days 사용, 없으면 1년+ 근무 시 6일 */
+function getAnnualLeaveDays(emp: { annual_leave_days?: number | null; join_date?: string | Date | null } | null): number {
+  if (!emp) return 0
+  const stored = Number(emp.annual_leave_days)
+  if (stored > 0) return stored
+  const joinStr = emp.join_date ? toDateStr(emp.join_date) : ''
+  if (!joinStr) return 0
+  const joinDate = new Date(joinStr + 'T12:00:00')
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  return joinDate <= oneYearAgo ? 6 : 0
+}
+
+/** 휴가 유형별 일수 (반차=0.5, 그 외=1) */
+function getLeaveDays(type: string): number {
+  const t = String(type || '').trim()
+  if (t.indexOf('반차') !== -1 || t.toLowerCase().indexOf('half') !== -1) return 0.5
+  return 1
+}
+
+/** 휴가 통계 - 매장별 직원별 연차/병가 사용 현황 */
+export async function GET(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+  const { searchParams } = new URL(request.url)
+  const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
+  const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+  let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
+  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+
+  if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
+
+  const isManager = userRole === 'manager'
+  if (isManager && userStore) storeFilter = userStore
+
+  const start = startStr ? new Date(startStr + 'T00:00:00') : new Date('2000-01-01')
+  const end = endStr ? new Date(endStr + 'T23:59:59') : new Date('2100-12-31')
+
+  try {
+    type EmpRow = { store?: string; name?: string; annual_leave_days?: number | null; join_date?: string | null }
+    type LeaveRow = { store?: string; name?: string; type?: string; leave_date?: string; status?: string }
+
+    let empRows: EmpRow[] = []
+    if (storeFilter) {
+      empRows = (await supabaseSelectFilter(
+        'employees',
+        `store=ilike.${encodeURIComponent(storeFilter)}`,
+        { order: 'id.asc' }
+      )) as EmpRow[]
+    } else {
+      empRows = (await supabaseSelect('employees', { order: 'id.asc' })) as EmpRow[]
+    }
+
+    let leaveRows: LeaveRow[] = []
+    if (storeFilter) {
+      leaveRows = (await supabaseSelectFilter(
+        'leave_requests',
+        `store=ilike.${encodeURIComponent(storeFilter)}`,
+        { order: 'leave_date.asc', limit: 2000 }
+      )) as LeaveRow[]
+    } else {
+      leaveRows = (await supabaseSelect('leave_requests', { order: 'leave_date.asc', limit: 2000 })) as LeaveRow[]
+    }
+
+    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedTotalAnnual: number; usedTotalSick: number; remain: number }[] = []
+
+    for (const emp of empRows || []) {
+      const empStore = String(emp.store || '').trim()
+      const empName = String(emp.name || '').trim()
+      if (!empName) continue
+
+      const annualLimit = getAnnualLeaveDays(emp)
+      let usedPeriodAnnual = 0
+      let usedPeriodSick = 0
+      let usedTotalAnnual = 0
+      let usedTotalSick = 0
+
+      for (const l of leaveRows || []) {
+        const lName = String(l.name || '').trim()
+        if (lName !== empName) continue
+
+        const lStatus = String(l.status || '').trim()
+        if (lStatus !== '승인' && lStatus !== 'Approved') continue
+
+        const lType = String(l.type || '').trim()
+        if (lType.indexOf('무급휴가') !== -1) continue
+
+        const dateStr = toDateStr(l.leave_date)
+        if (!dateStr) continue
+        const lDate = new Date(dateStr + 'T12:00:00')
+        const days = getLeaveDays(lType)
+
+        if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
+          usedTotalSick += days
+          if (lDate >= start && lDate <= end) usedPeriodSick += days
+        } else {
+          usedTotalAnnual += days
+          if (lDate >= start && lDate <= end) usedPeriodAnnual += days
+        }
+      }
+
+      result.push({
+        store: empStore,
+        name: empName,
+        usedPeriodAnnual: Math.round(usedPeriodAnnual * 10) / 10,
+        usedPeriodSick: Math.round(usedPeriodSick * 10) / 10,
+        usedTotalAnnual: Math.round(usedTotalAnnual * 10) / 10,
+        usedTotalSick: Math.round(usedTotalSick * 10) / 10,
+        remain: Math.max(0, Math.round((annualLimit - usedTotalAnnual) * 10) / 10),
+      })
+    }
+
+    result.sort((a, b) => {
+      if (a.store !== b.store) return a.store.localeCompare(b.store)
+      return a.name.localeCompare(b.name)
+    })
+
+    return NextResponse.json(result, { headers })
+  } catch (e) {
+    console.error('getLeaveStats:', e)
+    return NextResponse.json([], { headers })
+  }
+}

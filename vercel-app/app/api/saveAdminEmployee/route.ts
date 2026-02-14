@@ -50,6 +50,7 @@ export async function POST(req: Request) {
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',
       position_allowance: d.positionAllowance != null ? Number(d.positionAllowance) : 0,
+      haz_allow: d.riskAllowance != null ? Number(d.riskAllowance) : 0,
       grade: d.grade != null ? String(d.grade).trim() : '',
       photo: d.photo != null ? String(d.photo).trim() : '',
     }
