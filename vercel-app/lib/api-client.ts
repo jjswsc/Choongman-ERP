@@ -1041,3 +1041,72 @@ export async function getInvoiceData() {
   const res = await fetch('/api/getInvoiceData')
   return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
 }
+
+// ─── 직원 관리 (Employees) ───
+export interface AdminEmployeeItem {
+  row: number
+  store: string
+  name: string
+  nick: string
+  phone: string
+  job: string
+  birth: string
+  nation: string
+  join: string
+  resign: string
+  salType: string
+  salAmt: number
+  pw: string
+  role: string
+  email: string
+  annualLeaveDays: number
+  bankName: string
+  accountNumber: string
+  positionAllowance: number
+  grade: string
+  photo: string
+}
+
+export async function getAdminEmployeeList(params: { userStore: string; userRole: string }) {
+  const q = new URLSearchParams({
+    userStore: params.userStore,
+    userRole: params.userRole,
+  })
+  const res = await fetch(`/api/getAdminEmployeeList?${q}`)
+  const data = await res.json()
+  return {
+    list: (data.list || []) as AdminEmployeeItem[],
+    stores: (data.stores || []) as string[],
+  }
+}
+
+export async function getEmployeeLatestGrades() {
+  const res = await fetch('/api/getEmployeeLatestGrades')
+  return res.json() as Promise<Record<string, { grade: string }>>
+}
+
+export async function saveAdminEmployee(params: {
+  d: Partial<AdminEmployeeItem> & { row: number }
+  userStore: string
+  userRole: string
+}) {
+  const res = await fetch('/api/saveAdminEmployee', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteAdminEmployee(params: {
+  r: number
+  userStore: string
+  userRole: string
+}) {
+  const res = await fetch('/api/deleteAdminEmployee', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}

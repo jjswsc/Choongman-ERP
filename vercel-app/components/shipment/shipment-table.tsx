@@ -9,11 +9,11 @@ import { useT } from "@/lib/i18n"
 type StatusBadgeKey = "outTypeOrder" | "statusPartialDelivered" | "statusInTransit" | "statusDelivered" | "outTypeForce"
 
 const statusStyles: Record<StatusBadgeKey, string> = {
-  outTypeOrder: "bg-success text-success-foreground",
-  statusPartialDelivered: "bg-warning text-warning-foreground",
-  statusInTransit: "bg-success text-success-foreground",
-  statusDelivered: "bg-info text-info-foreground",
-  outTypeForce: "bg-warning/80 text-warning-foreground",
+  outTypeOrder: "bg-[#22C55E] text-white",
+  statusPartialDelivered: "bg-[#F59E0B] text-white",
+  statusInTransit: "bg-[#22C55E] text-white",
+  statusDelivered: "bg-[#22C55E] text-white",
+  outTypeForce: "bg-[#F59E0B] text-white",
 }
 
 export interface ShipmentTableRow {
@@ -88,7 +88,7 @@ export function ShipmentTable({
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-sidebar text-white">
+            <tr className="bg-[#1E293B] text-white">
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
               <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
@@ -126,13 +126,13 @@ export function ShipmentTable({
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-sidebar text-white">
+          <tr className="bg-[#1E293B] text-white">
             <th className="w-10 px-3 py-2.5 text-center">
               <input
                 type="checkbox"
                 checked={rows.length > 0 && selectedIndices.size === rows.length}
                 onChange={onToggleSelectAll}
-                className="h-3.5 w-3.5 rounded border-sidebar-accent accent-primary cursor-pointer"
+                className="h-3.5 w-3.5 rounded border-[#1E293B] accent-[#3B82F6] cursor-pointer"
               />
             </th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("orderColDate")}</th>
@@ -214,7 +214,7 @@ function TableRow({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="h-3.5 w-3.5 rounded accent-primary cursor-pointer"
+            className="h-3.5 w-3.5 rounded border-gray-300 accent-[#3B82F6] cursor-pointer"
           />
         </td>
         <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.orderDate}</td>

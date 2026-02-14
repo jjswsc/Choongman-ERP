@@ -173,7 +173,7 @@ export function ShipmentFilterBar({
             type="button"
             onClick={onPrintInvoice}
             disabled={selectedCount === 0}
-            className="h-8 flex items-center gap-1.5 rounded border border-primary bg-card px-3 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card"
+            className="h-8 flex items-center gap-1.5 rounded bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer className="h-3.5 w-3.5" />
             {t("outPrintInvoice")}
@@ -186,7 +186,7 @@ export function ShipmentFilterBar({
             type="button"
             onClick={onExcelDownload}
             disabled={selectedCount === 0}
-            className="h-8 flex items-center gap-1.5 rounded border border-success bg-success px-3 text-xs font-medium text-success-foreground hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-8 flex items-center gap-1.5 rounded bg-[#16A34A] px-3 text-xs font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-3.5 w-3.5" />
             {t("outExcelDownload")}
@@ -196,7 +196,7 @@ export function ShipmentFilterBar({
 
         {/* Total */}
         <div className="ml-auto">
-          <span className="text-sm font-bold text-destructive">
+          <span className="text-sm font-bold text-[#16A34A]">
             {t("outPeriodTotal")}: {totalAmount}
           </span>
         </div>

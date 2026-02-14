@@ -48,7 +48,7 @@ export function InboundTable({
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-sidebar text-white">
+            <tr className="bg-[#1E293B] text-white">
               <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
               <th className="px-3 py-2.5 text-center font-semibold">{t("inVendor")}</th>
               <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
@@ -88,7 +88,7 @@ export function InboundTable({
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-sidebar text-white">
+          <tr className="bg-[#1E293B] text-white">
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inVendor")}</th>
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>

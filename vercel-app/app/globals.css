@@ -150,11 +150,11 @@ body {
   }
 }
 
-/* 사이드바 검정 배경 + 흰색 글씨 */
+/* 사이드바 네이비 배경 + 흰색 글씨 (#1E293B) */
 .sidebar-dark,
 .sidebar-dark [data-sidebar="sidebar"],
 .sidebar-dark .bg-sidebar {
-  background-color: #0a0a0a !important;
+  background-color: #1E293B !important;
 }
 .sidebar-dark .text-sidebar-foreground,
 .sidebar-dark [data-sidebar="group-label"],

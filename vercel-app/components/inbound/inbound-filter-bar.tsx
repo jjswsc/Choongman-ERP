@@ -108,7 +108,7 @@ export function InboundFilterBar({
 
         {/* Total */}
         <div className="ml-auto">
-          <span className="text-sm font-bold text-destructive">
+          <span className="text-sm font-bold text-[#16A34A]">
             {t("inPeriodTotal")}: {totalAmount}
           </span>
         </div>
