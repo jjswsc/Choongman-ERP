@@ -255,6 +255,7 @@ export default function EmployeesPage() {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     t={t}
+                    statusFilter={statusFilter}
                   />
                 </div>
               </div>

@@ -561,13 +561,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         body.invoice-printing * { visibility: hidden !important; }
         body.invoice-printing > *:not(#invoice-print-area) { display: none !important; visibility: hidden !important; }
         body.invoice-printing #invoice-print-area,
-        body.invoice-printing #invoice-print-area * { visibility: visible !important; }
+        body.invoice-printing #invoice-print-area * { visibility: visible !important; -webkit-print-color-adjust: economy !important; print-color-adjust: economy !important; }
         body.invoice-printing #invoice-print-area {
           display: block !important; position: absolute !important; left: 0 !important; top: 0 !important;
           margin: 0 !important; width: 210mm !important; min-width: 210mm !important;
           max-width: 210mm !important; padding: 0 10mm !important; box-sizing: border-box !important;
           overflow: visible !important; line-height: 1.85 !important; z-index: 999999 !important;
-          background: #fff !important; visibility: visible !important;
+          background: #fff !important; visibility: visible !important; filter: grayscale(100%) !important;
         }
         body.invoice-printing html, body.invoice-printing body { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
         body.invoice-printing .delivery-note-invoice {

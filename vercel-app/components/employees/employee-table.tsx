@@ -31,9 +31,11 @@ interface EmployeeTableProps {
   onEdit: (idx: number) => void
   onDelete: (rowId: number) => void
   t: (k: string) => string
+  /** 전체 조회 시 퇴사자 빨간색 표시 */
+  statusFilter?: string
 }
 
-export function EmployeeTable({ rows, loading, onEdit, onDelete, t }: EmployeeTableProps) {
+export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter }: EmployeeTableProps) {
   const { lang } = useLang()
   const ageSuffix = lang === "ko" ? "세" : ""
   const cols = [
@@ -75,8 +77,13 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t }: EmployeeTa
                 ? `${new Date().getFullYear() - new Date(e.birth).getFullYear()}`
                 : "-"
               const grade = e.finalGrade || "-"
+              const isResigned = Boolean(String(e.resign || "").trim())
+              const showResignedHighlight = (statusFilter === "" || statusFilter === "all") && isResigned
               return (
-                <tr key={e.row} className="hover:bg-primary/5 transition-colors">
+                <tr
+                  key={e.row}
+                  className={`hover:bg-primary/5 transition-colors ${showResignedHighlight ? "bg-red-100 text-red-800" : ""}`}
+                >
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.store}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${gradeBadgeStyle(grade)}`}>

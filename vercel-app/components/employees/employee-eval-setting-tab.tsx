@@ -261,37 +261,36 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
             <DialogTitle>{t("eval_add_item")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
-            {type === "kitchen" && (
-              <>
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("eval_cat_main")}
-                  </label>
-                  <select
-                    value={addMain}
-                    onChange={(e) => setAddMain(e.target.value)}
-                    className="w-full mt-1 h-9 rounded border border-input bg-background px-3"
-                  >
-                    {KITCHEN_MAIN_CATS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("eval_cat_sub")}
-                  </label>
-                  <Input
-                    value={addSub}
-                    onChange={(e) => setAddSub(e.target.value)}
-                    placeholder={t("eval_setting_sub_ph")}
-                    className="mt-1"
-                  />
-                </div>
-              </>
-            )}
+            <div>
+              <label className="text-sm font-medium">{t("eval_cat_main")}</label>
+              {type === "kitchen" ? (
+                <select
+                  value={addMain}
+                  onChange={(e) => setAddMain(e.target.value)}
+                  className="w-full mt-1 h-9 rounded border border-input bg-background px-3"
+                >
+                  {KITCHEN_MAIN_CATS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  value={addMain}
+                  onChange={(e) => setAddMain(e.target.value)}
+                  placeholder={t("eval_cat_main")}
+                  className="mt-1"
+                />
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">{t("eval_cat_sub")}</label>
+              <Input
+                value={addSub}
+                onChange={(e) => setAddSub(e.target.value)}
+                placeholder={t("eval_setting_sub_ph")}
+                className="mt-1"
+              />
+            </div>
             <div>
               <label className="text-sm font-medium">{t("eval_item")}</label>
               <Input
