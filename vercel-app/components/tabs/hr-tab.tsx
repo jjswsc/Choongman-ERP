@@ -189,11 +189,11 @@ export function HrTab() {
         reason: leaveReason,
       })
       if (res.success) {
-        alert(res.message || "신청 완료")
+        alert(res.message || t("leaveRequestSuccess"))
         setLeaveReason("")
         loadLeaveInfo()
       } else {
-        alert(res.message || "신청 실패")
+        alert(res.message || t("leaveRequestFail"))
       }
     } catch (e) {
       alert("오류: " + (e instanceof Error ? e.message : String(e)))
