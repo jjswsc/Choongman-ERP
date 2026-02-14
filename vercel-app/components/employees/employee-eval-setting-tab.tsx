@@ -31,8 +31,6 @@ export interface EmployeeEvalSettingTabProps {
   type: "kitchen" | "service"
 }
 
-const KITCHEN_MAIN_CATS = ["메뉴숙련", "원가정확도", "위생", "태도"]
-
 export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -263,24 +261,12 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
           <div className="space-y-3 pt-2">
             <div>
               <label className="text-sm font-medium">{t("eval_cat_main")}</label>
-              {type === "kitchen" ? (
-                <select
-                  value={addMain}
-                  onChange={(e) => setAddMain(e.target.value)}
-                  className="w-full mt-1 h-9 rounded border border-input bg-background px-3"
-                >
-                  {KITCHEN_MAIN_CATS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={addMain}
-                  onChange={(e) => setAddMain(e.target.value)}
-                  placeholder={t("eval_cat_main")}
-                  className="mt-1"
-                />
-              )}
+              <Input
+                value={addMain}
+                onChange={(e) => setAddMain(e.target.value)}
+                placeholder={t("eval_cat_main")}
+                className="mt-1"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">{t("eval_cat_sub")}</label>

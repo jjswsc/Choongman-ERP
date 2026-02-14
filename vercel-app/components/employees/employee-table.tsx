@@ -5,10 +5,10 @@ import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
 function roleBadgeStyle(role: string): string {
-  const r = String(role || "").trim()
-  if (r === "Staff") return "bg-blue-600 text-white"
-  if (r === "Manager") return "bg-orange-500 text-white"
-  if (r === "Director") return "bg-black text-white"
+  const r = String(role || "").trim().toLowerCase()
+  if (r === "staff") return "bg-blue-600 text-white"
+  if (r === "manager") return "bg-orange-500 text-white"
+  if (r === "director") return "bg-black text-white"
   return "bg-gray-500 text-white"
 }
 function gradeBadgeStyle(g: string): string {
