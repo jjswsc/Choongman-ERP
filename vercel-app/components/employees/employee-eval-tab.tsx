@@ -288,7 +288,7 @@ export function EmployeeEvalTab({
             trainingNeeded,
             coach,
             targetDate,
-            reEvalDate,
+            reevalDate,
           },
           totalScore: computedTotal,
           grade: displayGrade || computedGrade,
