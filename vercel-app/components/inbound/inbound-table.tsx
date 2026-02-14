@@ -68,10 +68,10 @@ export function InboundTable({
             ) : (
               storeRows.map((r, idx) => (
                 <tr key={idx} className="hover:bg-primary/5 transition-colors">
-                  <td className="px-3 py-2.5 text-card-foreground whitespace-nowrap">{r.date}</td>
-                  <td className="px-3 py-2.5 text-card-foreground">{r.vendor}</td>
-                  <td className="px-3 py-2.5 text-card-foreground">{r.item}</td>
-                  <td className="px-3 py-2.5 text-right text-card-foreground font-medium tabular-nums">{r.qty.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{r.date}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground">{r.vendor}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground">{r.item}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{r.qty.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">{(r.amount || 0).toLocaleString()}</td>
                 </tr>
               ))
@@ -141,8 +141,8 @@ function TableRow({
   return (
     <>
       <tr className={cn("transition-colors hover:bg-primary/5")}>
-        <td className="px-3 py-2.5 text-card-foreground whitespace-nowrap">{row.date}</td>
-        <td className="px-3 py-2.5 text-card-foreground whitespace-nowrap font-medium">{row.vendor}</td>
+        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.date}</td>
+        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.vendor}</td>
         <td className="px-3 py-2.5 text-card-foreground">
           <div className="flex items-center gap-1.5">
             {hasDetails && (
@@ -164,7 +164,7 @@ function TableRow({
             </span>
           </div>
         </td>
-        <td className="px-3 py-2.5 text-right text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
+        <td className="px-3 py-2.5 text-center text-card-foreground font-medium tabular-nums">{row.totalQty.toLocaleString()}</td>
         <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
           {row.totalAmt.toLocaleString()}
         </td>
@@ -172,7 +172,7 @@ function TableRow({
       {isExpanded && hasDetails && (
         <tr>
           <td colSpan={5} className="px-0 py-0">
-            <div className="mx-6 my-2 overflow-hidden rounded border border-border">
+            <div className="mx-6 my-2 overflow-hidden rounded border border-border bg-muted/30">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/50">

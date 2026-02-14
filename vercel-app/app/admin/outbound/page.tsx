@@ -370,11 +370,13 @@ export default function OutboundPage() {
     const totalBaht = Math.round(Math.abs(group.totalAmt || 0))
     const vat7 = Math.round(totalBaht * 0.07)
     const grandTotal = totalBaht + vat7
+    const grandWords = `( ${grandTotal.toLocaleString()} ${invT("inv_baht_only")} )`
     const companyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
     const address = company?.address || "-"
     const taxId = company?.taxId || ""
     const phone = company?.phone || ""
     const bankInfo = company?.bankInfo || ""
+    const projectName = company?.projectName || "CM True Digital Park"
     const clientName = client?.companyName || group.target || "-"
     const clientAddr = (client as InvoiceDataClient)?.address || ""
     const clientTaxId = (client as InvoiceDataClient)?.taxId || ""
@@ -392,30 +394,35 @@ export default function OutboundPage() {
   <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
     <h2 style="margin:0; font-size:1.25rem;">${invT("inv_title")}</h2>
     <div style="text-align:right; font-size:11px;">
+      <div>${invT("inv_original_doc")}</div>
       <div><strong>${invT("inv_doc_no")}:</strong> ${docNo}</div>
       <div><strong>${invT("inv_date")}:</strong> ${d}</div>
+      <div><strong>${invT("inv_due_date")}:</strong> ${d}</div>
+      <div><strong>${invT("inv_reference")}:</strong> ${group.invoiceNo || "-"}</div>
+      <div><strong>Project Name:</strong> ${projectName}</div>
     </div>
   </div>
   <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-    <div style="flex:1;">
+    <div style="flex:1; padding-left:5mm;">
       <div style="font-weight:700; margin-bottom:4px;">${companyName}</div>
-      <div style="font-size:11px; color:#475569;">${address}<br>Tax ID ${taxId} | ${phone}</div>
+      <div style="font-size:11px; color:#475569;">${address}<br>${invT("inv_tax_id")} ${taxId} | ${phone}</div>
     </div>
-    <div style="flex:1; padding-left:16px;">
+    <div style="flex:1; padding-left:calc(16px + 5mm);">
       <div style="font-weight:700; margin-bottom:4px;">${invT("inv_client")}</div>
-      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>Tax ID: " + clientTaxId : ""}${clientAddr ? "<br>" + clientAddr : ""}${clientPhone ? "<br>" + clientPhone : ""}</div>
+      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>" + invT("inv_tax_id") + ": " + clientTaxId : ""}${clientAddr ? "<br>" + invT("inv_address") + ": " + clientAddr : ""}${clientPhone ? "<br>" + invT("inv_phone") + ": " + clientPhone : ""}</div>
     </div>
   </div>
-  <table style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${invT("inv_description")}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${invT("inv_amount")}</th></tr></thead><tbody>${rows}</tbody></table>
+  <table class="table table-bordered" style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${invT("inv_description")}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${invT("inv_amount")}</th></tr></thead><tbody>${rows}</tbody></table>
   <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px;">
     <div>${invT("inv_total")}: ${totalBaht.toLocaleString()} THB</div>
     <div>${invT("inv_vat7")}: ${vat7.toLocaleString()} THB</div>
     <div style="font-weight:700;">${invT("inv_grand_total")}: ${grandTotal.toLocaleString()} THB</div>
+    <div style="font-size:11px; margin-top:4px;">${grandWords}</div>
   </div></div>
   <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${invT("inv_remarks")}:</strong> ${bankInfo}</div>
   <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px;">
-    <div><strong>${clientName}</strong><br>${invT("inv_received_by")} ________________ ${invT("inv_date")} ________________</div>
-    <div><strong>${companyName.split(" ")[0]}</strong><br>${invT("inv_approved_by")} ________________ ${invT("inv_date")} ________________</div>
+    <div><strong>${clientName}</strong><br>${invT("inv_received_by")} ________________  ${invT("inv_date")} ________________</div>
+    <div><strong>${companyName.split(" ")[0]}</strong><br>${invT("inv_approved_by")} ________________  ${invT("inv_date")} ________________</div>
   </div>
 </div>`
   }
@@ -426,7 +433,8 @@ export default function OutboundPage() {
       alert(t("outSelectForExcel"))
       return
     }
-    const header = [
+    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    const headers = [
       t("orderColDate") || "주문 일자",
       t("orderColDeliveryDate") || "배송 일자",
       t("outColInvNo") || "인보이스",
@@ -436,25 +444,44 @@ export default function OutboundPage() {
       t("spec") || "규격",
       t("outColQty") || "수량",
       t("inColAmount") || "금액",
-    ].join("\t")
-    const rows: string[] = [header]
+    ]
+    const dataRows: string[][] = []
     for (const g of checked) {
       const orderDate = g.date?.slice(0, 10) || ""
       const deliveryDate = (g.items[0]?.deliveryDate || "").slice(0, 10) || "-"
       const type = g.type || "Force"
       const target = g.target || "-"
       for (const it of g.items) {
-        const name = (it.name || "").replace(/\t/g, " ")
-        const spec = (it.spec || "").replace(/\t/g, " ")
-        rows.push([orderDate, deliveryDate, g.invoiceNo || "-", type, target, name, spec, it.qty, it.amount].join("\t"))
+        const name = it.name || "-"
+        const spec = it.spec || "-"
+        dataRows.push([orderDate, deliveryDate, g.invoiceNo || "-", type, target, name, spec, String(it.qty ?? ""), String(it.amount ?? "")])
       }
     }
-    const bom = "\uFEFF"
-    const blob = new Blob([bom + rows.join("\n")], { type: "text/csv;charset=utf-8" })
+    const minW = 55
+    const pxPerChar = 8
+    const colWidths = headers.map((h, c) => {
+      let maxLen = String(h).length
+      for (const row of dataRows) {
+        const len = String(row[c] ?? "").length
+        if (len > maxLen) maxLen = len
+      }
+      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
+    })
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+<tr class="head">${headers.map((h) => `<td>${escapeXml(h)}</td>`).join("")}</tr>
+${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).join("")}</tr>`).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `outbound_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `outbound_${new Date().toISOString().slice(0, 10)}.xls`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -477,16 +504,38 @@ export default function OutboundPage() {
       }).join("")
       const area = document.createElement("div")
       area.id = "invoice-print-area"
-      area.className = "invoice-print-area"
       area.innerHTML = html
-      area.style.cssText = "position:absolute; left:-9999px; top:0; width:210mm;"
+      area.style.cssText = "position:absolute; left:-9999px; top:0; width:210mm; visibility:hidden;"
       document.body.appendChild(area)
       const style = document.createElement("style")
-      style.textContent = ".invoice-print-area { } @media print { body * { visibility: hidden; } .invoice-print-area, .invoice-print-area * { visibility: visible; } .invoice-print-area { position: absolute; left: 0; top: 0; width: 100%; } }"
+      style.id = "invoice-print-style"
+      style.textContent = `@media print {
+        body.invoice-printing * { visibility: hidden !important; }
+        body.invoice-printing > *:not(#invoice-print-area) { display: none !important; visibility: hidden !important; }
+        body.invoice-printing #invoice-print-area,
+        body.invoice-printing #invoice-print-area * { visibility: visible !important; }
+        body.invoice-printing #invoice-print-area {
+          display: block !important; position: absolute !important; left: 0 !important; top: 0 !important;
+          margin: 0 !important; width: 210mm !important; min-width: 210mm !important;
+          max-width: 210mm !important; padding: 0 10mm !important; box-sizing: border-box !important;
+          overflow: visible !important; line-height: 1.85 !important; z-index: 999999 !important;
+          background: #fff !important; visibility: visible !important;
+        }
+        body.invoice-printing html, body.invoice-printing body { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+        body.invoice-printing .delivery-note-invoice {
+          width: 100% !important; max-width: 210mm !important; box-sizing: border-box !important;
+          padding: 18mm 1cm 0.1cm calc(12px + 5mm) !important; margin: 0 auto !important;
+          border: none !important; page-break-after: always !important; line-height: 1.85 !important;
+        }
+        body.invoice-printing .delivery-note-invoice:last-child { page-break-after: auto !important; }
+      }`
       document.head.appendChild(style)
+      document.body.classList.add("invoice-printing")
       window.print()
+      document.body.classList.remove("invoice-printing")
       document.body.removeChild(area)
-      document.head.removeChild(style)
+      const el = document.getElementById("invoice-print-style")
+      if (el) el.remove()
     } catch (e) {
       console.error(e)
       alert(t("invLoadFailed"))
