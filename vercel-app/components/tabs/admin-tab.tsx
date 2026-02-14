@@ -72,6 +72,8 @@ export function AdminTab() {
   }, [auth])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
+  const leaveTypeToKey: Record<string, string> = { "연차": "annual", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
+  const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid") : type
 
   const loadLeaveList = () => {
     if (!auth?.store) return
@@ -196,7 +198,7 @@ export function AdminTab() {
                 <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
                   <div>
                     <p className="text-sm font-medium text-foreground">{item.name}{item.nick ? ` (${item.nick})` : ""} · {item.store}</p>
-                    <p className="text-xs text-muted-foreground">{t("adminLeaveRequest")} {item.requestDate} · {t("adminLeaveDate")} {item.date} · {item.type} {item.reason ? `· ${item.reason}` : ""}</p>
+                    <p className="text-xs text-muted-foreground">{t("adminLeaveRequest")} {item.requestDate} · {t("adminLeaveDate")} {item.date} · {translateLeaveType(item.type)} {item.reason ? `· ${item.reason}` : ""}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {item.status === "대기" && (

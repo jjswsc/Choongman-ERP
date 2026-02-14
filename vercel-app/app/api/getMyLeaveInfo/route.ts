@@ -64,9 +64,13 @@ export async function GET(request: NextRequest) {
         dateStr &&
         parseInt(dateStr.slice(0, 4), 10) === thisYear
       ) {
-        const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
-        if (type.indexOf('병가') !== -1) usedSick += val
-        else usedAnn += val
+        if (type.indexOf('무급휴가') !== -1) {
+          /* 무급휴가: 연차·병가 집계 제외, 급여 제외 */
+        } else {
+          const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
+          if (type.indexOf('병가') !== -1) usedSick += val
+          else usedAnn += val
+        }
       }
       return { date: dateStr, type, reason: r.reason || '', status }
     })

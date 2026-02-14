@@ -37,6 +37,7 @@ const LEAVE_TYPE_TO_KEY: Record<string, string> = {
   연차: "annual",
   반차: "half",
   병가: "sick",
+  무급휴가: "unpaid",
 }
 
 const LEAVE_STATUS_TO_KEY: Record<string, string> = {
@@ -348,9 +349,10 @@ export function HrTab() {
             onChange={(e) => setLeaveType(e.target.value)}
             className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           >
-            <option value="연차">{t("annual")}</option>
-            <option value="반차">{t("half")}</option>
-            <option value="병가">{t("sick")}</option>
+<option value="연차">{t("annual")}</option>
+              <option value="반차">{t("half")}</option>
+              <option value="병가">{t("sick")}</option>
+              <option value="무급휴가">{t("unpaid")}</option>
           </select>
           <Input
             type="date"

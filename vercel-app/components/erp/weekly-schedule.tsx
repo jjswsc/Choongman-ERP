@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, CalendarRange, ChevronLeft, ChevronRight, CalendarDays, Printer, FileSpreadsheet, ChevronDown, ChevronUp } from "lucide-react"
+import { Search, CalendarRange, ChevronLeft, ChevronRight, CalendarDays, Printer, FileSpreadsheet, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -185,11 +185,10 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     })
   }
 
-  const expandAll = () => setCollapsedRows(new Set())
-  const collapseAll = () => setCollapsedRows(new Set(personKeys))
-
   const handlePrint = () => {
     if (!hasSearched || schedule.length === 0) return
+    setCollapsedRows(new Set())
+    setTimeout(() => {
     const area = document.getElementById("weekly-schedule-print-area")
     if (!area) return
     const style = document.createElement("style")
@@ -213,10 +212,18 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         grid-template-columns: 72px repeat(7, 1fr) !important;
         width: 100% !important;
       }
+      #weekly-schedule-print-area .print-schedule-person { padding: 4px 6px !important; min-height: 28px !important; gap: 2px !important; }
+      #weekly-schedule-print-area .print-schedule-slot { min-height: 24px !important; padding: 2px 4px !important; font-size: 10px !important; }
+      #weekly-schedule-print-area .print-schedule-slot-empty { min-height: 24px !important; font-size: 9px !important; }
+      #weekly-schedule-print-area .print-schedule-person-name { font-size: 10px !important; }
+      #weekly-schedule-print-area .print-schedule-person-area { font-size: 9px !important; }
+      #weekly-schedule-print-area .print-schedule-gap { gap: 4px !important; }
+      #weekly-schedule-print-area .print-schedule-card { border-radius: 4px !important; }
     }`
     document.head.appendChild(style)
     window.print()
     document.getElementById("schedule-print-style")?.remove()
+    }, 50)
   }
 
   const escapeXml = (s: string) =>
@@ -351,17 +358,6 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <p>{t("scheduleStorePlaceholder")}: {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
               <p>{t("schedulePeriod")}: {weekRangeStr}</p>
             </div>
-            {/* 펼치기/접기 버튼 + 접기 아이콘 */}
-            <div className="flex items-center gap-2 mb-2 px-4 print:hidden">
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={expandAll}>
-                <ChevronDown className="mr-1 h-3 w-3" />
-                {t("scheduleExpandAll") || "전체 펼치기"}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={collapseAll}>
-                <ChevronUp className="mr-1 h-3 w-3" />
-                {t("scheduleCollapseAll") || "전체 접기"}
-              </Button>
-            </div>
             {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
             <div className="overflow-x-auto overscroll-x-contain px-4 pb-4 print:overflow-visible print:px-0">
             <div className="min-w-max print-schedule-wrap">
@@ -384,22 +380,22 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               </div>
 
               {/* 이름+부서 | 시간표 - 근무시간/쉬는시간 각각 한 줄 */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 print-schedule-gap">
                 {persons.map((p) => {
                   const key = `${p.store}|${p.name}`
                   const isCollapsed = collapsedRows.has(key)
                   return (
-                    <div key={key} className="rounded-xl border bg-card overflow-hidden">
+                    <div key={key} className="rounded-xl border bg-card overflow-hidden print-schedule-card">
                       <button
                         type="button"
                         onClick={() => toggleRow(key)}
-                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid"
+                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid print-schedule-person"
                         style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
                       >
                         {/* 이름 + 부서 + 접기 버튼 */}
                         <div className="flex flex-col items-start justify-center shrink-0 min-w-[72px]">
                           <div className="flex items-center gap-1">
-                            <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
+                            <span className="text-[13px] font-bold text-card-foreground leading-tight print-schedule-person-name">{p.name}</span>
                             {!isCollapsed && (
                               <span className="inline-flex shrink-0" title={t("scheduleCollapseAll") || "접기"}>
                                 <ChevronUp
@@ -409,7 +405,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
+                          <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5 print-schedule-person-area">
                             {areaLabel(p.area)}
                           </span>
                         </div>
@@ -418,11 +414,11 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           <div key={dayIdx} className="flex flex-col items-center justify-center shrink-0 min-w-[72px]">
                             {workStr ? (
                               isCollapsed ? (
-                                <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10">
+                                <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10 print-schedule-slot">
                                   <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
                                 </div>
                               ) : (
-                                <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[hsl(215,80%,50%)]/10 px-2 py-2 w-full min-h-[44px]">
+                                <div className="flex flex-col items-center justify-center gap-1 rounded-lg bg-[hsl(215,80%,50%)]/10 px-2 py-2 w-full min-h-[44px] print-schedule-slot">
                                   <span className="text-[12px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-tight whitespace-nowrap">
                                     {workStr}
                                   </span>
@@ -436,7 +432,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                                 </div>
                               )
                             ) : (
-                              <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-muted/50">
+                              <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-muted/50 print-schedule-slot print-schedule-slot-empty">
                                 <span className="text-[11px] font-medium text-muted-foreground">{t("scheduleOff")}</span>
                               </div>
                             )}
