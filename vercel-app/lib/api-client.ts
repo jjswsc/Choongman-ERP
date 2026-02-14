@@ -498,6 +498,44 @@ export async function processAttendanceApproval(params: { id: number; decision: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface AttendanceDailyRow {
+  date: string
+  store: string
+  name: string
+  inTimeStr: string
+  outTimeStr: string
+  breakMin: number
+  actualWorkHrs: number
+  plannedWorkHrs: number
+  diffMin: number
+  lateMin: number
+  otMin: number
+  status: string
+  approval: string
+  pendingId: number | null
+}
+
+export async function getAttendanceRecordsAdmin(params: {
+  startDate: string
+  endDate: string
+  storeFilter?: string
+  employeeFilter?: string
+  statusFilter?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.startDate) q.set('startDate', params.startDate)
+  if (params.endDate) q.set('endDate', params.endDate)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.employeeFilter) q.set('employeeFilter', params.employeeFilter)
+  if (params.statusFilter) q.set('statusFilter', params.statusFilter || 'all')
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await fetch(`/api/getAttendanceRecordsAdmin?${q}`)
+  return res.json() as Promise<AttendanceDailyRow[]>
+}
+
 // ─── 업무일지 (Work Log) ───
 export interface WorkLogItem {
   id: string
@@ -688,6 +726,19 @@ export async function getWeeklySchedule(params: {
   if (params.area && params.area !== 'All') q.set('area', params.area)
   const res = await fetch(`/api/getWeeklySchedule?${q}`)
   return res.json() as Promise<WeeklyScheduleItem[]>
+}
+
+export async function saveSchedule(params: {
+  store: string
+  monday: string
+  rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string }[]
+}) {
+  const res = await fetch('/api/saveSchedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export interface MyAttendanceSummary {
