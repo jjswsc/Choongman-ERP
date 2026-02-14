@@ -446,6 +446,12 @@ export default function OutboundPage() {
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
   }, [historyList, usageList, isOffice])
 
+  const [tabValue, setTabValue] = React.useState<"new" | "hist">(isOffice ? "new" : "hist")
+
+  React.useEffect(() => {
+    setTabValue(isOffice ? "new" : "hist")
+  }, [isOffice])
+
   if (loading) {
     return (
       <div className="flex-1 overflow-auto flex items-center justify-center min-h-[200px]">
@@ -455,11 +461,6 @@ export default function OutboundPage() {
   }
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
-  const [tabValue, setTabValue] = React.useState<"new" | "hist">(isOffice ? "new" : "hist")
-
-  React.useEffect(() => {
-    setTabValue(isOffice ? "new" : "hist")
-  }, [isOffice])
 
   return (
     <div className="flex-1 overflow-auto">
