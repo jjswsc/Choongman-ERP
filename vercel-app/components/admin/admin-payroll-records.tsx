@@ -75,7 +75,7 @@ export function AdminPayrollRecords() {
         setList(data.list)
       } else {
         setList([])
-        setError(data.msg || t("pay_error"))
+        setError(translateApiMessage(data.msg) || t("pay_error"))
       }
     } catch {
       setList([])
@@ -87,6 +87,14 @@ export function AdminPayrollRecords() {
   }
 
   const hasResult = list.length > 0
+
+  const translateApiMessage = (msg: string | undefined): string => {
+    if (!msg) return ""
+    const m = msg.trim()
+    if (m === "조회할 월(yyyy-MM)을 선택해주세요.") return t("pay_month_select")
+    if (m === "급여 내역 조회 중 오류가 발생했습니다.") return t("pay_records_error")
+    return msg
+  }
 
   return (
     <Card className="shadow-sm">

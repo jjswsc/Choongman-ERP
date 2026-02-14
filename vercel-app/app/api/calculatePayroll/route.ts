@@ -53,7 +53,9 @@ type AttSummaryRow = { lateMin: number; otMin: number; workMin: number; workDays
 /** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates */
 async function getAttendanceSummary(monthStr: string): Promise<Record<string, AttSummaryRow>> {
   const startStr = monthStr + '-01'
-  const firstDay = new Date(monthStr + '-01')
+  const firstDay = new Date(monthStr + '-01T12:00:00')
+  const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
+  const endStr = lastDay.toISOString().slice(0, 10)
   const nextMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 1)
   const nextMonthStr = nextMonth.getFullYear() + '-' + String(nextMonth.getMonth() + 1).padStart(2, '0') + '-01'
 

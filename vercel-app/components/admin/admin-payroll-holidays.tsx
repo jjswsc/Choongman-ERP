@@ -43,7 +43,7 @@ export function AdminPayrollHolidays() {
         setList(data.list)
       } else {
         setList([])
-        setError(data.msg || t("pay_error"))
+        setError(translateApiMessage(data.msg) || t("pay_error"))
       }
     } catch {
       setList([])
@@ -73,7 +73,7 @@ export function AdminPayrollHolidays() {
         setAddName("")
         loadList()
       } else {
-        setError(data.msg || t("pay_save_fail"))
+        setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }
     } catch {
       setError(t("pay_save_fail"))
@@ -105,7 +105,7 @@ export function AdminPayrollHolidays() {
         setEditName("")
         loadList()
       } else {
-        setError(data.msg || t("pay_save_fail"))
+        setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }
     } catch {
       setError(t("pay_save_fail"))
@@ -128,7 +128,7 @@ export function AdminPayrollHolidays() {
       if (data.success) {
         loadList()
       } else {
-        setError(data.msg || t("pay_save_fail"))
+        setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }
     } catch {
       setError(t("pay_save_fail"))
@@ -150,6 +150,21 @@ export function AdminPayrollHolidays() {
   }
 
   const hasResult = list.length > 0
+
+  const translateApiMessage = (msg: string | undefined): string => {
+    if (!msg) return ""
+    const m = msg.trim()
+    if (m === "연도를 선택해주세요.") return t("holiday_year_required")
+    if (m === "조회 실패.") return t("holiday_query_fail")
+    if (m === "연도와 날짜를 입력해주세요.") return t("holiday_year_date_required")
+    if (m === "추가되었습니다.") return t("holiday_added")
+    if (m === "id가 필요합니다.") return t("holiday_id_required")
+    if (m === "수정할 항목이 없습니다.") return t("holiday_nothing_to_update")
+    if (m === "수정되었습니다.") return t("holiday_updated")
+    if (m === "삭제되었습니다.") return t("holiday_deleted")
+    if (m.includes("action을 지정해주세요")) return t("holiday_action_required")
+    return msg
+  }
 
   return (
     <Card className="shadow-sm">
@@ -216,7 +231,7 @@ export function AdminPayrollHolidays() {
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-left font-medium">{t("holiday_date")}</th>
                   <th className="p-2 text-left font-medium">{t("holiday_name")}</th>
-                  <th className="p-2 text-right font-medium w-24">{t("editOrder")}</th>
+                  <th className="p-2 text-right font-medium w-24">{t("pay_actions")}</th>
                 </tr>
               </thead>
               <tbody>

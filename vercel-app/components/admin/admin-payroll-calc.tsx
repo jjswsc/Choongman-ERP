@@ -75,7 +75,7 @@ export function AdminPayrollCalc() {
         setList(data.list)
       } else {
         setList([])
-        setError(data.message || t("pay_error"))
+        setError(translateApiMessage(data.message) || t("pay_error"))
       }
     } catch {
       setList([])
@@ -87,6 +87,15 @@ export function AdminPayrollCalc() {
   }
 
   const hasResult = list.length > 0
+
+  const translateApiMessage = (msg: string | undefined): string => {
+    if (!msg) return ""
+    const m = msg.trim()
+    if (m === "월(yyyy-MM)을 선택해주세요.") return t("pay_month_required")
+    if (m === "저장할 데이터가 없습니다.") return t("pay_no_data_to_save")
+    if (m.startsWith("저장 실패:")) return t("pay_save_fail") + m.slice("저장 실패:".length)
+    return msg
+  }
 
   const handleSave = async () => {
     if (list.length === 0) return
@@ -121,7 +130,7 @@ export function AdminPayrollCalc() {
         setError(null)
         alert(t("pay_save_success"))
       } else {
-        setError(data.msg || t("pay_save_fail"))
+        setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }
     } catch {
       setError(t("pay_save_fail"))
