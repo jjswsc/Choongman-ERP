@@ -129,7 +129,7 @@ export function AdminScheduleEdit({
 
   const toggleSlot = (day: number, area: string, time: string) => {
     if (!selectedStaff) {
-      alert(t("att_staff_select") + " " + (t("scheduleStorePlaceholder") || "먼저 선택하세요"))
+      alert(t("att_staff_select") + " " + t("att_select_first"))
       return
     }
     const key = getSlotKey(day, area, time)
@@ -147,7 +147,7 @@ export function AdminScheduleEdit({
         ([k]) => k.startsWith(`${day}-`) && (slotData[k]?.includes(selectedStaff.name) || slotData[k]?.includes(brkName))
       )
       if (otherSlots.length > 0) {
-        alert("해당 요일에는 이미 배정되어 있습니다.")
+        alert(t("att_already_assigned"))
         return
       }
       next = [...current, selectedStaff.name]
@@ -157,7 +157,7 @@ export function AdminScheduleEdit({
 
   const loadSaved = () => {
     if (!store || !monday) {
-      alert("매장과 기준 월요일을 선택하세요.")
+      alert(t("att_store_monday_required"))
       return
     }
     setLoading(true)
@@ -182,7 +182,7 @@ export function AdminScheduleEdit({
         }
         setSlotData(next)
       })
-      .catch(() => alert("불러오기 실패"))
+      .catch(() => alert(t("att_load_failed")))
       .finally(() => setLoading(false))
   }
 
@@ -192,7 +192,7 @@ export function AdminScheduleEdit({
 
   const applyQuick = (area: string) => {
     if (!selectedStaff) {
-      alert(t("att_staff_select") + " 먼저 선택하세요")
+      alert(t("att_staff_select") + " " + t("att_select_first"))
       return
     }
     const [sh, sm] = quickStart.split(":").map(Number)
@@ -225,13 +225,13 @@ export function AdminScheduleEdit({
   const copyToNext = () => {
     if (!store || !monday) return
     const nextMonday = addDays(monday, 7)
-    if (!confirm(`현재 스케줄을 다음 주(${nextMonday})로 복사하시겠습니까?`)) return
+    if (!confirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
     setMonday(nextMonday)
   }
 
   const doSave = () => {
     if (!store || !monday) {
-      alert("매장과 기준 월요일을 선택하세요.")
+      alert(t("att_store_monday_required"))
       return
     }
     const map: Record<string, { work: string[]; break: string[] }> = {}
@@ -288,16 +288,16 @@ export function AdminScheduleEdit({
     }
 
     if (rows.length === 0) {
-      alert("저장할 데이터가 없습니다.")
+      alert(t("att_no_data_to_save"))
       return
     }
     setSaving(true)
     saveSchedule({ store, monday, rows })
       .then((r) => {
-        if (r.success) alert(r.message || "저장되었습니다.")
-        else alert(r.message || "저장 실패")
+        if (r.success) alert(r.message || t("att_saved"))
+        else alert(r.message || t("att_save_failed"))
       })
-      .catch((e) => alert("저장 실패: " + (e?.message || e)))
+      .catch((e) => alert(t("att_save_failed") + ": " + (e?.message || e)))
       .finally(() => setSaving(false))
   }
 
@@ -312,7 +312,7 @@ export function AdminScheduleEdit({
   if (!store) {
     return (
       <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
-        매장을 선택하세요.
+        {t("att_select_store")}
       </div>
     )
   }
@@ -497,7 +497,7 @@ export function AdminScheduleEdit({
             >
               <thead className="sticky top-0 bg-muted z-10 shadow-sm">
                 <tr>
-                  <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">Time</th>
+                  <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
                   {dayStrs.map((d, i) => (
                     <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center font-semibold">
                       {t(DAY_LABELS[i])} {d.slice(5)}

@@ -210,7 +210,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed py-12">
         <CalendarDays className="h-10 w-10 text-muted-foreground/50" />
-        <p className="text-center text-sm text-muted-foreground">매장을 선택하고 로그인해 주세요.</p>
+        <p className="text-center text-sm text-muted-foreground">{t("att_select_store_login")}</p>
       </div>
     )
   }

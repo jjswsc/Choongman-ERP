@@ -120,7 +120,7 @@ export default function AdminAttendancePage() {
         return next
       })
       loadRecords()
-    } else alert(res.message || "처리 실패")
+    } else alert(res.message || t("att_process_failed"))
   }
 
   const handleReject = async (id: number) => {
@@ -131,7 +131,7 @@ export default function AdminAttendancePage() {
       userRole: auth?.role,
     })
     if (res.success) loadRecords()
-    else alert(res.message || "처리 실패")
+    else alert(res.message || t("att_process_failed"))
   }
 
   return (
@@ -216,7 +216,7 @@ export default function AdminAttendancePage() {
                 <div className="py-16 text-center text-sm text-muted-foreground">{t("loading")}</div>
               ) : list.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
-                  {t("adminLeaveNoResult") || "조회된 기록이 없습니다."}
+                  {t("adminLeaveNoResult")}
                 </div>
               ) : (
                 <table className="w-full text-xs">
@@ -257,8 +257,8 @@ export default function AdminAttendancePage() {
                           <td className="px-3 py-2.5 text-center">{row.plannedWorkHrs}</td>
                           <td className="px-3 py-2.5 text-center">{row.diffMin}</td>
                           <td className="px-3 py-2.5 text-center">
-                            {row.lateMin > 0 && <span className="text-amber-600">지각{row.lateMin}분 </span>}
-                            {row.otMin > 0 && <span className="text-blue-600">연장{row.otMin}분</span>}
+                            {row.lateMin > 0 && <span className="text-amber-600">{t("att_late_label")} {row.lateMin}{t("att_min_unit")} </span>}
+                            {row.otMin > 0 && <span className="text-blue-600">{t("att_ot_label")} {row.otMin}{t("att_min_unit")}</span>}
                             {row.lateMin === 0 && row.otMin === 0 && "-"}
                           </td>
                           <td className="px-3 py-2.5 text-center">
@@ -281,7 +281,7 @@ export default function AdminAttendancePage() {
                                       type="number"
                                       min={0}
                                       max={999}
-                                      placeholder={t("att_ot_min") || "연장(분)"}
+                                      placeholder={t("att_ot_min")}
                                       value={otMinutesByRow[row.pendingId] ?? String(row.otMin)}
                                       onChange={(e) =>
                                         setOtMinutesByRow((p) => ({ ...p, [row.pendingId!]: e.target.value }))

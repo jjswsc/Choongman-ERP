@@ -96,6 +96,13 @@ export function EmployeeEvalTab({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
+  const [userTextTrans, setUserTextTrans] = React.useState<{
+    totalMemo: string
+    incidents: { details: string; typeOther: string }[]
+    remarks: Record<string, string>
+    trainingNeeded: string
+    coach: string
+  }>({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
 
   const employeeList = React.useMemo(() => {
     if (!evalStore || evalStore === "All") return []
@@ -160,7 +167,7 @@ export function EmployeeEvalTab({
   }, [evalType])
 
   React.useEffect(() => {
-    if (lang === "ko" || sections.length === 0) {
+    if (sections.length === 0) {
       setEvalTransMap({})
       return
     }
@@ -188,6 +195,88 @@ export function EmployeeEvalTab({
     }).catch(() => setEvalTransMap({}))
     return () => { cancelled = true }
   }, [sections, lang])
+
+  React.useEffect(() => {
+    if (sections.length === 0) {
+      setUserTextTrans({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
+      return
+    }
+    const texts: string[] = []
+    const keys: { type: string; idx?: number; key?: string }[] = []
+    if ((totalMemo || "").trim()) {
+      texts.push(totalMemo.trim())
+      keys.push({ type: "totalMemo" })
+    }
+    for (let i = 0; i < incidents.length; i++) {
+      const d = (incidents[i]?.details || "").trim()
+      if (d) {
+        texts.push(d)
+        keys.push({ type: "incident", idx: i })
+      }
+      const o = (incidents[i]?.typeOther || "").trim()
+      if (o) {
+        texts.push(o)
+        keys.push({ type: "incidentOther", idx: i })
+      }
+    }
+    if ((trainingNeeded || "").trim()) {
+      texts.push(trainingNeeded.trim())
+      keys.push({ type: "trainingNeeded" })
+    }
+    if ((coach || "").trim()) {
+      texts.push(coach.trim())
+      keys.push({ type: "coach" })
+    }
+    for (const [k, v] of Object.entries(remarks)) {
+      if ((v || "").trim()) {
+        texts.push(v.trim())
+        keys.push({ type: "remark", key: k })
+      }
+    }
+    if (texts.length === 0) {
+      setUserTextTrans({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      translateTexts(texts, lang).then((translated) => {
+        if (cancelled) return
+        const next: {
+          totalMemo: string
+          incidents: { details: string; typeOther: string }[]
+          remarks: Record<string, string>
+          trainingNeeded: string
+          coach: string
+        } = {
+          totalMemo: "",
+          incidents: incidents.map(() => ({ details: "", typeOther: "" })),
+          remarks: {},
+          trainingNeeded: "",
+          coach: "",
+        }
+        keys.forEach((key, i) => {
+          const t = translated[i] ?? texts[i] ?? ""
+          if (key.type === "totalMemo") next.totalMemo = t
+          else if (key.type === "trainingNeeded") next.trainingNeeded = t
+          else if (key.type === "coach") next.coach = t
+          else if (key.type === "incident" && key.idx !== undefined) {
+            if (!next.incidents[key.idx]) next.incidents[key.idx] = { details: "", typeOther: "" }
+            next.incidents[key.idx].details = t
+          } else if (key.type === "incidentOther" && key.idx !== undefined) {
+            if (!next.incidents[key.idx]) next.incidents[key.idx] = { details: "", typeOther: "" }
+            next.incidents[key.idx].typeOther = t
+          } else if (key.type === "remark" && key.key) next.remarks[key.key] = t
+        })
+        setUserTextTrans(next)
+      }).catch(() =>
+        setUserTextTrans({ totalMemo: "", incidents: [], remarks: {}, trainingNeeded: "", coach: "" })
+      )
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [totalMemo, incidents, remarks, trainingNeeded, coach, lang, sections.length])
 
   const getEvalTrans = (text: string) =>
     (text && evalTransMap[text]) || text || ""
@@ -381,8 +470,68 @@ export function EmployeeEvalTab({
           태도: t("eval_section_attitude"),
         }
 
+  const hasUserTrans =
+    userTextTrans.totalMemo ||
+    userTextTrans.trainingNeeded ||
+    userTextTrans.coach ||
+    userTextTrans.incidents.some((i) => i.details || i.typeOther) ||
+    Object.keys(userTextTrans.remarks).length > 0
+
   return (
-    <div className="space-y-4">
+    <div className="relative space-y-4">
+      {sections.length > 0 && hasUserTrans && (
+        <div className="fixed right-4 top-20 z-50 max-h-[calc(100vh-6rem)] w-72 overflow-auto rounded-lg border border-border bg-card p-3 shadow-lg">
+          <h6 className="mb-2 border-b pb-2 text-xs font-bold">
+            {t("eval_translation_preview")}
+          </h6>
+          <div className="space-y-2 text-xs">
+            {userTextTrans.totalMemo && (
+              <div>
+                <span className="font-medium text-muted-foreground">{t("eval_total_comment")}:</span>
+                <p className="mt-0.5 whitespace-pre-wrap break-words">{userTextTrans.totalMemo}</p>
+              </div>
+            )}
+            {userTextTrans.incidents.map((inc, i) =>
+              inc.details || inc.typeOther ? (
+                <div key={i}>
+                  <span className="font-medium text-muted-foreground">
+                    {t("eval_incident")} #{i + 1}:
+                  </span>
+                  {(inc.details || inc.typeOther) && (
+                    <p className="mt-0.5 whitespace-pre-wrap break-words">
+                      {[inc.typeOther, inc.details].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                </div>
+              ) : null
+            )}
+            {userTextTrans.trainingNeeded && (
+              <div>
+                <span className="font-medium text-muted-foreground">{t("eval_training")}:</span>
+                <p className="mt-0.5">{userTextTrans.trainingNeeded}</p>
+              </div>
+            )}
+            {userTextTrans.coach && (
+              <div>
+                <span className="font-medium text-muted-foreground">{t("eval_coach")}:</span>
+                <p className="mt-0.5">{userTextTrans.coach}</p>
+              </div>
+            )}
+            {Object.entries(userTextTrans.remarks).length > 0 && (
+              <div>
+                <span className="font-medium text-muted-foreground">{t("eval_notes")}:</span>
+                <div className="mt-0.5 space-y-1">
+                  {Object.entries(userTextTrans.remarks).map(([k, v]) => (
+                    <p key={k} className="whitespace-pre-wrap break-words">
+                      #{k}: {v}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div>

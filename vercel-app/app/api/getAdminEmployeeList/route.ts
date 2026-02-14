@@ -33,8 +33,8 @@ export async function GET(req: Request) {
       if (!r.store && !r.name) continue
       const empStore = String(r.store || '').trim()
       let include = false
-      if (role.includes('director') || role.includes('ceo') || role.includes('hr')) include = true
-      else if (role.includes('officer')) {
+      if (role.includes('director')) include = true
+      else if (role.includes('ceo') || role.includes('hr') || role.includes('officer')) {
         if (!isOfficeStore(empStore)) include = true
       } else if (role.includes('manager')) {
         if (!isOfficeStore(empStore)) include = true
@@ -76,7 +76,7 @@ export async function GET(req: Request) {
       if (OFFICE_STORES.some((s) => b.toLowerCase().includes(s.toLowerCase()))) return 1
       return a.localeCompare(b)
     })
-    const canSeeOffice = role.includes('director') || role.includes('ceo') || role.includes('hr')
+    const canSeeOffice = role.includes('director')
     if (!canSeeOffice) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }

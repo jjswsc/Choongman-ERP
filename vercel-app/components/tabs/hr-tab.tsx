@@ -210,7 +210,7 @@ export function HrTab() {
     return (
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <Users className="h-12 w-12 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">매장을 선택하고 로그인해 주세요.</p>
+        <p className="text-sm text-muted-foreground">{t("att_select_store_login")}</p>
       </div>
     )
   }
