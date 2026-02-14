@@ -306,12 +306,12 @@ export default function OutboundPage() {
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("outStore")}</label>
-                        <Select value={outStore} onValueChange={setOutStore}>
+                        <Select value={outStore || "__none__"} onValueChange={(v) => setOutStore(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="mt-1 h-9">
                             <SelectValue placeholder={t("outStorePlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">{t("outStorePlaceholder")}</SelectItem>
+                            <SelectItem value="__none__">{t("outStorePlaceholder")}</SelectItem>
                             {outboundTargets.map((s) => (
                               <SelectItem key={s} value={s}>
                                 {s}
@@ -418,22 +418,22 @@ export default function OutboundPage() {
                 <Input type="month" value={histMonth} onChange={(e) => setHistMonth(e.target.value)} className="h-9 w-36" title={t("inMonthHint")} />
                 {isOffice && (
                   <>
-                    <Select value={histType} onValueChange={setHistType}>
+                    <Select value={histType || "__all__"} onValueChange={(v) => setHistType(v === "__all__" ? "" : v)}>
                       <SelectTrigger className="h-9 w-28">
                         <SelectValue placeholder={t("outFilterType")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">{t("outTypeAll")}</SelectItem>
+                        <SelectItem value="__all__">{t("outTypeAll")}</SelectItem>
                         <SelectItem value="Force">{t("outTypeForce")}</SelectItem>
                         <SelectItem value="Order">{t("outTypeOrder")}</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Select value={histStore} onValueChange={setHistStore}>
+                    <Select value={histStore || "__all__"} onValueChange={(v) => setHistStore(v === "__all__" ? "" : v)}>
                       <SelectTrigger className="h-9 w-40">
                         <SelectValue placeholder={t("outFilterStoreAll")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">{t("outFilterStoreAll")}</SelectItem>
+                        <SelectItem value="__all__">{t("outFilterStoreAll")}</SelectItem>
                         {outboundTargets.map((s) => (
                           <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}

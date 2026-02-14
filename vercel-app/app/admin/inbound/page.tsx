@@ -266,12 +266,12 @@ export default function InboundPage() {
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("inVendor")}</label>
-                        <Select value={inVendor} onValueChange={setInVendor}>
+                        <Select value={inVendor || "__none__"} onValueChange={(v) => setInVendor(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="mt-1 h-9">
                             <SelectValue placeholder={t("inVendorPlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">{t("inVendorPlaceholder")}</SelectItem>
+                            <SelectItem value="__none__">{t("inVendorPlaceholder")}</SelectItem>
                             {purchaseVendors.map((v) => (
                               <SelectItem key={v.code} value={v.name}>
                                 {v.name}
@@ -375,12 +375,12 @@ export default function InboundPage() {
                 <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-36" />
                 <Input type="month" value={histMonth} onChange={(e) => setHistMonth(e.target.value)} className="h-9 w-36" title={t("inMonthHint")} />
                 {isOffice && (
-                  <Select value={histVendor} onValueChange={setHistVendor}>
-                    <SelectTrigger className="h-9 w-40">
-                      <SelectValue placeholder={t("inVendorAll")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">{t("inVendorAll")}</SelectItem>
+                    <Select value={histVendor || "__all__"} onValueChange={(v) => setHistVendor(v === "__all__" ? "" : v)}>
+                      <SelectTrigger className="h-9 w-40">
+                        <SelectValue placeholder={t("inVendorAll")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("inVendorAll")}</SelectItem>
                       {purchaseVendors.map((v) => (
                         <SelectItem key={v.code} value={v.name}>{v.name}</SelectItem>
                       ))}
