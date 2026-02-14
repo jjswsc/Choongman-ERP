@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter, Geist_Mono, Noto_Sans_KR } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 import "./globals.css"
 
@@ -45,9 +46,11 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} font-sans antialiased`}>
-        <AuthProvider>
-          <LangProvider>{children}</LangProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <LangProvider>{children}</LangProvider>
+          </AuthProvider>
+        </ErrorBoundary>
       </body>
     </html>
   )

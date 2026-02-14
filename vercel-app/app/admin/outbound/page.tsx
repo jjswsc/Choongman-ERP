@@ -650,12 +650,12 @@ export default function OutboundPage() {
           onSelect={handleItemSelect}
         />
 
-        <Dialog open={!!photoModalUrl} onOpenChange={(o) => !o && setPhotoModalUrl(null)}>
-          <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
-            <DialogHeader className="sr-only">
-              <DialogTitle>{t("outPhotoView")}</DialogTitle>
-            </DialogHeader>
-            {photoModalUrl && (
+        {photoModalUrl && (
+          <Dialog open onOpenChange={(o) => !o && setPhotoModalUrl(null)}>
+            <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
+              <DialogHeader className="sr-only">
+                <DialogTitle>{t("outPhotoView")}</DialogTitle>
+              </DialogHeader>
               <div className="flex items-center justify-center bg-black/50 min-h-[200px]">
                 <img
                   src={photoModalUrl}
@@ -663,9 +663,9 @@ export default function OutboundPage() {
                   className="max-w-full max-h-[85vh] object-contain"
                 />
               </div>
-            )}
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </div>
   )
