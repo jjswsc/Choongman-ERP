@@ -67,7 +67,7 @@ export function EmployeeEvalTab({
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const evaluatorName = auth?.name || auth?.store || ""
+  const evaluatorName = auth?.user || auth?.store || ""
 
   const [evalStore, setEvalStore] = React.useState("")
   const [evalEmployee, setEvalEmployee] = React.useState("")
