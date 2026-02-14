@@ -146,3 +146,26 @@ export async function supabaseInsertMany(table: string, rows: Record<string, unk
   const text = await res.text()
   return text ? (JSON.parse(text) as unknown) : []
 }
+
+/** UPSERT: 충돌 시 기존 행 갱신. onConflict 예: "month,store,name" */
+export async function supabaseUpsert(
+  table: string,
+  rows: Record<string, unknown>[],
+  onConflict: string
+) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?on_conflict=${encodeURIComponent(onConflict)}`
+  const res = await fetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation,resolution=merge-duplicates',
+    },
+    body: JSON.stringify(rows),
+  })
+  if (!res.ok) throw new Error('Supabase upsert failed: ' + (await res.text()))
+  const text = await res.text()
+  return text ? (JSON.parse(text) as unknown) : []
+}

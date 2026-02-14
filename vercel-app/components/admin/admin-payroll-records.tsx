@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Calculator, Save } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -22,26 +21,28 @@ function toMonthStr(d?: Date): string {
   return x.toISOString().slice(0, 7)
 }
 
-type PayrollRow = {
+type RecordRow = {
+  month: string
   store: string
   name: string
   salary: number
-  posAllow: number
-  hazAllow: number
-  birthBonus: number
-  holidayPay: number
-  otAmt: number
-  lateMin: number
-  lateDed: number
+  pos_allow: number
+  haz_allow: number
+  birth_bonus: number
+  holiday_pay: number
+  ot_amt: number
+  late_min: number
+  late_ded: number
   sso: number
-  netPay: number
+  net_pay: number
+  status?: string
 }
 
 function fmt(n: number): string {
   return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-export function AdminPayrollCalc() {
+export function AdminPayrollRecords() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -50,8 +51,7 @@ export function AdminPayrollCalc() {
   const [storeFilter, setStoreFilter] = useState("All")
   const [stores, setStores] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [list, setList] = useState<PayrollRow[]>([])
+  const [list, setList] = useState<RecordRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [queried, setQueried] = useState(false)
 
@@ -63,19 +63,19 @@ export function AdminPayrollCalc() {
     })
   }, [auth?.store])
 
-  const handleCalc = async () => {
+  const handleQuery = async () => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams({ monthStr })
       if (storeFilter && storeFilter !== "All") params.set("store", storeFilter)
-      const res = await fetch(`/api/calculatePayroll?${params}`)
+      const res = await fetch(`/api/getPayrollRecords?${params}`)
       const data = await res.json()
       if (data.success && Array.isArray(data.list)) {
         setList(data.list)
       } else {
         setList([])
-        setError(data.message || t("pay_error"))
+        setError(data.msg || t("pay_error"))
       }
     } catch {
       setList([])
@@ -87,48 +87,6 @@ export function AdminPayrollCalc() {
   }
 
   const hasResult = list.length > 0
-
-  const handleSave = async () => {
-    if (list.length === 0) return
-    setSaving(true)
-    setError(null)
-    try {
-      const payload = {
-        monthStr,
-        list: list.map((r) => ({
-          store: r.store,
-          name: r.name,
-          salary: r.salary,
-          posAllow: r.posAllow,
-          hazAllow: r.hazAllow,
-          birthBonus: r.birthBonus,
-          holidayPay: r.holidayPay,
-          otAmt: r.otAmt,
-          lateMin: r.lateMin,
-          lateDed: r.lateDed,
-          sso: r.sso,
-          netPay: r.netPay,
-          status: "확정",
-        })),
-      }
-      const res = await fetch("/api/savePayroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (data.success) {
-        setError(null)
-        alert(t("pay_save_success"))
-      } else {
-        setError(data.msg || t("pay_save_fail"))
-      }
-    } catch {
-      setError(t("pay_save_fail"))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <Card className="shadow-sm">
@@ -158,23 +116,11 @@ export function AdminPayrollCalc() {
           </div>
           <Button
             className="h-9 font-medium"
-            onClick={handleCalc}
+            onClick={handleQuery}
             disabled={loading}
           >
-            <Calculator className="mr-1.5 h-3.5 w-3.5" />
-            {loading ? t("loading") : t("pay_calc_run")}
+            {loading ? t("loading") : t("btn_query_go")}
           </Button>
-          {hasResult && (
-            <Button
-              variant="outline"
-              className="h-9 font-medium"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              <Save className="mr-1.5 h-3.5 w-3.5" />
-              {saving ? t("loading") : t("pay_save")}
-            </Button>
-          )}
         </div>
 
         {error && (
@@ -208,15 +154,15 @@ export function AdminPayrollCalc() {
                     <td className="p-2">{r.store}</td>
                     <td className="p-2">{r.name}</td>
                     <td className="p-2 text-right">{fmt(r.salary)}</td>
-                    <td className="p-2 text-right">{fmt(r.posAllow)}</td>
-                    <td className="p-2 text-right">{fmt(r.hazAllow)}</td>
-                    <td className="p-2 text-right">{fmt(r.birthBonus)}</td>
-                    <td className="p-2 text-right">{fmt(r.holidayPay)}</td>
-                    <td className="p-2 text-right">{fmt(r.otAmt)}</td>
-                    <td className="p-2 text-right">{r.lateMin}</td>
-                    <td className="p-2 text-right">{fmt(r.lateDed)}</td>
+                    <td className="p-2 text-right">{fmt(r.pos_allow)}</td>
+                    <td className="p-2 text-right">{fmt(r.haz_allow)}</td>
+                    <td className="p-2 text-right">{fmt(r.birth_bonus)}</td>
+                    <td className="p-2 text-right">{fmt(r.holiday_pay)}</td>
+                    <td className="p-2 text-right">{fmt(r.ot_amt)}</td>
+                    <td className="p-2 text-right">{r.late_min}</td>
+                    <td className="p-2 text-right">{fmt(r.late_ded)}</td>
                     <td className="p-2 text-right">{fmt(r.sso)}</td>
-                    <td className="p-2 text-right font-medium">{fmt(r.netPay)}</td>
+                    <td className="p-2 text-right font-medium">{fmt(r.net_pay)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -226,7 +172,7 @@ export function AdminPayrollCalc() {
 
         {!queried && (
           <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-            {t("pay_query_please")}
+            {t("pay_records_query_please")}
           </div>
         )}
 

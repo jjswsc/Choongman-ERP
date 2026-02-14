@@ -2,6 +2,9 @@
 
 import { useAuth } from "@/lib/auth-context"
 import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
+import { AdminPayrollRecords } from "@/components/admin/admin-payroll-records"
+import { AdminPayrollHolidays } from "@/components/admin/admin-payroll-holidays"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 
@@ -28,7 +31,28 @@ export default function Page() {
           <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminPayroll")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("pay_month")}</p>
         </div>
-        <AdminPayrollCalc />
+        <Tabs defaultValue="calc" className="w-full">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-4">
+            <TabsTrigger value="calc" className="text-sm font-medium">
+              {t("pay_tab_calc")}
+            </TabsTrigger>
+            <TabsTrigger value="records" className="text-sm font-medium">
+              {t("pay_tab_records")}
+            </TabsTrigger>
+            <TabsTrigger value="holidays" className="text-sm font-medium">
+              {t("pay_tab_holidays")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="calc">
+            <AdminPayrollCalc />
+          </TabsContent>
+          <TabsContent value="records">
+            <AdminPayrollRecords />
+          </TabsContent>
+          <TabsContent value="holidays">
+            <AdminPayrollHolidays />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )
