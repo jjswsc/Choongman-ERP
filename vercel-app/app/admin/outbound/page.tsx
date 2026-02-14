@@ -359,9 +359,29 @@ export default function OutboundPage() {
     group: (typeof groupedHistory)[0],
     company: InvoiceDataCompany | null,
     client: InvoiceDataClient | { companyName: string },
-    isFirstPage: boolean,
-    invT: (k: string) => string
+    isFirstPage: boolean
   ) => {
+    const inv = {
+      inv_title: "Delivery Note / Tax Invoice",
+      inv_original_doc: "Original (Set Document)",
+      inv_doc_no: "Document No.",
+      inv_due_date: "Due Date",
+      inv_reference: "Reference",
+      inv_tax_id: "Tax ID",
+      inv_address: "Address",
+      inv_phone: "Phone",
+      inv_client: "Client",
+      inv_description: "Item",
+      inv_amount: "Amount",
+      inv_total: "Total",
+      inv_vat7: "VAT 7%",
+      inv_grand_total: "Grand Total",
+      inv_remarks: "Remarks",
+      inv_received_by: "Recipient",
+      inv_approved_by: "Approved by",
+      inv_date: "Date",
+      inv_baht_only: "baht only",
+    }
     const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
     const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
     const d = dateStr.length === 10
@@ -370,7 +390,7 @@ export default function OutboundPage() {
     const totalBaht = Math.round(Math.abs(group.totalAmt || 0))
     const vat7 = Math.round(totalBaht * 0.07)
     const grandTotal = totalBaht + vat7
-    const grandWords = `( ${grandTotal.toLocaleString()} ${invT("inv_baht_only")} )`
+    const grandWords = `( ${grandTotal.toLocaleString()} ${inv.inv_baht_only} )`
     const companyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
     const address = company?.address || "-"
     const taxId = company?.taxId || ""
@@ -392,37 +412,36 @@ export default function OutboundPage() {
     const pageBreak = isFirstPage ? "" : " page-break-before: always;"
     return `<div class="delivery-note-invoice" style="max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;${pageBreak} font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;">
   <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-    <h2 style="margin:0; font-size:1.25rem;">${invT("inv_title")}</h2>
+    <h2 style="margin:0; font-size:1.25rem;">${inv.inv_title}</h2>
     <div style="text-align:right; font-size:11px;">
-      <div>${invT("inv_original_doc")}</div>
-      <div><strong>${invT("inv_doc_no")}:</strong> ${docNo}</div>
-      <div><strong>${invT("inv_date")}:</strong> ${d}</div>
-      <div><strong>${invT("inv_due_date")}:</strong> ${d}</div>
-      <div><strong>${invT("inv_reference")}:</strong> ${group.invoiceNo || "-"}</div>
+      <div>${inv.inv_original_doc}</div>
+      <div><strong>${inv.inv_doc_no}:</strong> ${docNo}</div>
+      <div><strong>${inv.inv_due_date}:</strong> ${d}</div>
+      <div><strong>${inv.inv_reference}:</strong> ${group.invoiceNo || "-"}</div>
       <div><strong>Project Name:</strong> ${projectName}</div>
     </div>
   </div>
   <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
     <div style="flex:1; padding-left:5mm;">
       <div style="font-weight:700; margin-bottom:4px;">${companyName}</div>
-      <div style="font-size:11px; color:#475569;">${address}<br>${invT("inv_tax_id")} ${taxId} | ${phone}</div>
+      <div style="font-size:11px; color:#475569;">${address}<br>${inv.inv_tax_id} ${taxId} | ${phone}</div>
     </div>
     <div style="flex:1; padding-left:calc(16px + 5mm);">
-      <div style="font-weight:700; margin-bottom:4px;">${invT("inv_client")}</div>
-      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>" + invT("inv_tax_id") + ": " + clientTaxId : ""}${clientAddr ? "<br>" + invT("inv_address") + ": " + clientAddr : ""}${clientPhone ? "<br>" + invT("inv_phone") + ": " + clientPhone : ""}</div>
+      <div style="font-weight:700; margin-bottom:4px;">${inv.inv_client}</div>
+      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>" + inv.inv_tax_id + ": " + clientTaxId : ""}${clientAddr ? "<br>" + inv.inv_address + ": " + clientAddr : ""}${clientPhone ? "<br>" + inv.inv_phone + ": " + clientPhone : ""}</div>
     </div>
   </div>
-  <table class="table table-bordered" style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${invT("inv_description")}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${invT("inv_amount")}</th></tr></thead><tbody>${rows}</tbody></table>
+  <table class="table table-bordered" style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${inv.inv_description}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${inv.inv_amount}</th></tr></thead><tbody>${rows}</tbody></table>
   <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px;">
-    <div>${invT("inv_total")}: ${totalBaht.toLocaleString()} THB</div>
-    <div>${invT("inv_vat7")}: ${vat7.toLocaleString()} THB</div>
-    <div style="font-weight:700;">${invT("inv_grand_total")}: ${grandTotal.toLocaleString()} THB</div>
+    <div>${inv.inv_total}: ${totalBaht.toLocaleString()} THB</div>
+    <div>${inv.inv_vat7}: ${vat7.toLocaleString()} THB</div>
+    <div style="font-weight:700;">${inv.inv_grand_total}: ${grandTotal.toLocaleString()} THB</div>
     <div style="font-size:11px; margin-top:4px;">${grandWords}</div>
   </div></div>
-  <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${invT("inv_remarks")}:</strong> ${bankInfo}</div>
+  <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${inv.inv_remarks}:</strong> ${bankInfo}</div>
   <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px;">
-    <div><strong>${clientName}</strong><br>${invT("inv_received_by")} ________________  ${invT("inv_date")} ________________</div>
-    <div><strong>${companyName.split(" ")[0]}</strong><br>${invT("inv_approved_by")} ________________  ${invT("inv_date")} ________________</div>
+    <div><strong>${clientName}</strong><br>${inv.inv_received_by} ________________  ${inv.inv_date} ________________</div>
+    <div><strong>${companyName.split(" ")[0]}</strong><br>${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</div>
   </div>
 </div>`
   }
@@ -494,13 +513,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     }
     try {
       const { company, clients } = await getInvoiceData()
-      const invT = (k: string) => t(k as "inv_title") || k
       let prevTarget: string | null = null
       const html = checked.map((g, idx) => {
         const isFirst = idx === 0 || g.target !== prevTarget
         prevTarget = g.target
         const client = (clients && clients[g.target]) || { companyName: g.target || "-" }
-        return buildInvoiceHtml(g, company, client, isFirst, invT)
+        return buildInvoiceHtml(g, company, client, isFirst)
       }).join("")
       const area = document.createElement("div")
       area.id = "invoice-print-area"

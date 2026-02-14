@@ -1,6 +1,6 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono, Noto_Sans_KR } from "next/font/google"
+import { Inter, Geist_Mono, Noto_Sans_KR, Orbitron } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 const notoSansKr = Noto_Sans_KR({
   subsets: ["latin"],
   variable: "--font-noto-sans-kr",
+})
+const orbitron = Orbitron({
+  subsets: ["latin"],
+  variable: "--font-orbitron",
+  weight: ["400", "500", "600", "700"],
 })
 
 export const metadata: Metadata = {
@@ -45,7 +50,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} ${orbitron.variable} font-sans antialiased`}>
         <ErrorBoundary>
           <AuthProvider>
             <LangProvider>{children}</LangProvider>

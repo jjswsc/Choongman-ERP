@@ -114,14 +114,23 @@ export function ErpSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r-0 print:hidden sidebar-dark">
       {/* Logo */}
-      <SidebarHeader className="px-4 py-5 border-b border-sidebar-border">
-        <div className="flex flex-col group-data-[collapsible=icon]:items-center">
-          <h1 className="text-sm font-bold text-white tracking-wide group-data-[collapsible=icon]:text-xs">
-            CHOONGMAN
-          </h1>
-          <p className="text-[10px] text-sidebar-foreground/70 tracking-widest mt-0.5 group-data-[collapsible=icon]:hidden">
-            ERP MANAGER
-          </p>
+      <SidebarHeader className="px-3 py-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary-foreground">
+              <path d="M3 3v18h18" />
+              <path d="M18 9V3" />
+              <path d="M3 15l6-6 4 4 8-8" />
+            </svg>
+          </div>
+          <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
+            <h1 className="font-orbitron text-sm font-bold text-white tracking-wide leading-tight">
+              CHOONGMAN
+            </h1>
+            <p className="font-orbitron text-[11px] font-medium text-white/90 leading-tight">
+              ERP SYSTEM
+            </p>
+          </div>
         </div>
       </SidebarHeader>
 
