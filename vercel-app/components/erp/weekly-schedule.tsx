@@ -199,6 +199,19 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       #weekly-schedule-print-area, #weekly-schedule-print-area * { visibility: visible; }
       #weekly-schedule-print-area { position: absolute; left: 0; top: 0; width: 100%; }
       .print\\:hidden { display: none !important; }
+      #weekly-schedule-print-area .print-schedule-header {
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: 800;
+        font-family: "Malgun Gothic", "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+        letter-spacing: 0.03em;
+      }
+      #weekly-schedule-print-area .print-schedule-header p { margin: 0.4em 0; }
+      #weekly-schedule-print-area .print-schedule-wrap { width: 100% !important; min-width: 100% !important; }
+      #weekly-schedule-print-area .print-schedule-grid {
+        grid-template-columns: 72px repeat(7, 1fr) !important;
+        width: 100% !important;
+      }
     }`
     document.head.appendChild(style)
     window.print()
@@ -332,10 +345,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
       ) : (
         <>
           <div id="weekly-schedule-print-area">
-            {/* 인쇄용 상단 - 매장, 기간 */}
-            <div className="hidden print:block border-b pb-2 mb-2 px-4 text-sm">
-              <p><span className="font-semibold">{t("scheduleStorePlaceholder")}:</span> {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
-              <p><span className="font-semibold">{t("schedulePeriod")}:</span> {weekRangeStr}</p>
+            {/* 인쇄용 상단 - 매장, 기간 (가운데 정렬, 제목 스타일) */}
+            <div className="hidden print:block print-schedule-header border-b border-border pb-3 mb-3 pt-1">
+              <p>{t("scheduleStorePlaceholder")}: {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
+              <p>{t("schedulePeriod")}: {weekRangeStr}</p>
             </div>
             {/* 펼치기/접기 버튼 + 접기 아이콘 */}
             <div className="flex items-center gap-2 mb-2 px-4 print:hidden">
@@ -349,10 +362,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               </Button>
             </div>
             {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
-            <div className="overflow-x-auto overscroll-x-contain px-4 pb-4">
-            <div className="min-w-max">
+            <div className="overflow-x-auto overscroll-x-contain px-4 pb-4 print:overflow-visible print:px-0">
+            <div className="min-w-max print-schedule-wrap">
               {/* 요일 헤더 */}
-              <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
+              <div className="grid gap-1 mb-2 print-schedule-grid" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
                 <div className="shrink-0" />
                 {dayLabels.map((day, i) => (
                   <div key={day} className="flex flex-col items-center gap-0.5 shrink-0 min-w-[72px]">
@@ -379,7 +392,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                       <button
                         type="button"
                         onClick={() => toggleRow(key)}
-                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors"
+                        className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors print-schedule-grid"
                         style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
                       >
                         {/* 이름 + 부서 + 접기 버튼 */}

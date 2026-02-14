@@ -302,19 +302,22 @@ export function AdminScheduleEdit({
   }
 
   const dayStrs = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
-  const dailyStaffCount = React.useMemo(() => {
-    const counts: number[] = [0, 0, 0, 0, 0, 0, 0]
+  const dailyStaffCountByArea = React.useMemo(() => {
+    const result: Record<number, Record<string, number>> = {}
     for (let d = 0; d < 7; d++) {
-      const names = new Set<string>()
-      for (const [key, vals] of Object.entries(slotData)) {
-        if (!key.startsWith(`${d}-`)) continue
-        for (const n of vals) {
-          names.add(n.startsWith("BRK_") ? n.replace("BRK_", "") : n)
+      result[d] = { Service: 0, Kitchen: 0, Office: 0 }
+      for (const ar of ["Service", "Kitchen", "Office"] as const) {
+        const names = new Set<string>()
+        for (const [key, vals] of Object.entries(slotData)) {
+          if (!key.startsWith(`${d}-${ar}-`)) continue
+          for (const n of vals) {
+            names.add(n.startsWith("BRK_") ? n.replace("BRK_", "") : n)
+          }
         }
+        result[d][ar] = names.size
       }
-      counts[d] = names.size
     }
-    return counts
+    return result
   }, [slotData])
   const hours: number[] = []
   for (let h = startHour; h <= endHour; h++) hours.push(h)
@@ -700,11 +703,32 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <thead className="sticky top-0 bg-muted z-10 shadow-sm">
                 <tr className="bg-primary/10">
                   <th className="border border-border px-3 py-2 w-16 bg-muted/80 text-xs font-semibold text-muted-foreground">{t("scheduleDailyStaff") || "일일인원"}</th>
-                  {dayStrs.map((d, i) => (
-                    <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center">
-                      <span className="font-bold text-primary text-sm">{dailyStaffCount[i]}명</span>
-                    </th>
-                  ))}
+                  {dayStrs.map((d, i) =>
+                    areas.map((ar) => {
+                      const areaLabels: Record<string, string> = {
+                        Service: t("scheduleAreaService") || "서비스",
+                        Kitchen: t("scheduleAreaKitchen") || "주방",
+                        Office: t("scheduleAreaOffice") || "오피스",
+                      }
+                      const label = areaLabels[ar]
+                      const count = dailyStaffCountByArea[i]?.[ar] ?? 0
+                      return (
+                        <th
+                          key={`${d}-${ar}`}
+                          className={cn(
+                            "border border-border px-2 py-2 text-center",
+                            ar === "Service" && "bg-orange-100/80 dark:bg-orange-950/25",
+                            ar === "Kitchen" && "bg-green-100/80 dark:bg-green-950/25",
+                            ar === "Office" && "bg-blue-100/80 dark:bg-blue-950/25"
+                          )}
+                        >
+                          <span className="font-bold text-primary text-sm">
+                            {label} {count}명
+                          </span>
+                        </th>
+                      )
+                    })
+                  )}
                 </tr>
                 <tr>
                   <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
