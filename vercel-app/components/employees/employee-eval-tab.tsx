@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context"
 import {
   getEvaluationItems,
   saveEvaluationResult,
+  translateTexts,
   type AdminEmployeeItem,
 } from "@/lib/api-client"
 import {
@@ -94,6 +95,7 @@ export function EmployeeEvalTab({
   const [finalGrade, setFinalGrade] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
 
   const employeeList = React.useMemo(() => {
     if (!evalStore || evalStore === "All") return []
@@ -156,6 +158,39 @@ export function EmployeeEvalTab({
       setLoading(false)
     }
   }, [evalType])
+
+  React.useEffect(() => {
+    if (lang === "ko" || sections.length === 0) {
+      setEvalTransMap({})
+      return
+    }
+    const texts: string[] = []
+    for (const sec of sections) {
+      if (sec.main && sec.main.trim()) texts.push(sec.main.trim())
+      for (const it of sec.items) {
+        if (it.sub && it.sub.trim()) texts.push(it.sub.trim())
+        if (it.name && it.name.trim()) texts.push(it.name.trim())
+      }
+    }
+    const unique = [...new Set(texts)].filter(Boolean).slice(0, 100)
+    if (unique.length === 0) {
+      setEvalTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(unique, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      unique.forEach((txt, i) => {
+        map[txt] = translated[i] ?? txt
+      })
+      setEvalTransMap(map)
+    }).catch(() => setEvalTransMap({}))
+    return () => { cancelled = true }
+  }, [sections, lang])
+
+  const getEvalTrans = (text: string) =>
+    (text && evalTransMap[text]) || text || ""
 
   const updateTotals = React.useCallback(() => {
     let menuAvg = 0,
@@ -401,7 +436,7 @@ export function EmployeeEvalTab({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold">
-              평가 유형
+              {t("eval_list_type")}
             </label>
             <Select
               value={evalType}
@@ -411,8 +446,8 @@ export function EmployeeEvalTab({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="kitchen">🍳 주방 직원</SelectItem>
-                <SelectItem value="service">🍽 서비스 직원</SelectItem>
+                <SelectItem value="kitchen">{t("eval_type_kitchen_emp")}</SelectItem>
+                <SelectItem value="service">{t("eval_type_service_emp")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -488,7 +523,7 @@ export function EmployeeEvalTab({
               className="rounded-lg border border-border bg-card p-4"
             >
               <h6 className="mb-3 border-b pb-2 text-sm font-bold">
-                {sectionTitles[sec.main] || sec.main}
+                {sectionTitles[sec.main] || getEvalTrans(sec.main) || sec.main}
               </h6>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -543,12 +578,12 @@ export function EmployeeEvalTab({
                           </td>
                           {sec.main === "메뉴숙련" && (
                             <>
-                              <td className="px-3 py-2">{it.sub}</td>
-                              <td className="px-3 py-2">{it.name}</td>
+                              <td className="px-3 py-2">{getEvalTrans(it.sub) || it.sub}</td>
+                              <td className="px-3 py-2">{getEvalTrans(it.name) || it.name}</td>
                             </>
                           )}
                           {sec.main !== "메뉴숙련" && (
-                            <td className="px-3 py-2">{it.name}</td>
+                            <td className="px-3 py-2">{getEvalTrans(it.name) || it.name}</td>
                           )}
                           <td className="px-3 py-2">
                             <select
@@ -631,7 +666,7 @@ export function EmployeeEvalTab({
                 </table>
               </div>
               <p className="mt-1 text-xs">
-                {sec.main} {t("eval_section_avg")}:{" "}
+                {sectionTitles[sec.main] || getEvalTrans(sec.main) || sec.main} {t("eval_section_avg")}:{" "}
                 {sec.items.length
                   ? (
                       sec.items.reduce(

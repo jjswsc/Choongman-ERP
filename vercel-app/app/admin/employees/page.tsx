@@ -65,6 +65,7 @@ export default function EmployeesPage() {
   const [gradeFilter, setGradeFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState("")
   const [searchText, setSearchText] = React.useState("")
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
 
   const loadEmployeeList = React.useCallback(
@@ -144,7 +145,7 @@ export default function EmployeesPage() {
   }, [employeeCache, storeFilter, gradeFilter, statusFilter, searchText])
 
   const handleSearch = () => {
-    // Client-side filter - already applied via filteredRows
+    setHasSearched(true)
   }
 
   const handleEdit = (idx: number) => {
@@ -249,6 +250,11 @@ export default function EmployeesPage() {
                 </div>
                 <p className="text-xs text-muted-foreground">{t("emp_search_hint")}</p>
                 <div className="overflow-x-auto max-h-[600px]">
+                  {!hasSearched ? (
+                    <div className="py-16 text-center text-sm text-muted-foreground">
+                      {t("emp_search_hint")}
+                    </div>
+                  ) : (
                   <EmployeeTable
                     rows={filteredRows}
                     loading={loading}
@@ -257,6 +263,7 @@ export default function EmployeesPage() {
                     t={t}
                     statusFilter={statusFilter}
                   />
+                  )}
                 </div>
               </div>
             </div>

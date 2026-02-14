@@ -25,7 +25,7 @@ export default function StockPage() {
   const { auth } = useAuth()
   const [stores, setStores] = React.useState<string[]>([])
   const [list, setList] = React.useState<StockStatusItem[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [storeFilter, setStoreFilter] = React.useState("")
   const [stockDateFilter, setStockDateFilter] = React.useState("")
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -82,10 +82,6 @@ export default function StockPage() {
   React.useEffect(() => {
     fetchStores()
   }, [fetchStores])
-
-  React.useEffect(() => {
-    fetchStock()
-  }, [fetchStock])
 
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
