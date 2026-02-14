@@ -538,10 +538,22 @@ export function OrderTab() {
         </TabsContent>
 
         <TabsContent value="history" className="mt-4 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="date-input-compact h-9 flex-1 min-w-[145px] text-xs" />
-            <span className="text-xs text-muted-foreground shrink-0">~</span>
-            <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="date-input-compact h-9 flex-1 min-w-[145px] text-xs" />
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={histStart}
+                onChange={(e) => setHistStart(e.target.value)}
+                className="h-9 flex-1 min-w-0 text-xs"
+              />
+              <span className="text-xs text-muted-foreground shrink-0">~</span>
+              <Input
+                type="date"
+                value={histEnd}
+                onChange={(e) => setHistEnd(e.target.value)}
+                className="h-9 flex-1 min-w-0 text-xs"
+              />
+            </div>
             <Button size="sm" className="h-9 font-medium" onClick={loadHistory} disabled={historyLoading}>
               {historyLoading ? t('loading') : t('search')}
             </Button>

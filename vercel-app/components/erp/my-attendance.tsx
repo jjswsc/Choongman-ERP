@@ -254,6 +254,9 @@ export function MyAttendance() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const tRef = React.useRef(t)
+  tRef.current = t
+
   const [myMonth, setMyMonth] = React.useState(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
@@ -273,7 +276,7 @@ export function MyAttendance() {
       return
     }
     const leaveSet = new Set<string>()
-    Promise.all([
+    const apiPromise = Promise.all([
       getMyAttendanceSummary({ store, name, yearMonth: myMonth }),
       getAttendanceList({
         startDate: start,
@@ -283,6 +286,10 @@ export function MyAttendance() {
       }),
       getMyLeaveInfo({ store, name }),
     ])
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 18000)
+    )
+    Promise.race([apiPromise, timeoutPromise])
       .then(([sum, logs, leaveInfo]) => {
         setSummary(sum)
         const history = (leaveInfo?.history || []) as LeaveHistoryItem[]
@@ -291,7 +298,7 @@ export function MyAttendance() {
             leaveSet.add(h.date)
           }
         }
-        const records = buildDailyRecords(myMonth, logs || [], leaveSet, t)
+        const records = buildDailyRecords(myMonth, logs || [], leaveSet, tRef.current)
         setDailyRecords(records)
       })
       .catch(() => {
@@ -299,7 +306,7 @@ export function MyAttendance() {
         setDailyRecords([])
       })
       .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, myMonth, t])
+  }, [auth?.store, auth?.user, myMonth])
 
   React.useEffect(() => {
     if (auth?.store && auth?.user) loadData()

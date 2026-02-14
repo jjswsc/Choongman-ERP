@@ -212,12 +212,12 @@ ${filteredList.map((r) => {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("stockColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("stockColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("stockColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("stockColQty")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("stockColSafeQty")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("stockColAmount")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("stockColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColQty")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColSafeQty")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColAmount")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColStatus")}</th>
               {canAdjust && (
                 <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColAction")}</th>

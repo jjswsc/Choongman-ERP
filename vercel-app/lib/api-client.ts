@@ -967,3 +967,56 @@ export async function getInboundForStore(params: {
   const res = await fetch(`/api/getInboundForStore?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }
+
+// ─── 출고 관리 (Outbound) ───
+export interface OutboundHistoryItem {
+  date: string
+  target: string
+  type: 'Force' | 'Outbound'
+  name: string
+  code: string
+  spec: string
+  qty: number
+  amount: number
+  orderRowId?: string
+  deliveryStatus?: string
+  deliveryDate?: string
+  orderDate?: string
+  invoiceNo?: string
+  receiveImageUrl?: string
+  receivedIndices?: number[]
+  totalOrderItems?: number
+}
+
+export async function forceOutboundBatch(list: {
+  date?: string
+  deliveryDate?: string
+  store: string
+  code: string
+  name?: string
+  spec?: string
+  qty: number | string
+}[]) {
+  const res = await fetch('/api/forceOutboundBatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(list),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getCombinedOutboundHistory(params: {
+  startStr: string
+  endStr: string
+  vendorFilter?: string
+  typeFilter?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  if (params.typeFilter) q.set('typeFilter', params.typeFilter)
+  const res = await fetch(`/api/getCombinedOutboundHistory?${q}`)
+  return res.json() as Promise<OutboundHistoryItem[]>
+}

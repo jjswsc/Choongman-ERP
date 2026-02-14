@@ -109,35 +109,41 @@ export function HomeTab() {
           <CardTitle className="text-base font-semibold">{t('noticeBoard')}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'All' | 'Unread' | 'Read')}>
-              <SelectTrigger className="h-9 w-16 shrink-0 text-xs sm:w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">{t('noticeFilterAll')}</SelectItem>
-                <SelectItem value="Unread">{t('noticeFilterUnread')}</SelectItem>
-                <SelectItem value="Read">{t('noticeFilterRead')}</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[100px]"
-              aria-label={t('dateFrom')}
-            />
-            <span className="text-xs text-muted-foreground shrink-0">~</span>
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[100px]"
-              aria-label={t('dateTo')}
-            />
-            <Button size="icon" className="h-9 w-9 shrink-0" type="button" onClick={() => fetchNotices()} title={t('search')}>
-              <Search className="h-3.5 w-3.5" />
-            </Button>
+          <div className="flex flex-col gap-2">
+            {/* 1행: 미확인 필터 + 검색 버튼 */}
+            <div className="flex items-center gap-2">
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'All' | 'Unread' | 'Read')}>
+                <SelectTrigger className="h-9 min-w-[100px] flex-1 text-xs sm:flex-initial sm:w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">{t('noticeFilterAll')}</SelectItem>
+                  <SelectItem value="Unread">{t('noticeFilterUnread')}</SelectItem>
+                  <SelectItem value="Read">{t('noticeFilterRead')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="icon" className="h-9 w-9 shrink-0" type="button" onClick={() => fetchNotices()} title={t('search')}>
+                <Search className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {/* 2행: 날짜 검색창 */}
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-9 flex-1 min-w-0 text-xs"
+                aria-label={t('dateFrom')}
+              />
+              <span className="text-xs text-muted-foreground shrink-0">~</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-9 flex-1 min-w-0 text-xs"
+                aria-label={t('dateTo')}
+              />
+            </div>
           </div>
 
           {loading ? (

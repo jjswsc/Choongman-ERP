@@ -1,7 +1,526 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import * as React from "react"
+import { ArrowUpFromLine } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
+import {
+  getAdminItems,
+  getAdminVendors,
+  getStockStores,
+  forceOutboundBatch,
+  getCombinedOutboundHistory,
+  getMyUsageHistory,
+  type AdminItem,
+  type AdminVendor,
+  type OutboundHistoryItem,
+  type UsageHistoryItem,
+} from "@/lib/api-client"
+import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
 
-export default function Page() {
-  return <AdminPlaceholder title="출고 관리" />
+const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
+
+interface OutboundCartItem {
+  date: string
+  deliveryDate: string
+  store: string
+  code: string
+  name: string
+  spec: string
+  qty: string
+}
+
+export default function OutboundPage() {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const { auth } = useAuth()
+  const [items, setItems] = React.useState<AdminItem[]>([])
+  const [outboundTargets, setOutboundTargets] = React.useState<string[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [historyLoading, setHistoryLoading] = React.useState(false)
+  const [historyList, setHistoryList] = React.useState<OutboundHistoryItem[]>([])
+  const [usageList, setUsageList] = React.useState<UsageHistoryItem[]>([])
+
+  const [outDate, setOutDate] = React.useState("")
+  const [deliveryDate, setDeliveryDate] = React.useState("")
+  const [outStore, setOutStore] = React.useState("")
+  const [outQty, setOutQty] = React.useState("")
+  const [cart, setCart] = React.useState<OutboundCartItem[]>([])
+  const [pickerOpen, setPickerOpen] = React.useState(false)
+  const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
+  const [saving, setSaving] = React.useState(false)
+
+  const [histStart, setHistStart] = React.useState("")
+  const [histEnd, setHistEnd] = React.useState("")
+  const [histMonth, setHistMonth] = React.useState("")
+  const [histStore, setHistStore] = React.useState("")
+  const [histType, setHistType] = React.useState("")
+
+  const isOffice = React.useMemo(() => {
+    const store = (auth?.store || "").trim()
+    return OFFICE_STORES.some((s) => store.toLowerCase().includes(s.toLowerCase()))
+  }, [auth?.store])
+
+  React.useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    setOutDate(today)
+  }, [])
+
+  React.useEffect(() => {
+    const now = new Date()
+    const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+    setHistStart(first)
+    setHistEnd(last)
+  }, [])
+
+  React.useEffect(() => {
+    Promise.all([getAdminItems(), getAdminVendors(), getStockStores()])
+      .then(([itemList, vendorList, storeList]) => {
+        setItems(itemList || [])
+        const salesNames = (vendorList || []).filter(
+          (v: AdminVendor) => v.type === "sales" || v.type === "both"
+        ).map((v: AdminVendor) => v.name)
+        const stores = (storeList || []).filter(
+          (s: string) => !OFFICE_STORES.some((o) => s.toLowerCase().includes(o.toLowerCase()))
+        )
+        const merged = [...new Set([...salesNames, ...stores])].filter(Boolean).sort()
+        setOutboundTargets(merged)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleItemSelect = (item: AdminItem) => {
+    setSelectedItem(item)
+    setOutQty("")
+  }
+
+  const handleAddToList = () => {
+    if (!selectedItem) {
+      alert(t("inAlertSelectItem") || "품목을 선택해주세요.")
+      return
+    }
+    if (!outQty.trim()) {
+      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      return
+    }
+    if (!outStore) {
+      alert(t("outStorePlaceholder") || "출고처를 선택해주세요.")
+      return
+    }
+    const q = parseFloat(outQty.replace(/,/g, ""))
+    if (isNaN(q) || q <= 0) {
+      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      return
+    }
+    setCart((prev) => [
+      ...prev,
+      {
+        date: outDate || new Date().toISOString().slice(0, 10),
+        deliveryDate: deliveryDate || "",
+        store: outStore,
+        code: selectedItem.code,
+        name: selectedItem.name,
+        spec: selectedItem.spec || "",
+        qty: outQty,
+      },
+    ])
+    setSelectedItem(null)
+    setOutQty("")
+  }
+
+  const handleRemoveFromCart = (idx: number) => {
+    setCart((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleSave = async () => {
+    if (!cart.length) {
+      alert(t("outEmptyList") || "담긴 품목이 없습니다.")
+      return
+    }
+    if (!confirm(t("outConfirmMsg") || "출고 확정하시겠습니까?")) return
+    setSaving(true)
+    try {
+      const list = cart.map((c) => ({
+        date: c.date,
+        deliveryDate: c.deliveryDate || undefined,
+        store: c.store,
+        code: c.code,
+        name: c.name,
+        spec: c.spec,
+        qty: c.qty,
+      }))
+      const res = await forceOutboundBatch(list)
+      if (res.success) {
+        alert(res.message || "출고 완료")
+        setCart([])
+      } else {
+        alert(res.message || "출고 실패")
+      }
+    } catch {
+      alert("출고 처리 실패")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fetchHistory = React.useCallback(async () => {
+    let s = histStart
+    let e = histEnd
+    if (histMonth) {
+      const [y, m] = histMonth.split("-").map(Number)
+      const first = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+      const last = new Date(y, m, 0).toISOString().slice(0, 10)
+      s = first
+      e = last
+    }
+    if (!s || !e) return
+    setHistoryLoading(true)
+    try {
+      if (isOffice) {
+        const list = await getCombinedOutboundHistory({
+          startStr: s,
+          endStr: e,
+          vendorFilter: histStore || undefined,
+          typeFilter: histType || undefined,
+        })
+        setHistoryList(Array.isArray(list) ? list : [])
+        setUsageList([])
+      } else {
+        const list = await getMyUsageHistory({
+          store: auth?.store || "",
+          startStr: s,
+          endStr: e,
+        })
+        setUsageList(Array.isArray(list) ? list : [])
+        setHistoryList([])
+      }
+    } catch {
+      setHistoryList([])
+      setUsageList([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [histStart, histEnd, histMonth, histStore, histType, isOffice, auth?.store])
+
+  const groupedHistory = React.useMemo(() => {
+    if (!isOffice) return []
+    const g: Record<string, { date: string; target: string; type: string; totalQty: number; totalAmt: number; items: OutboundHistoryItem[] }> = {}
+    for (const i of historyList) {
+      const k = `${i.date}_${i.target}_${i.type}_${i.orderRowId || ""}`
+      if (!g[k]) {
+        g[k] = {
+          date: i.date,
+          target: i.target,
+          type: i.type,
+          totalQty: 0,
+          totalAmt: 0,
+          items: [],
+        }
+      }
+      g[k].items.push(i)
+      g[k].totalQty += i.qty
+      g[k].totalAmt += i.amount || 0
+    }
+    return Object.values(g).sort((a, b) => (b.date + b.target).localeCompare(a.date + a.target))
+  }, [historyList, isOffice])
+
+  const periodTotal = React.useMemo(() => {
+    if (isOffice) return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
+    return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
+  }, [historyList, usageList, isOffice])
+
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-auto flex items-center justify-center min-h-[200px]">
+        <span className="text-muted-foreground">{t("loading")}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-auto">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
+            <ArrowUpFromLine className="h-5 w-5 text-warning" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
+              {t("adminOutbound")}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {t("outPageSub")}
+            </p>
+          </div>
+        </div>
+
+        <Tabs defaultValue={isOffice ? "new" : "hist"} className="space-y-4">
+          <TabsList>
+            {isOffice && (
+              <TabsTrigger value="new">{t("outTabNew")}</TabsTrigger>
+            )}
+            <TabsTrigger value="hist">{t("outTabHist")}</TabsTrigger>
+          </TabsList>
+
+          {isOffice && (
+            <TabsContent value="new">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                <div className="md:col-span-2 space-y-4">
+                  <div className="rounded-xl border bg-card p-5">
+                    <h3 className="text-sm font-bold mb-4">{t("outTabNew")}</h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-semibold">{t("outOrderDate")}</label>
+                        <Input
+                          type="date"
+                          value={outDate}
+                          onChange={(e) => setOutDate(e.target.value)}
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("outDeliveryDate")}</label>
+                        <Input
+                          type="date"
+                          value={deliveryDate}
+                          onChange={(e) => setDeliveryDate(e.target.value)}
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("outStore")}</label>
+                        <Select value={outStore} onValueChange={setOutStore}>
+                          <SelectTrigger className="mt-1 h-9">
+                            <SelectValue placeholder={t("outStorePlaceholder")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">{t("outStorePlaceholder")}</SelectItem>
+                            {outboundTargets.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("outItem")}</label>
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            readOnly
+                            value={selectedItem ? `${selectedItem.code} ${selectedItem.name}` : ""}
+                            placeholder={t("inFindItem")}
+                            className="h-9"
+                          />
+                          <Button size="sm" className="h-9" onClick={() => setPickerOpen(true)}>
+                            🔍
+                          </Button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("outQty")}</label>
+                        <Input
+                          type="number"
+                          value={outQty}
+                          onChange={(e) => setOutQty(e.target.value)}
+                          placeholder={t("outQty")}
+                          className="mt-1 h-9"
+                          onKeyDown={(e) => e.key === "Enter" && handleAddToList()}
+                        />
+                      </div>
+                      <Button className="w-full" variant="secondary" onClick={handleAddToList}>
+                        {t("outAddList")}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="md:col-span-3">
+                  <div className="rounded-xl border bg-card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold">
+                        {t("outWaitList")} <span className="badge bg-muted px-2 py-0.5 rounded text-xs">{cart.length}</span>
+                      </h3>
+                    </div>
+                    <div className="overflow-x-auto max-h-[400px]">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-2 px-2">{t("outColStore")}</th>
+                            <th className="text-left py-2 px-2">{t("outColItem")}</th>
+                            <th className="text-right py-2 px-2 w-20">{t("outColQty")}</th>
+                            <th className="w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cart.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-8 text-center text-muted-foreground text-sm">
+                                {t("outEmptyList")}
+                              </td>
+                            </tr>
+                          ) : (
+                            cart.map((c, idx) => (
+                              <tr key={idx} className="border-b">
+                                <td className="py-2 px-2">{c.store}</td>
+                                <td className="py-2 px-2">{c.name} {c.spec ? `(${c.spec})` : ""}</td>
+                                <td className="py-2 px-2 text-right font-medium">{c.qty}</td>
+                                <td className="py-2 px-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-destructive hover:text-destructive"
+                                    onClick={() => handleRemoveFromCart(idx)}
+                                  >
+                                    {t("delete")}
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <Button
+                      className="w-full mt-4"
+                      onClick={handleSave}
+                      disabled={saving || !cart.length}
+                    >
+                      {saving ? t("loading") : t("outConfirm")}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+          )}
+
+          <TabsContent value="hist">
+            <div className="rounded-xl border bg-card p-5">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-36" />
+                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-36" />
+                <Input type="month" value={histMonth} onChange={(e) => setHistMonth(e.target.value)} className="h-9 w-36" title={t("inMonthHint")} />
+                {isOffice && (
+                  <>
+                    <Select value={histType} onValueChange={setHistType}>
+                      <SelectTrigger className="h-9 w-28">
+                        <SelectValue placeholder={t("outFilterType")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">{t("outTypeAll")}</SelectItem>
+                        <SelectItem value="Force">{t("outTypeForce")}</SelectItem>
+                        <SelectItem value="Order">{t("outTypeOrder")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={histStore} onValueChange={setHistStore}>
+                      <SelectTrigger className="h-9 w-40">
+                        <SelectValue placeholder={t("outFilterStoreAll")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">{t("outFilterStoreAll")}</SelectItem>
+                        {outboundTargets.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
+                <Button size="sm" className="h-9" onClick={fetchHistory}>
+                  {t("stockBtnSearch")}
+                </Button>
+                <span className="text-sm font-bold text-primary ml-2">
+                  {t("outPeriodTotal")}: {periodTotal.toLocaleString()}
+                </span>
+              </div>
+              <div className="overflow-x-auto max-h-[500px]">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-4 py-2 text-left w-24">{t("stockColDate")}</th>
+                      {isOffice && <th className="px-4 py-2 text-left w-20">{t("outFilterType")}</th>}
+                      {isOffice && <th className="px-4 py-2 text-left">{t("outColStore")}</th>}
+                      <th className="px-4 py-2 text-left">{t("outColItem")}</th>
+                      <th className="px-4 py-2 text-right w-20">{t("outColQty")}</th>
+                      <th className="px-4 py-2 text-right w-24">{t("inColAmount")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyLoading ? (
+                      <tr>
+                        <td colSpan={isOffice ? 6 : 4} className="py-12 text-center">
+                          {t("loading")}
+                        </td>
+                      </tr>
+                    ) : !isOffice ? (
+                      usageList.length === 0 ? (
+                        <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">{t("outNoData")}</td></tr>
+                      ) : (
+                        usageList.map((u, idx) => (
+                          <tr key={idx} className="border-b">
+                            <td className="px-4 py-2">{u.date}</td>
+                            <td className="px-4 py-2">{u.item}</td>
+                            <td className="px-4 py-2 text-right">{u.qty.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right text-primary">{(u.amount || 0).toLocaleString()}</td>
+                          </tr>
+                        ))
+                      )
+                    ) : groupedHistory.length === 0 ? (
+                      <tr><td colSpan={6} className="py-12 text-center text-muted-foreground">{t("outNoData")}</td></tr>
+                    ) : (
+                      groupedHistory.flatMap((g, gi) => [
+                        <tr key={gi} className="border-b font-medium">
+                          <td className="px-4 py-2">{g.date}</td>
+                          <td className="px-4 py-2">
+                            <span className={`text-xs px-2 py-0.5 rounded ${g.type === "Force" ? "bg-warning/20 text-warning" : "bg-success/20 text-success"}`}>
+                              {g.type === "Force" ? t("outTypeForce") : t("outTypeOrder")}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2">{g.target}</td>
+                          <td className="px-4 py-2">
+                            {g.items[0].name}
+                            {g.items.length > 1 ? ` ${t("inEtcCount")} ${g.items.length - 1}` : ""}
+                          </td>
+                          <td className="px-4 py-2 text-right">{g.totalQty.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-right text-primary">{g.totalAmt.toLocaleString()}</td>
+                        </tr>,
+                        ...g.items.slice(1).map((i, ii) => (
+                          <tr key={`${gi}-${ii}`} className="border-b bg-muted/5">
+                            <td className="px-4 py-2"></td>
+                            <td className="px-4 py-2"></td>
+                            <td className="px-4 py-2"></td>
+                            <td className="px-4 py-2 pl-8 text-muted-foreground text-xs">{i.name} {i.spec ? `(${i.spec})` : ""}</td>
+                            <td className="px-4 py-2 text-right">{i.qty.toLocaleString()}</td>
+                            <td className="px-4 py-2 text-right">{(i.amount || 0).toLocaleString()}</td>
+                          </tr>
+                        )),
+                      ])
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <ItemPickerDialog
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          items={items}
+          onSelect={handleItemSelect}
+        />
+      </div>
+    </div>
+  )
 }
