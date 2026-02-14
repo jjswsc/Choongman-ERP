@@ -1,7 +1,274 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import * as React from "react"
+import { Users } from "lucide-react"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  getAdminEmployeeList,
+  getEmployeeLatestGrades,
+  saveAdminEmployee,
+  deleteAdminEmployee,
+  type AdminEmployeeItem,
+} from "@/lib/api-client"
+import {
+  EmployeeFilterBar,
+  EmployeeTable,
+  EmployeeForm,
+  EmployeeEvalTab,
+  EmployeeEvalListTab,
+  EmployeeEvalSettingTab,
+  emptyForm,
+  type EmployeeTableRow,
+  type EmployeeFormData,
+} from "@/components/employees"
 
-export default function Page() {
-  return <AdminPlaceholder title="직원 관리" />
+function toFormData(e: AdminEmployeeItem): EmployeeFormData {
+  return {
+    row: e.row,
+    store: e.store || "",
+    name: e.name || "",
+    nick: e.nick || "",
+    phone: e.phone || "",
+    job: e.job || "Service",
+    email: e.email || "",
+    birth: e.birth || "",
+    nation: e.nation || "",
+    join: e.join || "",
+    resign: e.resign || "",
+    salType: e.salType || "Monthly",
+    salAmt: e.salAmt ?? 0,
+    pw: e.pw || "",
+    role: e.role || "Staff",
+    annualLeaveDays: e.annualLeaveDays ?? 15,
+    bankName: e.bankName || "",
+    accountNumber: e.accountNumber || "",
+    positionAllowance: e.positionAllowance ?? 0,
+    grade: e.grade || "",
+    photo: e.photo || "",
+  }
+}
+
+export default function EmployeesPage() {
+  const t = useT(useLang().lang)
+  const { auth } = useAuth()
+  const userStore = (auth?.store || "").trim()
+  const userRole = (auth?.role || "").trim()
+
+  const [loading, setLoading] = React.useState(true)
+  const [saving, setSaving] = React.useState(false)
+  const [employeeCache, setEmployeeCache] = React.useState<EmployeeTableRow[]>([])
+  const [stores, setStores] = React.useState<string[]>([])
+  const [storeFilter, setStoreFilter] = React.useState("")
+  const [gradeFilter, setGradeFilter] = React.useState("")
+  const [searchText, setSearchText] = React.useState("")
+  const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
+
+  const loadEmployeeList = React.useCallback(
+    async (callback?: () => void) => {
+      setLoading(true)
+      try {
+        const [listRes, gradesRes] = await Promise.all([
+          getAdminEmployeeList({ userStore, userRole }),
+          getEmployeeLatestGrades(),
+        ])
+        const list = listRes.list || []
+        const storeList = listRes.stores || []
+        setStores(storeList)
+
+        const normName = (n: string) =>
+          String(n || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .replace(/^(Mr\.?|Ms\.?|Mrs\.?)\s*/i, "")
+            .trim() || String(n || "").trim()
+
+        const merged: EmployeeTableRow[] = list.map((e) => {
+          const fromSheet = e.grade != null && String(e.grade).trim() !== "" ? String(e.grade).trim() : null
+          if (fromSheet) {
+            return { ...e, finalGrade: fromSheet }
+          }
+          const store = String(e.store || "").trim().replace(/\s+/g, " ")
+          const name = String(e.name || "").trim().replace(/\s+/g, " ")
+          const nick = String(e.nick || "").trim().replace(/\s+/g, " ")
+          const key = store + "|" + name
+          const keyNorm = store + "|" + (normName(name) || name)
+          const keyNick = nick && nick !== name ? store + "|" + nick : ""
+          const g =
+            (gradesRes && gradesRes[key]?.grade) ||
+            (gradesRes && gradesRes[keyNorm]?.grade) ||
+            (gradesRes && keyNick && gradesRes[keyNick]?.grade) ||
+            null
+          return { ...e, finalGrade: g && String(g).trim() ? g : "-" }
+        })
+        setEmployeeCache(merged)
+        callback?.()
+      } catch {
+        setEmployeeCache([])
+        setStores([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [userStore, userRole]
+  )
+
+  React.useEffect(() => {
+    loadEmployeeList()
+  }, [loadEmployeeList])
+
+  const filteredRows = React.useMemo(() => {
+    const s = storeFilter || "All"
+    const g = gradeFilter || "All"
+    const k = searchText.toLowerCase().trim()
+    return employeeCache.filter((e) => {
+      const eStore = String(e.store || "")
+      const eName = String(e.name || "").toLowerCase()
+      const eNick = String(e.nick || "").toLowerCase()
+      const eGrade = String(e.finalGrade || "").trim()
+      const matchStore = s === "" || s === "All" || eStore === s
+      const matchGrade = g === "" || g === "All" || eGrade === g
+      const matchKey = k === "" || eName.includes(k) || eNick.includes(k)
+      return matchStore && matchGrade && matchKey
+    })
+  }, [employeeCache, storeFilter, gradeFilter, searchText])
+
+  const handleSearch = () => {
+    // Client-side filter - already applied via filteredRows
+  }
+
+  const handleEdit = (idx: number) => {
+    const e = filteredRows[idx]
+    if (e) setForm(toFormData(e))
+  }
+
+  const handleDelete = async (rowId: number) => {
+    if (!confirm(t("emp_confirm_delete"))) return
+    setLoading(true)
+    try {
+      const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
+      alert(res.message || (res as { message?: string }).message || "삭제 완료")
+      await loadEmployeeList()
+    } catch (e) {
+      console.error(e)
+      alert(t("emp_result_empty") || "오류")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!form.name) return
+    setSaving(true)
+    try {
+      const res = await saveAdminEmployee({
+        d: form,
+        userStore,
+        userRole,
+      })
+      if (res.success) {
+        alert(res.message || "저장되었습니다.")
+        setForm({ ...emptyForm })
+        await loadEmployeeList()
+      } else {
+        alert(res.message || "저장 실패")
+      }
+    } catch (e) {
+      console.error(e)
+      alert("저장 실패")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleNew = () => {
+    setForm({ ...emptyForm, annualLeaveDays: 15 })
+  }
+
+  if (loading && employeeCache.length === 0) {
+    return (
+      <div className="flex-1 overflow-auto flex items-center justify-center min-h-[200px]">
+        <span className="text-muted-foreground">{t("loading")}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 overflow-auto">
+      <div className="p-6 space-y-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Users className="h-5 w-5 text-primary" />
+          <h1 className="text-lg font-bold text-foreground">{t("adminEmployees")}</h1>
+        </div>
+
+        <Tabs defaultValue="list" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+            <TabsTrigger value="list">{t("tab_hr_list")}</TabsTrigger>
+            <TabsTrigger value="eval">{t("tab_hr_eval")}</TabsTrigger>
+            <TabsTrigger value="eval-list">{t("tab_eval_list")}</TabsTrigger>
+            <TabsTrigger value="kitchen-setting">{t("tab_eval_kitchen_setting")}</TabsTrigger>
+            <TabsTrigger value="service-setting">{t("tab_eval_service_setting")}</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="list" className="mt-0">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-4">
+                <EmployeeForm
+                  form={form}
+                  onChange={setForm}
+                  stores={stores}
+                  onSave={handleSave}
+                  onNew={handleNew}
+                  saving={saving}
+                />
+              </div>
+              <div className="lg:col-span-8 space-y-3">
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <EmployeeFilterBar
+                    stores={stores}
+                    storeFilter={storeFilter}
+                    onStoreFilterChange={setStoreFilter}
+                    gradeFilter={gradeFilter}
+                    onGradeFilterChange={setGradeFilter}
+                    searchText={searchText}
+                    onSearchTextChange={setSearchText}
+                    onSearch={handleSearch}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{t("emp_search_hint")}</p>
+                <div className="overflow-x-auto max-h-[600px]">
+                  <EmployeeTable
+                    rows={filteredRows}
+                    loading={loading}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    t={t}
+                  />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="eval">
+            <EmployeeEvalTab
+              stores={stores}
+              employees={employeeCache}
+              onSaved={loadEmployeeList}
+            />
+          </TabsContent>
+          <TabsContent value="eval-list">
+            <EmployeeEvalListTab stores={stores} />
+          </TabsContent>
+          <TabsContent value="kitchen-setting">
+            <EmployeeEvalSettingTab type="kitchen" />
+          </TabsContent>
+          <TabsContent value="service-setting">
+            <EmployeeEvalSettingTab type="service" />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
 }

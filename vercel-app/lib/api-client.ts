@@ -1110,3 +1110,129 @@ export async function deleteAdminEmployee(params: {
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
+
+/** 평가 항목 조회 (kitchen | service) */
+export async function getEvaluationItems(params: {
+  type: 'kitchen' | 'service'
+  activeOnly?: boolean
+}) {
+  const q = new URLSearchParams({
+    type: params.type,
+    activeOnly: String(params.activeOnly === true),
+  })
+  const res = await fetch(`/api/getEvaluationItems?${q}`)
+  return res.json() as Promise<{ id: string | number; main: string; sub: string; name: string; use?: boolean }[]>
+}
+
+/** 평가 이력 조회 */
+export async function getEvaluationHistory(params: {
+  type: string
+  start?: string
+  end?: string
+  store?: string
+  employee?: string
+  evaluator?: string
+}) {
+  const q = new URLSearchParams()
+  q.set('type', params.type || 'kitchen')
+  if (params.start) q.set('start', params.start)
+  if (params.end) q.set('end', params.end)
+  if (params.store) q.set('store', params.store)
+  if (params.employee) q.set('employee', params.employee)
+  if (params.evaluator) q.set('evaluator', params.evaluator)
+  const res = await fetch(`/api/getEvaluationHistory?${q}`)
+  return res.json() as Promise<
+    {
+      id: string
+      date: string
+      store: string
+      employeeName: string
+      evaluator: string
+      finalGrade: string
+      totalScore: string
+      memo: string
+      jsonData?: string
+    }[]
+  >
+}
+
+/** 평가 항목 일괄 수정 */
+export async function updateEvaluationItems(params: {
+  type: 'kitchen' | 'service'
+  updates: { id: string | number; name?: string; use?: boolean }[]
+}) {
+  const res = await fetch('/api/updateEvaluationItems', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: params.type,
+      updates: params.updates,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || '수정 실패')
+  }
+  return res.text() as Promise<string>
+}
+
+/** 평가 항목 추가 */
+export async function addEvaluationItem(params: {
+  type: 'kitchen' | 'service'
+  mainCat?: string
+  subCat?: string
+  itemName?: string
+}) {
+  const res = await fetch('/api/addEvaluationItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || '추가 실패')
+  }
+  return res.text() as Promise<string>
+}
+
+/** 평가 항목 삭제 */
+export async function deleteEvaluationItem(params: {
+  type: 'kitchen' | 'service'
+  itemId: string | number
+}) {
+  const res = await fetch('/api/deleteEvaluationItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: params.type,
+      itemId: params.itemId,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || '삭제 실패')
+  }
+  return res.text() as Promise<string>
+}
+
+/** 평가 결과 저장 */
+export async function saveEvaluationResult(params: {
+  type: 'kitchen' | 'service'
+  id?: string
+  date: string
+  store: string
+  employeeName: string
+  evaluator: string
+  finalGrade: string
+  memo: string
+  jsonData: unknown
+}) {
+  const res = await fetch('/api/saveEvaluationResult', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const text = await res.text()
+  if (!res.ok) throw new Error(text || '저장 실패')
+  return text as 'SAVED' | 'UPDATED'
+}
