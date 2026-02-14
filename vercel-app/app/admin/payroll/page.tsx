@@ -1,7 +1,7 @@
 "use client"
 
 import { useAuth } from "@/lib/auth-context"
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 
@@ -21,5 +21,15 @@ export default function Page() {
     )
   }
 
-  return <AdminPlaceholder title={t("adminPayroll")} />
+  return (
+    <div className="flex-1 overflow-auto">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminPayroll")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("pay_month")}</p>
+        </div>
+        <AdminPayrollCalc />
+      </div>
+    </div>
+  )
 }
