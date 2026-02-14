@@ -4,6 +4,13 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
+function roleBadgeStyle(role: string): string {
+  const r = String(role || "").trim()
+  if (r === "Staff") return "bg-blue-600 text-white"
+  if (r === "Manager") return "bg-orange-500 text-white"
+  if (r === "Director") return "bg-black text-white"
+  return "bg-gray-500 text-white"
+}
 function gradeBadgeStyle(g: string): string {
   const v = String(g || "-").trim().toUpperCase()
   if (v === "A" || v === "S") return "bg-[#1B5E20] text-white"
@@ -81,7 +88,7 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t }: EmployeeTa
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.nation || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{age}{age !== "-" ? ageSuffix : ""}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold bg-info/20 text-info-foreground">
+                    <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${roleBadgeStyle(e.role)}`}>
                       {e.role}
                     </span>
                   </td>

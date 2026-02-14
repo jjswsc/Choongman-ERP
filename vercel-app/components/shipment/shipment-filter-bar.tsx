@@ -18,9 +18,11 @@ interface ShipmentFilterBarProps {
   onMonthClick?: () => void
   // Type & Store (histType: "" | "Order" | "Force" - Order=주문승인, Force=강제출고)
   histType: string
+  histDeliveryStatus: string
   histStore: string
   outboundTargets: string[]
   onHistTypeChange: (v: string) => void
+  onHistDeliveryStatusChange: (v: string) => void
   onHistStoreChange: (v: string) => void
   // Invoice search (client-side filter)
   invoiceSearch?: string
@@ -47,9 +49,11 @@ export function ShipmentFilterBar({
   onHistMonthChange,
   onMonthClick,
   histType,
+  histDeliveryStatus = "",
   histStore,
   outboundTargets,
   onHistTypeChange,
+  onHistDeliveryStatusChange,
   onHistStoreChange,
   invoiceSearch = "",
   onInvoiceSearchChange,
@@ -108,62 +112,40 @@ export function ShipmentFilterBar({
 
         {isOffice && (
           <>
-            {/* 주문유형 (Order Type) */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
-                {t("outFilterOrderType")}
-              </label>
-              <select
-                value={histType === "Order" ? "Order" : "__all__"}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === "Order") onHistTypeChange("Order")
-                  else if (histType === "Order") onHistTypeChange("")
-                }}
-                className="h-8 w-[100px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
-              >
-                <option value="__all__">{t("outTypeAll")}</option>
-                <option value="Order">{t("outTypeOrder")}</option>
-              </select>
-            </div>
+            {/* 주문유형 (Order Type): 주문승인 / 강제출고 - placeholder로 라벨 포함 */}
+            <select
+              value={histType || "__all__"}
+              onChange={(e) => onHistTypeChange(e.target.value === "__all__" ? "" : e.target.value)}
+              className="h-8 w-[110px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            >
+              <option value="__all__">{t("outFilterOrderType")}: {t("outTypeAll")}</option>
+              <option value="Order">{t("outTypeOrder")}</option>
+              <option value="Force">{t("outTypeForce")}</option>
+            </select>
 
-            {/* 출고 유형 (Outbound Type) */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
-                {t("outFilterOutboundType")}
-              </label>
-              <select
-                value={histType === "Force" ? "Force" : "__all__"}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === "Force") onHistTypeChange("Force")
-                  else if (histType === "Force") onHistTypeChange("")
-                }}
-                className="h-8 w-[100px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
-              >
-                <option value="__all__">{t("outTypeAll")}</option>
-                <option value="Force">{t("outTypeForce")}</option>
-              </select>
-            </div>
+            {/* 출고 유형 (배송상태): 배송완료 / 일부배송완료 / 배송중 - placeholder로 라벨 포함 */}
+            <select
+              value={histDeliveryStatus || "__all__"}
+              onChange={(e) => onHistDeliveryStatusChange(e.target.value === "__all__" ? "" : e.target.value)}
+              className="h-8 w-[130px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            >
+              <option value="__all__">{t("outFilterOutboundType")}: {t("outTypeAll")}</option>
+              <option value="배송완료">{t("outDeliveryDelivered")}</option>
+              <option value="일부배송완료">{t("outDeliveryPartial")}</option>
+              <option value="배송중">{t("outDeliveryTransit")}</option>
+            </select>
 
-            {/* Destination Filter (출고처) */}
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
-                {t("outFilterStore")}
-              </label>
-              <select
-                value={histStore || "__all__"}
-                onChange={(e) => onHistStoreChange(e.target.value === "__all__" ? "" : e.target.value)}
-                className="h-8 min-w-[120px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
-              >
-              <option value="__all__">{t("outFilterStoreAll")}</option>
+            {/* 출고처 - placeholder로 라벨 포함 */}
+            <select
+              value={histStore || "__all__"}
+              onChange={(e) => onHistStoreChange(e.target.value === "__all__" ? "" : e.target.value)}
+              className="h-8 min-w-[120px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            >
+              <option value="__all__">{t("outFilterStore")}: {t("outFilterStoreAll")}</option>
               {outboundTargets.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
-            </div>
 
             {/* Invoice Search */}
             <div className="relative">

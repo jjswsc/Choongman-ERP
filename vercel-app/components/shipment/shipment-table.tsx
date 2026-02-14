@@ -67,20 +67,17 @@ export function ShipmentTable({
     })
   }
 
-  const getStatusBadges = (type: string, deliveryStatus?: string): StatusBadgeKey[] => {
-    const badges: StatusBadgeKey[] = []
-    if (type === "Force" || type === "ForceOutbound") {
-      badges.push("outTypeForce")
-    } else {
-      badges.push("outTypeOrder")
-      if (deliveryStatus) {
-        const s = String(deliveryStatus)
-        if (s.includes("일부") || s.includes("Partial")) badges.push("statusPartialDelivered")
-        else if (s.includes("배송중") || s.includes("Transit")) badges.push("statusInTransit")
-        else if (s.includes("배송완료") || s.includes("Delivered")) badges.push("statusDelivered")
-      }
-    }
-    return badges
+  const getOrderTypeBadge = (type: string): StatusBadgeKey | null => {
+    if (type === "Force" || type === "ForceOutbound") return "outTypeForce"
+    return "outTypeOrder"
+  }
+  const getOutboundTypeBadge = (deliveryStatus?: string): StatusBadgeKey | null => {
+    if (!deliveryStatus) return null
+    const s = String(deliveryStatus)
+    if (s.includes("일부") || s.includes("Partial")) return "statusPartialDelivered"
+    if (s.includes("배송중") || s.includes("Transit")) return "statusInTransit"
+    if (s.includes("배송완료") || s.includes("Delivered")) return "statusDelivered"
+    return null
   }
 
   if (!isOffice) {
@@ -120,7 +117,7 @@ export function ShipmentTable({
     )
   }
 
-  const colCount = 10
+  const colCount = 11
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -138,7 +135,8 @@ export function ShipmentTable({
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("orderColDate")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("orderColDeliveryDate")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColInvNo")}</th>
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outFilterType")}</th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColOrderType")}</th>
+            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColOutboundType")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColPhoto")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColStore")}</th>
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
@@ -166,7 +164,8 @@ export function ShipmentTable({
                 onToggleExpand={() => toggleExpand(idx)}
                 onToggleSelect={() => onToggleSelect(idx)}
                 onPhotoClick={onPhotoClick}
-                getStatusBadges={getStatusBadges}
+                getOrderTypeBadge={getOrderTypeBadge}
+                getOutboundTypeBadge={getOutboundTypeBadge}
                 t={t}
               />
             ))
@@ -185,7 +184,8 @@ function TableRow({
   onToggleExpand,
   onToggleSelect,
   onPhotoClick,
-  getStatusBadges,
+  getOrderTypeBadge,
+  getOutboundTypeBadge,
   t,
 }: {
   row: ShipmentTableRow
@@ -195,11 +195,13 @@ function TableRow({
   onToggleExpand: () => void
   onToggleSelect: () => void
   onPhotoClick?: (url: string) => void
-  getStatusBadges: (type: string, deliveryStatus?: string) => StatusBadgeKey[]
+  getOrderTypeBadge: (type: string) => StatusBadgeKey | null
+  getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
 }) {
   const hasDetails = row.items.length > 1
-  const badges = getStatusBadges(row.type, row.deliveryStatus)
+  const orderBadge = getOrderTypeBadge(row.type)
+  const outboundBadge = getOutboundTypeBadge(row.deliveryStatus)
 
   return (
     <>
@@ -221,19 +223,22 @@ function TableRow({
         <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.deliveryDate || "-"}</td>
         <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-mono text-[11px]">{row.invoiceNo}</td>
         <td className="px-3 py-2.5 text-center">
-          <div className="flex items-center justify-center gap-1 flex-wrap">
-            {badges.map((key, i) => (
-              <span
-                key={i}
-                className={cn(
-                  "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap",
-                  statusStyles[key]
-                )}
-              >
-                {t(key)}
-              </span>
-            ))}
-          </div>
+          {orderBadge ? (
+            <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap", statusStyles[orderBadge])}>
+              {t(orderBadge)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </td>
+        <td className="px-3 py-2.5 text-center">
+          {outboundBadge ? (
+            <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap", statusStyles[outboundBadge])}>
+              {t(outboundBadge)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
         </td>
         <td className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1.5">
@@ -279,7 +284,7 @@ function TableRow({
       </tr>
       {isExpanded && hasDetails && (
         <tr>
-          <td colSpan={10} className="px-0 py-0">
+          <td colSpan={11} className="px-0 py-0">
             <div className="mx-6 my-2 overflow-hidden rounded border border-border bg-muted/30">
               <table className="w-full text-xs">
                 <thead>

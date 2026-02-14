@@ -100,53 +100,66 @@ export function EmployeeForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_store")}</label>
-          <Select value={form.store || "__none__"} onValueChange={(v) => update("store", v === "__none__" ? "" : v)}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder={t("emp_label_store")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">-</SelectItem>
-              {stores.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_name")}</label>
-          <Input
-            value={form.name}
-            onChange={(e) => update("name", e.target.value)}
-            className="h-8 text-xs"
-            placeholder={t("emp_label_name")}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_nickname")}</label>
-          <Input
-            value={form.nick}
-            onChange={(e) => update("nick", e.target.value)}
-            className="h-8 text-xs"
-            placeholder={t("emp_label_nickname")}
-          />
-        </div>
-        <div className="col-span-2 flex gap-2 items-end">
-          <div className="flex-1">
+        {/* 매장, 이름, 닉네임 + 오른쪽 사진 */}
+        <div className="col-span-2 flex gap-4">
+          <div className="flex-1 space-y-3">
+            <div>
+              <label className="text-xs font-semibold block mb-1">{t("emp_label_store")}</label>
+              <Select value={form.store || "__none__"} onValueChange={(v) => update("store", v === "__none__" ? "" : v)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder={t("emp_label_store")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">-</SelectItem>
+                  {stores.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1">{t("emp_label_name")}</label>
+              <Input
+                value={form.name}
+                onChange={(e) => update("name", e.target.value)}
+                className="h-8 text-xs"
+                placeholder={t("emp_label_name")}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold block mb-1">{t("emp_label_nickname")}</label>
+              <Input
+                value={form.nick}
+                onChange={(e) => update("nick", e.target.value)}
+                className="h-8 text-xs"
+                placeholder={t("emp_label_nickname")}
+              />
+            </div>
+          </div>
+          <div className="flex-shrink-0 w-24 flex flex-col">
             <label className="text-xs font-semibold block mb-1">{t("emp_photo")}</label>
+            <div
+              className="flex-1 min-h-[calc(3*2rem+2*0.75rem)] rounded border border-input bg-muted overflow-hidden flex items-center justify-center"
+              style={{ minHeight: "7.5rem" }}
+            >
+              {form.photo ? (
+                <img
+                  src={form.photo}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => (e.currentTarget.style.display = "none")}
+                />
+              ) : (
+                <span className="text-[10px] text-muted-foreground">{t("emp_photo_url_ph")}</span>
+              )}
+            </div>
             <Input
               value={form.photo}
               onChange={(e) => update("photo", e.target.value)}
-              className="h-8 text-xs"
+              className="h-7 mt-1.5 text-[10px]"
               placeholder={t("emp_photo_url_ph")}
             />
           </div>
-          {form.photo && (
-            <div className="w-14 h-14 rounded overflow-hidden border bg-muted flex-shrink-0">
-              <img src={form.photo} alt="" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
-            </div>
-          )}
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_label_job")}</label>

@@ -80,6 +80,7 @@ export default function OutboundPage() {
   const [histMonth, setHistMonth] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
   const [histType, setHistType] = React.useState("")
+  const [histDeliveryStatus, setHistDeliveryStatus] = React.useState("")
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
   const [itemSearch, setItemSearch] = React.useState("")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
@@ -236,6 +237,14 @@ export default function OutboundPage() {
     }
   }, [histStart, histEnd, histMonth, histStore, histType, isOffice, auth?.store])
 
+  const normalizedDeliveryStatus = (s: string) => {
+    const v = String(s || "").trim()
+    if (v.includes("일부") || v.includes("Partial")) return "일부배송완료"
+    if (v.includes("배송완료") || v.includes("Delivered")) return "배송완료"
+    if (v.includes("배송중") || v.includes("Transit")) return "배송중"
+    return v || ""
+  }
+
   const groupedHistory = React.useMemo(() => {
     if (!isOffice) return []
     const g: Record<string, {
@@ -272,6 +281,16 @@ export default function OutboundPage() {
   const filteredGroupedHistory = React.useMemo(() => {
     if (!isOffice) return groupedHistory
     let result = groupedHistory
+    if (histDeliveryStatus) {
+      result = result.filter((g) => {
+        const first = g.items[0]
+        const ds = normalizedDeliveryStatus(first?.deliveryStatus || "")
+        if (histDeliveryStatus === "배송완료") return ds === "배송완료"
+        if (histDeliveryStatus === "일부배송완료") return ds === "일부배송완료"
+        if (histDeliveryStatus === "배송중") return ds === "배송중"
+        return true
+      })
+    }
     if (invoiceSearch.trim()) {
       const qInv = invoiceSearch.trim().toLowerCase()
       result = result.filter((g) => (g.invoiceNo || "").toLowerCase().includes(qInv))
@@ -287,7 +306,7 @@ export default function OutboundPage() {
       )
     }
     return result
-  }, [groupedHistory, invoiceSearch, itemSearch, isOffice])
+  }, [groupedHistory, histDeliveryStatus, invoiceSearch, itemSearch, isOffice])
 
   const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
     if (!isOffice) return []
@@ -335,7 +354,7 @@ export default function OutboundPage() {
 
   React.useEffect(() => {
     setSelectedForPrint(new Set())
-  }, [invoiceSearch, itemSearch])
+  }, [invoiceSearch, itemSearch, histDeliveryStatus])
 
   const togglePrintSelect = (idx: number) => {
     setSelectedForPrint((prev) => {
@@ -457,7 +476,8 @@ export default function OutboundPage() {
       t("orderColDate") || "주문 일자",
       t("orderColDeliveryDate") || "배송 일자",
       t("outColInvNo") || "인보이스",
-      t("outFilterType") || "유형",
+      t("outColOrderType") || "주문 유형",
+      t("outColOutboundType") || "출고 유형",
       t("outColStore") || "출고처",
       t("outColItem") || "품목명",
       t("spec") || "규격",
@@ -470,10 +490,20 @@ export default function OutboundPage() {
       const deliveryDate = (g.items[0]?.deliveryDate || "").slice(0, 10) || "-"
       const type = g.type || "Force"
       const target = g.target || "-"
+      const orderTypeLabel = type === "Force" ? t("outTypeForce") : t("outTypeOrder")
+      const deliveryStatus = g.items[0]?.deliveryStatus || ""
+      const normDs = (s: string) => {
+        const v = String(s || "").trim()
+        if (v.includes("일부") || v.includes("Partial")) return t("outDeliveryPartial")
+        if (v.includes("배송완료") || v.includes("Delivered")) return t("outDeliveryDelivered")
+        if (v.includes("배송중") || v.includes("Transit")) return t("outDeliveryTransit")
+        return "-"
+      }
+      const outboundTypeLabel = type === "Order" ? normDs(deliveryStatus) : "-"
       for (const it of g.items) {
         const name = it.name || "-"
         const spec = it.spec || "-"
-        dataRows.push([orderDate, deliveryDate, g.invoiceNo || "-", type, target, name, spec, String(it.qty ?? ""), String(it.amount ?? "")])
+        dataRows.push([orderDate, deliveryDate, g.invoiceNo || "-", orderTypeLabel, outboundTypeLabel, target, name, spec, String(it.qty ?? ""), String(it.amount ?? "")])
       }
     }
     const minW = 55
@@ -738,9 +768,11 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
               }}
               histType={histType}
+              histDeliveryStatus={histDeliveryStatus}
               histStore={histStore}
               outboundTargets={outboundTargets}
               onHistTypeChange={setHistType}
+              onHistDeliveryStatusChange={setHistDeliveryStatus}
               onHistStoreChange={setHistStore}
               invoiceSearch={invoiceSearch}
               onInvoiceSearchChange={setInvoiceSearch}

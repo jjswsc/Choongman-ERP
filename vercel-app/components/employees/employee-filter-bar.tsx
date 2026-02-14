@@ -10,6 +10,8 @@ interface EmployeeFilterBarProps {
   onStoreFilterChange: (v: string) => void
   gradeFilter: string
   onGradeFilterChange: (v: string) => void
+  statusFilter: string
+  onStatusFilterChange: (v: string) => void
   searchText: string
   onSearchTextChange: (v: string) => void
   onSearch: () => void
@@ -23,6 +25,8 @@ export function EmployeeFilterBar({
   onStoreFilterChange,
   gradeFilter,
   onGradeFilterChange,
+  statusFilter,
+  onStatusFilterChange,
   searchText,
   onSearchTextChange,
   onSearch,
@@ -50,6 +54,15 @@ export function EmployeeFilterBar({
         {GRADES.filter((g) => g !== "All").map((g) => (
           <option key={g} value={g}>{g}</option>
         ))}
+      </select>
+      <select
+        value={statusFilter || "all"}
+        onChange={(e) => onStatusFilterChange(e.target.value === "all" ? "" : e.target.value)}
+        className="h-8 rounded border border-input bg-card px-2 pr-8 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer max-w-[120px]"
+      >
+        <option value="all">{t("emp_status_all")}</option>
+        <option value="active">{t("emp_status_active")}</option>
+        <option value="resigned">{t("emp_status_resigned")}</option>
       </select>
       <div className="relative flex-1 min-w-[120px] max-w-[200px]">
         <input

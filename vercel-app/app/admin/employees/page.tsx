@@ -63,6 +63,7 @@ export default function EmployeesPage() {
   const [stores, setStores] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
   const [gradeFilter, setGradeFilter] = React.useState("")
+  const [statusFilter, setStatusFilter] = React.useState("")
   const [searchText, setSearchText] = React.useState("")
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
 
@@ -122,18 +123,25 @@ export default function EmployeesPage() {
   const filteredRows = React.useMemo(() => {
     const s = storeFilter || "All"
     const g = gradeFilter || "All"
+    const st = statusFilter || "all"
     const k = searchText.toLowerCase().trim()
     return employeeCache.filter((e) => {
       const eStore = String(e.store || "")
       const eName = String(e.name || "").toLowerCase()
       const eNick = String(e.nick || "").toLowerCase()
       const eGrade = String(e.finalGrade || "").trim()
+      const hasResign = Boolean(String(e.resign || "").trim())
       const matchStore = s === "" || s === "All" || eStore === s
       const matchGrade = g === "" || g === "All" || eGrade === g
+      const matchStatus =
+        st === "" ||
+        st === "all" ||
+        (st === "active" && !hasResign) ||
+        (st === "resigned" && hasResign)
       const matchKey = k === "" || eName.includes(k) || eNick.includes(k)
-      return matchStore && matchGrade && matchKey
+      return matchStore && matchGrade && matchStatus && matchKey
     })
-  }, [employeeCache, storeFilter, gradeFilter, searchText])
+  }, [employeeCache, storeFilter, gradeFilter, statusFilter, searchText])
 
   const handleSearch = () => {
     // Client-side filter - already applied via filteredRows
@@ -232,6 +240,8 @@ export default function EmployeesPage() {
                     onStoreFilterChange={setStoreFilter}
                     gradeFilter={gradeFilter}
                     onGradeFilterChange={setGradeFilter}
+                    statusFilter={statusFilter}
+                    onStatusFilterChange={setStatusFilter}
                     searchText={searchText}
                     onSearchTextChange={setSearchText}
                     onSearch={handleSearch}
