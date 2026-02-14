@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       leaveRows = (await supabaseSelect('leave_requests', { order: 'leave_date.asc', limit: 2000 })) as LeaveRow[]
     }
 
-    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedTotalAnnual: number; usedTotalSick: number; remain: number }[] = []
+    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[] = []
 
     for (const emp of empRows || []) {
       const empStore = String(emp.store || '').trim()
@@ -83,8 +83,10 @@ export async function GET(request: NextRequest) {
       const annualLimit = getAnnualLeaveDays(emp)
       let usedPeriodAnnual = 0
       let usedPeriodSick = 0
+      let usedPeriodUnpaid = 0
       let usedTotalAnnual = 0
       let usedTotalSick = 0
+      let usedTotalUnpaid = 0
 
       for (const l of leaveRows || []) {
         const lName = String(l.name || '').trim()
@@ -94,14 +96,15 @@ export async function GET(request: NextRequest) {
         if (lStatus !== '승인' && lStatus !== 'Approved') continue
 
         const lType = String(l.type || '').trim()
-        if (lType.indexOf('무급휴가') !== -1) continue
-
         const dateStr = toDateStr(l.leave_date)
         if (!dateStr) continue
         const lDate = new Date(dateStr + 'T12:00:00')
         const days = getLeaveDays(lType)
 
-        if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
+        if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1) {
+          usedTotalUnpaid += days
+          if (lDate >= start && lDate <= end) usedPeriodUnpaid += days
+        } else if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
           usedTotalSick += days
           if (lDate >= start && lDate <= end) usedPeriodSick += days
         } else {
@@ -115,8 +118,10 @@ export async function GET(request: NextRequest) {
         name: empName,
         usedPeriodAnnual: Math.round(usedPeriodAnnual * 10) / 10,
         usedPeriodSick: Math.round(usedPeriodSick * 10) / 10,
+        usedPeriodUnpaid: Math.round(usedPeriodUnpaid * 10) / 10,
         usedTotalAnnual: Math.round(usedTotalAnnual * 10) / 10,
         usedTotalSick: Math.round(usedTotalSick * 10) / 10,
+        usedTotalUnpaid: Math.round(usedTotalUnpaid * 10) / 10,
         remain: Math.max(0, Math.round((annualLimit - usedTotalAnnual) * 10) / 10),
       })
     }

@@ -141,29 +141,46 @@ export function AdminLeaveApproval() {
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {leaveLoading ? t("loading") : t("search")}
         </Button>
-        <div className="flex flex-col gap-2">
+        <div className="overflow-x-auto -mx-2">
           {leaveList.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
           ) : (
-            leaveList.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{item.name}{item.nick ? ` (${item.nick})` : ""} · {item.store}</p>
-                  <p className="text-xs text-muted-foreground">{t("adminLeaveRequest")} {item.requestDate} · {t("adminLeaveDate")} {item.date} · {translateLeaveType(item.type)} {item.reason ? `· ${item.reason}` : ""}</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {item.status === "대기" && (
-                    <>
-                      <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
-                      <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
-                    </>
-                  )}
-                  {item.status !== "대기" && (
-                    <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
-                  )}
-                </div>
-              </div>
-            ))
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="p-2 text-left font-medium">{t("store")}</th>
+                  <th className="p-2 text-left font-medium">{t("leave_col_name")}</th>
+                  <th className="p-2 text-left font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
+                  <th className="p-2 text-left font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
+                  <th className="p-2 text-left font-medium">{t("leave_col_type")}</th>
+                  <th className="p-2 text-left font-medium min-w-[120px]">{t("leave_col_reason")}</th>
+                  <th className="p-2 text-right font-medium w-28">{t("leave_col_action")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaveList.map((item) => (
+                  <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
+                    <td className="p-2">{item.store}</td>
+                    <td className="p-2">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
+                    <td className="p-2 whitespace-nowrap">{item.requestDate}</td>
+                    <td className="p-2 whitespace-nowrap">{item.date}</td>
+                    <td className="p-2">{translateLeaveType(item.type)}</td>
+                    <td className="p-2">{item.reason || "-"}</td>
+                    <td className="p-2 text-right">
+                      {item.status === "대기" && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
+                        </div>
+                      )}
+                      {item.status !== "대기" && (
+                        <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </CardContent>

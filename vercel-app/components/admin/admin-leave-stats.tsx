@@ -41,7 +41,7 @@ export function AdminLeaveStats() {
   const [endStr, setEndStr] = useState(lastDayOfMonth())
   const [storeFilter, setStoreFilter] = useState("All")
   const [stores, setStores] = useState<string[]>([])
-  const [statsList, setStatsList] = useState<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedTotalAnnual: number; usedTotalSick: number; remain: number }[]>([])
+  const [statsList, setStatsList] = useState<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -106,8 +106,8 @@ export function AdminLeaveStats() {
               <tr className="border-b bg-muted/50">
                 <th className="px-3 py-2.5 font-semibold">{t("store")}</th>
                 <th className="px-3 py-2.5 font-semibold">{t("leave_col_name")}</th>
-                <th colSpan={2} className="px-3 py-2 font-semibold">{t("leave_used_period")}</th>
-                <th colSpan={2} className="px-3 py-2 font-semibold">{t("leave_used_total")}</th>
+                <th colSpan={3} className="px-3 py-2 font-semibold">{t("leave_used_period")}</th>
+                <th colSpan={3} className="px-3 py-2 font-semibold">{t("leave_used_total")}</th>
                 <th className="px-3 py-2.5 font-semibold">{t("leave_remain")}</th>
               </tr>
               <tr className="border-b bg-muted/30">
@@ -115,15 +115,17 @@ export function AdminLeaveStats() {
                 <th className="px-3 py-1" />
                 <th className="px-2 py-1 font-medium">{t("annual")}</th>
                 <th className="px-2 py-1 font-medium">{t("sick")}</th>
+                <th className="px-2 py-1 font-medium">{t("unpaid")}</th>
                 <th className="px-2 py-1 font-medium">{t("annual")}</th>
                 <th className="px-2 py-1 font-medium">{t("sick")}</th>
+                <th className="px-2 py-1 font-medium">{t("unpaid")}</th>
                 <th className="px-3 py-1" />
               </tr>
             </thead>
             <tbody>
               {statsList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
                     {t("leave_stats_hint")}
                   </td>
                 </tr>
@@ -134,8 +136,10 @@ export function AdminLeaveStats() {
                     <td className="px-3 py-2.5 font-medium">{r.name}</td>
                     <td className="px-2 py-2.5">{r.usedPeriodAnnual}</td>
                     <td className="px-2 py-2.5">{r.usedPeriodSick}</td>
+                    <td className="px-2 py-2.5">{r.usedPeriodUnpaid}</td>
                     <td className="px-2 py-2.5">{r.usedTotalAnnual}</td>
                     <td className="px-2 py-2.5">{r.usedTotalSick}</td>
+                    <td className="px-2 py-2.5">{r.usedTotalUnpaid}</td>
                     <td className="px-3 py-2.5 font-bold text-primary">{r.remain}</td>
                   </tr>
                 ))
