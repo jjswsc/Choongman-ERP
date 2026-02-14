@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, CalendarRange, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react"
+import { Search, CalendarRange, ChevronLeft, ChevronRight, CalendarDays, Printer, FileSpreadsheet, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -185,6 +185,65 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     })
   }
 
+  const expandAll = () => setCollapsedRows(new Set())
+  const collapseAll = () => setCollapsedRows(new Set(personKeys))
+
+  const handlePrint = () => {
+    if (!hasSearched || schedule.length === 0) return
+    const area = document.getElementById("weekly-schedule-print-area")
+    if (!area) return
+    const style = document.createElement("style")
+    style.id = "schedule-print-style"
+    style.textContent = `@media print {
+      body * { visibility: hidden; }
+      #weekly-schedule-print-area, #weekly-schedule-print-area * { visibility: visible; }
+      #weekly-schedule-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+      .print\\:hidden { display: none !important; }
+    }`
+    document.head.appendChild(style)
+    window.print()
+    document.getElementById("schedule-print-style")?.remove()
+  }
+
+  const escapeXml = (s: string) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
+  const handleExcel = () => {
+    if (!hasSearched || schedule.length === 0) return
+    const storeLabel = storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal
+    const headers = ["", ...dayLabels.map((d, i) => `${d} ${daysFull[i]}`)]
+    const dataRows: string[][] = []
+    for (const p of persons) {
+      const workRow = [p.name + (showArea ? ` (${areaLabel(p.area)})` : "")]
+      const breakRow = [""]
+      for (let i = 0; i < 7; i++) {
+        workRow.push(p.workDays[i] || "-")
+        breakRow.push(p.breakDays[i] ? `R ${p.breakDays[i]}` : "")
+      }
+      dataRows.push(workRow)
+      dataRows.push(breakRow)
+    }
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
+<body>
+<table>
+<tr><td class="head">${escapeXml(t("scheduleWeek") || "주간 시간표")}</td><td colspan="7">${escapeXml(weekRangeStr)}</td></tr>
+<tr><td class="head">${escapeXml(t("scheduleStorePlaceholder") || "매장")}</td><td colspan="7">${escapeXml(storeLabel)}</td></tr>
+<tr></tr>
+<tr class="head">${headers.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>
+${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `schedule_${storeLabel}_${date}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (!auth?.store) return null
 
   return (
@@ -233,6 +292,18 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
           <Search className="mr-1 h-3.5 w-3.5" />
           {loading ? t("loading") : t("search")}
         </Button>
+        {hasSearched && schedule.length > 0 && (
+          <>
+            <Button size="sm" variant="outline" className="h-9 rounded-lg px-3 text-xs print:hidden" onClick={handlePrint} title={t("schedulePrintHint") || t("pettyPrintHint")}>
+              <Printer className="mr-1 h-3.5 w-3.5" />
+              {t("printBtn")}
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 rounded-lg px-3 text-xs print:hidden" onClick={handleExcel} title={t("scheduleExcelHint") || t("pettyExcelHint")}>
+              <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
+              {t("excelBtn")}
+            </Button>
+          </>
+        )}
       </div>
 
       {/* Week Navigation */}
@@ -260,8 +331,25 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         </div>
       ) : (
         <>
-          {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
-          <div className="overflow-x-auto overscroll-x-contain px-4 pb-4">
+          <div id="weekly-schedule-print-area">
+            {/* 인쇄용 상단 - 매장, 기간 */}
+            <div className="hidden print:block border-b pb-2 mb-2 px-4 text-sm">
+              <p><span className="font-semibold">{t("scheduleStorePlaceholder")}:</span> {storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || !storeFilterFinal ? t("scheduleStoreAll") : storeFilterFinal}</p>
+              <p><span className="font-semibold">{t("schedulePeriod")}:</span> {weekRangeStr}</p>
+            </div>
+            {/* 펼치기/접기 버튼 + 접기 아이콘 */}
+            <div className="flex items-center gap-2 mb-2 px-4 print:hidden">
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={expandAll}>
+                <ChevronDown className="mr-1 h-3 w-3" />
+                {t("scheduleExpandAll") || "전체 펼치기"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={collapseAll}>
+                <ChevronUp className="mr-1 h-3 w-3" />
+                {t("scheduleCollapseAll") || "전체 접기"}
+              </Button>
+            </div>
+            {/* 가로 스크롤 영역 - 드래그해서 옆으로 이동 */}
+            <div className="overflow-x-auto overscroll-x-contain px-4 pb-4">
             <div className="min-w-max">
               {/* 요일 헤더 */}
               <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}>
@@ -294,9 +382,19 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
                         className="grid gap-1 w-full items-stretch px-2 py-2.5 text-left active:bg-muted/30 transition-colors"
                         style={{ gridTemplateColumns: "72px repeat(7, minmax(72px, 80px))" }}
                       >
-                        {/* 이름 + 부서 */}
+                        {/* 이름 + 부서 + 접기 버튼 */}
                         <div className="flex flex-col items-start justify-center shrink-0 min-w-[72px]">
-                          <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[13px] font-bold text-card-foreground leading-tight">{p.name}</span>
+                            {!isCollapsed && (
+                              <span className="inline-flex shrink-0" title={t("scheduleCollapseAll") || "접기"}>
+                                <ChevronUp
+                                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                                  onClick={(e) => { e.stopPropagation(); toggleRow(key); }}
+                                />
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] font-medium text-muted-foreground leading-tight mt-0.5">
                             {areaLabel(p.area)}
                           </span>
@@ -335,6 +433,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
                   )
                 })}
               </div>
+            </div>
             </div>
           </div>
         </>

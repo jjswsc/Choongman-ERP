@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2 } from "lucide-react"
+import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -302,12 +302,144 @@ export function AdminScheduleEdit({
   }
 
   const dayStrs = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+  const dailyStaffCount = React.useMemo(() => {
+    const counts: number[] = [0, 0, 0, 0, 0, 0, 0]
+    for (let d = 0; d < 7; d++) {
+      const names = new Set<string>()
+      for (const [key, vals] of Object.entries(slotData)) {
+        if (!key.startsWith(`${d}-`)) continue
+        for (const n of vals) {
+          names.add(n.startsWith("BRK_") ? n.replace("BRK_", "") : n)
+        }
+      }
+      counts[d] = names.size
+    }
+    return counts
+  }, [slotData])
   const hours: number[] = []
   for (let h = startHour; h <= endHour; h++) hours.push(h)
   const hourOptions = Array.from({ length: 24 }, (_, i) => i)
   const timeOptions = Array.from({ length: 24 }, (_, i) =>
     ["00", "30"].map((m) => `${String(i).padStart(2, "0")}:${m}`)
   ).flat()
+
+  type PersonSchedule = { name: string; area: string; workDays: string[]; breakDays: string[] }
+  const scheduleForExport = React.useMemo(() => {
+    const map: Record<string, { work: string[]; break: string[] }> = {}
+    for (const [key, names] of Object.entries(slotData)) {
+      if (!names.length) continue
+      const [dayStr, area, time] = key.split("-")
+      const day = parseInt(dayStr, 10)
+      const datePart = dayStrs[day]
+      for (const n of names) {
+        const realName = n.startsWith("BRK_") ? n.replace("BRK_", "") : n
+        const recKey = `${datePart}_${realName}_${area}`
+        if (!map[recKey]) map[recKey] = { work: [], break: [] }
+        if (n.startsWith("BRK_")) map[recKey].break.push(time)
+        else map[recKey].work.push(time)
+      }
+    }
+    const byPerson: Record<string, PersonSchedule> = {}
+    for (const [k, v] of Object.entries(map)) {
+      const parts = k.split("_")
+      const date = parts[0]
+      const area = parts[parts.length - 1]
+      const name = parts.slice(1, -1).join("_")
+      const dayIdx = dayStrs.indexOf(date)
+      if (dayIdx < 0) continue
+      const pk = `${name}|${area}`
+      if (!byPerson[pk]) byPerson[pk] = { name, area, workDays: ["", "", "", "", "", "", ""], breakDays: ["", "", "", "", "", "", ""] }
+      const all = [...v.work, ...v.break].sort()
+      if (all.length === 0) continue
+      const pIn = all[0]
+      const last = all[all.length - 1]
+      const [lh, lm] = last.split(":").map(Number)
+      let lm2 = lm + 30
+      let lh2 = lh
+      if (lm2 >= 60) { lm2 -= 60; lh2++ }
+      const pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+      let breakStr = ""
+      if (v.break.length > 0) {
+        const bSorted = v.break.sort()
+        const pBS = bSorted[0]
+        const bLast = bSorted[bSorted.length - 1]
+        const [bh, bm] = bLast.split(":").map(Number)
+        let bm2 = bm + 30
+        let bh2 = bh
+        if (bm2 >= 60) { bm2 -= 60; bh2++ }
+        const pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
+        breakStr = `${pBS}-${pBE}`
+      }
+      const workStr = `${pIn}-${pOut}`
+      byPerson[pk].workDays[dayIdx] = workStr
+      byPerson[pk].breakDays[dayIdx] = breakStr
+    }
+    return Object.values(byPerson).sort((a, b) => (a.name + a.area).localeCompare(b.name + b.area))
+  }, [slotData, dayStrs])
+
+  const weekRangeStr = dayStrs.length >= 7
+    ? `${dayStrs[0].replace(/-/g, ".")} ~ ${dayStrs[6].slice(5).replace(/-/g, ".")}`
+    : ""
+  const dayLabels = DAY_LABELS.map((k) => t(k))
+  const daysFull = dayStrs.map((s) => {
+    const [, m, d] = s.split("-")
+    return `${parseInt(m, 10)}/${parseInt(d, 10)}`
+  })
+
+  const escapeXml = (s: string) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+
+  const handlePrint = () => {
+    if (scheduleForExport.length === 0) return
+    const area = document.getElementById("admin-schedule-print-area")
+    if (!area) return
+    const style = document.createElement("style")
+    style.id = "admin-schedule-print-style"
+    style.textContent = `@media print {
+      body * { visibility: hidden; }
+      #admin-schedule-print-area, #admin-schedule-print-area * { visibility: visible; }
+      #admin-schedule-print-area { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+      .print\\:hidden { display: none !important; }
+    }`
+    document.head.appendChild(style)
+    window.print()
+    document.getElementById("admin-schedule-print-style")?.remove()
+  }
+
+  const handleExcel = () => {
+    if (scheduleForExport.length === 0) return
+    const headers = ["", ...dayLabels.map((d, i) => `${d} ${daysFull[i]}`)]
+    const dataRows: string[][] = []
+    for (const p of scheduleForExport) {
+      const workRow = [p.name + ` (${p.area})`]
+      const breakRow = [""]
+      for (let i = 0; i < 7; i++) {
+        workRow.push(p.workDays[i] || "-")
+        breakRow.push(p.breakDays[i] ? `R ${p.breakDays[i]}` : "")
+      }
+      dataRows.push(workRow)
+      dataRows.push(breakRow)
+    }
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
+<body>
+<table>
+<tr><td class="head">${escapeXml(t("scheduleWeek") || "주간 시간표")}</td><td colspan="7">${escapeXml(weekRangeStr)}</td></tr>
+<tr><td class="head">${escapeXml(t("scheduleStorePlaceholder") || "매장")}</td><td colspan="7">${escapeXml(store)}</td></tr>
+<tr></tr>
+<tr class="head">${headers.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>
+${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `schedule_${store}_${monday}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (!store) {
     return (
@@ -428,7 +560,46 @@ export function AdminScheduleEdit({
 
         {/* Grid */}
         <div className="lg:col-span-10 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
+          {/* 인쇄용 영역 - 검색한 스케줄만 매장/기간과 함께 출력 */}
+          {scheduleForExport.length > 0 && (
+            <div id="admin-schedule-print-area" className="hidden print:block">
+              <div className="border-b pb-2 mb-2 text-sm">
+                <p><span className="font-semibold">{t("scheduleStorePlaceholder")}:</span> {store}</p>
+                <p><span className="font-semibold">{t("schedulePeriod")}:</span> {weekRangeStr}</p>
+              </div>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="border px-2 py-1.5 font-semibold text-left w-24"></th>
+                    {dayLabels.map((d, i) => (
+                      <th key={d} className="border px-2 py-1.5 font-semibold text-center">
+                        {d} {daysFull[i]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduleForExport.map((p) => (
+                    <React.Fragment key={p.name + p.area}>
+                      <tr className="border-b">
+                        <td className="border px-2 py-1 font-medium">{p.name} ({p.area})</td>
+                        {p.workDays.map((w, i) => (
+                          <td key={i} className="border px-2 py-1 text-center">{w || "-"}</td>
+                        ))}
+                      </tr>
+                      <tr className="border-b">
+                        <td className="border px-2 py-1 text-muted-foreground"></td>
+                        {p.breakDays.map((b, i) => (
+                          <td key={i} className="border px-2 py-1 text-center text-muted-foreground text-[10px]">{b ? `R ${b}` : ""}</td>
+                        ))}
+                      </tr>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
             <Input type="date" value={monday} onChange={(e) => snapToMonday(e.target.value)} className="h-9 w-36 text-xs" />
             <Select value={String(startHour)} onValueChange={(v) => setStartHour(parseInt(v, 10))}>
               <SelectTrigger className="h-9 w-20 text-xs">
@@ -467,6 +638,18 @@ export function AdminScheduleEdit({
               <Save className="mr-1 h-3.5 w-3.5" />
               {saving ? t("loading") : t("att_save_schedule")}
             </Button>
+            {scheduleForExport.length > 0 && (
+              <>
+                <Button size="sm" variant="outline" className="h-9 print:hidden" onClick={handlePrint} title={t("schedulePrintHint") || t("pettyPrintHint")}>
+                  <Printer className="mr-1 h-3.5 w-3.5" />
+                  {t("printBtn")}
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 print:hidden" onClick={handleExcel} title={t("scheduleExcelHint") || t("pettyExcelHint")}>
+                  <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
+                  {t("excelBtn")}
+                </Button>
+              </>
+            )}
             <div className="flex items-center gap-1 ml-2 border-l pl-2">
               <Button size="sm" variant="outline" className="h-9 w-9 p-0" onClick={() => setZoom((z) => Math.max(75, z - 25))} title={t("att_zoom_out")}>
                 <ZoomOut className="h-4 w-4" />
@@ -478,16 +661,35 @@ export function AdminScheduleEdit({
               <Button size="sm" variant={slotViewHour ? "default" : "outline"} className="h-9 px-2 text-xs" onClick={() => setSlotViewHour(!slotViewHour)} title={t("att_view_1h")}>
                 1h
               </Button>
-              <Button size="sm" variant={isFullscreen ? "default" : "outline"} className="h-9 w-9 p-0" onClick={() => setIsFullscreen(!isFullscreen)} title={t("att_fullscreen")}>
-                <Maximize2 className="h-4 w-4" />
+              <Button size="sm" variant={isFullscreen ? "default" : "outline"} className="h-9 px-2" onClick={() => setIsFullscreen(!isFullscreen)} title={isFullscreen ? (t("att_fullscreen_exit") || "확장 끄기") : (t("att_fullscreen") || "확장")}>
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="mr-1 h-4 w-4" />
+                    <span className="text-xs">{t("att_fullscreen_exit") || "확장 끄기"}</span>
+                  </>
+                ) : (
+                  <Maximize2 className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
 
           <div
-            className={cn("overflow-auto rounded-xl border-2 border-border bg-card", isFullscreen ? "fixed inset-4 z-50 shadow-2xl" : "max-h-[700px]")}
+            className={cn("overflow-auto rounded-xl border-2 border-border bg-card relative", isFullscreen ? "fixed inset-4 z-50 shadow-2xl" : "max-h-[700px]")}
             style={{ paddingBottom: 8 }}
           >
+            {isFullscreen && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="fixed top-4 right-4 z-[60] shadow-lg"
+                onClick={() => setIsFullscreen(false)}
+                title={t("att_fullscreen_exit") || "확장 끄기"}
+              >
+                <Minimize2 className="mr-1.5 h-4 w-4" />
+                {t("att_fullscreen_exit") || "확장 끄기"}
+              </Button>
+            )}
             <table
               className="w-full border-collapse"
               style={{
@@ -496,6 +698,14 @@ export function AdminScheduleEdit({
               }}
             >
               <thead className="sticky top-0 bg-muted z-10 shadow-sm">
+                <tr className="bg-primary/10">
+                  <th className="border border-border px-3 py-2 w-16 bg-muted/80 text-xs font-semibold text-muted-foreground">{t("scheduleDailyStaff") || "일일인원"}</th>
+                  {dayStrs.map((d, i) => (
+                    <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center">
+                      <span className="font-bold text-primary text-sm">{dailyStaffCount[i]}명</span>
+                    </th>
+                  ))}
+                </tr>
                 <tr>
                   <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
                   {dayStrs.map((d, i) => (

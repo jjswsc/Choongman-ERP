@@ -365,6 +365,14 @@ body {
   font-size: 15px;
 }
 
+/* 선택된 값 표시 - 항상 하얀색 유지 (매장/이름 선택 후에도) */
+.login-page .login-select-trigger,
+.login-page .login-select-trigger *,
+.login-page .login-select-trigger span,
+.login-page .login-select-trigger [data-placeholder] {
+  color: white !important;
+}
+
 .login-page .login-select-trigger[data-state="open"] {
   border-color: #FF6B00 !important;
   box-shadow: 0 0 12px rgba(255, 107, 0, 0.35);
@@ -427,13 +435,15 @@ body {
   color: white !important;
 }
 
-.login-select-content [data-highlighted] {
-  background: rgba(255, 107, 0, 0.35) !important;
-  outline: none;
+.login-select-content [data-radix-select-item][data-state="checked"] {
+  color: white !important;
+  background: rgba(255, 107, 0, 0.25) !important;
 }
 
-.login-select-content [data-radix-select-item] {
-  color: inherit;
+.login-select-content [data-highlighted] {
+  background: rgba(255, 107, 0, 0.35) !important;
+  color: white !important;
+  outline: none;
 }
 
 /* 날짜 입력 - 달력 아이콘과 숫자 겹침 방지, 년/월/일 모두 보이도록 */
