@@ -113,6 +113,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const [schedule, setSchedule] = React.useState<TodayScheduleItem[]>([])
   const [attendance, setAttendance] = React.useState<TodayAttendanceItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
 
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0) {
@@ -128,6 +129,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const loadTodayData = React.useCallback(() => {
     let store = storeFilterFinal || auth?.store
     if (!store) return
+    setHasSearched(true)
     store = (store === t("scheduleStoreAll") || store === "All" || store === "전체") ? "All" : store
     setLoading(true)
     Promise.all([getTodaySchedule({ store, date }), getTodayAttendanceSummary({ store, date })])
@@ -141,10 +143,6 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       })
       .finally(() => setLoading(false))
   }, [storeFilterFinal, auth?.store, date])
-
-  React.useEffect(() => {
-    if (storeFilterFinal || auth?.store) loadTodayData()
-  }, [storeFilterFinal, auth?.store, loadTodayData])
 
   const filteredSchedule =
     areaFilter === "all"
@@ -256,9 +254,14 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </Button>
       </div>
 
-      {/* 테이블 - 구역 | 이름 | 9시~21시 (사진과 동일 레이아웃) */}
+      {/* 테이블 - 구역 | 이름 | 9시~21시 */}
       <div className="px-4 pb-4">
-        {loading ? (
+        {!hasSearched ? (
+          <div className="rounded-xl border border-dashed border-border py-8 text-center">
+            <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
+            <p className="mt-2 text-xs text-muted-foreground">{t("scheduleLoadHint")}</p>
+          </div>
+        ) : loading ? (
           <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
         ) : filteredSchedule.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border py-8 text-center">

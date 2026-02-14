@@ -48,6 +48,7 @@ export default function AdminAttendancePage() {
   const [loading, setLoading] = React.useState(false)
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
+  const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number, string>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -104,15 +105,22 @@ export default function AdminAttendancePage() {
       .finally(() => setLoading(false))
   }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: number, optOtMinutes?: number | null) => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
+      optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
       userStore: auth?.store,
       userRole: auth?.role,
     })
-    if (res.success) loadRecords()
-    else alert(res.message || "처리 실패")
+    if (res.success) {
+      setOtMinutesByRow((p) => {
+        const next = { ...p }
+        delete next[id]
+        return next
+      })
+      loadRecords()
+    } else alert(res.message || "처리 실패")
   }
 
   const handleReject = async (id: number) => {
@@ -266,15 +274,43 @@ export default function AdminAttendancePage() {
                           </td>
                           <td className="px-3 py-2.5">
                             {row.pendingId != null ? (
-                              <div className="flex gap-1 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="h-7 px-2 text-[10px]"
-                                  onClick={() => handleApprove(row.pendingId!)}
-                                >
-                                  {t("att_approve_btn")}
-                                </Button>
+                              <div className="flex flex-wrap items-center gap-1.5 justify-center">
+                                {row.otMin > 0 ? (
+                                  <>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={999}
+                                      placeholder={t("att_ot_min") || "연장(분)"}
+                                      value={otMinutesByRow[row.pendingId] ?? String(row.otMin)}
+                                      onChange={(e) =>
+                                        setOtMinutesByRow((p) => ({ ...p, [row.pendingId!]: e.target.value }))
+                                      }
+                                      className="h-7 w-14 text-xs text-center px-1"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-7 px-2 text-[10px]"
+                                      onClick={() => {
+                                        const v = otMinutesByRow[row.pendingId!] ?? String(row.otMin)
+                                        const n = parseInt(v, 10)
+                                        handleApprove(row.pendingId!, !isNaN(n) && n >= 0 ? n : row.otMin)
+                                      }}
+                                    >
+                                      {t("att_approve_btn")}
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="h-7 px-2 text-[10px]"
+                                    onClick={() => handleApprove(row.pendingId!)}
+                                  >
+                                    {t("att_approve_btn")}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -324,6 +360,7 @@ export default function AdminAttendancePage() {
               <WeeklySchedule
                 storeFilter={scheduleStore || stores.find((s) => s !== "All") || ""}
                 storeList={stores.filter((s) => s !== "All")}
+                onStoreChange={setScheduleStore}
               />
             </div>
           </TabsContent>

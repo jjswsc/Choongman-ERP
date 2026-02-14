@@ -44,9 +44,10 @@ const zoneStyle: Record<string, string> = {
 interface WeeklyScheduleProps {
   storeFilter?: string
   storeList?: string[]
+  onStoreChange?: (store: string) => void
 }
 
-export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: storeListProp = [] }: WeeklyScheduleProps) {
+export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: storeListProp = [], onStoreChange }: WeeklyScheduleProps) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -57,7 +58,12 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [areaFilter, setAreaFilter] = React.useState("all")
   const [schedule, setSchedule] = React.useState<WeeklyScheduleItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [collapsedRows, setCollapsedRows] = React.useState<Set<string>>(new Set())
+
+  const displayStoreList = storeListProp.length > 0 ? storeListProp : storeList
+  const isOffice = displayStoreList.length > 1 && ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+  const storeOptions = isOffice ? [t("scheduleStoreAll"), ...displayStoreList.filter((s) => s !== t("scheduleStoreAll") && s !== "All")] : displayStoreList
 
   React.useEffect(() => {
     if (auth?.store && storeListProp.length === 0) {
@@ -78,6 +84,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const loadWeekData = React.useCallback(() => {
     let store = storeFilterFinal || auth?.store
     if (!store) return
+    setHasSearched(true)
     setLoading(true)
     const area = areaFilter === "all" ? undefined : areaFilter === "service" ? "Service" : areaFilter === "kitchen" ? "Kitchen" : "Office"
     store = (store === t("scheduleStoreAll") || store === "All" || store === "전체") ? "All" : store
@@ -88,9 +95,10 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       .finally(() => setLoading(false))
   }, [auth?.store, storeFilterFinal, date, areaFilter])
 
-  React.useEffect(() => {
-    if (auth?.store) loadWeekData()
-  }, [auth?.store, loadWeekData])
+  const handleStoreChange = (v: string) => {
+    if (onStoreChange) onStoreChange(v)
+    else setStoreFilter(v)
+  }
 
   const areaLabel = (ar: string) => {
     if (ar === "Service") return t("scheduleAreaService") || "서비스"
@@ -192,8 +200,23 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         </div>
       </div>
 
-      {/* Filters - 매장은 상단에서 선택 */}
+      {/* Filters - 매장, 날짜, 구역, 검색 */}
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        {storeOptions.length > 0 ? (
+          <Select
+            value={storeFilterFinal || storeOptions[0] || ""}
+            onValueChange={handleStoreChange}
+          >
+            <SelectTrigger className="h-9 min-w-[120px] rounded-lg text-xs">
+              <SelectValue placeholder={t("scheduleStorePlaceholder")} />
+            </SelectTrigger>
+            <SelectContent>
+              {storeOptions.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 flex-1 min-w-[120px] rounded-lg text-xs" />
         <Select value={areaFilter} onValueChange={setAreaFilter}>
           <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
@@ -223,12 +246,17 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
         </Button>
       </div>
 
-      {loading ? (
+      {!hasSearched ? (
+        <div className="rounded-xl border border-dashed border-border py-8 text-center">
+          <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
+          <p className="mt-2 text-xs text-muted-foreground">{t("scheduleLoadHint")}</p>
+        </div>
+      ) : loading ? (
         <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
       ) : schedule.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border py-8 text-center">
           <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/30" />
-          <p className="mt-2 text-xs text-muted-foreground">{t("scheduleLoadHint")}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("scheduleTodayEmpty")}</p>
         </div>
       ) : (
         <>

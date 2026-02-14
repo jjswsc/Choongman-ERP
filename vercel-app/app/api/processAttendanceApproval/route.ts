@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const decision = String(body?.decision || body?.status || '').trim()
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
+    const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
 
     if (!id || isNaN(id)) {
       return NextResponse.json(
@@ -40,6 +41,9 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = { approved: decision }
     if (decision === '승인완료') {
       patch.status = '정상(승인)'
+      if (optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
+        patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
+      }
     } else if (decision === '반려') {
       patch.status = '반려'
     }

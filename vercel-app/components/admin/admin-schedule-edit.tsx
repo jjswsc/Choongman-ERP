@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, RotateCcw, Copy, Save, Calendar, Users } from "lucide-react"
+import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -82,6 +82,9 @@ export function AdminScheduleEdit({
   const [quickBreakStart, setQuickBreakStart] = React.useState("13:00")
   const [quickBreakHours, setQuickBreakHours] = React.useState(1)
   const [quickDay, setQuickDay] = React.useState(0)
+  const [zoom, setZoom] = React.useState(100)
+  const [slotViewHour, setSlotViewHour] = React.useState(false)
+  const [isFullscreen, setIsFullscreen] = React.useState(false)
 
   const store = storeFilter === "All" || !storeFilter ? "" : storeFilter
   const isOffice = store.toLowerCase().includes("office") || store.includes("오피스") || store.includes("본사")
@@ -464,24 +467,56 @@ export function AdminScheduleEdit({
               <Save className="mr-1 h-3.5 w-3.5" />
               {saving ? t("loading") : t("att_save_schedule")}
             </Button>
+            <div className="flex items-center gap-1 ml-2 border-l pl-2">
+              <Button size="sm" variant="outline" className="h-9 w-9 p-0" onClick={() => setZoom((z) => Math.max(75, z - 25))} title={t("att_zoom_out")}>
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <span className="text-xs font-medium min-w-[3rem] text-center">{zoom}%</span>
+              <Button size="sm" variant="outline" className="h-9 w-9 p-0" onClick={() => setZoom((z) => Math.min(200, z + 25))} title={t("att_zoom_in")}>
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button size="sm" variant={slotViewHour ? "default" : "outline"} className="h-9 px-2 text-xs" onClick={() => setSlotViewHour(!slotViewHour)} title={t("att_view_1h")}>
+                1h
+              </Button>
+              <Button size="sm" variant={isFullscreen ? "default" : "outline"} className="h-9 w-9 p-0" onClick={() => setIsFullscreen(!isFullscreen)} title={t("att_fullscreen")}>
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto rounded border max-h-[600px] overflow-y-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead className="sticky top-0 bg-muted z-10">
+          <div
+            className={cn("overflow-auto rounded-xl border-2 border-border bg-card", isFullscreen ? "fixed inset-4 z-50 shadow-2xl" : "max-h-[700px]")}
+            style={{ paddingBottom: 8 }}
+          >
+            <table
+              className="w-full border-collapse"
+              style={{
+                fontSize: slotViewHour ? `${13 * (zoom / 100)}px` : `${11 * (zoom / 100)}px`,
+                minWidth: "max-content",
+              }}
+            >
+              <thead className="sticky top-0 bg-muted z-10 shadow-sm">
                 <tr>
-                  <th className="border px-2 py-1.5 w-14">Time</th>
+                  <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">Time</th>
                   {dayStrs.map((d, i) => (
-                    <th key={d} colSpan={areas.length} className="border px-2 py-1.5 text-center">
+                    <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center font-semibold">
                       {t(DAY_LABELS[i])} {d.slice(5)}
                     </th>
                   ))}
                 </tr>
                 <tr>
-                  <th className="border px-2 py-1" />
+                  <th className="border border-border px-1 py-1 bg-muted/80" />
                   {dayStrs.map(() =>
                     areas.map((ar) => (
-                      <th key={ar} className="border px-1 py-1 min-w-[52px] bg-muted/80">
+                      <th
+                        key={ar}
+                        className={cn(
+                          "border border-border px-2 py-1.5 min-w-[60px] font-medium",
+                          ar === "Service" && "bg-orange-100 dark:bg-orange-950/30",
+                          ar === "Kitchen" && "bg-green-100 dark:bg-green-950/30",
+                          ar === "Office" && "bg-blue-100 dark:bg-blue-950/30"
+                        )}
+                      >
                         {ar}
                       </th>
                     ))
@@ -489,32 +524,41 @@ export function AdminScheduleEdit({
                 </tr>
               </thead>
               <tbody>
-                {hours.map((h) => (
-                  <tr key={h}>
-                    <td className="border px-2 py-1 font-bold text-center">{String(h).padStart(2, "0")}:00</td>
-                    {dayStrs.map((_, day) =>
-                      areas.map((area) => (
-                        <td key={`${day}-${area}`} className="border p-0 align-top">
-                          <div className="flex">
-                            {[0, 30].map((half) => {
-                              const time = `${String(h).padStart(2, "0")}:${String(half).padStart(2, "0")}`
+                {(slotViewHour ? hours : hours.flatMap((h) => [h, h])).map((_, rowIdx) => {
+                  const hourNum = slotViewHour ? hours[rowIdx] : hours[Math.floor(rowIdx / 2)]
+                  const half = slotViewHour ? 0 : (rowIdx % 2) * 30
+                  const timeLabel = slotViewHour ? `${String(hourNum).padStart(2, "0")}:00` : `${String(hourNum).padStart(2, "0")}:${String(half).padStart(2, "0")}`
+                  const slotMinH = slotViewHour ? Math.max(40, 28 * (zoom / 100)) : Math.max(32, 22 * (zoom / 100))
+                  const timesToShow = slotViewHour ? [0, 30] : [half]
+                  return (
+                    <tr key={`${hourNum}-${half}`}>
+                      <td className="border border-border px-2 py-1 font-bold text-center bg-muted/50 sticky left-0">{timeLabel}</td>
+                      {dayStrs.map((_, day) =>
+                        areas.map((area) => (
+                          <td key={`${day}-${area}`} className="border border-border p-0 align-top">
+                            {timesToShow.map((hx, ti) => {
+                              const time = `${String(hourNum).padStart(2, "0")}:${String(hx).padStart(2, "0")}`
                               const names = getSlotNames(day, area, time)
                               const hasData = names.length > 0
+                              const areaHover = area === "Service" ? "hover:bg-orange-50 dark:hover:bg-orange-950/20" : area === "Kitchen" ? "hover:bg-green-50 dark:hover:bg-green-950/20" : "hover:bg-blue-50 dark:hover:bg-blue-950/20"
                               return (
                                 <div
                                   key={time}
                                   onClick={() => toggleSlot(day, area, time)}
                                   className={cn(
-                                    "flex-1 min-h-[28px] cursor-pointer border-r last:border-r-0 flex flex-wrap items-center justify-center gap-0.5 p-0.5",
-                                    hasData && "bg-primary/10"
+                                    "cursor-pointer flex flex-wrap items-center justify-center gap-1 p-1.5 transition-colors",
+                                    hasData && "bg-primary/10",
+                                    areaHover,
+                                    slotViewHour && ti === 1 && "border-t border-dashed border-border"
                                   )}
+                                  style={{ minHeight: slotMinH }}
                                 >
                                   {names.map((n) => (
                                     <span
                                       key={n}
                                       className={cn(
-                                        "text-[9px] px-1 py-0.5 rounded truncate max-w-full",
-                                        n.startsWith("BRK_") ? "bg-gray-700 text-white" : "bg-primary text-primary-foreground"
+                                        "px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-full",
+                                        n.startsWith("BRK_") ? "bg-gray-600 text-white" : area === "Service" ? "bg-orange-500 text-white" : area === "Kitchen" ? "bg-green-600 text-white" : "bg-blue-500 text-white"
                                       )}
                                     >
                                       {n.startsWith("BRK_") ? "R" : staffList.find((s) => s.name === n)?.nick || n}
@@ -523,12 +567,12 @@ export function AdminScheduleEdit({
                                 </div>
                               )
                             })}
-                          </div>
-                        </td>
-                      ))
-                    )}
-                  </tr>
-                ))}
+                          </td>
+                        ))
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
