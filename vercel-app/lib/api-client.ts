@@ -483,7 +483,7 @@ export async function getLeaveStats(params: {
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
   const res = await fetch(`/api/getLeaveStats?${q}`)
-  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedTotalAnnual: number; usedTotalSick: number; remain: number }[]>
+  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[]>
 }
 
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string }) {
