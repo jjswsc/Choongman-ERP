@@ -54,6 +54,17 @@ export function AdminLeaveApproval() {
   const leaveTypeToKey: Record<string, string> = { "연차": "annual", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
   const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid") : type
 
+  const translateApiMessage = (msg: string | undefined): string => {
+    if (!msg) return t("processFail")
+    if (msg === "잘못된 요청입니다.") return t("invalidRequest")
+    if (msg === "승인 또는 반려를 선택해 주세요.") return t("selectApproveOrReject")
+    if (msg === "해당 휴가 신청을 찾을 수 없습니다.") return t("leaveRequestNotFound")
+    if (msg === "해당 매장의 휴가만 승인할 수 있습니다.") return t("leaveStoreOnly")
+    if (msg === "처리되었습니다.") return t("processSuccess")
+    if (msg.startsWith("처리 실패:")) return t("processFail") + msg.slice("처리 실패:".length)
+    return msg
+  }
+
   const loadLeaveList = () => {
     if (!auth?.store) return
     setLeaveLoading(true)
@@ -74,8 +85,11 @@ export function AdminLeaveApproval() {
   const handleLeaveApprove = async (id: number, decision: string) => {
     if (!auth?.store) return
     const res = await processLeaveApproval({ id, decision, userStore: auth.store, userRole: auth.role })
-    if (res.success) loadLeaveList()
-    else alert(res.message || "처리 실패")
+    if (res.success) {
+      loadLeaveList()
+    } else {
+      alert(translateApiMessage(res.message))
+    }
   }
 
   return (

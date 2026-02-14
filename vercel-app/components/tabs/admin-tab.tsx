@@ -56,6 +56,16 @@ export function AdminTab() {
     })
   }, [auth])
 
+  const translateApiMessage = (msg: string | undefined): string => {
+    if (!msg) return t("processFail")
+    if (msg === "잘못된 요청입니다.") return t("invalidRequest")
+    if (msg === "해당 기록을 찾을 수 없습니다.") return t("attRecordNotFound")
+    if (msg === "해당 매장의 근태만 승인할 수 있습니다.") return t("attStoreOnly")
+    if (msg === "처리가 완료되었습니다.") return t("attProcessSuccess")
+    if (msg.startsWith("처리 실패:")) return t("processFail") + msg.slice("처리 실패:".length)
+    return msg
+  }
+
   const loadAttList = () => {
     if (!auth?.store) return
     setAttLoading(true)
@@ -74,8 +84,11 @@ export function AdminTab() {
   const handleAttApprove = async (id: number, decision: string) => {
     if (!auth?.store) return
     const res = await processAttendanceApproval({ id, decision, userStore: auth.store, userRole: auth.role })
-    if (res.success) loadAttList()
-    else alert(res.message || "처리 실패")
+    if (res.success) {
+      loadAttList()
+    } else {
+      alert(translateApiMessage(res.message))
+    }
   }
 
   return (
