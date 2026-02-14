@@ -1,6 +1,6 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono } from "next/font/google"
+import { Inter, Geist_Mono, Noto_Sans_KR } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 
@@ -14,10 +14,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
 })
+const notoSansKr = Noto_Sans_KR({
+  subsets: ["latin"],
+  variable: "--font-noto-sans-kr",
+})
 
 export const metadata: Metadata = {
-  title: "CHOONGMAN ERP",
-  description: "CHOONGMAN ERP Manager - Enterprise Resource Planning System",
+  title: "CHOONGMAN ERP MANAGER",
+  description: "CHOONGMAN ERP 출고 관리 시스템",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon-192.png",
@@ -40,7 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className={`${inter.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} font-sans antialiased`}>
         <AuthProvider>
           <LangProvider>{children}</LangProvider>
         </AuthProvider>

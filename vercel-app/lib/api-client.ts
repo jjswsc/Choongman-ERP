@@ -1020,3 +1020,24 @@ export async function getCombinedOutboundHistory(params: {
   const res = await fetch(`/api/getCombinedOutboundHistory?${q}`)
   return res.json() as Promise<OutboundHistoryItem[]>
 }
+
+export interface InvoiceDataCompany {
+  companyName: string
+  address: string
+  taxId: string
+  phone: string
+  bankInfo: string
+  projectName?: string
+}
+
+export interface InvoiceDataClient {
+  companyName: string
+  address: string
+  taxId: string
+  phone: string
+}
+
+export async function getInvoiceData() {
+  const res = await fetch('/api/getInvoiceData')
+  return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
+}

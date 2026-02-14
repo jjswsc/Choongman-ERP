@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { ArrowUpFromLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,7 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -22,12 +27,21 @@ import {
   forceOutboundBatch,
   getCombinedOutboundHistory,
   getMyUsageHistory,
+  getInvoiceData,
   type AdminItem,
   type AdminVendor,
   type OutboundHistoryItem,
   type UsageHistoryItem,
+  type InvoiceDataCompany,
+  type InvoiceDataClient,
 } from "@/lib/api-client"
 import { ItemPickerDialog } from "@/components/erp/item-picker-dialog"
+import {
+  ShipmentHeader,
+  ShipmentFilterBar,
+  ShipmentTable,
+  type ShipmentTableRow,
+} from "@/components/shipment"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -66,6 +80,9 @@ export default function OutboundPage() {
   const [histMonth, setHistMonth] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
   const [histType, setHistType] = React.useState("")
+  const [invoiceSearch, setInvoiceSearch] = React.useState("")
+  const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
+  const [photoModalUrl, setPhotoModalUrl] = React.useState<string | null>(null)
 
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()
@@ -192,6 +209,7 @@ export default function OutboundPage() {
     }
     if (!s || !e) return
     setHistoryLoading(true)
+    setSelectedForPrint(new Set())
     try {
       if (isOffice) {
         const list = await getCombinedOutboundHistory({
@@ -221,7 +239,16 @@ export default function OutboundPage() {
 
   const groupedHistory = React.useMemo(() => {
     if (!isOffice) return []
-    const g: Record<string, { date: string; target: string; type: string; totalQty: number; totalAmt: number; items: OutboundHistoryItem[] }> = {}
+    const g: Record<string, {
+      date: string
+      target: string
+      type: string
+      totalQty: number
+      totalAmt: number
+      items: OutboundHistoryItem[]
+      invoiceNo?: string
+      receiveImageUrl?: string
+    }> = {}
     for (const i of historyList) {
       const k = `${i.date}_${i.target}_${i.type}_${i.orderRowId || ""}`
       if (!g[k]) {
@@ -236,10 +263,183 @@ export default function OutboundPage() {
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
-      g[k].totalAmt += i.amount || 0
+      g[k].totalAmt += (i.amount || 0)
+      if (i.invoiceNo) g[k].invoiceNo = i.invoiceNo
+      if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
     }
     return Object.values(g).sort((a, b) => (b.date + b.target).localeCompare(a.date + a.target))
   }, [historyList, isOffice])
+
+  const filteredGroupedHistory = React.useMemo(() => {
+    if (!isOffice || !invoiceSearch.trim()) return groupedHistory
+    const q = invoiceSearch.trim().toLowerCase()
+    return groupedHistory.filter((g) => (g.invoiceNo || "").toLowerCase().includes(q))
+  }, [groupedHistory, invoiceSearch, isOffice])
+
+  const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
+    if (!isOffice) return []
+    return filteredGroupedHistory.map((g, i) => {
+      const first = g.items[0]
+      const orderDate = first?.orderDate || g.date?.slice(0, 10) || ""
+      const deliveryDate = first?.deliveryDate || ""
+      const deliveryStatus = first?.deliveryStatus
+      const itemsSummary =
+        g.items.length === 1
+          ? `${first?.name || ""}${first?.spec ? ` (${first.spec})` : ""}`
+          : `${g.items[0]?.name || ""} ${t("inEtcCount")} ${g.items.length - 1}`
+      return {
+        id: `g-${i}-${g.date}-${g.target}`,
+        orderDate,
+        deliveryDate: deliveryDate.slice(0, 10) || deliveryDate || "-",
+        invoiceNo: g.invoiceNo || "-",
+        target: g.target || "-",
+        type: g.type || "Force",
+        deliveryStatus,
+        items: g.items.map((it) => ({
+          name: it.name || "",
+          spec: it.spec || "",
+          qty: it.qty || 0,
+          amount: it.amount || 0,
+        })),
+        itemsSummary,
+        totalQty: g.totalQty,
+        totalAmt: g.totalAmt,
+        receiveImageUrl: g.receiveImageUrl,
+      }
+    })
+  }, [filteredGroupedHistory, isOffice, t])
+
+  const usageTableRows = React.useMemo(
+    () =>
+      usageList.map((u) => ({
+        date: u.date,
+        item: u.item,
+        qty: u.qty,
+        amount: u.amount || 0,
+      })),
+    [usageList]
+  )
+
+  React.useEffect(() => {
+    setSelectedForPrint(new Set())
+  }, [invoiceSearch])
+
+  const togglePrintSelect = (idx: number) => {
+    setSelectedForPrint((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx)
+      else next.add(idx)
+      return next
+    })
+  }
+
+  const togglePrintSelectAll = () => {
+    if (!isOffice || filteredGroupedHistory.length === 0) return
+    if (selectedForPrint.size >= filteredGroupedHistory.length) {
+      setSelectedForPrint(new Set())
+    } else {
+      setSelectedForPrint(new Set(filteredGroupedHistory.map((_, i) => i)))
+    }
+  }
+
+  const buildInvoiceHtml = (
+    group: (typeof groupedHistory)[0],
+    company: InvoiceDataCompany | null,
+    client: InvoiceDataClient | { companyName: string },
+    isFirstPage: boolean,
+    invT: (k: string) => string
+  ) => {
+    const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
+    const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
+    const d = dateStr.length === 10
+      ? `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}/${dateStr.slice(0, 4)}`
+      : dateStr.replace(/-/g, "/")
+    const totalBaht = Math.round(Math.abs(group.totalAmt || 0))
+    const vat7 = Math.round(totalBaht * 0.07)
+    const grandTotal = totalBaht + vat7
+    const companyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
+    const address = company?.address || "-"
+    const taxId = company?.taxId || ""
+    const phone = company?.phone || ""
+    const bankInfo = company?.bankInfo || ""
+    const clientName = client?.companyName || group.target || "-"
+    const clientAddr = (client as InvoiceDataClient)?.address || ""
+    const clientTaxId = (client as InvoiceDataClient)?.taxId || ""
+    const clientPhone = (client as InvoiceDataClient)?.phone || ""
+    const rows = (group.items || []).map((it, idx) => {
+      const amt = Math.round(Math.abs(it.amount || 0))
+      const qty = Math.abs(it.qty || 0)
+      const price = qty ? amt / qty : 0
+      return `<tr><td class="text-center">${idx + 1}</td><td>${(it.name || "-")}${it.spec ? ` ${it.spec}` : ""}</td><td class="text-center">${qty}</td><td class="text-end">${price.toLocaleString()}</td><td class="text-end">0</td><td class="text-end">${amt.toLocaleString()}</td></tr>`
+    }).join("")
+    const tableStyle = "width:100%; border-collapse: collapse; border: 1px solid #e2e8f0; margin: 8px 0;"
+    const thStyle = "background: #0369a1; color: #fff; padding: 6px 8px; text-align: center; border: 1px solid #0369a1;"
+    const pageBreak = isFirstPage ? "" : " page-break-before: always;"
+    return `<div class="delivery-note-invoice" style="max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;${pageBreak} font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+    <h2 style="margin:0; font-size:1.25rem;">${invT("inv_title")}</h2>
+    <div style="text-align:right; font-size:11px;">
+      <div><strong>${invT("inv_doc_no")}:</strong> ${docNo}</div>
+      <div><strong>${invT("inv_date")}:</strong> ${d}</div>
+    </div>
+  </div>
+  <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+    <div style="flex:1;">
+      <div style="font-weight:700; margin-bottom:4px;">${companyName}</div>
+      <div style="font-size:11px; color:#475569;">${address}<br>Tax ID ${taxId} | ${phone}</div>
+    </div>
+    <div style="flex:1; padding-left:16px;">
+      <div style="font-weight:700; margin-bottom:4px;">${invT("inv_client")}</div>
+      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>Tax ID: " + clientTaxId : ""}${clientAddr ? "<br>" + clientAddr : ""}${clientPhone ? "<br>" + clientPhone : ""}</div>
+    </div>
+  </div>
+  <table style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${invT("inv_description")}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${invT("inv_amount")}</th></tr></thead><tbody>${rows}</tbody></table>
+  <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px;">
+    <div>${invT("inv_total")}: ${totalBaht.toLocaleString()} THB</div>
+    <div>${invT("inv_vat7")}: ${vat7.toLocaleString()} THB</div>
+    <div style="font-weight:700;">${invT("inv_grand_total")}: ${grandTotal.toLocaleString()} THB</div>
+  </div></div>
+  <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${invT("inv_remarks")}:</strong> ${bankInfo}</div>
+  <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px;">
+    <div><strong>${clientName}</strong><br>${invT("inv_received_by")} ________________ ${invT("inv_date")} ________________</div>
+    <div><strong>${companyName.split(" ")[0]}</strong><br>${invT("inv_approved_by")} ________________ ${invT("inv_date")} ________________</div>
+  </div>
+</div>`
+  }
+
+  const handlePrintInvoice = async () => {
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    if (checked.length === 0) {
+      alert(t("outSelectForPrint") || "인쇄할 출고 내역을 선택해 주세요.")
+      return
+    }
+    try {
+      const { company, clients } = await getInvoiceData()
+      const invT = (k: string) => t(k as "inv_title") || k
+      let prevTarget: string | null = null
+      const html = checked.map((g, idx) => {
+        const isFirst = idx === 0 || g.target !== prevTarget
+        prevTarget = g.target
+        const client = (clients && clients[g.target]) || { companyName: g.target || "-" }
+        return buildInvoiceHtml(g, company, client, isFirst, invT)
+      }).join("")
+      const area = document.createElement("div")
+      area.id = "invoice-print-area"
+      area.className = "invoice-print-area"
+      area.innerHTML = html
+      area.style.cssText = "position:absolute; left:-9999px; top:0; width:210mm;"
+      document.body.appendChild(area)
+      const style = document.createElement("style")
+      style.textContent = ".invoice-print-area { } @media print { body * { visibility: hidden; } .invoice-print-area, .invoice-print-area * { visibility: visible; } .invoice-print-area { position: absolute; left: 0; top: 0; width: 100%; } }"
+      document.head.appendChild(style)
+      window.print()
+      document.body.removeChild(area)
+      document.head.removeChild(style)
+    } catch (e) {
+      console.error(e)
+      alert("인보이스 로드 실패")
+    }
+  }
 
   const periodTotal = React.useMemo(() => {
     if (isOffice) return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
@@ -254,30 +454,23 @@ export default function OutboundPage() {
     )
   }
 
+  const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
+  const [tabValue, setTabValue] = React.useState<"new" | "hist">(isOffice ? "new" : "hist")
+
+  React.useEffect(() => {
+    setTabValue(isOffice ? "new" : "hist")
+  }, [isOffice])
+
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
-            <ArrowUpFromLine className="h-5 w-5 text-warning" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("adminOutbound")}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {t("outPageSub")}
-            </p>
-          </div>
-        </div>
+      <div className="p-6 space-y-4">
+        <ShipmentHeader
+          value={tabValue}
+          onValueChange={(v) => v !== "order" && setTabValue(v)}
+          showNewTab={isOffice}
+        />
 
-        <Tabs defaultValue={isOffice ? "new" : "hist"} className="space-y-4">
-          <TabsList>
-            {isOffice && (
-              <TabsTrigger value="new">{t("outTabNew")}</TabsTrigger>
-            )}
-            <TabsTrigger value="hist">{t("outTabHist")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
 
           {isOffice && (
             <TabsContent value="new">
@@ -411,109 +604,41 @@ export default function OutboundPage() {
           )}
 
           <TabsContent value="hist">
-            <div className="rounded-xl border bg-card p-5">
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-36" />
-                <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-36" />
-                <Input type="month" value={histMonth} onChange={(e) => setHistMonth(e.target.value)} className="h-9 w-36" title={t("inMonthHint")} />
-                {isOffice && (
-                  <>
-                    <Select value={histType || "__all__"} onValueChange={(v) => setHistType(v === "__all__" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-28">
-                        <SelectValue placeholder={t("outFilterType")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">{t("outTypeAll")}</SelectItem>
-                        <SelectItem value="Force">{t("outTypeForce")}</SelectItem>
-                        <SelectItem value="Order">{t("outTypeOrder")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={histStore || "__all__"} onValueChange={(v) => setHistStore(v === "__all__" ? "" : v)}>
-                      <SelectTrigger className="h-9 w-40">
-                        <SelectValue placeholder={t("outFilterStoreAll")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__all__">{t("outFilterStoreAll")}</SelectItem>
-                        {outboundTargets.map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </>
-                )}
-                <Button size="sm" className="h-9" onClick={fetchHistory}>
-                  {t("stockBtnSearch")}
-                </Button>
-                <span className="text-sm font-bold text-primary ml-2">
-                  {t("outPeriodTotal")}: {periodTotal.toLocaleString()}
-                </span>
-              </div>
-              <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-2 text-left w-24">{t("stockColDate")}</th>
-                      {isOffice && <th className="px-4 py-2 text-left w-20">{t("outFilterType")}</th>}
-                      {isOffice && <th className="px-4 py-2 text-left">{t("outColStore")}</th>}
-                      <th className="px-4 py-2 text-left">{t("outColItem")}</th>
-                      <th className="px-4 py-2 text-right w-20">{t("outColQty")}</th>
-                      <th className="px-4 py-2 text-right w-24">{t("inColAmount")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyLoading ? (
-                      <tr>
-                        <td colSpan={isOffice ? 6 : 4} className="py-12 text-center">
-                          {t("loading")}
-                        </td>
-                      </tr>
-                    ) : !isOffice ? (
-                      usageList.length === 0 ? (
-                        <tr><td colSpan={4} className="py-12 text-center text-muted-foreground">{t("outNoData")}</td></tr>
-                      ) : (
-                        usageList.map((u, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-4 py-2">{u.date}</td>
-                            <td className="px-4 py-2">{u.item}</td>
-                            <td className="px-4 py-2 text-right">{u.qty.toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right text-primary">{(u.amount || 0).toLocaleString()}</td>
-                          </tr>
-                        ))
-                      )
-                    ) : groupedHistory.length === 0 ? (
-                      <tr><td colSpan={6} className="py-12 text-center text-muted-foreground">{t("outNoData")}</td></tr>
-                    ) : (
-                      groupedHistory.flatMap((g, gi) => [
-                        <tr key={gi} className="border-b font-medium">
-                          <td className="px-4 py-2">{g.date}</td>
-                          <td className="px-4 py-2">
-                            <span className={`text-xs px-2 py-0.5 rounded ${g.type === "Force" ? "bg-warning/20 text-warning" : "bg-success/20 text-success"}`}>
-                              {g.type === "Force" ? t("outTypeForce") : t("outTypeOrder")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2">{g.target}</td>
-                          <td className="px-4 py-2">
-                            {g.items[0].name}
-                            {g.items.length > 1 ? ` ${t("inEtcCount")} ${g.items.length - 1}` : ""}
-                          </td>
-                          <td className="px-4 py-2 text-right">{g.totalQty.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-right text-primary">{g.totalAmt.toLocaleString()}</td>
-                        </tr>,
-                        ...g.items.slice(1).map((i, ii) => (
-                          <tr key={`${gi}-${ii}`} className="border-b bg-muted/5">
-                            <td className="px-4 py-2"></td>
-                            <td className="px-4 py-2"></td>
-                            <td className="px-4 py-2"></td>
-                            <td className="px-4 py-2 pl-8 text-muted-foreground text-xs">{i.name} {i.spec ? `(${i.spec})` : ""}</td>
-                            <td className="px-4 py-2 text-right">{i.qty.toLocaleString()}</td>
-                            <td className="px-4 py-2 text-right">{(i.amount || 0).toLocaleString()}</td>
-                          </tr>
-                        )),
-                      ])
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <ShipmentFilterBar
+              totalAmount={periodTotalFormatted}
+              isOffice={isOffice}
+              histStart={histStart}
+              histEnd={histEnd}
+              histMonth={histMonth}
+              onHistStartChange={setHistStart}
+              onHistEndChange={setHistEnd}
+              onHistMonthChange={setHistMonth}
+              onMonthClick={() => {
+                const now = new Date()
+                setHistMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`)
+              }}
+              histType={histType}
+              histStore={histStore}
+              outboundTargets={outboundTargets}
+              onHistTypeChange={setHistType}
+              onHistStoreChange={setHistStore}
+              invoiceSearch={invoiceSearch}
+              onInvoiceSearchChange={setInvoiceSearch}
+              onSearch={fetchHistory}
+              onPrintInvoice={isOffice ? handlePrintInvoice : undefined}
+              onExcelDownload={isOffice ? () => { /* TODO: implement excel export */ } : undefined}
+            />
+            <div className="overflow-x-auto max-h-[500px]">
+              <ShipmentTable
+                isOffice={isOffice}
+                rows={shipmentTableRows}
+                loading={historyLoading}
+                selectedIndices={selectedForPrint}
+                onToggleSelect={togglePrintSelect}
+                onToggleSelectAll={togglePrintSelectAll}
+                onPhotoClick={(url) => setPhotoModalUrl(url)}
+                usageRows={usageTableRows}
+              />
             </div>
           </TabsContent>
         </Tabs>
@@ -524,6 +649,23 @@ export default function OutboundPage() {
           items={items}
           onSelect={handleItemSelect}
         />
+
+        <Dialog open={!!photoModalUrl} onOpenChange={(o) => !o && setPhotoModalUrl(null)}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
+            <DialogHeader className="sr-only">
+              <DialogTitle>{t("outPhotoView")}</DialogTitle>
+            </DialogHeader>
+            {photoModalUrl && (
+              <div className="flex items-center justify-center bg-black/50 min-h-[200px]">
+                <img
+                  src={photoModalUrl}
+                  alt={t("outPhotoView")}
+                  className="max-w-full max-h-[85vh] object-contain"
+                />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

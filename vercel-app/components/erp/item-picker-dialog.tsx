@@ -4,6 +4,7 @@ import * as React from "react"
 import { Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -25,21 +26,45 @@ export function ItemPickerDialog({
   const { lang } = useLang()
   const t = useT(lang)
   const [search, setSearch] = React.useState("")
+  const [categoryFilter, setCategoryFilter] = React.useState("__all__")
+
+  const categories = React.useMemo(() => {
+    const cats = new Set<string>()
+    for (const i of items) {
+      const c = String(i.category || "").trim()
+      if (c) cats.add(c)
+    }
+    return Array.from(cats).sort()
+  }, [items])
 
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return items
-    const q = search.toLowerCase()
-    return items.filter(
-      (i) =>
-        i.code.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q)
-    )
-  }, [items, search])
+    let list = items
+    if (categoryFilter && categoryFilter !== "__all__") {
+      list = list.filter((i) => String(i.category || "").trim() === categoryFilter)
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(
+        (i) =>
+          i.code.toLowerCase().includes(q) ||
+          i.name.toLowerCase().includes(q) ||
+          String(i.category || "").toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [items, search, categoryFilter])
 
   const handleSelect = (item: AdminItem) => {
     onSelect(item)
     onOpenChange(false)
     setSearch("")
+    setCategoryFilter("__all__")
+  }
+
+  const handleClose = () => {
+    setSearch("")
+    setCategoryFilter("__all__")
+    onOpenChange(false)
   }
 
   if (!open) return null
@@ -47,7 +72,7 @@ export function ItemPickerDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={() => onOpenChange(false)}
+      onClick={handleClose}
     >
       <div
         className="w-full max-w-2xl max-h-[80vh] rounded-xl border bg-card shadow-xl flex flex-col"
@@ -55,14 +80,29 @@ export function ItemPickerDialog({
       >
         <div className="p-4 border-b">
           <h3 className="text-sm font-bold mb-3">{t("inFindItem") || "품목 찾기"}</h3>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("itemsSearchPh") || "코드, 품목명"}
-              className="pl-9"
-            />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("itemsSearchPh") || "코드, 품목명"}
+                className="pl-9"
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-9 w-full sm:w-[140px]">
+                <SelectValue placeholder={t("itemsCategoryAll") || "전체 카테고리"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t("itemsCategoryAll") || "전체"}</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4">
@@ -111,7 +151,7 @@ export function ItemPickerDialog({
           </table>
         </div>
         <div className="p-4 border-t flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" size="sm" onClick={handleClose}>
             {t("cancel")}
           </Button>
         </div>
