@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getEvaluationHistory } from "@/lib/api-client"
+import { getEvaluationHistory, translateTexts } from "@/lib/api-client"
 import {
   Dialog,
   DialogContent,
@@ -58,6 +58,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
   const [detailRow, setDetailRow] = React.useState<EvalHistoryRow | null>(null)
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
   const [evaluatorOptions, setEvaluatorOptions] = React.useState<string[]>([])
+  const [transMap, setTransMap] = React.useState<Record<string, string>>({})
 
   const loadHistory = React.useCallback(async () => {
     setLoading(true)
@@ -104,6 +105,73 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
     setDetailRow(row)
     setDetailOpen(true)
   }
+
+  React.useEffect(() => {
+    if (lang === "ko") {
+      setTransMap({})
+      return
+    }
+    const texts: string[] = []
+    if (detailRow) {
+      if (detailRow.memo && detailRow.memo.trim()) texts.push(detailRow.memo.trim())
+      if (detailRow.jsonData) {
+        try {
+          const data = typeof detailRow.jsonData === "string" ? JSON.parse(detailRow.jsonData) : detailRow.jsonData
+          if (data?.sections) {
+            for (const key of ["menu", "cost", "hygiene", "attitude"]) {
+              const arr = data.sections[key]
+              if (Array.isArray(arr)) {
+                for (const item of arr) {
+                  const n = String(item?.notes || "").trim()
+                  if (n) texts.push(n)
+                }
+              }
+            }
+          }
+          if (data?.incidents) {
+            for (const inc of data.incidents) {
+              const t = String(inc?.type || "").trim()
+              const d = String(inc?.details || "").trim()
+              if (t) texts.push(t)
+              if (d) texts.push(d)
+            }
+          }
+        } catch {
+          //
+        }
+      }
+    }
+    for (const r of list) {
+      const m = (r.memo || "").trim()
+      if (m && m.length > 3) texts.push(m)
+    }
+    const unique = [...new Set(texts)].slice(0, 80)
+    if (unique.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(unique, lang).then((translated) => {
+      if (cancelled) return
+      const map: Record<string, string> = {}
+      unique.forEach((txt, i) => {
+        map[txt] = translated[i] ?? txt
+      })
+      setTransMap(map)
+    }).catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [detailRow, list, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
+
+  const mainTitleMap: Record<string, string> = {
+    메뉴숙련: t("eval_main_menu"),
+    원가정확도: t("eval_main_cost"),
+    위생: t("eval_main_hygiene"),
+    태도: t("eval_main_attitude"),
+    서비스: t("eval_section_service"),
+  }
+  const getMainTitle = (main: string) => mainTitleMap[main] || getTrans(main) || main
 
   const detailBody = React.useMemo(() => {
     if (!detailRow?.jsonData) return null
@@ -304,10 +372,11 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 </tr>
               ) : (
                 list.map((r) => {
+                  const memoRaw = getTrans(r.memo || "") || r.memo || "-"
                   const memoShort =
-                    (r.memo || "").length > 30
-                      ? (r.memo || "").slice(0, 30) + "…"
-                      : r.memo || "-"
+                    memoRaw.length > 30
+                      ? memoRaw.slice(0, 30) + "…"
+                      : memoRaw
                   return (
                     <tr
                       key={r.id}
@@ -380,33 +449,33 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                 | {t("eval_list_th_score")}: {detailRow.totalScore || "-"}
               </div>
               <div className="mb-3 rounded bg-muted/50 p-2 text-xs whitespace-pre-wrap">
-                {detailRow.memo || (lang === "ko" ? "(없음)" : "(none)")}
+                {getTrans(detailRow.memo || "") || detailRow.memo || t("eval_none")}
               </div>
               <div className="flex-1 overflow-auto">
                 {detailBody ? (
                   <>
                     <p className="mb-2 text-xs font-bold">
-                      총점: {detailBody.totalScore ?? "-"}
+                      {t("eval_detail_total")}: {detailBody.totalScore ?? "-"}
                     </p>
                     <table className="w-full text-xs border-collapse">
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="px-2 py-1.5 text-left">대분류</th>
-                          <th className="px-2 py-1.5 text-left">항목</th>
-                          <th className="px-2 py-1.5 text-center">점수</th>
-                          <th className="px-2 py-1.5 text-left">비고</th>
+                          <th className="px-2 py-1.5 text-left">{t("eval_cat_main")}</th>
+                          <th className="px-2 py-1.5 text-left">{t("eval_item")}</th>
+                          <th className="px-2 py-1.5 text-center">{t("eval_list_th_score")}</th>
+                          <th className="px-2 py-1.5 text-left">{t("eval_remarks")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detailBody.rows.map((row, i) => (
                           <tr key={i} className="border-b">
-                            <td className="px-2 py-1.5">{row.main}</td>
+                            <td className="px-2 py-1.5">{getMainTitle(row.main)}</td>
                             <td className="px-2 py-1.5">{row.name}</td>
                             <td className="px-2 py-1.5 text-center">
                               {row.score}
                             </td>
                             <td className="px-2 py-1.5 text-muted-foreground">
-                              {row.notes}
+                              {getTrans(row.notes) || row.notes || "-"}
                             </td>
                           </tr>
                         ))}
@@ -415,9 +484,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                   </>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    {lang === "ko"
-                      ? "저장된 상세 데이터가 없습니다."
-                      : "No detailed data."}
+                    {t("eval_no_detail")}
                   </p>
                 )}
               </div>

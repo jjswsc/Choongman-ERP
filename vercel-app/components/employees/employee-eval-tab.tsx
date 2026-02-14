@@ -23,13 +23,13 @@ import { Button } from "@/components/ui/button"
 const EVAL_WEIGHTS = { 메뉴숙련: 0.4, 원가정확도: 0.2, 위생: 0.2, 태도: 0.2 }
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.5, 3.0, 2.0]
 const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "D", "E", "F"]
-const EVAL_INCIDENT_TYPES = [
-  "반복 과다 소스",
-  "위생 관련 이력",
-  "고객 관련",
-  "개선 없음",
-  "안전 사고(화상/미끄럼/낙상 등)",
-]
+const EVAL_INCIDENT_KEYS = [
+  "eval_incident_1",
+  "eval_incident_2",
+  "eval_incident_3",
+  "eval_incident_4",
+  "eval_incident_5",
+] as const
 const SHIFT_OPTIONS = ["Kitchen", "Service", "Morning", "Evening", "Full"]
 
 interface EvalItem {
@@ -83,8 +83,8 @@ export function EmployeeEvalTab({
   const [soloOK, setSoloOK] = React.useState<Record<string, boolean>>({})
   const [peakOK, setPeakOK] = React.useState<Record<string, boolean>>({})
   const [canTrain, setCanTrain] = React.useState<Record<string, boolean>>({})
-  const [incidents, setIncidents] = React.useState<IncidentRow[]>([
-    { type: EVAL_INCIDENT_TYPES[0], typeOther: "", occurred: "No", date: "", details: "" },
+  const [incidents, setIncidents] = React.useState<IncidentRow[]>(() => [
+    { type: EVAL_INCIDENT_KEYS[0], typeOther: "", occurred: "No", date: "", details: "" },
   ])
   const [trainingNeeded, setTrainingNeeded] = React.useState("")
   const [coach, setCoach] = React.useState("")
@@ -294,9 +294,7 @@ export function EmployeeEvalTab({
           grade: displayGrade || computedGrade,
         },
       })
-      alert(
-        lang === "ko" ? "저장되었습니다." : "Saved."
-      )
+      alert(t("eval_saved_ok"))
       setEvalId("")
       setTotalMemo("")
       setTrainingNeeded("")
@@ -305,7 +303,7 @@ export function EmployeeEvalTab({
       setReevalDate("")
       setIncidents([
         {
-          type: EVAL_INCIDENT_TYPES[0],
+          type: EVAL_INCIDENT_KEYS[0],
           typeOther: "",
           occurred: "No",
           date: "",
@@ -315,7 +313,7 @@ export function EmployeeEvalTab({
       onSaved?.()
     } catch (e) {
       console.error(e)
-      alert(lang === "ko" ? "저장 실패" : "Save failed")
+      alert(t("eval_save_fail"))
     } finally {
       setSaving(false)
     }
@@ -325,7 +323,7 @@ export function EmployeeEvalTab({
     setIncidents((p) => [
       ...p,
       {
-        type: EVAL_INCIDENT_TYPES[0],
+        type: EVAL_INCIDENT_KEYS[0],
         typeOther: "",
         occurred: "No",
         date: "",
@@ -340,12 +338,12 @@ export function EmployeeEvalTab({
 
   const sectionTitles: Record<string, string> =
     evalType === "service"
-      ? { 서비스: "서비스 평가 항목 (1-5)" }
+      ? { 서비스: t("eval_section_service") }
       : {
-          메뉴숙련: "2) 메뉴 숙련 (1-5)",
-          원가정확도: "3) 조리 정확도·원가 관리 (1-5)",
-          위생: "4) 위생·작업 습관 (1-5)",
-          태도: "5) 태도·피크타임 수행 (1-5)",
+          메뉴숙련: t("eval_section_menu"),
+          원가정확도: t("eval_section_cost"),
+          위생: t("eval_section_hygiene"),
+          태도: t("eval_section_attitude"),
         }
 
   return (
@@ -502,10 +500,10 @@ export function EmployeeEvalTab({
                       {sec.main === "메뉴숙련" && (
                         <>
                           <th className="px-3 py-2 text-left font-semibold">
-                            Category
+                            {t("eval_col_category")}
                           </th>
                           <th className="px-3 py-2 text-left font-semibold">
-                            Menu Item
+                            {t("eval_col_menu_item")}
                           </th>
                         </>
                       )}
@@ -515,23 +513,23 @@ export function EmployeeEvalTab({
                         </th>
                       )}
                       <th className="px-3 py-2 text-center font-semibold">
-                        Score (1-5)
+                        {t("eval_score_range")}
                       </th>
                       {sec.main === "메뉴숙련" && (
                         <>
                           <th className="px-3 py-2 text-center font-semibold">
-                            Solo OK
+                            {t("eval_solo_ok")}
                           </th>
                           <th className="px-3 py-2 text-center font-semibold">
-                            Peak OK
+                            {t("eval_peak_ok")}
                           </th>
                           <th className="px-3 py-2 text-center font-semibold">
-                            Can Train
+                            {t("eval_can_train")}
                           </th>
                         </>
                       )}
                       <th className="px-3 py-2 text-left font-semibold">
-                        Notes
+                        {t("eval_notes")}
                       </th>
                     </tr>
                   </thead>
@@ -623,7 +621,7 @@ export function EmployeeEvalTab({
                                 }))
                               }
                               className="h-7 text-xs"
-                              placeholder="비고"
+                              placeholder={t("placeholder_remarks")}
                             />
                           </td>
                         </tr>
@@ -633,7 +631,7 @@ export function EmployeeEvalTab({
                 </table>
               </div>
               <p className="mt-1 text-xs">
-                {sec.main} 평균:{" "}
+                {sec.main} {t("eval_section_avg")}:{" "}
                 {sec.items.length
                   ? (
                       sec.items.reduce(
@@ -703,12 +701,12 @@ export function EmployeeEvalTab({
                           }
                           className="h-7 w-full rounded border bg-background px-2 text-xs"
                         >
-                          {EVAL_INCIDENT_TYPES.map((opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
+                          {EVAL_INCIDENT_KEYS.map((key) => (
+                            <option key={key} value={key}>
+                              {t(key)}
                             </option>
                           ))}
-                          <option value="__기타__">기타(직접입력)</option>
+                          <option value="__기타__">{t("eval_incident_other")}</option>
                         </select>
                         {inc.type === "__기타__" && (
                           <Input
@@ -720,7 +718,7 @@ export function EmployeeEvalTab({
                                 return n
                               })
                             }
-                            placeholder="기타 유형"
+                            placeholder={t("eval_incident_type_other_ph")}
                             className="mt-1 h-7 text-xs"
                           />
                         )}
@@ -791,7 +789,7 @@ export function EmployeeEvalTab({
               onClick={addIncident}
               className="mt-2 text-xs text-primary hover:underline"
             >
-              + 행 추가
+{t("eval_add_row")}
             </button>
           </div>
 
@@ -806,7 +804,7 @@ export function EmployeeEvalTab({
                   value={trainingNeeded}
                   onChange={(e) => setTrainingNeeded(e.target.value)}
                   className="h-8 w-[180px] text-xs"
-                  placeholder="Training Needed"
+                  placeholder={t("eval_training")}
                 />
               </div>
               <div>
@@ -815,7 +813,7 @@ export function EmployeeEvalTab({
                   value={coach}
                   onChange={(e) => setCoach(e.target.value)}
                   className="h-8 w-[180px] text-xs"
-                  placeholder="Coach/Trainer"
+                  placeholder={t("eval_coach")}
                 />
               </div>
               <div>

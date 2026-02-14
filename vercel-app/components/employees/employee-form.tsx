@@ -139,7 +139,7 @@ export function EmployeeForm({
               value={form.photo}
               onChange={(e) => update("photo", e.target.value)}
               className="h-8 text-xs"
-              placeholder="URL (선택)"
+              placeholder={t("emp_photo_url_ph")}
             />
           </div>
           {form.photo && (

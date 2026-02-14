@@ -189,7 +189,7 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
                   colSpan={6}
                   className="p-6 text-center text-muted-foreground"
                 >
-                  등록된 항목이 없습니다. 항목 불러오기 후 추가하세요.
+{t("eval_setting_no_items")}
                 </td>
               </tr>
             ) : (
@@ -286,7 +286,7 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
                   <Input
                     value={addSub}
                     onChange={(e) => setAddSub(e.target.value)}
-                    placeholder="없으면 비워두기"
+                    placeholder={t("eval_setting_sub_ph")}
                     className="mt-1"
                   />
                 </div>
@@ -297,7 +297,7 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
               <Input
                 value={addName}
                 onChange={(e) => setAddName(e.target.value)}
-                placeholder="(새 항목)"
+                placeholder={t("eval_setting_new_item")}
                 className="mt-1"
               />
             </div>
