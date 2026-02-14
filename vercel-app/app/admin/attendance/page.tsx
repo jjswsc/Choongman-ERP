@@ -223,7 +223,7 @@ export default function AdminAttendancePage() {
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("stockFilterStore")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold min-w-[5rem]">{t("stockFilterStore")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("emp_label_name")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
@@ -233,7 +233,7 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_late_extra")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold w-24">{t("att_approve_btn")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[140px]">{t("att_approve_btn")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -248,7 +248,7 @@ export default function AdminAttendancePage() {
                           )}
                         >
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
-                          <td className="px-3 py-2.5 text-center">{row.store}</td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap text-[11px]">{row.store}</td>
                           <td className="px-3 py-2.5 text-center font-medium">{row.name}</td>
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
@@ -272,9 +272,9 @@ export default function AdminAttendancePage() {
                               {row.status}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-2 py-2.5">
                             {row.pendingId != null ? (
-                              <div className="flex flex-wrap items-center gap-1.5 justify-center">
+                              <div className="flex flex-nowrap items-center gap-1 justify-center">
                                 {row.otMin > 0 ? (
                                   <>
                                     <Input
@@ -286,12 +286,12 @@ export default function AdminAttendancePage() {
                                       onChange={(e) =>
                                         setOtMinutesByRow((p) => ({ ...p, [row.pendingId!]: e.target.value }))
                                       }
-                                      className="h-7 w-14 text-xs text-center px-1"
+                                      className="h-7 w-12 text-xs text-center px-1 shrink-0"
                                     />
                                     <Button
                                       size="sm"
                                       variant="default"
-                                      className="h-7 px-2 text-[10px]"
+                                      className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
                                       onClick={() => {
                                         const v = otMinutesByRow[row.pendingId!] ?? String(row.otMin)
                                         const n = parseInt(v, 10)
@@ -305,7 +305,7 @@ export default function AdminAttendancePage() {
                                   <Button
                                     size="sm"
                                     variant="default"
-                                    className="h-7 px-2 text-[10px]"
+                                    className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
                                     onClick={() => handleApprove(row.pendingId!)}
                                   >
                                     {t("att_approve_btn")}
@@ -314,7 +314,7 @@ export default function AdminAttendancePage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2 text-[10px]"
+                                  className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
                                   onClick={() => handleReject(row.pendingId!)}
                                 >
                                   {t("att_reject_btn")}

@@ -204,7 +204,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
 
           <form onSubmit={handleSubmit}>
             <Select value={lang} onValueChange={handleLangChange}>
-              <SelectTrigger type="button" className="login-select-trigger">
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="login-select-content">
@@ -217,7 +217,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             </Select>
 
             <Select value={store} onValueChange={handleStoreChange}>
-              <SelectTrigger type="button" className="login-select-trigger">
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue placeholder={`${t.selectStore}...`} />
               </SelectTrigger>
               <SelectContent className="login-select-content">
@@ -237,7 +237,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             )}
 
             <Select value={user} onValueChange={setUser} disabled={!store}>
-              <SelectTrigger type="button" className="login-select-trigger">
+              <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue placeholder={`${t.selectName}...`} />
               </SelectTrigger>
               <SelectContent className="login-select-content">
