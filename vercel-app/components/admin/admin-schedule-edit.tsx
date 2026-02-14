@@ -701,8 +701,16 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               }}
             >
               <thead className="sticky top-0 bg-muted z-10 shadow-sm">
-                <tr className="bg-primary/10">
-                  <th className="border border-border px-3 py-2 w-16 bg-muted/80 text-xs font-semibold text-muted-foreground">{t("scheduleDailyStaff") || "일일인원"}</th>
+                <tr>
+                  <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
+                  {dayStrs.map((d, i) => (
+                    <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center font-semibold">
+                      {t(DAY_LABELS[i])} {d.slice(5)}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  <th className="border border-border px-1 py-1 bg-muted/80" />
                   {dayStrs.map((d, i) =>
                     areas.map((ar) => {
                       const areaLabels: Record<string, string> = {
@@ -716,44 +724,17 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                         <th
                           key={`${d}-${ar}`}
                           className={cn(
-                            "border border-border px-2 py-2 text-center",
-                            ar === "Service" && "bg-orange-100/80 dark:bg-orange-950/25",
-                            ar === "Kitchen" && "bg-green-100/80 dark:bg-green-950/25",
-                            ar === "Office" && "bg-blue-100/80 dark:bg-blue-950/25"
+                            "border border-border px-2 py-1.5 min-w-[60px] font-medium text-center",
+                            ar === "Service" && "bg-orange-100 dark:bg-orange-950/30",
+                            ar === "Kitchen" && "bg-green-100 dark:bg-green-950/30",
+                            ar === "Office" && "bg-blue-100 dark:bg-blue-950/30"
                           )}
                         >
-                          <span className="font-bold text-primary text-sm">
-                            {label} {count}명
-                          </span>
+                          <span className="block">{label}</span>
+                          <span className="block text-xs font-bold text-primary mt-0.5">{count}명</span>
                         </th>
                       )
                     })
-                  )}
-                </tr>
-                <tr>
-                  <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
-                  {dayStrs.map((d, i) => (
-                    <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center font-semibold">
-                      {t(DAY_LABELS[i])} {d.slice(5)}
-                    </th>
-                  ))}
-                </tr>
-                <tr>
-                  <th className="border border-border px-1 py-1 bg-muted/80" />
-                  {dayStrs.map(() =>
-                    areas.map((ar) => (
-                      <th
-                        key={ar}
-                        className={cn(
-                          "border border-border px-2 py-1.5 min-w-[60px] font-medium",
-                          ar === "Service" && "bg-orange-100 dark:bg-orange-950/30",
-                          ar === "Kitchen" && "bg-green-100 dark:bg-green-950/30",
-                          ar === "Office" && "bg-blue-100 dark:bg-blue-950/30"
-                        )}
-                      >
-                        {ar}
-                      </th>
-                    ))
                   )}
                 </tr>
               </thead>

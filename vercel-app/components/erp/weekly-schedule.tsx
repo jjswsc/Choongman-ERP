@@ -195,6 +195,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     const style = document.createElement("style")
     style.id = "schedule-print-style"
     style.textContent = `@media print {
+      @page { margin: 0.5in; }
       body * { visibility: hidden; }
       #weekly-schedule-print-area, #weekly-schedule-print-area * { visibility: visible; }
       #weekly-schedule-print-area { position: absolute; left: 0; top: 0; width: 100%; }
