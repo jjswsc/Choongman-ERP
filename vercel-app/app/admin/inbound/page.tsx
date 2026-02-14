@@ -87,10 +87,13 @@ export default function InboundPage() {
   React.useEffect(() => {
     Promise.all([getAdminItems(), getAdminVendors()])
       .then(([itemList, vendorList]) => {
-        setItems(itemList || [])
-        setVendors(vendorList || [])
+        setItems(Array.isArray(itemList) ? itemList : [])
+        setVendors(Array.isArray(vendorList) ? vendorList : [])
       })
-      .catch(() => {})
+      .catch(() => {
+        setItems([])
+        setVendors([])
+      })
       .finally(() => setLoading(false))
   }, [])
 

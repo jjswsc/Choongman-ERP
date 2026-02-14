@@ -8,6 +8,8 @@ import {
   TrendingUp,
   AlertTriangle,
   Calendar,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -264,6 +266,7 @@ export function MyAttendance() {
   const [summary, setSummary] = React.useState<MyAttendanceSummary | null>(null)
   const [dailyRecords, setDailyRecords] = React.useState<DailyRecord[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [expandedDates, setExpandedDates] = React.useState<Set<string>>(new Set())
 
   const loadData = React.useCallback(() => {
     const store = auth?.store
@@ -300,6 +303,7 @@ export function MyAttendance() {
         }
         const records = buildDailyRecords(myMonth, logs || [], leaveSet, tRef.current)
         setDailyRecords(records)
+        setExpandedDates(new Set())
       })
       .catch(() => {
         setSummary(null)
@@ -440,18 +444,30 @@ export function MyAttendance() {
         <div className="flex flex-col gap-1.5 px-4 pb-4 pt-2">
           {dailyRecords.map((record) => {
             const config = statusConfig[record.status]
+            const isExpanded = expandedDates.has(record.date)
+            const toggle = () => {
+              setExpandedDates((prev) => {
+                const next = new Set(prev)
+                if (next.has(record.date)) next.delete(record.date)
+                else next.add(record.date)
+                return next
+              })
+            }
             return (
               <div
                 key={record.date}
                 className={cn(
-                  "rounded-xl border px-3 py-3 transition-colors",
+                  "rounded-xl border overflow-hidden transition-colors",
                   record.status === "holiday"
                     ? "bg-muted/30 border-transparent"
                     : "bg-card"
                 )}
               >
-                <div className="flex items-center gap-3">
-                  {/* Date block */}
+                <button
+                  type="button"
+                  onClick={toggle}
+                  className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-muted/30"
+                >
                   <div className="flex flex-col items-center w-10 shrink-0">
                     <span className="text-[13px] font-extrabold tabular-nums text-card-foreground leading-none">
                       {record.date.split("/")[1]}
@@ -469,8 +485,6 @@ export function MyAttendance() {
                       {record.day}
                     </span>
                   </div>
-
-                  {/* Status pill */}
                   <span
                     className={cn(
                       "inline-flex shrink-0 items-center rounded-lg px-2.5 py-1 text-[10px] font-bold leading-none",
@@ -480,50 +494,69 @@ export function MyAttendance() {
                   >
                     {t(config.labelKey)}
                   </span>
-
-                  {/* Clock in/out */}
                   <div className="flex-1 min-w-0">
-                    {record.clockIn ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center gap-1">
-                          <div className="h-[6px] w-[6px] rounded-full bg-[hsl(152,60%,42%)]" />
-                          <span className="text-[12px] font-bold tabular-nums text-card-foreground">
-                            {record.clockIn}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground/50">
-                          {">"}
+                    {!isExpanded && (
+                      record.clockIn ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          {record.clockIn} → {record.clockOut ?? "-"}
+                          {record.workHours && (
+                            <span className="ml-1 font-medium text-card-foreground">
+                              · {record.workHours}
+                            </span>
+                          )}
                         </span>
-                        <div className="flex items-center gap-1">
-                          <div className="h-[6px] w-[6px] rounded-full bg-[hsl(0,72%,51%)]" />
-                          <span className="text-[12px] font-bold tabular-nums text-card-foreground">
-                            {record.clockOut ?? "-"}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">-</span>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">-</span>
+                      )
                     )}
                   </div>
-
-                  {/* Work hours */}
-                  <div className="shrink-0 text-right">
-                    {record.workHours ? (
-                      <div className="flex flex-col items-end">
-                        <span className="text-[12px] font-bold tabular-nums text-card-foreground leading-none">
-                          {record.workHours}
-                        </span>
-                        {record.overtime && (
-                          <span className="mt-1 text-[9px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-none">
-                            +{record.overtime}
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </button>
+                {isExpanded && (
+                  <div className="flex items-center gap-3 border-t border-border/60 px-3 py-3 bg-muted/10">
+                    <div className="flex-1 min-w-0">
+                      {record.clockIn ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1">
+                            <div className="h-[6px] w-[6px] rounded-full bg-[hsl(152,60%,42%)]" />
+                            <span className="text-[12px] font-bold tabular-nums text-card-foreground">
+                              {record.clockIn}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/50">{">"}</span>
+                          <div className="flex items-center gap-1">
+                            <div className="h-[6px] w-[6px] rounded-full bg-[hsl(0,72%,51%)]" />
+                            <span className="text-[12px] font-bold tabular-nums text-card-foreground">
+                              {record.clockOut ?? "-"}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">-</span>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {record.workHours ? (
+                        <div className="flex flex-col items-end">
+                          <span className="text-[12px] font-bold tabular-nums text-card-foreground leading-none">
+                            {record.workHours}
                           </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">-</span>
-                    )}
+                          {record.overtime && (
+                            <span className="mt-1 text-[9px] font-bold tabular-nums text-[hsl(215,80%,50%)] leading-none">
+                              +{record.overtime}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">-</span>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )
           })}

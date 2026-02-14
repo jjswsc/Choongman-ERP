@@ -88,17 +88,21 @@ export default function OutboundPage() {
   React.useEffect(() => {
     Promise.all([getAdminItems(), getAdminVendors(), getStockStores()])
       .then(([itemList, vendorList, storeList]) => {
-        setItems(itemList || [])
-        const salesNames = (vendorList || []).filter(
-          (v: AdminVendor) => v.type === "sales" || v.type === "both"
-        ).map((v: AdminVendor) => v.name)
-        const stores = (storeList || []).filter(
+        setItems(Array.isArray(itemList) ? itemList : [])
+        const vendors = Array.isArray(vendorList) ? vendorList : []
+        const salesNames = vendors
+          .filter((v: AdminVendor) => v.type === "sales" || v.type === "both")
+          .map((v: AdminVendor) => v.name)
+        const stores = (Array.isArray(storeList) ? storeList : []).filter(
           (s: string) => !OFFICE_STORES.some((o) => s.toLowerCase().includes(o.toLowerCase()))
         )
         const merged = [...new Set([...salesNames, ...stores])].filter(Boolean).sort()
         setOutboundTargets(merged)
       })
-      .catch(() => {})
+      .catch(() => {
+        setItems([])
+        setOutboundTargets([])
+      })
       .finally(() => setLoading(false))
   }, [])
 

@@ -104,8 +104,8 @@ export function StockAdjustmentHistory() {
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 min-w-[90px] whitespace-nowrap text-center">{t("stockHistColDate")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 min-w-[80px] text-center">{t("stockHistColStore")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("stockHistColItem")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[145px] text-center">{t("stockHistColStore")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[100px] text-center">{t("stockHistColItem")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("stockHistColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockHistColDiff")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-64 min-w-[120px] text-center">{t("stockHistColReason")}</th>
@@ -131,8 +131,8 @@ export function StockAdjustmentHistory() {
                   className={`border-b last:border-b-0 ${idx % 2 === 1 ? "bg-muted/5" : ""}`}
                 >
                   <td className="px-5 py-3 text-xs whitespace-nowrap">{row.date}</td>
-                  <td className="px-5 py-3 text-xs font-medium w-28">{row.store}</td>
-                  <td className="px-5 py-3 text-xs min-w-[120px]" title={row.item}>{row.item}</td>
+                  <td className="px-5 py-3 text-xs font-medium min-w-[145px]" title={row.store}>{row.store}</td>
+                  <td className="px-5 py-3 text-xs min-w-[100px] truncate" title={row.item}>{row.item}</td>
                   <td className="px-5 py-3 text-[11px] text-muted-foreground w-14">{row.spec}</td>
                   <td className={cn(
                     "px-5 py-3 text-right font-semibold tabular-nums",
