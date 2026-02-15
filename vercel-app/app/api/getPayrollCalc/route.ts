@@ -235,13 +235,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 평일(월~금) 일수 - 공휴일 제외
-    let expectedWorkDays = 0
+    // 기대 근무일: 본사=월~금(주5일), 매장=월~토(주6일, 일요일만 휴무) - 공휴일 제외
+    let expectedWorkDaysOffice = 0 // 월~금
+    let expectedWorkDaysStore = 0 // 월~토 (일요일만 제외)
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, targetMonth, d)
       const dayOfWeek = date.getDay()
       const dateStr = date.toISOString().slice(0, 10)
-      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet.has(dateStr)) expectedWorkDays++
+      if (holidaySet.has(dateStr)) continue
+      if (dayOfWeek !== 0) expectedWorkDaysStore++ // 일요일 제외
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) expectedWorkDaysOffice++ // 토·일 제외
     }
 
     const list: PayrollCalcRow[] = []
@@ -289,7 +292,8 @@ export async function GET(request: NextRequest) {
         lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
         otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
       } else {
-        salary = salAmt
+        // 월급제: 근무일이 없으면 기본급 0 (출퇴근 데이터 없음 = 근무 없음)
+        salary = workDays > 0 ? salAmt : 0
         lateDed = LATE_DED_HOURS_BASE > 0 && salary ? Math.floor((lateMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
         const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
         otAmt = hourlyForOt > 0 ? Math.floor((otMin / 60) * hourlyForOt * OT_MULTIPLIER) : 0
@@ -316,10 +320,13 @@ export async function GET(request: NextRequest) {
       // 무급 휴가 + 결석 공제 (월급제만, 시급제는 미근무일 이미 급여 없음)
       const unpaidLeaveDays = unpaidLeaveDaysMap[attKey] || 0
       const paidLeaveDays = paidLeaveDaysMap[attKey] || 0
+      const expectedWorkDays = isOfficeStore(store) ? expectedWorkDaysOffice : expectedWorkDaysStore
       const absenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDays)
       const unpaidAbsenceDays = unpaidLeaveDays + absenceDays
-      const unpaidAbsenceDed = !isHourly && salary > 0 && unpaidAbsenceDays > 0
-        ? Math.floor((salary / 30) * unpaidAbsenceDays)
+      // 태국 관행: 일급 = 월급 ÷ 당월 근무일수, 공제 = 일급 × 결석/무급휴가일수
+      const dailyRate = expectedWorkDays > 0 ? salary / expectedWorkDays : 0
+      const unpaidAbsenceDed = !isHourly && salary > 0 && unpaidAbsenceDays > 0 && dailyRate > 0
+        ? Math.floor(dailyRate * unpaidAbsenceDays)
         : 0
 
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
