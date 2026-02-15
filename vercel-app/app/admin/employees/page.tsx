@@ -67,13 +67,13 @@ function JobCountSummary({
             className={`flex-1 min-w-[80px] px-2 py-1 border-r border-border/60 text-center ${style.bg}`}
           >
             <span className="text-[11px] font-medium text-muted-foreground">{label} </span>
-            <span className="text-sm font-semibold text-foreground tabular-nums">{n}{unit}</span>
+            <span className="text-xs font-semibold text-foreground tabular-nums">{n}{unit}</span>
           </div>
         )
       })}
       <div className="flex-1 min-w-[80px] px-2 py-1 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30 text-center">
         <span className="text-[11px] font-medium text-muted-foreground">{t("noticeCountPrefix")} </span>
-        <span className="text-sm font-bold text-foreground tabular-nums">{total}{unit}</span>
+        <span className="text-xs font-bold text-foreground tabular-nums">{total}{unit}</span>
       </div>
     </div>
   )
