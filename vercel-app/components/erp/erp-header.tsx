@@ -45,6 +45,7 @@ const PATH_KEYS: Record<string, string> = {
   "/admin/store-visit": "adminStoreVisit",
   "/admin/complaints": "adminComplaints",
   "/admin/settings": "adminSettings",
+  "/admin/profile": "adminProfile",
 }
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
@@ -140,10 +141,10 @@ export function ErpHeader() {
             <DropdownMenuLabel className="text-xs">{t("adminMyAccount")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
-              <Link href="/admin/settings">{t("adminProfile")}</Link>
+              <Link href="/admin/profile">{t("adminProfile")}</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
-              <Link href="/admin/settings">{t("adminChangePw")}</Link>
+              <Link href="/admin/profile">{t("adminChangePw")}</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

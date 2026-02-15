@@ -1,7 +1,7 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import { AdminSettings } from "@/components/admin/admin-settings"
 
 export default function Page() {
-  return <AdminPlaceholder title="설정" />
+  return <AdminSettings />
 }

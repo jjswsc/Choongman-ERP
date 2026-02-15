@@ -1500,3 +1500,45 @@ export async function updateComplaintLog(rowOrId: string | number, data: Record<
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
+
+// ─── 시스템 설정 ───
+export interface HeadOfficeInfo {
+  companyName: string
+  taxId: string
+  address: string
+  phone: string
+  bankInfo: string
+}
+
+export async function getHeadOfficeInfo() {
+  const res = await fetch('/api/getHeadOfficeInfo')
+  return res.json() as Promise<HeadOfficeInfo>
+}
+
+export async function saveHeadOfficeInfo(data: HeadOfficeInfo) {
+  const res = await fetch('/api/saveHeadOfficeInfo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getMenuPermission(store: string, name: string) {
+  const q = new URLSearchParams({ store, name })
+  const res = await fetch(`/api/getMenuPermission?${q}`)
+  return res.json() as Promise<Record<string, number>>
+}
+
+export async function setMenuPermission(
+  store: string,
+  name: string,
+  permissions: Record<string, number>
+) {
+  const res = await fetch('/api/setMenuPermission', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, name, perm: permissions }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
