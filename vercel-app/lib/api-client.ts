@@ -1465,6 +1465,40 @@ export async function getStoreVisitStats(params: { startStr: string; endStr: str
   }>
 }
 
+export interface VisitRecord {
+  id: number
+  employee: string
+  department: string
+  store: string
+  purpose: string
+  date: string
+  durationMin: number
+}
+
+export async function getStoreVisitRecords(params: {
+  startStr: string
+  endStr: string
+  store?: string
+  employeeName?: string
+  department?: string
+  purpose?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+    ...(params.userStore && { userStore: params.userStore }),
+    ...(params.userRole && { userRole: params.userRole }),
+    ...(params.store && params.store !== "__ALL__" && { store: params.store }),
+    ...(params.employeeName && params.employeeName !== "__ALL__" && { employeeName: params.employeeName }),
+    ...(params.department && params.department !== "__ALL__" && { department: params.department }),
+    ...(params.purpose && params.purpose !== "__ALL__" && { purpose: params.purpose }),
+  })
+  const res = await fetch(`/api/getStoreVisitRecords?${q}`)
+  return res.json() as Promise<VisitRecord[]>
+}
+
 // ─── 컴플레인 일지 ───
 export interface ComplaintLogItem {
   row?: number

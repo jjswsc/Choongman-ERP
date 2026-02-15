@@ -1,23 +1,34 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { CalendarDays, Search, MapPin, BarChart3 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
-  visitRecords,
   aggregateBy,
   getWeeklyTrend,
   getStorePurposeMatrix,
 } from "@/lib/visit-data"
+import { getStoreVisitRecords } from "@/lib/api-client"
 import { SummaryCards } from "./summary-cards"
 import { RankedBarChart } from "./ranked-bar-chart"
 import { TrendChart } from "./trend-chart"
 import { HeatmapTable } from "./heatmap-table"
 import { PurposeDonut } from "./purpose-donut"
+import { VisitListTab } from "./visit-list-tab"
 import { cn } from "@/lib/utils"
 
 const ALL = "__ALL__"
+
+function defaultStartDate() {
+  const d = new Date()
+  d.setDate(d.getDate() - 30)
+  return d.toISOString().slice(0, 10)
+}
+
+function defaultEndDate() {
+  return new Date().toISOString().slice(0, 10)
+}
 
 const pageTabs = [
   { id: "list", icon: MapPin, label: "방문 목록" },
@@ -30,42 +41,53 @@ export function VisitStatsContent() {
   const userStore = (auth?.store || "").trim()
 
   const [activeTab, setActiveTab] = useState("stats")
-  const [startDate, setStartDate] = useState("2026-01-01")
-  const [endDate, setEndDate] = useState("2026-02-15")
+  const [startDate, setStartDate] = useState(defaultStartDate)
+  const [endDate, setEndDate] = useState(defaultEndDate)
   const [storeFilter, setStoreFilter] = useState(ALL)
   const [employeeFilter, setEmployeeFilter] = useState(ALL)
   const [deptFilter, setDeptFilter] = useState(ALL)
   const [purposeFilter, setPurposeFilter] = useState(ALL)
+  const [records, setRecords] = useState<{ id: number; employee: string; department: string; store: string; purpose: string; date: string; durationMin: number }[]>([])
+  const [statsLoading, setStatsLoading] = useState(false)
 
-  const dateFiltered = useMemo(() => {
-    return visitRecords.filter((r) => r.date >= startDate && r.date <= endDate)
-  }, [startDate, endDate])
+  const fetchRecords = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const list = await getStoreVisitRecords({
+        startStr: startDate,
+        endStr: endDate,
+        store: storeFilter !== ALL ? storeFilter : undefined,
+        employeeName: employeeFilter !== ALL ? employeeFilter : undefined,
+        department: deptFilter !== ALL ? deptFilter : undefined,
+        purpose: purposeFilter !== ALL ? purposeFilter : undefined,
+        userStore: isManager && userStore ? userStore : undefined,
+        userRole: isManager ? auth?.role : undefined,
+      })
+      setRecords(Array.isArray(list) ? list : [])
+    } catch {
+      setRecords([])
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [startDate, endDate, storeFilter, employeeFilter, deptFilter, purposeFilter, isManager, userStore, auth?.role])
 
-  const scopeData = useMemo(() => {
-    if (isManager && userStore) return dateFiltered.filter((r) => r.store === userStore)
-    return dateFiltered
-  }, [dateFiltered, isManager, userStore])
-
-  const filterOptions = useMemo(() => {
-    const stores = isManager && userStore ? [userStore] : [...new Set(dateFiltered.map((r) => r.store))].sort()
-    const employees = [...new Set(scopeData.map((r) => r.employee))].sort()
-    const depts = [...new Set(scopeData.map((r) => r.department))].sort()
-    const purposes = [...new Set(scopeData.map((r) => r.purpose))].sort()
-    return { stores, employees, depts, purposes }
-  }, [dateFiltered, scopeData, isManager, userStore])
+  useEffect(() => {
+    fetchRecords()
+  }, [fetchRecords])
 
   useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
   }, [isManager, userStore])
 
-  const filtered = useMemo(() => {
-    let data = scopeData
-    if (!isManager && storeFilter !== ALL) data = data.filter((r) => r.store === storeFilter)
-    if (employeeFilter !== ALL) data = data.filter((r) => r.employee === employeeFilter)
-    if (deptFilter !== ALL) data = data.filter((r) => r.department === deptFilter)
-    if (purposeFilter !== ALL) data = data.filter((r) => r.purpose === purposeFilter)
-    return data
-  }, [scopeData, isManager, storeFilter, employeeFilter, deptFilter, purposeFilter])
+  const filterOptions = useMemo(() => {
+    const stores = isManager && userStore ? [userStore] : [...new Set(records.map((r) => r.store))].filter(Boolean).sort()
+    const employees = [...new Set(records.map((r) => r.employee))].filter(Boolean).sort()
+    const depts = [...new Set(records.map((r) => r.department))].filter(Boolean).sort()
+    const purposes = [...new Set(records.map((r) => r.purpose))].filter(Boolean).sort()
+    return { stores, employees, depts, purposes }
+  }, [records, isManager, userStore])
+
+  const filtered = records
 
   const byDept = useMemo(() => aggregateBy(filtered, "department"), [filtered])
   const byEmployee = useMemo(() => aggregateBy(filtered, "employee"), [filtered])
@@ -224,9 +246,13 @@ export function VisitStatsContent() {
                 </select>
               </div>
 
-              <button className="inline-flex h-9 items-center gap-2 rounded bg-[#2563eb] px-5 text-[13px] font-medium text-[hsl(0,0%,100%)] hover:bg-[#1d4ed8] transition-colors">
+              <button
+                onClick={() => fetchRecords()}
+                disabled={statsLoading}
+                className="inline-flex h-9 items-center gap-2 rounded bg-[#2563eb] px-5 text-[13px] font-medium text-[hsl(0,0%,100%)] hover:bg-[#1d4ed8] transition-colors disabled:opacity-60"
+              >
                 <Search className="h-3.5 w-3.5" />
-                통계 조회
+                {statsLoading ? "조회 중..." : "통계 조회"}
               </button>
               <div className="ml-auto text-[12px] text-muted-foreground">
                 조회 결과: <span className="font-medium text-foreground">{filtered.length}</span>건
@@ -269,8 +295,8 @@ export function VisitStatsContent() {
         )}
 
         {activeTab === "list" && (
-          <div className="flex items-center justify-center h-[300px] text-muted-foreground text-[14px]">
-            방문 목록 탭 내용이 여기에 표시됩니다.
+          <div className="space-y-4">
+            <VisitListTab />
           </div>
         )}
       </div>
