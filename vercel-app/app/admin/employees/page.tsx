@@ -66,13 +66,13 @@ function JobCountSummary({
             key={j}
             className={`flex-1 min-w-[80px] px-2 py-1 border-r border-border/60 text-center ${style.bg}`}
           >
-            <span className="text-[11px] font-medium text-muted-foreground">{label} </span>
+            <span className="text-xs font-medium text-muted-foreground">{label} </span>
             <span className="text-xs font-semibold text-foreground tabular-nums">{n}{unit}</span>
           </div>
         )
       })}
       <div className="flex-1 min-w-[80px] px-2 py-1 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30 text-center">
-        <span className="text-[11px] font-medium text-muted-foreground">{t("noticeCountPrefix")} </span>
+        <span className="text-xs font-medium text-muted-foreground">{t("noticeCountPrefix")} </span>
         <span className="text-xs font-bold text-foreground tabular-nums">{total}{unit}</span>
       </div>
     </div>
@@ -122,9 +122,10 @@ export default function EmployeesPage() {
   const [searchText, setSearchText] = React.useState("")
   const [hasSearched, setHasSearched] = React.useState(false)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
+  const fullListRef = React.useRef<EmployeeTableRow[]>([])
 
   const loadEmployeeList = React.useCallback(
-    async (callback?: () => void) => {
+    async (opts?: { updateDisplay?: boolean }, callback?: () => void) => {
       setLoading(true)
       try {
         const [listRes, gradesRes] = await Promise.all([
@@ -160,9 +161,15 @@ export default function EmployeesPage() {
             null
           return { ...e, finalGrade: g && String(g).trim() ? g : "-" }
         })
-        setEmployeeCache(merged)
+        fullListRef.current = merged
+        if (opts?.updateDisplay !== false) {
+          setEmployeeCache(merged)
+        } else {
+          setEmployeeCache([])
+        }
         callback?.()
       } catch {
+        fullListRef.current = []
         setEmployeeCache([])
         setStores([])
       } finally {
@@ -173,7 +180,7 @@ export default function EmployeesPage() {
   )
 
   React.useEffect(() => {
-    loadEmployeeList()
+    loadEmployeeList({ updateDisplay: false })
   }, [loadEmployeeList])
 
   const filteredRows = React.useMemo(() => {
@@ -200,6 +207,9 @@ export default function EmployeesPage() {
   }, [employeeCache, storeFilter, gradeFilter, statusFilter, searchText])
 
   const handleSearch = () => {
+    if (fullListRef.current.length > 0 && employeeCache.length === 0) {
+      setEmployeeCache(fullListRef.current)
+    }
     setHasSearched(true)
   }
 
@@ -214,7 +224,7 @@ export default function EmployeesPage() {
     try {
       const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
       alert(res.message || (res as { message?: string }).message || "삭제 완료")
-      await loadEmployeeList()
+      await loadEmployeeList({ updateDisplay: true })
     } catch (e) {
       console.error(e)
       alert(t("emp_result_empty") || "오류")
@@ -235,7 +245,7 @@ export default function EmployeesPage() {
       if (res.success) {
         alert(res.message || "저장되었습니다.")
         setForm({ ...emptyForm })
-        await loadEmployeeList()
+        await loadEmployeeList({ updateDisplay: true })
       } else {
         alert(res.message || "저장 실패")
       }
