@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Save } from "lucide-react"
+import { Search, Save, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -24,6 +24,12 @@ import {
   updateComplaintLog,
   type ComplaintLogItem,
 } from "@/lib/api-client"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -41,7 +47,6 @@ const SEVERITIES = ["경미", "보통", "심각"]
 const STATUSES = ["접수", "조사중", "처리완료", "보류", "종료"]
 
 const emptyForm = () => ({
-  number: "",
   date: todayStr(),
   time: timeStr(),
   store: "",
@@ -83,6 +88,7 @@ export function AdminComplaints() {
   const [listStatus, setListStatus] = useState("__all__")
   const [listData, setListData] = useState<ComplaintLogItem[]>([])
   const [listLoading, setListLoading] = useState(false)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
 
   const writerName = auth?.user || auth?.store || ""
 
@@ -126,7 +132,6 @@ export function AdminComplaints() {
   const openDetail = useCallback((item: ComplaintLogItem) => {
     const id = String(item.row ?? item.id ?? "")
     setForm({
-      number: item.number || "",
       date: item.date || "",
       time: item.time || "",
       store: item.store || "",
@@ -159,7 +164,6 @@ export function AdminComplaints() {
     setSaveLoading(true)
     try {
       const data = {
-        number: form.number,
         date: form.date,
         time: form.time,
         store: form.store,
@@ -225,15 +229,6 @@ export function AdminComplaints() {
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold block mb-1">{t("complaint_number")}</label>
-                    <Input
-                      value={form.number}
-                      readOnly
-                      className="h-9 text-xs bg-muted"
-                      placeholder={t("complaint_number_auto")}
-                    />
-                  </div>
                   <div>
                     <label className="text-xs font-semibold block mb-1">{t("label_date")}</label>
                     <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="h-9 text-xs" />
@@ -470,7 +465,6 @@ export function AdminComplaints() {
                   <table className="w-full text-xs border-collapse">
                     <thead>
                       <tr className="border-b bg-muted/50">
-                        <th className="p-2 text-center font-medium">{t("complaint_col_number")}</th>
                         <th className="p-2 text-center font-medium">{t("label_date")}</th>
                         <th className="p-2 text-center font-medium">{t("store")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_col_customer")}</th>
@@ -479,6 +473,7 @@ export function AdminComplaints() {
                         <th className="p-2 text-center font-medium">{t("complaint_title")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_severity")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_status")}</th>
+                        <th className="p-2 text-center font-medium">{t("photo")}</th>
                         <th className="p-2 text-center font-medium">{t("complaint_btn_detail")}</th>
                       </tr>
                     </thead>
@@ -494,7 +489,6 @@ export function AdminComplaints() {
                       ) : (
                         listData.map((item, i) => (
                           <tr key={i} className="border-b border-border/60 hover:bg-muted/30">
-                            <td className="p-2 text-center font-medium">{item.number}</td>
                             <td className="p-2 text-center">{item.date}</td>
                             <td className="p-2 text-center">{item.store}</td>
                             <td className="p-2 text-center">{item.customer || "-"}</td>
@@ -503,6 +497,15 @@ export function AdminComplaints() {
                             <td className="p-2 text-left max-w-[160px] truncate" title={item.title}>{item.title || "-"}</td>
                             <td className="p-2 text-center">{item.severity || "-"}</td>
                             <td className="p-2 text-center">{item.status || "-"}</td>
+                            <td className="p-2 text-center">
+                              {item.photoUrl ? (
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
+                                  <Image className="h-4 w-4" />
+                                </Button>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
                             <td className="p-2 text-center">
                               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openDetail(item)}>
                                 {t("complaint_btn_detail")}
@@ -518,6 +521,19 @@ export function AdminComplaints() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Dialog open={!!photoPreviewUrl} onOpenChange={(open) => !open && setPhotoPreviewUrl(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t("photo")}</DialogTitle>
+            </DialogHeader>
+            {photoPreviewUrl && (
+              <div className="overflow-hidden rounded-md">
+                <img src={photoPreviewUrl} alt={t("photo")} className="w-full h-auto max-h-[70vh] object-contain" />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
