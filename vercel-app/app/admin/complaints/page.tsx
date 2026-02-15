@@ -1,7 +1,7 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import { AdminComplaints } from "@/components/admin/admin-complaints"
 
 export default function Page() {
-  return <AdminPlaceholder title="컴플레인 일지" />
+  return <AdminComplaints />
 }
