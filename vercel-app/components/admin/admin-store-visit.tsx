@@ -68,7 +68,7 @@ export function AdminStoreVisit() {
   const [listStore, setListStore] = useState("All")
   const [listDept, setListDept] = useState("All")
   const [listEmployee, setListEmployee] = useState("All")
-  const [listPurpose, setListPurpose] = useState("")
+  const [listPurpose, setListPurpose] = useState("__all__")
   const [historyList, setHistoryList] = useState<StoreVisitHistoryItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
@@ -123,7 +123,7 @@ export function AdminStoreVisit() {
         store: listStore === "All" ? undefined : listStore,
         employeeName: listEmployee === "All" ? undefined : listEmployee,
         department: listDept === "All" ? undefined : listDept,
-        purpose: listPurpose || undefined,
+        purpose: listPurpose && listPurpose !== "__all__" ? listPurpose : undefined,
       })
       setHistoryList(list || [])
     } catch {
@@ -218,7 +218,7 @@ export function AdminStoreVisit() {
                       <SelectValue placeholder={t("visit_col_purpose")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t("all")}</SelectItem>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
                       <SelectItem value="정기 점검">{t("visitPurposeInspect")}</SelectItem>
                       <SelectItem value="직원 교육">{t("visitPurposeTraining")}</SelectItem>
                       <SelectItem value="긴급 지원">{t("visitPurposeUrgent")}</SelectItem>
