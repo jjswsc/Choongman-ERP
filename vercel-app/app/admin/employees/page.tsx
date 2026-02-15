@@ -27,6 +27,14 @@ import {
 
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
 
+const JOB_STYLE: Record<string, { bg: string; label: string }> = {
+  Service: { bg: "bg-amber-50/90 dark:bg-amber-950/20", label: "empJobService" },
+  Kitchen: { bg: "bg-emerald-50/90 dark:bg-emerald-950/20", label: "empJobKitchen" },
+  Officer: { bg: "bg-sky-50/90 dark:bg-sky-950/20", label: "empJobOfficer" },
+  Director: { bg: "bg-violet-50/90 dark:bg-violet-950/20", label: "empJobDirector" },
+  기타: { bg: "bg-slate-50/90 dark:bg-slate-800/15", label: "workLogOther" },
+}
+
 function JobCountSummary({
   rows,
   t,
@@ -43,24 +51,39 @@ function JobCountSummary({
       counts.기타++
     }
   }
-  const labels: Record<string, string> = {
-    Service: t("empJobService"),
-    Kitchen: t("empJobKitchen"),
-    Officer: t("empJobOfficer"),
-    Director: t("empJobDirector"),
-    기타: t("workLogOther"),
-  }
   const unit = t("empJobCountUnit")
-  const parts = [...JOB_OPTIONS, "기타"].map((j) => {
-    const n = counts[j as keyof typeof counts]
-    const lab = labels[j]
-    return n > 0 ? `${lab} ${n}${unit}` : null
-  }).filter(Boolean)
-  if (parts.length === 0) return null
+  const items = [...JOB_OPTIONS, "기타"].filter((j) => counts[j as keyof typeof counts] > 0)
+  const total = items.reduce((s, j) => s + counts[j as keyof typeof counts], 0)
+  if (items.length === 0) return null
   return (
-    <p className="text-sm font-medium text-foreground">
-      {parts.join(" · ")}
-    </p>
+    <div className="flex rounded-lg overflow-hidden border border-border shadow-sm">
+      {items.map((j) => {
+        const n = counts[j as keyof typeof counts]
+        const style = JOB_STYLE[j]
+        const label = t(style.label)
+        return (
+          <div
+            key={j}
+            className={`flex-1 min-w-[90px] px-4 py-3 border-r border-border/60 ${style.bg}`}
+          >
+            <div className="text-center">
+              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
+              <div className="text-xl font-semibold text-foreground tabular-nums mt-1">
+                {n}{unit}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+      <div className="flex-1 min-w-[90px] px-4 py-3 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30">
+        <div className="text-center">
+          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("noticeCountPrefix")}</div>
+          <div className="text-xl font-bold text-foreground tabular-nums mt-1">
+            {total}{unit}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
