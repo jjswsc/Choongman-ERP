@@ -25,6 +25,45 @@ import {
   type EmployeeFormData,
 } from "@/components/employees"
 
+const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"] as const
+
+function JobCountSummary({
+  rows,
+  t,
+}: {
+  rows: { job?: string }[]
+  t: (k: string) => string
+}) {
+  const counts = { Service: 0, Kitchen: 0, Officer: 0, Director: 0, 기타: 0 }
+  for (const r of rows) {
+    const j = String(r.job || "").trim()
+    if (JOB_OPTIONS.includes(j as (typeof JOB_OPTIONS)[number])) {
+      counts[j as keyof typeof counts]++
+    } else {
+      counts.기타++
+    }
+  }
+  const labels: Record<string, string> = {
+    Service: t("empJobService"),
+    Kitchen: t("empJobKitchen"),
+    Officer: t("empJobOfficer"),
+    Director: t("empJobDirector"),
+    기타: t("workLogOther"),
+  }
+  const unit = t("empJobCountUnit")
+  const parts = [...JOB_OPTIONS, "기타"].map((j) => {
+    const n = counts[j as keyof typeof counts]
+    const lab = labels[j]
+    return n > 0 ? `${lab} ${n}${unit}` : null
+  }).filter(Boolean)
+  if (parts.length === 0) return null
+  return (
+    <p className="text-sm font-medium text-foreground">
+      {parts.join(" · ")}
+    </p>
+  )
+}
+
 function toFormData(e: AdminEmployeeItem): EmployeeFormData {
   return {
     row: e.row,
@@ -240,6 +279,12 @@ export default function EmployeesPage() {
                 />
               </div>
               <div className="lg:col-span-8 space-y-3">
+                {/* 직무별 인원 요약 - 조회 버튼 클릭 후에만 표시 */}
+                {hasSearched && employeeCache.length > 0 && (
+                  <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
+                    <JobCountSummary rows={filteredRows} t={t} />
+                  </div>
+                )}
                 <div className="rounded-lg border border-border bg-card p-3">
                   <EmployeeFilterBar
                     stores={stores}

@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   ShieldCheck,
   ArrowDownToLine,
@@ -14,11 +15,25 @@ import { RecentActivity } from "@/components/erp/recent-activity"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getAdminDashboardStats } from "@/lib/api-client"
 
 export default function AdminDashboardPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const [stats, setStats] = useState({
+    unapprovedOrders: 0,
+    thisMonthInbound: 0,
+    thisMonthOutbound: 0,
+    leavePending: 0,
+    attPending: 0,
+  })
+
+  useEffect(() => {
+    getAdminDashboardStats()
+      .then(setStats)
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -34,35 +49,33 @@ export default function AdminDashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               title={t("adminUnapprovedOrders")}
-              value={0}
+              value={stats.unapprovedOrders}
               icon={ShieldCheck}
               variant="primary"
               description={t("adminPendingApprove")}
             />
             <StatCard
               title={t("adminThisMonthInbound")}
-              value={12}
+              value={stats.thisMonthInbound}
               icon={ArrowDownToLine}
               variant="success"
-              trend={{ value: "8%", isPositive: true }}
             />
             <StatCard
               title={t("adminThisMonthOutbound")}
-              value={67}
+              value={stats.thisMonthOutbound}
               icon={ArrowUpFromLine}
               variant="warning"
-              trend={{ value: "15%", isPositive: true }}
             />
             <StatCard
               title={t("adminLeavePending")}
-              value={4}
+              value={stats.leavePending}
               icon={Palmtree}
               variant="destructive"
               description={t("adminLeaveApproveNeed")}
             />
             <StatCard
               title={t("adminAttPending")}
-              value={0}
+              value={stats.attPending}
               icon={CalendarClock}
               variant="default"
               description={t("adminAttDone")}

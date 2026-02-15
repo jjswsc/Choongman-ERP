@@ -263,6 +263,7 @@ CREATE TABLE IF NOT EXISTS schedules (
   recorded_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS plan_in_prev_day BOOLEAN DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_schedules_date ON schedules(schedule_date);
 CREATE INDEX IF NOT EXISTS idx_schedules_store ON schedules(store_name);
 

@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string }
+    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string; plan_in_prev_day?: boolean }
     let scheduleRows: SchRow[] = []
     const dateFilter = `schedule_date=gte.${start}&schedule_date=lte.${end}`
     if (isAll) {
@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
         pBS: formatTime(r.break_start),
         pBE: formatTime(r.break_end),
         area,
+        plan_in_prev_day: !!r.plan_in_prev_day,
       }
     })
 

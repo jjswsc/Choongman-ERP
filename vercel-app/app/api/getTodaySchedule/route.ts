@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string }
+    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; memo?: string; plan_in_prev_day?: boolean }
     let scheduleRows: SchRow[] = []
     const dateFilter = `schedule_date=eq.${dateStr}`
     if (isAll) {
@@ -53,6 +53,21 @@ export async function GET(request: NextRequest) {
       const filter = `${dateFilter}&store_name=ilike.${encodeURIComponent(store)}`
       scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
     }
+    // 자정 넘는 근무: schedule_date=다음날 + plan_in_prev_day → 당일에도 포함 (당일 18:00~익일 02:00 등)
+    const nextDay = (() => {
+      const d = new Date(dateStr + 'T12:00:00')
+      d.setDate(d.getDate() + 1)
+      return d.toISOString().slice(0, 10)
+    })()
+    const prevDayFilter = `schedule_date=eq.${nextDay}&plan_in_prev_day=eq.true`
+    let prevDayRows: SchRow[] = []
+    if (isAll) {
+      prevDayRows = (await supabaseSelectFilter('schedules', prevDayFilter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+    } else {
+      const filter = `${prevDayFilter}&store_name=ilike.${encodeURIComponent(store)}`
+      prevDayRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 100 })) as SchRow[]
+    }
+    scheduleRows = [...scheduleRows, ...prevDayRows]
 
     const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500 })) as { name?: string; nick?: string; store?: string }[]
     const nameToNick: Record<string, string> = {}
@@ -73,6 +88,7 @@ export async function GET(request: NextRequest) {
         pBS: formatTime(r.break_start),
         pBE: formatTime(r.break_end),
         area,
+        plan_in_prev_day: !!r.plan_in_prev_day,
       }
     })
 

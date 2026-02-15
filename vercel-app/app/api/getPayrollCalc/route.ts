@@ -81,14 +81,40 @@ function buildAttendanceSummary(
       }
     }
   }
+  const mergedPrevDay = new Set<string>()
   for (const dk of Object.keys(byDay)) {
+    if (mergedPrevDay.has(dk)) continue
     const v = byDay[dk]
-    if (v.inMs > 0 && v.outMs > 0 && v.outApproved && v.outMs > v.inMs) {
+    let inMs = v.inMs
+    let outMs = v.outMs
+    let breakMin = v.breakMin || 0
+    let otMin = v.otMin || 0
+    let outApproved = v.outApproved
+    if (inMs > 0 && outMs === 0) {
+      const parts = dk.split('_')
+      const dateStr = parts[0]
+      const keyRest = parts.slice(1).join('_')
+      const nextDate = (() => {
+        const d = new Date(dateStr + 'T12:00:00')
+        d.setDate(d.getDate() + 1)
+        return d.toISOString().slice(0, 10)
+      })()
+      const nextDk = `${nextDate}_${keyRest}`
+      const nextV = byDay[nextDk]
+      if (nextV && nextV.outMs > 0 && !nextV.inMs) {
+        outMs = nextV.outMs
+        breakMin += nextV.breakMin || 0
+        otMin += nextV.otMin || 0
+        outApproved = nextV.outApproved
+        mergedPrevDay.add(nextDk)
+      }
+    }
+    if (inMs > 0 && outMs > 0 && outApproved && outMs > inMs) {
       const storeName = dk.slice(11)
       if (!map[storeName]) map[storeName] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
-      const minWork = Math.max(0, Math.floor((v.outMs - v.inMs) / 60000) - (v.breakMin || 0))
+      const minWork = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMin)
       map[storeName].workMin += minWork
-      map[storeName].otMin += v.otMin || 0
+      map[storeName].otMin += otMin
       map[storeName].workDays += 1
       const dateStr = dk.split('_')[0]
       if (dateStr) map[storeName].workDates.add(dateStr)

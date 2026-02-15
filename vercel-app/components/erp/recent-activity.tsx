@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -11,54 +12,16 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { getAdminRecentActivity } from "@/lib/api-client"
+import type { AdminActivityItem } from "@/lib/api-client"
 
-interface Activity {
-  id: string
-  type: "receiving" | "shipping" | "order" | "leave" | "employee"
-  titleKey: string
-  description: string
-  time: string
-}
-
-const activities: Activity[] = [
-  {
-    id: "1",
-    type: "shipping",
-    titleKey: "adminActOutboundDone",
-    description: "서울점 - 24건 출고 처리됨",
-    time: "10분 전",
-  },
-  {
-    id: "2",
-    type: "receiving",
-    titleKey: "adminActInboundReg",
-    description: "본사 창고 - 신규 입고 12건",
-    time: "25분 전",
-  },
-  {
-    id: "3",
-    type: "order",
-    titleKey: "adminActOrderApproved",
-    description: "부산점 주문 #2841 승인됨",
-    time: "1시간 전",
-  },
-  {
-    id: "4",
-    type: "leave",
-    titleKey: "adminActLeaveReq",
-    description: "김민수 - 연차 (02/15 ~ 02/16)",
-    time: "2시간 전",
-  },
-  {
-    id: "5",
-    type: "employee",
-    titleKey: "adminActEmployeeReg",
-    description: "이지은 - 영업부 배정",
-    time: "3시간 전",
-  },
+const fallbackActivities: AdminActivityItem[] = [
+  { id: "1", type: "shipping", titleKey: "adminActOutboundDone", description: "-", time: "-" },
+  { id: "2", type: "receiving", titleKey: "adminActInboundReg", description: "-", time: "-" },
+  { id: "3", type: "order", titleKey: "adminActOrderApproved", description: "-", time: "-" },
 ]
 
-const typeConfig = {
+const typeConfig: Record<string, { icon: typeof ArrowDownToLine; color: string; bg: string }> = {
   receiving: {
     icon: ArrowDownToLine,
     color: "text-success",
@@ -89,6 +52,13 @@ const typeConfig = {
 export function RecentActivity() {
   const { lang } = useLang()
   const t = useT(lang)
+  const [activities, setActivities] = useState<AdminActivityItem[]>(fallbackActivities)
+
+  useEffect(() => {
+    getAdminRecentActivity()
+      .then((list) => setActivities(Array.isArray(list) && list.length > 0 ? list : fallbackActivities))
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="rounded-xl border bg-card">
@@ -100,7 +70,7 @@ export function RecentActivity() {
       </div>
       <div className="divide-y">
         {activities.map((activity) => {
-          const config = typeConfig[activity.type]
+          const config = typeConfig[activity.type] || typeConfig.receiving
           const Icon = config.icon
           return (
             <div

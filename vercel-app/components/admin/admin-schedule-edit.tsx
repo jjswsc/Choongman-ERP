@@ -70,7 +70,7 @@ export function AdminScheduleEdit({
 
   const [monday, setMonday] = React.useState(getMondayOfWeek)
   const [startHour, setStartHour] = React.useState(6)
-  const [endHour, setEndHour] = React.useState(23)
+  const [endHour, setEndHour] = React.useState(29)
   const [staffList, setStaffList] = React.useState<StaffItem[]>([])
   const [selectedStaff, setSelectedStaff] = React.useState<{ name: string; nick: string } | null>(null)
   const [slotData, setSlotData] = React.useState<Record<string, string[]>>({})
@@ -164,16 +164,23 @@ export function AdminScheduleEdit({
     getWeeklySchedule({ store, monday })
       .then((data) => {
         const next: Record<string, string[]> = {}
-        const dayStrs = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+        const dayStrsLocal = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
         for (const row of data || []) {
           const dateStr = row.date?.slice(0, 10)
-          const dayIdx = dayStrs.indexOf(dateStr)
-          if (dayIdx < 0) continue
+          const dayIdx = dayStrsLocal.indexOf(dateStr)
+          const displayDayIdx = row.plan_in_prev_day && dayIdx > 0 ? dayIdx - 1 : dayIdx
+          if (displayDayIdx < 0) continue
           const area = row.area || "Service"
-          const workTimes = get30MinIntervals(row.pIn || "09:00", row.pOut || "18:00")
+          const pIn = row.pIn || "09:00"
+          const pOut = row.pOut || "18:00"
+          const [, oh, om] = pOut.match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/) || [null, 0, 0]
+          const outH = parseInt(String(oh), 10)
+          const outM = parseInt(String(om), 10)
+          const endSlot = row.plan_in_prev_day ? `${String(outH + 24).padStart(2, "0")}:${String(outM).padStart(2, "0")}` : pOut
+          const workTimes = get30MinIntervals(pIn, endSlot)
           const breakTimes = row.pBS && row.pBE ? get30MinIntervals(row.pBS, row.pBE) : []
           for (const t of workTimes) {
-            const key = getSlotKey(dayIdx, area, t)
+            const key = getSlotKey(displayDayIdx, area, t)
             const names = next[key] || []
             const val = breakTimes.includes(t) ? "BRK_" + row.name : row.name
             if (!names.includes(val)) names.push(val)
@@ -251,12 +258,14 @@ export function AdminScheduleEdit({
       }
     }
 
-    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string }[] = []
+    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
     for (const [k, v] of Object.entries(map)) {
       const parts = k.split("_")
       const date = parts[0]
       const area = parts[parts.length - 1]
       const name = parts.slice(1, -1).join("_")
+      const dayIdx = dayStrs.indexOf(date)
+      if (dayIdx < 0) continue
       const all = [...v.work, ...v.break].sort()
       if (all.length === 0) continue
       const pIn = all[0]
@@ -268,7 +277,21 @@ export function AdminScheduleEdit({
         lm2 -= 60
         lh2++
       }
-      const pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+      const isOvernight = lh2 >= 24
+      let storeDate: string
+      let pOut: string
+      let plan_in_prev_day = false
+      if (isOvernight) {
+        const nextDayIdx = dayIdx >= 0 && dayIdx < 6 ? dayIdx + 1 : 0
+        storeDate = dayIdx >= 0 && dayIdx < 6 ? dayStrs[nextDayIdx] : addDays(monday, 7)
+        const outH = lh2 - 24
+        const outM = lm2
+        pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+        plan_in_prev_day = true
+      } else {
+        storeDate = date
+        pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+      }
       let pBS = ""
       let pBE = ""
       if (v.break.length > 0) {
@@ -284,7 +307,7 @@ export function AdminScheduleEdit({
         }
         pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
       }
-      rows.push({ date, name, pIn, pOut, pBS, pBE, remark: `[${area}]` })
+      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${area}]`, plan_in_prev_day })
     }
 
     if (rows.length === 0) {
@@ -321,8 +344,8 @@ export function AdminScheduleEdit({
   }, [slotData])
   const hours: number[] = []
   for (let h = startHour; h <= endHour; h++) hours.push(h)
-  const hourOptions = Array.from({ length: 24 }, (_, i) => i)
-  const timeOptions = Array.from({ length: 24 }, (_, i) =>
+  const hourOptions = Array.from({ length: 30 }, (_, i) => i)
+  const timeOptions = Array.from({ length: 30 }, (_, i) =>
     ["00", "30"].map((m) => `${String(i).padStart(2, "0")}:${m}`)
   ).flat()
 
@@ -360,7 +383,9 @@ export function AdminScheduleEdit({
       let lm2 = lm + 30
       let lh2 = lh
       if (lm2 >= 60) { lm2 -= 60; lh2++ }
-      const pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+      const outH = lh2 >= 24 ? lh2 - 24 : lh2
+      const outM = lm2
+      const pOutDisplay = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
       let breakStr = ""
       if (v.break.length > 0) {
         const bSorted = v.break.sort()
@@ -373,7 +398,7 @@ export function AdminScheduleEdit({
         const pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
         breakStr = `${pBS}-${pBE}`
       }
-      const workStr = `${pIn}-${pOut}`
+      const workStr = `${pIn}-${pOutDisplay}`
       byPerson[pk].workDays[dayIdx] = workStr
       byPerson[pk].breakDays[dayIdx] = breakStr
     }

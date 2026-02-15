@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
         plan_out: String(s.pOut || s.plan_out || '18:00').trim(),
         break_start: String(s.pBS || s.break_start || '').trim(),
         break_end: String(s.pBE || s.break_end || '').trim(),
+        plan_in_prev_day: !!s.plan_in_prev_day,
         memo: String(s.remark || s.memo || '').trim() || '스마트스케줄러',
       })
     }

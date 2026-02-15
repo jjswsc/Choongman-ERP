@@ -23,9 +23,10 @@ function parsePlanToMinutes(plan: string | null | undefined): number {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
 }
 
-function plannedHrsFromPlans(planIn: string, planOut: string, planBS: string, planBE: string): number {
+function plannedHrsFromPlans(planIn: string, planOut: string, planBS: string, planBE: string, planInPrevDay?: boolean): number {
   const inMin = parsePlanToMinutes(planIn)
-  const outMin = parsePlanToMinutes(planOut)
+  let outMin = parsePlanToMinutes(planOut)
+  if (planInPrevDay && outMin < inMin) outMin += 24 * 60 // 익일 퇴근(02:00 등) → 26:00=1560분
   const bsMin = parsePlanToMinutes(planBS)
   const beMin = parsePlanToMinutes(planBE)
   if (inMin >= outMin) return 0
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       )) as AttRow[]
     }
 
-    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string }
+    type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }
     const scheduleMap: Record<string, SchRow> = {}
     const schFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr.slice(0, 10)}`
     const schRows = (await supabaseSelectFilter('schedules', schFilter, { order: 'schedule_date.asc', limit: 1000 })) as SchRow[]
@@ -194,43 +195,74 @@ export async function GET(request: NextRequest) {
     const result: AttendanceDailyRow[] = []
     for (const rec of Object.values(byKey)) {
       if (!rec.inTime) continue
+      let dateForRow = rec.date
+      let inTimeForRow = rec.inTime
+      let outTimeForRow = rec.outTime
+      let breakMinForRow = rec.breakMin
+      let lateMinForRow = rec.lateMin
+      let earlyMinForRow = rec.earlyMin
+      let otMinForRow = rec.otMin
+      let statusForRow = rec.status
+      let outApprovedForRow = rec.outApproved
+      let outIdForRow = rec.outId
+      let inIdForRow = rec.inId
 
-      const sch = scheduleMap[`${rec.date}|${rec.store}|${rec.name}`]
+      if (!outTimeForRow) {
+        const nextDay = (() => {
+          const d = new Date(rec.date + 'T12:00:00')
+          d.setDate(d.getDate() + 1)
+          return d.toISOString().slice(0, 10)
+        })()
+        const nextRec = byKey[`${nextDay}|${rec.store}|${rec.name}`]
+        if (nextRec && nextRec.outTime && !nextRec.inTime) {
+          outTimeForRow = nextRec.outTime
+          earlyMinForRow = nextRec.earlyMin
+          otMinForRow = nextRec.otMin
+          statusForRow = nextRec.status || ''
+          outApprovedForRow = nextRec.outApproved
+          outIdForRow = nextRec.outId
+          breakMinForRow += nextRec.breakMin
+          dateForRow = nextDay
+        }
+      }
+
+      const sch = scheduleMap[`${dateForRow}|${rec.store}|${rec.name}`]
       const planIn = sch?.plan_in || ''
       const planOut = sch?.plan_out || ''
       const planBS = sch?.break_start || ''
       const planBE = sch?.break_end || ''
-      const plannedWorkHrs = plannedHrsFromPlans(planIn, planOut, planBS, planBE)
+      const planInPrevDay = !!sch?.plan_in_prev_day
+      const plannedWorkHrs = plannedHrsFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
 
       let actualWorkMin = 0
-      if (rec.inTime && rec.outTime) {
-        const inMs = new Date(rec.inTime).getTime()
-        const outMs = new Date(rec.outTime).getTime()
-        actualWorkMin = Math.max(0, Math.floor((outMs - inMs) / 60000) - rec.breakMin)
+      if (inTimeForRow && outTimeForRow) {
+        const inMs = new Date(inTimeForRow).getTime()
+        const outMs = new Date(outTimeForRow).getTime()
+        actualWorkMin = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMinForRow)
       }
       const actualWorkHrs = actualWorkMin / 60
       const plannedWorkMin = plannedWorkHrs * 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
 
-      const pendingId = rec.outId ?? rec.inId
-      const approval = rec.outTime ? (rec.outApproved || '대기') : '대기'
-      const isPending = /위치미확인|승인대기/.test(rec.status) && approval === '대기'
+      const pendingId = outIdForRow ?? inIdForRow
+      const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
+      const isPending = /위치미확인|승인대기/.test(statusForRow) && approval === '대기'
 
       if (pendingOnly && !isPending) continue
 
       result.push({
-        date: rec.date,
+        date: dateForRow,
         store: rec.store,
         name: rec.name,
-        inTimeStr: toTimeStr(rec.inTime),
-        outTimeStr: rec.outTime ? toTimeStr(rec.outTime) : '-',
-        breakMin: rec.breakMin,
+        inTimeStr: toTimeStr(inTimeForRow),
+        outTimeStr: outTimeForRow ? toTimeStr(outTimeForRow) : '-',
+        breakMin: breakMinForRow,
         actualWorkHrs: Math.round(actualWorkHrs * 100) / 100,
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
-        lateMin: rec.lateMin,
-        otMin: rec.otMin,
-        status: rec.outTime ? rec.status : '퇴근미기록',
+        lateMin: lateMinForRow,
+        otMin: otMinForRow,
+        status: outTimeForRow ? statusForRow : '퇴근미기록',
         approval: approval || '대기',
         pendingId,
       })

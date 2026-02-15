@@ -14,7 +14,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
-const JOB_OPTIONS = ["Service", "Kitchen", "Manager", "Director"]
+const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"]
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly"]
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "D", "E", "F"]

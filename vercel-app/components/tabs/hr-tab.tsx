@@ -13,9 +13,11 @@ import {
   submitAttendance,
   requestLeave,
   getMyLeaveInfo,
+  getMyPayroll,
+  getHeadOfficeInfo,
 } from "@/lib/api-client"
 import { Badge } from "@/components/ui/badge"
-import { Users, Sun, Moon, Coffee, Play, Clock } from "lucide-react"
+import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download } from "lucide-react"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -76,6 +78,35 @@ export function HrTab() {
   const [leaveSubmitting, setLeaveSubmitting] = useState(false)
   const [now, setNow] = useState(() => new Date())
 
+  // 내 급여 명세서
+  const [payrollMonth, setPayrollMonth] = useState(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1)
+    return d.toISOString().slice(0, 7)
+  })
+  const [payrollData, setPayrollData] = useState<{
+    month: string
+    store: string
+    name: string
+    dept: string
+    role: string
+    companyName?: string
+    salary: number
+    pos_allow: number
+    haz_allow: number
+    birth_bonus: number
+    holiday_pay: number
+    spl_bonus: number
+    ot_amt: number
+    late_ded: number
+    sso: number
+    tax: number
+    other_ded: number
+    net_pay: number
+  } | null>(null)
+  const [companyName, setCompanyName] = useState("")
+  const [payrollLoading, setPayrollLoading] = useState(false)
+
   useEffect(() => {
     const tid = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(tid)
@@ -105,6 +136,25 @@ export function HrTab() {
     })
   }, [auth?.store, auth?.user])
 
+  const fetchPayroll = useCallback(() => {
+    if (!auth?.store || !auth?.user) return
+    setPayrollLoading(true)
+    Promise.all([
+      getMyPayroll({ store: auth.store, name: auth.user, month: payrollMonth }),
+      getHeadOfficeInfo(),
+    ])
+      .then(([payRes, companyRes]) => {
+        const data = payRes.success && payRes.data ? payRes.data : null
+        setPayrollData(data)
+        setCompanyName(data?.companyName || companyRes?.companyName || "CHOONGMAN")
+      })
+      .catch(() => {
+        setPayrollData(null)
+        setCompanyName("")
+      })
+      .finally(() => setPayrollLoading(false))
+  }, [auth?.store, auth?.user, payrollMonth])
+
   useEffect(() => {
     if (!auth?.store || !auth?.user) {
       setLoading(false)
@@ -116,6 +166,11 @@ export function HrTab() {
     loadLeaveInfo()
     setLoading(false)
   }, [auth?.store, auth?.user, loadButtonState, loadTodayLog, loadLeaveInfo])
+
+  useEffect(() => {
+    if (!auth?.store || !auth?.user) return
+    fetchPayroll()
+  }, [auth?.store, auth?.user, fetchPayroll])
 
   const sendAttendance = (type: string) => {
     if (!auth?.store || !auth?.user) return
@@ -206,6 +261,77 @@ export function HrTab() {
   const hasBreak = todayTypes.includes("휴식시작")
   const hasResume = todayTypes.includes("휴식종료")
   const hasClockOut = todayTypes.includes("퇴근")
+
+  const fmt = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+  const formatMonthLabel = (m: string) => {
+    if (!m || m.length < 7) return m
+    const [, mm] = m.split("-")
+    const months = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+    return `${m.slice(0, 4)}년 ${months[parseInt(mm, 10) || 0] || mm}월`
+  }
+  const formatMonthForPrint = (m: string, l: string) => {
+    if (!m || m.length < 7) return m
+    const d = new Date(m + "-01")
+    const localeMap: Record<string, string> = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }
+    return d.toLocaleDateString(localeMap[l] || "en-US", { year: "numeric", month: "long" })
+  }
+  const handlePrintPayroll = () => {
+    if (!payrollData) return
+    const issueDate = new Date().toISOString().slice(0, 10)
+    const printWin = window.open("", "_blank")
+    if (!printWin) return
+    const monthLabel = formatMonthForPrint(payrollData.month, lang)
+    const displayCompany = payrollData.companyName || companyName || "CHOONGMAN"
+    printWin.document.write(`
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("payMyTitle")} - ${payrollData.name}</title>
+<style>
+body{font-family:'Malgun Gothic',Arial,sans-serif;font-size:11pt;color:#1e293b;padding:24px;max-width:480px;margin:0 auto;}
+h1{font-size:16pt;text-align:center;margin-bottom:4px;color:#0f172a;}
+.company{text-align:center;font-size:12pt;font-weight:600;margin-bottom:20px;color:#374151;}
+.meta{display:grid;grid-template-columns:80px 1fr;gap:4px 12px;margin-bottom:16px;font-size:10pt;}
+.meta dt{color:#64748b;} .meta dd{margin:0;}
+table{width:100%;border-collapse:collapse;font-size:10pt;}
+th,td{border:1px solid #e2e8f0;padding:8px 10px;text-align:left;}
+th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
+.section{background:#f1f5f9;} .deduct{color:#dc2626;}
+.net{font-weight:700;font-size:12pt;background:#e0f2fe;color:#0c4a6e;}
+.footer{margin-top:24px;font-size:9pt;color:#94a3b8;text-align:right;}
+</style></head><body>
+<h1>${t("payPrintTitle")}</h1>
+<div class="company">${displayCompany}</div>
+<dl class="meta">
+<dt>${t("payPrintMonth")}</dt><dd>${monthLabel}</dd>
+<dt>${t("payPrintStore")}</dt><dd>${payrollData.store}</dd>
+<dt>${t("payPrintRole")}</dt><dd>${payrollData.role || "-"}</dd>
+<dt>${t("payPrintDept")}</dt><dd>${payrollData.dept || "-"}</dd>
+<dt>${t("payPrintName")}</dt><dd>${payrollData.name}</dd>
+</dl>
+<table>
+<tr class="section"><th colspan="2">${t("payPrintAllow")}</th></tr>
+<tr><td>${t("pay_salary")}</td><td class="num">${fmt(payrollData.salary)} THB</td></tr>
+<tr><td>${t("pay_pos_allow")}</td><td class="num">+${fmt(payrollData.pos_allow)}</td></tr>
+<tr><td>${t("pay_haz_allow")}</td><td class="num">+${fmt(payrollData.haz_allow)}</td></tr>
+<tr><td>${t("pay_birth")}</td><td class="num">+${fmt(payrollData.birth_bonus)}</td></tr>
+<tr><td>${t("pay_holiday")}</td><td class="num">+${fmt(payrollData.holiday_pay)}</td></tr>
+<tr><td>${t("pay_spl_bonus")}</td><td class="num">+${fmt(payrollData.spl_bonus)}</td></tr>
+<tr><td>${t("pay_ot_hours")}</td><td class="num">+${fmt(payrollData.ot_amt)}</td></tr>
+<tr class="section"><th colspan="2">${t("payPrintDeduct")}</th></tr>
+<tr><td>${t("pay_late_ded")}</td><td class="num deduct">-${fmt(payrollData.late_ded)}</td></tr>
+<tr><td>${t("pay_sso")}</td><td class="num deduct">-${fmt(payrollData.sso)}</td></tr>
+<tr><td>${t("pay_tax")}</td><td class="num deduct">-${fmt(payrollData.tax)}</td></tr>
+<tr><td>${t("pay_other_ded")}</td><td class="num deduct">-${fmt(payrollData.other_ded)}</td></tr>
+<tr class="net"><td><strong>${t("pay_net")}</strong></td><td class="num"><strong>${fmt(payrollData.net_pay)} THB</strong></td></tr>
+</table>
+<div class="footer">${t("payPrintIssueDate")}: ${issueDate}</div>
+<div class="company" style="margin-top:16px;font-size:11pt;">${displayCompany}</div>
+</body></html>`)
+    printWin.document.close()
+    printWin.focus()
+    setTimeout(() => {
+      printWin!.print()
+      printWin!.close()
+    }, 250)
+  }
 
   if (!auth?.store || !auth?.user) {
     return (
@@ -403,6 +529,96 @@ export function HrTab() {
                 </div>
               ))}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 내 급여 명세서 - 인사탭 맨 아래 */}
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center gap-2 pb-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+            <Wallet className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <CardTitle className="text-base font-semibold">{t("payMyTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t("payMySub")}</p>
+          <div className="flex items-center gap-2">
+            <Input
+              type="month"
+              value={payrollMonth}
+              onChange={(e) => setPayrollMonth(e.target.value.slice(0, 7))}
+              className="h-9 flex-1 min-w-0 text-xs"
+            />
+            <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => fetchPayroll()} disabled={payrollLoading}>
+              <Search className="h-3.5 w-3.5 mr-1" />
+              {t("search")}
+            </Button>
+          </div>
+          {payrollLoading ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">{t("payMyLoading")}</div>
+          ) : !payrollData ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">{t("payMyNoData")}</div>
+          ) : (
+            <>
+              <div className="rounded-lg border border-border/60 overflow-hidden text-xs">
+                <div className="bg-muted/30 px-3 py-2 font-medium">
+                  {formatMonthLabel(payrollData.month)} · {payrollData.store} · {payrollData.role || "-"}
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_salary")}</span>
+                  <span className="font-medium">{fmt(payrollData.salary)} THB</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_pos_allow")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.pos_allow)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_haz_allow")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.haz_allow)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_birth")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.birth_bonus)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_holiday")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.holiday_pay)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_spl_bonus")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.spl_bonus)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40">
+                  <span className="text-muted-foreground">{t("pay_ot_hours")}</span>
+                  <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.ot_amt)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
+                  <span className="text-muted-foreground">{t("pay_late_ded")}</span>
+                  <span className="text-destructive">-{fmt(payrollData.late_ded)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
+                  <span className="text-muted-foreground">{t("pay_sso")}</span>
+                  <span className="text-destructive">-{fmt(payrollData.sso)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
+                  <span className="text-muted-foreground">{t("pay_tax")}</span>
+                  <span className="text-destructive">-{fmt(payrollData.tax)}</span>
+                </div>
+                <div className="px-3 py-2 flex justify-between border-t border-border/40 bg-destructive/5">
+                  <span className="text-muted-foreground">{t("pay_other_ded")}</span>
+                  <span className="text-destructive">-{fmt(payrollData.other_ded)}</span>
+                </div>
+                <div className="px-3 py-3 flex justify-between items-center border-t-2 border-primary/30 bg-primary/5">
+                  <span className="font-semibold text-sm">{t("pay_net")}</span>
+                  <span className="font-bold text-base text-primary">{fmt(payrollData.net_pay)} THB</span>
+                </div>
+              </div>
+              <Button size="sm" variant="outline" className="w-full mt-3 h-9" onClick={handlePrintPayroll}>
+                <Download className="h-3.5 w-3.5 mr-2" />
+                {t("payMyDownloadPdf")}
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>

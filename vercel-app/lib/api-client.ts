@@ -62,6 +62,7 @@ export interface MyPayrollData {
   name: string
   dept: string
   role: string
+  companyName?: string
   salary: number
   pos_allow: number
   haz_allow: number
@@ -307,6 +308,32 @@ export async function getAdminOrders(params: {
     list: (data.list || []) as AdminOrderItem[],
     stores: (data.stores || []) as string[],
   }
+}
+
+export interface AdminDashboardStats {
+  unapprovedOrders: number
+  thisMonthInbound: number
+  thisMonthOutbound: number
+  leavePending: number
+  attPending: number
+}
+
+export async function getAdminDashboardStats() {
+  const res = await fetch('/api/getAdminDashboardStats')
+  return res.json() as Promise<AdminDashboardStats>
+}
+
+export interface AdminActivityItem {
+  id: string
+  type: 'receiving' | 'shipping' | 'order' | 'leave' | 'employee'
+  titleKey: string
+  description: string
+  time: string
+}
+
+export async function getAdminRecentActivity() {
+  const res = await fetch('/api/getAdminRecentActivity')
+  return res.json() as Promise<AdminActivityItem[]>
 }
 
 export async function processOrderDecision(params: {
@@ -750,6 +777,7 @@ export interface TodayScheduleItem {
   pBS: string
   pBE: string
   area: string
+  plan_in_prev_day?: boolean
 }
 
 export interface TodayAttendanceItem {
@@ -796,7 +824,7 @@ export async function getWeeklySchedule(params: {
 export async function saveSchedule(params: {
   store: string
   monday: string
-  rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string }[]
+  rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string; plan_in_prev_day?: boolean }[]
 }) {
   const res = await fetch('/api/saveSchedule', {
     method: 'POST',

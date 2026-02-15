@@ -133,11 +133,20 @@ export async function POST(request: NextRequest) {
       planBS = '',
       planBE = ''
     const scheduleFilter = `schedule_date=eq.${todayStrVal}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
-    const schRows = (await supabaseSelectFilter(
+    let schRows = (await supabaseSelectFilter(
       'schedules',
       scheduleFilter,
       { limit: 5 }
-    )) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string }[]
+    )) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+    if ((!schRows || schRows.length === 0) && logType === '출근') {
+      const tomorrow = (() => {
+        const d = new Date(todayStrVal + 'T12:00:00')
+        d.setDate(d.getDate() + 1)
+        return d.toISOString().slice(0, 10)
+      })()
+      const prevDayFilter = `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+      schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+    }
     if (schRows && schRows.length > 0) {
       planIn = String(schRows[0].plan_in || '').trim()
       planOut = String(schRows[0].plan_out || '').trim()

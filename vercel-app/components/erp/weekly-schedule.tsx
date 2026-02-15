@@ -138,6 +138,14 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", byDate: {} }
     }
     byPerson[key].byDate[r.date] = r
+    if (r.plan_in_prev_day && r.date) {
+      const prevDate = (() => {
+        const d = new Date(r.date + "T12:00:00")
+        d.setDate(d.getDate() - 1)
+        return d.toISOString().slice(0, 10)
+      })()
+      if (dayStrs.includes(prevDate)) byPerson[key].byDate[prevDate] = r
+    }
   }
   const personKeys = Object.keys(byPerson).sort()
   const dailyCount = [0, 0, 0, 0, 0, 0, 0]
