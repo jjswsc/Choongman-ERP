@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { CalendarCheck, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -96,10 +96,7 @@ export function AdminLeaveApproval() {
 
   return (
     <Card className="shadow-sm">
-      <CardHeader className="flex flex-row items-center gap-2 pb-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-          <CalendarCheck className="h-3.5 w-3.5 text-primary" />
-        </div>
+      <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold">{t("adminLeaveApproval")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -157,15 +154,15 @@ export function AdminLeaveApproval() {
           {leaveList.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
           ) : (
-            <table className="w-full text-xs border-collapse">
+            <table className="w-full text-xs border-collapse table-fixed">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="p-2 text-center font-medium">{t("store")}</th>
-                  <th className="p-2 text-center font-medium w-24">{t("leave_col_name")}</th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
-                  <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
-                  <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
-                  <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
+                  <th className="p-2 text-center font-medium w-20">{t("store")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap" style={{ width: "7rem" }}>{t("leave_col_name")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap" style={{ width: "6rem" }}>{t("leave_col_request_date")}</th>
+                  <th className="p-2 text-center font-medium whitespace-nowrap" style={{ width: "6rem" }}>{t("leave_col_leave_date")}</th>
+                  <th className="p-2 text-center font-medium w-14">{t("leave_col_type")}</th>
+                  <th className="p-2 text-left font-medium" style={{ width: "auto" }}>{t("leave_col_reason")}</th>
                   <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
                 </tr>
               </thead>
@@ -173,11 +170,11 @@ export function AdminLeaveApproval() {
                 {leaveList.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{item.store}</td>
-                    <td className="p-2 text-center">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
+                    <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
-                    <td className="p-2 text-center">{item.reason || "-"}</td>
+                    <td className="p-2 text-left break-words">{item.reason || "-"}</td>
                     <td className="p-2 text-center">
                       {item.status === "대기" && (
                         <div className="flex items-center justify-center gap-1.5">

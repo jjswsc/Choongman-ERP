@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { BarChart3 } from "lucide-react"
 import { StockTable } from "@/components/erp/stock-table"
 import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
 import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
@@ -124,18 +123,13 @@ export default function StockPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <BarChart3 className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("stockPageTitle")}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {t("stockPageSub")}
-            </p>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            {t("stockPageTitle")}
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            {t("stockPageSub")}
+          </p>
         </div>
 
         <Tabs defaultValue="list" className="space-y-4">

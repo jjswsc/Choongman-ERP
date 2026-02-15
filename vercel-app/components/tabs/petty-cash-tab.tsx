@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Banknote, Search, Plus, Camera } from "lucide-react"
+import { Search, Plus, Camera } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -224,10 +224,7 @@ export function PettyCashTab() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center gap-2 pb-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-            <Banknote className="h-3.5 w-3.5 text-primary" />
-          </div>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold">
             {t("pettyCashTitle") || "💵 패티 캐쉬"}
           </CardTitle>
