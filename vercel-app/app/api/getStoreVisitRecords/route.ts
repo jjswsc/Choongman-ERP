@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
   const userStore = searchParams.get("userStore")?.trim()
   const userRole = String(searchParams.get("userRole") || "").toLowerCase()
 
-  const filters = [`visit_date=gte.${startStr}`, `visit_date=lte.${endStr}`]
+  const filters = [
+    `visit_date=gte.${startStr}`,
+    `visit_date=lte.${endStr}`,
+    `or=(visit_type.eq.${encodeURIComponent("방문종료")},visit_type.eq.${encodeURIComponent("강제 방문종료")},duration_min.gt.0)`,
+  ]
   if (userRole.includes("manager") && userStore) {
     filters.push(`store_name=eq.${encodeURIComponent(userStore)}`)
   }
@@ -62,8 +66,9 @@ export async function GET(request: NextRequest) {
     const result = (rows || [])
       .filter((d) => !department || department === "__ALL__" || namesInDept.length === 0 || namesInDept.includes(String(d.name || "").trim()))
       .map((d, idx) => {
-        const durationVal = d.duration_min
-        const durationNum = durationVal != null ? Math.max(0, Math.floor(Number(durationVal))) : 0
+        const raw = d as { duration_min?: number | string; [k: string]: unknown }
+        const durationVal = raw.duration_min ?? raw.durationMin
+        const durationNum = durationVal != null && durationVal !== "" ? Math.max(0, Math.floor(Number(durationVal))) : 0
         return {
           id: idx + 1,
           employee: String(d.name || "").trim(),

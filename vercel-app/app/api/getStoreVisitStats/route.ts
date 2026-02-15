@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('end') || searchParams.get('endStr') || '2100-12-31').slice(0, 10)
 
   try {
-    const rangeFilter = `visit_date=gte.${startStr}&visit_date=lte.${endStr}`
+    const rangeFilter = `visit_date=gte.${startStr}&visit_date=lte.${endStr}&or=(visit_type.eq.${encodeURIComponent('방문종료')},visit_type.eq.${encodeURIComponent('강제 방문종료')},duration_min.gt.0)`
     let visitData: { name?: string; store_name?: string; purpose?: string; duration_min?: number; visit_date?: string }[] = []
     try {
       visitData = (await supabaseSelectFilter('store_visits', rangeFilter, {
@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
         limit: 2000,
       })) as typeof visitData
     } catch {
-      const fallback = (await supabaseSelectFilter('store_visits', `visit_date=gte.${startStr}`, {
+      const fallbackFilter = `visit_date=gte.${startStr}&or=(visit_type.eq.${encodeURIComponent('방문종료')},visit_type.eq.${encodeURIComponent('강제 방문종료')},duration_min.gt.0)`
+      const fallback = (await supabaseSelectFilter('store_visits', fallbackFilter, {
         order: 'visit_date',
         limit: 2000,
       })) as typeof visitData

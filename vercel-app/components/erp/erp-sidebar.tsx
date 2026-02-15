@@ -123,7 +123,7 @@ export function ErpSidebar() {
       {/* Logo */}
       <SidebarHeader className="px-3 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/90">
+          <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-transparent">
             <Image
               src="/img/logo.png"
               alt="CHOONGMAN CHICKEN"

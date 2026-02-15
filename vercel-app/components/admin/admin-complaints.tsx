@@ -35,7 +35,7 @@ function timeStr() {
 }
 
 const VISIT_PATHS = ["홀", "배달", "포장"]
-const PLATFORMS = ["", "Grab", "Lineman", "Shopee", "Robinhood", "기타"]
+const PLATFORMS = ["__none__", "Grab", "Lineman", "Shopee", "Robinhood", "기타"]
 const TYPES = ["음식", "서비스", "환경/청결", "가격/결제", "기타"]
 const SEVERITIES = ["경미", "보통", "심각"]
 const STATUSES = ["접수", "조사중", "처리완료", "보류", "종료"]
@@ -49,7 +49,7 @@ const emptyForm = () => ({
   customer: "",
   contact: "",
   visitPath: "홀",
-  platform: "",
+  platform: "__none__",
   type: "음식",
   menu: "",
   title: "",
@@ -78,9 +78,9 @@ export function AdminComplaints() {
   const [listStart, setListStart] = useState(todayStr())
   const [listEnd, setListEnd] = useState(todayStr())
   const [listStore, setListStore] = useState("All")
-  const [listVisitPath, setListVisitPath] = useState("")
-  const [listType, setListType] = useState("")
-  const [listStatus, setListStatus] = useState("")
+  const [listVisitPath, setListVisitPath] = useState("__all__")
+  const [listType, setListType] = useState("__all__")
+  const [listStatus, setListStatus] = useState("__all__")
   const [listData, setListData] = useState<ComplaintLogItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
@@ -105,9 +105,9 @@ export function AdminComplaints() {
         startStr: listStart || undefined,
         endStr: listEnd || undefined,
         store: listStore && listStore !== "All" ? listStore : undefined,
-        visitPath: listVisitPath || undefined,
-        typeFilter: listType || undefined,
-        statusFilter: listStatus || undefined,
+        visitPath: listVisitPath && listVisitPath !== "__all__" ? listVisitPath : undefined,
+        typeFilter: listType && listType !== "__all__" ? listType : undefined,
+        statusFilter: listStatus && listStatus !== "__all__" ? listStatus : undefined,
       })
       setListData(list || [])
     } catch {
@@ -134,7 +134,7 @@ export function AdminComplaints() {
       customer: item.customer || "",
       contact: item.contact || "",
       visitPath: item.visitPath || "홀",
-      platform: item.platform || "",
+      platform: item.platform || "__none__",
       type: item.type || "음식",
       menu: item.menu || "",
       title: item.title || "",
@@ -167,7 +167,7 @@ export function AdminComplaints() {
         customer: form.customer,
         contact: form.contact,
         visitPath: form.visitPath,
-        platform: form.platform,
+        platform: form.platform === "__none__" ? "" : form.platform,
         type: form.type,
         menu: form.menu,
         title: form.title,
@@ -296,13 +296,13 @@ export function AdminComplaints() {
                   {showPlatform && (
                     <div>
                       <label className="text-xs font-semibold block mb-1">{t("complaint_platform")}</label>
-                      <Select value={form.platform} onValueChange={(v) => setForm((f) => ({ ...f, platform: v }))}>
+                      <Select value={form.platform || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, platform: v }))}>
                         <SelectTrigger className="h-9 text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           {PLATFORMS.map((p) => (
-                            <SelectItem key={p || "-"} value={p}>{p || "-"}</SelectItem>
+                            <SelectItem key={p} value={p}>{p === "__none__" ? "-" : p === "기타" ? t("complaint_platform_etc") : p}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -427,34 +427,34 @@ export function AdminComplaints() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={listVisitPath} onValueChange={setListVisitPath}>
+                  <Select value={listVisitPath || "__all__"} onValueChange={setListVisitPath}>
                     <SelectTrigger className="h-9 w-[100px] text-xs">
                       <SelectValue placeholder={t("complaint_visit_path")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t("all")}</SelectItem>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
                       {VISIT_PATHS.map((p) => (
                         <SelectItem key={p} value={p}>{t(p === "홀" ? "complaint_path_hall" : p === "배달" ? "complaint_path_delivery" : "complaint_path_takeout")}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={listType} onValueChange={setListType}>
+                  <Select value={listType || "__all__"} onValueChange={setListType}>
                     <SelectTrigger className="h-9 w-[100px] text-xs">
                       <SelectValue placeholder={t("complaint_type")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t("all")}</SelectItem>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
                       {TYPES.map((ty) => (
                         <SelectItem key={ty} value={ty}>{t("complaint_type_" + (ty === "음식" ? "food" : ty === "서비스" ? "service" : ty === "환경/청결" ? "env" : ty === "가격/결제" ? "price" : "etc"))}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Select value={listStatus} onValueChange={setListStatus}>
+                  <Select value={listStatus || "__all__"} onValueChange={setListStatus}>
                     <SelectTrigger className="h-9 w-[100px] text-xs">
                       <SelectValue placeholder={t("complaint_status")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">{t("all")}</SelectItem>
+                      <SelectItem value="__all__">{t("all")}</SelectItem>
                       {STATUSES.map((s) => (
                         <SelectItem key={s} value={s}>{t("complaint_status_" + (s === "접수" ? "recv" : s === "조사중" ? "inv" : s === "처리완료" ? "done" : s === "보류" ? "hold" : "closed"))}</SelectItem>
                       ))}
