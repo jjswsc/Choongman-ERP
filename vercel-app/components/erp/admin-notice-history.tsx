@@ -5,7 +5,6 @@ import {
   Search,
   Clock,
   Eye,
-  CalendarIcon,
   Users,
   FileText,
   ChevronDown,
@@ -119,27 +118,21 @@ export function AdminNoticeHistory() {
         </div>
       </div>
 
-      {/* Date filter */}
+      {/* Date filter - 오른쪽에만 네이티브 달력 표시 */}
       <div className="flex items-center gap-3 border-b px-6 py-4 bg-muted/20">
-        <div className="relative">
-          <CalendarIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="date-input-compact date-input-left-icon-only h-9 w-40 pl-9 text-xs"
-          />
-        </div>
+        <Input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="date-input-compact h-9 w-40 text-xs"
+        />
         <span className="text-xs font-medium text-muted-foreground">~</span>
-        <div className="relative">
-          <CalendarIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="date-input-compact date-input-left-icon-only h-9 w-40 pl-9 text-xs"
-          />
-        </div>
+        <Input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="date-input-compact h-9 w-40 text-xs"
+        />
         <Button
           size="sm"
           className="h-9 px-4 text-xs font-semibold"

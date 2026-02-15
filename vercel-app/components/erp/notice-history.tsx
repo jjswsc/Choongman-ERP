@@ -9,7 +9,6 @@ import {
   Eye,
   ChevronDown,
   ChevronUp,
-  CalendarIcon,
   Users,
   FileText,
 } from "lucide-react"
@@ -120,25 +119,19 @@ export function NoticeHistory() {
       </div>
 
       <div className="flex items-center gap-2 px-4 pb-3">
-        <div className="relative flex-1 min-w-0">
-          <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="date-input-compact h-9 pl-8 text-xs rounded-lg"
-          />
-        </div>
+        <Input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="date-input-compact flex-1 min-w-0 h-9 text-xs rounded-lg"
+        />
         <span className="text-xs text-muted-foreground font-medium">~</span>
-        <div className="relative flex-1 min-w-0">
-          <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="date-input-compact h-9 pl-8 text-xs rounded-lg"
-          />
-        </div>
+        <Input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="date-input-compact flex-1 min-w-0 h-9 text-xs rounded-lg"
+        />
         <Button
           size="sm"
           className="h-9 shrink-0 rounded-lg px-3 text-xs font-semibold"

@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { CalendarIcon, Search, Megaphone, FileText, Bell } from "lucide-react"
+import { Search, Megaphone, FileText, Bell, ChevronDown, ChevronUp } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -32,6 +32,7 @@ export function NoticesPanel() {
   const [endDate, setEndDate] = React.useState(todayStr)
   const [notices, setNotices] = React.useState<NoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
 
   const fetchNotices = React.useCallback(() => {
@@ -100,29 +101,23 @@ export function NoticesPanel() {
             <label className="text-[11px] font-medium text-muted-foreground">
               {t("adminStartDate")}
             </label>
-            <div className="relative">
-              <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="date-input-compact h-9 w-40 pl-8 text-xs"
-              />
-            </div>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="date-input-compact h-9 w-40 text-xs"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-muted-foreground">
               {t("adminEndDate")}
             </label>
-            <div className="relative">
-              <CalendarIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="date-input-compact h-9 w-40 pl-8 text-xs"
-              />
-            </div>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="date-input-compact h-9 w-40 text-xs"
+            />
           </div>
           <Button size="sm" className="h-9 px-4 text-xs" onClick={fetchNotices}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
@@ -150,30 +145,47 @@ export function NoticesPanel() {
           </div>
         ) : (
           <div className="flex flex-col divide-y">
-            {filtered.map((n) => (
-              <div
-                key={n.id}
-                className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/30"
-              >
+            {filtered.map((n) => {
+              const isExpanded = expandedId === n.id
+              return (
                 <div
-                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-                    !isRead(n.status) ? "bg-destructive/10" : "bg-muted"
-                  }`}
+                  key={n.id}
+                  className="overflow-hidden transition-colors hover:bg-muted/30"
                 >
-                  <Bell
-                    className={`h-3 w-3 ${
-                      !isRead(n.status) ? "text-destructive" : "text-muted-foreground"
-                    }`}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isExpanded ? null : n.id)}
+                    className="flex w-full items-start gap-3 px-5 py-3 text-left active:bg-muted/20"
+                  >
+                    <div
+                      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                        !isRead(n.status) ? "bg-destructive/10" : "bg-muted"
+                      }`}
+                    >
+                      <Bell
+                        className={`h-3 w-3 ${
+                          !isRead(n.status) ? "text-destructive" : "text-muted-foreground"
+                        }`}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate">{getTrans(n.title)}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {n.date} · {n.sender}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">{isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-border/60 bg-muted/20 px-5 py-3 pl-14">
+                      <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                        {n.content ? getTrans(n.content) : "(내용 없음)"}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{getTrans(n.title)}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {n.date} · {n.sender}
-                  </p>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

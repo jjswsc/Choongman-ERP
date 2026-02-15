@@ -133,7 +133,12 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  const stores = Object.keys(loginData)
+  const isOfficeStore = (s: string) => /^(본사|office|오피스|본점)$/i.test(String(s || "").trim())
+  const stores = Object.keys(loginData).sort((a, b) => {
+    if (isOfficeStore(a) && !isOfficeStore(b)) return -1
+    if (!isOfficeStore(a) && isOfficeStore(b)) return 1
+    return a.localeCompare(b)
+  })
   const users = store ? (loginData[store] || []) : []
   const noStores = !loading && stores.length === 0
 
