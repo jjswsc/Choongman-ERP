@@ -18,8 +18,9 @@ async function getLoginDataHandler() {
     type?: string
   }[] | null
   const vendorList: string[] = []
-  for (let v = 0; v < (vendorRows || []).length; v++) {
-    const row = vendorRows[v]
+  const vRows = vendorRows || []
+  for (let v = 0; v < vRows.length; v++) {
+    const row = vRows[v]
     const gpsName = String(row.gps_name || '').trim()
     const fullName = String(row.name || '').trim()
     const t = String(row.type || '').toLowerCase()
