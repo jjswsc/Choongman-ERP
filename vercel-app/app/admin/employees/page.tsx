@@ -68,7 +68,7 @@ function JobCountSummary({
           >
             <div className="text-center">
               <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
-              <div className="text-xl font-semibold text-foreground tabular-nums mt-1">
+              <div className="text-base font-semibold text-foreground tabular-nums mt-1">
                 {n}{unit}
               </div>
             </div>
@@ -78,7 +78,7 @@ function JobCountSummary({
       <div className="flex-1 min-w-[90px] px-4 py-3 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30">
         <div className="text-center">
           <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("noticeCountPrefix")}</div>
-          <div className="text-xl font-bold text-foreground tabular-nums mt-1">
+          <div className="text-base font-bold text-foreground tabular-nums mt-1">
             {total}{unit}
           </div>
         </div>
