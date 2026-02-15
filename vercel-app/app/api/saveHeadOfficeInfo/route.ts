@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 
+const HQ_CODE = 'HQ' // 본사 전용 code (vendors_code_key unique 제약 회피)
+
 /** 본사 정보 저장 */
 export async function POST(req: NextRequest) {
   try {
@@ -11,14 +13,17 @@ export async function POST(req: NextRequest) {
     const phone = String(body.phone || '').trim()
     const bankInfo = String(body.bankInfo || '').trim()
 
-    let existing = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as { id?: number }[]
+    let existing = (await supabaseSelectFilter('vendors', `code=eq.${encodeURIComponent(HQ_CODE)}`, { limit: 1 })) as { id?: number }[]
+    if (!existing || existing.length === 0) {
+      existing = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as typeof existing
+    }
     if (!existing || existing.length === 0) {
       existing = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as typeof existing
     }
 
     const payload = {
       type: '본사',
-      code: '',
+      code: HQ_CODE,
       name: companyName,
       tax_id: taxId,
       addr: address,
