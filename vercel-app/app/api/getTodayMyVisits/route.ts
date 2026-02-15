@@ -3,14 +3,18 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const TZ = 'Asia/Bangkok'
 
-function formatVisitTime(visitTime: string | null | undefined): string {
+function formatVisitTime(visitTime: string | null | undefined, createdAt?: string | null): string {
   let t = String(visitTime != null ? visitTime : '').trim()
   if (t.length >= 5) {
     if (t.indexOf('T') >= 0) {
       const iso = t.substring(t.indexOf('T') + 1)
-      return iso.length >= 5 ? iso.substring(0, 5) : iso.substring(0, 8)
+      return iso.length >= 5 ? iso.substring(0, 5) : iso.substring(0, 8).replace(/[^0-9:]/g, '').substring(0, 5)
     }
-    return t.length >= 8 ? t.substring(0, 5) : t.substring(0, 5)
+    return t.substring(0, 5)
+  }
+  if (createdAt && typeof createdAt === 'string' && createdAt.indexOf('T') >= 0) {
+    const timePart = createdAt.substring(createdAt.indexOf('T') + 1)
+    return timePart.length >= 5 ? timePart.substring(0, 5) : timePart.substring(0, 8).replace(/[^0-9:]/g, '').substring(0, 5)
   }
   return ''
 }
@@ -30,14 +34,14 @@ export async function GET(request: NextRequest) {
     const list = (await supabaseSelectFilter(
       'store_visits',
       `visit_date=eq.${todayStr}&name=eq.${encodeURIComponent(userName)}`,
-      { order: 'visit_time.desc', limit: 20 }
-    )) as { visit_time?: string; store_name?: string; visit_type?: string; duration_min?: number }[]
+      { order: 'visit_time.desc,created_at.desc', limit: 20 }
+    )) as { visit_time?: string; store_name?: string; visit_type?: string; duration_min?: number | string; created_at?: string }[]
 
     const result = (list || []).map((row) => ({
-      time: formatVisitTime(row.visit_time) || String(row.visit_time || ''),
+      time: formatVisitTime(row.visit_time, row.created_at) || String(row.visit_time || ''),
       store: row.store_name,
       type: row.visit_type,
-      duration: row.duration_min ?? 0,
+      duration: Math.max(0, Math.floor(Number(row.duration_min ?? 0)) || 0),
     }))
     return NextResponse.json(result, { headers })
   } catch (e) {
@@ -61,14 +65,14 @@ export async function POST(request: NextRequest) {
     const list = (await supabaseSelectFilter(
       'store_visits',
       `visit_date=eq.${todayStr}&name=eq.${encodeURIComponent(userName)}`,
-      { order: 'visit_time.desc', limit: 20 }
-    )) as { visit_time?: string; store_name?: string; visit_type?: string; duration_min?: number }[]
+      { order: 'visit_time.desc,created_at.desc', limit: 20 }
+    )) as { visit_time?: string; store_name?: string; visit_type?: string; duration_min?: number | string; created_at?: string }[]
 
     const result = (list || []).map((row) => ({
-      time: formatVisitTime(row.visit_time) || String(row.visit_time || ''),
+      time: formatVisitTime(row.visit_time, row.created_at) || String(row.visit_time || ''),
       store: row.store_name,
       type: row.visit_type,
-      duration: row.duration_min ?? 0,
+      duration: Math.max(0, Math.floor(Number(row.duration_min ?? 0)) || 0),
     }))
     return NextResponse.json(result, { headers })
   } catch (e) {

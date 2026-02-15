@@ -115,22 +115,28 @@ export async function POST(request: NextRequest) {
       const searchStore = String(data.storeName || '').trim()
       // 방문시작 또는 강제 방문시작 둘 다 검색 (최신 2건 가져와서 방문시작 유형만 사용)
       const rawRecent = (await supabaseSelectFilter('store_visits', `name=eq.${encodeURIComponent(searchName)}&store_name=eq.${encodeURIComponent(searchStore)}`, {
-        order: 'visit_date.desc,visit_time.desc',
+        order: 'visit_date.desc,created_at.desc',
         limit: 10,
-      })) as { visit_type?: string; visit_date?: string; visit_time?: string }[]
+      })) as { visit_type?: string; visit_date?: string; visit_time?: string; created_at?: string }[]
       const recent = (rawRecent || []).filter(
         (r) => r.visit_type === '방문시작' || r.visit_type === '강제 방문시작'
       ).slice(0, 1)
       if (recent && recent.length > 0) {
         const startRow = recent[0]
         const startDateStr = String(startRow.visit_date || '').substring(0, 10)
-        const startTimeStr = String(startRow.visit_time || '').trim()
-        const timePart = (startTimeStr.length >= 8 ? startTimeStr : startTimeStr + '00').substring(0, 8)
-        // Asia/Bangkok (UTC+7) 로 저장된 시간을 올바르게 해석
+        let startTimeStr = String(startRow.visit_time || '').trim()
+        // visit_time이 비어있으면 created_at에서 시간 추출
+        if (startTimeStr.length < 5 && startRow.created_at && String(startRow.created_at).indexOf('T') >= 0) {
+          const iso = String(startRow.created_at)
+          const tPart = iso.substring(iso.indexOf('T') + 1)
+          if (tPart.length >= 8) startTimeStr = tPart.substring(0, 8)
+          else if (tPart.length >= 5) startTimeStr = tPart.substring(0, 5) + ':00'
+        }
+        const rawTime = startTimeStr.length >= 8 ? startTimeStr : startTimeStr.length >= 5 ? startTimeStr + ':00' : '00:00:00'
+        const timePart = rawTime.length >= 8 ? rawTime.substring(0, 8) : rawTime.padEnd(8, ':00').substring(0, 8)
         const startDateTime = new Date(startDateStr + 'T' + timePart + '+07:00')
-        const diffMs = isNaN(startDateTime.getTime())
-          ? 0
-          : now.getTime() - startDateTime.getTime()
+        const startParsed = startDateTime.getTime()
+        const diffMs = !isNaN(startParsed) ? now.getTime() - startParsed : 0
         durationMin = diffMs > 0 ? Math.floor(diffMs / (1000 * 60)) : 0
       } else {
         durationMin = 0

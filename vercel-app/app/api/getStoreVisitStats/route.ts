@@ -43,7 +43,8 @@ export async function GET(request: NextRequest) {
     const byPurposeMap: Record<string, number> = {}
 
     for (const d of visitData || []) {
-      const duration = Number(d.duration_min) || 0
+      const raw = d as { duration_min?: number | string }
+      const duration = Math.max(0, Math.floor(Number(raw?.duration_min ?? 0)) || 0)
       const name = String(d.name || '').trim()
       const store = String(d.store_name || '').trim()
       const purpose = String(d.purpose || '').trim() || '기타'

@@ -60,15 +60,20 @@ export async function GET(request: NextRequest) {
 
     const result = (list || [])
       .filter((d) => !deptFilter || namesInDept.length === 0 || namesInDept.includes(String(d.name || '').trim()))
-      .map((d) => ({
-        date: String(d.visit_date || '').slice(0, 10),
-        time: fmtTime(d.visit_time, d.created_at),
-        name: d.name,
-        store: d.store_name,
-        type: d.visit_type,
-        purpose: d.purpose,
-        duration: d.duration_min,
-      }))
+      .map((d) => {
+        const raw = d as { visit_time?: string; created_at?: string; duration_min?: number | string }
+        const durationVal = raw.duration_min
+        const durationNum = durationVal != null ? (typeof durationVal === 'number' ? durationVal : Math.floor(Number(durationVal)) || 0) : 0
+        return {
+          date: String(d.visit_date || '').slice(0, 10),
+          time: fmtTime(raw.visit_time, raw.created_at),
+          name: d.name,
+          store: d.store_name,
+          type: d.visit_type,
+          purpose: d.purpose,
+          duration: durationNum,
+        }
+      })
 
     return NextResponse.json(result)
   } catch (e) {
