@@ -64,24 +64,16 @@ function JobCountSummary({
         return (
           <div
             key={j}
-            className={`flex-1 min-w-[90px] px-4 py-3 border-r border-border/60 ${style.bg}`}
+            className={`flex-1 min-w-[80px] px-2 py-1 border-r border-border/60 text-center ${style.bg}`}
           >
-            <div className="text-center">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</div>
-              <div className="text-base font-semibold text-foreground tabular-nums mt-1">
-                {n}{unit}
-              </div>
-            </div>
+            <span className="text-[11px] font-medium text-muted-foreground">{label} </span>
+            <span className="text-sm font-semibold text-foreground tabular-nums">{n}{unit}</span>
           </div>
         )
       })}
-      <div className="flex-1 min-w-[90px] px-4 py-3 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30">
-        <div className="text-center">
-          <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("noticeCountPrefix")}</div>
-          <div className="text-base font-bold text-foreground tabular-nums mt-1">
-            {total}{unit}
-          </div>
-        </div>
+      <div className="flex-1 min-w-[80px] px-2 py-1 bg-primary/10 dark:bg-primary/15 border-l-2 border-primary/30 text-center">
+        <span className="text-[11px] font-medium text-muted-foreground">{t("noticeCountPrefix")} </span>
+        <span className="text-sm font-bold text-foreground tabular-nums">{total}{unit}</span>
       </div>
     </div>
   )
