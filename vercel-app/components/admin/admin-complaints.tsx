@@ -101,7 +101,7 @@ export function AdminComplaints() {
 
   useEffect(() => {
     getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter(Boolean).sort()
+      const keys = Object.keys(r.users || {}).filter((k) => k && String(k).trim()).sort()
       setStores(["All", ...keys])
       if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
     })
@@ -276,12 +276,12 @@ export function AdminComplaints() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold block mb-1">{t("store")}</label>
-                    <Select value={form.store} onValueChange={(v) => setForm((f) => ({ ...f, store: v }))}>
+                    <Select value={form.store || undefined} onValueChange={(v) => setForm((f) => ({ ...f, store: v }))}>
                       <SelectTrigger className="h-9 text-xs">
                         <SelectValue placeholder={t("store")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {stores.filter((s) => s !== "All").map((st) => (
+                        {stores.filter((s) => s && s !== "All").map((st) => (
                           <SelectItem key={st} value={st}>{st}</SelectItem>
                         ))}
                       </SelectContent>
@@ -449,12 +449,12 @@ export function AdminComplaints() {
                     <label className="text-xs font-semibold block mb-1">{t("visit_end_date")}</label>
                     <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
                   </div>
-                  <Select value={listStore} onValueChange={setListStore}>
+                  <Select value={listStore || "All"} onValueChange={setListStore}>
                     <SelectTrigger className="h-9 w-[110px] text-xs">
                       <SelectValue placeholder={t("store")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {stores.map((st) => (
+                      {stores.filter((s) => s).map((st) => (
                         <SelectItem key={st} value={st}>{st === "All" ? t("all") : st}</SelectItem>
                       ))}
                     </SelectContent>
