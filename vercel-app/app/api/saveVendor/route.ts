@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       code?: string
       name?: string
+      gps_name?: string
       contact?: string
       phone?: string
       email?: string
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
 
     const code = String(body.code || '').trim()
     const name = String(body.name || '').trim()
+    const gpsName = String(body.gps_name || '').trim()
     const editingCode = body.editingCode ? String(body.editingCode).trim() : null
     if (!code || !name) {
       return NextResponse.json({ success: false, message: '코드와 거래처명이 필요합니다.' }, { headers })
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
     const row = {
       code,
       name,
+      gps_name: gpsName || null,
       type: mapTypeToDb(body.type || 'purchase'),
       manager: String(body.contact || '').trim(),
       phone: String(body.phone || '').trim(),

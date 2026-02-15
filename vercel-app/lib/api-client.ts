@@ -919,6 +919,7 @@ export interface AdminItem {
 export interface AdminVendor {
   code: string
   name: string
+  gps_name?: string
   contact: string
   phone: string
   email: string
@@ -969,6 +970,7 @@ export async function deleteItem(params: { code: string }) {
 export async function saveVendor(params: {
   code: string
   name: string
+  gps_name?: string
   contact?: string
   phone?: string
   email?: string

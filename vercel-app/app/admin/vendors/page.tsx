@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Building2 } from "lucide-react"
 import { VendorForm, type VendorFormData } from "@/components/erp/vendor-form"
-import { VendorTable } from "@/components/erp/vendor-table"
+import { VendorTable, type VendorTypeFilter } from "@/components/erp/vendor-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getAdminVendors, saveVendor, deleteVendor } from "@/lib/api-client"
@@ -12,6 +12,7 @@ import type { Vendor } from "@/components/erp/vendor-table"
 const emptyForm: VendorFormData = {
   code: "",
   name: "",
+  gps_name: "",
   contact: "",
   phone: "",
   email: "",
@@ -29,6 +30,7 @@ export default function VendorsPage() {
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [typeFilter, setTypeFilter] = React.useState<VendorTypeFilter>("all")
 
   React.useEffect(() => {
     getAdminVendors()
@@ -49,6 +51,7 @@ export default function VendorsPage() {
         setFormData({
           code: v.code,
           name: v.name,
+          gps_name: v.gps_name ?? "",
           contact: v.contact,
           phone: v.phone,
           email: v.email,
@@ -76,6 +79,7 @@ export default function VendorsPage() {
     const res = await saveVendor({
       code,
       name,
+      gps_name: formData.gps_name.trim() || undefined,
       contact: formData.contact.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
@@ -91,6 +95,7 @@ export default function VendorsPage() {
     const newVendor: Vendor = {
       code,
       name,
+      gps_name: formData.gps_name.trim() || undefined,
       contact: formData.contact.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
@@ -113,6 +118,7 @@ export default function VendorsPage() {
     setFormData({
       code: vendor.code,
       name: vendor.name,
+      gps_name: vendor.gps_name ?? "",
       contact: vendor.contact,
       phone: vendor.phone,
       email: vendor.email,
@@ -124,7 +130,8 @@ export default function VendorsPage() {
   }
 
   const handleDelete = async (vendor: Vendor) => {
-    if (!confirm(`"${vendor.name}" ${t("vendorConfirmDelete")}`)) return
+    const displayName = (vendor.type === "sales" || vendor.type === "both") && vendor.gps_name?.trim() ? vendor.gps_name : vendor.name
+    if (!confirm(`"${displayName}" ${t("vendorConfirmDelete")}`)) return
     const res = await deleteVendor({ code: vendor.code })
     if (!res.success) {
       alert(res.message || "삭제에 실패했습니다.")
@@ -145,10 +152,19 @@ export default function VendorsPage() {
   const filteredVendors = React.useMemo(() => {
     if (!hasSearched) return []
     return vendors.filter((v) => {
-      const matchTerm = !searchTerm || v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.code.toLowerCase().includes(searchTerm.toLowerCase())
-      return matchTerm
+      const matchType =
+        typeFilter === "all" ||
+        (typeFilter === "purchase" && (v.type === "purchase" || v.type === "both")) ||
+        (typeFilter === "sales" && (v.type === "sales" || v.type === "both"))
+      const displayName = (v.type === "sales" || v.type === "both") && v.gps_name?.trim() ? v.gps_name : v.name
+      const matchTerm =
+        !searchTerm ||
+        v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (v.gps_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        v.code.toLowerCase().includes(searchTerm.toLowerCase())
+      return matchType && matchTerm
     })
-  }, [vendors, hasSearched, searchTerm])
+  }, [vendors, hasSearched, searchTerm, typeFilter])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -182,6 +198,8 @@ export default function VendorsPage() {
             hasSearched={hasSearched}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}

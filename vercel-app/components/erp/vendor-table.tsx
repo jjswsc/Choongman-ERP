@@ -11,6 +11,13 @@ import {
   ChevronRight,
   ListFilter,
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -18,6 +25,7 @@ import { cn } from "@/lib/utils"
 export interface Vendor {
   code: string
   name: string
+  gps_name?: string
   contact: string
   phone: string
   email: string
@@ -26,11 +34,15 @@ export interface Vendor {
   memo: string
 }
 
+export type VendorTypeFilter = "all" | "purchase" | "sales"
+
 export interface VendorTableProps {
   vendors: Vendor[]
   hasSearched: boolean
   searchTerm: string
   setSearchTerm: (v: string) => void
+  typeFilter: VendorTypeFilter
+  setTypeFilter: (v: VendorTypeFilter) => void
   onSearch: () => void
   onEdit: (vendor: Vendor) => void
   onDelete: (vendor: Vendor) => void
@@ -41,6 +53,8 @@ export function VendorTable({
   hasSearched,
   searchTerm,
   setSearchTerm,
+  typeFilter,
+  setTypeFilter,
   onSearch,
   onEdit,
   onDelete,
@@ -60,7 +74,7 @@ export function VendorTable({
         </span>
       </div>
 
-      <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
+      <div className="flex flex-col gap-3 border-b bg-muted/20 px-6 py-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -71,6 +85,16 @@ export function VendorTable({
             onKeyDown={(e) => e.key === "Enter" && onSearch()}
           />
         </div>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as VendorTypeFilter)}>
+          <SelectTrigger className="h-9 w-[140px] text-xs">
+            <SelectValue placeholder={t("vendorTypeAll")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("vendorTypeAll")}</SelectItem>
+            <SelectItem value="purchase">{t("vendorTypePurchase")}</SelectItem>
+            <SelectItem value="sales">{t("vendorTypeSales")}</SelectItem>
+          </SelectContent>
+        </Select>
         <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={onSearch}>
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {t("vendorBtnSearch")}
@@ -115,7 +139,11 @@ export function VendorTable({
                     </span>
                   </td>
                   <td className="px-5 py-3 min-w-[140px]">
-                    <span className="text-sm font-medium text-foreground">{vendor.name}</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {(vendor.type === "sales" || vendor.type === "both") && vendor.gps_name?.trim()
+                        ? vendor.gps_name
+                        : vendor.name}
+                    </span>
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-xs text-muted-foreground">{vendor.phone || "-"}</span>

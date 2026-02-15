@@ -23,20 +23,27 @@ export async function GET() {
       phone?: string
       addr?: string
       memo?: string
+      gps_name?: string
     }[] | null
 
     const list = (rows || [])
       .filter((row) => row?.code)
-      .map((row) => ({
-        code: String(row.code),
-        name: String(row.name || ''),
-        contact: String(row.manager || ''),
-        phone: String(row.phone || ''),
-        email: '',
-        address: String(row.addr || ''),
-        type: mapVendorType(row.type || ''),
-        memo: String(row.memo || ''),
-      }))
+      .map((row) => {
+        const t = mapVendorType(row.type || '')
+        const gpsName = String(row.gps_name || '').trim()
+        const fullName = String(row.name || '').trim()
+        return {
+          code: String(row.code),
+          name: fullName,
+          gps_name: gpsName,
+          contact: String(row.manager || ''),
+          phone: String(row.phone || ''),
+          email: '',
+          address: String(row.addr || ''),
+          type: t,
+          memo: String(row.memo || ''),
+        }
+      })
 
     return NextResponse.json(list, { headers })
   } catch (e) {

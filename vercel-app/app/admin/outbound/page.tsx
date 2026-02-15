@@ -109,7 +109,7 @@ export default function OutboundPage() {
         const vendors = Array.isArray(vendorList) ? vendorList : []
         const salesNames = vendors
           .filter((v: AdminVendor) => v.type === "sales" || v.type === "both")
-          .map((v: AdminVendor) => v.name)
+          .map((v: AdminVendor) => (v.gps_name?.trim() || v.name).trim())
         const stores = (Array.isArray(storeList) ? storeList : []).filter(
           (s: string) => !OFFICE_STORES.some((o) => s.toLowerCase().includes(o.toLowerCase()))
         )

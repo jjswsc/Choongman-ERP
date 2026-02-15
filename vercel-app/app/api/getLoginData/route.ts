@@ -12,10 +12,19 @@ async function getLoginDataHandler() {
       userMap[store].push(name)
     }
   }
-  const vendorRows = await supabaseSelect('vendors', { order: 'id.asc' })
+  const vendorRows = (await supabaseSelect('vendors', { order: 'id.asc' })) as {
+    name?: string
+    gps_name?: string
+    type?: string
+  }[] | null
   const vendorList: string[] = []
   for (let v = 0; v < (vendorRows || []).length; v++) {
-    const n = String((vendorRows as { name?: string }[])[v].name || '').trim()
+    const row = vendorRows[v]
+    const gpsName = String(row.gps_name || '').trim()
+    const fullName = String(row.name || '').trim()
+    const t = String(row.type || '').toLowerCase()
+    const isSales = t === 'sales' || t === '매출' || t === '매출처' || t === 'both' || t === '둘 다'
+    const n = (isSales && gpsName) ? gpsName : fullName
     if (n) vendorList.push(n)
   }
   return { users: userMap, vendors: vendorList }
