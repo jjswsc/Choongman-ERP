@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ArrowUpFromLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -613,9 +614,14 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminOutbound")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("outPageSub")}</p>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <ArrowUpFromLine className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminOutbound")}</h1>
+            <p className="text-xs text-muted-foreground">{t("outPageSub")}</p>
+          </div>
         </div>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
           <TabsList className={`grid w-full max-w-md mb-4 ${isOffice ? "grid-cols-2" : "grid-cols-1"}`}>

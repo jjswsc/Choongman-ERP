@@ -225,8 +225,8 @@ export function PettyCashTab() {
     <div className="flex flex-col gap-4 p-4">
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center gap-2 pb-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100">
-            <Banknote className="h-3.5 w-3.5 text-purple-600" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+            <Banknote className="h-3.5 w-3.5 text-primary" />
           </div>
           <CardTitle className="text-base font-semibold">
             {t("pettyCashTitle") || "💵 패티 캐쉬"}
@@ -347,7 +347,7 @@ export function PettyCashTab() {
                       <button
                         type="button"
                         onClick={() => receiptFileInputRef.current?.click()}
-                        className="rounded border-0 bg-purple-100 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-200"
+                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
                       >
                         {addReceiptFile ? addReceiptFile.name : t("chooseFile")}
                       </button>

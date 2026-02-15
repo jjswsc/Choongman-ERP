@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search } from "lucide-react"
+import { Clock, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -137,9 +137,14 @@ export default function AdminAttendancePage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminAttendance")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("tab_att_status")}</p>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Clock className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminAttendance")}</h1>
+            <p className="text-xs text-muted-foreground">{t("tab_att_status")}</p>
+          </div>
         </div>
 
         <Tabs defaultValue="status" className="space-y-4">

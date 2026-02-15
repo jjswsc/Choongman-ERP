@@ -161,11 +161,11 @@ export function AdminLeaveApproval() {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-center font-medium">{t("store")}</th>
-                  <th className="p-2 text-center font-medium">{t("leave_col_name")}</th>
+                  <th className="p-2 text-center font-medium w-24">{t("leave_col_name")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
                   <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
-                  <th className="p-2 text-center font-medium min-w-[120px]">{t("leave_col_reason")}</th>
+                  <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
                   <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
                 </tr>
               </thead>
