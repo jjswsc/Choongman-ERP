@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
 
   if (storeFilter === 'All' || storeFilter === '전체') storeFilter = ''
 
-  const isDirector = userRole.includes('director')
+  const isDirector = userRole.includes('director') || userRole.includes('ceo') || userRole.includes('hr')
   const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사' || storeFilter.toLowerCase() === 'office'
   if (isOffice && !isDirector) {
     return NextResponse.json({ success: true, list: [] }, { headers })

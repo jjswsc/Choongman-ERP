@@ -34,7 +34,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const monthStr = String(body.month || body.monthStr || '').trim().slice(0, 7)
-    const list = (body.list || body.rows || []) as PayrollSaveRow[]
+    let list = (body.list || body.rows || []) as PayrollSaveRow[]
+    const userStore = String(body.userStore || '').trim()
+    const userRole = String(body.userRole || '').toLowerCase()
+    if (userRole.includes('manager') && userStore) {
+      list = list.filter((r) => String(r.store || '').trim() === userStore)
+    }
 
     if (!monthStr || monthStr.length < 7) {
       return NextResponse.json(

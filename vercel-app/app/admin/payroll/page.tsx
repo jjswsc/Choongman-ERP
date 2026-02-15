@@ -8,13 +8,14 @@ import { AdminPayrollHolidays } from "@/components/admin/admin-payroll-holidays"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
+import { isOfficeRole, isManagerRole } from "@/lib/permissions"
 
 export default function Page() {
   const { auth } = useAuth()
   const t = useT(useLang().lang)
-  const isDirector = (auth?.role || "").toLowerCase().includes("director")
+  const canAccessPayroll = isOfficeRole(auth?.role || "") || isManagerRole(auth?.role || "")
 
-  if (!isDirector) {
+  if (!canAccessPayroll) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-6 text-center max-w-md">

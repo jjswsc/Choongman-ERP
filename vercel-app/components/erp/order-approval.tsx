@@ -25,6 +25,8 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import { getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
@@ -111,13 +113,16 @@ function mapApiToOrder(
 export function OrderApproval() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
+  const isManager = isManagerRole(auth?.role || "")
+  const userStore = (auth?.store || "").trim()
   const [orders, setOrders] = React.useState<Order[]>([])
   const [stores, setStores] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [checkedOrders, setCheckedOrders] = React.useState<Set<string>>(new Set())
   const [allChecked, setAllChecked] = React.useState(false)
-  const [storeFilter, setStoreFilter] = React.useState("all")
+  const [storeFilter, setStoreFilter] = React.useState(isManager && userStore ? userStore : "all")
   const [startDate, setStartDate] = React.useState(() => {
     const d = new Date()
     d.setDate(1)
@@ -132,14 +137,18 @@ export function OrderApproval() {
   const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
   const [submittingId, setSubmittingId] = React.useState<string | null>(null)
 
+  const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
+
   const fetchOrders = React.useCallback(async () => {
     setLoading(true)
     try {
       const { list, stores: s } = await getAdminOrders({
         startStr: startDate,
         endStr: endDate,
-        store: storeFilter === "all" ? undefined : storeFilter,
+        store: effectiveStore,
         status: statusFilter === "all" ? undefined : statusFilter,
+        userStore: isManager ? userStore : undefined,
+        userRole: isManager ? auth?.role : undefined,
       })
       setStores(s || [])
 
@@ -175,7 +184,11 @@ export function OrderApproval() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, storeFilter, statusFilter])
+  }, [startDate, endDate, effectiveStore, statusFilter, isManager, userStore])
+
+  React.useEffect(() => {
+    if (isManager && userStore) setStoreFilter(userStore)
+  }, [isManager, userStore])
 
   React.useEffect(() => {
     fetchOrders()
@@ -218,6 +231,7 @@ export function OrderApproval() {
         orderId,
         decision,
         deliveryDate: deliveryDate || undefined,
+        userRole: auth?.role,
       })
       if (!res.success) {
         alert(res.message || t("orderDecisionFailed"))
@@ -248,25 +262,27 @@ export function OrderApproval() {
       {/* Filter bar */}
       <div className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-              <Package className="h-3.5 w-3.5 text-primary" />
-              {t("orderFilterStore")}
-            </label>
-            <Select value={storeFilter} onValueChange={setStoreFilter}>
-              <SelectTrigger className="h-9 w-40 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("orderFilterStoreAll")}</SelectItem>
-                {stores.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isManager && (
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <Package className="h-3.5 w-3.5 text-primary" />
+                {t("orderFilterStore")}
+              </label>
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger className="h-9 w-40 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("orderFilterStoreAll")}</SelectItem>
+                  {stores.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
@@ -564,38 +580,41 @@ export function OrderApproval() {
                               onChange={(e) =>
                                 setDeliveryDateByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))
                               }
+                              readOnly={isManager}
                             />
-                            <div className="ml-auto flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 px-4 text-[11px] font-semibold"
-                                disabled={submittingId !== null || order.status !== "Pending"}
-                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Hold", order) }}
-                              >
-                                <Pause className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnHold")}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 px-4 text-[11px] font-bold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                disabled={submittingId !== null || order.status !== "Pending"}
-                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Rejected", order) }}
-                              >
-                                <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnReject")}
-                              </Button>
-                              <Button
-                                size="sm"
-                                className="h-8 px-5 text-[11px] font-bold bg-success text-success-foreground hover:bg-success/90"
-                                disabled={submittingId !== null || order.status !== "Pending"}
-                                onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Approved", order) }}
-                              >
-                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                                {t("orderBtnApprove")}
-                              </Button>
-                            </div>
+                            {!isManager && (
+                              <div className="ml-auto flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-4 text-[11px] font-semibold"
+                                  disabled={submittingId !== null || order.status !== "Pending"}
+                                  onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Hold", order) }}
+                                >
+                                  <Pause className="mr-1.5 h-3.5 w-3.5" />
+                                  {t("orderBtnHold")}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-4 text-[11px] font-bold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                  disabled={submittingId !== null || order.status !== "Pending"}
+                                  onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Rejected", order) }}
+                                >
+                                  <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                                  {t("orderBtnReject")}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className="h-8 px-5 text-[11px] font-bold bg-success text-success-foreground hover:bg-success/90"
+                                  disabled={submittingId !== null || order.status !== "Pending"}
+                                  onClick={(e) => { e.stopPropagation(); handleDecision(order.orderId, "Approved", order) }}
+                                >
+                                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                                  {t("orderBtnApprove")}
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

@@ -15,6 +15,7 @@ import {
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import { getLoginData } from "@/lib/api-client"
 import { Mail } from "lucide-react"
 
@@ -59,9 +60,11 @@ export function AdminPayrollRecords() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const isManager = isManagerRole(auth?.role || "")
+  const userStore = (auth?.store || "").trim()
 
   const [monthStr, setMonthStr] = useState(toMonthStr())
-  const [storeFilter, setStoreFilter] = useState("All")
+  const [storeFilter, setStoreFilter] = useState(isManager && userStore ? userStore : "All")
   const [stores, setStores] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -79,6 +82,10 @@ export function AdminPayrollRecords() {
     })
   }, [auth?.store])
 
+  useEffect(() => {
+    if (isManager && userStore) setStoreFilter(userStore)
+  }, [isManager, userStore])
+
   const filteredList = list.filter((r) => storeFilter === "All" || r.store === storeFilter)
   const totalAmount = filteredList.reduce((sum, r) => sum + (r.net_pay || 0), 0)
 
@@ -88,7 +95,13 @@ export function AdminPayrollRecords() {
     setSelected(new Set())
     setSelectAll(false)
     try {
+      const effectiveStore = isManager && userStore ? userStore : (storeFilter === "All" ? "" : storeFilter)
       const params = new URLSearchParams({ monthStr })
+      if (effectiveStore) params.set("storeFilter", effectiveStore)
+      if (isManager) {
+        params.set("userStore", userStore)
+        params.set("userRole", auth?.role || "")
+      }
       const res = await fetch(`/api/getPayrollRecords?${params}`)
       const data = await res.json()
       if (data.success && Array.isArray(data.list)) {
@@ -188,19 +201,21 @@ export function AdminPayrollRecords() {
               className="h-9 text-xs"
             />
           </div>
-          <div className="flex-1 min-w-[140px]">
-            <label className="text-xs font-semibold block mb-1">{t("store")}</label>
-            <Select value={storeFilter} onValueChange={setStoreFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder={t("store")} />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((st) => (
-                  <SelectItem key={st} value={st}>{st}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!isManager && (
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-semibold block mb-1">{t("store")}</label>
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={t("store")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((st) => (
+                    <SelectItem key={st} value={st}>{st}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Button
             className="h-9 font-medium"
             onClick={handleQuery}

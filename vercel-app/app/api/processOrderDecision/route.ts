@@ -15,6 +15,14 @@ export async function POST(request: NextRequest) {
     const orderId = Number(body.orderId ?? body.row ?? body.orderRowId)
     const decision = String(body.decision ?? '').trim()
     const deliveryDate = body.deliveryDate ? String(body.deliveryDate).trim() : ''
+    const userRole = String(body.userRole ?? '').toLowerCase()
+
+    if (userRole.includes('manager')) {
+      return NextResponse.json(
+        { success: false, message: '매장 매니저는 주문 승인/반려 권한이 없습니다.' },
+        { headers }
+      )
+    }
 
     if (!orderId || isNaN(orderId)) {
       return NextResponse.json(

@@ -129,9 +129,10 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim()
-  const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  if (userRole.includes('manager') && userStore) storeFilter = userStore
 
   if (!monthStr || monthStr.length < 7) {
     return NextResponse.json(
@@ -143,7 +144,7 @@ export async function GET(request: NextRequest) {
   const normMonth = monthStr.slice(0, 7)
   const isAll = !storeFilter || storeFilter === 'All' || storeFilter === '전체'
   const isOffice = storeFilter === 'Office' || storeFilter === '오피스' || storeFilter === '본사'
-  const canSeeOffice = userRole.includes('director')
+  const canSeeOffice = userRole.includes('director') || userRole.includes('ceo') || userRole.includes('hr')
 
   if (isOffice && !canSeeOffice) {
     return NextResponse.json({ success: true, list: [] }, { headers })

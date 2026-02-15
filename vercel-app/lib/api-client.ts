@@ -250,12 +250,16 @@ export async function getAdminOrders(params: {
   store?: string
   deliveryStatus?: string
   status?: string
+  userStore?: string
+  userRole?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
     endStr: params.endStr,
   })
   if (params.store) q.set('store', params.store)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
   if (params.deliveryStatus) q.set('deliveryStatus', params.deliveryStatus)
   if (params.status) q.set('status', params.status)
   const res = await fetch(`/api/getAdminOrders?${q}`)
@@ -270,6 +274,7 @@ export async function processOrderDecision(params: {
   orderId: number
   decision: 'Approved' | 'Rejected' | 'Hold'
   deliveryDate?: string
+  userRole?: string
 }) {
   const res = await fetch('/api/processOrderDecision', {
     method: 'POST',

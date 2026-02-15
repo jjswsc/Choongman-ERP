@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
-  const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  if (userRole.includes('manager') && userStore) storeFilter = userStore
 
   if (!monthStr || monthStr.length < 7) {
     return NextResponse.json(

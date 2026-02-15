@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { isManagerRole, canAccessSettings } from "@/lib/permissions"
 interface MenuItem {
   titleKey: string
   icon: React.ElementType
@@ -88,12 +89,17 @@ const menuSections: MenuSection[] = [
   },
 ]
 
+/** 매니저에게 숨길 메뉴 href */
+const MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
+
 export function ErpSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { logout } = useAuth()
+  const { auth, logout } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const isManager = isManagerRole(auth?.role || "")
+  const showSettings = canAccessSettings(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     adminSectionLogistics: true,
@@ -178,7 +184,9 @@ export function ErpSidebar() {
                   </button>
                   {isExpanded && (
                     <div className="space-y-0.5">
-                      {section.items.map((item) => (
+                      {section.items
+                        .filter((item) => !(isManager && MANAGER_HIDDEN_HREFS.has(item.href)))
+                        .map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
@@ -222,18 +230,20 @@ export function ErpSidebar() {
       {/* Footer */}
       <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
         <div className="space-y-0.5">
-          <Link
-            href="/admin/settings"
-            className={cn(
-              "flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
-              pathname === "/admin/settings"
-                ? "bg-primary text-primary-foreground font-medium shadow-sm"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-            )}
-          >
-            <Settings className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate group-data-[collapsible=icon]:hidden">{t("adminSettings")}</span>
-          </Link>
+          {showSettings && (
+            <Link
+              href="/admin/settings"
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded px-3 py-2 text-[13px] transition-colors",
+                pathname === "/admin/settings"
+                  ? "bg-primary text-primary-foreground font-medium shadow-sm"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              )}
+            >
+              <Settings className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate group-data-[collapsible=icon]:hidden">{t("adminSettings")}</span>
+            </Link>
+          )}
           <button
             type="button"
             onClick={handleLogout}

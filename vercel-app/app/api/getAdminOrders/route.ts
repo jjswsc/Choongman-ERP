@@ -7,7 +7,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const startStr = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
-  const storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
+  let storeFilter = String(searchParams.get('store') || searchParams.get('storeFilter') || '').trim()
+  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  if (userRole.includes('manager') && userStore) storeFilter = userStore
   const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || '').trim()
   const statusFilter = String(searchParams.get('status') || searchParams.get('statusFilter') || '').trim()
 
