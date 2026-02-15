@@ -29,9 +29,10 @@ export interface EvaluationItemRow {
 
 export interface EmployeeEvalSettingTabProps {
   type: "kitchen" | "service"
+  readOnly?: boolean
 }
 
-export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
+export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalSettingTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
@@ -169,25 +170,27 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
               </th>
               <th className="p-2 text-left font-medium">{t("eval_item")}</th>
               <th className="p-2 text-center font-medium w-14">{t("eval_use")}</th>
-              <th className="p-2 text-center font-medium w-16">
-                {t("eval_delete")}
-              </th>
+              {!readOnly && (
+                <th className="p-2 text-center font-medium w-16">
+                  {t("eval_delete")}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                <td colSpan={readOnly ? 5 : 6} className="p-6 text-center text-muted-foreground">
                   {t("loading")}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={readOnly ? 5 : 6}
                   className="p-6 text-center text-muted-foreground"
                 >
-{t("eval_setting_no_items")}
+                  {t("eval_setting_no_items")}
                 </td>
               </tr>
             ) : (
@@ -212,28 +215,30 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
                     <Input
                       value={item.name}
                       onChange={(e) => setItemName(idx, e.target.value)}
-                      className="h-8 text-sm"
+                      readOnly={readOnly}
+                      className={`h-8 text-sm ${readOnly ? "bg-muted/30" : ""}`}
                     />
                   </td>
                   <td className="p-2 text-center">
                     <Checkbox
                       checked={item.use ?? true}
-                      onCheckedChange={(v) =>
-                        setItemUse(idx, v === true)
-                      }
+                      onCheckedChange={(v) => setItemUse(idx, v === true)}
+                      disabled={readOnly}
                     />
                   </td>
-                  <td className="p-2 text-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(item.id)}
-                      disabled={saving}
-                    >
-                      {t("eval_delete")}
-                    </Button>
-                  </td>
+                  {!readOnly && (
+                    <td className="p-2 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(item.id)}
+                        disabled={saving}
+                      >
+                        {t("eval_delete")}
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -245,12 +250,16 @@ export function EmployeeEvalSettingTab({ type }: EmployeeEvalSettingTabProps) {
         <Button variant="outline" onClick={handleLoad} disabled={loading}>
           {t("eval_load_items")}
         </Button>
-        <Button variant="outline" onClick={handleAdd} disabled={saving}>
-          {t("eval_add_item")}
-        </Button>
-        <Button onClick={handleSave} disabled={saving || loading}>
-          {saving ? t("loading") : t("eval_save_items")}
-        </Button>
+        {!readOnly && (
+          <>
+            <Button variant="outline" onClick={handleAdd} disabled={saving}>
+              {t("eval_add_item")}
+            </Button>
+            <Button onClick={handleSave} disabled={saving || loading}>
+              {saving ? t("loading") : t("eval_save_items")}
+            </Button>
+          </>
+        )}
       </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>

@@ -5,6 +5,7 @@ import { Users } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -257,9 +258,14 @@ export default function EmployeesPage() {
     }
   }
 
+  const isManager = isManagerRole(userRole)
+
   const handleNew = () => {
-    setForm({ ...emptyForm, annualLeaveDays: 15 })
+    const base = { ...emptyForm, annualLeaveDays: 15 }
+    if (isManager && userStore) base.store = userStore
+    setForm(base)
   }
+  const storesForForm = isManager && userStore ? [userStore] : stores
 
   if (loading && employeeCache.length === 0) {
     return (
@@ -297,7 +303,7 @@ export default function EmployeesPage() {
                 <EmployeeForm
                   form={form}
                   onChange={setForm}
-                  stores={stores}
+                  stores={storesForForm}
                   onSave={handleSave}
                   onNew={handleNew}
                   saving={saving}
@@ -312,7 +318,7 @@ export default function EmployeesPage() {
                 )}
                 <div className="rounded-lg border border-border bg-card p-3">
                   <EmployeeFilterBar
-                    stores={stores}
+                    stores={storesForForm}
                     storeFilter={storeFilter}
                     onStoreFilterChange={setStoreFilter}
                     gradeFilter={gradeFilter}
@@ -347,7 +353,7 @@ export default function EmployeesPage() {
 
           <TabsContent value="eval">
             <EmployeeEvalTab
-              stores={stores}
+              stores={storesForForm}
               employees={employeeCache}
               onSaved={loadEmployeeList}
             />
@@ -356,10 +362,10 @@ export default function EmployeesPage() {
             <EmployeeEvalListTab stores={stores} />
           </TabsContent>
           <TabsContent value="kitchen-setting">
-            <EmployeeEvalSettingTab type="kitchen" />
+            <EmployeeEvalSettingTab type="kitchen" readOnly={isManager} />
           </TabsContent>
           <TabsContent value="service-setting">
-            <EmployeeEvalSettingTab type="service" />
+            <EmployeeEvalSettingTab type="service" readOnly={isManager} />
           </TabsContent>
         </Tabs>
       </div>

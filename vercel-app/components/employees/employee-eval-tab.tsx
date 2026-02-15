@@ -5,6 +5,7 @@ import { RotateCw } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import {
   getEvaluationItems,
   saveEvaluationResult,
@@ -96,6 +97,14 @@ export function EmployeeEvalTab({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [evalTransMap, setEvalTransMap] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    const isManager = isManagerRole(auth?.role || "")
+    const userStore = (auth?.store || "").trim()
+    if (isManager && userStore && stores.includes(userStore)) {
+      setEvalStore(userStore)
+    }
+  }, [auth?.role, auth?.store, stores])
   const [userTextTrans, setUserTextTrans] = React.useState<{
     totalMemo: string
     incidents: { details: string; typeOther: string }[]

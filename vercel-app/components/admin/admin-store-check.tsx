@@ -17,6 +17,7 @@ import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus } fr
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import {
   getLoginData,
   getChecklistItems,
@@ -70,6 +71,7 @@ export function AdminStoreCheck() {
   const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const isHQ = auth?.role === "director" || auth?.role === "officer"
+  const isManager = isManagerRole(auth?.role || "")
   const inspectorName = auth?.user || auth?.store || ""
 
   // 로그인 언어로 점검 항목/비고 자동 번역
@@ -108,12 +110,21 @@ export function AdminStoreCheck() {
     if (!auth?.store) return
     getLoginData().then((r) => {
       const keys = Object.keys(r.users || {}).filter(Boolean).sort()
-      const list = isHQ ? ["All", ...keys] : keys
+      let list: string[]
+      if (isManager) {
+        list = [auth.store]
+        setStoreSelect(auth.store)
+        setHistStore(auth.store)
+      } else if (isHQ) {
+        list = ["All", ...keys]
+        if (list.length > 0 && !storeSelect) setStoreSelect(list.find((s) => s !== "All") || list[0] || "")
+      } else {
+        list = keys
+        setStoreSelect(auth.store)
+      }
       setStores(list)
-      if (!isHQ && auth.store) setStoreSelect(auth.store)
-      else if (isHQ && list.length > 0 && !storeSelect) setStoreSelect(list.find((s) => s !== "All") || list[0] || "")
     })
-  }, [auth?.store, auth?.user, isHQ])
+  }, [auth?.store, auth?.role, auth?.user, isHQ, isManager])
 
   const loadChecklistForm = async () => {
     if (!storeSelect || !dateSelect) {

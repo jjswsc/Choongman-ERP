@@ -17,6 +17,7 @@ import { Search, Save, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import {
   getLoginData,
   getComplaintLogList,
@@ -98,14 +99,25 @@ export function AdminComplaints() {
   const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const writerName = auth?.user || auth?.store || ""
+  const isManager = isManagerRole(auth?.role || "")
+  const isHQ = auth?.role === "director" || auth?.role === "officer"
 
   useEffect(() => {
+    if (!auth?.store) return
     getLoginData().then((r) => {
       const keys = Object.keys(r.users || {}).filter((k) => k && String(k).trim()).sort()
-      setStores(["All", ...keys])
-      if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
+      let list: string[]
+      if (isManager) {
+        list = [auth.store]
+        setForm((f) => ({ ...f, store: auth.store, writer: writerName }))
+        setListStore(auth.store)
+      } else {
+        list = isHQ ? ["All", ...keys] : keys
+        if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
+      }
+      setStores(list)
     })
-  }, [])
+  }, [auth?.store, auth?.role, isManager, isHQ])
 
   useEffect(() => {
     setForm((f) => ({ ...f, writer: writerName }))

@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
+import { isManagerRole } from "@/lib/permissions"
 import {
   getStockStores,
   getAppData,
@@ -82,6 +83,14 @@ export default function StockPage() {
   React.useEffect(() => {
     fetchStores()
   }, [fetchStores])
+
+  React.useEffect(() => {
+    const isManager = isManagerRole(auth?.role || "")
+    const userStore = (auth?.store || "").trim()
+    if (isManager && userStore) {
+      setStoreFilter(userStore)
+    }
+  }, [auth?.role, auth?.store])
 
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
