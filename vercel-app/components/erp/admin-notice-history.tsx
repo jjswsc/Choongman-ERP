@@ -127,7 +127,7 @@ export function AdminNoticeHistory() {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="date-input-compact h-9 w-40 pl-9 text-xs"
+            className="date-input-compact date-input-left-icon-only h-9 w-40 pl-9 text-xs"
           />
         </div>
         <span className="text-xs font-medium text-muted-foreground">~</span>
@@ -137,7 +137,7 @@ export function AdminNoticeHistory() {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="date-input-compact h-9 w-40 pl-9 text-xs"
+            className="date-input-compact date-input-left-icon-only h-9 w-40 pl-9 text-xs"
           />
         </div>
         <Button
@@ -187,86 +187,83 @@ export function AdminNoticeHistory() {
                   onClick={() =>
                     setExpandedId(isExpanded ? null : notice.id)
                   }
-                  className="flex w-full items-center gap-4 px-6 py-4 text-left hover:bg-muted/30 transition-colors"
+                  className="flex w-full flex-col gap-2 px-6 py-3 text-left hover:bg-muted/30 transition-colors"
                 >
-                  {/* Index */}
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums text-muted-foreground">
-                    {idx + 1}
-                  </div>
-
-                  {/* Title + meta */}
-                  <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-bold text-card-foreground truncate block">
-                      {getTrans(notice.title)}
-                    </h4>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                      {notice.recipients.map((r) => (
-                        <span
-                          key={r}
-                          className="inline-flex shrink-0 items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary"
-                        >
-                          To: {r === "전체" ? t("noticeFilterAll") : r}
-                        </span>
-                      ))}
+                  {/* Line 1: Index + 제목 | 대상 | 내용 */}
+                  <div className="flex w-full items-center gap-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums text-muted-foreground">
+                      {idx + 1}
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {getTrans(notice.preview)}
-                    </p>
-                  </div>
-
-                  {/* Date */}
-                  <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
-                    {notice.date}
-                  </span>
-
-                  {/* Read status */}
-                  <div className="flex shrink-0 items-center gap-2 w-32">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          allRead ? "bg-success" : "bg-primary"
-                        )}
-                        style={{ width: `${readPercent}%` }}
-                      />
+                    <div className="min-w-0 flex-1 flex items-center gap-2 text-xs overflow-hidden">
+                      <span className="font-bold text-card-foreground shrink-0 max-w-[140px] truncate" title={getTrans(notice.title)}>
+                        {getTrans(notice.title)}
+                      </span>
+                      <span className="text-muted-foreground shrink-0">·</span>
+                      <div className="flex shrink-0 flex-wrap gap-1">
+                        {notice.recipients.map((r) => (
+                          <span
+                            key={r}
+                            className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary"
+                          >
+                            {r === "전체" ? t("noticeFilterAll") : r}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-muted-foreground shrink-0">·</span>
+                      <span className="text-muted-foreground truncate min-w-0 flex-1" title={getTrans(notice.preview)}>
+                        {getTrans(notice.preview)}
+                      </span>
                     </div>
-                    <span
-                      className={cn(
-                        "text-[11px] font-bold tabular-nums",
-                        allRead ? "text-success" : "text-muted-foreground"
-                      )}
-                    >
-                      {notice.readCount}/{notice.totalCount}
+                  </div>
+                  {/* Line 2: 날짜 | 읽음 상태 | 액션 */}
+                  <div className="flex w-full items-center gap-4 pl-10">
+                    <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground">
+                      {notice.date}
                     </span>
+                    <div className="flex shrink-0 items-center gap-2 w-28">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            allRead ? "bg-success" : "bg-primary"
+                          )}
+                          style={{ width: `${readPercent}%` }}
+                        />
+                      </div>
+                      <span
+                        className={cn(
+                          "text-[11px] font-bold tabular-nums shrink-0",
+                          allRead ? "text-success" : "text-muted-foreground"
+                        )}
+                      >
+                        {notice.readCount}/{notice.totalCount}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] font-semibold"
+                        onClick={(e) => handleDelete(e, notice.id)}
+                      >
+                        {t("delete")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[10px] font-semibold"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Eye className="mr-1 h-3 w-3" />
+                        {t("noticeReadConfirm")}
+                      </Button>
+                    </div>
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground ml-auto" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground ml-auto" />
+                    )}
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3 text-[11px] font-semibold"
-                      onClick={(e) => handleDelete(e, notice.id)}
-                    >
-                      {t("delete")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3 text-[11px] font-semibold"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Eye className="mr-1 h-3 w-3" />
-                      {t("noticeReadConfirm")}
-                    </Button>
-                  </div>
-
-                  {/* Chevron */}
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  )}
                 </button>
 
                 {/* Expanded detail */}
