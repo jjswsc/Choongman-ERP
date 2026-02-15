@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Wrench } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -149,6 +150,17 @@ export function AdminPayrollHolidays() {
     setEditName("")
   }
 
+  const handleSetup = async () => {
+    if (!confirm(t("pay_holiday_setup_confirm"))) return
+    try {
+      const res = await fetch("/api/setupPublicHolidays")
+      const data = await res.json()
+      alert(data.msg || (data.success ? "준비 완료" : "오류"))
+    } catch {
+      alert(t("pay_error"))
+    }
+  }
+
   const hasResult = list.length > 0
 
   const translateApiMessage = (msg: string | undefined): string => {
@@ -169,9 +181,11 @@ export function AdminPayrollHolidays() {
   return (
     <Card className="shadow-sm">
       <CardContent className="pt-6">
+        <h6 className="font-semibold mb-1">{t("pay_holiday_title")}</h6>
+        <p className="text-xs text-muted-foreground mb-4">{t("pay_holiday_desc")}</p>
         <div className="flex flex-wrap items-end gap-3 mb-4">
           <div className="w-24">
-            <label className="text-xs font-semibold block mb-1">{t("holiday_year")}</label>
+            <label className="text-xs font-semibold block mb-1">{t("pay_holiday_year")}</label>
             <Input
               type="number"
               min={2020}
@@ -181,6 +195,14 @@ export function AdminPayrollHolidays() {
               className="h-9 text-xs"
             />
           </div>
+          <Button
+            variant="outline"
+            className="h-9 font-medium border-orange-200 text-orange-700 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-300"
+            onClick={handleSetup}
+          >
+            <Wrench className="mr-1.5 h-3.5 w-3.5" />
+            {t("pay_holiday_setup_btn")}
+          </Button>
           <Button
             className="h-9 font-medium"
             onClick={loadList}
@@ -229,15 +251,17 @@ export function AdminPayrollHolidays() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="p-2 text-left font-medium">{t("holiday_date")}</th>
-                  <th className="p-2 text-left font-medium">{t("holiday_name")}</th>
-                  <th className="p-2 text-center font-medium w-20">{t("pay_actions")}</th>
+                  <th className="p-2 text-center font-medium w-10">{t("pay_holiday_th_no")}</th>
+                  <th className="p-2 text-left font-medium">{t("pay_holiday_th_date")}</th>
+                  <th className="p-2 text-left font-medium">{t("pay_holiday_th_name")}</th>
+                  <th className="p-2 text-center font-medium w-[120px]">{t("pay_holiday_th_manage")}</th>
                 </tr>
               </thead>
               <tbody>
-                {list.map((r) =>
+                {list.map((r, idx) =>
                   editId === r.id ? (
                     <tr key={r.id} className="border-b border-border/60 bg-muted/20">
+                      <td className="p-2 text-center">{idx + 1}</td>
                       <td className="p-2">
                         <Input
                           type="date"
@@ -266,6 +290,7 @@ export function AdminPayrollHolidays() {
                     </tr>
                   ) : (
                     <tr key={r.id} className="border-b border-border/60 hover:bg-muted/30">
+                      <td className="p-2 text-center">{idx + 1}</td>
                       <td className="p-2">{r.date}</td>
                       <td className="p-2">{r.name}</td>
                       <td className="p-2">
