@@ -55,7 +55,7 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
                 <ChartTooltipContent
                   formatter={(value, name, item) => (
                     <span className="text-foreground font-medium">
-                      {formatMinutes(Number(value))} ({item.payload?.visits ?? 0}건)
+                      {formatMinutes(Number(value))} ({Number(item.payload?.visits ?? 0)}건)
                     </span>
                   )}
                 />
