@@ -153,7 +153,11 @@ export async function GET(request: NextRequest) {
     const [y, m] = normMonth.split('-').map(Number)
     const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 
-    const [empRows, attRows, phRows] = await Promise.all([
+    const startStr = normMonth + '-01'
+    const lastDay = new Date(parseInt(normMonth.slice(0, 4), 10), parseInt(normMonth.slice(5, 7), 10) - 1, 0)
+    const endStr = lastDay.toISOString().slice(0, 10)
+
+    const [empRows, attRows, phRows, leaveRows] = await Promise.all([
       supabaseSelect('employees', { order: 'id.asc' }) as Promise<{
         id?: number
         store?: string
@@ -183,12 +187,37 @@ export async function GET(request: NextRequest) {
         approved?: string
       }[] | null>,
       supabaseSelectFilter('public_holidays', `year=eq.${parseInt(normMonth.slice(0, 4), 10)}`, { order: 'date.asc' }) as Promise<{ date?: string }[] | null>,
+      supabaseSelectFilter(
+        'leave_requests',
+        `leave_date=gte.${startStr}&leave_date=lte.${endStr}`,
+        { order: 'leave_date.asc', limit: 1000 }
+      ) as Promise<{ store?: string; name?: string; leave_date?: string; type?: string; status?: string }[] | null>,
     ])
 
     const attSummary = buildAttendanceSummary(normMonth, attRows || [])
     const firstDay = new Date(normMonth + '-01')
     const targetMonth = firstDay.getMonth()
     const year = firstDay.getFullYear()
+
+    // 휴가 집계: 무급휴가 일수, 유급휴가(연차/병가) 일수 (store_name별)
+    const unpaidLeaveDaysMap: Record<string, number> = {}
+    const paidLeaveDaysMap: Record<string, number> = {}
+    for (const lr of leaveRows || []) {
+      if (String(lr.status || '').trim() !== '승인') continue
+      const store = String(lr.store || '').trim()
+      const name = String(lr.name || '').trim()
+      const type = String(lr.type || '').trim()
+      const dateStr = toDateStr(lr.leave_date)
+      if (!store || !name || !dateStr || dateStr < startStr || dateStr > endStr) continue
+      const key = store + '_' + name
+      if (/무급|unpaid/i.test(type)) {
+        unpaidLeaveDaysMap[key] = (unpaidLeaveDaysMap[key] || 0) + 1
+      } else if (/연차|병가|annual|sick/i.test(type)) {
+        paidLeaveDaysMap[key] = (paidLeaveDaysMap[key] || 0) + 1
+      }
+    }
+
+    // 해당 월 평일 수 (공휴일 제외) - 결석 산정용
     let holidaySet = new Set<string>()
     if (phRows && phRows.length > 0) {
       const startStr = normMonth + '-01'
@@ -203,6 +232,15 @@ export async function GET(request: NextRequest) {
         const d = year + h.date
         if (d >= normMonth + '-01' && d <= normMonth + '-31') holidaySet.add(d)
       }
+    }
+
+    // 평일(월~금) 일수 - 공휴일 제외
+    let expectedWorkDays = 0
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const date = new Date(year, targetMonth, d)
+      const dayOfWeek = date.getDay()
+      const dateStr = date.toISOString().slice(0, 10)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidaySet.has(dateStr)) expectedWorkDays++
     }
 
     const list: PayrollCalcRow[] = []
@@ -274,9 +312,18 @@ export async function GET(request: NextRequest) {
         else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays * 2)
       }
 
+      // 무급 휴가 + 결석 공제 (월급제만, 시급제는 미근무일 이미 급여 없음)
+      const unpaidLeaveDays = unpaidLeaveDaysMap[attKey] || 0
+      const paidLeaveDays = paidLeaveDaysMap[attKey] || 0
+      const absenceDays = Math.max(0, expectedWorkDays - workDays - paidLeaveDays)
+      const unpaidAbsenceDays = unpaidLeaveDays + absenceDays
+      const unpaidAbsenceDed = !isHourly && salary > 0 && unpaidAbsenceDays > 0
+        ? Math.floor((salary / 30) * unpaidAbsenceDays)
+        : 0
+
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
-      const deduct = lateDed + sso
-      const netPay = income - deduct
+      const deduct = lateDed + sso + unpaidAbsenceDed
+      const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
 
       list.push({
@@ -301,7 +348,7 @@ export async function GET(request: NextRequest) {
         lateDed,
         sso,
         tax: 0,
-        otherDed: 0,
+        otherDed: unpaidAbsenceDed,
         netPay,
         status: '대기',
       })
@@ -310,9 +357,11 @@ export async function GET(request: NextRequest) {
     list.sort((a, b) => (a.store !== b.store ? a.store.localeCompare(b.store) : a.name.localeCompare(b.name)))
     return NextResponse.json({ success: true, list }, { headers })
   } catch (e) {
-    console.error('getPayrollCalc:', e)
+    const errMsg = e instanceof Error ? e.message : String(e)
+    const errStack = e instanceof Error ? e.stack : ''
+    console.error('getPayrollCalc:', errMsg, errStack)
     return NextResponse.json(
-      { success: false, msg: '급여 계산 중 오류가 발생했습니다.' },
+      { success: false, msg: '급여 계산 중 오류가 발생했습니다.', detail: errMsg },
       { status: 500, headers }
     )
   }

@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Calculator, Save, Pencil, Wrench } from "lucide-react"
+import { Calculator, Save, Pencil } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -102,17 +102,6 @@ export function AdminPayrollCalc() {
     })
   }, [auth?.store])
 
-  const handleDbSetup = async () => {
-    if (!confirm(t("pay_db_setup_confirm"))) return
-    try {
-      const res = await fetch("/api/setupPayrollDB")
-      const data = await res.json()
-      alert(data.msg || t("pay_db_setup_ok"))
-    } catch {
-      alert(t("pay_error"))
-    }
-  }
-
   const handleCalc = async () => {
     setLoading(true)
     setError(null)
@@ -126,6 +115,7 @@ export function AdminPayrollCalc() {
       const res = await fetch(`/api/getPayrollCalc?${params}`)
       const data = await res.json()
       if (data.list && Array.isArray(data.list)) {
+        setError(null)
         const rows: PayrollRow[] = data.list.map((r: Record<string, unknown>) => ({
           id: String(r.id || ""),
           month: String(r.month || ""),
@@ -169,11 +159,13 @@ export function AdminPayrollCalc() {
         alert("✅ " + (t("pay_calc_done") || "계산 완료! 내용을 확인하고 저장하세요."))
       } else {
         setList([])
-        setError(data.msg || t("pay_error"))
+        const errMsg = data.detail ? `${data.msg}\n(${data.detail})` : (data.msg || t("pay_error"))
+        setError(errMsg)
       }
-    } catch {
+    } catch (e) {
       setList([])
-      setError(t("pay_error"))
+      const errMsg = e instanceof Error ? e.message : t("pay_error")
+      setError(errMsg)
     } finally {
       setLoading(false)
       setQueried(true)
@@ -298,14 +290,6 @@ export function AdminPayrollCalc() {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant="outline"
-            className="h-9 font-medium border-destructive/50 text-destructive hover:bg-destructive/10"
-            onClick={handleDbSetup}
-          >
-            <Wrench className="mr-1.5 h-3.5 w-3.5" />
-            {t("pay_db_setup")}
-          </Button>
           <Button
             className="h-9 font-medium"
             onClick={handleCalc}
