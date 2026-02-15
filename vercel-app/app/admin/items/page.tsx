@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { Tags } from "lucide-react"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
@@ -166,9 +167,14 @@ export default function ItemsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">{t("itemsMgmt")}</h1>
-          <p className="text-xs text-muted-foreground">{t("itemsMgmtSub")}</p>
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <Tags className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("itemsMgmt")}</h1>
+            <p className="text-xs text-muted-foreground">{t("itemsMgmtSub")}</p>
+          </div>
         </div>
 
         {loading && (

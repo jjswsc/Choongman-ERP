@@ -1390,3 +1390,48 @@ export async function updateChecklistItems(updates: { id: string | number; name?
   if (!res.ok) throw new Error(data.msg || '저장 실패')
   return true
 }
+
+// ─── 매장 방문 현황 ───
+export interface StoreVisitHistoryItem {
+  date: string
+  time: string
+  name: string
+  store: string
+  type: string
+  purpose: string
+  duration?: number
+}
+
+export async function getStoreVisitHistory(params: {
+  startStr: string
+  endStr: string
+  store?: string
+  employeeName?: string
+  department?: string
+}) {
+  const q = new URLSearchParams({
+    start: params.startStr,
+    end: params.endStr,
+    ...(params.store && params.store !== 'All' && { store: params.store }),
+    ...(params.employeeName && params.employeeName !== 'All' && { employeeName: params.employeeName }),
+    ...(params.department && params.department !== 'All' && { department: params.department }),
+  })
+  const res = await fetch(`/api/getStoreVisitHistory?${q}`)
+  return res.json() as Promise<StoreVisitHistoryItem[]>
+}
+
+export interface StoreVisitStatsItem {
+  label: string
+  minutes: number
+}
+
+export async function getStoreVisitStats(params: { startStr: string; endStr: string }) {
+  const q = new URLSearchParams({ start: params.startStr, end: params.endStr })
+  const res = await fetch(`/api/getStoreVisitStats?${q}`)
+  return res.json() as Promise<{
+    byDept: StoreVisitStatsItem[]
+    byEmployee: StoreVisitStatsItem[]
+    byStore: StoreVisitStatsItem[]
+    byPurpose: StoreVisitStatsItem[]
+  }>
+}

@@ -1,7 +1,7 @@
 "use client"
 
-import { AdminPlaceholder } from "@/components/admin/admin-placeholder"
+import { AdminStoreVisit } from "@/components/admin/admin-store-visit"
 
 export default function Page() {
-  return <AdminPlaceholder title="매장 방문 현황" />
+  return <AdminStoreVisit />
 }
