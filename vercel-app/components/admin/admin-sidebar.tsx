@@ -41,8 +41,8 @@ export function AdminSidebar() {
     <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-black/40 bg-[#0a0a0a]">
       {/* Logo / Title */}
       <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
-          <span className="text-sm font-bold text-white">CM</span>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/10">
+          <img src="/img/logo.png" alt="CHOONGMAN CHICKEN" className="h-full w-full object-contain" />
         </div>
         <span className="truncate font-bold text-white">충만치킨 ERP</span>
       </div>

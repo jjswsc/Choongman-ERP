@@ -21,7 +21,6 @@ import {
   getLoginData,
   getAdminEmployeeList,
   getStoreVisitHistory,
-  getStoreVisitStats,
   type StoreVisitHistoryItem,
   type StoreVisitStatsItem,
 } from "@/lib/api-client"
@@ -93,6 +92,7 @@ export function AdminStoreVisit() {
     byPurpose: [],
   })
   const [statsLoading, setStatsLoading] = useState(false)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   const loadOptions = useCallback(async () => {
     const [loginRes, empRes] = await Promise.all([
@@ -147,15 +147,29 @@ export function AdminStoreVisit() {
       return
     }
     setStatsLoading(true)
+    setStatsError(null)
     try {
-      const data = await getStoreVisitStats({ startStr: statsStart, endStr: statsEnd })
-      setStatsData(data || { byDept: [], byEmployee: [], byStore: [], byPurpose: [] })
-    } catch {
+      const res = await fetch(`/api/getStoreVisitStats?start=${statsStart}&end=${statsEnd}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setStatsError(data?.message || String(res.status))
+        setStatsData({ byDept: [], byEmployee: [], byStore: [], byPurpose: [] })
+      } else {
+        setStatsData(data || { byDept: [], byEmployee: [], byStore: [], byPurpose: [] })
+      }
+    } catch (e) {
+      setStatsError(e instanceof Error ? e.message : String(e))
       setStatsData({ byDept: [], byEmployee: [], byStore: [], byPurpose: [] })
     } finally {
       setStatsLoading(false)
     }
   }, [statsStart, statsEnd, statsShowDept, statsShowEmployee, statsShowStore, statsShowPurpose, t])
+
+  useEffect(() => {
+    if (tab === "stats" && (statsShowDept || statsShowEmployee || statsShowStore || statsShowPurpose)) {
+      loadStats()
+    }
+  }, [tab, statsShowDept, statsShowEmployee, statsShowStore, statsShowPurpose, loadStats])
 
   const maxMinutes = Math.max(
     ...statsData.byDept.map((x) => x.minutes),
@@ -318,6 +332,57 @@ export function AdminStoreVisit() {
                   </Button>
                 </div>
 
+                {statsError && (
+                  <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {t("visit_stats_error") || "통계 조회 오류"}: {statsError}
+                  </div>
+                )}
+                <div className="mb-4 overflow-x-auto">
+                  <table className="w-full min-w-[320px] border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="p-2 text-left font-medium">{t("visit_stat_category") || "구분"}</th>
+                        <th className="p-2 text-left font-medium">{t("visit_stat_item") || "항목"}</th>
+                        <th className="p-2 text-right font-medium">{t("visit_col_duration")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statsShowDept && statsData.byDept.map((it) => (
+                        <tr key={"dept-" + it.label} className="border-b border-border/40">
+                          <td className="p-2">{t("visit_chart_dept")}</td>
+                          <td className="p-2 font-medium">{it.label}</td>
+                          <td className="p-2 text-right">{it.minutes}분</td>
+                        </tr>
+                      ))}
+                      {statsShowEmployee && statsData.byEmployee.map((it) => (
+                        <tr key={"emp-" + it.label} className="border-b border-border/40">
+                          <td className="p-2">{t("visit_chart_employee")}</td>
+                          <td className="p-2 font-medium">{it.label}</td>
+                          <td className="p-2 text-right">{it.minutes}분</td>
+                        </tr>
+                      ))}
+                      {statsShowStore && statsData.byStore.map((it) => (
+                        <tr key={"store-" + it.label} className="border-b border-border/40">
+                          <td className="p-2">{t("visit_chart_store")}</td>
+                          <td className="p-2 font-medium">{it.label}</td>
+                          <td className="p-2 text-right">{it.minutes}분</td>
+                        </tr>
+                      ))}
+                      {statsShowPurpose && statsData.byPurpose.map((it) => (
+                        <tr key={"purpose-" + it.label} className="border-b border-border/40">
+                          <td className="p-2">{t("visit_chart_purpose")}</td>
+                          <td className="p-2 font-medium">{it.label}</td>
+                          <td className="p-2 text-right">{it.minutes}분</td>
+                        </tr>
+                      ))}
+                      {!statsLoading && !statsError && statsData.byDept.length === 0 && statsData.byEmployee.length === 0 && statsData.byStore.length === 0 && statsData.byPurpose.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="p-6 text-center text-muted-foreground">{t("visit_stats_no_data") || "해당 기간에 집계된 방문 데이터가 없습니다."}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   {statsShowDept && (
                     <div className="rounded-lg border p-4">

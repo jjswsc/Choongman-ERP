@@ -136,6 +136,19 @@ function supabaseDelete(table, id) {
   return true;
 }
 
+/** DELETE: filter 조건으로 삭제 (예: "id=in.(1,2,3)" 또는 "store_name=eq.A") */
+function supabaseDeleteByFilter(table, filter) {
+  var config = getSupabaseConfig();
+  var url = config.url + '/rest/v1/' + encodeURIComponent(table) + '?' + filter;
+  var res = UrlFetchApp.fetch(url, {
+    method: 'delete',
+    headers: { 'apikey': config.key, 'Authorization': 'Bearer ' + config.key },
+    muteHttpExceptions: true
+  });
+  if (res.getResponseCode() >= 400) throw new Error('Supabase delete failed: ' + res.getContentText());
+  return true;
+}
+
 /** RPC 또는 raw filter 조회 (filter 예: "store_name=eq.StoreA") */
 function supabaseSelectFilter(table, filter, options) {
   var config = getSupabaseConfig();

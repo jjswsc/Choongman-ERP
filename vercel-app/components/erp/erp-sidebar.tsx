@@ -124,10 +124,9 @@ export function ErpSidebar() {
       <SidebarHeader className="px-3 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
           <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/90">
-            {/* 회사 로고: public/logo.png 또는 logo.svg를 교체하세요 */}
             <Image
-              src="/logo.svg"
-              alt="Logo"
+              src="/img/logo.png"
+              alt="CHOONGMAN CHICKEN"
               width={36}
               height={36}
               className="object-contain"
