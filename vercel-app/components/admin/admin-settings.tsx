@@ -298,10 +298,54 @@ export function AdminSettings() {
 
           <TabsContent value="about" className="mt-4">
             <Card>
-              <CardContent className="pt-6">
-                <p className="mb-3 text-sm">{t("settings_permission_hq")}</p>
-                <p className="mb-3 text-sm">{t("settings_permission_store")}</p>
-                <p className="text-sm text-muted-foreground">{t("settings_permission_note")}</p>
+              <CardContent className="pt-6 space-y-6">
+                <p className="text-sm text-muted-foreground">{t("settings_perm_intro")}</p>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-foreground">{t("settings_perm_role_director")}</h3>
+                  <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_director_desc")}</p>
+
+                  <h3 className="text-sm font-bold text-foreground mt-4">{t("settings_perm_role_officer")}</h3>
+                  <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_officer_desc")}</p>
+
+                  <h3 className="text-sm font-bold text-foreground mt-4">{t("settings_perm_role_manager")}</h3>
+                  <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_manager_desc")}</p>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-3">{t("settings_perm_table_title")}</h4>
+                  <div className="overflow-x-auto rounded-lg border text-sm">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left p-2.5 font-medium border-b">{t("settings_perm_table_col_menu")}</th>
+                          <th className="text-left p-2.5 font-medium border-b w-48">{t("settings_perm_table_col_mgr")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b"><td className="p-2.5">{t("adminWorkLog")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminItems")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminVendors")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminOrders")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_no_edit")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminStock")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_stock_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminInbound")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminOutbound")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminForce")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminEmployees")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminAttendance")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminLeave")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminPayroll")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminPettyCash")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminStoreCheck")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminStoreVisit")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5">{t("adminComplaints")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr><td className="p-2.5">{t("adminSettings")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground pt-2">{t("settings_permission_note")}</p>
               </CardContent>
             </Card>
           </TabsContent>
