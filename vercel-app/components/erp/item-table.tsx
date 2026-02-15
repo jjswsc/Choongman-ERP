@@ -24,6 +24,17 @@ import {
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
+/** Google Drive view URL → img src용 직접 링크로 변환 */
+function toImageUrl(url: string): string {
+  const s = String(url || '').trim()
+  if (!s) return s
+  const m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
+  if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`
+  const m2 = s.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/)
+  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`
+  return s
+}
+
 export interface ItemTableProps {
   products: Product[]
   categories: string[]
@@ -143,7 +154,7 @@ export function ItemTable({
                         variant="outline"
                         size="sm"
                         className="h-6 px-1.5 text-[10px] font-semibold gap-0.5"
-                        onClick={() => setImagePreview({ url: product.imageUrl!, name: product.name })}
+                        onClick={() => setImagePreview({ url: toImageUrl(product.imageUrl!), name: product.name })}
                       >
                         <ImageIcon className="h-2.5 w-2.5" />
                         {t("photo")}
@@ -207,7 +218,16 @@ export function ItemTable({
               src={imagePreview.url}
               alt={imagePreview.name}
               className="max-h-[70vh] max-w-full rounded-lg object-contain"
+              referrerPolicy="no-referrer"
             />
+            <a
+              href={imagePreview.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block text-xs text-primary underline hover:no-underline"
+            >
+              새 탭에서 열기
+            </a>
             <Button
               variant="outline"
               size="sm"

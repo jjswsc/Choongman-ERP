@@ -24,6 +24,16 @@ function hasValidImage(url: string | undefined): boolean {
   return s.length > 10 && (s.startsWith("http") || s.startsWith("data:image"))
 }
 
+function toImageUrl(url: string): string {
+  const s = String(url || '').trim()
+  if (!s) return s
+  const m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
+  if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`
+  const m2 = s.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/)
+  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`
+  return s
+}
+
 function formatStock(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
@@ -208,12 +218,12 @@ export function UsageTab() {
                                   title={hasImg ? t("photo") : t("noImage")}
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    if (hasImg) setImageModal({ url: item.image!, name: item.name })
+                                    if (hasImg) setImageModal({ url: toImageUrl(item.image!), name: item.name })
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" && hasImg) {
                                       e.stopPropagation()
-                                      setImageModal({ url: item.image!, name: item.name })
+                                      setImageModal({ url: toImageUrl(item.image!), name: item.name })
                                     }
                                   }}
                                   role="button"
