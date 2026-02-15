@@ -1308,3 +1308,85 @@ export async function saveEvaluationResult(params: {
   if (!res.ok) throw new Error(text || '저장 실패')
   return text as 'SAVED' | 'UPDATED'
 }
+
+// ─── 매장 점검 ───
+export interface ChecklistItem {
+  id: number
+  main: string
+  sub: string
+  name: string
+  use?: boolean
+}
+
+export async function getChecklistItems(activeOnly = true) {
+  const q = new URLSearchParams({ activeOnly: String(activeOnly) })
+  const res = await fetch(`/api/getChecklistItems?${q}`)
+  return res.json() as Promise<ChecklistItem[]>
+}
+
+export async function saveCheckResult(params: {
+  id?: string
+  date: string
+  store: string
+  inspector: string
+  summary: string
+  memo: string
+  jsonData: string | unknown
+}) {
+  const res = await fetch('/api/saveCheckResult', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.msg || '저장 실패')
+  return data.result as 'SAVED' | 'UPDATED'
+}
+
+export interface CheckHistoryItem {
+  id: string
+  date: string
+  store: string
+  inspector: string
+  result: string
+  memo?: string
+  json?: string
+}
+
+export async function getCheckHistory(params: {
+  startStr: string
+  endStr: string
+  store?: string
+  inspector?: string
+}) {
+  const q = new URLSearchParams({
+    start: params.startStr,
+    end: params.endStr,
+    ...(params.store && params.store !== 'All' && { store: params.store }),
+    ...(params.inspector && { inspector: params.inspector }),
+  })
+  const res = await fetch(`/api/getCheckHistory?${q}`)
+  return res.json() as Promise<CheckHistoryItem[]>
+}
+
+export async function deleteCheckHistory(id: string) {
+  const res = await fetch('/api/deleteCheckHistory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.msg || '삭제 실패')
+  return true
+}
+
+export async function updateChecklistItems(updates: { id: string | number; name?: string; use?: boolean }[]) {
+  const res = await fetch('/api/updateChecklistItems', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ updates }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.msg || '저장 실패')
+  return true
+}
