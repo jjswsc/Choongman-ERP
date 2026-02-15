@@ -123,6 +123,7 @@ export function AdminStoreCheck() {
     setLoadFormLoading(true)
     setCheckRows([])
     setEditId("")
+    setViewOnlyMode(false)
     setTotalMemo("")
     try {
       const items = await getChecklistItems(true)
@@ -147,7 +148,10 @@ export function AdminStoreCheck() {
     }
   }
 
-  const loadHistoryIntoForm = async (h: CheckHistoryItem) => {
+  const [viewOnlyMode, setViewOnlyMode] = useState(false)
+
+  const loadHistoryIntoForm = async (h: CheckHistoryItem, readOnly = false) => {
+    setViewOnlyMode(readOnly)
     setStoreSelect(h.store)
     setDateSelect(h.date)
     setEditId(h.id)
@@ -370,11 +374,11 @@ export function AdminStoreCheck() {
                     <thead className="sticky top-0 bg-muted z-10">
                       <tr className="border-b">
                         <th className="p-2 text-center w-12 font-medium">{t("store_no")}</th>
-                        <th className="p-2 text-left w-28 font-medium">{t("store_cat_main")}</th>
-                        <th className="p-2 text-left w-32 font-medium">{t("store_cat_sub")}</th>
-                        <th className="p-2 text-left font-medium">{t("store_check_item")}</th>
+                        <th className="p-2 text-center w-28 font-medium">{t("store_cat_main")}</th>
+                        <th className="p-2 text-center w-32 font-medium">{t("store_cat_sub")}</th>
+                        <th className="p-2 text-center font-medium">{t("store_check_item")}</th>
                         <th className="p-2 text-center w-24 font-medium">{t("store_check")}</th>
-                        <th className="p-2 text-left w-40 font-medium">{t("store_remark")}</th>
+                        <th className="p-2 text-center w-40 font-medium">{t("store_remark")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -388,32 +392,35 @@ export function AdminStoreCheck() {
                         checkRows.map((r, idx) => (
                           <tr key={r.id} className="border-b border-border/60 hover:bg-muted/30">
                             <td className="p-2 text-center font-medium">{r.id}</td>
-                            <td className="p-2">{tr(r.main)}</td>
-                            <td className="p-2">{tr(r.sub)}</td>
-                            <td className="p-2">{tr(r.name)}</td>
+                            <td className="p-2 text-center">{tr(r.main)}</td>
+                            <td className="p-2 text-center">{tr(r.sub)}</td>
+                            <td className="p-2 text-center">{tr(r.name)}</td>
                             <td className="p-2">
                               <div className="flex gap-1 justify-center">
                                 <Button
                                   size="sm"
                                   variant={r.val === "O" ? "default" : "outline"}
                                   className="h-7 px-2 text-xs"
-                                  onClick={() => updateCheckRow(idx, "val", "O")}
+                                  onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "O")}
+                                  disabled={viewOnlyMode}
                                 >O</Button>
                                 <Button
                                   size="sm"
                                   variant={r.val === "X" ? "destructive" : "outline"}
                                   className="h-7 px-2 text-xs"
-                                  onClick={() => updateCheckRow(idx, "val", "X")}
+                                  onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "X")}
+                                  disabled={viewOnlyMode}
                                 >X</Button>
                               </div>
                             </td>
                             <td className="p-2">
-                              <div>
+                              <div className="flex flex-col items-center">
                                 <Input
-                                  className="h-7 text-xs"
+                                  className="h-7 text-xs w-full max-w-xs"
                                   value={r.remark}
-                                  onChange={(e) => updateCheckRow(idx, "remark", e.target.value)}
+                                  onChange={(e) => !viewOnlyMode && updateCheckRow(idx, "remark", e.target.value)}
                                   placeholder=""
+                                  readOnly={viewOnlyMode}
                                 />
                                 {r.remark?.trim() && transMap[r.remark.trim()] && (
                                   <p className="text-[11px] text-muted-foreground mt-1 font-medium" title={r.remark}>{tr(r.remark)}</p>
@@ -433,8 +440,9 @@ export function AdminStoreCheck() {
                     <Input
                       className="text-xs"
                       value={totalMemo}
-                      onChange={(e) => setTotalMemo(e.target.value)}
+                      onChange={(e) => !viewOnlyMode && setTotalMemo(e.target.value)}
                       placeholder=""
+                      readOnly={viewOnlyMode}
                     />
                     {totalMemo?.trim() && transMap[totalMemo.trim()] && (
                       <p className="text-xs text-muted-foreground mt-1 font-medium" title={totalMemo}>{tr(totalMemo)}</p>
@@ -442,7 +450,7 @@ export function AdminStoreCheck() {
                     <Button
                       className="w-full mt-4 py-6 font-bold"
                       onClick={handleSaveCheck}
-                      disabled={saveLoading}
+                      disabled={saveLoading || viewOnlyMode}
                     >
                       <Save className="mr-2 h-4 w-4" />
                       {saveLoading ? t("loading") : t("store_save_check")}
@@ -516,10 +524,10 @@ export function AdminStoreCheck() {
                             <td className="p-2 text-center">{h.result}</td>
                             <td className="p-2">
                               <div className="flex gap-1 justify-center">
-                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h)}>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h, true)} title={lang === "ko" ? "보기 (수정 불가)" : "View (read-only)"}>
                                   <Eye className="h-3 w-3" />
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h)}>
+                                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => loadHistoryIntoForm(h, false)} title={lang === "ko" ? "수정하기" : "Edit"}>
                                   <Pencil className="h-3 w-3" />
                                 </Button>
                                 <Button size="sm" variant="destructive" className="h-7 px-2" onClick={() => handleDeleteHistory(h.id)}>
@@ -552,26 +560,26 @@ export function AdminStoreCheck() {
 
                   <div className="flex flex-wrap items-end gap-2 mb-4 p-3 rounded border bg-muted/30">
                     <Input
-                      className="h-8 w-24 text-xs"
+                      className="h-8 w-36 min-w-[140px] text-xs"
                       value={newMain}
                       onChange={(e) => setNewMain(e.target.value)}
                       placeholder={t("store_cat_main")}
                     />
                     <Input
-                      className="h-8 w-24 text-xs"
+                      className="h-8 w-36 min-w-[140px] text-xs"
                       value={newSub}
                       onChange={(e) => setNewSub(e.target.value)}
                       placeholder={t("store_cat_sub")}
                     />
                     <Input
-                      className="h-8 w-32 text-xs"
+                      className="h-8 w-48 min-w-[200px] text-xs flex-1"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       placeholder={t("store_check_item")}
                     />
                     <Button size="sm" className="h-8" onClick={handleAddCheckItem} disabled={settingAdding}>
                       <Plus className="mr-1 h-3.5 w-3.5" />
-                      {settingAdding ? t("loading") : (lang === "ko" ? "추가" : "Add")}
+                      {settingAdding ? t("loading") : t("btn_add")}
                     </Button>
                   </div>
 

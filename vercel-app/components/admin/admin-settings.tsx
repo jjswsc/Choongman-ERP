@@ -213,24 +213,24 @@ export function AdminSettings() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label className="text-xs font-semibold block mb-1">{t("settings_company_name")}</label>
-                    <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="h-9 text-xs" placeholder="본사 회사명" />
+                    <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="h-9 text-xs" placeholder={t("settings_ph_company")} />
                   </div>
                   <div>
                     <label className="text-xs font-semibold block mb-1">{t("settings_tax_id")}</label>
-                    <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} className="h-9 text-xs" placeholder="사업자번호" />
+                    <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} className="h-9 text-xs" placeholder={t("settings_ph_tax_id")} />
                   </div>
                 </div>
                 <div className="mt-3">
                   <label className="text-xs font-semibold block mb-1">{t("settings_address")}</label>
-                  <Input value={address} onChange={(e) => setAddress(e.target.value)} className="h-9 text-xs" placeholder="본사 주소" />
+                  <Input value={address} onChange={(e) => setAddress(e.target.value)} className="h-9 text-xs" placeholder={t("settings_ph_address")} />
                 </div>
                 <div className="mt-3">
                   <label className="text-xs font-semibold block mb-1">{t("settings_phone")}</label>
-                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="h-9 text-xs" placeholder="전화번호" />
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} className="h-9 text-xs" placeholder={t("settings_ph_phone")} />
                 </div>
                 <div className="mt-3">
                   <label className="text-xs font-semibold block mb-1">{t("settings_bank_info")}</label>
-                  <Input value={bankInfo} onChange={(e) => setBankInfo(e.target.value)} className="h-9 text-xs" placeholder="은행명, 계좌번호, 예금주 등" />
+                  <Input value={bankInfo} onChange={(e) => setBankInfo(e.target.value)} className="h-9 text-xs" placeholder={t("settings_ph_bank")} />
                 </div>
                 <Button className="mt-4 h-9" onClick={handleSaveOffice} disabled={officeSaving}>
                   {officeSaving ? t("loading") : t("settings_save_btn")}
@@ -315,31 +315,35 @@ export function AdminSettings() {
                 <div>
                   <h4 className="text-sm font-semibold mb-3">{t("settings_perm_table_title")}</h4>
                   <div className="overflow-x-auto rounded-lg border text-sm">
-                    <table className="w-full border-collapse">
+                    <table className="w-full border-collapse table-fixed">
+                      <colgroup>
+                        <col className="w-[30%]" />
+                        <col className="w-[70%]" />
+                      </colgroup>
                       <thead>
                         <tr className="bg-muted/50">
-                          <th className="text-left p-2.5 font-medium border-b">{t("settings_perm_table_col_menu")}</th>
-                          <th className="text-left p-2.5 font-medium border-b w-48">{t("settings_perm_table_col_mgr")}</th>
+                          <th className="text-center p-2.5 font-medium border-b">{t("settings_perm_table_col_menu")}</th>
+                          <th className="text-center p-2.5 font-medium border-b">{t("settings_perm_table_col_mgr")}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="border-b"><td className="p-2.5">{t("adminWorkLog")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminItems")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminVendors")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminOrders")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_no_edit")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminStock")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_stock_note")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminInbound")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminOutbound")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminForce")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminEmployees")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminAttendance")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminLeave")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminPayroll")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminPettyCash")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminStoreCheck")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminStoreVisit")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5">{t("adminComplaints")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr><td className="p-2.5">{t("adminSettings")}</td><td className="p-2.5 text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminWorkLog")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminItems")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminVendors")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminOrders")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_no_edit")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminStock")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_stock_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminInbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminOutbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminForce")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminAttendance")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminLeave")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminPayroll")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminPettyCash")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreCheck")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreVisit")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminComplaints")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr><td className="p-2.5 text-center">{t("adminSettings")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                       </tbody>
                     </table>
                   </div>

@@ -8,9 +8,9 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('end') || searchParams.get('endStr') || '2100-12-31').slice(0, 10)
 
   try {
+    const rangeFilter = `visit_date=gte.${startStr}&visit_date=lte.${endStr}`
     let visitData: { name?: string; store_name?: string; purpose?: string; duration_min?: number; visit_date?: string }[] = []
     try {
-      const rangeFilter = `and=(visit_date.gte.${startStr},visit_date.lte.${endStr})`
       visitData = (await supabaseSelectFilter('store_visits', rangeFilter, {
         order: 'visit_date',
         limit: 2000,
@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
 
     for (const d of visitData || []) {
       const duration = Number(d.duration_min) || 0
-      if (duration <= 0) continue
       const name = String(d.name || '').trim()
       const store = String(d.store_name || '').trim()
       const purpose = String(d.purpose || '').trim() || '기타'

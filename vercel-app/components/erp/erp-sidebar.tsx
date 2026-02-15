@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
@@ -122,8 +123,23 @@ export function ErpSidebar() {
       {/* Logo */}
       <SidebarHeader className="px-3 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary-foreground">
+          <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/90">
+            {/* 회사 로고: public/logo.png 또는 logo.svg를 교체하세요 */}
+            <Image
+              src="/logo.svg"
+              alt="Logo"
+              width={36}
+              height={36}
+              className="object-contain"
+              unoptimized
+              onError={(e) => {
+                const img = e.target as HTMLImageElement
+                img.style.display = "none"
+                const fallback = img.closest("div")?.querySelector("svg")
+                if (fallback instanceof HTMLElement) fallback.style.display = "block"
+              }}
+            />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-primary-foreground" style={{ display: "none" }}>
               <path d="M3 3v18h18" />
               <path d="M18 9V3" />
               <path d="M3 15l6-6 4 4 8-8" />
