@@ -8,7 +8,8 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('end') || searchParams.get('endStr') || '2100-12-31').slice(0, 10)
 
   try {
-    const visitData = (await supabaseSelectFilter('store_visits', `visit_date=gte.${startStr}&visit_date=lte.${endStr}`, {
+    const rangeFilter = `and=(visit_date.gte.%22${startStr}%22,visit_date.lte.%22${endStr}%22)`
+    const visitData = (await supabaseSelectFilter('store_visits', rangeFilter, {
       order: 'visit_date',
       limit: 2000,
     })) as { name?: string; store_name?: string; purpose?: string; duration_min?: number }[]

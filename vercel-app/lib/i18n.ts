@@ -184,9 +184,9 @@ export const i18n = {
     visitDuration: '체류',
     // 패티 캐쉬
     tabPettyCash: '회계',
-    pettyCashTitle: '💵 패티 캐쉬',
-    pettyTabList: '📋 내역',
-    pettyTabMonthly: '📊 월별 현황',
+    pettyCashTitle: '패티 캐쉬',
+    pettyTabList: '내역',
+    pettyTabMonthly: '월별 현황',
     pettyNoData: '데이터가 없습니다',
     pettyColDate: '날짜',
     pettyColType: '유형',
@@ -1269,9 +1269,9 @@ export const i18n = {
     visitType: 'Type',
     visitDuration: 'Duration',
     tabPettyCash: 'Accounting',
-    pettyCashTitle: '💵 Petty Cash',
-    pettyTabList: '📋 List',
-    pettyTabMonthly: '📊 Monthly',
+    pettyCashTitle: 'Petty Cash',
+    pettyTabList: 'List',
+    pettyTabMonthly: 'Monthly',
     pettyNoData: 'No data',
     pettyColDate: 'Date',
     pettyColType: 'Type',
@@ -2333,7 +2333,7 @@ export const i18n = {
     visitTitle: 'เยี่ยมสาขา', visitSub: 'บันทึกกิจกรรมสนับสนุนและฝึกอบรม', visitStore: 'สาขาที่เยี่ยม', visitStorePlaceholder: 'เลือกสาขา',
     visitPurpose: 'วัตถุประสงค์', visitPurposeInspect: 'ตรวจสอบ', visitPurposeTraining: 'ฝึกอบรม', visitPurposeUrgent: 'สนับสนุนด่วน', visitPurposeMeeting: 'ประชุม', visitPurposeEtc: 'อื่นๆ',
     visitStart: 'เริ่มเยี่ยม', visitEnd: 'สิ้นสุดเยี่ยม', visitSupporting: 'กำลังเยี่ยม', todayVisitLog: 'บันทึกวันนี้', visitLogEmpty: 'ไม่มีบันทึก', visitErrSelectStore: 'เลือกสาขา', visitOfficeOnly: 'เฉพาะ HQ',     visitType: 'ประเภท', visitDuration: 'ระยะเวลา',
-    tabPettyCash: 'บัญชี', pettyCashTitle: '💵 เงินสดย่อย', pettyTabList: '📋 รายการ', pettyTabMonthly: '📊 รายเดือน', pettyNoData: 'ไม่มีข้อมูล', pettyColDate: 'วันที่', pettyColType: 'ประเภท',
+    tabPettyCash: 'บัญชี', pettyCashTitle: 'เงินสดย่อย', pettyTabList: 'รายการ', pettyTabMonthly: 'รายเดือน', pettyNoData: 'ไม่มีข้อมูล', pettyColDate: 'วันที่', pettyColType: 'ประเภท',
     pettyTypeReceive: 'รับ',
     pettyTypeExpense: 'จ่าย',
     pettyTypeReplenish: 'เติม',
@@ -3289,7 +3289,7 @@ export const i18n = {
     visitTitle: 'ဆိုင်သွားရောက်', visitSub: 'ပံ့ပိုးမှုမှတ်တမ်း', visitStore: 'သွားမည့်ဆိုင်', visitStorePlaceholder: 'ဆိုင်ရွေး',
     visitPurpose: 'ဦးတည်ချက်', visitPurposeInspect: 'ကြည့်ရှု', visitPurposeTraining: 'သင်ကြား', visitPurposeUrgent: 'အရေးပေါ်', visitPurposeMeeting: 'တွေ့ဆုံ', visitPurposeEtc: 'အခြား',
     visitStart: 'စတင်မည်', visitEnd: 'ပြီးမည်', visitSupporting: 'သွားနေသည်', todayVisitLog: 'ယနေ့မှတ်တမ်း', visitLogEmpty: 'မှတ်တမ်းမရှိ', visitErrSelectStore: 'ဆိုင်ရွေးပါ', visitOfficeOnly: 'HQ သက်သက်',     visitType: 'အမျိုးအစား', visitDuration: 'ကြာချိန်',
-    tabPettyCash: 'စာရင်းကိုင်', pettyCashTitle: '💵 ငယ်ငယ်သုံးငွေ', pettyTabList: '📋 စာရင်း', pettyTabMonthly: '📊 လစဉ်', pettyNoData: 'ဒေတာမရှိပါ', pettyColDate: 'ရက်စွဲ', pettyColType: 'အမျိုးအစား',
+    tabPettyCash: 'စာရင်းကိုင်', pettyCashTitle: 'ငယ်ငယ်သုံးငွေ', pettyTabList: 'စာရင်း', pettyTabMonthly: 'လစဉ်', pettyNoData: 'ဒေတာမရှိပါ', pettyColDate: 'ရက်စွဲ', pettyColType: 'အမျိုးအစား',
     pettyTypeReceive: 'လက်ခံ',
     pettyTypeExpense: 'ထုတ်ယူ',
     pettyTypeReplenish: 'ဖြည့်တင်းမည်',
@@ -4245,7 +4245,7 @@ export const i18n = {
     visitTitle: 'ໄປສາຂາ', visitSub: 'ບັນທຶກການສະໜັບສະໜູນ', visitStore: 'ສາຂາທີ່ໄປ', visitStorePlaceholder: 'ເລືອກສາຂາ',
     visitPurpose: 'ຈຸດປະສົງ', visitPurposeInspect: 'ກວດກາ', visitPurposeTraining: 'ຝຶກອົບຮົມ', visitPurposeUrgent: 'ດ່ວນ', visitPurposeMeeting: 'ປະຊຸມ', visitPurposeEtc: 'ອື່ນໆ',
     visitStart: 'ເລີ່ມໄປ', visitEnd: 'ສິ້ນສຸດ', visitSupporting: 'ກຳລັງໄປ', todayVisitLog: 'ບັນທຶກມື້ນີ້', visitLogEmpty: 'ບໍ່ມີບັນທຶກ', visitErrSelectStore: 'ເລືອກສາຂາ', visitOfficeOnly: 'ເຈົ້າຫນ້າຮ້ານເທົ່ານັ້ນ',     visitType: 'ປະເພດ', visitDuration: 'ເວລາ',
-    tabPettyCash: 'ບັນຊີ', pettyCashTitle: '💵 ເງິນສົດນ້ອຍ', pettyTabList: '📋 ລາຍການ', pettyTabMonthly: '📊 ປະຈຳເດືອນ', pettyNoData: 'ບໍ່ມີຂໍ້ມູນ', pettyColDate: 'ວັນທີ', pettyColType: 'ປະເພດ',
+    tabPettyCash: 'ບັນຊີ', pettyCashTitle: 'ເງິນສົດນ້ອຍ', pettyTabList: 'ລາຍການ', pettyTabMonthly: 'ປະຈຳເດືອນ', pettyNoData: 'ບໍ່ມີຂໍ້ມູນ', pettyColDate: 'ວັນທີ', pettyColType: 'ປະເພດ',
     pettyTypeReceive: 'ຮັບ',
     pettyTypeExpense: 'ຈ່າຍ',
     pettyTypeReplenish: 'ເຕີມ',

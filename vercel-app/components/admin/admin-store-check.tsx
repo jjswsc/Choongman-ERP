@@ -24,6 +24,7 @@ import {
   getCheckHistory,
   deleteCheckHistory,
   updateChecklistItems,
+  translateTexts,
   type ChecklistItem,
   type CheckHistoryItem,
 } from "@/lib/api-client"
@@ -60,9 +61,42 @@ export function AdminStoreCheck() {
   const [settingItems, setSettingItems] = useState<ChecklistItem[]>([])
   const [settingLoading, setSettingLoading] = useState(false)
   const [settingSaving, setSettingSaving] = useState(false)
+  const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const isHQ = auth?.role === "director" || auth?.role === "officer"
   const inspectorName = auth?.user || auth?.store || ""
+
+  // 로그인 언어로 점검 항목/비고 자동 번역
+  useEffect(() => {
+    const texts = new Set<string>()
+    for (const r of checkRows) {
+      if (r.main?.trim()) texts.add(r.main.trim())
+      if (r.sub?.trim()) texts.add(r.sub.trim())
+      if (r.name?.trim()) texts.add(r.name.trim())
+      if (r.remark?.trim()) texts.add(r.remark.trim())
+    }
+    for (const it of settingItems) {
+      if (it.main?.trim()) texts.add(it.main.trim())
+      if (it.sub?.trim()) texts.add(it.sub.trim())
+      if (it.name?.trim()) texts.add(it.name.trim())
+    }
+    if (totalMemo?.trim()) texts.add(totalMemo.trim())
+    const arr = Array.from(texts)
+    if (arr.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(arr, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const m: Record<string, string> = {}
+        arr.forEach((s, i) => { m[s] = translated[i] ?? s })
+        setTransMap(m)
+      })
+      .catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [checkRows, totalMemo, settingItems, lang])
 
   useEffect(() => {
     if (!auth?.store) return
@@ -240,6 +274,8 @@ export function AdminStoreCheck() {
     )
   }
 
+  const tr = (s: string) => (s && transMap[s]) || s || ""
+
   const updateSettingItem = (idx: number, field: "name" | "use", value: string | boolean) => {
     setSettingItems((prev) =>
       prev.map((it, i) => (i === idx ? (field === "name" ? { ...it, name: String(value) } : { ...it, use: !!value }) : it))
@@ -321,9 +357,9 @@ export function AdminStoreCheck() {
                         checkRows.map((r, idx) => (
                           <tr key={r.id} className="border-b border-border/60 hover:bg-muted/30">
                             <td className="p-2 text-center font-medium">{r.id}</td>
-                            <td className="p-2">{r.main}</td>
-                            <td className="p-2">{r.sub}</td>
-                            <td className="p-2">{r.name}</td>
+                            <td className="p-2">{tr(r.main)}</td>
+                            <td className="p-2">{tr(r.sub)}</td>
+                            <td className="p-2">{tr(r.name)}</td>
                             <td className="p-2">
                               <div className="flex gap-1 justify-center">
                                 <Button
@@ -341,12 +377,17 @@ export function AdminStoreCheck() {
                               </div>
                             </td>
                             <td className="p-2">
-                              <Input
-                                className="h-7 text-xs"
-                                value={r.remark}
-                                onChange={(e) => updateCheckRow(idx, "remark", e.target.value)}
-                                placeholder=""
-                              />
+                              <div>
+                                <Input
+                                  className="h-7 text-xs"
+                                  value={r.remark}
+                                  onChange={(e) => updateCheckRow(idx, "remark", e.target.value)}
+                                  placeholder=""
+                                />
+                                {r.remark?.trim() && transMap[r.remark.trim()] && transMap[r.remark.trim()] !== r.remark.trim() && (
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">{tr(r.remark)}</p>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -364,6 +405,9 @@ export function AdminStoreCheck() {
                       onChange={(e) => setTotalMemo(e.target.value)}
                       placeholder=""
                     />
+                    {totalMemo?.trim() && transMap[totalMemo.trim()] && transMap[totalMemo.trim()] !== totalMemo.trim() && (
+                      <p className="text-xs text-muted-foreground mt-1">{tr(totalMemo)}</p>
+                    )}
                     <Button
                       className="w-full mt-4 py-6 font-bold"
                       onClick={handleSaveCheck}
@@ -490,8 +534,8 @@ export function AdminStoreCheck() {
                         {settingItems.map((it, idx) => (
                           <tr key={it.id} className="border-b border-border/60">
                             <td className="p-2 text-center">{it.id}</td>
-                            <td className="p-2">{it.main}</td>
-                            <td className="p-2">{it.sub}</td>
+                            <td className="p-2">{tr(it.main)}</td>
+                            <td className="p-2">{tr(it.sub)}</td>
                             <td className="p-2">
                               <Input
                                 className="h-7 text-xs"

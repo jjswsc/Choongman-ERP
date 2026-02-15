@@ -1408,6 +1408,7 @@ export async function getStoreVisitHistory(params: {
   store?: string
   employeeName?: string
   department?: string
+  purpose?: string
 }) {
   const q = new URLSearchParams({
     start: params.startStr,
@@ -1415,6 +1416,7 @@ export async function getStoreVisitHistory(params: {
     ...(params.store && params.store !== 'All' && { store: params.store }),
     ...(params.employeeName && params.employeeName !== 'All' && { employeeName: params.employeeName }),
     ...(params.department && params.department !== 'All' && { department: params.department }),
+    ...(params.purpose && { purpose: params.purpose }),
   })
   const res = await fetch(`/api/getStoreVisitHistory?${q}`)
   return res.json() as Promise<StoreVisitHistoryItem[]>

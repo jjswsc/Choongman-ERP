@@ -68,6 +68,7 @@ export function AdminStoreVisit() {
   const [listStore, setListStore] = useState("All")
   const [listDept, setListDept] = useState("All")
   const [listEmployee, setListEmployee] = useState("All")
+  const [listPurpose, setListPurpose] = useState("")
   const [historyList, setHistoryList] = useState<StoreVisitHistoryItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
@@ -122,6 +123,7 @@ export function AdminStoreVisit() {
         store: listStore === "All" ? undefined : listStore,
         employeeName: listEmployee === "All" ? undefined : listEmployee,
         department: listDept === "All" ? undefined : listDept,
+        purpose: listPurpose || undefined,
       })
       setHistoryList(list || [])
     } catch {
@@ -129,7 +131,7 @@ export function AdminStoreVisit() {
     } finally {
       setListLoading(false)
     }
-  }, [listStart, listEnd, listStore, listEmployee, listDept])
+  }, [listStart, listEnd, listStore, listEmployee, listDept, listPurpose])
 
   const loadStats = useCallback(async () => {
     if (!statsShowDept && !statsShowEmployee && !statsShowStore && !statsShowPurpose) {
@@ -209,6 +211,19 @@ export function AdminStoreVisit() {
                       {officeEmployees.map((emp) => (
                         <SelectItem key={emp} value={emp}>{emp === "All" ? t("all") : emp}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={listPurpose} onValueChange={setListPurpose}>
+                    <SelectTrigger className="h-9 w-[110px] text-xs">
+                      <SelectValue placeholder={t("visit_col_purpose")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">{t("all")}</SelectItem>
+                      <SelectItem value="정기 점검">{t("visitPurposeInspect")}</SelectItem>
+                      <SelectItem value="직원 교육">{t("visitPurposeTraining")}</SelectItem>
+                      <SelectItem value="긴급 지원">{t("visitPurposeUrgent")}</SelectItem>
+                      <SelectItem value="매장 미팅">{t("visitPurposeMeeting")}</SelectItem>
+                      <SelectItem value="기타">{t("visitPurposeEtc")}</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button className="h-9 font-medium" onClick={loadHistory} disabled={listLoading}>

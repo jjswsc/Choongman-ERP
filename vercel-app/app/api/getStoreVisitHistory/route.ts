@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
   const store = searchParams.get('store')?.trim()
   const employeeName = searchParams.get('employeeName')?.trim()
   const department = searchParams.get('department')?.trim()
+  const purposeFilter = searchParams.get('purpose')?.trim()
 
   const storeFilter = store === 'All' || !store ? 'All' : store
   const empFilter = employeeName === 'All' || !employeeName ? 'All' : employeeName
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
   const filters = [`visit_date=gte.${startStr}`, `visit_date=lte.${endStr}`]
   if (storeFilter !== 'All') filters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
   if (empFilter !== 'All') filters.push(`name=eq.${encodeURIComponent(empFilter)}`)
+  if (purposeFilter) filters.push(`purpose=eq.${encodeURIComponent(purposeFilter)}`)
 
   try {
     const list = (await supabaseSelectFilter('store_visits', filters.join('&'), {

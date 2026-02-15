@@ -161,7 +161,7 @@ export function AdminLeaveApproval() {
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   <th className="p-2 text-center font-medium">{t("store")}</th>
-                  <th className="p-2 text-center font-medium w-24">{t("leave_col_name")}</th>
+                  <th className="p-2 text-center font-medium min-w-[100px] whitespace-nowrap">{t("leave_col_name")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_request_date")}</th>
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
                   <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
@@ -173,7 +173,7 @@ export function AdminLeaveApproval() {
                 {leaveList.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{item.store}</td>
-                    <td className="p-2 text-center">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
+                    <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>

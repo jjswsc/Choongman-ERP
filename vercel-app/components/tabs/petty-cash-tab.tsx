@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -222,18 +222,13 @@ export function PettyCashTab() {
   const fmt = (n: number) => (n || 0).toLocaleString()
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-col gap-4">
       <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">
-            {t("pettyCashTitle") || "💵 패티 캐쉬"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <Tabs defaultValue="list" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-3">
-              <TabsTrigger value="list">{t("pettyTabList") || "📋 내역"}</TabsTrigger>
-              <TabsTrigger value="monthly">{t("pettyTabMonthly") || "📊 월별 현황"}</TabsTrigger>
+            <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
+              <TabsTrigger value="list">{t("pettyTabList")}</TabsTrigger>
+              <TabsTrigger value="monthly">{t("pettyTabMonthly")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="list" className="space-y-3">
