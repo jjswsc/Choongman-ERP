@@ -101,12 +101,14 @@ export async function POST(request: NextRequest) {
             html,
           }),
         })
-        const data = await res.json()
+        const data = (await res.json()) as { id?: string; message?: string; statusCode?: number }
         if (res.ok && data.id) {
           sent.push(name || store)
         } else {
+          const errMsg = data.message || `HTTP ${res.status}` || '발송 실패'
           failed.push(name || store || '?')
-          errors.push((name || store) + ': ' + (data.message || '발송 실패'))
+          errors.push((name || store) + ': ' + errMsg)
+          console.error('Resend API error:', res.status, errMsg, data)
         }
       } catch (e) {
         failed.push(name || store || '?')
@@ -114,11 +116,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const msg = sent.length > 0
+      ? `발송 완료: ${sent.length}명`
+      : failed.length > 0
+        ? (errors[0] || '발송 실패')
+        : ''
     return NextResponse.json({
       sent: sent.length,
       failed,
       errors: errors.slice(0, 10),
-      msg: sent.length > 0 ? `발송 완료: ${sent.length}명` : (failed.length ? '발송 실패' : ''),
+      msg,
     }, { headers })
   } catch (e) {
     console.error('sendPayrollStatementEmail:', e)

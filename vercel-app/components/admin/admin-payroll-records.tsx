@@ -164,7 +164,7 @@ export function AdminPayrollRecords() {
       if (data.sent !== undefined) {
         const msg = data.sent > 0
           ? `발송 완료: ${data.sent}명${data.failed?.length ? ` / 실패: ${data.failed.join(", ")}` : ""}`
-          : (data.msg || "발송 실패")
+          : (data.errors?.length ? data.errors.join("\n") : data.msg || "발송 실패")
         alert(msg)
         if (data.sent > 0) setSelected(new Set())
         setSelectAll(false)
