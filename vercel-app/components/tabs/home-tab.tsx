@@ -14,8 +14,8 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getMyNotices, translateTexts, type NoticeItem } from "@/lib/api-client"
-import { Megaphone, Bell, Search } from "lucide-react"
+import { getMyNotices, getMyPayroll, translateTexts, type NoticeItem } from "@/lib/api-client"
+import { Megaphone, Bell, Search, Wallet } from "lucide-react"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -43,6 +43,28 @@ export function HomeTab() {
   const [dateTo, setDateTo] = useState(todayStr)
   const [transMap, setTransMap] = useState<Record<string, string>>({})
 
+  // 내 급여 명세서
+  const [payrollMonth, setPayrollMonth] = useState(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1) // 기본: 전월
+    return d.toISOString().slice(0, 7)
+  })
+  const [payrollData, setPayrollData] = useState<{
+    salary: number
+    pos_allow: number
+    haz_allow: number
+    birth_bonus: number
+    holiday_pay: number
+    spl_bonus: number
+    ot_amt: number
+    late_ded: number
+    sso: number
+    tax: number
+    other_ded: number
+    net_pay: number
+  } | null>(null)
+  const [payrollLoading, setPayrollLoading] = useState(false)
+
   const fetchNotices = useCallback(() => {
     if (!auth?.store || !auth?.user) return
     setLoading(true)
@@ -52,9 +74,22 @@ export function HomeTab() {
       .finally(() => setLoading(false))
   }, [auth?.store, auth?.user])
 
+  const fetchPayroll = useCallback(() => {
+    if (!auth?.store || !auth?.user) return
+    setPayrollLoading(true)
+    getMyPayroll({ store: auth.store, name: auth.user, month: payrollMonth })
+      .then((r) => setPayrollData(r.success && r.data ? r.data : null))
+      .catch(() => setPayrollData(null))
+      .finally(() => setPayrollLoading(false))
+  }, [auth?.store, auth?.user, payrollMonth])
+
   useEffect(() => {
     fetchNotices()
   }, [fetchNotices])
+
+  useEffect(() => {
+    fetchPayroll()
+  }, [fetchPayroll])
 
   const filteredNotices = useMemo(() => {
     let list = notices
@@ -91,6 +126,7 @@ export function HomeTab() {
   }, [filteredNotices, lang])
 
   const getTrans = (text: string) => (text && transMap[text]) || text || ""
+  const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -99,6 +135,59 @@ export function HomeTab() {
         <h2 className="text-xl font-bold text-foreground">{t('welcome')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t('welcomeSub')}</p>
       </div>
+
+      {/* 내 급여 명세서 Section */}
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center gap-2 pb-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+            <Wallet className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <CardTitle className="text-base font-semibold">{t('payMyTitle')}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-xs text-muted-foreground">{t('payMySub')}</p>
+          <div className="flex items-center gap-2">
+            <Input
+              type="month"
+              value={payrollMonth}
+              onChange={(e) => setPayrollMonth(e.target.value.slice(0, 7))}
+              className="h-9 flex-1 min-w-0 text-xs"
+            />
+            <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => fetchPayroll()} disabled={payrollLoading}>
+              <Search className="h-3.5 w-3.5 mr-1" />
+              {t('search')}
+            </Button>
+          </div>
+          {payrollLoading ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">{t('payMyLoading')}</div>
+          ) : !payrollData ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">{t('payMyNoData')}</div>
+          ) : (
+            <div className="rounded-lg border border-border/60 overflow-hidden">
+              <div className="bg-muted/30 px-3 py-2 flex justify-between text-xs">
+                <span className="text-muted-foreground">{t('pay_salary')}</span>
+                <span className="font-medium">{fmt(payrollData.salary)} THB</span>
+              </div>
+              <div className="px-3 py-2 flex justify-between text-xs border-t border-border/40">
+                <span className="text-muted-foreground">{t('pay_pos_allow')} + {t('pay_haz_allow')} + {t('pay_birth')} + {t('pay_holiday')} + {t('pay_spl_bonus')}</span>
+                <span>+{fmt(payrollData.pos_allow + payrollData.haz_allow + payrollData.birth_bonus + payrollData.holiday_pay + payrollData.spl_bonus)}</span>
+              </div>
+              <div className="px-3 py-2 flex justify-between text-xs border-t border-border/40">
+                <span className="text-muted-foreground">{t('pay_ot_hours')}</span>
+                <span className="text-green-600 dark:text-green-400">+{fmt(payrollData.ot_amt)}</span>
+              </div>
+              <div className="px-3 py-2 flex justify-between text-xs border-t border-border/40 bg-destructive/5">
+                <span className="text-muted-foreground">{t('pay_late_ded')} + {t('pay_sso')} + {t('pay_tax')} + {t('pay_other_ded')}</span>
+                <span className="text-destructive">-{fmt(payrollData.late_ded + payrollData.sso + payrollData.tax + payrollData.other_ded)}</span>
+              </div>
+              <div className="px-3 py-3 flex justify-between items-center border-t-2 border-primary/30 bg-primary/5">
+                <span className="font-semibold text-sm">{t('pay_net')}</span>
+                <span className="font-bold text-base text-primary">{fmt(payrollData.net_pay)} THB</span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Notices Section */}
       <Card className="shadow-sm">

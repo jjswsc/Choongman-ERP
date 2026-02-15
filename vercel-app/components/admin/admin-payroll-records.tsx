@@ -16,8 +16,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { getLoginData } from "@/lib/api-client"
-import { Mail } from "lucide-react"
+import { getLoginData, sendNotice } from "@/lib/api-client"
+import { Megaphone } from "lucide-react"
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -67,12 +67,12 @@ export function AdminPayrollRecords() {
   const [storeFilter, setStoreFilter] = useState(isManager && userStore ? userStore : "All")
   const [stores, setStores] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [sending, setSending] = useState(false)
   const [list, setList] = useState<RecordRow[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [queried, setQueried] = useState(false)
+  const [sendingNotice, setSendingNotice] = useState(false)
 
   useEffect(() => {
     if (!auth?.store) return
@@ -137,44 +137,51 @@ export function AdminPayrollRecords() {
     }
   }
 
-  const handleSendEmail = async () => {
+  const formatMonthLabel = (m: string) => {
+    if (!m || m.length < 7) return m
+    const [, mm] = m.split("-")
+    const months = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
+    return `${m.slice(0, 4)}년 ${months[parseInt(mm, 10) || 0] || mm}월`
+  }
+
+  const handleSendNotice = async () => {
     if (!monthStr) {
       alert(t("pay_month_select"))
       return
     }
     const toSend = Array.from(selected).map((i) => filteredList[i])
     if (toSend.length === 0) {
-      alert(t("pay_email_hint"))
+      alert(t("pay_notice_select_hint"))
       return
     }
-    setSending(true)
+    setSendingNotice(true)
     setError(null)
     try {
-      const res = await fetch("/api/sendPayrollStatementEmail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          monthStr,
-          list: toSend.map((r) => ({ store: r.store, name: r.name })),
-          userStore: auth?.store || "",
-          userRole: auth?.role || "",
-        }),
+      const targetStore = storeFilter === "All" ? "전체" : storeFilter
+      const title = `${formatMonthLabel(monthStr)} 급여 명세서 등록`
+      const content = `급여 명세서가 등록되었습니다.\n앱 홈 → [내 급여 명세서]에서 확인하세요.`
+      const res = await sendNotice({
+        title,
+        content,
+        targetStore,
+        targetRole: "전체",
+        targetRecipients: toSend.map((r) => ({ store: r.store, name: r.name })),
+        sender: auth?.user || "",
+        userStore: auth?.store || "",
+        userRole: auth?.role || "",
       })
-      const data = await res.json()
-      if (data.sent !== undefined) {
-        const msg = data.sent > 0
-          ? `발송 완료: ${data.sent}명${data.failed?.length ? ` / 실패: ${data.failed.join(", ")}` : ""}`
-          : (data.errors?.length ? data.errors.join("\n") : data.msg || "발송 실패")
-        alert(msg)
-        if (data.sent > 0) setSelected(new Set())
+      if (res.success) {
+        alert(t("noticeSentSuccess"))
+        setSelected(new Set())
         setSelectAll(false)
+        window.dispatchEvent(new CustomEvent("notice-sent"))
       } else {
-        setError(data.msg || "이메일 발송 중 오류가 발생했습니다.")
+        setError(res.message || t("noticeSendFail"))
       }
     } catch {
-      setError("이메일 발송 중 오류가 발생했습니다.")
+      setError(t("noticeSendFail"))
     } finally {
-      setSending(false)
+      setSendingNotice(false)
     }
   }
 
@@ -223,21 +230,22 @@ export function AdminPayrollRecords() {
           >
             {loading ? t("loading") : t("btn_query_go")}
           </Button>
+          {hasResult && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9"
+              onClick={handleSendNotice}
+              disabled={sendingNotice || selected.size === 0}
+            >
+              <Megaphone className="mr-1.5 h-3.5 w-3.5" />
+              {sendingNotice ? t("loading") : t("pay_send_notice")}
+            </Button>
+          )}
         </div>
 
         {hasResult && (
-          <div className="mb-3 flex items-center gap-2">
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={handleSendEmail}
-              disabled={sending || selected.size === 0}
-            >
-              <Mail className="mr-1.5 h-3.5 w-3.5" />
-              {sending ? (t("pay_sending_count") || "발송 중…").replace("N", String(selected.size)) : t("pay_send_selected")}
-            </Button>
-            <span className="text-xs text-muted-foreground">{t("pay_email_hint")}</span>
-          </div>
+          <p className="mb-3 text-xs text-muted-foreground">{t("pay_delivery_hint")} {t("pay_notice_select_hint")}</p>
         )}
 
         {error && (
@@ -272,7 +280,7 @@ export function AdminPayrollRecords() {
                 {filteredList.map((r, i) => {
                   const allowSum = sumAllowance(r)
                   const deductSum = sumDeduct(r)
-                  return (
+                    return (
                     <tr key={`${r.store}_${r.name}_${i}`} className="border-b border-border/60 hover:bg-muted/30">
                       <td className="p-2 text-center">
                         <Checkbox

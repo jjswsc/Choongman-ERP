@@ -56,6 +56,45 @@ export async function getMyNotices(params: { store: string; name: string }) {
   return res.json() as Promise<NoticeItem[]>
 }
 
+export interface MyPayrollData {
+  month: string
+  store: string
+  name: string
+  dept: string
+  role: string
+  salary: number
+  pos_allow: number
+  haz_allow: number
+  birth_bonus: number
+  holiday_pay: number
+  spl_bonus: number
+  ot_amt: number
+  late_ded: number
+  sso: number
+  tax: number
+  other_ded: number
+  net_pay: number
+}
+
+export async function getMyPayroll(params: {
+  store: string
+  name: string
+  month: string
+}) {
+  const q = new URLSearchParams({
+    userStore: params.store,
+    userName: params.name,
+    month: params.month.slice(0, 7),
+  })
+  const res = await fetch(`/api/getMyPayroll?${q}`)
+  const json = await res.json()
+  return {
+    success: json.success === true,
+    data: json.data as MyPayrollData | null,
+    msg: json.msg || '',
+  }
+}
+
 export interface AppItem {
   code: string
   category: string
@@ -402,6 +441,7 @@ export async function sendNotice(params: {
   targetStore: string
   targetRole: string
   sender: string
+  targetRecipients?: Array<{ store: string; name: string }>
   userStore?: string
   userRole?: string
 }) {

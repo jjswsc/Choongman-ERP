@@ -42,18 +42,32 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
     sender?: string
     target_store?: string
     target_role?: string
+    target_recipients?: string | null
     created_at?: string
     attachments?: string
   }[] || []
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
-    const targetStores = String(row.target_store || '전체').trim()
-    const targetJobs = String(row.target_role || '전체').trim()
-    const storeMatch = targetStores === '전체' || targetStores.indexOf(store) > -1
-    const jobList = String(targetJobs || '전체').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-    const jobMatch = !targetJobs || targetJobs.trim() === '전체' || jobList.length === 0 || (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
-    if (!storeMatch || !jobMatch) continue
+    const recipientsRaw = row.target_recipients
+    if (recipientsRaw) {
+      try {
+        const recipients = JSON.parse(recipientsRaw) as string[]
+        if (Array.isArray(recipients) && recipients.length > 0) {
+          const myKey = `${store}|${name}`
+          if (!recipients.includes(myKey)) continue
+        }
+      } catch {
+        /* fall through to store/role match */
+      }
+    } else {
+      const targetStores = String(row.target_store || '전체').trim()
+      const targetJobs = String(row.target_role || '전체').trim()
+      const storeMatch = targetStores === '전체' || targetStores.indexOf(store) > -1
+      const jobList = String(targetJobs || '전체').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+      const jobMatch = !targetJobs || targetJobs.trim() === '전체' || jobList.length === 0 || (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
+      if (!storeMatch || !jobMatch) continue
+    }
 
     let att: unknown[] = []
     if (row.attachments) {

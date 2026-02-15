@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS notices (
   content TEXT DEFAULT '',
   target_store TEXT DEFAULT '전체',
   target_role TEXT DEFAULT '전체',
+  target_recipients TEXT DEFAULT NULL,
   sender TEXT DEFAULT '',
   attachments TEXT DEFAULT ''
 );
@@ -524,6 +525,7 @@ ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_store_name_key;
 ALTER TABLE employees ADD CONSTRAINT employees_store_name_key UNIQUE (store, name);
 ALTER TABLE notice_reads DROP CONSTRAINT IF EXISTS notice_reads_notice_id_store_name_key;
 ALTER TABLE notice_reads ADD CONSTRAINT notice_reads_notice_id_store_name_key UNIQUE (notice_id, store, name);
+ALTER TABLE notices ADD COLUMN IF NOT EXISTS target_recipients TEXT DEFAULT NULL;
 ALTER TABLE payroll_records DROP CONSTRAINT IF EXISTS payroll_records_month_store_name_key;
 ALTER TABLE payroll_records ADD CONSTRAINT payroll_records_month_store_name_key UNIQUE (month, store, name);
 ALTER TABLE menu_permissions DROP CONSTRAINT IF EXISTS menu_permissions_store_name_key;
