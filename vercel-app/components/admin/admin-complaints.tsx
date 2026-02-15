@@ -22,6 +22,7 @@ import {
   getComplaintLogList,
   saveComplaintLog,
   updateComplaintLog,
+  translateTexts,
   type ComplaintLogItem,
 } from "@/lib/api-client"
 import {
@@ -45,6 +46,11 @@ const PLATFORMS = ["__none__", "Grab", "Lineman", "Shopee", "Robinhood", "기타
 const TYPES = ["음식", "서비스", "환경/청결", "가격/결제", "기타"]
 const SEVERITIES = ["경미", "보통", "심각"]
 const STATUSES = ["접수", "조사중", "처리완료", "보류", "종료"]
+
+const visitPathToKey: Record<string, string> = { "홀": "complaint_path_hall", "배달": "complaint_path_delivery", "포장": "complaint_path_takeout" }
+const typeToKey: Record<string, string> = { "음식": "complaint_type_food", "서비스": "complaint_type_service", "환경/청결": "complaint_type_env", "가격/결제": "complaint_type_price", "기타": "complaint_type_etc" }
+const severityToKey: Record<string, string> = { "경미": "complaint_sev_low", "보통": "complaint_sev_mid", "심각": "complaint_sev_high" }
+const statusToKey: Record<string, string> = { "접수": "complaint_status_recv", "조사중": "complaint_status_inv", "처리완료": "complaint_status_done", "보류": "complaint_status_hold", "종료": "complaint_status_closed" }
 
 const emptyForm = () => ({
   date: todayStr(),
@@ -89,6 +95,7 @@ export function AdminComplaints() {
   const [listData, setListData] = useState<ComplaintLogItem[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
+  const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const writerName = auth?.user || auth?.store || ""
 
@@ -103,6 +110,36 @@ export function AdminComplaints() {
   useEffect(() => {
     setForm((f) => ({ ...f, writer: writerName }))
   }, [writerName])
+
+  useEffect(() => {
+    if (lang === "ko") {
+      setTransMap({})
+      return
+    }
+    const texts = [...new Set(
+      listData.flatMap((item) =>
+        [item.customer, item.title, item.content, item.menu, item.action].filter((s): s is string => Boolean(s && String(s).trim()))
+      )
+    )]
+    if (texts.length === 0) {
+      setTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(texts, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        texts.forEach((txt, i) => { map[txt] = translated[i] ?? txt })
+        setTransMap(map)
+      })
+      .catch(() => setTransMap({}))
+    return () => { cancelled = true }
+  }, [listData, lang])
+
+  const getTrans = (text: string) => (text && transMap[text]) || text || ""
+  const tr = (val: string | undefined, keyMap: Record<string, string>) =>
+    val && keyMap[val] ? t(keyMap[val] as never) : (val || "-")
 
   const loadList = useCallback(async () => {
     setListLoading(true)
@@ -491,12 +528,12 @@ export function AdminComplaints() {
                           <tr key={i} className="border-b border-border/60 hover:bg-muted/30">
                             <td className="p-2 text-center">{item.date}</td>
                             <td className="p-2 text-center">{item.store}</td>
-                            <td className="p-2 text-center">{item.customer || "-"}</td>
-                            <td className="p-2 text-center">{item.visitPath || "-"}</td>
-                            <td className="p-2 text-center">{item.type || "-"}</td>
-                            <td className="p-2 text-left max-w-[160px] truncate" title={item.title}>{item.title || "-"}</td>
-                            <td className="p-2 text-center">{item.severity || "-"}</td>
-                            <td className="p-2 text-center">{item.status || "-"}</td>
+                            <td className="p-2 text-center">{getTrans(item.customer || "") || "-"}</td>
+                            <td className="p-2 text-center">{tr(item.visitPath, visitPathToKey)}</td>
+                            <td className="p-2 text-center">{tr(item.type, typeToKey)}</td>
+                            <td className="p-2 text-left max-w-[160px] truncate" title={getTrans(item.title || "") || item.title}>{getTrans(item.title || "") || "-"}</td>
+                            <td className="p-2 text-center">{tr(item.severity, severityToKey)}</td>
+                            <td className="p-2 text-center">{tr(item.status, statusToKey)}</td>
                             <td className="p-2 text-center">
                               {item.photoUrl ? (
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPhotoPreviewUrl(item.photoUrl || null)} title={t("photo")}>
