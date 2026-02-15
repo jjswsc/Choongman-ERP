@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Wrench } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -150,17 +149,6 @@ export function AdminPayrollHolidays() {
     setEditName("")
   }
 
-  const handleSetup = async () => {
-    if (!confirm(t("pay_holiday_setup_confirm"))) return
-    try {
-      const res = await fetch("/api/setupPublicHolidays")
-      const data = await res.json()
-      alert(data.msg || (data.success ? "준비 완료" : "오류"))
-    } catch {
-      alert(t("pay_error"))
-    }
-  }
-
   const hasResult = list.length > 0
 
   const translateApiMessage = (msg: string | undefined): string => {
@@ -195,14 +183,6 @@ export function AdminPayrollHolidays() {
               className="h-9 text-xs"
             />
           </div>
-          <Button
-            variant="outline"
-            className="h-9 font-medium border-orange-200 text-orange-700 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-300"
-            onClick={handleSetup}
-          >
-            <Wrench className="mr-1.5 h-3.5 w-3.5" />
-            {t("pay_holiday_setup_btn")}
-          </Button>
           <Button
             className="h-9 font-medium"
             onClick={loadList}

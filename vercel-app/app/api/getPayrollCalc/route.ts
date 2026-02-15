@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
       }[] | null>,
       supabaseSelectFilter(
         'attendance_logs',
-        `log_at=gte.${normMonth}-01&log_at=lt.${nextMonth}`,
+        `log_at=gte.${normMonth}-01&log_at=lt.${nextMonth}-01`,
         { order: 'log_at.asc', limit: 3000 }
       ) as Promise<{
         log_at?: string
