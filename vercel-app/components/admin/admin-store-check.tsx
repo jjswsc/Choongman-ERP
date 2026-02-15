@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2 } from "lucide-react"
+import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -24,6 +24,8 @@ import {
   getCheckHistory,
   deleteCheckHistory,
   updateChecklistItems,
+  addChecklistItem,
+  deleteChecklistItem,
   translateTexts,
   type ChecklistItem,
   type CheckHistoryItem,
@@ -61,6 +63,10 @@ export function AdminStoreCheck() {
   const [settingItems, setSettingItems] = useState<ChecklistItem[]>([])
   const [settingLoading, setSettingLoading] = useState(false)
   const [settingSaving, setSettingSaving] = useState(false)
+  const [settingAdding, setSettingAdding] = useState(false)
+  const [newMain, setNewMain] = useState("")
+  const [newSub, setNewSub] = useState("")
+  const [newName, setNewName] = useState("")
   const [transMap, setTransMap] = useState<Record<string, string>>({})
 
   const isHQ = auth?.role === "director" || auth?.role === "officer"
@@ -266,6 +272,31 @@ export function AdminStoreCheck() {
     }
   }
 
+  const handleAddCheckItem = async () => {
+    setSettingAdding(true)
+    try {
+      await addChecklistItem({ main: newMain, sub: newSub, name: newName || "항목" })
+      setNewMain("")
+      setNewSub("")
+      setNewName("")
+      loadSettingItems()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "추가 실패")
+    } finally {
+      setSettingAdding(false)
+    }
+  }
+
+  const handleDeleteCheckItem = async (id: string | number) => {
+    if (!confirm(lang === "ko" ? "이 점검 항목을 삭제하시겠습니까?" : "Delete this check item?")) return
+    try {
+      await deleteChecklistItem(id)
+      loadSettingItems()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "삭제 실패")
+    }
+  }
+
   const updateCheckRow = (idx: number, field: "val" | "remark", value: string) => {
     setCheckRows((prev) =>
       prev.map((r, i) =>
@@ -384,8 +415,8 @@ export function AdminStoreCheck() {
                                   onChange={(e) => updateCheckRow(idx, "remark", e.target.value)}
                                   placeholder=""
                                 />
-                                {r.remark?.trim() && transMap[r.remark.trim()] && transMap[r.remark.trim()] !== r.remark.trim() && (
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">{tr(r.remark)}</p>
+                                {r.remark?.trim() && transMap[r.remark.trim()] && (
+                                  <p className="text-[11px] text-muted-foreground mt-1 font-medium" title={r.remark}>{tr(r.remark)}</p>
                                 )}
                               </div>
                             </td>
@@ -405,8 +436,8 @@ export function AdminStoreCheck() {
                       onChange={(e) => setTotalMemo(e.target.value)}
                       placeholder=""
                     />
-                    {totalMemo?.trim() && transMap[totalMemo.trim()] && transMap[totalMemo.trim()] !== totalMemo.trim() && (
-                      <p className="text-xs text-muted-foreground mt-1">{tr(totalMemo)}</p>
+                    {totalMemo?.trim() && transMap[totalMemo.trim()] && (
+                      <p className="text-xs text-muted-foreground mt-1 font-medium" title={totalMemo}>{tr(totalMemo)}</p>
                     )}
                     <Button
                       className="w-full mt-4 py-6 font-bold"
@@ -519,6 +550,31 @@ export function AdminStoreCheck() {
                   </div>
                   <p className="text-xs text-muted-foreground mb-3">{t("store_setting_desc")}</p>
 
+                  <div className="flex flex-wrap items-end gap-2 mb-4 p-3 rounded border bg-muted/30">
+                    <Input
+                      className="h-8 w-24 text-xs"
+                      value={newMain}
+                      onChange={(e) => setNewMain(e.target.value)}
+                      placeholder={t("store_cat_main")}
+                    />
+                    <Input
+                      className="h-8 w-24 text-xs"
+                      value={newSub}
+                      onChange={(e) => setNewSub(e.target.value)}
+                      placeholder={t("store_cat_sub")}
+                    />
+                    <Input
+                      className="h-8 w-32 text-xs"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder={t("store_check_item")}
+                    />
+                    <Button size="sm" className="h-8" onClick={handleAddCheckItem} disabled={settingAdding}>
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      {settingAdding ? t("loading") : (lang === "ko" ? "추가" : "Add")}
+                    </Button>
+                  </div>
+
                   <div className="overflow-auto max-h-[400px] border rounded-md">
                     <table className="w-full text-xs border-collapse">
                       <thead className="sticky top-0 bg-muted">
@@ -528,6 +584,7 @@ export function AdminStoreCheck() {
                           <th className="p-2 text-left font-medium">{t("store_cat_sub")}</th>
                           <th className="p-2 text-left font-medium">{t("store_check_item")}</th>
                           <th className="p-2 text-center w-16 font-medium">{t("eval_use")}</th>
+                          <th className="p-2 text-center w-16 font-medium">{t("delete")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -550,6 +607,11 @@ export function AdminStoreCheck() {
                                 onChange={(e) => updateSettingItem(idx, "use", e.target.checked)}
                                 className="rounded"
                               />
+                            </td>
+                            <td className="p-2 text-center">
+                              <Button size="sm" variant="destructive" className="h-7 px-2" onClick={() => handleDeleteCheckItem(it.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </td>
                           </tr>
                         ))}

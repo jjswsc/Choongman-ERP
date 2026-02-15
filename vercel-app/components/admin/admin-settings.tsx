@@ -34,25 +34,25 @@ const MENU_IDS = [
   "store-complaint", "settings",
 ]
 
-const MENU_LABELS: Record<string, string> = {
-  dashboard: "대시보드",
-  notices: "공지사항",
-  "work-log": "업무일지",
-  "item-manage": "품목 관리",
-  "vendor-manage": "거래처 관리",
-  outbound: "출고 관리",
-  stock: "재고 현황",
-  inbound: "입고 관리",
-  force: "강제 출고",
-  "hr-employee": "직원 관리",
-  "attendance-manage": "근태/스케줄",
-  payroll: "급여 관리",
-  "hr-leave": "휴가 관리",
-  "petty-cash": "패티 캐쉬",
-  "store-manage": "매장 점검",
-  "store-visit": "매장 방문",
-  "store-complaint": "컴플레인 일지",
-  settings: "설정",
+const MENU_TO_TKEY: Record<string, string> = {
+  dashboard: "adminDashboard",
+  notices: "adminNotices",
+  "work-log": "adminWorkLog",
+  "item-manage": "adminItems",
+  "vendor-manage": "adminVendors",
+  outbound: "adminOutbound",
+  stock: "adminStock",
+  inbound: "adminInbound",
+  force: "adminForce",
+  "hr-employee": "adminEmployees",
+  "attendance-manage": "adminAttendance",
+  payroll: "adminPayroll",
+  "hr-leave": "adminLeave",
+  "petty-cash": "adminPettyCash",
+  "store-manage": "adminStoreCheck",
+  "store-visit": "adminStoreVisit",
+  "store-complaint": "adminComplaints",
+  settings: "adminSettings",
 }
 
 export function AdminSettings() {
@@ -286,7 +286,7 @@ export function AdminSettings() {
                           onCheckedChange={() => togglePerm(`${id}_view`)}
                         />
                         <label htmlFor={`perm_${id}`} className="text-xs cursor-pointer flex-1">
-                          {MENU_LABELS[id] || id}
+                          {t(MENU_TO_TKEY[id] || id)}
                         </label>
                       </div>
                     ))}

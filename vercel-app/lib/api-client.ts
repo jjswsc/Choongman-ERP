@@ -1391,6 +1391,28 @@ export async function updateChecklistItems(updates: { id: string | number; name?
   return true
 }
 
+export async function addChecklistItem(params: { main?: string; sub?: string; name?: string }) {
+  const res = await fetch('/api/addChecklistItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  const data = (await res.json().catch(() => ({}))) as { success?: boolean; id?: number; message?: string }
+  if (!res.ok || !data.success) throw new Error(data.message || '추가 실패')
+  return data
+}
+
+export async function deleteChecklistItem(id: string | number) {
+  const res = await fetch('/api/deleteChecklistItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  })
+  const data = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string }
+  if (!res.ok || !data.success) throw new Error(data.message || '삭제 실패')
+  return true
+}
+
 // ─── 매장 방문 현황 ───
 export interface StoreVisitHistoryItem {
   date: string
