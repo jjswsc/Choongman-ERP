@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getSentNotices,
   deleteNoticeAdmin,
@@ -96,7 +97,7 @@ export function NoticeHistory() {
       setNotices((prev) => prev.filter((n) => n.id !== id))
       setExpandedId(null)
     } else {
-      alert(res.message || t("noticeDeleteFail"))
+      alert(translateApiMessage(res.message, t) || t("noticeDeleteFail"))
     }
   }
 

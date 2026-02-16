@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getNoticeOptions, sendNotice } from "@/lib/api-client"
 
 interface AttachedFile {
@@ -135,9 +136,9 @@ export function NoticeCompose() {
         setSelectedStores([])
         setSelectedPositions([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
-        alert(res.message || t("noticeSentSuccess"))
+        alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
       } else {
-        alert(res.message || t("noticeSendFail"))
+        alert(translateApiMessage(res.message, t) || t("noticeSendFail"))
       }
     } finally {
       setSending(false)

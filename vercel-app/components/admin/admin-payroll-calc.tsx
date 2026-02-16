@@ -164,7 +164,7 @@ export function AdminPayrollCalc() {
           status: String(r.status || "대기"),
         }))
         setList(rows)
-        alert("✅ " + (t("pay_calc_done") || "계산 완료! 내용을 확인하고 저장하세요."))
+        alert("✅ " + t("pay_calc_done"))
       } else {
         setList([])
         const errMsg = data.detail ? `${data.msg}\n(${data.detail})` : (data.msg || t("pay_error"))
@@ -222,7 +222,7 @@ export function AdminPayrollCalc() {
 
   const handleSave = async () => {
     if (list.length === 0) return
-    if (!confirm("⚠️ " + monthStr + "월 " + t("pay_save_confirm_msg"))) return
+    if (!confirm("⚠️ " + monthStr + t("pay_month_suffix") + " " + t("pay_save_confirm_msg"))) return
     setSaving(true)
     setError(null)
     try {

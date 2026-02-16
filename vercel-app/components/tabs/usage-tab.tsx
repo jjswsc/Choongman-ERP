@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processUsage, getMyUsageHistory, type AppItem } from "@/lib/api-client"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 
@@ -144,7 +145,7 @@ export function UsageTab() {
         loadHistory()
         getAppData(auth.store).then((r) => setStock(r.stock || {}))
       } else {
-        alert((res.message || t('orderFail')) as string)
+        alert(translateApiMessage(res.message, t) || t('orderFail'))
       }
     } catch (e) {
       alert((t('orderFail') as string) + ': ' + (e instanceof Error ? e.message : String(e)))
@@ -184,7 +185,7 @@ export function UsageTab() {
               />
             )}
             <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>
-            <Button variant="ghost" size="sm" className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70" onClick={() => { setImageModal(null); setImageLoadError(false) }}>
+            <Button variant="ghost" size="sm" className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70" onClick={() => { setImageModal(null); setImageLoadError(false) }} aria-label={t("btn_close")}>
               ✕
             </Button>
           </div>

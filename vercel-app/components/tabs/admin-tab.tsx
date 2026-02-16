@@ -15,6 +15,7 @@ import {
 import { UserCog, Search, Palmtree } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
   getLoginData,
@@ -56,15 +57,7 @@ export function AdminTab() {
     })
   }, [auth])
 
-  const translateApiMessage = (msg: string | undefined): string => {
-    if (!msg) return t("processFail")
-    if (msg === "잘못된 요청입니다.") return t("invalidRequest")
-    if (msg === "해당 기록을 찾을 수 없습니다.") return t("attRecordNotFound")
-    if (msg === "해당 매장의 근태만 승인할 수 있습니다.") return t("attStoreOnly")
-    if (msg === "처리가 완료되었습니다.") return t("attProcessSuccess")
-    if (msg.startsWith("처리 실패:")) return t("processFail") + msg.slice("처리 실패:".length)
-    return msg
-  }
+  const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
 
   const loadAttList = () => {
     if (!auth?.store) return
@@ -87,7 +80,7 @@ export function AdminTab() {
     if (res.success) {
       loadAttList()
     } else {
-      alert(translateApiMessage(res.message))
+      alert(translateApiMessage(res.message) || t("processFail"))
     }
   }
 

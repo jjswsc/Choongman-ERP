@@ -297,7 +297,7 @@ export function AdminPayrollRecords() {
                       <td className="p-2 text-right font-semibold bg-muted/30">{fmt(r.net_pay)}</td>
                       <td className="p-2 text-center">
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted">
-                          {r.status || "지급대기"}
+                          {r.status === "확정" ? t("pay_status_confirmed") : r.status === "지급대기" ? t("pay_status_pending") : (r.status ? r.status : t("pay_status_pending"))}
                         </span>
                       </td>
                     </tr>

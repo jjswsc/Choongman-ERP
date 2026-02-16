@@ -5,6 +5,7 @@ import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Mi
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -317,8 +318,8 @@ export function AdminScheduleEdit({
     setSaving(true)
     saveSchedule({ store, monday, rows })
       .then((r) => {
-        if (r.success) alert(r.message || t("att_saved"))
-        else alert(r.message || t("att_save_failed"))
+        if (r.success) alert(translateApiMessage(r.message, t) || t("att_saved"))
+        else alert(translateApiMessage(r.message, t) || t("att_save_failed"))
       })
       .catch((e) => alert(t("att_save_failed") + ": " + (e?.message || e)))
       .finally(() => setSaving(false))

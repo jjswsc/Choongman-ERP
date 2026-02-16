@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Megaphone, Send } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { getNoticeOptions, sendNotice } from "@/lib/api-client"
 
@@ -72,9 +73,9 @@ export function AdminNoticeSection() {
     if (res.success) {
       setNoticeTitle("")
       setNoticeContent("")
-      alert(res.message || "공지가 발송되었습니다.")
+      alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
     } else {
-      alert(res.message || "발송 실패")
+      alert(translateApiMessage(res.message, t) || t("noticeSendFail"))
     }
   }
 

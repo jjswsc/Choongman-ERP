@@ -8,6 +8,7 @@ import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-histor
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
@@ -104,7 +105,7 @@ export default function StockPage() {
       qty: newSafeQty,
     })
     if (!res.success) {
-      alert(res.message || "저장 실패")
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       return
     }
     alert(t("stockSafeSaveSuccess"))
@@ -123,7 +124,7 @@ export default function StockPage() {
       userRole: auth?.role,
     })
     if (!res.success) {
-      alert(res.message || t("stockAdjustFailed"))
+      alert(translateApiMessage(res.message, t) || t("stockAdjustFailed"))
       return
     }
     alert(t("stockAdjustSuccess"))

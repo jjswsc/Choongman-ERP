@@ -141,7 +141,7 @@ export function AdminPublicHolidays() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("holiday_delete_confirm") || "삭제하시겠습니까?")) return
+    if (!confirm(t("holiday_delete_confirm"))) return
     setError(null)
     try {
       const res = await fetch("/api/savePublicHoliday", {

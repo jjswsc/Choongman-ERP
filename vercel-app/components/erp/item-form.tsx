@@ -156,7 +156,6 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
           </div>
           <div className="flex flex-col gap-2">
             <label className="flex items-center justify-between text-xs font-semibold text-foreground">
-              <span>{t("itemsVendor")}</span>
               <DropdownMenu open={vendorOpen} onOpenChange={setVendorOpen}>
                 <DropdownMenuTrigger asChild>
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px] font-semibold text-primary hover:underline">

@@ -12,9 +12,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, Camera } from "lucide-react"
+import { Search, Plus, Camera, Download } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { getLoginData } from "@/lib/api-client"
 import {
@@ -172,12 +173,12 @@ export function PettyCashTab() {
     if (!auth?.store || !auth?.user) return
     const store = addStore || (stores.includes("All") ? stores.find((s) => s !== "All") : stores[0])
     if (!store || store === "All") {
-      alert(t("pettyAlertStore") || "매장을 선택하세요.")
+      alert(t("pettyAlertStore"))
       return
     }
     const amt = parseInt(addAmount, 10) || 0
     if (amt <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력하세요.")
+      alert(t("pettyAlertAmount"))
       return
     }
     setAddSaving(true)
@@ -187,7 +188,7 @@ export function PettyCashTab() {
         receiptUrl = await compressImageForUpload(addReceiptFile)
       } catch (err) {
         console.error("compressImage:", err)
-        alert(t("pettySaveFail") || "영수증 이미지 처리 실패")
+        alert(t("pettySaveFail"))
         setAddSaving(false)
         return
       }
@@ -213,13 +214,81 @@ export function PettyCashTab() {
         return null
       })
       loadList()
-      alert(t("pettySaved") || "저장되었습니다.")
+      alert(t("pettySaved"))
     } else {
-      alert(res.message || t("pettyAddFail"))
+      alert(translateApiMessage(res.message, t) || t("pettyAddFail"))
     }
   }
 
   const fmt = (n: number) => (n || 0).toLocaleString()
+
+  const downloadMonthlyExcel = () => {
+    if (monthlyData.length === 0) return
+    const escapeXml = (s: string) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+    const cols = [
+      t("pettyColDate") || "날짜",
+      t("store") || "매장",
+      t("pettyColType") || "유형",
+      t("pettyColAmount") || "금액",
+      t("pettyColBalance") || "잔액",
+      t("pettyColMemo") || "내용",
+      t("pettyColUser") || "등록자",
+    ]
+    const storeLabel = monthlyStore === "All" ? t("all") || "전체" : monthlyStore
+    const rows: string[][] = [
+      [t("pettyTabMonthly") || "월별 현황", "", "", "", "", "", ""],
+      [t("pettyYearMonth") || "기간", monthlyYm, "", "", "", "", ""],
+      [t("store") || "매장", storeLabel, "", "", "", "", ""],
+      [],
+      cols,
+    ]
+    for (const r of monthlyData) {
+      rows.push([
+        r.trans_date,
+        r.store,
+        t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type,
+        String(r.amount),
+        String(r.balance_after ?? 0),
+        r.memo || "",
+        r.user_name || "",
+      ])
+    }
+    const pxPerChar = 8
+    const minW = 60
+    const colWidths = cols.map((_, c) => {
+      let maxLen = (cols[c] || "").length
+      for (const row of rows) {
+        const cell = row[c]
+        const len = String(cell ?? "").length
+        if (len > maxLen) maxLen = len
+      }
+      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 280))
+    })
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+${rows.map((row, ri) => {
+  const isHead = ri < 4 || ri === 4
+  return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
+}).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `petty_monthly_${monthlyStore === "All" ? "all" : monthlyStore}_${monthlyYm}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -261,6 +330,7 @@ export function PettyCashTab() {
                         <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-left">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center w-10">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
@@ -274,6 +344,7 @@ export function PettyCashTab() {
                             {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-xs text-muted-foreground">{r.user_name || "-"}</td>
                           <td className="p-2 text-center">
                             {r.receipt_url ? (
                               <button
@@ -397,6 +468,10 @@ export function PettyCashTab() {
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {monthlyLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
                 </Button>
+                <Button size="sm" variant="outline" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={downloadMonthlyExcel} disabled={monthlyData.length === 0} title={t("pettyExcelHint") || ""}>
+                  <Download className="mr-1 h-3.5 w-3.5" />
+                  {t("excelBtn") || "Excel"}
+                </Button>
               </div>
               <div className="rounded-lg border border-border/60 max-h-[320px] overflow-x-auto overflow-y-auto">
                 {monthlyData.length === 0 ? (
@@ -411,6 +486,7 @@ export function PettyCashTab() {
                         <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-right font-medium">{t("pettyColBalance") || "잔액"}</th>
                         <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-left">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center w-10">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
@@ -426,6 +502,7 @@ export function PettyCashTab() {
                           </td>
                           <td className="p-2 text-right font-medium">{fmt(r.balance_after ?? 0)}</td>
                           <td className="p-2 hidden sm:table-cell truncate max-w-[80px]">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-xs text-muted-foreground">{r.user_name || "-"}</td>
                           <td className="p-2 text-center">
                             {r.receipt_url ? (
                               <button

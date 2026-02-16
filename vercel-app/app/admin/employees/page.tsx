@@ -4,6 +4,7 @@ import * as React from "react"
 import { Users } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -224,11 +225,11 @@ export default function EmployeesPage() {
     setLoading(true)
     try {
       const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
-      alert(res.message || (res as { message?: string }).message || "삭제 완료")
+      alert(translateApiMessage(res.message ?? (res as { message?: string }).message, t) || t("msg_delete_ok"))
       await loadEmployeeList({ updateDisplay: true })
     } catch (e) {
       console.error(e)
-      alert(t("emp_result_empty") || "오류")
+      alert(t("emp_result_empty") || t("msg_empty_result"))
     } finally {
       setLoading(false)
     }
@@ -244,15 +245,15 @@ export default function EmployeesPage() {
         userRole,
       })
       if (res.success) {
-        alert(res.message || "저장되었습니다.")
+        alert(translateApiMessage(res.message, t) || t("msg_saved"))
         setForm({ ...emptyForm })
         await loadEmployeeList({ updateDisplay: true })
       } else {
-        alert(res.message || "저장 실패")
+        alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       }
     } catch (e) {
       console.error(e)
-      alert("저장 실패")
+      alert(t("msg_save_fail"))
     } finally {
       setSaving(false)
     }

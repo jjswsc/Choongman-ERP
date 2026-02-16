@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getWorkLogStaffList,
   getWorkLogData,
@@ -278,7 +279,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         loadData()
       } else {
         const r = res as { messageKey?: string; message?: string }
-        alert(r.messageKey ? t(r.messageKey) : (r.message || t("workLogSaveFail")))
+        alert(r.messageKey ? t(r.messageKey) : (translateApiMessage(r.message, t) || t("workLogSaveFail")))
       }
     } catch (e) {
       alert(t("workLogSaveError"))
@@ -300,10 +301,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       })
       if (res.success) {
         loadData()
-        alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogCloseDone")))
+        alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogCloseDone")))
       } else {
         const r = res as { messageKey?: string; message?: string }
-        alert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${r.message}` : t(r.messageKey || "workLogCloseFail"))
+        alert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}` : t(r.messageKey || "workLogCloseFail"))
       }
     } catch (e) {
       alert(t("workLogCloseError"))

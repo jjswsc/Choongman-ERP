@@ -5,6 +5,7 @@ import { Clock, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -120,7 +121,7 @@ export default function AdminAttendancePage() {
         return next
       })
       loadRecords()
-    } else alert(res.message || t("att_process_failed"))
+    } else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
   const handleReject = async (id: number) => {
@@ -131,7 +132,7 @@ export default function AdminAttendancePage() {
       userRole: auth?.role,
     })
     if (res.success) loadRecords()
-    else alert(res.message || t("att_process_failed"))
+    else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
   return (

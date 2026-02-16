@@ -12,6 +12,9 @@ import {
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 
 interface LoginFormProps {
   redirectTo: string
@@ -28,7 +31,8 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const [lang, setLang] = useState("ko")
+  const { lang, setLang } = useLang()
+  const tMsg = useT(lang)
 
   const [pwModalOpen, setPwModalOpen] = useState(false)
   const [pwOld, setPwOld] = useState("")
@@ -56,7 +60,8 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("cm_lang")
-      if (saved) setLang(saved)
+      if (saved && ["ko", "en", "th", "mm", "la"].includes(saved))
+        setLang(saved as "ko" | "en" | "th" | "mm" | "la")
     }
   }, [])
 
@@ -66,7 +71,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   }
 
   const handleLangChange = (l: string) => {
-    setLang(l)
+    if (["ko", "en", "th", "mm", "la"].includes(l)) setLang(l as "ko" | "en" | "th" | "mm" | "la")
     try {
       sessionStorage.setItem("cm_lang", l)
     } catch {}
@@ -75,7 +80,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!store || !user) {
-      setError(lang === "ko" ? "매장과 이름을 선택하세요." : "Please select store and name.")
+      setError(tMsg("msg_select_store_name"))
       return
     }
     setSubmitting(true)
@@ -86,10 +91,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
         setAuth({ store: res.storeName, user: res.userName, role: res.role || "" })
         router.replace(redirectTo)
       } else {
-        setError(res.message || (lang === "ko" ? "로그인 실패: PIN을 확인하세요." : "Login failed: Check PIN."))
+        setError(res.message || tMsg("msg_login_failed"))
       }
     } catch (err) {
-      setError((lang === "ko" ? "서버 오류: " : "Server error: ") + (err instanceof Error ? err.message : String(err)))
+      setError(tMsg("msg_server_error_prefix") + (err instanceof Error ? err.message : String(err)))
     } finally {
       setSubmitting(false)
     }
@@ -98,19 +103,19 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const handlePwChange = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!store || !user) {
-      setPwError(lang === "ko" ? "매장과 이름을 먼저 선택하세요." : "Please select store and name first.")
+      setPwError(tMsg("msg_store_name_first"))
       return
     }
     if (!pwOld) {
-      setPwError(lang === "ko" ? "현재 비밀번호를 입력하세요." : "Enter current password.")
+      setPwError(tMsg("msg_enter_current_pw"))
       return
     }
     if (!pwNew) {
-      setPwError(lang === "ko" ? "새 비밀번호를 입력하세요." : "Enter new password.")
+      setPwError(tMsg("msg_enter_new_pw"))
       return
     }
     if (pwNew !== pwNew2) {
-      setPwError(lang === "ko" ? "새 비밀번호가 일치하지 않습니다." : "New passwords do not match.")
+      setPwError(tMsg("msg_pw_mismatch"))
       return
     }
     setPwChanging(true)
@@ -118,16 +123,16 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     try {
       const res = await changePassword({ store, name: user, oldPw: pwOld, newPw: pwNew })
       if (res.success) {
-        alert(res.message)
+        alert(translateApiMessage(res.message, tMsg) || tMsg("pw_success"))
         setPwModalOpen(false)
         setPwOld("")
         setPwNew("")
         setPwNew2("")
       } else {
-        setPwError(res.message || (lang === "ko" ? "변경 실패" : "Change failed"))
+        setPwError(translateApiMessage(res.message, tMsg) || tMsg("msg_change_failed"))
       }
     } catch (err) {
-      setPwError((lang === "ko" ? "서버 오류: " : "Server error: ") + (err instanceof Error ? err.message : String(err)))
+      setPwError(tMsg("msg_server_error_prefix") + (err instanceof Error ? err.message : String(err)))
     } finally {
       setPwChanging(false)
     }
@@ -235,9 +240,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             </Select>
             {noStores && (
               <p className="-mt-2 mb-2 text-xs text-amber-400">
-                {lang === "ko"
-                  ? "매장 목록을 불러올 수 없습니다. vercel-app/.env에 SUPABASE_URL, SUPABASE_ANON_KEY를 설정해 주세요."
-                  : "Cannot load store list. Set SUPABASE_URL and SUPABASE_ANON_KEY in vercel-app/.env"}
+                {tMsg("msg_no_stores_env")}
               </p>
             )}
 
@@ -274,7 +277,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               type="button"
               onClick={() => {
                 if (!store || !user) {
-                  alert(lang === "ko" ? "매장과 이름을 먼저 선택하세요." : "Please select store and name first.")
+                  alert(tMsg("msg_store_name_first"))
                   return
                 }
                 setPwModalOpen(true)
@@ -322,7 +325,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               />
               {pwError && <p className="mb-3 text-sm text-red-400">{pwError}</p>}
               <button type="submit" className="login-btn mb-2" disabled={pwChanging}>
-                {pwChanging ? (lang === "ko" ? "변경 중..." : "Changing...") : t.pwChangeBtn}
+                {pwChanging ? tMsg("pw_changing") : t.pwChangeBtn}
               </button>
               <button
                 type="button"

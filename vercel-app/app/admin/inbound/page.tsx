@@ -14,6 +14,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
   getAdminItems,
@@ -106,20 +107,20 @@ export default function InboundPage() {
 
   const handleAddToList = () => {
     if (!selectedItem) {
-      alert(t("inAlertSelectItem") || "품목을 선택해주세요.")
+      alert(t("inAlertSelectItem"))
       return
     }
     if (!inQty.trim()) {
-      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      alert(t("inAlertEnterQty"))
       return
     }
     if (!inVendor) {
-      alert(t("inAlertSelectVendor") || "매입처를 선택해주세요.")
+      alert(t("inAlertSelectVendor"))
       return
     }
     const q = parseFloat(inQty.replace(/,/g, ""))
     if (isNaN(q) || q <= 0) {
-      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      alert(t("inAlertEnterQty"))
       return
     }
     setCart((prev) => [
@@ -143,10 +144,10 @@ export default function InboundPage() {
 
   const handleSave = async () => {
     if (!cart.length) {
-      alert(t("inAlertNoList") || "저장할 목록이 없습니다.")
+      alert(t("inAlertNoList"))
       return
     }
-    const msg = (t("inConfirmSave") || "총 {count}건을 입고 처리하시겠습니까?").replace("{count}", String(cart.length))
+    const msg = t("inConfirmSave").replace("{count}", String(cart.length))
     if (!confirm(msg)) return
     setSaving(true)
     try {
@@ -160,10 +161,10 @@ export default function InboundPage() {
       }))
       const res = await registerInboundBatch(list)
       if (res.success) {
-        alert(res.message || t("inSaveSuccess"))
+        alert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
         setCart([])
       } else {
-        alert(res.message || t("inSaveFailed"))
+        alert(translateApiMessage(res.message, t) || t("inSaveFailed"))
       }
     } catch {
       alert(t("inSaveFailed"))

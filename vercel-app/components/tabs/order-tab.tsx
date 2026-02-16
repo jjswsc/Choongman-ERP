@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList } from "lucide-react"
@@ -141,7 +142,7 @@ export function OrderTab() {
         alert(t('orderSuccess'))
         setCart([])
       } else {
-        alert(t('orderFail') + (res.message ? ': ' + res.message : ''))
+        alert(t('orderFail') + (res.message ? ': ' + translateApiMessage(res.message, t) : ''))
       }
     } catch (e) {
       alert(t('orderFail') + ': ' + (e instanceof Error ? e.message : String(e)))
@@ -285,7 +286,7 @@ export function OrderTab() {
           setReceiveSubmitting(false)
           setTimeout(() => alert(t("receiveDone")), 50)
         } else {
-          alert(res.message || t("orderFail"))
+          alert(translateApiMessage(res?.message, t) || t("orderFail"))
         }
       } catch (err) {
         console.error("processOrderReceive error:", err)

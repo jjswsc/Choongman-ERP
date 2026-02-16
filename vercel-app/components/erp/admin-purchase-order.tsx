@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getPurchaseLocations,
   getVendorsForPurchase,
@@ -151,7 +152,7 @@ export function AdminPurchaseOrder() {
         alert(t("purchaseOrderSuccess") + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
       } else {
-        alert(t("purchaseOrderFail") + (res.message ? ": " + res.message : ""))
+        alert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
     } catch (e) {
       alert(t("purchaseOrderFail") + ": " + (e instanceof Error ? e.message : String(e)))

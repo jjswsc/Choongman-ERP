@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
@@ -222,7 +223,7 @@ export function OrderApproval() {
     const idStr = String(orderId)
     const deliveryDate = deliveryDateByOrder[idStr] || ""
     if (decision === "Approved" && !deliveryDate.trim()) {
-      alert(t("orderDeliveryDateRequired") || "승인하려면 배송일을 선택해 주세요.")
+      alert(t("orderDeliveryDateRequired"))
       return
     }
     setSubmittingId(idStr)
@@ -234,7 +235,7 @@ export function OrderApproval() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(res.message || t("orderDecisionFailed"))
+        alert(translateApiMessage(res.message, t) || t("orderDecisionFailed"))
         return
       }
       alert(t("orderDecisionSuccess"))

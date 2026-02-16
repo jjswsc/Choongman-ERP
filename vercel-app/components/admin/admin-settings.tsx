@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Settings } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
   getLoginData,
@@ -155,10 +156,10 @@ export function AdminSettings() {
         phone,
         bankInfo,
       })
-      alert(res.success ? res.message : res.message || "저장 실패")
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       if (res.success) loadHeadOffice()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setOfficeSaving(false)
     }
@@ -176,9 +177,9 @@ export function AdminSettings() {
         if (checked) out[key] = 1
       }
       const res = await setMenuPermission(permStore, permEmployee, out)
-      alert(res.success ? res.message : res.message || "저장 실패")
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setPermSaving(false)
     }

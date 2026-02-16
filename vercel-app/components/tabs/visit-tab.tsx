@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getLoginData,
   getTodayMyVisits,
@@ -92,7 +93,7 @@ export function VisitTab() {
   const handleVisit = async (type: "방문시작" | "방문종료") => {
     if (!auth?.user) return
     if (type === "방문시작" && !selectedStore) {
-      alert(t("visitErrSelectStore") || "방문 매장을 선택해 주세요.")
+      alert(t("visitErrSelectStore"))
       return
     }
 
@@ -122,7 +123,7 @@ export function VisitTab() {
       const forceType = type === "방문시작" ? "강제 방문시작" : "강제 방문종료"
       const useForce =
         lat === "Unknown" || lng === "Unknown"
-          ? window.confirm(t("attGpsFailConfirm") || "위치를 확인할 수 없습니다. 강제 방문으로 기록할까요?")
+          ? window.confirm(t("attGpsFailConfirm"))
           : false
 
       const visitType = useForce ? forceType : type
@@ -143,10 +144,10 @@ export function VisitTab() {
         }
         loadStatusAndLog()
       } else {
-        alert(result.msg || "저장 실패")
+        alert(translateApiMessage(result.msg, t) || t("msg_save_fail"))
       }
     } catch (e) {
-      alert("오류: " + (e instanceof Error ? e.message : String(e)))
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(null)
     }
@@ -156,7 +157,7 @@ export function VisitTab() {
     return (
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <MapPin className="h-12 w-12 text-muted-foreground/50" />
-        <p className="text-center text-sm text-muted-foreground">로그인 후 이용해 주세요.</p>
+        <p className="text-center text-sm text-muted-foreground">{t("workLogLoginRequired")}</p>
       </div>
     )
   }

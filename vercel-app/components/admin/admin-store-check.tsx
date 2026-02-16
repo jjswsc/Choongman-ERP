@@ -202,7 +202,7 @@ export function AdminStoreCheck() {
     setSaveLoading(true)
     try {
       const failCount = checkRows.filter((r) => r.val === "X").length
-      const summary = failCount === 0 ? "PASS" : `FAIL (${failCount}건)`
+      const summary = failCount === 0 ? t("store_check_summary_pass") : t("store_check_summary_fail").replace("{n}", String(failCount))
       const jsonData = checkRows.map((r) => ({
         id: r.id,
         main: r.main,
@@ -227,7 +227,7 @@ export function AdminStoreCheck() {
       setTab("history")
       searchHistory()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaveLoading(false)
     }
@@ -257,7 +257,7 @@ export function AdminStoreCheck() {
       alert(t("store_check_deleted"))
       searchHistory()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "삭제 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -281,7 +281,7 @@ export function AdminStoreCheck() {
       alert(t("store_check_saved"))
       loadSettingItems()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSettingSaving(false)
     }
@@ -296,19 +296,19 @@ export function AdminStoreCheck() {
       setNewName("")
       loadSettingItems()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "추가 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSettingAdding(false)
     }
   }
 
   const handleDeleteCheckItem = async (id: string | number) => {
-    if (!confirm(lang === "ko" ? "이 점검 항목을 삭제하시겠습니까?" : "Delete this check item?")) return
+    if (!confirm(t("msg_delete_confirm_check_item"))) return
     try {
       await deleteChecklistItem(id)
       loadSettingItems()
     } catch (e) {
-      alert(e instanceof Error ? e.message : "삭제 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     }
   }
 

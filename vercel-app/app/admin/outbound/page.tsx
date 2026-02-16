@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
   getAdminItems,
@@ -130,20 +131,20 @@ export default function OutboundPage() {
 
   const handleAddToList = () => {
     if (!selectedItem) {
-      alert(t("inAlertSelectItem") || "품목을 선택해주세요.")
+      alert(t("inAlertSelectItem"))
       return
     }
     if (!outQty.trim()) {
-      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      alert(t("inAlertEnterQty"))
       return
     }
     if (!outStore) {
-      alert(t("outStorePlaceholder") || "출고처를 선택해주세요.")
+      alert(t("outStorePlaceholder"))
       return
     }
     const q = parseFloat(outQty.replace(/,/g, ""))
     if (isNaN(q) || q <= 0) {
-      alert(t("inAlertEnterQty") || "수량을 입력해주세요.")
+      alert(t("inAlertEnterQty"))
       return
     }
     setCart((prev) => [
@@ -168,10 +169,10 @@ export default function OutboundPage() {
 
   const handleSave = async () => {
     if (!cart.length) {
-      alert(t("outEmptyList") || "담긴 품목이 없습니다.")
+      alert(t("outEmptyList"))
       return
     }
-    if (!confirm(t("outConfirmMsg") || "출고 확정하시겠습니까?")) return
+    if (!confirm(t("outConfirmMsg"))) return
     setSaving(true)
     try {
       const list = cart.map((c) => ({
@@ -185,10 +186,10 @@ export default function OutboundPage() {
       }))
       const res = await forceOutboundBatch(list)
       if (res.success) {
-        alert(res.message || t("outSaveSuccess"))
+        alert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
         setCart([])
       } else {
-        alert(res.message || t("outSaveFailed"))
+        alert(translateApiMessage(res.message, t) || t("outSaveFailed"))
       }
     } catch {
       alert(t("outProcessFail"))
@@ -473,16 +474,16 @@ export default function OutboundPage() {
     }
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     const headers = [
-      t("orderColDate") || "주문 일자",
-      t("orderColDeliveryDate") || "배송 일자",
-      t("outColInvNo") || "인보이스",
-      t("outColOrderType") || "주문 유형",
-      t("outColOutboundType") || "출고 유형",
-      t("outColStore") || "출고처",
-      t("outColItem") || "품목명",
-      t("spec") || "규격",
-      t("outColQty") || "수량",
-      t("inColAmount") || "금액",
+      t("orderColDate"),
+      t("orderColDeliveryDate"),
+      t("outColInvNo"),
+      t("outColOrderType"),
+      t("outColOutboundType"),
+      t("outColStore"),
+      t("outColItem"),
+      t("spec"),
+      t("outColQty"),
+      t("inColAmount"),
     ]
     const dataRows: string[][] = []
     for (const g of checked) {

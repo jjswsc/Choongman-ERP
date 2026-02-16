@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getLoginData, getAppData, processOrder, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
@@ -162,7 +163,7 @@ export function AdminOrderCreate() {
         alert(t("orderSuccess"))
         setCart([])
       } else {
-        alert(t("orderFail") + (res.message ? ": " + res.message : ""))
+        alert(t("orderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
     } catch (e) {
       alert(t("orderFail") + ": " + (e instanceof Error ? e.message : String(e)))

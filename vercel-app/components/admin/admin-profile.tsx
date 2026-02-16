@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { User, KeyRound } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { changePassword } from "@/lib/api-client"
 
@@ -46,12 +47,12 @@ export function AdminProfile() {
         newPw: pwNew,
       })
       if (res.success) {
-        alert(res.message)
+        alert(translateApiMessage(res.message, t) || t("pw_success"))
         setPwOld("")
         setPwNew("")
         setPwNew2("")
       } else {
-        setPwError(res.message || (lang === "ko" ? "변경 실패" : "Change failed"))
+        setPwError(translateApiMessage(res.message, t) || t("msg_change_failed"))
       }
     } catch (err) {
       setPwError((lang === "ko" ? "서버 오류: " : "Server error: ") + (err instanceof Error ? err.message : String(err)))

@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Save, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
@@ -236,24 +237,24 @@ export function AdminComplaints() {
       if (editId) {
         const res = await updateComplaintLog(editId, data)
         if (res.success) {
-          alert(res.message || t("store_check_updated"))
+          alert(translateApiMessage(res.message, t) || t("store_check_updated"))
           resetForm()
           loadList()
         } else {
-          alert(res.message || "수정 실패")
+          alert(translateApiMessage(res.message, t) || t("msg_modify_fail"))
         }
       } else {
         const res = await saveComplaintLog(data)
         if (res.success) {
-          alert(res.message || t("store_check_saved"))
+          alert(translateApiMessage(res.message, t) || t("store_check_saved"))
           resetForm()
           loadList()
         } else {
-          alert(res.message || "저장 실패")
+          alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
         }
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 실패")
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaveLoading(false)
     }

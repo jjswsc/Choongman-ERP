@@ -6,6 +6,7 @@ import { VendorForm, type VendorFormData } from "@/components/erp/vendor-form"
 import { VendorTable, type VendorTypeFilter } from "@/components/erp/vendor-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminVendors, saveVendor, deleteVendor } from "@/lib/api-client"
 import type { Vendor } from "@/components/erp/vendor-table"
 
@@ -89,7 +90,7 @@ export default function VendorsPage() {
       editingCode: editingCode || undefined,
     })
     if (!res.success) {
-      alert(res.message || "저장에 실패했습니다.")
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
     const newVendor: Vendor = {
@@ -134,7 +135,7 @@ export default function VendorsPage() {
     if (!confirm(`"${displayName}" ${t("vendorConfirmDelete")}`)) return
     const res = await deleteVendor({ code: vendor.code })
     if (!res.success) {
-      alert(res.message || "삭제에 실패했습니다.")
+      alert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
       return
     }
     setVendors((prev) => prev.filter((v) => v.code !== vendor.code))

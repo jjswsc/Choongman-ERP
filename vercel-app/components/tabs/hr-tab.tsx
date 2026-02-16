@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getTodayAttendanceTypes,
   getAttendanceList,
@@ -31,6 +32,13 @@ const ATT_TYPE_TO_KEY: Record<string, string> = {
   퇴근: "attOut",
   휴식시작: "attBreak",
   휴식종료: "attResume",
+}
+
+const ATT_TYPE_TO_CONFIRM_KEY: Record<string, string> = {
+  출근: "attConfirmIn",
+  퇴근: "attConfirmOut",
+  휴식시작: "attConfirmBreak",
+  휴식종료: "attConfirmResume",
 }
 
 function translateAttType(type: string, t: (k: I18nKeys) => string): string {
@@ -182,8 +190,8 @@ export function HrTab() {
 
   const sendAttendance = (type: string) => {
     if (!auth?.store || !auth?.user) return
-    const key = ATT_TYPE_TO_KEY[type] || "attIn"
-    const msg = t(key as "attIn" | "attOut" | "attBreak" | "attResume") || `${type}하시겠습니까?`
+    const confirmKey = ATT_TYPE_TO_CONFIRM_KEY[type] || "attConfirmIn"
+    const msg = t(confirmKey as "attConfirmIn" | "attConfirmOut" | "attConfirmBreak" | "attConfirmResume")
     if (!confirm(msg)) return
 
     const options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
@@ -216,7 +224,7 @@ export function HrTab() {
             }
           }
           if (isGpsPending) alert(t("attGpsPendingSaved"))
-          else alert(res.message || "완료")
+          else alert(translateApiMessage(res.message, t) || t("msg_done"))
 
           if ((res.message && res.message.includes("✅")) || isGpsPending) {
             loadButtonState()
@@ -239,7 +247,7 @@ export function HrTab() {
   const handleRequestLeave = async () => {
     if (!auth?.store || !auth?.user) return
     if (!leaveDate.trim()) {
-      alert("날짜를 선택해 주세요.")
+      alert(t("msg_select_date"))
       return
     }
     setLeaveSubmitting(true)
@@ -252,14 +260,14 @@ export function HrTab() {
         reason: leaveReason,
       })
       if (res.success) {
-        alert(res.message || t("leaveRequestSuccess"))
+        alert(translateApiMessage(res.message, t) || t("leaveRequestSuccess"))
         setLeaveReason("")
         loadLeaveInfo()
       } else {
-        alert(res.message || t("leaveRequestFail"))
+        alert(translateApiMessage(res.message, t) || t("leaveRequestFail"))
       }
     } catch (e) {
-      alert("오류: " + (e instanceof Error ? e.message : String(e)))
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLeaveSubmitting(false)
     }
@@ -288,12 +296,12 @@ export function HrTab() {
       })
       if (res.success) {
         loadLeaveInfo()
-        alert(res.message || t("leaveCertUploaded"))
+        alert(translateApiMessage(res.message, t) || t("leaveCertUploaded"))
       } else {
-        alert(res.message || "업로드 실패")
+        alert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
       }
     } catch (err) {
-      alert("오류: " + (err instanceof Error ? err.message : String(err)))
+      alert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
     } finally {
       setCertUploadingId(null)
     }

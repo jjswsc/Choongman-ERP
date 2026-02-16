@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
@@ -128,7 +129,7 @@ export function WorklogApproval() {
     try {
       const res = await updateWorkLogPriority({ id, priority })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : t("workLogSaveFail"))
+      else alert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : translateApiMessage((res as { message?: string }).message, t) || t("workLogSaveFail"))
     } catch {
       alert(t("workLogProcessError"))
     } finally {
@@ -141,7 +142,7 @@ export function WorklogApproval() {
     try {
       const res = await updateWorkLogManagerCheck({ id, status: "승인" })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogProcessError")))
+      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
     } catch {
       alert(t("workLogProcessError"))
     } finally {
@@ -160,7 +161,7 @@ export function WorklogApproval() {
         comment: comment.trim() || undefined,
       })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogProcessError")))
+      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
     } catch {
       alert(t("workLogProcessError"))
     } finally {

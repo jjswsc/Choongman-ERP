@@ -6,6 +6,7 @@ import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
@@ -90,7 +91,7 @@ export default function ItemsPage() {
       editingCode: editingCode || undefined,
     })
     if (!res.success) {
-      alert(res.message || "저장에 실패했습니다.")
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
     const newItem: Product = {
@@ -135,7 +136,7 @@ export default function ItemsPage() {
     if (!confirm(`"${product.name}" ${t("itemsConfirmDelete")}`)) return
     const res = await deleteItem({ code: product.code })
     if (!res.success) {
-      alert(res.message || "삭제에 실패했습니다.")
+      alert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
       return
     }
     setProducts((prev) => prev.filter((p) => p.code !== product.code))

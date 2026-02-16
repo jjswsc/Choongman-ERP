@@ -69,7 +69,7 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
       use: item.use ?? true,
     }))
     if (updates.length === 0) {
-      alert(t("eval_save_items_ok") || "저장할 항목이 없습니다.")
+      alert(t("eval_save_items_ok") || t("eval_no_items_to_save"))
       return
     }
     setSaving(true)
@@ -79,7 +79,7 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(String(e))
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }
@@ -112,7 +112,7 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(String(e))
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }
@@ -127,7 +127,7 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(String(e))
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }
