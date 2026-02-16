@@ -329,7 +329,7 @@ ${rows.map((row, ri) => {
                       <col style={{ width: "48px" }} />
                       <col style={{ width: "70px" }} />
                       <col />
-                      <col style={{ width: "90px" }} />
+                      <col style={{ width: "180px" }} />
                       <col style={{ width: "40px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
@@ -493,7 +493,7 @@ ${rows.map((row, ri) => {
                       <col style={{ width: "70px" }} />
                       <col style={{ width: "80px" }} />
                       <col />
-                      <col style={{ width: "90px" }} />
+                      <col style={{ width: "180px" }} />
                       <col style={{ width: "40px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">

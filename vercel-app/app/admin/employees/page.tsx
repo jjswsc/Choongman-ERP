@@ -117,6 +117,7 @@ export default function EmployeesPage() {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [employeeCache, setEmployeeCache] = React.useState<EmployeeTableRow[]>([])
+  const [allEmployees, setAllEmployees] = React.useState<EmployeeTableRow[]>([])
   const [stores, setStores] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
   const [gradeFilter, setGradeFilter] = React.useState("")
@@ -164,6 +165,7 @@ export default function EmployeesPage() {
           return { ...e, finalGrade: g && String(g).trim() ? g : "-" }
         })
         fullListRef.current = merged
+        setAllEmployees(merged)
         if (opts?.updateDisplay !== false) {
           setEmployeeCache(merged)
         } else {
@@ -172,6 +174,7 @@ export default function EmployeesPage() {
         callback?.()
       } catch {
         fullListRef.current = []
+        setAllEmployees([])
         setEmployeeCache([])
         setStores([])
       } finally {
@@ -355,7 +358,7 @@ export default function EmployeesPage() {
           <TabsContent value="eval">
             <EmployeeEvalTab
               stores={storesForForm}
-              employees={employeeCache}
+              employees={allEmployees}
               onSaved={loadEmployeeList}
             />
           </TabsContent>
