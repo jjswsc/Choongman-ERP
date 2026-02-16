@@ -88,7 +88,12 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     try {
       const res = await loginCheck({ store, name: user, pw, isAdminPage })
       if (res.success && res.storeName && res.userName) {
-        setAuth({ store: res.storeName, user: res.userName, role: res.role || "" })
+        setAuth({
+          store: res.storeName,
+          user: res.userName,
+          role: res.role || "",
+          token: res.token,
+        })
         router.replace(redirectTo)
       } else {
         setError(res.message || tMsg("msg_login_failed"))

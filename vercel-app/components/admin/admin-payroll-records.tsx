@@ -16,7 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { getLoginData, sendNotice } from "@/lib/api-client"
+import { apiFetch, useStoreList, sendNotice } from "@/lib/api-client"
 import { Megaphone } from "lucide-react"
 
 function toMonthStr(d?: Date): string {
@@ -74,13 +74,11 @@ export function AdminPayrollRecords() {
   const [queried, setQueried] = useState(false)
   const [sendingNotice, setSendingNotice] = useState(false)
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter(Boolean).sort()
-      setStores(["All", ...keys.filter((s) => s !== "All")])
-    })
-  }, [auth?.store])
+    setStores(["All", ...storeList.filter((s) => s !== "All")])
+  }, [auth?.store, storeList])
 
   useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
@@ -102,7 +100,7 @@ export function AdminPayrollRecords() {
         params.set("userStore", userStore)
         params.set("userRole", auth?.role || "")
       }
-      const res = await fetch(`/api/getPayrollRecords?${params}`)
+      const res = await apiFetch(`/api/getPayrollRecords?${params}`)
       const data = await res.json()
       if (data.success && Array.isArray(data.list)) {
         setList(data.list)

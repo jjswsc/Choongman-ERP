@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const empRows = (await supabaseSelectFilter(
       'employees',
       `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`,
-      { limit: 1 }
+      { limit: 1, select: 'annual_leave_days,join_date' }
     )) as { annual_leave_days?: number | null; join_date?: string | null }[]
     const annualTotal = getAnnualLeaveDays(empRows?.[0] ?? null)
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'leave_requests',
       filter,
-      { order: 'leave_date.desc', limit: 100 }
+      { order: 'leave_date.desc', limit: 100, select: 'id,leave_date,status,type,reason,certificate_url' }
     )) as { id?: number; leave_date?: string; status?: string; type?: string; reason?: string; certificate_url?: string }[]
 
     const thisYear = new Date().getFullYear()

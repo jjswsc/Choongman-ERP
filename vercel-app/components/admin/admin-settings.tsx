@@ -19,7 +19,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
-  getLoginData,
+  useStoreList,
   getAdminEmployeeList,
   getHeadOfficeInfo,
   saveHeadOfficeInfo,
@@ -97,13 +97,10 @@ export function AdminSettings() {
     }
   }, [])
 
+  const { stores: storeKeys } = useStoreList()
   const loadPermOptions = useCallback(async () => {
-    const [loginRes, empRes] = await Promise.all([
-      getLoginData(),
-      getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" }),
-    ])
-    const storeKeys = Object.keys(loginRes.users || {}).filter(Boolean).sort()
     setPermStores(storeKeys)
+    const empRes = await getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" })
     if (storeKeys.length && !permStore) setPermStore(storeKeys[0])
 
     const list: { store: string; name: string; nick: string }[] = []
@@ -113,7 +110,7 @@ export function AdminSettings() {
       if (st && name) list.push({ store: st, name, nick: String(e.nick || "").trim() })
     }
     setPermEmployees(list)
-  }, [auth?.store, auth?.role])
+  }, [auth?.store, auth?.role, storeKeys])
 
   const loadPermForEmployee = useCallback(async () => {
     if (!permStore || !permEmployee) return

@@ -25,25 +25,26 @@ export async function GET(request: NextRequest) {
   if (employeeName && employeeName !== "__ALL__") filters.push(`name=eq.${encodeURIComponent(employeeName)}`)
   if (purpose && purpose !== "__ALL__") filters.push(`purpose=eq.${encodeURIComponent(purpose)}`)
 
-  let namesInDept: string[] = []
-  if (department && department !== "__ALL__") {
-    const empList = (await supabaseSelect("employees", { order: "id.asc" })) as
+  try {
+    const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name" })) as
       | { store?: string; job?: string; nick?: string; name?: string }[]
       | []
-    for (const e of empList) {
-      const st = String(e.store || "").toLowerCase()
-      if (st.indexOf("office") === -1 && st !== "본사" && st !== "오피스") continue
-      const rowDept = String(e.job || "").trim() || "Staff"
-      if (rowDept !== department) continue
-      const n = String(e.nick || "").trim() || String(e.name || "").trim()
-      if (n && !namesInDept.includes(n)) namesInDept.push(n)
-    }
-  }
 
-  try {
+    let namesInDept: string[] = []
+    if (department && department !== "__ALL__") {
+      for (const e of empList) {
+        const st = String(e.store || "").toLowerCase()
+        if (st.indexOf("office") === -1 && st !== "본사" && st !== "오피스") continue
+        const rowDept = String(e.job || "").trim() || "Staff"
+        if (rowDept !== department) continue
+        const n = String(e.nick || "").trim() || String(e.name || "").trim()
+        if (n && !namesInDept.includes(n)) namesInDept.push(n)
+      }
+    }
     const rows = (await supabaseSelectFilter("store_visits", filters.join("&"), {
       order: "visit_date.desc,visit_time.desc",
       limit: 5000,
+      select: "visit_date,visit_time,name,store_name,purpose,duration_min",
     })) as {
       id?: string
       visit_date?: string
@@ -54,9 +55,6 @@ export async function GET(request: NextRequest) {
     }[]
 
     const nameToDept: Record<string, string> = {}
-    const empList = (await supabaseSelect("employees", { order: "id.asc" })) as
-      | { store?: string; job?: string; nick?: string; name?: string }[]
-      | []
     for (const e of empList) {
       const rowDept = String(e.job || "").trim() || "Staff"
       const nameToShow = String(e.nick || "").trim() || String(e.name || "").trim()

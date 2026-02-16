@@ -3,6 +3,8 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { getSSOLimitsByYear } from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -22,14 +24,6 @@ function toDateStr(val: unknown): string {
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val as string)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
-  const y = year
-  if (y <= 2025) return { ceiling: 15000, maxDed: 750 }
-  if (y <= 2028) return { ceiling: 17500, maxDed: 875 }
-  if (y <= 2031) return { ceiling: 20000, maxDed: 1000 }
-  return { ceiling: 23000, maxDed: 1150 }
 }
 
 const DEFAULT_HOLIDAYS: { date: string; name: string }[] = [
@@ -172,11 +166,18 @@ export interface PayrollCalcRow {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const { auth } = authResult
+
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = (auth.store || '').trim()
+  const userRole = (auth.role || '').toLowerCase()
   if (userRole.includes('manager') && userStore) storeFilter = userStore
 
   if (!monthStr || monthStr.length < 7) {

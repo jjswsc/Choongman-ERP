@@ -24,7 +24,6 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
-  getMyAttendanceSummary,
   getAttendanceList,
   getMyLeaveInfo,
   type MyAttendanceSummary,
@@ -104,6 +103,46 @@ interface DailyRecord {
   status: DailyStatus
   workHours: string | null
   overtime: string | null
+}
+
+function deriveSummaryFromLogs(logs: AttendanceLogItem[], yearMonth: string): MyAttendanceSummary {
+  const { start, end } = getMonthRange(yearMonth)
+  const byKey: Record<string, { lateMin: number; otMin: number; hasOut: boolean }> = {}
+  for (const r of logs || []) {
+    const dateStr = (r.timestamp || "").slice(0, 10)
+    if (!dateStr || dateStr < start || dateStr > end) continue
+    if (!byKey[dateStr]) byKey[dateStr] = { lateMin: 0, otMin: 0, hasOut: false }
+    const rec = byKey[dateStr]
+    const type = String(r.type || "").trim()
+    if (type === "출근") rec.lateMin = Math.max(rec.lateMin, r.late_min ?? 0)
+    else if (type === "퇴근") {
+      rec.hasOut = true
+      rec.otMin = Math.max(rec.otMin, r.ot_min ?? 0)
+    }
+  }
+  let normalDays = 0
+  let otMinutes = 0
+  let otDays = 0
+  let lateMinutes = 0
+  let lateDays = 0
+  for (const rec of Object.values(byKey)) {
+    if (rec.lateMin > 0) {
+      lateMinutes += rec.lateMin
+      lateDays += 1
+    }
+    if (rec.otMin > 0) {
+      otMinutes += rec.otMin
+      otDays += 1
+    }
+    if (rec.hasOut && rec.lateMin === 0) normalDays += 1
+  }
+  return {
+    normalDays,
+    otHours: Math.round((otMinutes / 60) * 10) / 10,
+    otDays,
+    lateMinutes,
+    lateDays,
+  }
 }
 
 function buildDailyRecords(
@@ -280,7 +319,6 @@ export function MyAttendance() {
     }
     const leaveSet = new Set<string>()
     const apiPromise = Promise.all([
-      getMyAttendanceSummary({ store, name, yearMonth: myMonth }),
       getAttendanceList({
         startDate: start,
         endDate: end,
@@ -293,8 +331,8 @@ export function MyAttendance() {
       setTimeout(() => reject(new Error("timeout")), 18000)
     )
     Promise.race([apiPromise, timeoutPromise])
-      .then(([sum, logs, leaveInfo]) => {
-        setSummary(sum)
+      .then(([logs, leaveInfo]) => {
+        setSummary(deriveSummaryFromLogs(logs || [], myMonth))
         const history = (leaveInfo?.history || []) as LeaveHistoryItem[]
         for (const h of history) {
           if (h.date && (h.status === "승인" || h.status === "Approved")) {

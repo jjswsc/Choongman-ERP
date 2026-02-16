@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { verifyPassword, hashPassword } from '@/lib/password'
+import { parseOr400, changePasswordSchema } from '@/lib/api-validate'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -9,14 +11,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const store = String(body.store || '').trim()
-    const name = String(body.name || '').trim()
-    const oldPw = String(body.oldPw || '').trim()
-    const newPw = String(body.newPw || '').trim()
-
-    if (!newPw) {
-      return NextResponse.json({ success: false, message: '새 비밀번호를 입력하세요.' }, { headers })
-    }
+    const validated = parseOr400(changePasswordSchema, body, headers)
+    if (validated.errorResponse) return validated.errorResponse
+    const { store, name, oldPw, newPw } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
     const rows = (await supabaseSelectFilter('employees', filter)) as {
@@ -30,7 +27,9 @@ export async function POST(req: NextRequest) {
     }
 
     const row = rows[0]
-    if (String(row.password || '').trim() !== oldPw) {
+    const storedPw = String(row.password || '').trim()
+    const oldOk = await verifyPassword(oldPw, storedPw)
+    if (!oldOk) {
       return NextResponse.json({ success: false, message: '현재 비밀번호가 일치하지 않습니다.' }, { headers })
     }
 
@@ -38,7 +37,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '계정 정보를 찾을 수 없습니다.' }, { headers })
     }
 
-    await supabaseUpdate('employees', row.id, { password: newPw })
+    const hashedNew = await hashPassword(newPw)
+    await supabaseUpdate('employees', row.id, { password: hashedNew })
     return NextResponse.json(
       { success: true, message: '비밀번호가 변경되었습니다. 다시 로그인해 주세요.' },
       { headers }

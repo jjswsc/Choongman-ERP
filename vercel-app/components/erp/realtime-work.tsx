@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getLoginData, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
+import { useStoreList, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 function todayStr() {
@@ -115,16 +115,14 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
 
+  const { stores: storeListFromHook } = useStoreList()
   React.useEffect(() => {
-    if (auth?.store && storeListProp.length === 0) {
+    if (auth?.store && storeListProp.length === 0 && storeListFromHook.length > 0) {
       setStoreFilter(auth.store)
-      getLoginData().then((r) => {
-        const stores = Object.keys(r.users || {}).filter(Boolean)
-        const unique = Array.from(new Set([auth.store, ...stores])).filter(Boolean).sort()
-        setStoreList(unique)
-      })
+      const unique = Array.from(new Set([auth.store, ...storeListFromHook])).filter(Boolean).sort()
+      setStoreList(unique)
     }
-  }, [auth?.store, storeListProp.length])
+  }, [auth?.store, storeListProp.length, storeListFromHook])
 
   const loadTodayData = React.useCallback(() => {
     let store = storeFilterFinal || auth?.store

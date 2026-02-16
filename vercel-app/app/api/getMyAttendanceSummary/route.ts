@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter('attendance_logs', filter, {
       order: 'log_at.asc',
       limit: 500,
+      select: 'log_at,log_type,late_min,ot_min',
     })) as AttRow[]
 
     const byKey: Record<

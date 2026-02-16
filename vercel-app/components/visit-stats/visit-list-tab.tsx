@@ -16,7 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import {
-  getLoginData,
+  useStoreList,
   getAdminEmployeeList,
   getStoreVisitHistory,
   type StoreVisitHistoryItem,
@@ -46,13 +46,10 @@ export function VisitListTab() {
   const [historyList, setHistoryList] = useState<StoreVisitHistoryItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
+  const { stores: storeKeys } = useStoreList()
   const loadOptions = useCallback(async () => {
-    const [loginRes, empRes] = await Promise.all([
-      getLoginData(),
-      getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" }),
-    ])
-    const storeKeys = Object.keys(loginRes.users || {}).filter(Boolean).sort()
     setStores(["All", ...storeKeys.filter((s) => s !== "All")])
+    const empRes = await getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "director" })
 
     const deptSet = new Set<string>()
     const empList: string[] = []
@@ -68,7 +65,7 @@ export function VisitListTab() {
     }
     setDepartments(["All", ...Array.from(deptSet).sort()])
     setOfficeEmployees(["All", ...empList.sort()])
-  }, [auth?.store, auth?.role])
+  }, [auth?.store, auth?.role, storeKeys])
 
   useEffect(() => {
     loadOptions()

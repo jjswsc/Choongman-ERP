@@ -19,7 +19,7 @@ import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
-  getLoginData,
+  useStoreList,
   getChecklistItems,
   saveCheckResult,
   getCheckHistory,
@@ -106,25 +106,23 @@ export function AdminStoreCheck() {
     return () => { cancelled = true }
   }, [checkRows, totalMemo, settingItems, lang])
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter(Boolean).sort()
-      let list: string[]
-      if (isManager) {
-        list = [auth.store]
-        setStoreSelect(auth.store)
-        setHistStore(auth.store)
-      } else if (isHQ) {
-        list = ["All", ...keys]
-        if (list.length > 0 && !storeSelect) setStoreSelect(list.find((s) => s !== "All") || list[0] || "")
-      } else {
-        list = keys
-        setStoreSelect(auth.store)
-      }
-      setStores(list)
-    })
-  }, [auth?.store, auth?.role, auth?.user, isHQ, isManager])
+    let list: string[]
+    if (isManager) {
+      list = [auth.store]
+      setStoreSelect(auth.store)
+      setHistStore(auth.store)
+    } else if (isHQ) {
+      list = ["All", ...storeList]
+      if (list.length > 0 && !storeSelect) setStoreSelect(list.find((s) => s !== "All") || list[0] || "")
+    } else {
+      list = storeList
+      setStoreSelect(auth.store)
+    }
+    setStores(list)
+  }, [auth?.store, auth?.role, isHQ, isManager, storeList])
 
   const loadChecklistForm = async () => {
     if (!storeSelect || !dateSelect) {

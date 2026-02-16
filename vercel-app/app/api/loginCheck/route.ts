@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { signToken } from '@/lib/jwt-auth'
+import { verifyPassword } from '@/lib/password'
+import { parseOr400, loginSchema } from '@/lib/api-validate'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -9,14 +12,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const store = String(body.store || '').trim()
-    const name = String(body.name || '').trim()
-    const pw = String(body.pw || '').trim()
-    const isAdminPage = body.isAdminPage !== false
-
-    if (!store || !name) {
-      return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
-    }
+    const validated = parseOr400(loginSchema, { ...body, isAdminPage: body.isAdminPage !== false }, headers)
+    if (validated.errorResponse) return validated.errorResponse
+    const { store, name, pw, isAdminPage } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
     const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string }[]
@@ -25,8 +23,9 @@ export async function POST(req: NextRequest) {
     }
 
     const row = rows[0]
-    const sheetPw = String(row.password || '').trim()
-    if (sheetPw !== pw) {
+    const storedPw = String(row.password || '').trim()
+    const ok = await verifyPassword(pw, storedPw)
+    if (!ok) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
 
@@ -45,11 +44,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '권한 없음' }, { headers })
     }
 
+    const storeName = String(row.store || '').trim()
+    const userName = String(row.name || '').trim()
+    const token = await signToken({ store: storeName, name: userName, role: finalRole })
+
     return NextResponse.json({
       success: true,
-      storeName: row.store,
-      userName: row.name,
+      storeName,
+      userName,
       role: finalRole,
+      token,
     }, { headers })
   } catch (e) {
     console.error('loginCheck:', e)

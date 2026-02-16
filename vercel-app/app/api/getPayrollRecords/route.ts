@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 export interface PayrollRecordRow {
   month: string
@@ -29,11 +30,18 @@ export interface PayrollRecordRow {
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const { auth } = authResult
+
   const { searchParams } = new URL(request.url)
   const monthStr = String(searchParams.get('month') || searchParams.get('monthStr') || '').trim().slice(0, 7)
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
-  const userStore = String(searchParams.get('userStore') || '').trim()
-  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const userStore = (auth.store || '').trim()
+  const userRole = (auth.role || '').toLowerCase()
   if (userRole.includes('manager') && userStore) storeFilter = userStore
 
   if (!monthStr || monthStr.length < 7) {

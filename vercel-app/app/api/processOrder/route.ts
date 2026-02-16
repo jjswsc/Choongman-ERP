@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { parseOr400, processOrderSchema } from '@/lib/api-validate'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -9,9 +10,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const cart = Array.isArray(body.cart) ? body.cart : []
-    const storeName = String(body.storeName || body.store || '').trim()
-    const userName = String(body.userName || body.user || '').trim()
+    const bodyForValidation = { ...body, storeName: body.storeName || body.store || '', userName: body.userName || body.user || '' }
+    const validated = parseOr400(processOrderSchema, bodyForValidation, headers)
+    if (validated.errorResponse) return validated.errorResponse
+    const { storeName, userName, cart } = validated.parsed
 
     let sub = 0
     for (let i = 0; i < cart.length; i++) {

@@ -1,44 +1,12 @@
 /**
- * API 클라이언트 - 로그인 등
+ * API 클라이언트
+ * core fetch/auth는 lib/api/ 에서 분리
  */
-export async function getLoginData() {
-  const res = await fetch('/api/getLoginData')
-  return res.json() as Promise<{ users: Record<string, string[]>; vendors: string[] }>
-}
+import { apiFetch } from './api/fetch'
 
-export async function loginCheck(params: {
-  store: string
-  name: string
-  pw: string
-  isAdminPage?: boolean
-}) {
-  const res = await fetch('/api/loginCheck', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{
-    success: boolean
-    message?: string
-    storeName?: string
-    userName?: string
-    role?: string
-  }>
-}
-
-export async function changePassword(params: {
-  store: string
-  name: string
-  oldPw: string
-  newPw: string
-}) {
-  const res = await fetch('/api/changePassword', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{ success: boolean; message?: string }>
-}
+export { apiFetch } from './api/fetch'
+export { getLoginData, loginCheck, changePassword } from './api/auth'
+export { useStoreList } from './use-store-list'
 
 export interface NoticeItem {
   id: number
@@ -52,7 +20,7 @@ export interface NoticeItem {
 
 export async function getMyNotices(params: { store: string; name: string }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getMyNotices?${q}`)
+  const res = await apiFetch(`/api/getMyNotices?${q}`)
   return res.json() as Promise<NoticeItem[]>
 }
 
@@ -87,7 +55,7 @@ export async function getMyPayroll(params: {
     userName: params.name,
     month: params.month.slice(0, 7),
   })
-  const res = await fetch(`/api/getMyPayroll?${q}`)
+  const res = await apiFetch(`/api/getMyPayroll?${q}`)
   const json = await res.json()
   return {
     success: json.success === true,
@@ -111,7 +79,7 @@ export interface AppItem {
 export async function getAppData(storeName: string, asOfDate?: string) {
   const params = new URLSearchParams({ storeName })
   if (asOfDate && asOfDate.trim()) params.set('asOfDate', asOfDate.trim())
-  const res = await fetch(`/api/getAppData?${params}`)
+  const res = await apiFetch(`/api/getAppData?${params}`)
   const data = await res.json()
   return { items: (data.items || []) as AppItem[], stock: data.stock || {} }
 }
@@ -142,7 +110,7 @@ export async function saveSafetyStock(params: {
   code: string
   qty: number
 }) {
-  const res = await fetch('/api/saveSafetyStock', {
+  const res = await apiFetch('/api/saveSafetyStock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -160,12 +128,12 @@ export async function getAdjustmentHistory(params: {
     endStr: params.endStr,
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
-  const res = await fetch(`/api/getAdjustmentHistory?${q}`)
+  const res = await apiFetch(`/api/getAdjustmentHistory?${q}`)
   return res.json() as Promise<AdjustmentHistoryItem[]>
 }
 
 export async function getStockStores() {
-  const res = await fetch('/api/getStockStores')
+  const res = await apiFetch('/api/getStockStores')
   return res.json() as Promise<string[]>
 }
 
@@ -178,7 +146,7 @@ export async function adjustStock(params: {
   memo?: string
   userRole?: string
 }) {
-  const res = await fetch('/api/adjustStock', {
+  const res = await apiFetch('/api/adjustStock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -191,7 +159,7 @@ export async function processOrder(params: {
   userName: string
   cart: { code?: string; name: string; price: number; qty: number }[]
 }) {
-  const res = await fetch('/api/processOrder', {
+  const res = await apiFetch('/api/processOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -217,7 +185,7 @@ export async function getMyOrderHistory(params: {
   endStr: string
 }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getMyOrderHistory?${q}`)
+  const res = await apiFetch(`/api/getMyOrderHistory?${q}`)
   return res.json() as Promise<OrderHistoryItem[]>
 }
 
@@ -234,7 +202,7 @@ export async function processUsage(params: {
   userName?: string
   items: { code?: string; name?: string; qty: number }[]
 }) {
-  const res = await fetch('/api/processUsage', {
+  const res = await apiFetch('/api/processUsage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -248,7 +216,7 @@ export async function getMyUsageHistory(params: {
   endStr: string
 }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getMyUsageHistory?${q}`)
+  const res = await apiFetch(`/api/getMyUsageHistory?${q}`)
   return res.json() as Promise<UsageHistoryItem[]>
 }
 
@@ -258,7 +226,7 @@ export async function processOrderReceive(params: {
   isPartialReceive?: boolean
   inspectedIndices?: number[]
 }) {
-  const res = await fetch('/api/processOrderReceive', {
+  const res = await apiFetch('/api/processOrderReceive', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -302,7 +270,7 @@ export async function getAdminOrders(params: {
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.deliveryStatus) q.set('deliveryStatus', params.deliveryStatus)
   if (params.status) q.set('status', params.status)
-  const res = await fetch(`/api/getAdminOrders?${q}`)
+  const res = await apiFetch(`/api/getAdminOrders?${q}`)
   const data = await res.json()
   return {
     list: (data.list || []) as AdminOrderItem[],
@@ -319,7 +287,7 @@ export interface AdminDashboardStats {
 }
 
 export async function getAdminDashboardStats() {
-  const res = await fetch('/api/getAdminDashboardStats')
+  const res = await apiFetch('/api/getAdminDashboardStats')
   return res.json() as Promise<AdminDashboardStats>
 }
 
@@ -337,7 +305,7 @@ export interface AdminActivityItem {
 }
 
 export async function getAdminRecentActivity() {
-  const res = await fetch('/api/getAdminRecentActivity')
+  const res = await apiFetch('/api/getAdminRecentActivity')
   return res.json() as Promise<AdminActivityItem[]>
 }
 
@@ -347,7 +315,7 @@ export async function processOrderDecision(params: {
   deliveryDate?: string
   userRole?: string
 }) {
-  const res = await fetch('/api/processOrderDecision', {
+  const res = await apiFetch('/api/processOrderDecision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -359,7 +327,7 @@ export async function updateOrderDeliveryStatus(params: {
   orderId: number
   deliveryStatus: string
 }) {
-  const res = await fetch('/api/updateOrderDeliveryStatus', {
+  const res = await apiFetch('/api/updateOrderDeliveryStatus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -373,7 +341,7 @@ export async function updateOrderCart(params: {
   deliveryStatus?: string
   receivedIndices?: number[]
 }) {
-  const res = await fetch('/api/updateOrderCart', {
+  const res = await apiFetch('/api/updateOrderCart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -387,7 +355,7 @@ export async function getTodayAttendanceTypes(params: { storeName: string; name:
     storeName: params.storeName,
     name: params.name,
   })
-  const res = await fetch(`/api/getTodayAttendanceTypes?${q}`)
+  const res = await apiFetch(`/api/getTodayAttendanceTypes?${q}`)
   return res.json() as Promise<string[]>
 }
 
@@ -411,7 +379,7 @@ export async function getAttendanceList(params: {
     storeFilter: params.storeFilter,
     employeeFilter: params.employeeFilter,
   })
-  const res = await fetch(`/api/getAttendanceList?${q}`)
+  const res = await apiFetch(`/api/getAttendanceList?${q}`)
   return res.json() as Promise<AttendanceLogItem[]>
 }
 
@@ -422,7 +390,7 @@ export async function submitAttendance(params: {
   lat: string | number
   lng: string | number
 }) {
-  const res = await fetch('/api/submitAttendance', {
+  const res = await apiFetch('/api/submitAttendance', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -437,7 +405,7 @@ export async function requestLeave(params: {
   date: string
   reason: string
 }) {
-  const res = await fetch('/api/requestLeave', {
+  const res = await apiFetch('/api/requestLeave', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -456,7 +424,7 @@ export interface LeaveHistoryItem {
 
 export async function getMyLeaveInfo(params: { store: string; name: string }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getMyLeaveInfo?${q}`)
+  const res = await apiFetch(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
     stats: { usedAnn: number; usedSick: number; usedUnpaid: number; remain: number }
@@ -469,7 +437,7 @@ export async function uploadLeaveCertificate(params: {
   name: string
   certificateUrl: string
 }) {
-  const res = await fetch('/api/uploadLeaveCertificate', {
+  const res = await apiFetch('/api/uploadLeaveCertificate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -479,7 +447,7 @@ export async function uploadLeaveCertificate(params: {
 
 // ─── 관리 (Admin) ───
 export async function getNoticeOptions() {
-  const res = await fetch('/api/getNoticeOptions')
+  const res = await apiFetch('/api/getNoticeOptions')
   return res.json() as Promise<{ stores: string[]; roles: string[] }>
 }
 
@@ -493,7 +461,7 @@ export async function sendNotice(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await fetch('/api/sendNotice', {
+  const res = await apiFetch('/api/sendNotice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -526,12 +494,12 @@ export async function getSentNotices(params: {
   })
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await fetch(`/api/getSentNotices?${q}`)
+  const res = await apiFetch(`/api/getSentNotices?${q}`)
   return res.json() as Promise<SentNoticeItem[]>
 }
 
 export async function deleteNoticeAdmin(params: { id: number }) {
-  const res = await fetch('/api/deleteNoticeAdmin', {
+  const res = await apiFetch('/api/deleteNoticeAdmin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: params.id }),
@@ -559,7 +527,7 @@ export async function getLeavePendingList(params: {
   if (params.userRole) clean.userRole = params.userRole
   if (params.dateFilterType) clean.dateFilterType = params.dateFilterType
   const q = new URLSearchParams(clean)
-  const res = await fetch(`/api/getLeavePendingList?${q}`)
+  const res = await apiFetch(`/api/getLeavePendingList?${q}`)
   return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>
 }
 
@@ -577,12 +545,12 @@ export async function getLeaveStats(params: {
   if (params.userStore) clean.userStore = params.userStore
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
-  const res = await fetch(`/api/getLeaveStats?${q}`)
+  const res = await apiFetch(`/api/getLeaveStats?${q}`)
   return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[]>
 }
 
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string }) {
-  const res = await fetch('/api/processLeaveApproval', {
+  const res = await apiFetch('/api/processLeaveApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -598,12 +566,12 @@ export async function getAttendancePendingList(params: {
   userRole?: string
 }) {
   const q = new URLSearchParams(params as Record<string, string>)
-  const res = await fetch(`/api/getAttendancePendingList?${q}`)
+  const res = await apiFetch(`/api/getAttendancePendingList?${q}`)
   return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
 }
 
 export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; userStore?: string; userRole?: string }) {
-  const res = await fetch('/api/processAttendanceApproval', {
+  const res = await apiFetch('/api/processAttendanceApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -647,7 +615,7 @@ export async function getAttendanceRecordsAdmin(params: {
   if (params.statusFilter) q.set('statusFilter', params.statusFilter || 'all')
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await fetch(`/api/getAttendanceRecordsAdmin?${q}`)
+  const res = await apiFetch(`/api/getAttendanceRecordsAdmin?${q}`)
   return res.json() as Promise<AttendanceDailyRow[]>
 }
 
@@ -669,12 +637,12 @@ export interface WorkLogData {
 }
 
 export async function getWorkLogStaffList() {
-  const res = await fetch('/api/getWorkLogStaffList')
+  const res = await apiFetch('/api/getWorkLogStaffList')
   return res.json() as Promise<{ staff: { name: string; displayName: string }[] }>
 }
 
 export async function getWorkLogOfficeOptions() {
-  const res = await fetch('/api/getWorkLogOfficeOptions')
+  const res = await apiFetch('/api/getWorkLogOfficeOptions')
   return res.json() as Promise<{ staff: { name: string; displayName: string }[]; depts: string[] }>
 }
 
@@ -683,7 +651,7 @@ export async function getWorkLogData(params: { dateStr: string; name: string }) 
     dateStr: params.dateStr,
     name: params.name,
   })
-  const res = await fetch(`/api/getWorkLogData?${q}`)
+  const res = await apiFetch(`/api/getWorkLogData?${q}`)
   return res.json() as Promise<WorkLogData>
 }
 
@@ -692,7 +660,7 @@ export async function saveWorkLogData(params: {
   name: string
   logs: WorkLogItem[]
 }) {
-  const res = await fetch('/api/saveWorkLogData', {
+  const res = await apiFetch('/api/saveWorkLogData', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -705,7 +673,7 @@ export async function submitDailyClose(params: {
   name: string
   logs: WorkLogItem[]
 }) {
-  const res = await fetch('/api/submitDailyClose', {
+  const res = await apiFetch('/api/submitDailyClose', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -718,7 +686,7 @@ export async function updateWorkLogManagerCheck(params: {
   status: string
   comment?: string
 }) {
-  const res = await fetch('/api/updateManagerCheck', {
+  const res = await apiFetch('/api/updateManagerCheck', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -727,7 +695,7 @@ export async function updateWorkLogManagerCheck(params: {
 }
 
 export async function updateWorkLogPriority(params: { id: string; priority: string }) {
-  const res = await fetch('/api/updateWorkLogPriority', {
+  const res = await apiFetch('/api/updateWorkLogPriority', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -762,7 +730,7 @@ export async function getWorkLogManagerReport(params: {
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   if (params.status && params.status !== 'all') q.set('status', params.status)
-  const res = await fetch(`/api/getWorkLogManagerReport?${q}`)
+  const res = await apiFetch(`/api/getWorkLogManagerReport?${q}`)
   return res.json() as Promise<WorkLogManagerItem[]>
 }
 
@@ -788,7 +756,7 @@ export async function getWorkLogWeekly(params: {
   })
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
-  const res = await fetch(`/api/getWorkLogWeekly?${q}`)
+  const res = await apiFetch(`/api/getWorkLogWeekly?${q}`)
   return res.json() as Promise<{
     summaries: WorkLogWeeklySummary[]
     totalTasks: number
@@ -824,7 +792,7 @@ export interface TodayAttendanceItem {
 
 export async function getTodaySchedule(params: { store: string; date: string }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getTodaySchedule?${q}`)
+  const res = await apiFetch(`/api/getTodaySchedule?${q}`)
   return res.json() as Promise<TodayScheduleItem[]>
 }
 
@@ -833,7 +801,7 @@ export async function getTodayAttendanceSummary(params: {
   date: string
 }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getTodayAttendanceSummary?${q}`)
+  const res = await apiFetch(`/api/getTodayAttendanceSummary?${q}`)
   return res.json() as Promise<TodayAttendanceItem[]>
 }
 
@@ -849,7 +817,7 @@ export async function getWeeklySchedule(params: {
     monday: params.monday,
   })
   if (params.area && params.area !== 'All') q.set('area', params.area)
-  const res = await fetch(`/api/getWeeklySchedule?${q}`)
+  const res = await apiFetch(`/api/getWeeklySchedule?${q}`)
   return res.json() as Promise<WeeklyScheduleItem[]>
 }
 
@@ -858,7 +826,7 @@ export async function saveSchedule(params: {
   monday: string
   rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string; plan_in_prev_day?: boolean }[]
 }) {
-  const res = await fetch('/api/saveSchedule', {
+  const res = await apiFetch('/api/saveSchedule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -884,7 +852,7 @@ export async function getMyAttendanceSummary(params: {
     name: params.name,
     yearMonth: params.yearMonth,
   })
-  const res = await fetch(`/api/getMyAttendanceSummary?${q}`)
+  const res = await apiFetch(`/api/getMyAttendanceSummary?${q}`)
   return res.json() as Promise<MyAttendanceSummary>
 }
 
@@ -898,13 +866,13 @@ export interface TodayVisitItem {
 
 export async function getTodayMyVisits(params: { userName: string }) {
   const q = new URLSearchParams({ userName: params.userName })
-  const res = await fetch(`/api/getTodayMyVisits?${q}`)
+  const res = await apiFetch(`/api/getTodayMyVisits?${q}`)
   return res.json() as Promise<TodayVisitItem[]>
 }
 
 export async function checkUserVisitStatus(params: { userName: string }) {
   const q = new URLSearchParams({ userName: params.userName })
-  const res = await fetch(`/api/checkUserVisitStatus?${q}`)
+  const res = await apiFetch(`/api/checkUserVisitStatus?${q}`)
   return res.json() as Promise<{ active: boolean; storeName?: string; purpose?: string }>
 }
 
@@ -916,7 +884,7 @@ export async function submitStoreVisit(params: {
   lat?: string | number
   lng?: string | number
 }) {
-  const res = await fetch('/api/submitStoreVisit', {
+  const res = await apiFetch('/api/submitStoreVisit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -951,7 +919,7 @@ export async function getPettyCashList(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await fetch(`/api/getPettyCashList?${q}`)
+  const res = await apiFetch(`/api/getPettyCashList?${q}`)
   return res.json() as Promise<PettyCashItem[]>
 }
 
@@ -966,7 +934,7 @@ export async function getPettyCashMonthDetail(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await fetch(`/api/getPettyCashMonthDetail?${q}`)
+  const res = await apiFetch(`/api/getPettyCashMonthDetail?${q}`)
   return res.json() as Promise<PettyCashItem[]>
 }
 
@@ -974,7 +942,7 @@ export async function getPettyCashMonthDetail(params: {
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim())
   if (filtered.length === 0) return []
-  const res = await fetch('/api/translate', {
+  const res = await apiFetch('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texts: filtered, targetLang }),
@@ -994,7 +962,7 @@ export async function addPettyCashTransaction(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await fetch('/api/addPettyCashTransaction', {
+  const res = await apiFetch('/api/addPettyCashTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1029,12 +997,12 @@ export interface AdminVendor {
 }
 
 export async function getAdminItems() {
-  const res = await fetch('/api/getItems')
+  const res = await apiFetch('/api/getItems')
   return res.json() as Promise<AdminItem[]>
 }
 
 export async function getAdminVendors() {
-  const res = await fetch('/api/getVendors')
+  const res = await apiFetch('/api/getVendors')
   return res.json() as Promise<AdminVendor[]>
 }
 
@@ -1050,7 +1018,7 @@ export async function saveItem(params: {
   imageUrl?: string
   editingCode?: string
 }) {
-  const res = await fetch('/api/saveItem', {
+  const res = await apiFetch('/api/saveItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1059,7 +1027,7 @@ export async function saveItem(params: {
 }
 
 export async function deleteItem(params: { code: string }) {
-  const res = await fetch('/api/deleteItem', {
+  const res = await apiFetch('/api/deleteItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1079,7 +1047,7 @@ export async function saveVendor(params: {
   memo?: string
   editingCode?: string
 }) {
-  const res = await fetch('/api/saveVendor', {
+  const res = await apiFetch('/api/saveVendor', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1088,7 +1056,7 @@ export async function saveVendor(params: {
 }
 
 export async function deleteVendor(params: { code: string }) {
-  const res = await fetch('/api/deleteVendor', {
+  const res = await apiFetch('/api/deleteVendor', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1114,7 +1082,7 @@ export async function registerInboundBatch(list: {
   spec?: string
   qty: number | string
 }[]) {
-  const res = await fetch('/api/registerInboundBatch', {
+  const res = await apiFetch('/api/registerInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(list),
@@ -1132,7 +1100,7 @@ export async function getInboundHistory(params: {
     endStr: params.endStr,
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
   })
-  const res = await fetch(`/api/getInboundHistory?${q}`)
+  const res = await apiFetch(`/api/getInboundHistory?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }
 
@@ -1142,7 +1110,7 @@ export async function getInboundForStore(params: {
   endStr: string
 }) {
   const q = new URLSearchParams(params)
-  const res = await fetch(`/api/getInboundForStore?${q}`)
+  const res = await apiFetch(`/api/getInboundForStore?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }
 
@@ -1175,7 +1143,7 @@ export async function forceOutboundBatch(list: {
   spec?: string
   qty: number | string
 }[]) {
-  const res = await fetch('/api/forceOutboundBatch', {
+  const res = await apiFetch('/api/forceOutboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(list),
@@ -1195,7 +1163,7 @@ export async function getCombinedOutboundHistory(params: {
   })
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
-  const res = await fetch(`/api/getCombinedOutboundHistory?${q}`)
+  const res = await apiFetch(`/api/getCombinedOutboundHistory?${q}`)
   return res.json() as Promise<OutboundHistoryItem[]>
 }
 
@@ -1216,7 +1184,7 @@ export interface InvoiceDataClient {
 }
 
 export async function getInvoiceData() {
-  const res = await fetch('/api/getInvoiceData')
+  const res = await apiFetch('/api/getInvoiceData')
   return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
 }
 
@@ -1251,7 +1219,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
     userStore: params.userStore,
     userRole: params.userRole,
   })
-  const res = await fetch(`/api/getAdminEmployeeList?${q}`)
+  const res = await apiFetch(`/api/getAdminEmployeeList?${q}`)
   const data = await res.json()
   return {
     list: (data.list || []) as AdminEmployeeItem[],
@@ -1260,7 +1228,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
 }
 
 export async function getEmployeeLatestGrades() {
-  const res = await fetch('/api/getEmployeeLatestGrades')
+  const res = await apiFetch('/api/getEmployeeLatestGrades')
   return res.json() as Promise<Record<string, { grade: string }>>
 }
 
@@ -1269,7 +1237,7 @@ export async function saveAdminEmployee(params: {
   userStore: string
   userRole: string
 }) {
-  const res = await fetch('/api/saveAdminEmployee', {
+  const res = await apiFetch('/api/saveAdminEmployee', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1282,7 +1250,7 @@ export async function deleteAdminEmployee(params: {
   userStore: string
   userRole: string
 }) {
-  const res = await fetch('/api/deleteAdminEmployee', {
+  const res = await apiFetch('/api/deleteAdminEmployee', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1299,7 +1267,7 @@ export async function getEvaluationItems(params: {
     type: params.type,
     activeOnly: String(params.activeOnly === true),
   })
-  const res = await fetch(`/api/getEvaluationItems?${q}`)
+  const res = await apiFetch(`/api/getEvaluationItems?${q}`)
   return res.json() as Promise<{ id: string | number; main: string; sub: string; name: string; use?: boolean }[]>
 }
 
@@ -1319,7 +1287,7 @@ export async function getEvaluationHistory(params: {
   if (params.store) q.set('store', params.store)
   if (params.employee) q.set('employee', params.employee)
   if (params.evaluator) q.set('evaluator', params.evaluator)
-  const res = await fetch(`/api/getEvaluationHistory?${q}`)
+  const res = await apiFetch(`/api/getEvaluationHistory?${q}`)
   return res.json() as Promise<
     {
       id: string
@@ -1340,7 +1308,7 @@ export async function updateEvaluationItems(params: {
   type: 'kitchen' | 'service'
   updates: { id: string | number; name?: string; use?: boolean }[]
 }) {
-  const res = await fetch('/api/updateEvaluationItems', {
+  const res = await apiFetch('/api/updateEvaluationItems', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1362,7 +1330,7 @@ export async function addEvaluationItem(params: {
   subCat?: string
   itemName?: string
 }) {
-  const res = await fetch('/api/addEvaluationItem', {
+  const res = await apiFetch('/api/addEvaluationItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1379,7 +1347,7 @@ export async function deleteEvaluationItem(params: {
   type: 'kitchen' | 'service'
   itemId: string | number
 }) {
-  const res = await fetch('/api/deleteEvaluationItem', {
+  const res = await apiFetch('/api/deleteEvaluationItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1407,7 +1375,7 @@ export async function saveEvaluationResult(params: {
   jsonData: unknown
   userRole?: string
 }) {
-  const res = await fetch('/api/saveEvaluationResult', {
+  const res = await apiFetch('/api/saveEvaluationResult', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1428,7 +1396,7 @@ export interface ChecklistItem {
 
 export async function getChecklistItems(activeOnly = true) {
   const q = new URLSearchParams({ activeOnly: String(activeOnly) })
-  const res = await fetch(`/api/getChecklistItems?${q}`)
+  const res = await apiFetch(`/api/getChecklistItems?${q}`)
   return res.json() as Promise<ChecklistItem[]>
 }
 
@@ -1441,7 +1409,7 @@ export async function saveCheckResult(params: {
   memo: string
   jsonData: string | unknown
 }) {
-  const res = await fetch('/api/saveCheckResult', {
+  const res = await apiFetch('/api/saveCheckResult', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1473,12 +1441,12 @@ export async function getCheckHistory(params: {
     ...(params.store && params.store !== 'All' && { store: params.store }),
     ...(params.inspector && { inspector: params.inspector }),
   })
-  const res = await fetch(`/api/getCheckHistory?${q}`)
+  const res = await apiFetch(`/api/getCheckHistory?${q}`)
   return res.json() as Promise<CheckHistoryItem[]>
 }
 
 export async function deleteCheckHistory(id: string) {
-  const res = await fetch('/api/deleteCheckHistory', {
+  const res = await apiFetch('/api/deleteCheckHistory', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1489,7 +1457,7 @@ export async function deleteCheckHistory(id: string) {
 }
 
 export async function updateChecklistItems(updates: { id: string | number; name?: string; use?: boolean }[]) {
-  const res = await fetch('/api/updateChecklistItems', {
+  const res = await apiFetch('/api/updateChecklistItems', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ updates }),
@@ -1500,7 +1468,7 @@ export async function updateChecklistItems(updates: { id: string | number; name?
 }
 
 export async function addChecklistItem(params: { main?: string; sub?: string; name?: string }) {
-  const res = await fetch('/api/addChecklistItem', {
+  const res = await apiFetch('/api/addChecklistItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1511,7 +1479,7 @@ export async function addChecklistItem(params: { main?: string; sub?: string; na
 }
 
 export async function deleteChecklistItem(id: string | number) {
-  const res = await fetch('/api/deleteChecklistItem', {
+  const res = await apiFetch('/api/deleteChecklistItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -1548,7 +1516,7 @@ export async function getStoreVisitHistory(params: {
     ...(params.department && params.department !== 'All' && { department: params.department }),
     ...(params.purpose && { purpose: params.purpose }),
   })
-  const res = await fetch(`/api/getStoreVisitHistory?${q}`)
+  const res = await apiFetch(`/api/getStoreVisitHistory?${q}`)
   return res.json() as Promise<StoreVisitHistoryItem[]>
 }
 
@@ -1559,7 +1527,7 @@ export interface StoreVisitStatsItem {
 
 export async function getStoreVisitStats(params: { startStr: string; endStr: string }) {
   const q = new URLSearchParams({ start: params.startStr, end: params.endStr })
-  const res = await fetch(`/api/getStoreVisitStats?${q}`)
+  const res = await apiFetch(`/api/getStoreVisitStats?${q}`)
   return res.json() as Promise<{
     byDept: StoreVisitStatsItem[]
     byEmployee: StoreVisitStatsItem[]
@@ -1598,7 +1566,7 @@ export async function getStoreVisitRecords(params: {
     ...(params.department && params.department !== "__ALL__" && { department: params.department }),
     ...(params.purpose && params.purpose !== "__ALL__" && { purpose: params.purpose }),
   })
-  const res = await fetch(`/api/getStoreVisitRecords?${q}`)
+  const res = await apiFetch(`/api/getStoreVisitRecords?${q}`)
   return res.json() as Promise<VisitRecord[]>
 }
 
@@ -1643,12 +1611,12 @@ export async function getComplaintLogList(params: {
   if (params.visitPath) q.set('visitPath', params.visitPath)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.statusFilter) q.set('statusFilter', params.statusFilter)
-  const res = await fetch(`/api/getComplaintLogList?${q}`)
+  const res = await apiFetch(`/api/getComplaintLogList?${q}`)
   return res.json() as Promise<ComplaintLogItem[]>
 }
 
 export async function saveComplaintLog(data: Record<string, unknown>) {
-  const res = await fetch('/api/saveComplaintLog', {
+  const res = await apiFetch('/api/saveComplaintLog', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data }),
@@ -1657,7 +1625,7 @@ export async function saveComplaintLog(data: Record<string, unknown>) {
 }
 
 export async function updateComplaintLog(rowOrId: string | number, data: Record<string, unknown>) {
-  const res = await fetch('/api/updateComplaintLog', {
+  const res = await apiFetch('/api/updateComplaintLog', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rowOrId, data }),
@@ -1675,12 +1643,12 @@ export interface HeadOfficeInfo {
 }
 
 export async function getHeadOfficeInfo() {
-  const res = await fetch('/api/getHeadOfficeInfo')
+  const res = await apiFetch('/api/getHeadOfficeInfo')
   return res.json() as Promise<HeadOfficeInfo>
 }
 
 export async function saveHeadOfficeInfo(data: HeadOfficeInfo) {
-  const res = await fetch('/api/saveHeadOfficeInfo', {
+  const res = await apiFetch('/api/saveHeadOfficeInfo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -1712,25 +1680,25 @@ export interface ItemByVendor {
 }
 
 export async function getPurchaseLocations() {
-  const res = await fetch('/api/getPurchaseLocations')
+  const res = await apiFetch('/api/getPurchaseLocations')
   return res.json() as Promise<PurchaseLocation[]>
 }
 
 export async function getVendorsForPurchase() {
-  const res = await fetch('/api/getVendorsForPurchase')
+  const res = await apiFetch('/api/getVendorsForPurchase')
   return res.json() as Promise<VendorForPurchase[]>
 }
 
 export async function getItemsByVendor(vendorCode: string, vendorName?: string) {
   const q = new URLSearchParams({ vendorCode })
   if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
-  const res = await fetch(`/api/getItemsByVendor?${q}`)
+  const res = await apiFetch(`/api/getItemsByVendor?${q}`)
   return res.json() as Promise<ItemByVendor[]>
 }
 
 export async function getHqStockByLocation(locationCode: string) {
   const q = new URLSearchParams({ locationCode })
-  const res = await fetch(`/api/getHqStockByLocation?${q}`)
+  const res = await apiFetch(`/api/getHqStockByLocation?${q}`)
   return res.json() as Promise<Record<string, number>>
 }
 
@@ -1743,7 +1711,7 @@ export async function savePurchaseOrder(params: {
   cart: { code: string; name: string; price: number; cost?: number; qty: number }[]
   userName: string
 }) {
-  const res = await fetch('/api/savePurchaseOrder', {
+  const res = await apiFetch('/api/savePurchaseOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1769,13 +1737,13 @@ export interface PurchaseOrderRow {
 }
 
 export async function getPurchaseOrders() {
-  const res = await fetch('/api/getPurchaseOrders')
+  const res = await apiFetch('/api/getPurchaseOrders')
   return res.json() as Promise<PurchaseOrderRow[]>
 }
 
 export async function getMenuPermission(store: string, name: string) {
   const q = new URLSearchParams({ store, name })
-  const res = await fetch(`/api/getMenuPermission?${q}`)
+  const res = await apiFetch(`/api/getMenuPermission?${q}`)
   return res.json() as Promise<Record<string, number>>
 }
 
@@ -1784,7 +1752,7 @@ export async function setMenuPermission(
   name: string,
   permissions: Record<string, number>
 ) {
-  const res = await fetch('/api/setMenuPermission', {
+  const res = await apiFetch('/api/setMenuPermission', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, name, perm: permissions }),

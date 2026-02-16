@@ -6,15 +6,17 @@ export interface AuthState {
   store: string
   user: string
   role: string
+  token?: string
 }
 
 function loadAuth(): AuthState | null {
   if (typeof window === 'undefined') return null
   try {
+    const token = sessionStorage.getItem('cm_token')
     const store = sessionStorage.getItem('cm_store')
     const user = sessionStorage.getItem('cm_user')
     const role = sessionStorage.getItem('cm_role') || ''
-    if (store && user) return { store, user, role }
+    if (store && user) return { store, user, role, token: token || undefined }
   } catch {}
   return null
 }
@@ -24,6 +26,7 @@ function saveAuth(auth: AuthState) {
     sessionStorage.setItem('cm_store', auth.store)
     sessionStorage.setItem('cm_user', auth.user)
     sessionStorage.setItem('cm_role', auth.role)
+    if (auth.token) sessionStorage.setItem('cm_token', auth.token)
   } catch {}
 }
 
@@ -32,6 +35,7 @@ function clearAuth() {
     sessionStorage.removeItem('cm_store')
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
+    sessionStorage.removeItem('cm_token')
   } catch {}
 }
 

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getLoginData, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
+import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
 function getMondayOfWeek(d?: Date): string {
@@ -65,21 +65,19 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const isOffice = displayStoreList.length > 1 && ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
   const storeOptions = isOffice ? [t("scheduleStoreAll"), ...displayStoreList.filter((s) => s !== t("scheduleStoreAll") && s !== "All")] : displayStoreList
 
+  const { stores: storeListRaw } = useStoreList()
   React.useEffect(() => {
-    if (auth?.store && storeListProp.length === 0) {
-      getLoginData().then((r) => {
-        const stores = Object.keys(r.users || {}).filter(Boolean)
-        const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
-        if (isOffice) {
-          setStoreList([t("scheduleStoreAll"), ...stores].filter(Boolean))
-          setStoreFilter(t("scheduleStoreAll"))
-        } else {
-          setStoreList([auth.store!])
-          setStoreFilter(auth.store)
-        }
-      })
+    if (auth?.store && storeListProp.length === 0 && storeListRaw.length > 0) {
+      const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+      if (isOffice) {
+        setStoreList([t("scheduleStoreAll"), ...storeListRaw].filter(Boolean))
+        setStoreFilter(t("scheduleStoreAll"))
+      } else {
+        setStoreList([auth.store!])
+        setStoreFilter(auth.store)
+      }
     }
-  }, [auth?.store, auth?.role, t, storeListProp.length])
+  }, [auth?.store, auth?.role, t, storeListProp.length, storeListRaw])
 
   const loadWeekData = React.useCallback(() => {
     let store = storeFilterFinal || auth?.store

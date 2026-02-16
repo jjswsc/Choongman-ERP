@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { parseOr400, submitAttendanceSchema } from '@/lib/api-validate'
 
 const TZ = 'Asia/Bangkok'
 
@@ -53,19 +54,16 @@ export async function POST(request: NextRequest) {
   if (request.method === 'OPTIONS') return new NextResponse(null, { status: 204, headers })
 
   try {
-    const data = await request.json()
+    const raw = await request.json()
+    const bodyForValidation = { ...raw, storeName: raw.storeName || raw.store || '' }
+    const validated = parseOr400(submitAttendanceSchema, bodyForValidation, headers)
+    if (validated.errorResponse) return validated.errorResponse
+    const { storeName, name: empName, type: logType } = validated.parsed
+    const dataLat = validated.parsed.lat ?? raw.lat
+    const dataLng = validated.parsed.lng ?? raw.lng
+
     const todayStrVal = todayStr()
     const nowTime = new Date()
-    const storeName = String(data.storeName || data.store || '').trim()
-    const empName = String(data.name || '').trim()
-    const logType = String(data.type || '').trim()
-
-    if (!storeName || !empName || !logType) {
-      return NextResponse.json(
-        { success: false, message: '❌ 매장·이름·유형이 필요합니다.' },
-        { headers }
-      )
-    }
 
     const oncePerDayTypes = ['출근', '퇴근', '휴식시작', '휴식종료']
     if (oncePerDayTypes.includes(logType)) {
@@ -113,16 +111,16 @@ export async function POST(request: NextRequest) {
     }
     if (
       (targetLat !== 0 || targetLng !== 0) &&
-      data.lat !== 'Unknown' &&
-      data.lat !== '' &&
-      data.lng !== '' &&
-      data.lng !== 'Unknown'
+      dataLat !== 'Unknown' &&
+      dataLat !== '' &&
+      dataLng !== '' &&
+      dataLng !== 'Unknown'
     ) {
       const dist = calcDistance(
         targetLat,
         targetLng,
-        Number(data.lat),
-        Number(data.lng)
+        Number(dataLat),
+        Number(dataLng)
       )
       if (dist <= 100) locationOk = true
     }
@@ -225,8 +223,8 @@ export async function POST(request: NextRequest) {
       store_name: storeName,
       name: empName,
       log_type: logType,
-      lat: String(data.lat != null ? data.lat : '').trim(),
-      lng: String(data.lng != null ? data.lng : '').trim(),
+      lat: String(dataLat != null ? dataLat : '').trim(),
+      lng: String(dataLng != null ? dataLng : '').trim(),
       planned_time: planTime.trim(),
       late_min: lateMin,
       early_min: earlyMin,

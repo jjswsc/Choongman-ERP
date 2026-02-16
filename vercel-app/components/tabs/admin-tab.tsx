@@ -18,7 +18,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import {
-  getLoginData,
+  useStoreList,
   getAttendancePendingList,
   processAttendanceApproval,
 } from "@/lib/api-client"
@@ -43,19 +43,17 @@ export function AdminTab() {
   const [attList, setAttList] = useState<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>([])
   const [attLoading, setAttLoading] = useState(false)
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'officer'
-    getLoginData().then((r) => {
-      const stores = Object.keys(r.users || {}).filter(Boolean).sort()
-      if (isOffice) {
-        setAttStores(["All", ...stores])
-      } else {
-        setAttStores([auth.store])
-        setAttStoreFilter(auth.store)
-      }
-    })
-  }, [auth])
+    if (isOffice) {
+      setAttStores(["All", ...storeList.filter((s) => s !== "All")])
+    } else {
+      setAttStores([auth.store])
+      setAttStoreFilter(auth.store)
+    }
+  }, [auth?.store, auth?.role, storeList])
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
 

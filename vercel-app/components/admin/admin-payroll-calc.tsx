@@ -23,7 +23,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { getLoginData } from "@/lib/api-client"
+import { apiFetch, useStoreList } from "@/lib/api-client"
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -97,13 +97,11 @@ export function AdminPayrollCalc() {
   const [editLateDed, setEditLateDed] = useState("0")
   const [editOtherDed, setEditOtherDed] = useState("0")
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter(Boolean).sort()
-      setStores(["All", ...keys.filter((s) => s !== "All")])
-    })
-  }, [auth?.store])
+    setStores(["All", ...storeList.filter((s) => s !== "All")])
+  }, [auth?.store, storeList])
 
   useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
@@ -120,7 +118,7 @@ export function AdminPayrollCalc() {
         userStore: auth?.store || "",
         userRole: auth?.role || "",
       })
-      const res = await fetch(`/api/getPayrollCalc?${params}`)
+      const res = await apiFetch(`/api/getPayrollCalc?${params}`)
       const data = await res.json()
       if (data.list && Array.isArray(data.list)) {
         setError(null)
@@ -255,7 +253,7 @@ export function AdminPayrollCalc() {
           status: "확정",
         })),
       }
-      const res = await fetch("/api/savePayroll", {
+      const res = await apiFetch("/api/savePayroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

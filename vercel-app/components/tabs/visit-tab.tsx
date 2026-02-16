@@ -15,7 +15,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
-  getLoginData,
+  useStoreList,
   getTodayMyVisits,
   checkUserVisitStatus,
   submitStoreVisit,
@@ -52,16 +52,15 @@ export function VisitTab() {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState<string | null>(null)
 
-  const loadStoreList = useCallback(() => {
-    getLoginData().then((r) => {
-      const all = Object.keys(r.users || {}).filter(Boolean).sort()
-      const exclude = ["Office", "본사", "office"]
-      const stores = all.filter(
-        (s) => !exclude.includes(s) && s.toLowerCase() !== "office"
-      )
-      setStoreList(stores.length > 0 ? stores : all)
-    })
-  }, [])
+  const { stores: storeListRaw } = useStoreList()
+  useEffect(() => {
+    const all = storeListRaw
+    const exclude = ["Office", "본사", "office"]
+    const stores = all.filter(
+      (s) => !exclude.includes(s) && s.toLowerCase() !== "office"
+    )
+    setStoreList(stores.length > 0 ? stores : all)
+  }, [storeListRaw])
 
   useEffect(() => {
     if (storeList.length > 0 && !selectedStore && !activeVisit) {
@@ -81,10 +80,6 @@ export function VisitTab() {
     })
     getTodayMyVisits({ userName: auth.user }).then(setVisitLog)
   }, [auth?.user])
-
-  useEffect(() => {
-    loadStoreList()
-  }, [loadStoreList])
 
   useEffect(() => {
     if (auth?.user) loadStatusAndLog()

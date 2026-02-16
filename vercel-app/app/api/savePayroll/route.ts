@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpsert } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
+import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 
 const CHUNK = 50
 
@@ -30,29 +32,32 @@ export interface PayrollSaveRow {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const authResult = await requireAuth(request, 'manager')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
+  const { auth } = authResult
 
   try {
     const body = await request.json()
-    const monthStr = String(body.month || body.monthStr || '').trim().slice(0, 7)
-    let list = (body.list || body.rows || []) as PayrollSaveRow[]
-    const userStore = String(body.userStore || '').trim()
-    const userRole = String(body.userRole || '').toLowerCase()
+    const bodyForValidation = {
+      ...body,
+      list: body.list || body.rows || [],
+      month: (body.month || body.monthStr || '').slice(0, 7),
+    }
+    const validated = parseOr400(savePayrollSchema, bodyForValidation, headers)
+    if (validated.errorResponse) {
+      validated.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+      return validated.errorResponse
+    }
+    const { list: rawList, month: m, monthStr: ms } = validated.parsed
+    const monthStr = (m || ms || '').slice(0, 7)
+    let list = rawList as unknown as PayrollSaveRow[]
+    const userStore = (auth.store || '').trim()
+    const userRole = (auth.role || '').toLowerCase()
     if (userRole.includes('manager') && userStore) {
       list = list.filter((r) => String(r.store || '').trim() === userStore)
-    }
-
-    if (!monthStr || monthStr.length < 7) {
-      return NextResponse.json(
-        { success: false, msg: '귀속월을 선택해주세요.' },
-        { status: 400, headers }
-      )
-    }
-
-    if (!Array.isArray(list) || list.length === 0) {
-      return NextResponse.json(
-        { success: false, msg: '저장할 데이터가 없습니다.' },
-        { status: 400, headers }
-      )
     }
 
     const rows: Record<string, unknown>[] = list.map((r) => ({

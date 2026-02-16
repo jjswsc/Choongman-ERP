@@ -21,7 +21,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getLoginData, getAppData, processOrder, type AppItem } from "@/lib/api-client"
+import { useStoreList, getAppData, processOrder, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 
@@ -88,19 +88,17 @@ export function AdminOrderCreate() {
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
 
+  const { stores: storeList } = useStoreList()
   React.useEffect(() => {
     if (!auth?.store) return
-    getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter((k) => k && String(k).trim()).sort()
-      if (isManager) {
-        setStores([auth.store])
-        setStoreSelect(auth.store)
-      } else {
-        setStores(keys)
-        if (keys.length > 0 && !storeSelect) setStoreSelect(keys[0])
-      }
-    })
-  }, [auth?.store, auth?.role, isManager])
+    if (isManager) {
+      setStores([auth.store])
+      setStoreSelect(auth.store)
+    } else if (storeList.length > 0) {
+      setStores(storeList)
+      setStoreSelect((prev) => prev || storeList[0])
+    }
+  }, [auth?.store, auth?.role, isManager, storeList])
 
   React.useEffect(() => {
     if (!storeSelect) {

@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'attendance_logs',
       filter,
-      { order: 'log_at.asc', limit: 500 }
+      { order: 'log_at.asc', limit: 500, select: 'log_at,log_type,status,late_min,ot_min' }
     )) as { log_at?: string; log_type?: string; status?: string; late_min?: number; ot_min?: number }[]
 
     const list: { timestamp: string; type: string; status: string; late_min?: number; ot_min?: number }[] = []

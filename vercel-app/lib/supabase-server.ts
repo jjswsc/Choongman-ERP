@@ -11,11 +11,11 @@ function getConfig() {
 
 export async function supabaseSelect(
   table: string,
-  options: { order?: string; limit?: number; offset?: number } = {}
+  options: { order?: string; limit?: number; offset?: number; select?: string } = {}
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
-  const query = ['select=*']
+  const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*']
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
   if (options.limit != null) query.push(`limit=${Number(options.limit)}`)
   if (options.offset != null) query.push(`offset=${Number(options.offset)}`)
@@ -72,11 +72,11 @@ export async function supabaseUpdate(
 export async function supabaseSelectFilter(
   table: string,
   filter: string,
-  options: { order?: string; limit?: number } = {}
+  options: { order?: string; limit?: number; select?: string } = {}
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
-  const query = ['select=*', filter]
+  const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*', filter]
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
   if (options.limit != null) query.push(`limit=${Number(options.limit)}`)
   const rangeEnd = (options.limit != null ? Number(options.limit) : 2000) - 1

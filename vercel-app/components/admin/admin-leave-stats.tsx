@@ -15,7 +15,7 @@ import { BarChart3, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
-import { getLoginData, getLeaveStats } from "@/lib/api-client"
+import { useStoreList, getLeaveStats } from "@/lib/api-client"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -44,19 +44,17 @@ export function AdminLeaveStats() {
   const [statsList, setStatsList] = useState<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[]>([])
   const [loading, setLoading] = useState(false)
 
+  const { stores: storeKeys } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'
-    getLoginData().then((r) => {
-      const storeKeys = Object.keys(r.users || {}).filter(Boolean).sort()
-      if (isOffice) {
-        setStores(["All", ...storeKeys.filter((s) => s !== "All")])
-      } else {
-        setStores([auth.store!])
-        setStoreFilter(auth.store)
-      }
-    })
-  }, [auth])
+    if (isOffice) {
+      setStores(["All", ...storeKeys.filter((s) => s !== "All")])
+    } else {
+      setStores([auth.store!])
+      setStoreFilter(auth.store)
+    }
+  }, [auth?.store, auth?.role, storeKeys])
 
   const loadStats = () => {
     if (!auth?.store) return

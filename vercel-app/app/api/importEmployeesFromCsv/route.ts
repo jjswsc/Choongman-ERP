@@ -10,6 +10,7 @@ import {
   supabaseInsertMany,
   supabaseSelect,
 } from '@/lib/supabase-server'
+import { hashPassword, isHashed } from '@/lib/password'
 
 /** RFC 4180: 따옴표 안의 줄바꿈, "" 처리 */
 function parseCsv(text: string): string[][] {
@@ -142,7 +143,10 @@ export async function POST(request: NextRequest) {
       const job = col.job >= 0 ? String(r[col.job] ?? '').trim() : ''
       const nation = col.nation >= 0 ? String(r[col.nation] ?? '').trim() : ''
       const salType = col.sal_type >= 0 ? String(r[col.sal_type] ?? '').trim() || 'Monthly' : 'Monthly'
-      const password = col.password >= 0 ? String(r[col.password] ?? '').trim() || '' : ''
+      let password = col.password >= 0 ? String(r[col.password] ?? '').trim() || '' : ''
+      if (password && !isHashed(password)) {
+        password = await hashPassword(password)
+      }
       const role = col.role >= 0 ? String(r[col.role] ?? '').trim() || 'Staff' : 'Staff'
       const email = col.email >= 0 ? String(r[col.email] ?? '').trim() : ''
       const photo = col.photo >= 0 ? String(r[col.photo] ?? '').trim() : ''

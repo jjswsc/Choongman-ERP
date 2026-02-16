@@ -56,7 +56,7 @@ export async function GET(req: Request) {
         resign: toDateStr(r.resign_date),
         salType: r.sal_type || 'Monthly',
         salAmt: r.sal_amt || 0,
-        pw: r.password,
+        pw: '', // 비밀번호는 클라이언트에 전달하지 않음 (변경 시에만 입력)
         role: r.role || 'Staff',
         email: r.email || '',
         annualLeaveDays:

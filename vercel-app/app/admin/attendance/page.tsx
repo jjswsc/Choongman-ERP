@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
-  getLoginData,
+  useStoreList,
   getAttendanceRecordsAdmin,
   processAttendanceApproval,
   type AttendanceDailyRow,
@@ -75,38 +75,31 @@ export default function AdminAttendancePage() {
     return ["director", "officer", "ceo", "hr"].includes(r)
   }, [auth?.role])
 
+  const { stores: storeList, users: usersMap } = useStoreList()
   React.useEffect(() => {
-    getLoginData().then((r) => {
-      const st = Object.keys(r.users || {}).filter(Boolean).sort()
-      setStores(isOffice ? ["All", ...st] : [auth?.store || ""].filter(Boolean))
-      if (!isOffice && auth?.store) {
-        setStoreFilter(auth.store)
-        setTodayStore(auth.store)
-        setScheduleStore(auth.store)
-      } else if (isOffice && st.length > 0) {
-        const firstStore = st[0]
-        setTodayStore(firstStore)
-        setScheduleStore(firstStore)
-      }
-    })
-  }, [auth?.store, isOffice])
+    const st = storeList
+    setStores(isOffice ? ["All", ...st] : [auth?.store || ""].filter(Boolean))
+    if (!isOffice && auth?.store) {
+      setStoreFilter(auth.store)
+      setTodayStore(auth.store)
+      setScheduleStore(auth.store)
+    } else if (isOffice && st.length > 0) {
+      const firstStore = st[0]
+      setTodayStore(firstStore)
+      setScheduleStore(firstStore)
+    }
+  }, [auth?.store, isOffice, storeList])
 
   React.useEffect(() => {
     if (storeFilter === "All" || !storeFilter) {
-      getLoginData().then((r) => {
-        const users = r.users || {}
-        const names = new Set<string>()
-        Object.values(users).flat().forEach((n) => names.add(String(n).trim()))
-        setEmployeeOptions(["All", ...Array.from(names).filter(Boolean).sort()])
-      })
+      const names = new Set<string>()
+      Object.values(usersMap || {}).flat().forEach((n) => names.add(String(n).trim()))
+      setEmployeeOptions(["All", ...Array.from(names).filter(Boolean).sort()])
     } else {
-      getLoginData().then((r) => {
-        const users = r.users || {}
-        const names = (users[storeFilter] || []) as string[]
-        setEmployeeOptions(["All", ...names.filter(Boolean).sort()])
-      })
+      const names = (usersMap?.[storeFilter] || []) as string[]
+      setEmployeeOptions(["All", ...names.filter(Boolean).sort()])
     }
-  }, [storeFilter])
+  }, [storeFilter, usersMap])
 
   const loadRecords = React.useCallback(() => {
     setLoading(true)

@@ -8,30 +8,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getLoginData } from "@/lib/api-client"
+import { useStoreList } from "@/lib/api-client"
 
 export function TimesheetTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const { stores: storeListRaw } = useStoreList()
   const [storeList, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
 
   React.useEffect(() => {
-    if (auth?.store) {
-      getLoginData().then((r) => {
-        const stores = Object.keys(r.users || {}).filter(Boolean).sort()
-        const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
-        if (isOffice) {
-          setStoreList(stores)
-          setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)
-        } else {
-          setStoreList([auth.store])
-          setStoreFilter(auth.store || "")
-        }
-      })
+    if (!auth?.store) return
+    const stores = [...storeListRaw]
+    const isOffice = ["director", "officer", "ceo", "hr"].includes(auth?.role || "")
+    if (isOffice && stores.length > 0) {
+      setStoreList(stores)
+      setStoreFilter(stores.includes(auth.store) ? auth.store : stores[0] || auth.store)
+    } else {
+      setStoreList([auth.store])
+      setStoreFilter(auth.store || "")
     }
-  }, [auth?.store, auth?.role])
+  }, [auth?.store, auth?.role, storeListRaw])
 
   return (
     <div className="min-h-dvh bg-background">

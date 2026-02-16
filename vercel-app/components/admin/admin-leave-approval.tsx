@@ -18,7 +18,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { getLoginData, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
+import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -40,19 +40,17 @@ export function AdminLeaveApproval() {
   const [leaveLoading, setLeaveLoading] = useState(false)
   const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'officer'
-    getLoginData().then((r) => {
-      const stores = Object.keys(r.users || {}).filter(Boolean).sort()
-      if (isOffice) {
-        setLeaveStores(["All", ...stores])
-      } else {
-        setLeaveStores([auth.store])
-        setLeaveStoreFilter(auth.store)
-      }
-    })
-  }, [auth])
+    if (isOffice) {
+      setLeaveStores(["All", ...storeList.filter((s) => s !== "All")])
+    } else {
+      setLeaveStores([auth.store])
+      setLeaveStoreFilter(auth.store)
+    }
+  }, [auth?.store, auth?.role, storeList])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
   const leaveTypeToKey: Record<string, string> = { "연차": "annual", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }

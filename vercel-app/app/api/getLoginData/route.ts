@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
 async function getLoginDataHandler() {
-  const empList = await supabaseSelect('employees', { order: 'id.asc' })
+  const empList = await supabaseSelect('employees', { order: 'id.asc', select: 'store,name' })
   const userMap: Record<string, string[]> = {}
   for (let i = 0; i < (empList || []).length; i++) {
     const store = String((empList as { store?: string }[])[i].store || '').trim()
@@ -12,7 +12,7 @@ async function getLoginDataHandler() {
       userMap[store].push(name)
     }
   }
-  const vendorRows = (await supabaseSelect('vendors', { order: 'id.asc' })) as {
+  const vendorRows = (await supabaseSelect('vendors', { order: 'id.asc', select: 'name,gps_name,type' })) as {
     name?: string
     gps_name?: string
     type?: string

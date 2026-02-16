@@ -20,7 +20,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
-  getLoginData,
+  useStoreList,
   getComplaintLogList,
   saveComplaintLog,
   updateComplaintLog,
@@ -103,22 +103,21 @@ export function AdminComplaints() {
   const isManager = isManagerRole(auth?.role || "")
   const isHQ = auth?.role === "director" || auth?.role === "officer"
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
-    getLoginData().then((r) => {
-      const keys = Object.keys(r.users || {}).filter((k) => k && String(k).trim()).sort()
-      let list: string[]
-      if (isManager) {
-        list = [auth.store]
-        setForm((f) => ({ ...f, store: auth.store, writer: writerName }))
-        setListStore(auth.store)
-      } else {
-        list = isHQ ? ["All", ...keys] : keys
-        if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
-      }
-      setStores(list)
-    })
-  }, [auth?.store, auth?.role, isManager, isHQ])
+    const keys = storeList.filter((k) => k && String(k).trim()).sort()
+    let list: string[]
+    if (isManager) {
+      list = [auth.store]
+      setForm((f) => ({ ...f, store: auth.store, writer: writerName }))
+      setListStore(auth.store)
+    } else {
+      list = isHQ ? ["All", ...keys] : keys
+      if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
+    }
+    setStores(list)
+  }, [auth?.store, auth?.role, isManager, isHQ, storeList])
 
   useEffect(() => {
     setForm((f) => ({ ...f, writer: writerName }))

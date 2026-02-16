@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { hashPassword, isHashed } from '@/lib/password'
 
 
 function toDateStr(val: unknown): string | null {
@@ -31,7 +32,15 @@ export async function POST(req: Request) {
       )
     }
 
-    const payload = {
+    const rawPw = String(d.pw || '').trim()
+    let passwordValue: string
+    if (rawPw) {
+      passwordValue = isHashed(rawPw) ? rawPw : await hashPassword(rawPw)
+    } else {
+      passwordValue = ''
+    }
+
+    const payload: Record<string, unknown> = {
       store: String(d.store || '').trim(),
       name: String(d.name || '').trim(),
       nick: String(d.nick || '').trim(),
@@ -43,7 +52,6 @@ export async function POST(req: Request) {
       resign_date: toDateStr(d.resign),
       sal_type: String(d.salType || 'Monthly').trim(),
       sal_amt: Number(d.salAmt) || 0,
-      password: String(d.pw || '').trim(),
       role: String(d.role || 'Staff').trim(),
       email: String(d.email || '').trim(),
       annual_leave_days: d.annualLeaveDays != null && d.annualLeaveDays !== '' ? Number(d.annualLeaveDays) : 0,
@@ -57,9 +65,11 @@ export async function POST(req: Request) {
 
     const rowId = Number(d.row)
     if (rowId === 0) {
+      payload.password = passwordValue || ''
       await supabaseInsert('employees', payload)
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
+    if (passwordValue) payload.password = passwordValue
     await supabaseUpdate('employees', rowId, payload)
     return NextResponse.json({ success: true, message: '✅ 직원 정보가 수정되었습니다.' }, { headers })
   } catch (e) {

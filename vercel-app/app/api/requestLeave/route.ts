@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { parseOr400, requestLeaveSchema } from '@/lib/api-validate'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -11,23 +12,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const d = body.d || body
-    const store = String(d.store || '').trim()
-    const name = String(d.name || '').trim()
-    const leaveDate = String(d.date || d.leave_date || '').trim().slice(0, 10)
-
-    if (!store || !name || !leaveDate) {
-      return NextResponse.json(
-        { success: false, message: '❌ 매장·이름·날짜가 필요합니다.' },
-        { headers }
-      )
+    const bodyForValidation = {
+      store: d.store || '',
+      name: d.name || '',
+      type: d.type || '',
+      date: (d.date || d.leave_date || '').slice(0, 10),
+      reason: d.reason,
     }
+    const validated = parseOr400(requestLeaveSchema, bodyForValidation, headers)
+    if (validated.errorResponse) return validated.errorResponse
+    const { store, name, type, date: leaveDate, reason } = validated.parsed
 
     await supabaseInsert('leave_requests', {
       store,
       name,
-      type: String(d.type || '').trim(),
+      type: type.trim(),
       leave_date: leaveDate,
-      reason: String(d.reason || '').trim(),
+      reason: String(reason || '').trim(),
       status: '대기',
     })
     return NextResponse.json(

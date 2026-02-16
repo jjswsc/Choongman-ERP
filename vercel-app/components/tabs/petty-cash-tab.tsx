@@ -17,7 +17,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { getLoginData } from "@/lib/api-client"
+import { useStoreList } from "@/lib/api-client"
 import {
   getPettyCashList,
   getPettyCashMonthDetail,
@@ -70,24 +70,22 @@ export function PettyCashTab() {
   const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
+  const { stores: storeList } = useStoreList()
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = ["director", "officer", "ceo", "hr"].includes(auth.role || "")
-    getLoginData().then((r) => {
-      const storeList = Object.keys(r.users || {}).filter(Boolean).sort()
-      if (isOffice) {
-        setStores(["All", ...storeList])
-        setListStore("All")
-        setMonthlyStore("All")
-        setAddStore(storeList[0] || "")
-      } else {
-        setStores([auth.store!])
-        setListStore(auth.store!)
-        setMonthlyStore(auth.store!)
-        setAddStore(auth.store!)
-      }
-    })
-  }, [auth])
+    if (isOffice && storeList.length > 0) {
+      setStores(["All", ...storeList])
+      setListStore("All")
+      setMonthlyStore("All")
+      setAddStore(storeList[0] || "")
+    } else if (!isOffice) {
+      setStores([auth.store!])
+      setListStore(auth.store!)
+      setMonthlyStore(auth.store!)
+      setAddStore(auth.store!)
+    }
+  }, [auth?.store, auth?.role, storeList])
 
   // 내용(memo) 로그인 언어로 번역
   useEffect(() => {
