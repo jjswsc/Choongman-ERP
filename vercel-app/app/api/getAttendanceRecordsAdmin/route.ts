@@ -49,7 +49,10 @@ export interface AttendanceDailyRow {
   otMin: number
   status: string
   approval: string
+  /** @deprecated use pendingInId/pendingOutId */
   pendingId: number | null
+  pendingInId: number | null
+  pendingOutId: number | null
 }
 
 export async function GET(request: NextRequest) {
@@ -170,22 +173,26 @@ export async function GET(request: NextRequest) {
       const rec = byKey[key]
       const type = String(r.log_type || '').trim()
       const logAt = r.log_at || ''
-      const needsApproval = /위치미확인|승인대기/.test(String(r.status || '')) && String(r.approved || '').trim() === '대기'
+      const approved = String(r.approved || '').trim()
+      const st = String(r.status || '').trim()
+      const isGpsOrForced = /위치미확인|승인대기|강제퇴근/.test(st)
+      const needsInApproval = approved === '대기' && (isGpsOrForced || (Number(r.late_min) || 0) > 0)
+      const needsOutApproval = approved === '대기' && (isGpsOrForced || (Number(r.ot_min) || 0) > 0)
 
       if (type === '출근') {
         if (!rec.inTime || logAt < (rec.inTime || '')) {
           rec.inTime = logAt
           rec.lateMin = Number(r.late_min) || 0
-          if (needsApproval) rec.inId = r.id ?? null
+          if (needsInApproval) rec.inId = r.id ?? null
         }
       } else if (type === '퇴근') {
         if (!rec.outTime || logAt > (rec.outTime || '')) {
           rec.outTime = logAt
           rec.earlyMin = Number(r.early_min) || 0
           rec.otMin = Number(r.ot_min) || 0
-          rec.status = String(r.status || '').trim() || rec.status
-          rec.outApproved = String(r.approved || '').trim() || ''
-          if (needsApproval) rec.outId = r.id ?? null
+          rec.status = st || rec.status
+          rec.outApproved = approved || ''
+          if (needsOutApproval) rec.outId = r.id ?? null
         }
       } else if (type === '휴식종료') {
         rec.breakMin += Number(r.break_min) || 0
@@ -244,9 +251,8 @@ export async function GET(request: NextRequest) {
       const plannedWorkMin = plannedWorkHrs * 60
       const diffMin = Math.round(actualWorkMin - plannedWorkMin)
 
-      const pendingId = outIdForRow ?? inIdForRow
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
-      const isPending = /위치미확인|승인대기/.test(statusForRow) && approval === '대기'
+      const isPending = inIdForRow != null || outIdForRow != null
 
       if (pendingOnly && !isPending) continue
 
@@ -264,7 +270,9 @@ export async function GET(request: NextRequest) {
         otMin: otMinForRow,
         status: outTimeForRow ? statusForRow : '퇴근미기록',
         approval: approval || '대기',
-        pendingId,
+        pendingId: outIdForRow ?? inIdForRow,
+        pendingInId: inIdForRow,
+        pendingOutId: outIdForRow,
       })
     }
 

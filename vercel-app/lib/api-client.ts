@@ -626,6 +626,8 @@ export interface AttendanceDailyRow {
   status: string
   approval: string
   pendingId: number | null
+  pendingInId?: number | null
+  pendingOutId?: number | null
 }
 
 export async function getAttendanceRecordsAdmin(params: {

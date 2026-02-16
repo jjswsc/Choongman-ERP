@@ -135,6 +135,18 @@ export default function AdminAttendancePage() {
     else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
+  const handleRejectBoth = async (inId: number | null, outId: number | null) => {
+    const ids = [inId, outId].filter((x): x is number => x != null)
+    for (const id of ids) {
+      const res = await processAttendanceApproval({ id, decision: "반려", userStore: auth?.store, userRole: auth?.role })
+      if (!res.success) {
+        alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+        return
+      }
+    }
+    if (ids.length > 0) loadRecords()
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
@@ -239,12 +251,18 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_late_extra")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[140px]">{t("att_approve_btn")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[160px]">{t("att_approve_btn")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {list.map((row, i) => {
-                      const isPending = row.pendingId != null && /위치미확인|승인대기/.test(row.status)
+                      const pendingIn = row.pendingInId ?? null
+                      const pendingOut = row.pendingOutId ?? null
+                      const hasNewPending = pendingIn != null || pendingOut != null
+                      const hasLegacyPending = !hasNewPending && row.pendingId != null
+                      const hasPending = hasNewPending || hasLegacyPending
+                      const isPending = hasPending
+                      const needsOtInput = (pendingOut != null || (hasLegacyPending && row.otMin > 0)) && row.otMin > 0
                       return (
                         <tr
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
@@ -279,49 +297,53 @@ export default function AdminAttendancePage() {
                             </span>
                           </td>
                           <td className="px-2 py-2.5">
-                            {row.pendingId != null ? (
-                              <div className="flex flex-nowrap items-center gap-1 justify-center">
-                                {row.otMin > 0 ? (
-                                  <>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={999}
-                                      placeholder={t("att_ot_min")}
-                                      value={otMinutesByRow[row.pendingId] ?? String(row.otMin)}
-                                      onChange={(e) =>
-                                        setOtMinutesByRow((p) => ({ ...p, [row.pendingId!]: e.target.value }))
-                                      }
-                                      className="h-7 w-12 text-xs text-center px-1 shrink-0"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                      className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
-                                      onClick={() => {
-                                        const v = otMinutesByRow[row.pendingId!] ?? String(row.otMin)
-                                        const n = parseInt(v, 10)
-                                        handleApprove(row.pendingId!, !isNaN(n) && n >= 0 ? n : row.otMin)
-                                      }}
-                                    >
-                                      {t("att_approve_btn")}
-                                    </Button>
-                                  </>
-                                ) : (
+                            {hasPending ? (
+                              <div className="flex flex-nowrap items-center gap-1 justify-center flex-wrap">
+                                {pendingIn != null && (
                                   <Button
                                     size="sm"
                                     variant="default"
-                                    className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
-                                    onClick={() => handleApprove(row.pendingId!)}
+                                    className="h-7 px-1.5 text-[10px] shrink-0"
+                                    onClick={() => handleApprove(pendingIn)}
                                   >
-                                    {t("att_approve_btn")}
+                                    {t("att_approve_in")}
                                   </Button>
+                                )}
+                                {(pendingOut != null || (hasLegacyPending && row.pendingId != null)) && (
+                                  <>
+                                    {needsOtInput && (
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={999}
+                                        placeholder={t("att_ot_min")}
+                                        value={otMinutesByRow[pendingOut ?? row.pendingId!] ?? String(row.otMin)}
+                                        onChange={(e) =>
+                                          setOtMinutesByRow((p) => ({ ...p, [pendingOut ?? row.pendingId!]: e.target.value }))
+                                        }
+                                        className="h-7 w-10 text-xs text-center px-0.5 shrink-0"
+                                      />
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-7 px-1.5 text-[10px] shrink-0"
+                                      onClick={() => {
+                                        const outId = pendingOut ?? row.pendingId!
+                                        const otVal = needsOtInput ? (otMinutesByRow[outId] ?? String(row.otMin)) : ""
+                                        const n = parseInt(otVal, 10)
+                                        handleApprove(outId, needsOtInput && !isNaN(n) && n >= 0 ? n : undefined)
+                                      }}
+                                    >
+                                      {t("att_approve_out")}
+                                    </Button>
+                                  </>
                                 )}
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-7 px-2 text-[10px] shrink-0 whitespace-nowrap"
-                                  onClick={() => handleReject(row.pendingId!)}
+                                  className="h-7 px-1.5 text-[10px] shrink-0"
+                                  onClick={() => handleRejectBoth(pendingIn, pendingOut ?? (hasLegacyPending ? row.pendingId : null))}
                                 >
                                   {t("att_reject_btn")}
                                 </Button>
