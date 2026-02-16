@@ -328,7 +328,12 @@ export interface AdminActivityItem {
   type: 'receiving' | 'shipping' | 'order' | 'leave' | 'employee'
   titleKey: string
   description: string
+  descriptionKey?: string
+  descriptionParams?: Record<string, string>
   time: string
+  ts?: number
+  timeKey?: 'justNow' | 'minAgo' | 'hourAgo' | 'dayAgo' | 'date'
+  timeParam?: number | string
 }
 
 export async function getAdminRecentActivity() {

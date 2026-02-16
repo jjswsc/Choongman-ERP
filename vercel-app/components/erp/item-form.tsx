@@ -155,40 +155,41 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             </DropdownMenu>
           </div>
           <div className="flex flex-col gap-2">
-            <label className="flex items-center justify-between text-xs font-semibold text-foreground">
-              <DropdownMenu open={vendorOpen} onOpenChange={setVendorOpen}>
+            <label className="text-xs font-semibold text-foreground">{t("itemsVendorPh")}</label>
+            <DropdownMenu open={vendorOpen} onOpenChange={setVendorOpen}>
+              <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden">
+                <Input
+                  placeholder={t("itemsVendorPh")}
+                  className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  value={formData.vendor}
+                  onChange={(e) => update("vendor", e.target.value)}
+                  onFocus={() => setVendorOpen(true)}
+                />
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-[11px] font-semibold text-primary hover:underline">
-                    {t("itemsVendorPh")}
-                    <ChevronDown className="ml-0.5 h-3 w-3" />
+                  <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
+                    <ChevronDown className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="max-h-60 w-56 overflow-y-auto">
-                  {vendorList.length === 0 ? (
-                    <DropdownMenuItem disabled>{t("loading")}</DropdownMenuItem>
-                  ) : (
-                    vendorList.map((v) => (
-                      <DropdownMenuItem
-                        key={v.code}
-                        onClick={() => {
-                          update("vendor", v.code)
-                          setVendorOpen(false)
-                        }}
-                      >
-                        <span className="font-medium">{v.code}</span>
-                        <span className="ml-1.5 text-muted-foreground">— {v.name}</span>
-                      </DropdownMenuItem>
-                    ))
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </label>
-            <Input
-              placeholder={t("itemsVendorPh")}
-              className="h-10 text-sm"
-              value={formData.vendor}
-              onChange={(e) => update("vendor", e.target.value)}
-            />
+              </div>
+              <DropdownMenuContent align="start" className="max-h-60 w-56 overflow-y-auto">
+                {vendorList.length === 0 ? (
+                  <DropdownMenuItem disabled>{t("loading")}</DropdownMenuItem>
+                ) : (
+                  vendorList.map((v) => (
+                    <DropdownMenuItem
+                      key={v.code}
+                      onClick={() => {
+                        update("vendor", v.code)
+                        setVendorOpen(false)
+                      }}
+                    >
+                      <span className="font-medium">{v.code}</span>
+                      <span className="ml-1.5 text-muted-foreground">— {v.name}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

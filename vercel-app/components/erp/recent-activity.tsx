@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
   ArrowDownToLine,
@@ -20,6 +21,14 @@ const fallbackActivities: AdminActivityItem[] = [
   { id: "2", type: "receiving", titleKey: "adminActInboundReg", description: "-", time: "-" },
   { id: "3", type: "order", titleKey: "adminActOrderApproved", description: "-", time: "-" },
 ]
+
+const typeToHref: Record<string, string> = {
+  order: "/admin/orders",
+  receiving: "/admin/inbound",
+  shipping: "/admin/outbound",
+  leave: "/admin/leave",
+  employee: "/admin/employees",
+}
 
 const typeConfig: Record<string, { icon: typeof ArrowDownToLine; color: string; bg: string }> = {
   receiving: {
@@ -49,6 +58,40 @@ const typeConfig: Record<string, { icon: typeof ArrowDownToLine; color: string; 
   },
 }
 
+function formatDescription(
+  activity: AdminActivityItem,
+  t: (k: string) => string
+): string {
+  if (activity.descriptionKey && activity.descriptionParams) {
+    let msg = t(activity.descriptionKey)
+    const params = { ...activity.descriptionParams }
+    if (params.type === "연차") params.type = t("leaveTypeAnnual")
+    if (params.type === "병가") params.type = t("sick")
+    Object.entries(params).forEach(([k, v]) => {
+      msg = msg.replace(new RegExp(`\\{${k}\\}`, "g"), v)
+    })
+    return msg
+  }
+  return activity.description
+}
+
+function formatTime(activity: AdminActivityItem, t: (k: string) => string): string {
+  if (activity.timeKey === "date" && activity.timeParam != null) {
+    return String(activity.timeParam)
+  }
+  if (activity.timeKey === "justNow") return t("timeJustNow")
+  if (activity.timeKey === "minAgo" && typeof activity.timeParam === "number") {
+    return t("timeMinAgo").replace("{n}", String(activity.timeParam))
+  }
+  if (activity.timeKey === "hourAgo" && typeof activity.timeParam === "number") {
+    return t("timeHourAgo").replace("{n}", String(activity.timeParam))
+  }
+  if (activity.timeKey === "dayAgo" && typeof activity.timeParam === "number") {
+    return t("timeDayAgo").replace("{n}", String(activity.timeParam))
+  }
+  return activity.time
+}
+
 export function RecentActivity() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -72,11 +115,9 @@ export function RecentActivity() {
         {activities.map((activity) => {
           const config = typeConfig[activity.type] || typeConfig.receiving
           const Icon = config.icon
-          return (
-            <div
-              key={activity.id}
-              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/50"
-            >
+          const href = typeToHref[activity.type] ?? "#"
+          const content = (
+            <>
               <div
                 className={cn(
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
@@ -91,12 +132,28 @@ export function RecentActivity() {
                   {t(activity.titleKey)}
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
-                  {activity.description}
+                  {formatDescription(activity, t)}
                 </p>
               </div>
               <span className="shrink-0 text-[10px] text-muted-foreground">
-                {activity.time}
+                {formatTime(activity, t)}
               </span>
+            </>
+          )
+          return href !== "#" ? (
+            <Link
+              key={activity.id}
+              href={href}
+              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/50"
+            >
+              {content}
+            </Link>
+          ) : (
+            <div
+              key={activity.id}
+              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-muted/50"
+            >
+              {content}
             </div>
           )
         })}

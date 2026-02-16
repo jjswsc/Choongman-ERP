@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import {
   ShieldCheck,
@@ -47,39 +48,49 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <StatCard
-              title={t("adminUnapprovedOrders")}
-              value={stats.unapprovedOrders}
-              icon={ShieldCheck}
-              variant="primary"
-              description={t("adminPendingApprove")}
-            />
-            <StatCard
-              title={t("adminThisMonthInbound")}
-              value={stats.thisMonthInbound}
-              icon={ArrowDownToLine}
-              variant="success"
-            />
-            <StatCard
-              title={t("adminThisMonthOutbound")}
-              value={stats.thisMonthOutbound}
-              icon={ArrowUpFromLine}
-              variant="warning"
-            />
-            <StatCard
-              title={t("adminLeavePending")}
-              value={stats.leavePending}
-              icon={Palmtree}
-              variant="destructive"
-              description={t("adminLeaveApproveNeed")}
-            />
-            <StatCard
-              title={t("adminAttPending")}
-              value={stats.attPending}
-              icon={CalendarClock}
-              variant="default"
-              description={t("adminAttDone")}
-            />
+            <Link href="/admin/orders" className="block transition-opacity hover:opacity-90">
+              <StatCard
+                title={t("adminUnapprovedOrders")}
+                value={stats.unapprovedOrders}
+                icon={ShieldCheck}
+                variant="primary"
+                description={t("adminPendingApprove")}
+              />
+            </Link>
+            <Link href="/admin/inbound" className="block transition-opacity hover:opacity-90">
+              <StatCard
+                title={t("adminThisMonthInbound")}
+                value={stats.thisMonthInbound}
+                icon={ArrowDownToLine}
+                variant="success"
+              />
+            </Link>
+            <Link href="/admin/outbound" className="block transition-opacity hover:opacity-90">
+              <StatCard
+                title={t("adminThisMonthOutbound")}
+                value={stats.thisMonthOutbound}
+                icon={ArrowUpFromLine}
+                variant="warning"
+              />
+            </Link>
+            <Link href="/admin/leave" className="block transition-opacity hover:opacity-90">
+              <StatCard
+                title={t("adminLeavePending")}
+                value={stats.leavePending}
+                icon={Palmtree}
+                variant="destructive"
+                description={t("adminLeaveApproveNeed")}
+              />
+            </Link>
+            <Link href="/admin/attendance" className="block transition-opacity hover:opacity-90">
+              <StatCard
+                title={t("adminAttPending")}
+                value={stats.attPending}
+                icon={CalendarClock}
+                variant="default"
+                description={t("adminAttDone")}
+              />
+            </Link>
           </div>
 
           <div className="mt-6">

@@ -6,17 +6,21 @@ interface ActivityItem {
   type: 'receiving' | 'shipping' | 'order' | 'leave' | 'employee'
   titleKey: string
   description: string
+  descriptionKey?: string
+  descriptionParams?: Record<string, string>
   time: string
   ts: number
+  timeKey?: 'justNow' | 'minAgo' | 'hourAgo' | 'dayAgo' | 'date'
+  timeParam?: number | string
 }
 
-function formatTimeAgo(ts: Date): string {
+function computeTimeAgo(ts: Date): { key: ActivityItem['timeKey']; param?: number | string } {
   const sec = Math.floor((Date.now() - ts.getTime()) / 1000)
-  if (sec < 60) return '방금 전'
-  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`
-  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`
-  if (sec < 604800) return `${Math.floor(sec / 86400)}일 전`
-  return ts.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+  if (sec < 60) return { key: 'justNow' }
+  if (sec < 3600) return { key: 'minAgo', param: Math.floor(sec / 60) }
+  if (sec < 86400) return { key: 'hourAgo', param: Math.floor(sec / 3600) }
+  if (sec < 604800) return { key: 'dayAgo', param: Math.floor(sec / 86400) }
+  return { key: 'date', param: ts.toISOString().slice(0, 10) }
 }
 
 /** 관리자 대시보드 최근 활동 - 주문/입고/출고/휴가 등 실데이터 */
@@ -43,52 +47,72 @@ export async function GET() {
     for (const o of orders || []) {
       if (o.status !== 'Approved') continue
       const d = o.order_date ? new Date(o.order_date) : new Date()
+      const ta = computeTimeAgo(d)
       items.push({
         id: `order-${o.id}`,
         type: 'order',
         titleKey: 'adminActOrderApproved',
         description: `${o.store_name || ''} 주문 #${o.id} 승인됨`,
-        time: formatTimeAgo(d),
+        descriptionKey: 'adminActOrderDesc',
+        descriptionParams: { store: o.store_name || '', id: String(o.id) },
+        time: ta.key === 'date' ? String(ta.param) : '',
         ts: d.getTime(),
+        timeKey: ta.key,
+        timeParam: ta.param,
       })
     }
 
     for (const row of inboundLogs || []) {
       const d = row.log_date ? new Date(row.log_date) : new Date()
       const loc = String(row.location || '').trim() || '본사 창고'
+      const ta = computeTimeAgo(d)
       items.push({
         id: `in-${d.getTime()}-${row.vendor_target || ''}`,
         type: 'receiving',
         titleKey: 'adminActInboundReg',
         description: `${loc} - 신규 입고`,
-        time: formatTimeAgo(d),
+        descriptionKey: 'adminActInboundDesc',
+        descriptionParams: { location: loc },
+        time: ta.key === 'date' ? String(ta.param) : '',
         ts: d.getTime(),
+        timeKey: ta.key,
+        timeParam: ta.param,
       })
     }
 
     for (const row of outboundLogs || []) {
       const d = row.log_date ? new Date(row.log_date) : new Date()
       const target = String(row.vendor_target || '').trim() || '매장'
+      const ta = computeTimeAgo(d)
       items.push({
         id: `out-${d.getTime()}-${target}`,
         type: 'shipping',
         titleKey: 'adminActOutboundDone',
         description: `${target} - 출고 처리됨`,
-        time: formatTimeAgo(d),
+        descriptionKey: 'adminActOutboundDesc',
+        descriptionParams: { target },
+        time: ta.key === 'date' ? String(ta.param) : '',
         ts: d.getTime(),
+        timeKey: ta.key,
+        timeParam: ta.param,
       })
     }
 
     for (const r of leaveRows || []) {
       const d = r.created_at ? new Date(r.created_at) : new Date()
       const dateStr = r.leave_date ? String(r.leave_date).slice(0, 10) : ''
+      const ta = computeTimeAgo(d)
       items.push({
         id: `leave-${r.id}`,
         type: 'leave',
         titleKey: 'adminActLeaveReq',
         description: `${r.name || ''} - ${r.type || '연차'} (${dateStr})`,
-        time: formatTimeAgo(d),
+        descriptionKey: 'adminActLeaveDesc',
+        descriptionParams: { name: r.name || '', type: r.type || '연차', date: dateStr },
+        time: ta.key === 'date' ? String(ta.param) : '',
         ts: d.getTime(),
+        timeKey: ta.key,
+        timeParam: ta.param,
       })
     }
 
