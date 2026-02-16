@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole } from "@/lib/permissions"
+import { isManagerRole, isOfficeRole } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -263,6 +263,7 @@ export default function EmployeesPage() {
   }
 
   const isManager = isManagerRole(userRole)
+  const isOffice = isOfficeRole(userRole)
 
   const handleNew = () => {
     const base = { ...emptyForm, annualLeaveDays: 15 }
@@ -293,12 +294,16 @@ export default function EmployeesPage() {
         </div>
 
         <Tabs defaultValue="list" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+          <TabsList className={isOffice ? "grid w-full grid-cols-5 max-w-2xl" : "grid w-full grid-cols-2 max-w-md"}>
             <TabsTrigger value="list">{t("tab_hr_list")}</TabsTrigger>
-            <TabsTrigger value="eval">{t("tab_hr_eval")}</TabsTrigger>
+            {isOffice && <TabsTrigger value="eval">{t("tab_hr_eval")}</TabsTrigger>}
             <TabsTrigger value="eval-list">{t("tab_eval_list")}</TabsTrigger>
-            <TabsTrigger value="kitchen-setting">{t("tab_eval_kitchen_setting")}</TabsTrigger>
-            <TabsTrigger value="service-setting">{t("tab_eval_service_setting")}</TabsTrigger>
+            {isOffice && (
+              <>
+                <TabsTrigger value="kitchen-setting">{t("tab_eval_kitchen_setting")}</TabsTrigger>
+                <TabsTrigger value="service-setting">{t("tab_eval_service_setting")}</TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           <TabsContent value="list" className="mt-0">
@@ -355,22 +360,28 @@ export default function EmployeesPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="eval">
-            <EmployeeEvalTab
-              stores={storesForForm}
-              employees={allEmployees}
-              onSaved={loadEmployeeList}
-            />
-          </TabsContent>
+          {isOffice && (
+            <TabsContent value="eval">
+              <EmployeeEvalTab
+                stores={storesForForm}
+                employees={allEmployees}
+                onSaved={loadEmployeeList}
+              />
+            </TabsContent>
+          )}
           <TabsContent value="eval-list">
             <EmployeeEvalListTab stores={stores} />
           </TabsContent>
-          <TabsContent value="kitchen-setting">
-            <EmployeeEvalSettingTab type="kitchen" readOnly={isManager} />
-          </TabsContent>
-          <TabsContent value="service-setting">
-            <EmployeeEvalSettingTab type="service" readOnly={isManager} />
-          </TabsContent>
+          {isOffice && (
+            <>
+              <TabsContent value="kitchen-setting">
+                <EmployeeEvalSettingTab type="kitchen" readOnly={isManager} />
+              </TabsContent>
+              <TabsContent value="service-setting">
+                <EmployeeEvalSettingTab type="service" readOnly={isManager} />
+              </TabsContent>
+            </>
+          )}
         </Tabs>
       </div>
     </div>

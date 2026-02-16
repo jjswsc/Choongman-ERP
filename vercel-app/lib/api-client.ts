@@ -1394,7 +1394,7 @@ export async function deleteEvaluationItem(params: {
   return res.text() as Promise<string>
 }
 
-/** 평가 결과 저장 */
+/** 평가 결과 저장 (오피스 직원 이상만 가능) */
 export async function saveEvaluationResult(params: {
   type: 'kitchen' | 'service'
   id?: string
@@ -1405,6 +1405,7 @@ export async function saveEvaluationResult(params: {
   finalGrade: string
   memo: string
   jsonData: unknown
+  userRole?: string
 }) {
   const res = await fetch('/api/saveEvaluationResult', {
     method: 'POST',

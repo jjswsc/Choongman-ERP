@@ -6,7 +6,14 @@ import {
   supabaseUpdate,
 } from '@/lib/supabase-server'
 
-/** 평가 결과 저장 (신규 또는 수정) */
+const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
+
+function isOfficeRole(role: string): boolean {
+  const r = String(role || '').toLowerCase().trim()
+  return OFFICE_ROLES.some((x) => r.includes(x))
+}
+
+/** 평가 결과 저장 (신규 또는 수정). 오피스 직원 이상만 등록/수정 가능 */
 export async function POST(req: Request) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -23,7 +30,12 @@ export async function POST(req: Request) {
       finalGrade,
       memo,
       jsonData,
+      userRole = '',
     } = body
+
+    if (!isOfficeRole(userRole)) {
+      return NextResponse.json({ error: '직원 평가 등록/수정은 오피스 직원 이상만 가능합니다.' }, { status: 403, headers })
+    }
 
     const dateStr = date && typeof date === 'string' ? date.slice(0, 10) : ''
     if (!dateStr || dateStr.length < 10) {

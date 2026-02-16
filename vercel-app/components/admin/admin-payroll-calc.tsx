@@ -325,6 +325,7 @@ export function AdminPayrollCalc() {
           <p>{t("pay_calc_hint_line2")}</p>
           <p>{t("pay_calc_hint_line3")}</p>
           <p>{t("pay_calc_hint_line4")}</p>
+          <p>{t("pay_calc_hint_line5")}</p>
         </div>
 
         {error && (

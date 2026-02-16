@@ -416,6 +416,7 @@ export function EmployeeEvalTab({
         evaluator: evaluatorName,
         finalGrade: displayGrade || computedGrade,
         memo: totalMemo,
+        userRole: auth?.role || "",
         jsonData: {
           sections: payloadSections,
           incidents: incidentPayload,

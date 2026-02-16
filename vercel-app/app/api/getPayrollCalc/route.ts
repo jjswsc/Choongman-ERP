@@ -6,6 +6,9 @@ import {
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
+// 매장 직원: 한 달에 10분 이상 지각 3번 이상 → 반차(0.5일) 급여 삭감
+const LATE_HALF_DAY_MIN = 10
+const LATE_HALF_DAY_COUNT = 3
 
 const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
 
@@ -41,7 +44,7 @@ const DEFAULT_HOLIDAYS: { date: string; name: string }[] = [
   { date: '-12-10', name: 'Constitution Day' },
 ]
 
-type AttSummary = { lateMin: number; otMin: number; workMin: number; workDays: number; workDates: Set<string> }
+type AttSummary = { lateMin: number; lateDaysOver10: number; otMin: number; workMin: number; workDays: number; workDates: Set<string> }
 
 function buildAttendanceSummary(
   monthStr: string,
@@ -52,7 +55,7 @@ function buildAttendanceSummary(
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
   const map: Record<string, AttSummary> = {}
-  const byDay: Record<string, { inMs: number; outMs: number; breakMin: number; otMin: number; outApproved: boolean }> = {}
+  const byDay: Record<string, { inMs: number; outMs: number; breakMin: number; otMin: number; outApproved: boolean; lateMin?: number }> = {}
 
   for (const r of attRows || []) {
     const rowDateStr = toDateStr(r.log_at)
@@ -61,16 +64,20 @@ function buildAttendanceSummary(
     const name = String(r.name || '').trim()
     if (!store || !name) continue
     const key = store + '_' + name
-    if (!map[key]) map[key] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
+    if (!map[key]) map[key] = { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
     const dayKey = rowDateStr + '_' + key
-    if (!byDay[dayKey]) byDay[dayKey] = { inMs: 0, outMs: 0, breakMin: 0, otMin: 0, outApproved: false }
+    if (!byDay[dayKey]) byDay[dayKey] = { inMs: 0, outMs: 0, breakMin: 0, otMin: 0, outApproved: false, lateMin: 0 }
     const type = String(r.log_type || '').trim()
     const approval = String(r.approved || '').trim()
     const isApproved = approval === '승인' || approval === '승인완료'
     const needsApproval = /위치미확인|승인대기/.test(String(r.status || ''))
     const dt = r.log_at ? new Date(r.log_at).getTime() : 0
     if (type === '출근') {
-      if (!needsApproval || isApproved) map[key].lateMin += Number(r.late_min) || 0
+      const lateMin = Number(r.late_min) || 0
+      if (!needsApproval || isApproved) {
+        map[key].lateMin += lateMin
+        byDay[dayKey].lateMin = Math.max(byDay[dayKey].lateMin || 0, lateMin)
+      }
       if (!byDay[dayKey].inMs || dt < byDay[dayKey].inMs) byDay[dayKey].inMs = dt
     } else if (type === '퇴근') {
       if (!byDay[dayKey].outMs || dt > byDay[dayKey].outMs) {
@@ -111,13 +118,25 @@ function buildAttendanceSummary(
     }
     if (inMs > 0 && outMs > 0 && outApproved && outMs > inMs) {
       const storeName = dk.slice(11)
-      if (!map[storeName]) map[storeName] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
+      if (!map[storeName]) map[storeName] = { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
       const minWork = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMin)
       map[storeName].workMin += minWork
       map[storeName].otMin += otMin
       map[storeName].workDays += 1
       const dateStr = dk.split('_')[0]
       if (dateStr) map[storeName].workDates.add(dateStr)
+    }
+  }
+  // 10분 이상 지각 일수 집계 (매장 직원 반차 공제 규정용)
+  for (const dk of Object.keys(byDay)) {
+    const parts = dk.split('_')
+    const dateStr = parts[0]
+    const key = parts.slice(1).join('_')
+    if (!key || !dateStr) continue
+    const v = byDay[dk]
+    const dayLateMin = v.lateMin || 0
+    if (dayLateMin >= LATE_HALF_DAY_MIN && map[key]) {
+      map[key].lateDaysOver10 = (map[key].lateDaysOver10 || 0) + 1
     }
   }
   return map
@@ -304,8 +323,9 @@ export async function GET(request: NextRequest) {
       const birthBonus = birth && birth.getMonth() === targetMonth && workYears >= 1 ? 500 : 0
 
       const attKey = store + '_' + name
-      const att = attSummary[attKey] || { lateMin: 0, otMin: 0, workMin: 0, workDays: 0 }
+      const att = attSummary[attKey] || { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0 }
       const lateMin = att.lateMin
+      const lateDaysOver10 = att.lateDaysOver10 || 0
       const otMin = att.otMin
       const workMin = att.workMin
       const workDays = att.workDays
@@ -323,6 +343,12 @@ export async function GET(request: NextRequest) {
         lateDed = LATE_DED_HOURS_BASE > 0 && salary ? Math.floor((lateMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
         const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
         otAmt = hourlyForOt > 0 ? Math.floor((otMin / 60) * hourlyForOt * OT_MULTIPLIER) : 0
+      }
+      // 매장 직원: 10분 이상 지각 3번 이상 → 반차(0.5일) 급여 삭감
+      const expectedWorkDaysForDed = isOfficeStore(store) ? expectedWorkDaysOffice : expectedWorkDaysStore
+      if (!isOfficeStore(store) && lateDaysOver10 >= LATE_HALF_DAY_COUNT && salary > 0 && expectedWorkDaysForDed > 0) {
+        const dailyRate = salary / expectedWorkDaysForDed
+        lateDed += Math.floor(dailyRate * 0.5)
       }
 
       const contributable = Math.min(salary, ssoLimits.ceiling)

@@ -313,6 +313,9 @@ export function AdminSettings() {
                   <p className="text-sm text-muted-foreground pl-2">{t("settings_perm_role_manager_desc")}</p>
                 </div>
 
+                <p className="text-sm text-muted-foreground pl-2 border-l-2 border-primary/40 py-1">
+                  {t("settings_perm_eval_note")}
+                </p>
                 <div>
                   <h4 className="text-sm font-semibold mb-3">{t("settings_perm_table_title")}</h4>
                   <div className="overflow-x-auto rounded-lg border text-sm">
@@ -337,6 +340,7 @@ export function AdminSettings() {
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminOutbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminForce")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployeeEval")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_eval_list_only")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminAttendance")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminLeave")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminPayroll")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
