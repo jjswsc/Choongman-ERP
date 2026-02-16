@@ -117,13 +117,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, message: '✅ 마감 완료!' },
+      { success: true, messageKey: 'workLogCloseDone' },
       { headers }
     )
   } catch (e) {
     console.error('submitDailyClose:', e)
     return NextResponse.json(
-      { success: false, message: '❌ 마감 처리 실패: ' + (e as Error).message },
+      { success: false, messageKey: 'workLogCloseFail', message: (e as Error).message },
       { headers }
     )
   }

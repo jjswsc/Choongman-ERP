@@ -15,6 +15,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -31,6 +38,13 @@ import {
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
+
+const PRIORITIES = [
+  { value: "긴급", key: "workLogPriorityUrgent" },
+  { value: "상", key: "workLogPriorityHigh" },
+  { value: "중", key: "workLogPriorityMedium" },
+  { value: "하", key: "workLogPriorityLow" },
+] as const
 
 interface WorklogMyProps {
   userName: string
@@ -140,7 +154,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         content: "",
         progress: 0,
         status: "Continue",
-        priority: "",
+        priority: "중",
       },
     ])
   }
@@ -191,6 +205,19 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     })
   }
 
+  const updatePriority = (
+    setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
+    idOrIndex: string | number,
+    priority: string
+  ) => {
+    setList((prev) => {
+      if (typeof idOrIndex === 'number') {
+        return prev.map((it, i) => (i === idOrIndex ? { ...it, priority } : it))
+      }
+      return prev.map((it) => (it.id === idOrIndex ? { ...it, priority } : it))
+    })
+  }
+
   const formatManagerComment = (comment: string) => {
     if (!comment) return ""
     return comment
@@ -227,7 +254,8 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       if (res.success) {
         loadData()
       } else {
-        alert(res.message || t("workLogSaveFail"))
+        const r = res as { messageKey?: string; message?: string }
+        alert(r.messageKey ? t(r.messageKey) : (r.message || t("workLogSaveFail")))
       }
     } catch (e) {
       alert(t("workLogSaveError"))
@@ -249,9 +277,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       })
       if (res.success) {
         loadData()
-        alert(res.message || t("workLogCloseDone"))
+        alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogCloseDone")))
       } else {
-        alert(res.message || t("workLogCloseFail"))
+        const r = res as { messageKey?: string; message?: string }
+        alert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${r.message}` : t(r.messageKey || "workLogCloseFail"))
       }
     } catch (e) {
       alert(t("workLogCloseError"))
@@ -367,6 +396,21 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                         className="min-h-[36px] text-xs flex-1 resize-y"
                         rows={1}
                       />
+                      <Select
+                        value={it.priority || ""}
+                        onValueChange={(v) => updatePriority(setLocalContinue, it.id, v)}
+                      >
+                        <SelectTrigger className="h-8 w-20 shrink-0 text-xs">
+                          <SelectValue placeholder={t("workLogPriority")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PRIORITIES.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {t(p.key)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <p className="text-xs font-bold text-muted-foreground">{t("workLogProgressHint")}</p>
                     <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment || "")}</p>
@@ -388,13 +432,30 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               ) : (
                 localToday.map((it, idx) => (
                   <div key={it.id || `new-${idx}`} className="rounded-lg border bg-background p-3">
-                    <Textarea
-                      value={it.content}
-                      onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
-                      placeholder="업무 내용 (엔터로 줄바꿈)"
-                      className="mb-2 min-h-[36px] text-xs resize-y"
-                      rows={1}
-                    />
+                    <div className="flex items-start gap-2 mb-2">
+                      <Textarea
+                        value={it.content}
+                        onChange={(e) => updateContent(setLocalToday, idx, e.target.value)}
+                        placeholder={t("workLogTaskPlaceholder")}
+                        className="min-h-[36px] text-xs flex-1 resize-y"
+                        rows={1}
+                      />
+                      <Select
+                        value={it.priority || ""}
+                        onValueChange={(v) => updatePriority(setLocalToday, idx, v)}
+                      >
+                        <SelectTrigger className="h-8 w-20 shrink-0 text-xs">
+                          <SelectValue placeholder={t("workLogPriority")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PRIORITIES.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {t(p.key)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="range"

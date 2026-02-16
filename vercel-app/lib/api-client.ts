@@ -719,6 +719,15 @@ export async function updateWorkLogManagerCheck(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function updateWorkLogPriority(params: { id: string; priority: string }) {
+  const res = await fetch('/api/updateWorkLogPriority', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; messageKey?: string }>
+}
+
 export interface WorkLogManagerItem {
   id: string
   date: string
@@ -1669,6 +1678,68 @@ export async function saveHeadOfficeInfo(data: HeadOfficeInfo) {
     body: JSON.stringify(data),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+// ─── 본사 발주 (Purchase Order) ───
+export interface PurchaseLocation {
+  name: string
+  address: string
+  location_code: string
+}
+
+export interface VendorForPurchase {
+  code: string
+  name: string
+  address: string
+}
+
+export interface ItemByVendor {
+  code: string
+  name: string
+  spec: string
+  price: number
+  cost: number
+  category: string
+  image: string
+}
+
+export async function getPurchaseLocations() {
+  const res = await fetch('/api/getPurchaseLocations')
+  return res.json() as Promise<PurchaseLocation[]>
+}
+
+export async function getVendorsForPurchase() {
+  const res = await fetch('/api/getVendorsForPurchase')
+  return res.json() as Promise<VendorForPurchase[]>
+}
+
+export async function getItemsByVendor(vendorCode: string) {
+  const q = new URLSearchParams({ vendorCode })
+  const res = await fetch(`/api/getItemsByVendor?${q}`)
+  return res.json() as Promise<ItemByVendor[]>
+}
+
+export async function getHqStockByLocation(locationCode: string) {
+  const q = new URLSearchParams({ locationCode })
+  const res = await fetch(`/api/getHqStockByLocation?${q}`)
+  return res.json() as Promise<Record<string, number>>
+}
+
+export async function savePurchaseOrder(params: {
+  vendorCode: string
+  vendorName: string
+  locationName: string
+  locationAddress: string
+  locationCode: string
+  cart: { code: string; name: string; price: number; cost?: number; qty: number }[]
+  userName: string
+}) {
+  const res = await fetch('/api/savePurchaseOrder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; poNo?: string; message?: string }>
 }
 
 export async function getMenuPermission(store: string, name: string) {

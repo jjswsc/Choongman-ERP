@@ -6,10 +6,9 @@ import {
   Search,
   ShieldCheck,
   CheckCircle2,
-  XCircle,
+  MessageSquarePlus,
   Building2,
   User,
-  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,12 +20,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
+  updateWorkLogPriority,
   getWorkLogOfficeOptions,
   translateTexts,
   type WorkLogManagerItem,
@@ -43,10 +42,8 @@ function todayStr() {
 }
 
 export function WorklogApproval() {
-  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const canReject = (auth?.role || "").toLowerCase() === "director"
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [startStr, setStartStr] = React.useState(defaultStartStr)
   const [endStr, setEndStr] = React.useState(todayStr)
@@ -112,18 +109,24 @@ export function WorklogApproval() {
       .replace(/부터/g, t("workLogFrom"))
   }
   const getTransStatus = (status: string) => {
-    if (status === "승인") return t("statusApproved")
-    if (status === "반려") return t("statusRejected")
+    if (status === "승인") return t("workLogStatusConfirmed")
+    if (status === "반려") return t("workLogStatusHold")
     if (status === "대기") return t("statusPending")
     return status
   }
+  const PRIORITIES = [
+    { value: "긴급", key: "workLogPriorityUrgent" },
+    { value: "상", key: "workLogPriorityHigh" },
+    { value: "중", key: "workLogPriorityMedium" },
+    { value: "하", key: "workLogPriorityLow" },
+  ] as const
 
-  const handleApprove = async (id: string) => {
+  const handlePriorityChange = async (id: string, priority: string) => {
     setUpdating(id)
     try {
-      const res = await updateWorkLogManagerCheck({ id, status: "승인" })
+      const res = await updateWorkLogPriority({ id, priority })
       if (res.success) loadData()
-      else alert(res.message || t("workLogApproveFail"))
+      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : t("workLogSaveFail"))
     } catch {
       alert(t("workLogProcessError"))
     } finally {
@@ -131,17 +134,31 @@ export function WorklogApproval() {
     }
   }
 
-  const handleReject = async (id: string) => {
-    const comment = prompt(t("workLogRejectPrompt"))
+  const handleConfirm = async (id: string) => {
+    setUpdating(id)
+    try {
+      const res = await updateWorkLogManagerCheck({ id, status: "승인" })
+      if (res.success) loadData()
+      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogProcessError")))
+    } catch {
+      alert(t("workLogProcessError"))
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  const handleAddComment = async (id: string) => {
+    const comment = prompt(t("workLogCommentPrompt"))
+    if (comment === null) return
     setUpdating(id)
     try {
       const res = await updateWorkLogManagerCheck({
         id,
-        status: "반려",
-        comment: comment || undefined,
+        status: "승인",
+        comment: comment.trim() || undefined,
       })
       if (res.success) loadData()
-      else alert(res.message || t("workLogRejectFail"))
+      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (res.message || t("workLogProcessError")))
     } catch {
       alert(t("workLogProcessError"))
     } finally {
@@ -235,8 +252,8 @@ export function WorklogApproval() {
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
                 <SelectItem value="대기">{t("statusPending")}</SelectItem>
-                <SelectItem value="승인">{t("statusApproved")}</SelectItem>
-                <SelectItem value="반려">{t("statusRejected")}</SelectItem>
+                <SelectItem value="승인">{t("workLogStatusConfirmed")}</SelectItem>
+                <SelectItem value="반려">{t("workLogStatusHold")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -279,22 +296,42 @@ export function WorklogApproval() {
                       <table className="w-full text-left text-sm">
                         <thead>
                           <tr className="border-b bg-muted/10">
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-24">{t("workLogColDate")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground">{t("workLogColContent")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-32 whitespace-nowrap">{t("workLogColDate")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center">{t("workLogColContent")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-16">{t("workLogPriority")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColApproval")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground w-32">{t("workLogColAction")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColReviewStatus")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-32">{t("workLogColAction")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {items.map((it) => (
                             <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5">
-                              <td className="px-5 py-2 text-xs tabular-nums">{it.date}</td>
+                              <td className="px-5 py-2 text-xs tabular-nums text-center whitespace-nowrap">{it.date}</td>
                               <td className="px-5 py-2">
                                 <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
                                   <p className="mt-0.5 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
                                 )}
+                              </td>
+                              <td className="px-5 py-2 text-center">
+                                <Select
+                                  value={it.priority || ""}
+                                  onValueChange={(v) => handlePriorityChange(it.id, v)}
+                                  disabled={updating === it.id}
+                                >
+                                  <SelectTrigger className="h-7 w-20 mx-auto text-[10px]">
+                                    <SelectValue placeholder={t("workLogPriority")} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">-</SelectItem>
+                                    {PRIORITIES.map((p) => (
+                                      <SelectItem key={p.value} value={p.value}>
+                                        {t(p.key)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </td>
                               <td className="px-5 py-2 text-center">
                                 <span className="text-xs font-bold tabular-nums">{it.progress}%</span>
@@ -318,24 +355,22 @@ export function WorklogApproval() {
                                       size="sm"
                                       variant="outline"
                                       className="h-7 px-2 text-[10px] text-success"
-                                      onClick={() => handleApprove(it.id)}
+                                      onClick={() => handleConfirm(it.id)}
                                       disabled={updating === it.id}
                                     >
                                       <CheckCircle2 className="mr-1 h-3 w-3" />
-                                      {t("statusApproved")}
+                                      {t("workLogConfirmBtn")}
                                     </Button>
-                                    {canReject && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-[10px] text-destructive"
-                                        onClick={() => handleReject(it.id)}
-                                        disabled={updating === it.id}
-                                      >
-                                        <XCircle className="mr-1 h-3 w-3" />
-                                        {t("statusRejected")}
-                                      </Button>
-                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[10px] text-primary"
+                                      onClick={() => handleAddComment(it.id)}
+                                      disabled={updating === it.id}
+                                    >
+                                      <MessageSquarePlus className="mr-1 h-3 w-3" />
+                                      {t("workLogCommentBtn")}
+                                    </Button>
                                   </div>
                                 )}
                               </td>

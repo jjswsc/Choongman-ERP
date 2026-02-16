@@ -89,13 +89,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, message: 'SUCCESS' },
+      { success: true, messageKey: 'workLogSaveDone' },
       { headers }
     )
   } catch (e) {
     console.error('saveWorkLogData:', e)
     return NextResponse.json(
-      { success: false, message: 'FAIL' },
+      { success: false, messageKey: 'workLogSaveFail' },
       { headers }
     )
   }

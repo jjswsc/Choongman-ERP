@@ -18,13 +18,13 @@ export async function POST(req: NextRequest) {
     await supabaseUpdate('work_logs', id, patch)
 
     return NextResponse.json(
-      { success: true, message: 'UPDATED' },
+      { success: true, messageKey: 'workLogApproveDone' },
       { headers }
     )
   } catch (e) {
     console.error('updateManagerCheck:', e)
     return NextResponse.json(
-      { success: false, message: 'ERROR' },
+      { success: false, messageKey: 'workLogProcessError' },
       { headers }
     )
   }

@@ -64,6 +64,39 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_order_date ON orders(order_date);
 
+-- 창고/배송 위치 (본사 발주 시 선택)
+CREATE TABLE IF NOT EXISTS warehouse_locations (
+  id BIGSERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  address TEXT NOT NULL,
+  location_code TEXT NOT NULL,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_warehouse_locations_sort ON warehouse_locations(sort_order);
+-- 기본 창고 (선택 실행): INSERT INTO warehouse_locations (name, address, location_code, sort_order)
+--   VALUES ('창고', 'JIDUBANG(ASIA) 262 3 Bangkok-Chon Buri New Line Rd, Prawet, Bangkok 10250', '창고', 1);
+
+-- 발주서 (본사 → 거래처 발주)
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id BIGSERIAL PRIMARY KEY,
+  po_no TEXT,
+  vendor_code TEXT NOT NULL,
+  vendor_name TEXT NOT NULL,
+  location_name TEXT NOT NULL,
+  location_address TEXT NOT NULL,
+  location_code TEXT NOT NULL,
+  cart_json TEXT NOT NULL,
+  subtotal NUMERIC(12,2) DEFAULT 0,
+  vat NUMERIC(12,2) DEFAULT 0,
+  total NUMERIC(12,2) DEFAULT 0,
+  user_name TEXT DEFAULT '',
+  status TEXT DEFAULT 'Draft',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_vendor ON purchase_orders(vendor_code);
+CREATE INDEX IF NOT EXISTS idx_purchase_orders_created ON purchase_orders(created_at);
+
 -- 재고 이력 (기존 시트 "재고") - 한 행이 한 건 입출고
 CREATE TABLE IF NOT EXISTS stock_logs (
   id BIGSERIAL PRIMARY KEY,
