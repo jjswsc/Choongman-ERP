@@ -3,6 +3,7 @@
 import { ShoppingCart } from "lucide-react"
 import { AdminOrderCreate } from "@/components/erp/admin-order-create"
 import { AdminPurchaseOrder } from "@/components/erp/admin-purchase-order"
+import { AdminPurchaseOrderHistory } from "@/components/erp/admin-purchase-order-history"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -35,15 +36,19 @@ export default function OrderCreatePage() {
 
         {showHqTab ? (
           <Tabs defaultValue="store" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="store">{t("orderTabStore")}</TabsTrigger>
               <TabsTrigger value="hq">{t("orderTabHq")}</TabsTrigger>
+              <TabsTrigger value="history">{t("orderTabPoHistory")}</TabsTrigger>
             </TabsList>
             <TabsContent value="store">
               <AdminOrderCreate />
             </TabsContent>
             <TabsContent value="hq">
               <AdminPurchaseOrder />
+            </TabsContent>
+            <TabsContent value="history">
+              <AdminPurchaseOrderHistory />
             </TabsContent>
           </Tabs>
         ) : (

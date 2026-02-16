@@ -1743,6 +1743,28 @@ export async function savePurchaseOrder(params: {
   return res.json() as Promise<{ success: boolean; id?: number; poNo?: string; message?: string }>
 }
 
+export interface PurchaseOrderRow {
+  id?: number
+  po_no?: string
+  vendor_code?: string
+  vendor_name?: string
+  location_name?: string
+  location_address?: string
+  location_code?: string
+  cart_json?: string
+  subtotal?: number
+  vat?: number
+  total?: number
+  user_name?: string
+  status?: string
+  created_at?: string
+}
+
+export async function getPurchaseOrders() {
+  const res = await fetch('/api/getPurchaseOrders')
+  return res.json() as Promise<PurchaseOrderRow[]>
+}
+
 export async function getMenuPermission(store: string, name: string) {
   const q = new URLSearchParams({ store, name })
   const res = await fetch(`/api/getMenuPermission?${q}`)

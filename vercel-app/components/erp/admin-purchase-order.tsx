@@ -164,10 +164,12 @@ export function AdminPurchaseOrder() {
     const loc = locationSelect
     const ven = vendorSelect
     if (!loc || !ven) return ""
+    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", my: "my-MM", lo: "lo-LA" }[lang] || "en-US"
+    const dateStr = new Date().toLocaleDateString(locale)
     return `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Purchase Order - ${poNo}</title>
+<head><meta charset="utf-8"><title>${t("poTitle")} - ${poNo}</title>
 <style>
 body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}
 h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}
@@ -180,15 +182,15 @@ th{background:#f5f5f5}
 </style>
 </head>
 <body>
-<h1>PURCHASE ORDER / 발주서</h1>
-<p><strong>PO No:</strong> ${poNo}</p>
-<p><strong>Date:</strong> ${new Date().toLocaleDateString("ko-KR")}</p>
+<h1>${t("poTitle")}</h1>
+<p><strong>${t("poNo")}:</strong> ${poNo}</p>
+<p><strong>${t("poDate")}:</strong> ${dateStr}</p>
 <hr/>
-<h3>Ship To / 수령처</h3>
+<h3>${t("poShipTo")}</h3>
 <p><strong>${loc.name}</strong></p>
 <p>${loc.address}</p>
 <hr/>
-<h3>Vendor / 거래처</h3>
+<h3>${t("poVendor")}</h3>
 <p><strong>${ven.name}</strong></p>
 <p>${ven.address || "-"}</p>
 <hr/>
@@ -208,7 +210,7 @@ ${cart
 <tr class="tot"><td colspan="4" class="num">${t("total")}</td><td class="num"></td><td class="num">${total}</td></tr>
 </tfoot>
 </table>
-<p style="margin-top:24px;font-size:12px;color:#666">Prepared by: ${auth?.user || "-"}</p>
+<p style="margin-top:24px;font-size:12px;color:#666">${t("poPreparedBy")}: ${auth?.user || "-"}</p>
 </body>
 </html>
 `
@@ -232,26 +234,55 @@ ${cart
 
   const handleExcel = () => {
     const poNo = "PO-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + String(Date.now()).slice(-4)
-    const rows = [
-      ["PURCHASE ORDER", poNo],
-      ["Date", new Date().toLocaleDateString("ko-KR")],
-      [],
-      ["Ship To", locationSelect?.name || "", locationSelect?.address || ""],
-      ["Vendor", vendorSelect?.name || "", vendorSelect?.address || ""],
-      [],
-      ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")],
-      ...cart.map((c, i) => [i + 1, c.name, "-", c.price, c.qty, c.price * c.qty]),
-      [],
-      [t("subtotal"), "", "", "", "", subtotal],
-      [t("vat"), "", "", "", "", vat],
-      [t("total"), "", "", "", "", total],
+    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", my: "my-MM", lo: "lo-LA" }[lang] || "en-US"
+    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    const pad = (r: (string | number)[], n: number) => {
+      const arr = [...r.map((v) => String(v))]
+      while (arr.length < n) arr.push("")
+      return arr.slice(0, n)
+    }
+    const headers = ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
+    const dataRows = cart.map((c, i) => [i + 1, c.name, "-", c.price, c.qty, c.price * c.qty])
+    const allRows = [
+      pad([t("poTitle"), poNo], 6),
+      pad([t("poDate"), new Date().toLocaleDateString(locale)], 6),
+      pad([t("poShipTo"), locationSelect?.name || "", locationSelect?.address || ""], 6),
+      pad([t("poVendor"), vendorSelect?.name || "", vendorSelect?.address || ""], 6),
+      pad([], 6),
+      pad(headers, 6),
+      ...dataRows.map((r) => pad(r.map((v) => String(v)), 6)),
+      pad([], 6),
+      pad([t("subtotal"), "", "", "", "", String(subtotal)], 6),
+      pad([t("vat"), "", "", "", "", String(vat)], 6),
+      pad([t("total"), "", "", "", "", String(total)], 6),
     ]
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n")
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })
+    const pxPerChar = 8
+    const minW = 50
+    const colWidths = Array.from({ length: 6 }, (_, c) => {
+      let maxLen = minW / pxPerChar
+      for (const row of allRows) {
+        const len = String(row[c] ?? "").length
+        if (len > maxLen) maxLen = len
+      }
+      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
+    })
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+${allRows.map((row, ri) => {
+      const isHead = ri === 5 || ri >= allRows.length - 3
+      return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`
+    }).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `PO_${poNo}.csv`
+    a.download = `PO_${poNo}.xls`
     a.click()
     URL.revokeObjectURL(url)
   }
