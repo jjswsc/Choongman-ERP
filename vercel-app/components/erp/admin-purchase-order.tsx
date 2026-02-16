@@ -164,7 +164,7 @@ export function AdminPurchaseOrder() {
     const loc = locationSelect
     const ven = vendorSelect
     if (!loc || !ven) return ""
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", my: "my-MM", lo: "lo-LA" }[lang] || "en-US"
+    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
     const dateStr = new Date().toLocaleDateString(locale)
     return `
 <!DOCTYPE html>
@@ -234,7 +234,7 @@ ${cart
 
   const handleExcel = () => {
     const poNo = "PO-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + String(Date.now()).slice(-4)
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", my: "my-MM", lo: "lo-LA" }[lang] || "en-US"
+    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     const pad = (r: (string | number)[], n: number) => {
       const arr = [...r.map((v) => String(v))]
