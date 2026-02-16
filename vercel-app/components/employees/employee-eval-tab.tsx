@@ -334,14 +334,9 @@ export function EmployeeEvalTab({
     if (attitudeN) attitudeAvg /= attitudeN
     if (serviceN) serviceAvg /= serviceN
 
-    let total = 0
-    if (serviceN > 0) total = serviceAvg
-    else
-      total =
-        menuAvg * EVAL_WEIGHTS.메뉴숙련 +
-        costAvg * EVAL_WEIGHTS.원가정확도 +
-        hygieneAvg * EVAL_WEIGHTS.위생 +
-        attitudeAvg * EVAL_WEIGHTS.태도
+    const totalItems = menuN + costN + hygieneN + attitudeN + serviceN
+    const sumAll = menuAvg * menuN + costAvg * costN + hygieneAvg * hygieneN + attitudeAvg * attitudeN + serviceAvg * serviceN
+    const total = totalItems > 0 ? sumAll / totalItems : 0
 
     let grade = "-"
     if (total > 0) {
@@ -715,8 +710,8 @@ export function EmployeeEvalTab({
                 <table className="w-full text-xs table-fixed">
                   <colgroup>
                     <col style={{ width: "36px" }} />
-                    <col style={{ width: sec.main === "메뉴숙련" ? "70px" : "8px" }} />
-                    <col style={{ width: sec.main === "메뉴숙련" ? "100px" : undefined }} />
+                    <col style={{ width: sec.main === "메뉴숙련" ? "110px" : "8px" }} />
+                    <col style={{ width: sec.main === "메뉴숙련" ? "160px" : undefined }} />
                     <col style={{ width: "64px" }} />
                     <col style={{ width: "44px" }} />
                     <col style={{ width: "44px" }} />
@@ -732,7 +727,7 @@ export function EmployeeEvalTab({
                       <th className="px-2 py-2 text-left font-semibold">
                         {sec.main === "메뉴숙련" ? t("eval_col_menu_item") : t("eval_item")}
                       </th>
-                      <th className="px-2 py-2 text-center font-semibold w-16 shrink-0">{t("eval_score_range")}</th>
+                      <th className="px-2 py-2 text-center font-semibold w-16 shrink-0">{t("eval_score")}</th>
                       <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_solo_ok") : ""}</th>
                       <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_peak_ok") : ""}</th>
                       <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_can_train") : ""}</th>
@@ -747,8 +742,8 @@ export function EmployeeEvalTab({
                           <td className="px-2 py-2 text-center font-medium shrink-0">{it.id}</td>
                           {sec.main === "메뉴숙련" ? (
                             <>
-                              <td className="px-2 py-2 truncate">{getEvalTrans(it.sub) || it.sub}</td>
-                              <td className="px-2 py-2 truncate">{getEvalTrans(it.name) || it.name}</td>
+                              <td className="px-2 py-2 break-words">{getEvalTrans(it.sub) || it.sub}</td>
+                              <td className="px-2 py-2 break-words">{getEvalTrans(it.name) || it.name}</td>
                             </>
                           ) : (
                             <>
@@ -857,11 +852,6 @@ export function EmployeeEvalTab({
           ))}
 
           <div className="rounded-lg border border-border bg-muted/30 p-4">
-            {evalType === "kitchen" && (
-              <p className="mb-2 text-xs text-muted-foreground">
-                {t("eval_weight")}
-              </p>
-            )}
             <p className="text-sm font-bold">
               {t("eval_total_score")}:{" "}
               {computedTotal > 0 ? computedTotal.toFixed(2) : "-"}{" "}
@@ -898,10 +888,10 @@ export function EmployeeEvalTab({
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <colgroup>
-                  <col style={{ width: "25%" }} />
-                  <col style={{ width: "120px" }} />
-                  <col />
-                  <col style={{ width: "120px" }} />
+                    <col style={{ width: "25%" }} />
+                    <col style={{ width: "120px" }} />
+                    <col />
+                    <col style={{ width: "140px", minWidth: "140px" }} />
                   <col style={{ width: "50px" }} />
                 </colgroup>
                 <thead>
@@ -982,7 +972,7 @@ export function EmployeeEvalTab({
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-nowrap items-center gap-2 whitespace-nowrap">
                           <label className="flex items-center gap-1 text-xs shrink-0">
                             <input
                               type="checkbox"
