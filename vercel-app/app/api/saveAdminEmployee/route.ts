@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       password: String(d.pw || '').trim(),
       role: String(d.role || 'Staff').trim(),
       email: String(d.email || '').trim(),
-      annual_leave_days: d.annualLeaveDays != null && d.annualLeaveDays !== '' ? Number(d.annualLeaveDays) : 15,
+      annual_leave_days: d.annualLeaveDays != null && d.annualLeaveDays !== '' ? Number(d.annualLeaveDays) : 0,
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',
       position_allowance: d.positionAllowance != null ? Number(d.positionAllowance) : 0,

@@ -108,11 +108,13 @@ export function WorklogApproval() {
       .replace(/이월됨/g, t("workLogCarriedOver"))
       .replace(/부터/g, t("workLogFrom"))
   }
-  const getTransStatus = (status: string) => {
-    if (status === "승인") return t("workLogStatusConfirmed")
-    if (status === "반려") return t("workLogStatusHold")
-    if (status === "대기") return t("statusPending")
-    return status
+  const getReviewStatusDisplay = (item: WorkLogManagerItem) => {
+    const check = item.managerCheck || ""
+    const comment = (item.managerComment || "").trim()
+    const hasComment = !!comment && !comment.startsWith("⚡")
+    if (check === "대기") return t("statusPending")
+    if (check === "승인") return hasComment ? t("workLogStatusCommented") : t("workLogStatusConfirmed")
+    return check
   }
   const PRIORITIES = [
     { value: "긴급", key: "workLogPriorityUrgent" },
@@ -252,8 +254,7 @@ export function WorklogApproval() {
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
                 <SelectItem value="대기">{t("statusPending")}</SelectItem>
-                <SelectItem value="승인">{t("workLogStatusConfirmed")}</SelectItem>
-                <SelectItem value="반려">{t("workLogStatusHold")}</SelectItem>
+                <SelectItem value="승인">{t("workLogStatusConfirmed")} / {t("workLogStatusCommented")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -340,12 +341,11 @@ export function WorklogApproval() {
                                 <span
                                   className={cn(
                                     "inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold",
-                                    it.managerCheck === "승인" && "bg-success/10 text-success",
-                                    it.managerCheck === "반려" && "bg-destructive/10 text-destructive",
+                                    it.managerCheck === "승인" && (it.managerComment?.trim() && !it.managerComment.startsWith("⚡") ? "bg-primary/10 text-primary" : "bg-success/10 text-success"),
                                     it.managerCheck === "대기" && "bg-warning/10 text-warning"
                                   )}
                                 >
-                                  {getTransStatus(it.managerCheck || "")}
+                                  {getReviewStatusDisplay(it)}
                                 </span>
                               </td>
                               <td className="px-5 py-2">
