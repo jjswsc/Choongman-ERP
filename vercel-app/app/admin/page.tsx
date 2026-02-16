@@ -48,7 +48,7 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <Link href="/admin/orders" className="block transition-opacity hover:opacity-90">
+            <Link href="/admin/orders" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
               <StatCard
                 title={t("adminUnapprovedOrders")}
                 value={stats.unapprovedOrders}
@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
                 description={t("adminPendingApprove")}
               />
             </Link>
-            <Link href="/admin/inbound" className="block transition-opacity hover:opacity-90">
+            <Link href="/admin/inbound" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
               <StatCard
                 title={t("adminThisMonthInbound")}
                 value={stats.thisMonthInbound}
@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
                 variant="success"
               />
             </Link>
-            <Link href="/admin/outbound" className="block transition-opacity hover:opacity-90">
+            <Link href="/admin/outbound" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
               <StatCard
                 title={t("adminThisMonthOutbound")}
                 value={stats.thisMonthOutbound}
@@ -73,7 +73,7 @@ export default function AdminDashboardPage() {
                 variant="warning"
               />
             </Link>
-            <Link href="/admin/leave" className="block transition-opacity hover:opacity-90">
+            <Link href="/admin/leave" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
               <StatCard
                 title={t("adminLeavePending")}
                 value={stats.leavePending}
@@ -82,7 +82,7 @@ export default function AdminDashboardPage() {
                 description={t("adminLeaveApproveNeed")}
               />
             </Link>
-            <Link href="/admin/attendance" className="block transition-opacity hover:opacity-90">
+            <Link href="/admin/attendance" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
               <StatCard
                 title={t("adminAttPending")}
                 value={stats.attPending}

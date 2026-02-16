@@ -171,7 +171,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                   </Button>
                 </DropdownMenuTrigger>
               </div>
-              <DropdownMenuContent align="start" className="max-h-60 w-56 overflow-y-auto">
+              <DropdownMenuContent align="start" className="max-h-60 min-w-[320px] w-max max-w-[95vw] overflow-y-auto">
                 {vendorList.length === 0 ? (
                   <DropdownMenuItem disabled>{t("loading")}</DropdownMenuItem>
                 ) : (

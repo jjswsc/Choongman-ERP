@@ -329,30 +329,30 @@ ${rows.map((row, ri) => {
                       <col style={{ width: "48px" }} />
                       <col style={{ width: "70px" }} />
                       <col />
-                      <col style={{ width: "56px" }} />
+                      <col style={{ width: "90px" }} />
                       <col style={{ width: "40px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
-                        <th className="p-2 text-left">{t("pettyColDate") || "날짜"}</th>
-                        <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
-                        <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
-                        <th className="p-2 text-left">{t("pettyColUser") || "등록자"}</th>
+                        <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
+                        <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
+                        <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
+                        <th className="p-2 text-center hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {listData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
-                          <td className="p-2">{r.trans_date}</td>
-                          <td className="p-2 truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
-                          <td className={`p-2 text-right ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
+                          <td className="p-2 text-center">{r.trans_date}</td>
+                          <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
+                          <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-xs text-muted-foreground truncate">{r.user_name || "-"}</td>
+                          <td className="p-2 text-center hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center text-xs text-muted-foreground">{r.user_name || "-"}</td>
                           <td className="p-2 text-center">
                             {r.receipt_url ? (
                               <button
@@ -493,34 +493,34 @@ ${rows.map((row, ri) => {
                       <col style={{ width: "70px" }} />
                       <col style={{ width: "80px" }} />
                       <col />
-                      <col style={{ width: "56px" }} />
+                      <col style={{ width: "90px" }} />
                       <col style={{ width: "40px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
-                        <th className="p-2 text-left">{t("pettyColDate") || "날짜"}</th>
-                        <th className="p-2 text-left">{t("store") || "매장"}</th>
-                        <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
-                        <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-right font-medium">{t("pettyColBalance") || "잔액"}</th>
-                        <th className="p-2 text-left hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
-                        <th className="p-2 text-left">{t("pettyColUser") || "등록자"}</th>
+                        <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
+                        <th className="p-2 text-center">{t("store") || "매장"}</th>
+                        <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
+                        <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
+                        <th className="p-2 text-center font-medium">{t("pettyColBalance") || "잔액"}</th>
+                        <th className="p-2 text-center hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {monthlyData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
-                          <td className="p-2">{r.trans_date}</td>
-                          <td className="p-2 truncate">{r.store}</td>
-                          <td className="p-2 truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
-                          <td className={`p-2 text-right ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
+                          <td className="p-2 text-center">{r.trans_date}</td>
+                          <td className="p-2 text-center truncate">{r.store}</td>
+                          <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
+                          <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 text-right font-medium">{fmt(r.balance_after ?? 0)}</td>
-                          <td className="p-2 hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-xs text-muted-foreground truncate">{r.user_name || "-"}</td>
+                          <td className="p-2 text-center font-medium">{fmt(r.balance_after ?? 0)}</td>
+                          <td className="p-2 text-center hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center text-xs text-muted-foreground">{r.user_name || "-"}</td>
                           <td className="p-2 text-center">
                             {r.receipt_url ? (
                               <button
