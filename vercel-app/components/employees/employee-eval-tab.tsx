@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { compressImageForUpload } from "@/lib/utils"
 
 const EVAL_WEIGHTS = { 메뉴숙련: 0.4, 원가정확도: 0.2, 위생: 0.2, 태도: 0.2 }
 const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.5, 3.0, 2.0]
@@ -50,9 +51,10 @@ interface EvalSection {
 interface IncidentRow {
   type: string
   typeOther: string
-  occurred: "Yes" | "No"
   date: string
   details: string
+  warningLetterChecked: boolean
+  warningLetterUrl: string
 }
 
 export interface EmployeeEvalTabProps {
@@ -86,8 +88,11 @@ export function EmployeeEvalTab({
   const [peakOK, setPeakOK] = React.useState<Record<string, boolean>>({})
   const [canTrain, setCanTrain] = React.useState<Record<string, boolean>>({})
   const [incidents, setIncidents] = React.useState<IncidentRow[]>(() => [
-    { type: EVAL_INCIDENT_KEYS[0], typeOther: "", occurred: "No", date: "", details: "" },
+    { type: EVAL_INCIDENT_KEYS[0], typeOther: "", date: "", details: "", warningLetterChecked: false, warningLetterUrl: "" },
   ])
+  const warningLetterInputRef = React.useRef<HTMLInputElement>(null)
+  const warningLetterTargetIdxRef = React.useRef<number>(0)
+  const [uploadingWarningForIdx, setUploadingWarningForIdx] = React.useState<number | null>(null)
   const [trainingNeeded, setTrainingNeeded] = React.useState("")
   const [coach, setCoach] = React.useState("")
   const [targetDate, setTargetDate] = React.useState("")
@@ -400,9 +405,10 @@ export function EmployeeEvalTab({
         .filter((r) => r.type || r.typeOther)
         .map((r) => ({
           type: r.type === "__기타__" ? r.typeOther : r.type,
-          occurred: r.occurred,
           date: r.date,
           details: r.details,
+          warningLetterChecked: r.warningLetterChecked,
+          warningLetterUrl: r.warningLetterUrl || "",
         }))
 
       await saveEvaluationResult({
@@ -438,9 +444,10 @@ export function EmployeeEvalTab({
         {
           type: EVAL_INCIDENT_KEYS[0],
           typeOther: "",
-          occurred: "No",
           date: "",
           details: "",
+          warningLetterChecked: false,
+          warningLetterUrl: "",
         },
       ])
       onSaved?.()
@@ -458,11 +465,31 @@ export function EmployeeEvalTab({
       {
         type: EVAL_INCIDENT_KEYS[0],
         typeOther: "",
-        occurred: "No",
         date: "",
         details: "",
+        warningLetterChecked: false,
+        warningLetterUrl: "",
       },
     ])
+  }
+
+  const handleWarningLetterChange = async (idx: number, file: File | null) => {
+    if (!file) return
+    setUploadingWarningForIdx(idx)
+    try {
+      const url = await compressImageForUpload(file)
+      setIncidents((p) => {
+        const n = [...p]
+        n[idx] = { ...n[idx], warningLetterUrl: url, warningLetterChecked: true }
+        return n
+      })
+    } catch (err) {
+      console.error(err)
+      alert(t("msg_upload_fail"))
+    } finally {
+      setUploadingWarningForIdx(null)
+      if (warningLetterInputRef.current) warningLetterInputRef.current.value = ""
+    }
   }
 
   const removeIncident = (idx: number) => {
@@ -865,14 +892,25 @@ export function EmployeeEvalTab({
             <h6 className="mb-3 border-b pb-2 text-sm font-bold">
               {t("eval_incident")}
             </h6>
+            <input
+              ref={warningLetterInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleWarningLetterChange(warningLetterTargetIdxRef.current, file)
+                e.target.value = ""
+              }}
+            />
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="px-3 py-2">{t("eval_issue_type")}</th>
-                    <th className="w-[90px] px-3 py-2">{t("eval_occur")}</th>
                     <th className="w-[120px] px-3 py-2">{t("label_date")}</th>
                     <th className="px-3 py-2">{t("eval_detail")}</th>
+                    <th className="w-[120px] px-3 py-2 text-center">{t("eval_warning_letter")}</th>
                     <th className="w-[50px] px-3 py-2"></th>
                   </tr>
                 </thead>
@@ -917,25 +955,6 @@ export function EmployeeEvalTab({
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <select
-                          value={inc.occurred}
-                          onChange={(e) =>
-                            setIncidents((p) => {
-                              const n = [...p]
-                              n[idx] = {
-                                ...n[idx],
-                                occurred: e.target.value as "Yes" | "No",
-                              }
-                              return n
-                            })
-                          }
-                          className="h-7 w-full rounded border bg-background px-2 text-xs"
-                        >
-                          <option value="No">No</option>
-                          <option value="Yes">Yes</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2">
                         <Input
                           type="date"
                           value={inc.date}
@@ -962,6 +981,49 @@ export function EmployeeEvalTab({
                           placeholder={t("eval_detail")}
                           className="h-7 text-xs"
                         />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-center gap-1">
+                          <label className="flex items-center gap-1.5 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={inc.warningLetterChecked}
+                              onChange={(e) =>
+                                setIncidents((p) => {
+                                  const n = [...p]
+                                  n[idx] = { ...n[idx], warningLetterChecked: e.target.checked }
+                                  return n
+                                })
+                              }
+                              className="rounded"
+                            />
+                            {t("eval_warning_letter_check")}
+                          </label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs"
+                            disabled={uploadingWarningForIdx === idx}
+                            onClick={() => {
+                              warningLetterTargetIdxRef.current = idx
+                              setUploadingWarningForIdx(idx)
+                              warningLetterInputRef.current?.click()
+                            }}
+                          >
+                            {uploadingWarningForIdx === idx ? "..." : t("eval_warning_letter_upload")}
+                          </Button>
+                          {inc.warningLetterUrl && (
+                            <a
+                              href={inc.warningLetterUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline"
+                            >
+                              {t("eval_warning_letter_view")}
+                            </a>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <button
