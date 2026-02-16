@@ -712,46 +712,31 @@ export function EmployeeEvalTab({
                 {sectionTitles[sec.main] || getEvalTrans(sec.main) || sec.main}
               </h6>
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full text-xs table-fixed">
+                  <colgroup>
+                    <col style={{ width: "36px" }} />
+                    <col style={{ width: sec.main === "메뉴숙련" ? "70px" : "8px" }} />
+                    <col style={{ width: sec.main === "메뉴숙련" ? "100px" : undefined }} />
+                    <col style={{ width: "64px" }} />
+                    <col style={{ width: "44px" }} />
+                    <col style={{ width: "44px" }} />
+                    <col style={{ width: "52px" }} />
+                    <col />
+                  </colgroup>
                   <thead>
                     <tr className="border-b bg-muted/50">
-                      <th className="px-3 py-2 text-center font-semibold">
-                        NO
+                      <th className="px-2 py-2 text-center font-semibold">NO</th>
+                      <th className="px-2 py-2 text-left font-semibold">
+                        {sec.main === "메뉴숙련" ? t("eval_col_category") : ""}
                       </th>
-                      {sec.main === "메뉴숙련" && (
-                        <>
-                          <th className="px-3 py-2 text-left font-semibold">
-                            {t("eval_col_category")}
-                          </th>
-                          <th className="px-3 py-2 text-left font-semibold">
-                            {t("eval_col_menu_item")}
-                          </th>
-                        </>
-                      )}
-                      {sec.main !== "메뉴숙련" && (
-                        <th className="px-3 py-2 text-left font-semibold">
-                          {t("eval_item")}
-                        </th>
-                      )}
-                      <th className="px-3 py-2 text-center font-semibold">
-                        {t("eval_score_range")}
+                      <th className="px-2 py-2 text-left font-semibold">
+                        {sec.main === "메뉴숙련" ? t("eval_col_menu_item") : t("eval_item")}
                       </th>
-                      {sec.main === "메뉴숙련" && (
-                        <>
-                          <th className="px-3 py-2 text-center font-semibold">
-                            {t("eval_solo_ok")}
-                          </th>
-                          <th className="px-3 py-2 text-center font-semibold">
-                            {t("eval_peak_ok")}
-                          </th>
-                          <th className="px-3 py-2 text-center font-semibold">
-                            {t("eval_can_train")}
-                          </th>
-                        </>
-                      )}
-                      <th className="px-3 py-2 text-left font-semibold">
-                        {t("eval_notes")}
-                      </th>
+                      <th className="px-2 py-2 text-center font-semibold w-16 shrink-0">{t("eval_score_range")}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_solo_ok") : ""}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_peak_ok") : ""}</th>
+                      <th className="px-2 py-2 text-center font-semibold">{sec.main === "메뉴숙련" ? t("eval_can_train") : ""}</th>
+                      <th className="px-2 py-2 text-left font-semibold">{t("eval_notes")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -759,19 +744,19 @@ export function EmployeeEvalTab({
                       const key = String(it.id)
                       return (
                         <tr key={key} className="border-b">
-                          <td className="px-3 py-2 text-center font-medium">
-                            {it.id}
-                          </td>
-                          {sec.main === "메뉴숙련" && (
+                          <td className="px-2 py-2 text-center font-medium shrink-0">{it.id}</td>
+                          {sec.main === "메뉴숙련" ? (
                             <>
-                              <td className="px-3 py-2">{getEvalTrans(it.sub) || it.sub}</td>
-                              <td className="px-3 py-2">{getEvalTrans(it.name) || it.name}</td>
+                              <td className="px-2 py-2 truncate">{getEvalTrans(it.sub) || it.sub}</td>
+                              <td className="px-2 py-2 truncate">{getEvalTrans(it.name) || it.name}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-2 py-2" />
+                              <td className="px-2 py-2 truncate">{getEvalTrans(it.name) || it.name}</td>
                             </>
                           )}
-                          {sec.main !== "메뉴숙련" && (
-                            <td className="px-3 py-2">{getEvalTrans(it.name) || it.name}</td>
-                          )}
-                          <td className="px-3 py-2">
+                          <td className="px-2 py-2 w-16 shrink-0">
                             <select
                               value={scores[key] || "5"}
                               onChange={(e) =>
@@ -780,7 +765,7 @@ export function EmployeeEvalTab({
                                   [key]: e.target.value,
                                 }))
                               }
-                              className="h-7 w-14 rounded border bg-background px-1 text-center text-xs"
+                              className="h-7 w-full min-w-[3rem] rounded border bg-background px-1 text-center text-xs"
                             >
                               {[1, 2, 3, 4, 5].map((n) => (
                                 <option key={n} value={n}>
@@ -789,9 +774,9 @@ export function EmployeeEvalTab({
                               ))}
                             </select>
                           </td>
-                          {sec.main === "메뉴숙련" && (
+                          {sec.main === "메뉴숙련" ? (
                             <>
-                              <td className="px-3 py-2 text-center">
+                              <td className="px-2 py-2 text-center shrink-0">
                                 <input
                                   type="checkbox"
                                   checked={soloOK[key] || false}
@@ -804,7 +789,7 @@ export function EmployeeEvalTab({
                                   className="h-3.5 w-3.5"
                                 />
                               </td>
-                              <td className="px-3 py-2 text-center">
+                              <td className="px-2 py-2 text-center shrink-0">
                                 <input
                                   type="checkbox"
                                   checked={peakOK[key] || false}
@@ -817,7 +802,7 @@ export function EmployeeEvalTab({
                                   className="h-3.5 w-3.5"
                                 />
                               </td>
-                              <td className="px-3 py-2 text-center">
+                              <td className="px-2 py-2 text-center shrink-0">
                                 <input
                                   type="checkbox"
                                   checked={canTrain[key] || false}
@@ -831,8 +816,14 @@ export function EmployeeEvalTab({
                                 />
                               </td>
                             </>
+                          ) : (
+                            <>
+                              <td className="px-2 py-2" />
+                              <td className="px-2 py-2" />
+                              <td className="px-2 py-2" />
+                            </>
                           )}
-                          <td className="px-3 py-2">
+                          <td className="px-2 py-2 min-w-[80px]">
                             <Input
                               value={remarks[key] || ""}
                               onChange={(e) =>
@@ -841,7 +832,7 @@ export function EmployeeEvalTab({
                                   [key]: e.target.value,
                                 }))
                               }
-                              className="h-7 text-xs"
+                              className="h-7 w-full text-xs"
                               placeholder={t("placeholder_remarks")}
                             />
                           </td>
