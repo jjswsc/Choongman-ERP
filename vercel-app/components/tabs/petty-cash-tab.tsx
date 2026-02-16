@@ -319,27 +319,27 @@ ${rows.map((row, ri) => {
                   {listLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
                 </Button>
               </div>
-              <div className="rounded-lg border border-border/60 max-h-[240px] overflow-y-auto">
+              <div className="rounded-lg border border-border/60 max-h-[240px] overflow-x-auto overflow-y-auto">
                 {listData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed">
+                  <table className="w-full text-xs table-fixed min-w-[320px]">
                     <colgroup>
-                      <col style={{ width: "78px" }} />
-                      <col style={{ width: "48px" }} />
-                      <col style={{ width: "70px" }} />
+                      <col style={{ width: "68px" }} />
+                      <col style={{ width: "42px" }} />
+                      <col style={{ width: "64px" }} />
                       <col />
-                      <col style={{ width: "180px" }} />
-                      <col style={{ width: "40px" }} />
+                      <col style={{ width: "80px" }} />
+                      <col style={{ width: "36px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
                         <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
                         <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-center hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
                         <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
-                        <th className="p-2 text-center">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -351,13 +351,13 @@ ${rows.map((row, ri) => {
                             {r.amount >= 0 ? "" : "-"}
                             {fmt(Math.abs(r.amount))}
                           </td>
-                          <td className="p-2 text-center hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-center text-xs text-muted-foreground">{r.user_name || "-"}</td>
-                          <td className="p-2 text-center">
+                          <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
+                          <td className="p-2 text-center w-9">
                             {r.receipt_url ? (
                               <button
                                 type="button"
-                                className="h-7 w-7 rounded border border-border bg-muted/50 hover:bg-muted text-xs"
+                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted text-[10px] flex items-center justify-center mx-auto"
                                 onClick={() => setReceiptModalUrl(r.receipt_url!)}
                                 title={t("pettyColReceipt") || "영수증"}
                               >
@@ -485,16 +485,16 @@ ${rows.map((row, ri) => {
                 {monthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed">
+                  <table className="w-full text-xs table-fixed min-w-[380px]">
                     <colgroup>
-                      <col style={{ width: "78px" }} />
-                      <col style={{ width: "70px" }} />
-                      <col style={{ width: "48px" }} />
-                      <col style={{ width: "70px" }} />
-                      <col style={{ width: "80px" }} />
+                      <col style={{ width: "68px" }} />
+                      <col style={{ width: "56px" }} />
+                      <col style={{ width: "42px" }} />
+                      <col style={{ width: "64px" }} />
+                      <col style={{ width: "72px" }} />
                       <col />
-                      <col style={{ width: "180px" }} />
-                      <col style={{ width: "40px" }} />
+                      <col style={{ width: "80px" }} />
+                      <col style={{ width: "36px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
@@ -503,9 +503,9 @@ ${rows.map((row, ri) => {
                         <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center font-medium">{t("pettyColBalance") || "잔액"}</th>
-                        <th className="p-2 text-center hidden sm:table-cell">{t("pettyColMemo") || "내용"}</th>
+                        <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
                         <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
-                        <th className="p-2 text-center">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -519,13 +519,13 @@ ${rows.map((row, ri) => {
                             {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="p-2 text-center font-medium">{fmt(r.balance_after ?? 0)}</td>
-                          <td className="p-2 text-center hidden sm:table-cell truncate">{getMemo(r.memo || "")}</td>
-                          <td className="p-2 text-center text-xs text-muted-foreground">{r.user_name || "-"}</td>
-                          <td className="p-2 text-center">
+                          <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
+                          <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
+                          <td className="p-2 text-center w-9">
                             {r.receipt_url ? (
                               <button
                                 type="button"
-                                className="h-7 w-7 rounded border border-border bg-muted/50 hover:bg-muted text-xs"
+                                className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted text-[10px] flex items-center justify-center mx-auto"
                                 onClick={() => setReceiptModalUrl(r.receipt_url!)}
                                 title={t("pettyColReceipt") || "영수증"}
                               >

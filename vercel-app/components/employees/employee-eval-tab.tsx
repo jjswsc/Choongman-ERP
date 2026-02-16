@@ -93,6 +93,7 @@ export function EmployeeEvalTab({
   const warningLetterInputRef = React.useRef<HTMLInputElement>(null)
   const warningLetterTargetIdxRef = React.useRef<number>(0)
   const [uploadingWarningForIdx, setUploadingWarningForIdx] = React.useState<number | null>(null)
+  const [warningLetterViewUrl, setWarningLetterViewUrl] = React.useState<string | null>(null)
   const [trainingNeeded, setTrainingNeeded] = React.useState("")
   const [coach, setCoach] = React.useState("")
   const [targetDate, setTargetDate] = React.useState("")
@@ -905,13 +906,20 @@ export function EmployeeEvalTab({
             />
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
+                <colgroup>
+                  <col style={{ width: "25%" }} />
+                  <col style={{ width: "120px" }} />
+                  <col />
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "50px" }} />
+                </colgroup>
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="px-3 py-2">{t("eval_issue_type")}</th>
-                    <th className="w-[120px] px-3 py-2">{t("label_date")}</th>
+                    <th className="px-3 py-2">{t("label_date")}</th>
                     <th className="px-3 py-2">{t("eval_detail")}</th>
-                    <th className="w-[120px] px-3 py-2 text-center">{t("eval_warning_letter")}</th>
-                    <th className="w-[50px] px-3 py-2"></th>
+                    <th className="px-3 py-2 text-center">{t("eval_warning_letter")}</th>
+                    <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -983,8 +991,8 @@ export function EmployeeEvalTab({
                         />
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-col items-center gap-1">
-                          <label className="flex items-center gap-1.5 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-1 text-xs shrink-0">
                             <input
                               type="checkbox"
                               checked={inc.warningLetterChecked}
@@ -997,31 +1005,32 @@ export function EmployeeEvalTab({
                               }
                               className="rounded"
                             />
-                            {t("eval_warning_letter_check")}
+                            {t("eval_warning_letter_issued")}
                           </label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-6 text-xs"
-                            disabled={uploadingWarningForIdx === idx}
-                            onClick={() => {
-                              warningLetterTargetIdxRef.current = idx
-                              setUploadingWarningForIdx(idx)
-                              warningLetterInputRef.current?.click()
-                            }}
-                          >
-                            {uploadingWarningForIdx === idx ? "..." : t("eval_warning_letter_upload")}
-                          </Button>
-                          {inc.warningLetterUrl && (
-                            <a
-                              href={inc.warningLetterUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline"
+                          {inc.warningLetterUrl ? (
+                            <button
+                              type="button"
+                              className="h-6 w-6 shrink-0 rounded border border-border bg-muted/50 hover:bg-muted flex items-center justify-center text-[10px]"
+                              onClick={() => setWarningLetterViewUrl(inc.warningLetterUrl)}
+                              title={t("eval_warning_letter_view")}
                             >
-                              {t("eval_warning_letter_view")}
-                            </a>
+                              📷
+                            </button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-xs shrink-0"
+                              disabled={uploadingWarningForIdx === idx}
+                              onClick={() => {
+                                warningLetterTargetIdxRef.current = idx
+                                setUploadingWarningForIdx(idx)
+                                warningLetterInputRef.current?.click()
+                              }}
+                            >
+                              {uploadingWarningForIdx === idx ? "..." : t("eval_warning_letter_upload")}
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -1047,6 +1056,25 @@ export function EmployeeEvalTab({
 {t("eval_add_row")}
             </button>
           </div>
+
+          {warningLetterViewUrl && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+              onClick={() => setWarningLetterViewUrl(null)}
+            >
+              <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+                <img src={warningLetterViewUrl} alt={t("eval_warning_letter")} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+                  onClick={() => setWarningLetterViewUrl(null)}
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-lg border border-border bg-card p-4">
             <h6 className="mb-3 border-b pb-2 text-sm font-bold">

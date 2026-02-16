@@ -22,8 +22,8 @@ const tabs = [
   { id: "hr", labelKey: "tabHr" as const, icon: Users },
   { id: "timesheet", labelKey: "tabTimesheet" as const, icon: Clock },
   { id: "visit", labelKey: "tabVisit" as const, icon: MapPin, officeOnly: true },
-  { id: "pettycash", labelKey: "tabPettyCash" as const, icon: Banknote, adminOnly: true },
-  { id: "admin", labelKey: "tabAdmin" as const, icon: Settings },
+  { id: "pettycash", labelKey: "tabPettyCash" as const, icon: Banknote },
+  { id: "admin", labelKey: "tabAdmin" as const, icon: Settings, managerOrAdminOnly: true },
 ]
 
 interface AppNavigationProps {
@@ -46,9 +46,10 @@ export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
     )
 
   const visibleTabs = tabs.filter((tab) => {
-    const t = tab as { officeOnly?: boolean; adminOnly?: boolean }
+    const t = tab as { officeOnly?: boolean; adminOnly?: boolean; managerOrAdminOnly?: boolean }
     if (t.officeOnly && !isOffice) return false
     if (t.adminOnly && !isAdmin) return false
+    if (t.managerOrAdminOnly && !isAdmin) return false
     return true
   })
 
