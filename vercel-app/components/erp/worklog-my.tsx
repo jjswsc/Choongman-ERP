@@ -225,6 +225,29 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       .replace(/부터/g, t("workLogFrom") || "from")
   }
 
+  const ManagerFeedback = ({ item }: { item: WorkLogItem }) => {
+    const confirmed = item.managerCheck === "승인"
+    const rawComment = item.managerComment?.trim() || ""
+    const isCarryOverMsg = rawComment.startsWith("⚡")
+    const hasComment = !!rawComment && !isCarryOverMsg
+    if (!confirmed && !hasComment) return null
+    return (
+      <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-xs">
+        {confirmed && (
+          <span className="inline-flex items-center gap-1 font-semibold text-primary">
+            ✓ {t("workLogReviewConfirmed")}
+          </span>
+        )}
+        {hasComment && (
+          <p className="mt-1 text-foreground">
+            <span className="font-semibold text-muted-foreground">{t("workLogManagerFeedback")}:</span>{" "}
+            {formatManagerComment(rawComment)}
+          </p>
+        )}
+      </div>
+    )
+  }
+
   const updateProgressByIndex = (
     setList: React.Dispatch<React.SetStateAction<WorkLogItem[]>>,
     index: number,
@@ -350,9 +373,8 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                 localFinish.map((it) => (
                   <div key={it.id} className="rounded-lg border bg-background p-3 text-sm">
                     <p className="font-medium text-foreground whitespace-pre-wrap">{getTransContent(it.content || "")}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {it.progress}% · {formatManagerComment(it.managerComment || "")}
-                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{it.progress}%</p>
+                    <ManagerFeedback item={it} />
                   </div>
                 ))
               )}
@@ -413,7 +435,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                       </Select>
                     </div>
                     <p className="text-xs font-bold text-muted-foreground">{t("workLogProgressHint")}</p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment || "")}</p>
+                    {it.managerComment?.startsWith("⚡") && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
+                    )}
+                    <ManagerFeedback item={it} />
                   </div>
                 ))
               )}
@@ -467,6 +492,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
                       />
                       <span className="text-xs font-bold w-8">{it.progress}%</span>
                     </div>
+                    <ManagerFeedback item={it} />
                   </div>
                 ))
               )}
