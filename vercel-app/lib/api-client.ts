@@ -584,12 +584,17 @@ export async function getAttendancePendingList(params: {
   userStore?: string
   userRole?: string
 }) {
-  const q = new URLSearchParams(params as Record<string, string>)
+  const q = new URLSearchParams()
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.store != null && params.store !== '') q.set('store', params.store)
+  if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
+  if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
   const res = await apiFetch(`/api/getAttendancePendingList?${q}`)
   return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
 }
 
-export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; userStore?: string; userRole?: string }) {
+export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
   const res = await apiFetch('/api/processAttendanceApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -615,6 +620,7 @@ export interface AttendanceDailyRow {
   pendingId: number | null
   pendingInId?: number | null
   pendingOutId?: number | null
+  inStatus?: string
 }
 
 export async function getAttendanceRecordsAdmin(params: {

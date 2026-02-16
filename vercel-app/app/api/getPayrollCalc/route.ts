@@ -68,9 +68,13 @@ function buildAttendanceSummary(
     const dt = r.log_at ? new Date(r.log_at).getTime() : 0
     if (type === '출근') {
       const lateMin = Number(r.late_min) || 0
+      const status = String(r.status || '').trim()
+      const lateWaived = status === '정상(승인)'
       if (!needsApproval || isApproved) {
-        map[key].lateMin += lateMin
-        byDay[dayKey].lateMin = Math.max(byDay[dayKey].lateMin || 0, lateMin)
+        if (!lateWaived) {
+          map[key].lateMin += lateMin
+          byDay[dayKey].lateMin = Math.max(byDay[dayKey].lateMin || 0, lateMin)
+        }
       }
       if (!byDay[dayKey].inMs || dt < byDay[dayKey].inMs) byDay[dayKey].inMs = dt
     } else if (type === '퇴근') {

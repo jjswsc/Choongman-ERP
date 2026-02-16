@@ -98,7 +98,8 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const dt = new Date(r.log_at || '').getTime()
 
     if (type === '출근') {
-      if (!needsApproval || isApproved) map[key].lateMin += Number(r.late_min) || 0
+      const lateWaived = status === '정상(승인)'
+      if ((!needsApproval || isApproved) && !lateWaived) map[key].lateMin += Number(r.late_min) || 0
       if (!byDay[dayKey].inMs || dt < (byDay[dayKey].inMs || 0)) byDay[dayKey].inMs = dt
     } else if (type === '퇴근') {
       if (!byDay[dayKey].outMs || dt > (byDay[dayKey].outMs || 0)) {

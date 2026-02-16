@@ -9,6 +9,13 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -30,6 +37,11 @@ import { cn } from "@/lib/utils"
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
+function weekAgoStr() {
+  const d = new Date()
+  d.setDate(d.getDate() - 7)
+  return d.toISOString().slice(0, 10)
+}
 
 function statusToKey(s: string): string | null {
   const st = (s || "").trim()
@@ -38,7 +50,7 @@ function statusToKey(s: string): string | null {
   if (st.includes("정상") && st.includes("승인")) return "att_status_approved"
   if (st === "반려") return "att_status_rejected"
   if (st === "퇴근미기록") return "att_status_no_out"
-  if (st === "지각") return "att_status_late"
+  if (st === "지각" || st === "지각(승인)") return "att_status_late"
   if (st === "조퇴") return "att_status_early"
   if (st === "연장") return "att_status_overtime"
   if (st.includes("위치미확인") && st.includes("승인대기")) return "att_status_gps_pending"
@@ -58,7 +70,7 @@ export default function AdminAttendancePage() {
   const [stores, setStores] = React.useState<string[]>([])
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
 
-  const [startDate, setStartDate] = React.useState(todayStr)
+  const [startDate, setStartDate] = React.useState(weekAgoStr)
   const [endDate, setEndDate] = React.useState(todayStr)
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [employeeFilter, setEmployeeFilter] = React.useState("All")
@@ -118,11 +130,12 @@ export default function AdminAttendancePage() {
       .finally(() => setLoading(false))
   }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null) => {
+  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean) => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
       optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
+      waiveLate,
       userStore: auth?.store,
       userRole: auth?.role,
     })
@@ -254,7 +267,7 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_late_extra")}</th>
                       <th className="px-1 py-2.5 text-center font-semibold w-12" title={t("att_ot_help")}>{t("att_ot_label")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[120px]">{t("att_approve_btn")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_approve_btn")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -306,45 +319,58 @@ export default function AdminAttendancePage() {
                             )}
                           </td>
                           <td className="px-3 py-2.5 text-center">
-                            <span
-                              className={cn(
-                                "text-[10px] font-medium",
-                                isPending && "text-amber-600",
-                                row.status === "퇴근미기록" && "text-red-600"
-                              )}
-                            >
-                              {statusToKey(row.status) ? t(statusToKey(row.status)!) : row.status}
-                            </span>
+                            {pendingIn != null ? (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm" className={cn(
+                                    "h-6 px-2 text-[10px] font-medium",
+                                    row.status === "퇴근미기록"
+                                      ? "text-red-600 border-red-300 hover:bg-red-50"
+                                      : "text-amber-600 border-amber-300 hover:bg-amber-50"
+                                  )}>
+                                    {row.inStatus?.includes("위치미확인") ? "위치미확인" : row.status}
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="center">
+                                  {row.inStatus?.includes("위치미확인") && (
+                                    <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, false)}>{t("att_approve_location_only")}</DropdownMenuItem>
+                                  )}
+                                  {(row.lateMin > 0 || !row.inStatus?.includes("위치미확인")) && (
+                                    <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, row.lateMin > 0 ? true : undefined)}>{t("att_approve_in")}</DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem variant="destructive" onClick={() => handleReject(pendingIn)}>{t("att_btn_reject")}</DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            ) : (
+                              <span
+                                className={cn(
+                                  "text-[10px] font-medium",
+                                  isPending && "text-amber-600",
+                                  row.status === "퇴근미기록" && "text-red-600"
+                                )}
+                              >
+                                {statusToKey(row.status) ? t(statusToKey(row.status)!) : row.status}
+                              </span>
+                            )}
                           </td>
                           <td className="px-2 py-2.5">
-                            {hasPending ? (
-                              <div className="flex flex-col gap-1 items-center">
-                                {pendingIn != null && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-semibold text-foreground w-10">{t("att_col_in")}</span>
-                                    <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" onClick={() => handleApprove(pendingIn)}>{t("att_btn_approve")}</Button>
-                                    <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingIn)}>{t("att_btn_reject")}</Button>
-                                  </div>
-                                )}
-                                {hasPendingOut && (
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-semibold text-foreground w-10">{t("att_col_out")}</span>
-                                    <Button
-                                      size="sm"
-                                      variant="default"
-                                      className="h-6 px-2 text-[10px]"
-                                      onClick={() => {
-                                        const outId = pendingOut ?? row.pendingId!
-                                        const otVal = otMinutesByRow[outId] ?? String(row.otMin ?? 0)
-                                        const n = parseInt(otVal, 10)
-                                        handleApprove(outId, !isNaN(n) && n >= 0 ? n : undefined)
-                                      }}
-                                    >
-                                      {t("att_btn_approve")}
-                                    </Button>
-                                    <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
-                                  </div>
-                                )}
+                            {hasPendingOut ? (
+                              <div className="flex items-center gap-1 justify-center">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => {
+                                    const outId = pendingOut ?? row.pendingId!
+                                    const otVal = otMinutesByRow[outId] ?? String(row.otMin ?? 0)
+                                    const n = parseInt(otVal, 10)
+                                    handleApprove(outId, !isNaN(n) && n >= 0 ? n : undefined)
+                                  }}
+                                >
+                                  {t("att_btn_approve")}
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
                             ) : (
                               <span className="text-[10px] text-muted-foreground">-</span>

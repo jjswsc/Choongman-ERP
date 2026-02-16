@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
     const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
+    const waiveLate = body?.waiveLate === true
 
     if (!id || isNaN(id)) {
       return NextResponse.json(
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, { limit: 1 })) as { id: number; store_name?: string }[]
+    const rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, { limit: 1 })) as { id: number; store_name?: string; log_type?: string; late_min?: number }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 기록을 찾을 수 없습니다.' },
@@ -40,7 +41,13 @@ export async function POST(request: NextRequest) {
 
     const patch: Record<string, unknown> = { approved: decision }
     if (decision === '승인완료') {
-      patch.status = '정상(승인)'
+      const isClockIn = String(rows[0]?.log_type || '').trim() === '출근'
+      const hasLate = (Number(rows[0]?.late_min) || 0) > 0
+      if (isClockIn && hasLate && !waiveLate) {
+        patch.status = '지각(승인)'
+      } else {
+        patch.status = '정상(승인)'
+      }
       if (optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
         patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
       }

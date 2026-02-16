@@ -63,7 +63,8 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     if (type === '출근') {
       if (!v.inMs || dt < v.inMs) {
         v.inMs = dt
-        if (!needsApproval || isApproved) v.lateMin = Number(r.late_min) || 0
+        const lateWaived = status === '정상(승인)'
+        if ((!needsApproval || isApproved) && !lateWaived) v.lateMin = Number(r.late_min) || 0
       }
     } else if (type === '퇴근') {
       if (!v.outMs || dt > v.outMs) {

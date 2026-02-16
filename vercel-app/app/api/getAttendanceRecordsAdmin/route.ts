@@ -53,6 +53,7 @@ export interface AttendanceDailyRow {
   pendingId: number | null
   pendingInId: number | null
   pendingOutId: number | null
+  inStatus?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest) {
   const statusFilter = String(searchParams.get('statusFilter') || searchParams.get('status') || 'all').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  if (storeFilter === 'null' || storeFilter === 'undefined') storeFilter = ''
+  if (employeeFilter === 'null' || employeeFilter === 'undefined') employeeFilter = ''
 
   if (!startDate || !endDate) {
     return NextResponse.json([], { headers })
@@ -141,6 +144,7 @@ export async function GET(request: NextRequest) {
         inId: number | null
         outId: number | null
         outApproved: string
+        inStatus: string
       }
     > = {}
 
@@ -168,6 +172,7 @@ export async function GET(request: NextRequest) {
           inId: null,
           outId: null,
           outApproved: '',
+          inStatus: '',
         }
       }
       const rec = byKey[key]
@@ -183,7 +188,10 @@ export async function GET(request: NextRequest) {
         if (!rec.inTime || logAt < (rec.inTime || '')) {
           rec.inTime = logAt
           rec.lateMin = Number(r.late_min) || 0
-          if (needsInApproval) rec.inId = r.id ?? null
+          if (needsInApproval) {
+            rec.inId = r.id ?? null
+            rec.inStatus = st || ''
+          }
         }
       } else if (type === '퇴근') {
         if (!rec.outTime || logAt > (rec.outTime || '')) {
@@ -213,6 +221,7 @@ export async function GET(request: NextRequest) {
       let outApprovedForRow = rec.outApproved
       let outIdForRow = rec.outId
       let inIdForRow = rec.inId
+      const inStatusForRow = rec.inStatus || ''
 
       if (!outTimeForRow) {
         const nextDay = (() => {
@@ -273,6 +282,7 @@ export async function GET(request: NextRequest) {
         pendingId: outIdForRow ?? inIdForRow,
         pendingInId: inIdForRow,
         pendingOutId: outIdForRow,
+        inStatus: inStatusForRow,
       })
     }
 
