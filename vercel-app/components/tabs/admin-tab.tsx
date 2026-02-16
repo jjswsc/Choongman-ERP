@@ -153,18 +153,25 @@ export function AdminTab() {
                 <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
               </div>
             ) : (
-              attList.map((item) => (
-                <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{item.name} · {item.store_name}</p>
-                    <p className="text-xs text-muted-foreground">{item.log_at} · {item.log_type}</p>
+              attList.map((item) => {
+                const isIn = String(item.log_type || "").includes("출근") || String(item.log_type || "").toLowerCase().includes("in")
+                return (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{item.name} · {item.store_name}</p>
+                      <p className="text-xs text-muted-foreground">{item.log_at} · {item.log_type}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "승인완료")}>
+                        {isIn ? t("att_approve_in") : t("att_approve_out")}
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "반려")}>
+                        {isIn ? t("att_reject_in") : t("att_reject_out")}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "승인완료")}>{t("adminApproved")}</Button>
-                    <Button variant="outline" size="sm" className="h-7 px-3 text-xs font-medium" onClick={() => handleAttApprove(item.id, "반려")}>{t("adminRejected")}</Button>
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </CardContent>
