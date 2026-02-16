@@ -31,6 +31,25 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function statusToKey(s: string): string | null {
+  const st = (s || "").trim()
+  if (!st) return null
+  if (st === "정상") return "att_status_normal"
+  if (st.includes("정상") && st.includes("승인")) return "att_status_approved"
+  if (st === "반려") return "att_status_rejected"
+  if (st === "퇴근미기록") return "att_status_no_out"
+  if (st === "지각") return "att_status_late"
+  if (st === "조퇴") return "att_status_early"
+  if (st === "연장") return "att_status_overtime"
+  if (st.includes("위치미확인") && st.includes("승인대기")) return "att_status_gps_pending"
+  if (st.includes("위치미확인")) return "att_status_gps"
+  if (st.includes("강제퇴근") && st.includes("승인대기")) return "att_status_forced_out_pending"
+  if (st.includes("강제퇴근")) return "att_status_forced_out"
+  if (st === "휴게초과") return "att_status_break_over"
+  if (st === "휴게정상") return "att_status_break_ok"
+  return null
+}
+
 export default function AdminAttendancePage() {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -135,17 +154,6 @@ export default function AdminAttendancePage() {
     else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
-  const handleRejectBoth = async (inId: number | null, outId: number | null) => {
-    const ids = [inId, outId].filter((x): x is number => x != null)
-    for (const id of ids) {
-      const res = await processAttendanceApproval({ id, decision: "반려", userStore: auth?.store, userRole: auth?.role })
-      if (!res.success) {
-        alert(translateApiMessage(res.message, t) || t("att_process_failed"))
-        return
-      }
-    }
-    if (ids.length > 0) loadRecords()
-  }
 
   return (
     <div className="flex-1 overflow-auto">
@@ -293,21 +301,31 @@ export default function AdminAttendancePage() {
                                 row.status === "퇴근미기록" && "text-red-600"
                               )}
                             >
-                              {row.status}
+                              {statusToKey(row.status) ? t(statusToKey(row.status)!) : row.status}
                             </span>
                           </td>
                           <td className="px-2 py-2.5">
                             {hasPending ? (
                               <div className="flex flex-nowrap items-center gap-1 justify-center flex-wrap">
                                 {pendingIn != null && (
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    className="h-7 px-1.5 text-[10px] shrink-0"
-                                    onClick={() => handleApprove(pendingIn)}
-                                  >
-                                    {t("att_approve_in")}
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-7 px-1.5 text-[10px] shrink-0"
+                                      onClick={() => handleApprove(pendingIn)}
+                                    >
+                                      {t("att_approve_in")}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-1.5 text-[10px] shrink-0"
+                                      onClick={() => handleReject(pendingIn)}
+                                    >
+                                      {t("att_reject_in")}
+                                    </Button>
+                                  </>
                                 )}
                                 {(pendingOut != null || (hasLegacyPending && row.pendingId != null)) && (
                                   <>
@@ -337,16 +355,16 @@ export default function AdminAttendancePage() {
                                     >
                                       {t("att_approve_out")}
                                     </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-1.5 text-[10px] shrink-0"
+                                      onClick={() => handleReject(pendingOut ?? row.pendingId!)}
+                                    >
+                                      {t("att_reject_out")}
+                                    </Button>
                                   </>
                                 )}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-1.5 text-[10px] shrink-0"
-                                  onClick={() => handleRejectBoth(pendingIn, pendingOut ?? (hasLegacyPending ? row.pendingId : null))}
-                                >
-                                  {t("att_reject_btn")}
-                                </Button>
                               </div>
                             ) : (
                               <span className="text-[10px] text-muted-foreground">-</span>
