@@ -1713,8 +1713,9 @@ export async function getVendorsForPurchase() {
   return res.json() as Promise<VendorForPurchase[]>
 }
 
-export async function getItemsByVendor(vendorCode: string) {
+export async function getItemsByVendor(vendorCode: string, vendorName?: string) {
   const q = new URLSearchParams({ vendorCode })
+  if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
   const res = await fetch(`/api/getItemsByVendor?${q}`)
   return res.json() as Promise<ItemByVendor[]>
 }

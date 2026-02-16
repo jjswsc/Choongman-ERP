@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 본사 발주용: vendor 코드로 품목 목록 조회 (items.vendor = vendorCode) */
+/** 본사 발주용: vendor 코드 또는 이름으로 품목 목록 조회 (items.vendor = code 또는 name) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const vendorCode = String(searchParams.get('vendorCode') || searchParams.get('vendor') || '').trim()
+  const vendorName = String(searchParams.get('vendorName') || '').trim()
 
-  if (!vendorCode) {
+  if (!vendorCode && !vendorName) {
     return NextResponse.json([], { headers })
   }
 
   try {
-    const enc = encodeURIComponent(vendorCode)
-    const rows = (await supabaseSelectFilter(
-      'items',
-      `vendor=eq.${enc}`,
-      { order: 'code.asc', limit: 1000 }
-    )) as {
+    let rows: {
       code?: string
       name?: string
       spec?: string
@@ -26,7 +22,24 @@ export async function GET(request: NextRequest) {
       cost?: number
       category?: string
       image?: string
-    }[] | null
+    }[] | null = []
+
+    if (vendorCode) {
+      const enc = encodeURIComponent(vendorCode)
+      rows = (await supabaseSelectFilter(
+        'items',
+        `vendor=ilike.${enc}`,
+        { order: 'code.asc', limit: 1000 }
+      )) as typeof rows
+    }
+    if ((!rows || rows.length === 0) && vendorName) {
+      const encName = encodeURIComponent(vendorName)
+      rows = (await supabaseSelectFilter(
+        'items',
+        `vendor=ilike.${encName}`,
+        { order: 'code.asc', limit: 1000 }
+      )) as typeof rows
+    }
 
     const list = (rows || []).map((row) => ({
       code: String(row.code || ''),

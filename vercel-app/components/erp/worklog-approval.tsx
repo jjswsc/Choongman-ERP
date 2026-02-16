@@ -316,15 +316,15 @@ export function WorklogApproval() {
                               </td>
                               <td className="px-5 py-2 text-center">
                                 <Select
-                                  value={it.priority || ""}
-                                  onValueChange={(v) => handlePriorityChange(it.id, v)}
+                                  value={it.priority || "_none"}
+                                  onValueChange={(v) => handlePriorityChange(it.id, v === "_none" ? "" : v)}
                                   disabled={updating === it.id}
                                 >
                                   <SelectTrigger className="h-7 w-20 mx-auto text-[10px]">
                                     <SelectValue placeholder={t("workLogPriority")} />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">-</SelectItem>
+                                    <SelectItem value="_none">-</SelectItem>
                                     {PRIORITIES.map((p) => (
                                       <SelectItem key={p.value} value={p.value}>
                                         {t(p.key)}

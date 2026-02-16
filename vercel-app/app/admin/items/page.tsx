@@ -190,6 +190,7 @@ export default function ItemsPage() {
             onSave={handleSave}
             onReset={handleReset}
             onNewRegister={handleNewRegister}
+            categories={categories}
           />
           <ItemTable
             products={filteredProducts}

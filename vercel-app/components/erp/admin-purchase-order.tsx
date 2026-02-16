@@ -89,7 +89,7 @@ export function AdminPurchaseOrder() {
     }
     setLoading(true)
     Promise.all([
-      getItemsByVendor(vendorSelect.code),
+      getItemsByVendor(vendorSelect.code, vendorSelect.name),
       locationSelect
         ? getHqStockByLocation(locationSelect.location_code)
         : Promise.resolve({}),
