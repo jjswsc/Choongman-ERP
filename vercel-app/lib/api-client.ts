@@ -555,7 +555,7 @@ export async function getLeavePendingList(params: {
   if (params.dateFilterType) clean.dateFilterType = params.dateFilterType
   const q = new URLSearchParams(clean)
   const res = await fetch(`/api/getLeavePendingList?${q}`)
-  return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string }[]>
+  return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>
 }
 
 export async function getLeaveStats(params: {
