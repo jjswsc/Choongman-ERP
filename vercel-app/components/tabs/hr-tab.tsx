@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,11 +13,14 @@ import {
   submitAttendance,
   requestLeave,
   getMyLeaveInfo,
+  uploadLeaveCertificate,
   getMyPayroll,
   getHeadOfficeInfo,
 } from "@/lib/api-client"
+import { compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image, Upload } from "lucide-react"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -70,12 +73,16 @@ export function HrTab() {
   const [attLog, setAttLog] = useState<{ timestamp: string; type: string; status: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
-  const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, remain: 15 })
+  const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, remain: 15 })
   const [leaveHistory, setLeaveHistory] = useState<{ date: string; type: string; reason: string; status: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
   const [leaveDate, setLeaveDate] = useState(todayStr)
   const [leaveReason, setLeaveReason] = useState("")
   const [leaveSubmitting, setLeaveSubmitting] = useState(false)
+  const [certUploadingId, setCertUploadingId] = useState<number | null>(null)
+  const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
+  const leaveCertInputRef = useRef<HTMLInputElement>(null)
+  const pendingCertIdRef = useRef<number | null>(null)
   const [now, setNow] = useState(() => new Date())
 
   // 내 급여 명세서
@@ -254,6 +261,40 @@ export function HrTab() {
       alert("오류: " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLeaveSubmitting(false)
+    }
+  }
+
+  const triggerCertUpload = (id: number) => {
+    if (!auth?.store || !auth?.user) return
+    pendingCertIdRef.current = id
+    leaveCertInputRef.current?.click()
+  }
+
+  const handleCertFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const id = pendingCertIdRef.current
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    pendingCertIdRef.current = null
+    if (!id || !file || !auth?.store || !auth?.user) return
+    setCertUploadingId(id)
+    try {
+      const dataUrl = await compressImageForUpload(file)
+      const res = await uploadLeaveCertificate({
+        id,
+        store: auth.store,
+        name: auth.user,
+        certificateUrl: dataUrl,
+      })
+      if (res.success) {
+        loadLeaveInfo()
+        alert(res.message || t("leaveCertUploaded"))
+      } else {
+        alert(res.message || "업로드 실패")
+      }
+    } catch (err) {
+      alert("오류: " + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setCertUploadingId(null)
     }
   }
 
@@ -448,7 +489,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           <CardTitle className="text-sm font-semibold">{t("leaveStats")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
             <div className="rounded-lg bg-muted/50 px-3 py-2">
               <p className="text-xs text-muted-foreground">{t("usedAnn")}</p>
               <p className="text-lg font-bold">{leaveStats.usedAnn}</p>
@@ -456,6 +497,10 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
             <div className="rounded-lg bg-muted/50 px-3 py-2">
               <p className="text-xs text-muted-foreground">{t("usedSick")}</p>
               <p className="text-lg font-bold">{leaveStats.usedSick}</p>
+            </div>
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <p className="text-xs text-muted-foreground">{t("usedUnpaid")}</p>
+              <p className="text-lg font-bold">{leaveStats.usedUnpaid ?? 0}</p>
             </div>
             <div className="rounded-lg bg-primary/10 px-3 py-2">
               <p className="text-xs text-muted-foreground">{t("remain")}</p>
@@ -475,11 +520,16 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
             onChange={(e) => setLeaveType(e.target.value)}
             className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           >
-<option value="연차">{t("annual")}</option>
-              <option value="반차">{t("half")}</option>
-              <option value="병가">{t("sick")}</option>
-              <option value="무급휴가">{t("unpaid")}</option>
+            <option value="연차">{t("annual")}</option>
+            <option value="반차">{t("half")}</option>
+            <option value="병가">{t("sick")}</option>
+            <option value="무급휴가">{t("unpaid")}</option>
           </select>
+          {leaveType.indexOf("병가") !== -1 && (
+            <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded-lg px-3 py-2">
+              {t("leaveSickHint")}
+            </p>
+          )}
           <Input
             type="date"
             value={leaveDate}
@@ -507,27 +557,66 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           <CardTitle className="text-sm font-semibold">{t("reqHist")}</CardTitle>
         </CardHeader>
         <CardContent>
+          <input
+            ref={leaveCertInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCertFileChange}
+          />
           {leaveHistory.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">{t("leaveHistoryEmpty")}</div>
           ) : (
             <div className="space-y-1">
-              {leaveHistory.map((h, i) => (
-                <div
-                  key={i}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2.5"
-                >
-                  <div>
-                    <span className="text-sm font-medium">{h.date}</span>
-                    <span className="ml-2 text-xs text-muted-foreground">{translateLeaveType(h.type, t)}</span>
-                  </div>
-                  <Badge
-                    variant={h.status === "승인" || h.status === "Approved" ? "default" : "secondary"}
-                    className="text-xs"
+              {leaveHistory.map((h, i) => {
+                const isSickPending = h.type.indexOf("병가") !== -1 && (h.status === "대기" || h.status === "Pending")
+                const canUpload = isSickPending && h.id && !h.certificateUrl
+                const hasCert = isSickPending && h.certificateUrl
+                const uploading = certUploadingId === h.id
+                return (
+                  <div
+                    key={h.id ?? i}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2.5"
                   >
-                    {translateLeaveStatus(h.status, t)}
-                  </Badge>
-                </div>
-              ))}
+                    <div>
+                      <span className="text-sm font-medium">{h.date}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{translateLeaveType(h.type, t)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {canUpload && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => triggerCertUpload(h.id!)}
+                          disabled={uploading}
+                        >
+                          <Upload className="mr-1 h-3 w-3" />
+                          {uploading ? t("loading") : t("leaveCertUpload")}
+                        </Button>
+                      )}
+                      {hasCert && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-green-600"
+                          onClick={() => setCertPreviewUrl(h.certificateUrl!)}
+                        >
+                          <Image className="mr-1 h-3 w-3" />
+                          {t("leaveCertView")}
+                        </Button>
+                      )}
+                      <Badge
+                        variant={h.status === "승인" || h.status === "Approved" ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {translateLeaveStatus(h.status, t)}
+                      </Badge>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -622,6 +711,19 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!certPreviewUrl} onOpenChange={(open) => !open && setCertPreviewUrl(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t("leaveCertView")}</DialogTitle>
+          </DialogHeader>
+          {certPreviewUrl && (
+            <div className="overflow-hidden rounded-md">
+              <img src={certPreviewUrl} alt={t("leaveCertView")} className="w-full h-auto max-h-[70vh] object-contain" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

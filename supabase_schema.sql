@@ -147,10 +147,12 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   leave_date DATE NOT NULL,
   reason TEXT DEFAULT '',
   status TEXT DEFAULT '대기',
+  certificate_url TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_leave_requests_store ON leave_requests(store);
 CREATE INDEX IF NOT EXISTS idx_leave_requests_leave_date ON leave_requests(leave_date);
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS certificate_url TEXT DEFAULT '';
 
 -- 공지사항 (기존 시트 "공지사항") - ID=Date.now() 호환
 CREATE TABLE IF NOT EXISTS notices (

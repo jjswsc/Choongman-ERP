@@ -441,10 +441,12 @@ export async function requestLeave(params: {
 }
 
 export interface LeaveHistoryItem {
+  id?: number
   date: string
   type: string
   reason: string
   status: string
+  certificateUrl?: string
 }
 
 export async function getMyLeaveInfo(params: { store: string; name: string }) {
@@ -452,8 +454,22 @@ export async function getMyLeaveInfo(params: { store: string; name: string }) {
   const res = await fetch(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
-    stats: { usedAnn: number; usedSick: number; remain: number }
+    stats: { usedAnn: number; usedSick: number; usedUnpaid: number; remain: number }
   }>
+}
+
+export async function uploadLeaveCertificate(params: {
+  id: number
+  store: string
+  name: string
+  certificateUrl: string
+}) {
+  const res = await fetch('/api/uploadLeaveCertificate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 // ─── 관리 (Admin) ───

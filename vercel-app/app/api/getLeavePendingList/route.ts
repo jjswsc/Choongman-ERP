@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   if (isManager && userStore) store = userStore
 
   try {
-    let rows: { id: number; store?: string; name?: string; type?: string; leave_date?: string; request_at?: string; created_at?: string; reason?: string; status?: string }[] = []
+    let rows: { id: number; store?: string; name?: string; type?: string; leave_date?: string; request_at?: string; created_at?: string; reason?: string; status?: string; certificate_url?: string }[] = []
 
     if (store) {
       const filter = `store=ilike.${encodeURIComponent(store)}`
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       if (s && n) nickMap[s + '|' + n] = String(e.nick || '').trim()
     }
 
-    const list: { id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string }[] = []
+    const list: { id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[] = []
 
     for (const r of rows || []) {
       const rowStatus = String(r.status || '').trim()
@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
         requestDate: requestDateStr,
         reason: String(r.reason || '').trim(),
         status: rowStatus,
+        certificateUrl: String(r.certificate_url || '').trim(),
       })
     }
 

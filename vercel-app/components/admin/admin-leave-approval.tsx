@@ -12,7 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { CalendarCheck, Search } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { CalendarCheck, Search, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -34,8 +35,9 @@ export function AdminLeaveApproval() {
   const [leaveTypeFilter, setLeaveTypeFilter] = useState("All")
   const [leaveStatusFilter, setLeaveStatusFilter] = useState("대기")
   const [leaveStores, setLeaveStores] = useState<string[]>([])
-  const [leaveList, setLeaveList] = useState<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string }[]>([])
+  const [leaveList, setLeaveList] = useState<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>([])
   const [leaveLoading, setLeaveLoading] = useState(false)
+  const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!auth?.store) return
@@ -95,6 +97,7 @@ export function AdminLeaveApproval() {
   }
 
   return (
+    <>
     <Card className="shadow-sm">
       <CardHeader className="flex flex-row items-center gap-2 pb-3">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
@@ -166,6 +169,7 @@ export function AdminLeaveApproval() {
                   <th className="p-2 text-center font-medium whitespace-nowrap">{t("leave_col_leave_date")}</th>
                   <th className="p-2 text-center font-medium">{t("leave_col_type")}</th>
                   <th className="p-2 text-center font-medium min-w-[200px]">{t("leave_col_reason")}</th>
+                  <th className="p-2 text-center font-medium w-20">{t("leave_col_cert")}</th>
                   <th className="p-2 text-center font-medium w-28">{t("leave_col_action")}</th>
                 </tr>
               </thead>
@@ -178,6 +182,19 @@ export function AdminLeaveApproval() {
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
                     <td className="p-2 text-center">{item.reason || "-"}</td>
+                    <td className="p-2 text-center">
+                      {item.type.indexOf("병가") !== -1 ? (
+                        item.certificateUrl ? (
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={t("leaveCertView")}>
+                            <Image className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <span className="text-amber-600 text-xs font-medium" title={t("leaveCertPending")}>{t("leaveCertPending")}</span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </td>
                     <td className="p-2 text-center">
                       {item.status === "대기" && (
                         <div className="flex items-center justify-center gap-1.5">
@@ -197,5 +214,19 @@ export function AdminLeaveApproval() {
         </div>
       </CardContent>
     </Card>
+
+    <Dialog open={!!certPreviewUrl} onOpenChange={(open) => !open && setCertPreviewUrl(null)}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t("leaveCertView")}</DialogTitle>
+        </DialogHeader>
+        {certPreviewUrl && (
+          <div className="overflow-hidden rounded-md">
+            <img src={certPreviewUrl} alt={t("leaveCertView")} className="w-full h-auto max-h-[70vh] object-contain" />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
