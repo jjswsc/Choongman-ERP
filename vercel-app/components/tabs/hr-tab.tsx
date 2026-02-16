@@ -74,7 +74,7 @@ export function HrTab() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, remain: 15 })
-  const [leaveHistory, setLeaveHistory] = useState<{ date: string; type: string; reason: string; status: string }[]>([])
+  const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
   const [leaveDate, setLeaveDate] = useState(todayStr)
   const [leaveReason, setLeaveReason] = useState("")
