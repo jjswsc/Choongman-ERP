@@ -27,10 +27,14 @@ function hasValidImage(url: string | undefined): boolean {
 function toImageUrl(url: string): string {
   const s = String(url || '').trim()
   if (!s) return s
-  const m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
-  if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`
-  const m2 = s.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/)
-  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`
+  if (s.startsWith('data:image')) return s
+  if (s.startsWith('http')) {
+    const proxyPath = `/api/imageProxy?url=${encodeURIComponent(s)}`
+    if (typeof window !== 'undefined') {
+      return `${window.location.origin}${proxyPath}`
+    }
+    return proxyPath
+  }
   return s
 }
 
@@ -70,6 +74,7 @@ export function UsageTab() {
   const [histStart, setHistStart] = useState(() => daysAgoStr(7))
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
+  const [imageLoadError, setImageLoadError] = useState(false)
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -162,12 +167,24 @@ export function UsageTab() {
       {imageModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setImageModal(null)}
+          onClick={() => { setImageModal(null); setImageLoadError(false) }}
         >
           <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <img src={imageModal.url} alt={imageModal.name} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            {imageLoadError ? (
+              <div className="flex min-h-[120px] items-center justify-center rounded-lg bg-muted/80 px-6 py-8">
+                <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
+              </div>
+            ) : (
+              <img
+                src={imageModal.url}
+                alt={imageModal.name}
+                className="max-w-full max-h-[80vh] rounded-lg object-contain"
+                onError={() => setImageLoadError(true)}
+                onLoad={() => setImageLoadError(false)}
+              />
+            )}
             <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>
-            <Button variant="ghost" size="sm" className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70" onClick={() => setImageModal(null)}>
+            <Button variant="ghost" size="sm" className="absolute -top-2 -right-2 rounded-full bg-black/50 text-white hover:bg-black/70" onClick={() => { setImageModal(null); setImageLoadError(false) }}>
               ✕
             </Button>
           </div>
@@ -218,11 +235,15 @@ export function UsageTab() {
                                   title={hasImg ? t("photo") : t("noImage")}
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    if (hasImg) setImageModal({ url: toImageUrl(item.image!), name: item.name })
+                                    if (hasImg) {
+                                      setImageLoadError(false)
+                                      setImageModal({ url: toImageUrl(item.image!), name: item.name })
+                                    }
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter" && hasImg) {
                                       e.stopPropagation()
+                                      setImageLoadError(false)
                                       setImageModal({ url: toImageUrl(item.image!), name: item.name })
                                     }
                                   }}

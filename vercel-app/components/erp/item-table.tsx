@@ -24,14 +24,14 @@ import {
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
-/** Google Drive view URL → img src용 직접 링크로 변환 */
+/** 외부 이미지 URL → 프록시 또는 직접 사용 */
 function toImageUrl(url: string): string {
   const s = String(url || '').trim()
   if (!s) return s
-  const m = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
-  if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`
-  const m2 = s.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/)
-  if (m2) return `https://drive.google.com/uc?export=view&id=${m2[1]}`
+  if (s.startsWith('data:image')) return s
+  if (s.startsWith('http')) {
+    return `/api/imageProxy?url=${encodeURIComponent(s)}`
+  }
   return s
 }
 
@@ -63,6 +63,7 @@ export function ItemTable({
   const { lang } = useLang()
   const t = useT(lang)
   const [imagePreview, setImagePreview] = React.useState<{ url: string; name: string } | null>(null)
+  const [imageLoadError, setImageLoadError] = React.useState(false)
 
   return (
     <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -154,7 +155,10 @@ export function ItemTable({
                         variant="outline"
                         size="sm"
                         className="h-6 px-1.5 text-[10px] font-semibold gap-0.5"
-                        onClick={() => setImagePreview({ url: toImageUrl(product.imageUrl!), name: product.name })}
+                        onClick={() => {
+                          setImageLoadError(false)
+                          setImagePreview({ url: toImageUrl(product.imageUrl!), name: product.name })
+                        }}
                       >
                         <ImageIcon className="h-2.5 w-2.5" />
                         {t("photo")}
@@ -207,32 +211,32 @@ export function ItemTable({
       {imagePreview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setImagePreview(null)}
+          onClick={() => { setImagePreview(null); setImageLoadError(false) }}
         >
           <div
             className="relative max-h-[90vh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-2 text-xs font-semibold text-muted-foreground">{imagePreview.name}</p>
-            <img
-              src={imagePreview.url}
-              alt={imagePreview.name}
-              className="max-h-[70vh] max-w-full rounded-lg object-contain"
-              referrerPolicy="no-referrer"
-            />
-            <a
-              href={imagePreview.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-block text-xs text-primary underline hover:no-underline"
-            >
-              새 탭에서 열기
-            </a>
+            {imageLoadError ? (
+              <div className="flex min-h-[120px] items-center justify-center rounded-lg bg-muted/80 px-6 py-8">
+                <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
+              </div>
+            ) : (
+              <img
+                src={imagePreview.url}
+                alt={imagePreview.name}
+                className="max-h-[70vh] max-w-full rounded-lg object-contain"
+                referrerPolicy="no-referrer"
+                onError={() => setImageLoadError(true)}
+                onLoad={() => setImageLoadError(false)}
+              />
+            )}
             <Button
               variant="outline"
               size="sm"
               className="mt-3 w-full"
-              onClick={() => setImagePreview(null)}
+              onClick={() => { setImagePreview(null); setImageLoadError(false) }}
             >
               {t("itemsBtnClose")}
             </Button>
