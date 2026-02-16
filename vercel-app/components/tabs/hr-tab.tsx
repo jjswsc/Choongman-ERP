@@ -113,6 +113,7 @@ export function HrTab() {
   } | null>(null)
   const [companyName, setCompanyName] = useState("")
   const [payrollLoading, setPayrollLoading] = useState(false)
+  const [payrollPreviewOpen, setPayrollPreviewOpen] = useState(false)
 
   useEffect(() => {
     const tid = setInterval(() => setNow(new Date()), 1000)
@@ -316,15 +317,12 @@ export function HrTab() {
     const localeMap: Record<string, string> = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }
     return d.toLocaleDateString(localeMap[l] || "en-US", { year: "numeric", month: "long" })
   }
-  const handlePrintPayroll = () => {
-    if (!payrollData) return
+  const getPayrollHtml = () => {
+    if (!payrollData) return ""
     const issueDate = new Date().toISOString().slice(0, 10)
-    const printWin = window.open("", "_blank")
-    if (!printWin) return
     const monthLabel = formatMonthForPrint(payrollData.month, lang)
     const displayCompany = payrollData.companyName || companyName || "CHOONGMAN"
-    printWin.document.write(`
-<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("payMyTitle")} - ${payrollData.name}</title>
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("payMyTitle")} - ${payrollData.name}</title>
 <style>
 body{font-family:'Malgun Gothic',Arial,sans-serif;font-size:11pt;color:#1e293b;padding:24px;max-width:480px;margin:0 auto;}
 h1{font-size:16pt;text-align:center;margin-bottom:4px;color:#0f172a;}
@@ -365,13 +363,25 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
 </table>
 <div class="footer">${t("payPrintIssueDate")}: ${issueDate}</div>
 <div class="company" style="margin-top:16px;font-size:11pt;">${displayCompany}</div>
-</body></html>`)
-    printWin.document.close()
-    printWin.focus()
-    setTimeout(() => {
-      printWin!.print()
-      printWin!.close()
-    }, 250)
+</body></html>`
+  }
+
+  const handleOpenPayrollPreview = () => {
+    if (!payrollData) return
+    setPayrollPreviewOpen(true)
+  }
+
+  const handleDownloadPayroll = () => {
+    const html = getPayrollHtml()
+    if (!html) return
+    const fn = `payslip_${payrollData!.month}_${(payrollData!.name || "payroll").replace(/\s+/g, "_")}.html`
+    const blob = new Blob(["\uFEFF" + html], { type: "text/html;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = fn
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (!auth?.store || !auth?.user) {
@@ -703,14 +713,39 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                   <span className="font-bold text-base text-primary">{fmt(payrollData.net_pay)} THB</span>
                 </div>
               </div>
-              <Button size="sm" variant="outline" className="w-full mt-3 h-9" onClick={handlePrintPayroll}>
+              <Button size="sm" variant="outline" className="w-full mt-3 h-9" onClick={handleOpenPayrollPreview}>
                 <Download className="h-3.5 w-3.5 mr-2" />
-                {t("payMyDownloadPdf")}
+                {t("payMyViewDownload")}
               </Button>
             </>
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={payrollPreviewOpen} onOpenChange={setPayrollPreviewOpen}>
+        <DialogContent className="max-w-[520px] max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{t("payMyTitle")}</DialogTitle>
+          </DialogHeader>
+          {payrollData && (
+            <>
+              <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border bg-white">
+                <iframe
+                  srcDoc={getPayrollHtml()}
+                  title={t("payMyTitle")}
+                  className="w-full border-0"
+                  style={{ minHeight: "400px" }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">{t("payMyPrintHint")}</p>
+              <Button className="w-full mt-3" onClick={handleDownloadPayroll}>
+                <Download className="h-4 w-4 mr-2" />
+                {t("payMyDownloadFile")}
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!certPreviewUrl} onOpenChange={(open) => !open && setCertPreviewUrl(null)}>
         <DialogContent className="max-w-2xl">
