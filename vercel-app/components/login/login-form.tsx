@@ -96,7 +96,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
         })
         router.replace(redirectTo)
       } else {
-        setError(res.message || tMsg("msg_login_failed"))
+        setError(translateApiMessage(res.message, tMsg) || res.message || tMsg("msg_login_failed"))
       }
     } catch (err) {
       setError(tMsg("msg_server_error_prefix") + (err instanceof Error ? err.message : String(err)))

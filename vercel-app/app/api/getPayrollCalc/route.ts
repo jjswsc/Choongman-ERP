@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
       const key = store + '_' + name
       if (/무급|unpaid/i.test(type)) {
         unpaidLeaveDaysMap[key] = (unpaidLeaveDaysMap[key] || 0) + 1
-      } else if (/연차|병가|annual|sick/i.test(type)) {
+      } else if (/연차|병가|annual|sick|ลากิจ|lakij/i.test(type)) {
         paidLeaveDaysMap[key] = (paidLeaveDaysMap[key] || 0) + 1
       }
     }

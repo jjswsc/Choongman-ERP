@@ -51,6 +51,7 @@ const LEAVE_TYPE_TO_KEY: Record<string, string> = {
   반차: "half",
   병가: "sick",
   무급휴가: "unpaid",
+  ลากิจ: "lakij",
 }
 
 const LEAVE_STATUS_TO_KEY: Record<string, string> = {
@@ -81,7 +82,7 @@ export function HrTab() {
   const [attLog, setAttLog] = useState<{ timestamp: string; type: string; status: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
-  const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, remain: 15 })
+  const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 15, remainLakij: 3, annualTotal: 6, lakijTotal: 3 })
   const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
   const [leaveDate, setLeaveDate] = useState(todayStr)
@@ -507,22 +508,22 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           <CardTitle className="text-sm font-semibold">{t("leaveStats")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-xs text-muted-foreground">{t("usedAnn")}</p>
-              <p className="text-lg font-bold">{leaveStats.usedAnn}</p>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center">
+            <div className="rounded-lg bg-primary/10 px-1.5 sm:px-3 py-2 min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("annual")}</p>
+              <p className="text-sm sm:text-base font-bold text-primary">{leaveStats.usedAnn ?? 0} / {leaveStats.remain ?? 0}</p>
             </div>
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-xs text-muted-foreground">{t("usedSick")}</p>
-              <p className="text-lg font-bold">{leaveStats.usedSick}</p>
+            <div className="rounded-lg bg-primary/10 px-1.5 sm:px-3 py-2 min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("lakij")}</p>
+              <p className="text-sm sm:text-base font-bold text-primary">{leaveStats.usedLakij ?? 0} / {leaveStats.remainLakij ?? 3}</p>
             </div>
-            <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <p className="text-xs text-muted-foreground">{t("usedUnpaid")}</p>
-              <p className="text-lg font-bold">{leaveStats.usedUnpaid ?? 0}</p>
+            <div className="rounded-lg bg-muted/50 px-1.5 sm:px-3 py-2 min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("sick")}</p>
+              <p className="text-sm sm:text-base font-bold">{leaveStats.usedSick ?? 0}</p>
             </div>
-            <div className="rounded-lg bg-primary/10 px-3 py-2">
-              <p className="text-xs text-muted-foreground">{t("remain")}</p>
-              <p className="text-lg font-bold text-primary">{leaveStats.remain}</p>
+            <div className="rounded-lg bg-muted/50 px-1.5 sm:px-3 py-2 min-w-0">
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{t("unpaid")}</p>
+              <p className="text-sm sm:text-base font-bold">{leaveStats.usedUnpaid ?? 0}</p>
             </div>
           </div>
         </CardContent>
@@ -539,13 +540,14 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
             className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
           >
             <option value="연차">{t("annual")}</option>
+            <option value="ลากิจ">{t("lakij")}</option>
             <option value="반차">{t("half")}</option>
             <option value="병가">{t("sick")}</option>
             <option value="무급휴가">{t("unpaid")}</option>
           </select>
-          {leaveType.indexOf("병가") !== -1 && (
+          {(leaveType.indexOf("병가") !== -1 || leaveType.indexOf("ลากิจ") !== -1) && (
             <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 rounded-lg px-3 py-2">
-              {t("leaveSickHint")}
+              {leaveType.indexOf("병가") !== -1 ? t("leaveSickHint") : t("leaveLakijHint")}
             </p>
           )}
           <Input
@@ -588,9 +590,10 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           ) : (
             <div className="space-y-1">
               {leaveHistory.map((h, i) => {
-                const isSickPending = h.type.indexOf("병가") !== -1 && (h.status === "대기" || h.status === "Pending")
-                const canUpload = isSickPending && h.id && !h.certificateUrl
-                const hasCert = isSickPending && h.certificateUrl
+                const needsProof = h.type.indexOf("병가") !== -1 || h.type.indexOf("ลากิจ") !== -1
+                const isProofPending = needsProof && (h.status === "대기" || h.status === "Pending")
+                const canUpload = isProofPending && h.id && !h.certificateUrl
+                const hasCert = isProofPending && h.certificateUrl
                 const uploading = certUploadingId === h.id
                 return (
                   <div
@@ -611,7 +614,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                           disabled={uploading}
                         >
                           <Upload className="mr-1 h-3 w-3" />
-                          {uploading ? t("loading") : t("leaveCertUpload")}
+                          {uploading ? t("loading") : h.type.indexOf("ลากิจ") !== -1 ? t("leaveProofUpload") : t("leaveCertUpload")}
                         </Button>
                       )}
                       {hasCert && (
@@ -622,7 +625,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                           onClick={() => setCertPreviewUrl(h.certificateUrl!)}
                         >
                           <Image className="mr-1 h-3 w-3" />
-                          {t("leaveCertView")}
+                          {h.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}
                         </Button>
                       )}
                       <Badge

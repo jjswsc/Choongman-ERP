@@ -14,7 +14,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getMyNotices, translateTexts, type NoticeItem } from "@/lib/api-client"
+import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
 import { Megaphone, Bell, Search } from "lucide-react"
 
 function todayStr() {
@@ -42,6 +42,7 @@ export function HomeTab() {
   const [dateFrom, setDateFrom] = useState(() => daysAgoStr(30)) // 기본: 최근 30일
   const [dateTo, setDateTo] = useState(todayStr)
   const [transMap, setTransMap] = useState<Record<string, string>>({})
+  const [confirmingId, setConfirmingId] = useState<number | null>(null)
 
   const fetchNotices = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -91,6 +92,31 @@ export function HomeTab() {
   }, [filteredNotices, lang])
 
   const getTrans = (text: string) => (text && transMap[text]) || text || ""
+
+  const handleNoticeAction = useCallback(
+    async (noticeId: number, action: '확인' | '다음에') => {
+      if (!auth?.store || !auth?.user) return
+      if (action === '다음에') {
+        setExpandedId(null)
+        return
+      }
+      setConfirmingId(noticeId)
+      try {
+        const res = await confirmNoticeRead({ noticeId, store: auth.store, name: auth.user, action })
+        if (res.success) {
+          setNotices((prev) =>
+            prev.map((n) => (n.id === noticeId ? { ...n, status: '확인' } : n))
+          )
+          setExpandedId(null)
+        }
+      } catch {
+        // ignore
+      } finally {
+        setConfirmingId(null)
+      }
+    },
+    [auth?.store, auth?.user]
+  )
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -182,6 +208,27 @@ export function HomeTab() {
                         <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
                           {n.content ? getTrans(n.content) : "(내용 없음)"}
                         </p>
+                        {!isRead(n.status) && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              className="h-9 px-4 text-xs font-medium"
+                              onClick={() => handleNoticeAction(n.id, '확인')}
+                              disabled={confirmingId === n.id}
+                            >
+                              {confirmingId === n.id ? t('loading') : t('noticeConfirmBtn')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-9 px-4 text-xs font-medium"
+                              onClick={() => handleNoticeAction(n.id, '다음에')}
+                              disabled={confirmingId !== null}
+                            >
+                              {t('noticeLaterBtn')}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

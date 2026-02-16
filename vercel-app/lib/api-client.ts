@@ -24,6 +24,25 @@ export async function getMyNotices(params: { store: string; name: string }) {
   return res.json() as Promise<NoticeItem[]>
 }
 
+export async function confirmNoticeRead(params: {
+  noticeId: number
+  store: string
+  name: string
+  action: '확인' | '다음에'
+}) {
+  const res = await apiFetch('/api/confirmNoticeRead', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      noticeId: params.noticeId,
+      store: params.store,
+      name: params.name,
+      action: params.action,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface MyPayrollData {
   month: string
   store: string
@@ -427,7 +446,7 @@ export async function getMyLeaveInfo(params: { store: string; name: string }) {
   const res = await apiFetch(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
-    stats: { usedAnn: number; usedSick: number; usedUnpaid: number; remain: number }
+    stats: { usedAnn: number; usedSick: number; usedUnpaid: number; usedLakij: number; remain: number; remainLakij: number; annualTotal: number; lakijTotal: number }
   }>
 }
 
@@ -546,7 +565,7 @@ export async function getLeaveStats(params: {
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
   const res = await apiFetch(`/api/getLeaveStats?${q}`)
-  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[]>
+  return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>
 }
 
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string }) {

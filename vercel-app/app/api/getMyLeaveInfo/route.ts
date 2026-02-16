@@ -20,6 +20,9 @@ function getAnnualLeaveDays(
   return joinDate <= oneYearAgo ? 6 : 0
 }
 
+/** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
+const LAKIJ_DAYS_PER_YEAR = 3
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest) {
 
   if (!store || !name) {
     return NextResponse.json(
-      { history: [], stats: { usedAnn: 0, usedSick: 0, usedUnpaid: 0, remain: 0 } },
+      { history: [], stats: { usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 0, remainLakij: 0, annualTotal: 0, lakijTotal: 3 } },
       { headers }
     )
   }
@@ -52,7 +55,8 @@ export async function GET(request: NextRequest) {
     const thisYear = new Date().getFullYear()
     let usedAnn = 0,
       usedSick = 0,
-      usedUnpaid = 0
+      usedUnpaid = 0,
+      usedLakij = 0
     const history = (rows || []).map((r) => {
       const dateStr = toDateStr(r.leave_date)
       const status = String(r.status || '').trim()
@@ -65,6 +69,8 @@ export async function GET(request: NextRequest) {
         const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
         if (type.indexOf('무급휴가') !== -1 || type.toLowerCase().indexOf('unpaid') !== -1) {
           usedUnpaid += val
+        } else if (type.indexOf('ลากิจ') !== -1 || type.toLowerCase().indexOf('lakij') !== -1) {
+          usedLakij += val
         } else {
           if (type.indexOf('병가') !== -1) usedSick += val
           else usedAnn += val
@@ -74,17 +80,18 @@ export async function GET(request: NextRequest) {
     })
 
     const remain = Math.max(0, annualTotal - usedAnn)
+    const remainLakij = Math.max(0, LAKIJ_DAYS_PER_YEAR - usedLakij)
     return NextResponse.json(
       {
         history,
-        stats: { usedAnn, usedSick, usedUnpaid, remain, annualTotal },
+        stats: { usedAnn, usedSick, usedUnpaid, usedLakij, remain, remainLakij, annualTotal, lakijTotal: LAKIJ_DAYS_PER_YEAR },
       },
       { headers }
     )
   } catch (e) {
     console.error('getMyLeaveInfo:', e)
     return NextResponse.json(
-      { history: [], stats: { usedAnn: 0, usedSick: 0, usedUnpaid: 0, remain: 0, annualTotal: 0 } },
+      { history: [], stats: { usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 0, remainLakij: 0, annualTotal: 0, lakijTotal: 3 } },
       { headers }
     )
   }

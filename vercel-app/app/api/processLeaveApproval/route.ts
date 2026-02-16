@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter('leave_requests', `id=eq.${id}`, { limit: 1 })) as { id: number; store?: string }[]
+    const rows = (await supabaseSelectFilter('leave_requests', `id=eq.${id}`, { limit: 1 })) as { id: number; store?: string; type?: string }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 휴가 신청을 찾을 수 없습니다.' },
@@ -44,8 +44,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const status = decision === '승인' || decision === 'Approved' ? '승인' : '반려'
-    await supabaseUpdate('leave_requests', id, { status })
+    const rowType = String(rows[0].type || '').trim()
+    const isSick = rowType.indexOf('병가') !== -1 || rowType.toLowerCase().indexOf('sick') !== -1
+    const isLakij = rowType.indexOf('ลากิจ') !== -1 || rowType.toLowerCase().indexOf('lakij') !== -1
+    const isReject = decision === '반려' || decision === 'Rejected'
+
+    let status = decision === '승인' || decision === 'Approved' ? '승인' : '반려'
+    let type: string | undefined
+    if (isReject && (isSick || isLakij)) {
+      type = '무급휴가'
+      status = '승인'
+    }
+
+    await supabaseUpdate('leave_requests', id, type != null ? { type, status } : { status })
 
     return NextResponse.json(
       { success: true, message: '처리되었습니다.' },

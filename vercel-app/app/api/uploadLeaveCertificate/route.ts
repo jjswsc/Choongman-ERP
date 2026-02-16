@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 
-/** 병가 진단서 업로드 - leave_requests.certificate_url 업데이트 */
+/** 병가 진단서 / ลากิจ 증빙 서류 업로드 - leave_requests.certificate_url 업데이트 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '휴가 신청 ID가 필요합니다.' }, { headers })
     }
     if (!certificateUrl) {
-      return NextResponse.json({ success: false, message: '진단서 이미지가 필요합니다.' }, { headers })
+      return NextResponse.json({ success: false, message: '증빙 서류 이미지가 필요합니다.' }, { headers })
     }
     if (!store || !name) {
       return NextResponse.json({ success: false, message: '매장·이름이 필요합니다.' }, { headers })
@@ -39,11 +39,13 @@ export async function POST(request: NextRequest) {
     const rowStore = String(row.store || '').trim()
     const rowName = String(row.name || '').trim()
     if (rowStore !== store || rowName !== name) {
-      return NextResponse.json({ success: false, message: '본인의 휴가 신청만 진단서를 업로드할 수 있습니다.' }, { headers })
+      return NextResponse.json({ success: false, message: '본인의 휴가 신청만 증빙 서류를 업로드할 수 있습니다.' }, { headers })
     }
     const rowType = String(row.type || '').trim()
-    if (rowType.indexOf('병가') === -1) {
-      return NextResponse.json({ success: false, message: '병가 신청에만 진단서를 업로드할 수 있습니다.' }, { headers })
+    const isSick = rowType.indexOf('병가') !== -1 || rowType.toLowerCase().indexOf('sick') !== -1
+    const isLakij = rowType.indexOf('ลากิจ') !== -1 || rowType.toLowerCase().indexOf('lakij') !== -1
+    if (!isSick && !isLakij) {
+      return NextResponse.json({ success: false, message: '병가 및 ลากิจ 신청에만 증빙 서류를 업로드할 수 있습니다.' }, { headers })
     }
     const rowStatus = String(row.status || '').trim()
     if (rowStatus !== '대기' && rowStatus !== 'Pending') {
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('leave_requests', id, { certificate_url: certificateUrl })
-    return NextResponse.json({ success: true, message: '진단서가 업로드되었습니다.' }, { headers })
+    return NextResponse.json({ success: true, message: '증빙 서류가 업로드되었습니다.' }, { headers })
   } catch (e) {
     console.error('uploadLeaveCertificate:', e)
     return NextResponse.json(

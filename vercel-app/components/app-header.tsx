@@ -24,9 +24,10 @@ const langOptions: { value: LangCode; label: string }[] = [
 ]
 
 export function AppHeader() {
-  const { logout } = useAuth()
+  const { auth, logout } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
+  const canAdmin = auth?.role && (["director", "officer", "ceo", "hr", "manager"].some((r) => String(auth?.role || "").toLowerCase().includes(r)))
 
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-card/80 px-4 py-3 backdrop-blur-md">
@@ -37,13 +38,15 @@ export function AppHeader() {
         <span className="text-lg font-bold text-orange-500">충만치킨</span>
       </div>
       <div className="flex items-center gap-2">
-        <Link
-          href="/admin"
-          className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:flex"
-          title="관리자"
-        >
-          <LayoutDashboard className="h-4 w-4" />
-        </Link>
+        {canAdmin && (
+          <Link
+            href="/admin"
+            className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:flex"
+            title="관리자"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+          </Link>
+        )}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
           <SelectTrigger className="h-8 w-20 text-xs">
             <SelectValue />

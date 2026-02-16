@@ -30,6 +30,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 공지
   "공지사항이 등록되었습니다.": "noticeSentSuccess",
 
+  // 로그인/권한
+  "권한 없음": "msg_no_admin_permission",
+  "관리자 권한이 없습니다.": "msg_no_admin_permission",
+
   // 공통
   "수정되었습니다.": "msg_saved",
   "저장되었습니다.": "msg_saved",

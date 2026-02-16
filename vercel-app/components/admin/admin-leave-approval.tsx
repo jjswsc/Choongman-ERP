@@ -53,8 +53,8 @@ export function AdminLeaveApproval() {
   }, [auth?.store, auth?.role, storeList])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
-  const leaveTypeToKey: Record<string, string> = { "연차": "annual", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
-  const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid") : type
+  const leaveTypeToKey: Record<string, string> = { "연차": "annual", "ลากิจ": "lakij", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
+  const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid" | "lakij") : type
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
 
@@ -125,6 +125,7 @@ export function AdminLeaveApproval() {
             <SelectContent>
               <SelectItem value="All">{t("all")}</SelectItem>
               <SelectItem value="연차">{t("annual")}</SelectItem>
+              <SelectItem value="ลากิจ">{t("lakij")}</SelectItem>
               <SelectItem value="반차">{t("half")}</SelectItem>
               <SelectItem value="병가">{t("sick")}</SelectItem>
               <SelectItem value="무급휴가">{t("unpaid")}</SelectItem>
@@ -173,9 +174,9 @@ export function AdminLeaveApproval() {
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>
                     <td className="p-2 text-center">{item.reason || "-"}</td>
                     <td className="p-2 text-center">
-                      {item.type.indexOf("병가") !== -1 ? (
+                      {(item.type.indexOf("병가") !== -1 || item.type.indexOf("ลากิจ") !== -1) ? (
                         item.certificateUrl ? (
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={t("leaveCertView")}>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setCertPreviewUrl(item.certificateUrl)} title={item.type.indexOf("ลากิจ") !== -1 ? t("leaveProofView") : t("leaveCertView")}>
                             <Image className="h-4 w-4" />
                           </Button>
                         ) : (

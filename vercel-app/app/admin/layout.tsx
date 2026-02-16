@@ -6,7 +6,7 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, canManagerAccessPath } from "@/lib/permissions"
+import { isManagerRole, canManagerAccessPath, canAccessAdmin } from "@/lib/permissions"
 
 export default function AdminLayout({
   children,
@@ -22,6 +22,10 @@ export default function AdminLayout({
     if (!initialized) return
     if (!auth && !isLoginPage) {
       router.replace("/admin/login")
+      return
+    }
+    if (auth && !isLoginPage && !canAccessAdmin(auth.role || "")) {
+      router.replace("/?msg=no_admin")
       return
     }
     if (auth && !isLoginPage && isManagerRole(auth.role || "") && !canManagerAccessPath(pathname)) {

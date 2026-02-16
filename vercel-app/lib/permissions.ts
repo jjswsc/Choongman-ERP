@@ -30,6 +30,11 @@ export function isManagerRole(role: string): boolean {
   return r.includes(MANAGER_ROLE)
 }
 
+/** 관리자 페이지 접근 가능 (본사 + 매니저) */
+export function canAccessAdmin(role: string): boolean {
+  return isOfficeRole(role) || isManagerRole(role)
+}
+
 /** 설정 페이지 접근 가능 (Director, Officer만) */
 export function canAccessSettings(role: string): boolean {
   const r = String(role || "").toLowerCase().trim()

@@ -25,6 +25,9 @@ function getLeaveDays(type: string): number {
   return 1
 }
 
+/** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
+const LAKIJ_DAYS_PER_YEAR = 3
+
 /** 휴가 통계 - 매장별 직원별 연차/병가 사용 현황 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
       leaveRows = (await supabaseSelect('leave_requests', { order: 'leave_date.asc', limit: 2000 })) as LeaveRow[]
     }
 
-    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; remain: number }[] = []
+    const result: { store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[] = []
 
     for (const emp of empRows || []) {
       const empStore = String(emp.store || '').trim()
@@ -81,9 +84,11 @@ export async function GET(request: NextRequest) {
       let usedPeriodAnnual = 0
       let usedPeriodSick = 0
       let usedPeriodUnpaid = 0
+      let usedPeriodLakij = 0
       let usedTotalAnnual = 0
       let usedTotalSick = 0
       let usedTotalUnpaid = 0
+      let usedTotalLakij = 0
 
       for (const l of leaveRows || []) {
         const lName = String(l.name || '').trim()
@@ -101,6 +106,9 @@ export async function GET(request: NextRequest) {
         if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1) {
           usedTotalUnpaid += days
           if (lDate >= start && lDate <= end) usedPeriodUnpaid += days
+        } else if (lType.indexOf('ลากิจ') !== -1 || lType.toLowerCase().indexOf('lakij') !== -1) {
+          usedTotalLakij += days
+          if (lDate >= start && lDate <= end) usedPeriodLakij += days
         } else if (lType.indexOf('병가') !== -1 || lType.toLowerCase().indexOf('sick') !== -1) {
           usedTotalSick += days
           if (lDate >= start && lDate <= end) usedPeriodSick += days
@@ -116,10 +124,13 @@ export async function GET(request: NextRequest) {
         usedPeriodAnnual: Math.round(usedPeriodAnnual * 10) / 10,
         usedPeriodSick: Math.round(usedPeriodSick * 10) / 10,
         usedPeriodUnpaid: Math.round(usedPeriodUnpaid * 10) / 10,
+        usedPeriodLakij: Math.round(usedPeriodLakij * 10) / 10,
         usedTotalAnnual: Math.round(usedTotalAnnual * 10) / 10,
         usedTotalSick: Math.round(usedTotalSick * 10) / 10,
         usedTotalUnpaid: Math.round(usedTotalUnpaid * 10) / 10,
+        usedTotalLakij: Math.round(usedTotalLakij * 10) / 10,
         remain: Math.max(0, Math.round((annualLimit - usedTotalAnnual) * 10) / 10),
+        remainLakij: Math.max(0, Math.round((LAKIJ_DAYS_PER_YEAR - usedTotalLakij) * 10) / 10),
       })
     }
 

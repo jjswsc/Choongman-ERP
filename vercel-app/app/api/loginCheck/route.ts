@@ -35,13 +35,10 @@ export async function POST(req: NextRequest) {
     else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
     else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
 
-    const storeCol = String(row.store || '').trim()
-    if ((storeCol === 'Office' || storeCol === '본사' || storeCol === '오피스' || storeCol.toLowerCase() === 'office') && finalRole !== 'director') {
-      finalRole = 'officer'
-    }
-
+    // 관리자 페이지: director, officer, manager만 접근. 일반 직원(staff)은 권한 없음으로 로그인 차단
+    // ※ Office 소속이라도 role에 director/officer/manager가 없으면 접근 불가
     if (isAdminPage && finalRole !== 'director' && finalRole !== 'officer' && finalRole !== 'manager') {
-      return NextResponse.json({ success: false, message: '권한 없음' }, { headers })
+      return NextResponse.json({ success: false, message: '관리자 권한이 없습니다.' }, { headers })
     }
 
     const storeName = String(row.store || '').trim()
