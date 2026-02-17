@@ -552,7 +552,9 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       const html = checked.map((g, idx) => {
         const isFirst = idx === 0 || g.target !== prevTarget
         prevTarget = g.target
-        const client = (clients && clients[g.target]) || { companyName: g.target || "-" }
+        const targetNorm = (g.target || "").trim()
+        const targetLower = targetNorm.toLowerCase()
+        const client = (clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])) || { companyName: g.target || "-" }
         return buildInvoiceHtml(g, company, client, isFirst)
       }).join("")
       const area = document.createElement("div")

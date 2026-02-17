@@ -61,8 +61,15 @@ export async function GET() {
         taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
         phone: String(r.phone || '').trim() || '-',
       }
-      if (companyName) clients[companyName] = entry
-      if (gpsName && gpsName !== companyName) clients[gpsName] = entry
+      const keysToAdd = [companyName, gpsName].filter(Boolean)
+      const seen = new Set<string>()
+      for (const k of keysToAdd) {
+        if (!k || seen.has(k)) continue
+        seen.add(k)
+        clients[k] = entry
+        const normalized = k.toLowerCase().trim()
+        if (normalized && normalized !== k) clients[normalized] = entry
+      }
     }
 
     return NextResponse.json({ company, clients }, { headers })
