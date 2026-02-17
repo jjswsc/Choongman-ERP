@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
 
     const list: {
       id: string
+      sender: string
       title: string
       date: string
       recipients: string[]
