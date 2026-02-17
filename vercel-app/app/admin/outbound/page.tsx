@@ -333,6 +333,7 @@ export default function OutboundPage() {
           spec: it.spec || "",
           qty: it.qty || 0,
           amount: it.amount || 0,
+          originalOrderQty: it.originalOrderQty,
         })),
         itemsSummary,
         totalQty: g.totalQty,
@@ -416,7 +417,6 @@ export default function OutboundPage() {
     const taxId = company?.taxId || ""
     const phone = company?.phone || ""
     const bankInfo = company?.bankInfo || ""
-    const projectName = company?.projectName || "CM True Digital Park"
     const clientName = client?.companyName || group.target || "-"
     const clientAddr = (client as InvoiceDataClient)?.address || ""
     const clientTaxId = (client as InvoiceDataClient)?.taxId || ""
@@ -438,7 +438,6 @@ export default function OutboundPage() {
       <div><strong>${inv.inv_doc_no}:</strong> ${docNo}</div>
       <div><strong>${inv.inv_due_date}:</strong> ${d}</div>
       <div><strong>${inv.inv_reference}:</strong> ${group.invoiceNo || "-"}</div>
-      <div><strong>Project Name:</strong> ${projectName}</div>
     </div>
   </div>
   <div style="display:flex; justify-content:space-between; margin-bottom:12px;">

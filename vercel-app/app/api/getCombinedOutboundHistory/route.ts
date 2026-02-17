@@ -18,6 +18,8 @@ export interface OutboundHistoryItem {
   receiveImageUrl?: string
   receivedIndices?: number[]
   totalOrderItems?: number
+  /** 원본 주문 수량 (수령 시 조정된 경우 표시용) */
+  originalOrderQty?: number
 }
 
 export async function GET(request: NextRequest) {
@@ -130,7 +132,8 @@ export async function GET(request: NextRequest) {
         delivery_date?: string
         order_date?: string
         received_indices?: number[]
-        cart?: { code?: string; name?: string }[]
+        received_qty_json?: Record<string, number>
+        cart?: { code?: string; name?: string; qty?: number }[]
       }> = {}
 
       for (const oid of orderRowIds) {
@@ -140,6 +143,7 @@ export async function GET(request: NextRequest) {
           delivery_date?: string
           order_date?: string
           received_indices?: string | number[]
+          received_qty_json?: string
           cart_json?: string
         }[]
         if (ords && ords.length > 0) {
@@ -152,7 +156,11 @@ export async function GET(request: NextRequest) {
                 : JSON.parse(String(o.received_indices))
             }
           } catch {}
-          let cart: { code?: string; name?: string }[] = []
+          let recQtyMap: Record<string, number> = {}
+          try {
+            if (o.received_qty_json) recQtyMap = JSON.parse(String(o.received_qty_json)) || {}
+          } catch {}
+          let cart: { code?: string; name?: string; qty?: number }[] = []
           try {
             if (o.cart_json) cart = JSON.parse(o.cart_json) || []
           } catch {}
@@ -162,6 +170,7 @@ export async function GET(request: NextRequest) {
             delivery_date: o.delivery_date,
             order_date: o.order_date,
             received_indices: recIdx,
+            received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
             cart,
           }
         }
@@ -215,6 +224,11 @@ export async function GET(request: NextRequest) {
         const uk = key + '_' + matchIdx
         if (usedByOrder[uk]) continue
         usedByOrder[uk] = true
+        const cartItem = cart[matchIdx]
+        const originalQty = Number(cartItem?.qty ?? 0)
+        if (o.received_qty_json && originalQty > 0 && originalQty !== r.qty) {
+          r.originalOrderQty = originalQty
+        }
         filteredList.push(r)
       }
       return NextResponse.json(filteredList, { headers })

@@ -244,6 +244,7 @@ export async function processOrderReceive(params: {
   imageUrl?: string
   isPartialReceive?: boolean
   inspectedIndices?: number[]
+  receivedQtys?: Record<number, number>
 }) {
   const res = await apiFetch('/api/processOrderReceive', {
     method: 'POST',
@@ -1215,6 +1216,7 @@ export interface OutboundHistoryItem {
   invoiceNo?: string
   receiveImageUrl?: string
   receivedIndices?: number[]
+  originalOrderQty?: number
   totalOrderItems?: number
 }
 

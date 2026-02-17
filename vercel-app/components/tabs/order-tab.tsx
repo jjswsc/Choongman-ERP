@@ -80,6 +80,7 @@ export function OrderTab() {
   const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
   const [inspectedItems, setInspectedItems] = useState<Record<number, Set<number>>>({})
+  const [receivedQtys, setReceivedQtys] = useState<Record<number, Record<number, number>>>({})
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -204,6 +205,18 @@ export function OrderTab() {
     })
   }
 
+  const getReceivedQty = (orderId: number, itemIdx: number, defaultQty: number) => {
+    return receivedQtys[orderId]?.[itemIdx] ?? defaultQty
+  }
+
+  const setReceivedQty = (orderId: number, itemIdx: number, value: number) => {
+    setReceivedQtys((prev) => {
+      const orderMap = prev[orderId] ?? {}
+      const nextOrder = { ...orderMap, [itemIdx]: Math.max(0, value) }
+      return { ...prev, [orderId]: nextOrder }
+    })
+  }
+
   const isAllInspected = (o: OrderHistoryItem) => {
     const items = o.items || []
     if (items.length === 0) return true
@@ -267,11 +280,25 @@ export function OrderTab() {
         const isPartial = modal.order && !isAllInspected(modal.order)
         const inspectedSet = modal.order ? (inspectedItems[modal.order.id] ?? new Set<number>()) : new Set<number>()
         const inspectedIndices = Array.from(inspectedSet).sort((a, b) => a - b)
+        const items = modal.order?.items ?? []
+        const receivedQtysMap: Record<number, number> = {}
+        if (isPartial) {
+          inspectedIndices.forEach((idx) => {
+            const it = items[idx]
+            const origQty = it?.qty ?? 0
+            receivedQtysMap[idx] = getReceivedQty(modal.order!.id, idx, origQty)
+          })
+        } else {
+          items.forEach((it, idx) => {
+            receivedQtysMap[idx] = getReceivedQty(modal.order!.id, idx, it?.qty ?? 0)
+          })
+        }
         const res = await processOrderReceive({
             orderRowId: modal.orderId,
             imageUrl: dataUrl,
             isPartialReceive: isPartial,
             inspectedIndices: isPartial ? inspectedIndices : undefined,
+            receivedQtys: receivedQtysMap,
           })
         if (res && res.success === true) {
           receiveCameraRef.current && (receiveCameraRef.current.value = "")
@@ -283,6 +310,11 @@ export function OrderTab() {
           setReceivePhotoPreview((p) => { if (p) URL.revokeObjectURL(p); return null })
           setReceiveModal(null)
           setReceivePhotoFile(null)
+          setReceivedQtys((prev) => {
+            const next = { ...prev }
+            delete next[modal.orderId]
+            return next
+          })
           setReceiveSubmitting(false)
           setTimeout(() => alert(t("receiveDone")), 50)
         } else {
@@ -646,8 +678,24 @@ export function OrderTab() {
                                   {!showCheck && isReceived && (
                                     <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
                                   )}
-                                  <span className={`flex-1 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
-                                  <span className="text-muted-foreground shrink-0">× {it.qty ?? "-"}</span>
+                                  <span className={`flex-1 min-w-0 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
+                                  {showCheck && checked ? (
+                                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                      <span className="text-muted-foreground text-xs">{t("orderReceivedQty") || "받은 수량"}:</span>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        className="h-7 w-14 text-center text-xs tabular-nums py-0"
+                                        value={getReceivedQty(o.id, idx, it.qty ?? 0)}
+                                        onChange={(e) => {
+                                          const v = parseInt(e.target.value, 10)
+                                          setReceivedQty(o.id, idx, isNaN(v) || v < 0 ? 0 : v)
+                                        }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground shrink-0">× {it.qty ?? "-"}</span>
+                                  )}
                                   {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
                                 </div>
                               )

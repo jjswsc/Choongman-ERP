@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const imageUrl = body.imageUrl ? String(body.imageUrl).trim() : ''
     const isPartialReceive = Boolean(body.isPartialReceive)
     const inspectedIndices: number[] = Array.isArray(body.inspectedIndices) ? body.inspectedIndices : []
+    const receivedQtysRaw = body.receivedQtys && typeof body.receivedQtys === 'object' ? body.receivedQtys : null
 
     if (!orderId || isNaN(orderId)) {
       return NextResponse.json(
@@ -77,9 +78,28 @@ export async function POST(request: NextRequest) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
     const deliveryStatus = isPartialReceive ? '일부배송완료' : '배송완료'
 
+    const getQtyForIdx = (idx: number): number => {
+      if (receivedQtysRaw) {
+        const v = receivedQtysRaw[String(idx)] ?? receivedQtysRaw[idx]
+        if (typeof v === 'number' && v >= 0) return Math.floor(v)
+      }
+      return Number(cart[idx]?.qty || 0)
+    }
+
     const itemsToInbound = isPartialReceive && inspectedIndices.length > 0
-      ? inspectedIndices.map((idx) => cart[idx]).filter(Boolean)
-      : cart
+      ? inspectedIndices.map((idx) => {
+          const item = cart[idx]
+          if (!item) return null
+          const qty = getQtyForIdx(idx)
+          return { ...item, qty }
+        }).filter(Boolean) as { code?: string; name?: string; spec?: string; qty: number }[]
+      : cart.map((item, idx) => ({ ...item, qty: getQtyForIdx(idx) }))
+
+    const hasQtyAdjustments = cart.some((c, i) => {
+      const orig = Number(c.qty || 0)
+      const received = getQtyForIdx(i)
+      return received !== orig
+    })
 
     // 매장: 체크된 품목만 Inbound (매장 재고 증가)
     const inboundRows = itemsToInbound.map((item) => ({
@@ -120,6 +140,14 @@ export async function POST(request: NextRequest) {
       patch.received_indices = JSON.stringify(cart.map((_, i) => i))
     }
     if (imageUrl) patch.image_url = imageUrl
+    if (hasQtyAdjustments && receivedQtysRaw) {
+      const qtyMap: Record<string, number> = {}
+      const indices = isPartialReceive && inspectedIndices.length > 0 ? inspectedIndices : cart.map((_, i) => i)
+      indices.forEach((idx) => {
+        qtyMap[String(idx)] = getQtyForIdx(idx)
+      })
+      patch.received_qty_json = JSON.stringify(qtyMap)
+    }
     await supabaseUpdate('orders', orderId, patch)
 
     return NextResponse.json({ success: true, message: '완료되었습니다.' }, { headers })

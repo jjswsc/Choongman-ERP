@@ -24,7 +24,7 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
-  items: { name: string; spec: string; qty: number; amount: number }[]
+  items: { name: string; spec: string; qty: number; amount: number; originalOrderQty?: number }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -300,7 +300,17 @@ function TableRow({
                     <tr key={i} className="hover:bg-primary/5 transition-colors">
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
-                      <td className="px-4 py-2 text-center text-card-foreground font-medium tabular-nums">{d.qty.toLocaleString()}</td>
+                      <td className="px-4 py-2 text-center font-medium tabular-nums">
+                        {d.originalOrderQty != null && d.originalOrderQty !== d.qty ? (
+                          <>
+                            <span className="text-destructive line-through">{d.originalOrderQty.toLocaleString()}</span>
+                            <span className="mx-1 text-muted-foreground">→</span>
+                            <span className="text-card-foreground">{d.qty.toLocaleString()}</span>
+                          </>
+                        ) : (
+                          <span className="text-card-foreground">{d.qty.toLocaleString()}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right text-card-foreground tabular-nums">{d.amount.toLocaleString()}</td>
                     </tr>
                   ))}
