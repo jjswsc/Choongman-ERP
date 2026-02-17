@@ -38,6 +38,20 @@ export async function GET() {
 
     // 매출처 (type=매출처 또는 Sales, both) - name(회사명)과 gps_name(매장명) 모두 키로 등록
     const clients: Record<string, { companyName: string; address: string; taxId: string; phone: string }> = {}
+    // 본사(Office/본사 등)도 clients에 추가 - target이 Office일 때 매칭되도록
+    if (company) {
+      const officeEntry = {
+        companyName: company.companyName,
+        address: company.address || '-',
+        taxId: company.taxId || '-',
+        phone: company.phone || '-',
+      }
+      const officeKeys = ['Office', '본사', '오피스', '본점', 'Head Office']
+      for (const k of officeKeys) {
+        clients[k] = officeEntry
+        clients[k.toLowerCase()] = officeEntry
+      }
+    }
     let clientRows = (await supabaseSelectFilter('vendors', 'type=eq.매출처', { limit: 500 })) as {
       name?: string
       addr?: string

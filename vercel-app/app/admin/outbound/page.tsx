@@ -554,7 +554,21 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         prevTarget = g.target
         const targetNorm = (g.target || "").trim()
         const targetLower = targetNorm.toLowerCase()
-        const client = (clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])) || { companyName: g.target || "-" }
+        let client: InvoiceDataClient | { companyName: string } =
+          (clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])) as InvoiceDataClient | undefined
+        if (!client) {
+          const isOfficeTarget = OFFICE_STORES.some((s) => (g.target || "").toLowerCase().includes(s.toLowerCase()))
+          if (isOfficeTarget && company) {
+            client = {
+              companyName: company.companyName,
+              address: company.address || "-",
+              taxId: company.taxId || "-",
+              phone: company.phone || "-",
+            }
+          } else {
+            client = { companyName: g.target || "-" }
+          }
+        }
         return buildInvoiceHtml(g, company, client, isFirst)
       }).join("")
       const area = document.createElement("div")
