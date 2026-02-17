@@ -137,6 +137,7 @@ export function OrderApproval() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
   const [submittingId, setSubmittingId] = React.useState<string | null>(null)
+  const [editedItemsByOrderId, setEditedItemsByOrderId] = React.useState<Record<string, OrderItem[]>>({})
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -179,6 +180,7 @@ export function OrderApproval() {
       setOrders(mapped)
       setCheckedOrders(new Set(mapped.map((o) => o.id)))
       setAllChecked(mapped.length > 0)
+      setEditedItemsByOrderId({})
     } catch {
       setOrders([])
       setStores([])
@@ -219,6 +221,22 @@ export function OrderApproval() {
     setExpandedId(expandedId === id ? null : id)
   }
 
+  const getDisplayItems = (order: Order): OrderItem[] => {
+    return editedItemsByOrderId[order.id] ?? order.items
+  }
+
+  const updateOrderItem = (orderId: string, itemIndex: number, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => {
+    setEditedItemsByOrderId((prev) => {
+      const order = orders.find((o) => o.id === orderId)
+      if (!order) return prev
+      const base = prev[orderId] ?? order.items
+      const next = base.map((it, i) =>
+        i === itemIndex ? { ...it, ...updates, total: it.unitPrice * (updates.qty ?? it.qty) } : it
+      )
+      return { ...prev, [orderId]: next }
+    })
+  }
+
   const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
     const idStr = String(orderId)
     const deliveryDate = deliveryDateByOrder[idStr] || ""
@@ -226,6 +244,21 @@ export function OrderApproval() {
       alert(t("orderDeliveryDateRequired"))
       return
     }
+    const displayItems = getDisplayItems(order)
+    const selectedItems = decision === "Approved"
+      ? displayItems.filter((it) => it.checked && it.qty > 0)
+      : []
+    if (decision === "Approved" && selectedItems.length === 0) {
+      alert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
+      return
+    }
+    const updatedCart = selectedItems.map((it) => ({
+      code: it.code,
+      name: it.name,
+      spec: it.spec,
+      price: it.unitPrice,
+      qty: it.qty,
+    }))
     setSubmittingId(idStr)
     try {
       const res = await processOrderDecision({
@@ -233,15 +266,31 @@ export function OrderApproval() {
         decision,
         deliveryDate: deliveryDate || undefined,
         userRole: auth?.role,
+        updatedCart: decision === "Approved" ? updatedCart : undefined,
       })
       if (!res.success) {
         alert(translateApiMessage(res.message, t) || t("orderDecisionFailed"))
         return
       }
       alert(t("orderDecisionSuccess"))
-      setOrders((prev) =>
-        prev.map((o) => (o.orderId === orderId ? { ...o, status: decision } : o))
-      )
+      setOrders((prev) => {
+        if (decision !== "Approved") {
+          return prev.map((o) => (o.orderId === orderId ? { ...o, status: decision } : o))
+        }
+        const sub = updatedCart.reduce((s, it) => s + it.price * it.qty, 0)
+        const vat = Math.round(sub * 0.07)
+        const newTotal = sub + vat
+        return prev.map((o) =>
+          o.orderId === orderId ? { ...o, status: decision, totalAmount: newTotal } : o
+        )
+      })
+      if (decision === "Approved") {
+        setEditedItemsByOrderId((prev) => {
+          const next = { ...prev }
+          delete next[idStr]
+          return next
+        })
+      }
     } finally {
       setSubmittingId(null)
     }
@@ -462,7 +511,10 @@ export function OrderApproval() {
                             </span>
                           </div>
 
-                          {order.items.length > 0 && (
+                          {order.items.length > 0 && (() => {
+                            const displayItems = getDisplayItems(order)
+                            const canEdit = order.status === "Pending" && !isManager
+                            return (
                             <div className="overflow-x-auto rounded-lg border bg-card mb-4">
                               <table className="w-full text-left text-sm">
                                 <thead>
@@ -492,17 +544,22 @@ export function OrderApproval() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {order.items.map((item, idx) => (
+                                  {displayItems.map((item, idx) => (
                                     <tr
                                       key={idx}
                                       className={cn(
                                         "border-b last:border-b-0 transition-colors",
-                                        idx % 2 === 1 && "bg-muted/5"
+                                        idx % 2 === 1 && "bg-muted/5",
+                                        !item.checked && canEdit && "opacity-60"
                                       )}
                                     >
-                                      <td className="px-3 py-2.5 text-center">
+                                      <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                         <Checkbox
-                                          defaultChecked={item.checked}
+                                          checked={item.checked}
+                                          onCheckedChange={(v) =>
+                                            canEdit && updateOrderItem(order.id, idx, { checked: !!v })
+                                          }
+                                          disabled={!canEdit}
                                           className="h-3.5 w-3.5"
                                         />
                                       </td>
@@ -517,8 +574,23 @@ export function OrderApproval() {
                                           ? item.unitPrice.toLocaleString()
                                           : "0"}
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs font-bold tabular-nums text-foreground text-center">
-                                        {item.qty}
+                                      <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                        {canEdit ? (
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-7 w-14 text-center text-xs tabular-nums"
+                                            value={item.qty}
+                                            onChange={(e) => {
+                                              const v = parseInt(e.target.value, 10)
+                                              updateOrderItem(order.id, idx, { qty: isNaN(v) || v < 0 ? 0 : v })
+                                            }}
+                                          />
+                                        ) : (
+                                          <span className="text-xs font-bold tabular-nums text-foreground">
+                                            {item.qty}
+                                          </span>
+                                        )}
                                       </td>
                                       <td className="px-3 py-2.5 text-right">
                                         <span
@@ -554,9 +626,9 @@ export function OrderApproval() {
                                       </td>
                                       <td className="px-3 py-2.5 text-right">
                                         <span className="text-xs font-bold tabular-nums text-foreground">
-                                          {item.total > 0
-                                            ? item.total.toLocaleString()
-                                            : "0"}
+                                          {(item.unitPrice * item.qty > 0
+                                            ? (item.unitPrice * item.qty).toLocaleString()
+                                            : "0")}
                                         </span>
                                       </td>
                                     </tr>
@@ -564,7 +636,7 @@ export function OrderApproval() {
                                 </tbody>
                               </table>
                             </div>
-                          )}
+                          )})()}
 
                           <div className="flex items-center gap-3 pb-4">
                             <div className="flex items-center gap-2">

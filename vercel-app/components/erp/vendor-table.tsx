@@ -107,9 +107,9 @@ export function VendorTable({
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColType")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 min-w-[92px]">{t("vendorColType")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28">{t("vendorColPhone")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 min-w-[130px]">{t("vendorColPhone")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
             </tr>
           </thead>
@@ -140,7 +140,7 @@ export function VendorTable({
                       {vendor.code}
                     </span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 w-24 min-w-[92px] whitespace-nowrap">
                     <span
                       className={cn(
                         "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
@@ -163,7 +163,7 @@ export function VendorTable({
                         : vendor.name}
                     </span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 w-32 min-w-[130px] whitespace-nowrap">
                     <span className="text-xs text-muted-foreground">{vendor.phone || "-"}</span>
                   </td>
                   <td className="px-5 py-3">

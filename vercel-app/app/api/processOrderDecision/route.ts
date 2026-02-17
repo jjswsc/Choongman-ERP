@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const decision = String(body.decision ?? '').trim()
     const deliveryDate = body.deliveryDate ? String(body.deliveryDate).trim() : ''
     const userRole = String(body.userRole ?? '').toLowerCase()
+    const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
 
     if (userRole.includes('manager')) {
       return NextResponse.json(
@@ -45,6 +46,28 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = { status: decision }
     if (deliveryDate) patch.delivery_date = deliveryDate
     if (decision === 'Approved') patch.delivery_status = '배송중'
+
+    if (decision === 'Approved' && updatedCart && updatedCart.length > 0) {
+      const validCart = updatedCart
+        .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
+        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string }) => ({
+          code: String(i.code ?? ''),
+          name: String(i.name ?? ''),
+          price: Number(i.price ?? 0),
+          qty: Math.max(0, Math.floor(Number(i.qty ?? 0) || 0)),
+          spec: String(i.spec ?? ''),
+        }))
+        .filter((i) => i.qty > 0)
+      if (validCart.length > 0) {
+        let subtotal = 0
+        validCart.forEach((i) => { subtotal += i.price * i.qty })
+        const vat = Math.round(subtotal * 0.07)
+        patch.cart_json = JSON.stringify(validCart)
+        patch.subtotal = subtotal
+        patch.vat = vat
+        patch.total = subtotal + vat
+      }
+    }
 
     await supabaseUpdate('orders', orderId, patch)
     return NextResponse.json({ success: true, message: '처리되었습니다.' }, { headers })

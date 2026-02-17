@@ -333,6 +333,7 @@ export async function processOrderDecision(params: {
   decision: 'Approved' | 'Rejected' | 'Hold'
   deliveryDate?: string
   userRole?: string
+  updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
 }) {
   const res = await apiFetch('/api/processOrderDecision', {
     method: 'POST',
