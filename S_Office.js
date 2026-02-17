@@ -406,19 +406,20 @@ function updateManagerCheck(id, status, comment) {
   return "UPDATED";
 }
 
-/* [수정] 관리자 필터 (Supabase employees - Office 매장만) */
+/* [수정] 관리자 필터 (업무일지 work_logs에 나타날 수 있는 전체 부서·직원) - Office만이 아닌 전 직원 기준 */
 function getAllFilterOptions() {
   var list = (typeof getEmployeesData === "function" ? getEmployeesData() : []) || [];
   var deptSet = {};
   var staffList = [];
   for (var i = 0; i < list.length; i++) {
-    var st = String(list[i].store || "").toLowerCase();
-    if (st.indexOf("office") === -1 && st !== "본사" && st !== "오피스") continue;
     var rowName = String(list[i].nick || "").trim() || String(list[i].name || "").trim();
     var rowDept = String(list[i].job || "").trim();
+    if (rowDept === "") rowDept = "Staff";
     if (rowName !== "") staffList.push(rowName);
-    if (rowDept !== "") deptSet[rowDept] = true;
+    deptSet[rowDept] = true;
   }
+  // work_logs에 "기타"로 저장되는 경우 포함
+  if (!deptSet["기타"]) deptSet["기타"] = true;
   return {
     depts: Object.keys(deptSet).sort(),
     staff: staffList.filter(function(v, i, a) { return a.indexOf(v) === i; }).sort()
