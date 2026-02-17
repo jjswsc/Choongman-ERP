@@ -17,7 +17,7 @@ interface EmployeeFilterBarProps {
   onSearch: () => void
 }
 
-const GRADES = ["All", "S", "A", "B", "C", "D", "E", "F"]
+const GRADES = ["All", "S", "A", "B", "C", "F"]
 
 export function EmployeeFilterBar({
   stores,

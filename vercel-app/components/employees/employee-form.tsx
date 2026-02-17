@@ -17,7 +17,7 @@ import type { AdminEmployeeItem } from "@/lib/api-client"
 const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"]
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly"]
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
-const GRADE_OPTIONS = ["", "S", "A", "B", "C", "D", "E", "F"]
+const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
 export interface EmployeeFormData {
   row: number

@@ -253,7 +253,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold">
-              {t("label_store")}
+              {t("emp_label_store")}
             </label>
             <Select
               value={storeFilter}
@@ -335,7 +335,7 @@ export function EmployeeEvalListTab({ stores }: EmployeeEvalListTabProps) {
                   {t("eval_list_th_date")}
                 </th>
                 <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
-                  {t("label_store")}
+                  {t("emp_label_store")}
                 </th>
                 <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">
                   {t("eval_list_th_employee")}

@@ -12,8 +12,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus } from "lucide-react"
+import { ClipboardCheck, RefreshCw, Save, Search, Eye, Pencil, Trash2, Plus, FileText } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -43,7 +51,7 @@ export function AdminStoreCheck() {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const [tab, setTab] = useState<"check" | "history" | "setting">("check")
+  const [tab, setTab] = useState<"check" | "history" | "failedSummary" | "setting">("check")
   const [stores, setStores] = useState<string[]>([])
   const [storeSelect, setStoreSelect] = useState("")
   const [dateSelect, setDateSelect] = useState(todayStr())
@@ -69,6 +77,7 @@ export function AdminStoreCheck() {
   const [newSub, setNewSub] = useState("")
   const [newName, setNewName] = useState("")
   const [transMap, setTransMap] = useState<Record<string, string>>({})
+  const [remarkModalIdx, setRemarkModalIdx] = useState<number | null>(null)
 
   const isHQ = auth?.role === "director" || auth?.role === "officer"
   const isManager = isManagerRole(auth?.role || "")
@@ -337,13 +346,14 @@ export function AdminStoreCheck() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => {
-          setTab(v as "check" | "history" | "setting")
-          if (v === "history") searchHistory()
+          setTab(v as "check" | "history" | "failedSummary" | "setting")
+          if (v === "history" || v === "failedSummary") searchHistory()
           if (v === "setting") loadSettingItems()
         }}>
-          <TabsList className={cn("grid w-full max-w-md", isHQ ? "grid-cols-3" : "grid-cols-2")}>
+          <TabsList className={cn("grid w-full max-w-2xl", isHQ ? "grid-cols-4" : "grid-cols-3")}>
             <TabsTrigger value="check">{t("tab_store_check")}</TabsTrigger>
             <TabsTrigger value="history">{t("tab_store_history")}</TabsTrigger>
+            <TabsTrigger value="failedSummary">{t("tab_store_failed_summary")}</TabsTrigger>
             {isHQ && <TabsTrigger value="setting">{t("tab_store_setting")}</TabsTrigger>}
           </TabsList>
 
@@ -423,18 +433,21 @@ export function AdminStoreCheck() {
                               </div>
                             </td>
                             <td className="p-2">
-                              <div className="flex flex-col items-center">
-                                <Input
-                                  className="h-7 text-xs w-full max-w-xs"
-                                  value={r.remark}
-                                  onChange={(e) => !viewOnlyMode && updateCheckRow(idx, "remark", e.target.value)}
-                                  placeholder=""
-                                  readOnly={viewOnlyMode}
-                                />
-                                {r.remark?.trim() && transMap[r.remark.trim()] && (
-                                  <p className="text-[11px] text-muted-foreground mt-1 font-medium" title={r.remark}>{tr(r.remark)}</p>
-                                )}
-                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs w-full max-w-[140px] justify-start truncate"
+                                onClick={() => setRemarkModalIdx(idx)}
+                                title={r.remark || t("store_remark_add_btn")}
+                              >
+                                <FileText className="h-3 w-3 shrink-0 mr-1" />
+                                {r.remark?.trim()
+                                  ? (r.remark.length > 12 ? r.remark.slice(0, 12) + "…" : r.remark)
+                                  : t("store_remark_add_btn")}
+                              </Button>
+                              {r.remark?.trim() && transMap[r.remark.trim()] && (
+                                <p className="text-[11px] text-muted-foreground mt-1 font-medium truncate max-w-[140px]" title={r.remark}>{tr(r.remark)}</p>
+                              )}
                             </td>
                           </tr>
                         ))
@@ -466,6 +479,118 @@ export function AdminStoreCheck() {
                     </Button>
                   </>
                 )}
+              </CardContent>
+            </Card>
+            <Dialog open={remarkModalIdx !== null} onOpenChange={(open) => !open && setRemarkModalIdx(null)}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>
+                    {t("store_remark_modal_title")}
+                    {remarkModalIdx != null && checkRows[remarkModalIdx] && (
+                      <span className="text-muted-foreground font-normal text-sm"> — {tr(checkRows[remarkModalIdx].name)}</span>
+                    )}
+                  </DialogTitle>
+                </DialogHeader>
+                {remarkModalIdx != null && checkRows[remarkModalIdx] && (
+                  <Textarea
+                    className="min-h-[120px] text-sm"
+                    value={checkRows[remarkModalIdx].remark}
+                    onChange={(e) => updateCheckRow(remarkModalIdx, "remark", e.target.value)}
+                    placeholder={t("store_remark")}
+                    readOnly={viewOnlyMode}
+                  />
+                )}
+                <DialogFooter>
+                  <Button onClick={() => setRemarkModalIdx(null)}>{t("btn_close")}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          <TabsContent value="failedSummary" className="mt-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-wrap items-end gap-2 mb-4">
+                  <span className="text-xs font-semibold">{t("store_hist_period")}</span>
+                  <Input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} className="h-9 w-[130px] text-xs" />
+                  <span>~</span>
+                  <Input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} className="h-9 w-[130px] text-xs" />
+                  <Select value={histStore} onValueChange={setHistStore}>
+                    <SelectTrigger className="h-9 w-[120px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((st) => (
+                        <SelectItem key={st} value={st}>{st === "All" ? t("store_all_stores") : st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={histInspector}
+                    onChange={(e) => setHistInspector(e.target.value)}
+                    placeholder={t("store_inspector_ph")}
+                    className="h-9 w-[140px] text-xs"
+                  />
+                  <Button className="h-9 font-medium" onClick={searchHistory} disabled={histLoading}>
+                    <Search className="mr-1.5 h-3.5 w-3.5" />
+                    {histLoading ? t("loading") : t("btn_query_go")}
+                  </Button>
+                </div>
+                {(() => {
+                  type XRow = { date: string; store: string; inspector: string; main: string; sub: string; name: string; remark: string }
+                  const xRows: XRow[] = []
+                  for (const h of histList) {
+                    if (h.result === "PASS") continue
+                    try {
+                      const arr = JSON.parse(h.json || "[]") as { main?: string; sub?: string; name?: string; val?: string; remark?: string }[]
+                      for (const it of arr) {
+                        if (it.val === "X") {
+                          xRows.push({
+                            date: h.date,
+                            store: h.store,
+                            inspector: h.inspector,
+                            main: it.main || "",
+                            sub: it.sub || "",
+                            name: it.name || "",
+                            remark: it.remark || "",
+                          })
+                        }
+                      }
+                    } catch { /* ignore */ }
+                  }
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="p-2 text-center font-medium">{t("store_col_date")}</th>
+                            <th className="p-2 text-center font-medium">{t("store")}</th>
+                            <th className="p-2 text-center font-medium">{t("store_col_inspector")}</th>
+                            <th className="p-2 text-center font-medium">{t("store_col_item_path")}</th>
+                            <th className="p-2 text-left font-medium min-w-[200px]">{t("store_remark")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {histLoading ? (
+                            <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">{t("loading")}</td></tr>
+                          ) : xRows.length === 0 ? (
+                            <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">-</td></tr>
+                          ) : (
+                            xRows.map((x, i) => (
+                              <tr key={`${x.date}-${x.store}-${i}`} className="border-b border-border/60 hover:bg-muted/30">
+                                <td className="p-2 text-center">{x.date}</td>
+                                <td className="p-2 text-center">{x.store}</td>
+                                <td className="p-2 text-center">{x.inspector}</td>
+                                <td className="p-2 text-center whitespace-nowrap">{[x.main, x.sub, x.name].filter(Boolean).join(" > ")}</td>
+                                <td className="p-2 whitespace-pre-wrap break-words">{tr(x.remark) || "-"}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
           </TabsContent>

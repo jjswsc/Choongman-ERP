@@ -215,8 +215,8 @@ function updateEvalEmployeePhoto() {
 }
 var EVAL_INCIDENT_TYPES = ["반복 과다 소스", "위생 관련 이력", "고객 관련", "개선 없음", "안전 사고(화상/미끄럼/낙상 등)"];
 var EVAL_WEIGHTS = { "메뉴숙련": 0.4, "원가정확도": 0.2, "위생": 0.2, "태도": 0.2 };
-var EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.5, 3.0, 2.0];
-var EVAL_GRADE_LABEL = ["S", "A", "B", "C", "D", "E", "F"];
+var EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0];
+var EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"];
 
 function scoreToGrade(score) {
   var s = parseFloat(score);

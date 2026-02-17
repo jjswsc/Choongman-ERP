@@ -24,8 +24,8 @@ import { Button } from "@/components/ui/button"
 import { compressImageForUpload } from "@/lib/utils"
 
 const EVAL_WEIGHTS = { 메뉴숙련: 0.4, 원가정확도: 0.2, 위생: 0.2, 태도: 0.2 }
-const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.5, 3.0, 2.0]
-const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "D", "E", "F"]
+const EVAL_GRADE_CUT = [4.8, 4.5, 4.0, 3.0]
+const EVAL_GRADE_LABEL = ["S", "A", "B", "C", "F"]
 const EVAL_INCIDENT_KEYS = [
   "eval_incident_1",
   "eval_incident_2",
@@ -569,7 +569,7 @@ export function EmployeeEvalTab({
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-xs font-semibold">
-              {t("label_store")}
+              {t("emp_label_store")}
             </label>
             <Select
               value={evalStore || "__none__"}
