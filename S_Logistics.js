@@ -1044,7 +1044,8 @@ function getMyOrderHistory(store, startStr, endStr) {
       var deliveryStatus = o.delivery_status || (o.status === "Approved" ? "배송중" : "");
       var deliveryDate = (o.delivery_date || "").trim();
       var orderDate = o.order_date ? new Date(o.order_date) : new Date();
-      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: cart });
+      var userName = String(o.user_name || "").trim() || undefined;
+      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: cart, userName: userName });
     }
     return list;
   } catch (e) {

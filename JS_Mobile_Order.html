@@ -179,6 +179,8 @@ function updateCart(type){
         var deliveryDateStr = formatDateOnly(o.deliveryDate);
         var dateLine = "<span>" + orderDateLabel + " " + o.date + "</span>";
         if (deliveryDateStr) dateLine += " <span style=\"margin-left:8px;\">" + deliveryDateLabel + " " + deliveryDateStr + "</span>";
+        var orderedByLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_ordered_by) ? I18N[currentLang].m_ordered_by : "발주자";
+        if (o.userName) dateLine += " <span style=\"margin-left:8px;font-size:11px;color:#666;\">" + orderedByLabel + " " + o.userName + "</span>";
         c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
       }); 
     }).getMyOrderHistory(loggedInStore, s, e); 

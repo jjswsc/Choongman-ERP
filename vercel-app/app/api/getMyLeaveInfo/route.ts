@@ -18,7 +18,7 @@ function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
   }
   const joinVal = emp.join_date ?? emp.joinDate
   if (joinVal == null || (typeof joinVal === 'string' && !joinVal.trim())) return 0
-  const joinStr = toDateStr(joinVal)
+  const joinStr = typeof joinVal === 'string' || joinVal instanceof Date ? toDateStr(joinVal) : ''
   if (!joinStr) return 0
   const joinDate = new Date(joinStr + 'T12:00:00')
   if (isNaN(joinDate.getTime())) return 0
