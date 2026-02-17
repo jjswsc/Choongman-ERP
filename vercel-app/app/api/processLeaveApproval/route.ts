@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpdate, supabaseDeleteByFilter } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (decision !== '승인' && decision !== 'Approved' && decision !== '반려' && decision !== 'Rejected') {
+    if (decision !== '승인' && decision !== 'Approved' && decision !== '반려' && decision !== 'Rejected' && decision !== '삭제') {
       return NextResponse.json(
-        { success: false, message: '승인 또는 반려를 선택해 주세요.' },
+        { success: false, message: '승인, 반려 또는 삭제를 선택해 주세요.' },
         { headers }
       )
     }
@@ -40,6 +40,14 @@ export async function POST(request: NextRequest) {
     if (isManager && userStore && String(rows[0].store || '').trim() !== userStore) {
       return NextResponse.json(
         { success: false, message: '해당 매장의 휴가만 승인할 수 있습니다.' },
+        { headers }
+      )
+    }
+
+    if (decision === '삭제') {
+      await supabaseDeleteByFilter('leave_requests', `id=eq.${id}`)
+      return NextResponse.json(
+        { success: true, message: '삭제되었습니다.' },
         { headers }
       )
     }

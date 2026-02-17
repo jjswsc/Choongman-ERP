@@ -187,14 +187,17 @@ export function AdminLeaveApproval() {
                       )}
                     </td>
                     <td className="p-2 text-center">
-                      {item.status === "대기" && (
+                      {item.status === "대기" ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
-                      )}
-                      {item.status !== "대기" && (
-                        <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                        </div>
                       )}
                     </td>
                   </tr>
