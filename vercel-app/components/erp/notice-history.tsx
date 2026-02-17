@@ -22,9 +22,25 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getSentNotices,
   deleteNoticeAdmin,
+  getNoticeReadDetail,
+  getNoticeSenders,
   translateTexts,
   type SentNoticeItem,
+  type NoticeReadDetailItem,
 } from "@/lib/api-client"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -42,16 +58,23 @@ export function NoticeHistory() {
   const t = useT(lang)
   const [startDate, setStartDate] = React.useState(defaultStartStr)
   const [endDate, setEndDate] = React.useState(todayStr)
+  const [senderFilter, setSenderFilter] = React.useState<string>("mine")
+  const [senders, setSenders] = React.useState<string[]>([])
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [notices, setNotices] = React.useState<SentNoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
+  const [readDetailOpen, setReadDetailOpen] = React.useState(false)
+  const [readDetailTitle, setReadDetailTitle] = React.useState("")
+  const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
+  const [readDetailLoading, setReadDetailLoading] = React.useState(false)
 
   const loadNotices = React.useCallback(() => {
     if (!auth?.store || !auth?.user) return
     setLoading(true)
+    const sender = senderFilter === "all" ? "all" : senderFilter === "mine" ? auth.user : senderFilter
     getSentNotices({
-      sender: auth.user,
+      sender: sender || auth.user,
       startDate,
       endDate,
       userStore: auth.store,
@@ -60,11 +83,21 @@ export function NoticeHistory() {
       .then(setNotices)
       .catch(() => setNotices([]))
       .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, auth?.role, startDate, endDate])
+  }, [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter])
+
+  const loadSenders = React.useCallback(() => {
+    getNoticeSenders({ startDate, endDate })
+      .then(({ senders: s }) => setSenders(s))
+      .catch(() => setSenders([]))
+  }, [startDate, endDate])
 
   React.useEffect(() => {
     if (auth?.store && auth?.user) loadNotices()
   }, [auth?.store, auth?.user, loadNotices])
+
+  React.useEffect(() => {
+    loadSenders()
+  }, [loadSenders])
 
   React.useEffect(() => {
     const onSent = () => loadNotices()
@@ -101,6 +134,25 @@ export function NoticeHistory() {
     }
   }
 
+  const handleOpenReadDetail = React.useCallback(
+    async (e: React.MouseEvent, notice: SentNoticeItem) => {
+      e.stopPropagation()
+      setReadDetailTitle(transMap[notice.title] || notice.title)
+      setReadDetailOpen(true)
+      setReadDetailItems([])
+      setReadDetailLoading(true)
+      try {
+        const { items } = await getNoticeReadDetail({ noticeId: Number(notice.id) })
+        setReadDetailItems(items)
+      } catch {
+        setReadDetailItems([])
+      } finally {
+        setReadDetailLoading(false)
+      }
+    },
+    [transMap]
+  )
+
   if (!auth?.store || !auth?.user) return null
 
   return (
@@ -119,7 +171,24 @@ export function NoticeHistory() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-4 pb-3">
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        <div className="min-w-[120px]">
+          <label className="text-[9px] font-semibold text-muted-foreground block mb-0.5">{t("noticeSenderLabel")}</label>
+          <Select value={senderFilter} onValueChange={setSenderFilter}>
+            <SelectTrigger className="h-9 text-xs rounded-lg">
+              <SelectValue placeholder={t("noticeSenderAll")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("noticeSenderAll")}</SelectItem>
+              <SelectItem value="mine">{t("noticeSenderMine")}</SelectItem>
+              {senders
+                .filter((s) => s !== (auth?.user || ''))
+                .map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Input
           type="date"
           value={startDate}
@@ -201,6 +270,11 @@ export function NoticeHistory() {
                       <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
                         {notice.date}
                       </span>
+                      {senderFilter === "all" && notice.sender && (
+                        <span className="inline-flex items-center rounded-md bg-muted/80 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                          {notice.sender}
+                        </span>
+                      )}
                       {notice.recipients.map((r) => (
                         <span
                           key={r}
@@ -286,9 +360,7 @@ export function NoticeHistory() {
                         variant="outline"
                         size="sm"
                         className="flex-1 h-9 rounded-lg text-xs font-semibold"
-                        onClick={() => {
-                          /* TODO: 수신확인 상세 모달/페이지 */
-                        }}
+                        onClick={(e) => handleOpenReadDetail(e, notice)}
                       >
                         <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                         {t("noticeReadConfirm")}
@@ -310,6 +382,60 @@ export function NoticeHistory() {
           })
         )}
       </div>
+
+      <Dialog open={readDetailOpen} onOpenChange={setReadDetailOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">
+              {t("noticeReadDetailTitle")}
+              {readDetailTitle && (
+                <span className="block text-xs font-normal text-muted-foreground mt-1 truncate">
+                  {readDetailTitle}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-auto min-h-0 flex-1 -mx-1">
+            {readDetailLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
+            ) : readDetailItems.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">-</div>
+            ) : (
+              <table className="w-full text-xs border-collapse">
+                <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                  <tr className="border-b">
+                    <th className="p-2 text-left font-medium">{t("noticeReadDetailStore")}</th>
+                    <th className="p-2 text-left font-medium">{t("noticeReadDetailName")}</th>
+                    <th className="p-2 text-left font-medium">{t("noticeReadDetailReadAt")}</th>
+                    <th className="p-2 text-center font-medium w-20">{t("noticeReadStats")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {readDetailItems.map((item, i) => (
+                    <tr key={`${item.store}-${item.name}-${i}`} className="border-b border-border/60">
+                      <td className="p-2">{item.store}</td>
+                      <td className="p-2">{item.name}</td>
+                      <td className="p-2 text-muted-foreground">{item.read_at || "-"}</td>
+                      <td className="p-2 text-center">
+                        <span
+                          className={cn(
+                            "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
+                            item.status === "확인"
+                              ? "bg-[hsl(152,60%,42%)]/20 text-[hsl(152,60%,42%)]"
+                              : "bg-[hsl(38,92%,50%)]/20 text-[hsl(38,92%,50%)]"
+                          )}
+                        >
+                          {item.status === "확인" ? t("noticeRead") : t("noticeUnread")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

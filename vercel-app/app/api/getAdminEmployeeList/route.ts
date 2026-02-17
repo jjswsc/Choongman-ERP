@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-
-const OFFICE_STORES = ['본사', 'Office', '오피스', '본점']
-
-function isOfficeStore(st: string) {
-  const x = String(st || '').trim()
-  return x === '본사' || x === 'Office' || x === '오피스' || x.toLowerCase() === 'office'
-}
+import { isOfficeStore, OFFICE_STORES } from '@/lib/permissions'
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -90,8 +84,10 @@ export async function GET(req: Request) {
 
     const storeSet = new Set((rows || []).map((r) => String(r.store || '').trim()).filter(Boolean))
     let allStores = Array.from(storeSet).sort((a, b) => {
-      if (OFFICE_STORES.some((s) => a.toLowerCase().includes(s.toLowerCase()))) return -1
-      if (OFFICE_STORES.some((s) => b.toLowerCase().includes(s.toLowerCase()))) return 1
+      const aLower = a.toLowerCase()
+      const bLower = b.toLowerCase()
+      if (OFFICE_STORES.some((s) => aLower.includes(s.toLowerCase()))) return -1
+      if (OFFICE_STORES.some((s) => bLower.includes(s.toLowerCase()))) return 1
       return a.localeCompare(b)
     })
     const canSeeOffice = role.includes('director') || role.includes('ceo') || role.includes('hr')

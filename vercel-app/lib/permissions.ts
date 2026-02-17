@@ -6,7 +6,17 @@
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
  * - Franchisee: franchisee (추후)
+ *
+ * store=Office → Officer로 인식 (employees.store가 본사/Office/오피스/본점이면)
  */
+
+/** employees.store가 본사/Office인지 (→ Officer 권한 적용) */
+export function isOfficeStore(store: string): boolean {
+  const x = String(store || "").trim()
+  return x === "본사" || x === "Office" || x === "오피스" || x === "본점" || x.toLowerCase() === "office"
+}
+
+export const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
 const DIRECTOR_ROLES = ["director", "ceo", "hr"]
 const OFFICE_ROLES = ["director", "ceo", "hr", "officer"]

@@ -20,23 +20,23 @@ export async function GET(request: NextRequest) {
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = (searchParams.get('userRole') || '').toLowerCase()
 
-  if (!sender) {
-    return NextResponse.json([], { headers })
-  }
+  const isAllSenders = sender === '' || sender.toLowerCase() === 'all' || sender === '전체'
 
   try {
-    let filter = `sender=ilike.${encodeURIComponent(sender)}`
-    if (startStr) filter += `&created_at=gte.${startStr}`
+    let filter = isAllSenders ? '' : `sender=ilike.${encodeURIComponent(sender)}`
+    if (startStr) filter += (filter ? '&' : '') + `created_at=gte.${startStr}`
     if (endStr) {
       const endPlus = endStr + 'T23:59:59'
-      filter += `&created_at=lte.${endPlus}`
+      filter += (filter ? '&' : '') + `created_at=lte.${endPlus}`
     }
+    const effectiveFilter = filter || 'id=gte.0'
 
-    const rows = (await supabaseSelectFilter('notices', filter, {
+    const rows = (await supabaseSelectFilter('notices', effectiveFilter, {
       order: 'created_at.desc',
       limit: 200,
     })) as {
       id: number
+      sender?: string
       title?: string
       content?: string
       target_store?: string
@@ -120,6 +120,7 @@ export async function GET(request: NextRequest) {
 
       list.push({
         id: String(row.id),
+        sender: String(row.sender || '').trim(),
         title: row.title || '',
         date: toDateStr(row.created_at),
         recipients,

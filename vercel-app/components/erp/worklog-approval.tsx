@@ -329,7 +329,7 @@ export function WorklogApproval() {
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-16">{t("workLogPriority")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColReviewStatus")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-44">{t("workLogColAction")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-36">{t("workLogColAction")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -376,27 +376,27 @@ export function WorklogApproval() {
                                 </span>
                               </td>
                               <td className="px-5 py-2">
-                                <div className="flex flex-col items-stretch gap-1 min-w-[72px]">
+                                <div className="flex flex-row items-center gap-1 flex-wrap">
                                   {it.managerCheck === "대기" && (
                                     <>
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-7 px-2 text-[10px] text-success"
+                                        className="h-6 px-1.5 text-[9px] text-success min-w-0"
                                         onClick={() => handleConfirm(it.id)}
                                         disabled={updating === it.id}
                                       >
-                                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                                        <CheckCircle2 className="mr-0.5 h-2.5 w-2.5 shrink-0" />
                                         {t("workLogConfirmBtn")}
                                       </Button>
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-7 px-2 text-[10px] text-primary"
+                                        className="h-6 px-1.5 text-[9px] text-primary min-w-0"
                                         onClick={() => handleAddComment(it.id)}
                                         disabled={updating === it.id}
                                       >
-                                        <MessageSquarePlus className="mr-1 h-3 w-3" />
+                                        <MessageSquarePlus className="mr-0.5 h-2.5 w-2.5 shrink-0" />
                                         {t("workLogCommentBtn")}
                                       </Button>
                                     </>
@@ -404,12 +404,12 @@ export function WorklogApproval() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 px-2 text-[10px] text-destructive hover:text-destructive"
+                                    className="h-6 px-1.5 text-[9px] text-destructive hover:text-destructive min-w-0"
                                     onClick={() => handleDelete(it.id)}
                                     disabled={updating === it.id}
                                     title={t("workLogDeleteBtn")}
                                   >
-                                    <Trash2 className="h-3 w-3" />
+                                    <Trash2 className="h-2.5 w-2.5" />
                                   </Button>
                                 </div>
                               </td>

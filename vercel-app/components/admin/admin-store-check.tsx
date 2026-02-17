@@ -83,7 +83,7 @@ export function AdminStoreCheck() {
   const isManager = isManagerRole(auth?.role || "")
   const inspectorName = auth?.user || auth?.store || ""
 
-  // 로그인 언어로 점검 항목/비고 자동 번역
+  // 로그인 언어로 점검 항목/비고/항목요약 자동 번역
   useEffect(() => {
     const texts = new Set<string>()
     for (const r of checkRows) {
@@ -98,6 +98,20 @@ export function AdminStoreCheck() {
       if (it.name?.trim()) texts.add(it.name.trim())
     }
     if (totalMemo?.trim()) texts.add(totalMemo.trim())
+    for (const h of histList) {
+      if (h.result === "PASS") continue
+      try {
+        const arr = JSON.parse(h.json || "[]") as { main?: string; sub?: string; name?: string; val?: string; remark?: string }[]
+        for (const it of arr) {
+          if (it.val === "X") {
+            if (it.main?.trim()) texts.add(it.main.trim())
+            if (it.sub?.trim()) texts.add(it.sub.trim())
+            if (it.name?.trim()) texts.add(it.name.trim())
+            if (it.remark?.trim()) texts.add(it.remark.trim())
+          }
+        }
+      } catch { /* ignore */ }
+    }
     const arr = Array.from(texts)
     if (arr.length === 0) {
       setTransMap({})
@@ -113,7 +127,7 @@ export function AdminStoreCheck() {
       })
       .catch(() => setTransMap({}))
     return () => { cancelled = true }
-  }, [checkRows, totalMemo, settingItems, lang])
+  }, [checkRows, totalMemo, settingItems, histList, lang])
 
   const { stores: storeList } = useStoreList()
   useEffect(() => {
@@ -581,7 +595,7 @@ export function AdminStoreCheck() {
                                 <td className="p-2 text-center">{x.date}</td>
                                 <td className="p-2 text-center">{x.store}</td>
                                 <td className="p-2 text-center">{x.inspector}</td>
-                                <td className="p-2 text-center whitespace-nowrap">{[x.main, x.sub, x.name].filter(Boolean).join(" > ")}</td>
+                                <td className="p-2 text-center whitespace-nowrap">{[tr(x.main), tr(x.sub), tr(x.name)].filter(Boolean).join(" > ") || "-"}</td>
                                 <td className="p-2 whitespace-pre-wrap break-words">{tr(x.remark) || "-"}</td>
                               </tr>
                             ))

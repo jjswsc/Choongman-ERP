@@ -3,6 +3,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { signToken } from '@/lib/jwt-auth'
 import { verifyPassword } from '@/lib/password'
 import { parseOr400, loginSchema } from '@/lib/api-validate'
+import { isOfficeStore } from '@/lib/permissions'
 
 export async function POST(req: NextRequest) {
   const headers = new Headers()
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
     const { store, name, pw, isAdminPage } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string; resign_date?: string | null }[]
+    const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string; job?: string; resign_date?: string | null }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
@@ -36,11 +37,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
 
-    let rawRole = String(row.role || '').toLowerCase().replace(/\./g, '')
+    const storeName = String(row.store || '').trim()
+    const empIsOfficeStore = isOfficeStore(storeName)
+    let rawRole = String((row.role || row.job || '')).toLowerCase().replace(/\./g, '')
     let finalRole = 'staff'
     if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
     else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
     else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
+    else if (empIsOfficeStore) finalRole = 'officer' // store=Office → Officer로 인식
 
     // 관리자 페이지: director, officer, manager만 접근. 일반 직원(staff)은 권한 없음으로 로그인 차단
     // ※ Office 소속이라도 role에 director/officer/manager가 없으면 접근 불가
@@ -48,7 +52,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '관리자 권한이 없습니다.' }, { headers })
     }
 
-    const storeName = String(row.store || '').trim()
     const userName = String(row.name || '').trim()
     const token = await signToken({ store: storeName, name: userName, role: finalRole })
 

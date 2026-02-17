@@ -498,6 +498,7 @@ export async function sendNotice(params: {
 
 export interface SentNoticeItem {
   id: string
+  sender?: string
   title: string
   date: string
   recipients: string[]
@@ -505,6 +506,15 @@ export interface SentNoticeItem {
   content?: string
   readCount: number
   totalCount: number
+}
+
+export async function getNoticeSenders(params?: { startDate?: string; endDate?: string }) {
+  const q = new URLSearchParams()
+  if (params?.startDate) q.set('startDate', params.startDate)
+  if (params?.endDate) q.set('endDate', params.endDate)
+  const res = await apiFetch(`/api/getNoticeSenders?${q}`)
+  const data = (await res.json()) as { senders?: string[] }
+  return { senders: data.senders ?? [] }
 }
 
 export async function getSentNotices(params: {
@@ -523,6 +533,21 @@ export async function getSentNotices(params: {
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetch(`/api/getSentNotices?${q}`)
   return res.json() as Promise<SentNoticeItem[]>
+}
+
+export interface NoticeReadDetailItem {
+  store: string
+  name: string
+  read_at: string
+  status: string
+}
+
+export async function getNoticeReadDetail(params: { noticeId: number }) {
+  const q = new URLSearchParams({ noticeId: String(params.noticeId) })
+  const res = await apiFetch(`/api/getNoticeReadDetail?${q}`)
+  const data = (await res.json()) as { items?: NoticeReadDetailItem[]; success?: boolean; message?: string }
+  if (!res.ok || data.success === false) throw new Error(data.message || 'Failed')
+  return { items: data.items ?? [] }
 }
 
 export async function deleteNoticeAdmin(params: { id: number }) {
