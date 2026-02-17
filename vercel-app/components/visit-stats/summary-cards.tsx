@@ -2,6 +2,8 @@
 
 import { Clock, MapPin, Users, Target } from "lucide-react"
 import { formatMinutes } from "@/lib/visit-data"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type SummaryProps = {
   totalMin: number
@@ -11,35 +13,37 @@ type SummaryProps = {
 }
 
 export function SummaryCards({ totalMin, totalVisits, uniqueStores, uniqueEmployees }: SummaryProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const cards = [
     {
-      label: "총 투입시간",
+      label: t("visit_summary_total"),
       value: formatMinutes(totalMin),
-      sub: `${totalVisits}건`,
+      sub: `${totalVisits}${t("visit_count_suffix")}`,
       icon: Clock,
       accent: "#2563eb",
       bg: "#eff6ff",
     },
     {
-      label: "방문 매장",
-      value: `${uniqueStores}개`,
-      sub: `매장당 평균 ${formatMinutes(Math.round(totalMin / (uniqueStores || 1)))}`,
+      label: t("visit_summary_stores"),
+      value: `${uniqueStores}${t("visit_summary_count")}`,
+      sub: `${t("visit_summary_stores_sub")} ${formatMinutes(Math.round(totalMin / (uniqueStores || 1)))}`,
       icon: MapPin,
       accent: "#059669",
       bg: "#ecfdf5",
     },
     {
-      label: "투입 인원",
-      value: `${uniqueEmployees}명`,
-      sub: `인당 평균 ${formatMinutes(Math.round(totalMin / (uniqueEmployees || 1)))}`,
+      label: t("visit_summary_employees"),
+      value: `${uniqueEmployees}${t("visit_summary_count_people")}`,
+      sub: `${t("visit_summary_employees_sub")} ${formatMinutes(Math.round(totalMin / (uniqueEmployees || 1)))}`,
       icon: Users,
       accent: "#d97706",
       bg: "#fffbeb",
     },
     {
-      label: "건당 평균",
+      label: t("visit_summary_avg"),
       value: formatMinutes(Math.round(totalMin / (totalVisits || 1))),
-      sub: `${totalVisits}건 기준`,
+      sub: `${totalVisits}${t("visit_count_suffix")} ${t("visit_summary_avg_sub")}`,
       icon: Target,
       accent: "#7c3aed",
       bg: "#f5f3ff",

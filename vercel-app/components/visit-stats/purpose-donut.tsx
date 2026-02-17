@@ -3,20 +3,36 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { formatMinutes } from "@/lib/visit-data"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type PurposeDonutProps = {
   data: { name: string; totalMin: number; visits: number }[]
 }
 
 const COLORS: Record<string, string> = {
-  "정기점검": "#2563eb",
-  "직원교육": "#059669",
-  "긴급지원": "#dc2626",
-  "매장미팅": "#d97706",
+  "정기점검": "#2563eb", "정기 점검": "#2563eb",
+  "직원교육": "#059669", "직원 교육": "#059669",
+  "긴급지원": "#dc2626", "긴급 지원": "#dc2626",
+  "매장미팅": "#d97706", "매장 미팅": "#d97706",
+  "기타": "#6b7280",
 }
 const FALLBACK_COLORS = ["#6366f1", "#ec4899", "#14b8a6", "#f97316"]
 
+function purposeToKey(p: string): string {
+  const m: Record<string, string> = {
+    "정기점검": "visitPurposeInspect", "정기 점검": "visitPurposeInspect",
+    "직원교육": "visitPurposeTraining", "직원 교육": "visitPurposeTraining",
+    "긴급지원": "visitPurposeUrgent", "긴급 지원": "visitPurposeUrgent",
+    "매장미팅": "visitPurposeMeeting", "매장 미팅": "visitPurposeMeeting",
+    "기타": "visitPurposeEtc",
+  }
+  return m[p] || ""
+}
+
 export function PurposeDonut({ data }: PurposeDonutProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const totalMin = data.reduce((s, d) => s + d.totalMin, 0)
 
   const chartConfig = Object.fromEntries(
@@ -28,7 +44,7 @@ export function PurposeDonut({ data }: PurposeDonutProps) {
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <h3 className="mb-4 text-[14px] font-semibold text-foreground">목적별 비율</h3>
+      <h3 className="mb-4 text-[14px] font-semibold text-foreground">{t("visit_purpose_ratio")}</h3>
       <div className="flex items-center gap-6">
         <ChartContainer config={chartConfig} className="h-[180px] w-[180px] aspect-square shrink-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -75,9 +91,9 @@ export function PurposeDonut({ data }: PurposeDonutProps) {
                   className="inline-block h-3 w-3 rounded-sm shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="text-[12px] text-foreground font-medium w-[60px] truncate">{d.name}</span>
+                <span className="text-[12px] text-foreground font-medium w-[60px] truncate">{purposeToKey(d.name) ? t(purposeToKey(d.name)) : d.name}</span>
                 <span className="text-[12px] text-muted-foreground">{pct}%</span>
-                <span className="text-[11px] text-muted-foreground">({d.visits}건)</span>
+                <span className="text-[11px] text-muted-foreground">({d.visits}{t("visit_count_suffix")})</span>
               </div>
             )
           })}

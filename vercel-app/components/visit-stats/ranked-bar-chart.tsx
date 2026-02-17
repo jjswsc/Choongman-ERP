@@ -1,5 +1,7 @@
 "use client"
 
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   BarChart,
   Bar,
@@ -20,11 +22,11 @@ type RankedBarChartProps = {
 }
 
 export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const inputTimeLabel = t("visit_chart_input_time")
   const chartConfig = {
-    totalMin: {
-      label: "투입시간 (분)",
-      color,
-    },
+    totalMin: { label: inputTimeLabel, color },
   }
 
   const maxVal = Math.max(...data.map((d) => d.totalMin), 1)
@@ -34,7 +36,7 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-[14px] font-semibold text-foreground">{title}</h3>
         <span className="text-[11px] text-muted-foreground">
-          {data.length}개 항목
+          {data.length}{t("visit_chart_items")}
         </span>
       </div>
       <ChartContainer config={chartConfig} className="h-[220px] w-full aspect-auto">
@@ -55,13 +57,13 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
                 <ChartTooltipContent
                   formatter={(value, name, item) => (
                     <span className="text-foreground font-medium">
-                      {formatMinutes(Number(value))} ({Number(item.payload?.visits ?? 0)}건)
+                      {formatMinutes(Number(value))} ({Number(item.payload?.visits ?? 0)}{t("visit_count_suffix")})
                     </span>
                   )}
                 />
               }
             />
-            <Bar dataKey="totalMin" name="투입시간" radius={[0, 4, 4, 0]} barSize={18}>
+            <Bar dataKey="totalMin" name={inputTimeLabel} radius={[0, 4, 4, 0]} barSize={18}>
               {data.map((entry, idx) => {
                 const ratio = entry.totalMin / maxVal
                 const opacity = 0.35 + ratio * 0.65

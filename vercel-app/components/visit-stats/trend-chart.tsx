@@ -1,6 +1,8 @@
 "use client"
 
 import * as React from "react"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   AreaChart,
   Area,
@@ -17,32 +19,30 @@ type TrendChartProps = {
 }
 
 export function TrendChart({ data }: TrendChartProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const uid = React.useId().replace(/:/g, "")
   const gradTime = `gradTime-${uid}`
   const gradVisits = `gradVisits-${uid}`
+  const inputTimeLabel = t("visit_trend_input_time")
+  const visitsLabel = t("visit_trend_visits")
   const chartConfig = {
-    totalMin: {
-      label: "투입시간",
-      color: "#2563eb",
-    },
-    visits: {
-      label: "방문횟수",
-      color: "#059669",
-    },
+    totalMin: { label: inputTimeLabel, color: "#2563eb" },
+    visits: { label: visitsLabel, color: "#059669" },
   }
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-[14px] font-semibold text-foreground">주간 방문 추이</h3>
+        <h3 className="text-[14px] font-semibold text-foreground">{t("visit_trend_title")}</h3>
         <div className="flex items-center gap-4 text-[11px]">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#2563eb" }} />
-            투입시간
+            {inputTimeLabel}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: "#059669" }} />
-            방문횟수
+            {visitsLabel}
           </span>
         </div>
       </div>
@@ -86,7 +86,7 @@ export function TrendChart({ data }: TrendChartProps) {
                 <ChartTooltipContent
                   formatter={(value, name) => (
                     <span className="text-foreground font-medium">
-                      {name === "투입시간" ? formatMinutes(Number(value)) : `${value}건`}
+                      {name === inputTimeLabel ? formatMinutes(Number(value)) : `${value}${t("visit_count_suffix")}`}
                     </span>
                   )}
                 />
@@ -96,7 +96,7 @@ export function TrendChart({ data }: TrendChartProps) {
               yAxisId="time"
               type="monotone"
               dataKey="totalMin"
-              name="투입시간"
+              name={inputTimeLabel}
               stroke="#2563eb"
               strokeWidth={2}
               fill={`url(#${gradTime})`}
@@ -105,7 +105,7 @@ export function TrendChart({ data }: TrendChartProps) {
               yAxisId="count"
               type="monotone"
               dataKey="visits"
-              name="방문횟수"
+              name={visitsLabel}
               stroke="#059669"
               strokeWidth={2}
               fill={`url(#${gradVisits})`}
