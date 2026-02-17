@@ -21,6 +21,9 @@ import {
   useStoreList,
   getAttendancePendingList,
   processAttendanceApproval,
+  getAttendanceNoRecordList,
+  createAttendanceFromSchedule,
+  type AttendanceNoRecordRow,
 } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
@@ -46,7 +49,9 @@ export function AdminTab() {
   const [attStoreFilter, setAttStoreFilter] = useState("All")
   const [attStores, setAttStores] = useState<string[]>([])
   const [attList, setAttList] = useState<{ id: number; log_at: string; store_name: string; name: string; nick?: string; log_type: string; status?: string; approved?: string; late_min?: number; ot_min?: number }[]>([])
+  const [noRecordList, setNoRecordList] = useState<AttendanceNoRecordRow[]>([])
   const [attLoading, setAttLoading] = useState(false)
+  const [attMode, setAttMode] = useState<"pending" | "noRecord">("pending")
   const [otMinutesByItem, setOtMinutesByItem] = useState<Record<number, string>>({})
 
   const { stores: storeList } = useStoreList()
@@ -80,9 +85,49 @@ export function AdminTab() {
       .finally(() => setAttLoading(false))
   }, [auth, attStores.length, isOffice, attStart, attEnd, attStoreFilter])
 
+  const loadNoRecordList = useCallback(() => {
+    if (!auth) return
+    if (attStores.length === 0 && !isOffice) return
+    setAttLoading(true)
+    getAttendanceNoRecordList({
+      startStr: attStart,
+      endStr: attEnd,
+      store: attStoreFilter === "All" ? undefined : attStoreFilter,
+      userStore: auth.store || "",
+      userRole: auth.role || "",
+    })
+      .then(setNoRecordList)
+      .catch(() => setNoRecordList([]))
+      .finally(() => setAttLoading(false))
+  }, [auth, attStores.length, isOffice, attStart, attEnd, attStoreFilter])
+
+  const handleSearch = useCallback(() => {
+    if (attMode === "pending") loadAttList()
+    else loadNoRecordList()
+  }, [attMode, loadAttList, loadNoRecordList])
+
   useEffect(() => {
-    if (auth && attStores.length > 0) loadAttList()
-  }, [auth?.store, auth?.role, attStart, attEnd, attStoreFilter, attStores.length, loadAttList])
+    if (auth && attStores.length > 0) {
+      if (attMode === "pending") loadAttList()
+      else loadNoRecordList()
+    }
+  }, [auth?.store, auth?.role, attStart, attEnd, attStoreFilter, attStores.length, attMode, loadAttList, loadNoRecordList])
+
+  const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
+    if (!auth) return
+    const res = await createAttendanceFromSchedule({
+      date: row.date,
+      store: row.store,
+      name: row.name,
+      userStore: auth.store || "",
+      userRole: auth.role || "",
+    })
+    if (res.success) {
+      loadNoRecordList()
+    } else {
+      alert(translateApiMessage(res.message) || t("processFail"))
+    }
+  }
 
   const handleAttApprove = async (id: number, decision: string, optOtMinutes?: number | null, waiveLate?: boolean) => {
     if (!auth) return
@@ -151,6 +196,12 @@ export function AdminTab() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-xs text-muted-foreground -mt-1">{t("adminAttMobileHelp")}</p>
+          <Tabs value={attMode} onValueChange={(v) => setAttMode(v as "pending" | "noRecord")} className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="pending" className="text-xs">{t("att_pending_only")}</TabsTrigger>
+              <TabsTrigger value="noRecord" className="text-xs">{t("att_tab_no_record")}</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground block mb-0.5">{t("att_start_date")}</label>
@@ -174,12 +225,13 @@ export function AdminTab() {
               </SelectContent>
             </Select>
           </div>
-          <Button className="h-10 w-full font-medium" onClick={loadAttList} disabled={attLoading}>
+          <Button className="h-10 w-full font-medium" onClick={handleSearch} disabled={attLoading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {attLoading ? t("loading") : t("stockBtnSearch")}
           </Button>
           <div className="flex flex-col gap-2">
-            {attList.length === 0 ? (
+            {attMode === "pending" ? (
+            attList.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border py-8 text-center">
                 <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
                 <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
@@ -188,7 +240,6 @@ export function AdminTab() {
               attList.map((item) => {
                 const isIn = String(item.log_type || "").includes("출근") || String(item.log_type || "").toLowerCase().includes("in")
                 const hasLate = (item.late_min ?? 0) > 0
-                const hasGps = (item.status || "").includes("위치미확인") || (item.status || "").includes("승인대기")
                 const otVal = otMinutesByItem[item.id] ?? String(item.ot_min ?? 0)
                 return (
                   <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
@@ -227,11 +278,7 @@ export function AdminTab() {
                         />
                       )}
                       {isIn ? (
-                        <>
-                          {hasGps && <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700 dark:hover:bg-orange-900/50" onClick={() => handleAttApprove(item.id, "승인완료", undefined, false)}>{t("att_approve_location_only")}</Button>}
-                          {hasLate && <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => handleAttApprove(item.id, "승인완료", undefined, true)}>{t("att_approve_in")}</Button>}
-                          {(!hasLate && !hasGps) && <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => handleAttApprove(item.id, "승인완료")}>{t("att_approve_in")}</Button>}
-                        </>
+                        <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => handleAttApprove(item.id, "승인완료", undefined, hasLate)}>{t("att_approve_in")}</Button>
                       ) : (
                         <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => { const n = parseInt(otVal, 10); handleAttApprove(item.id, "승인완료", !isNaN(n) && n >= 0 ? n : undefined); }}>{t("att_approve_out")}</Button>
                       )}
@@ -240,6 +287,34 @@ export function AdminTab() {
                   </div>
                 )
               })
+            )
+            ) : (
+            noRecordList.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
+                <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoRecord")}</p>
+              </div>
+            ) : (
+              noRecordList.map((row) => (
+                <div key={`${row.date}-${row.store}-${row.name}`} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
+                  <div className="min-w-0 flex-1 shrink">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-medium text-foreground">{row.name}</span>
+                      {row.nick && <span className="text-[10px] text-muted-foreground">({row.nick})</span>}
+                      <span className="text-[10px] px-1 py-0.5 rounded shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                        {t("att_tab_no_record")}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {row.date} {row.store} · {row.inTimeStr}~{row.outTimeStr}
+                    </p>
+                  </div>
+                  <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={() => handleEmergencyApprove(row)}>
+                    {t("att_btn_emergency_approve")}
+                  </Button>
+                </div>
+              ))
+            )
             )}
           </div>
         </CardContent>

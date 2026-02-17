@@ -603,6 +603,53 @@ export async function processAttendanceApproval(params: { id: number; decision: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface AttendanceNoRecordRow {
+  date: string
+  store: string
+  name: string
+  nick?: string
+  inTimeStr: string
+  outTimeStr: string
+  breakMin: number
+  planIn: string
+  planOut: string
+  breakStart: string
+  breakEnd: string
+  planInPrevDay?: boolean
+}
+
+export async function getAttendanceNoRecordList(params: {
+  startStr: string
+  endStr: string
+  store?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.store != null && params.store !== '') q.set('store', params.store)
+  if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
+  if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getAttendanceNoRecordList?${q}`)
+  return res.json() as Promise<AttendanceNoRecordRow[]>
+}
+
+export async function createAttendanceFromSchedule(params: {
+  date: string
+  store: string
+  name: string
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/createAttendanceFromSchedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface AttendanceDailyRow {
   date: string
   store: string

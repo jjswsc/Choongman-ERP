@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Calculator, Save, Pencil } from "lucide-react"
+import { Calculator, Save, Pencil, FolderOpen } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -106,6 +106,62 @@ export function AdminPayrollCalc() {
   useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
   }, [isManager, userStore])
+
+  const handleLoad = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const effectiveStore = isManager && userStore ? userStore : (storeFilter === "All" ? "" : storeFilter)
+      const params = new URLSearchParams({
+        monthStr,
+        userStore: auth?.store || "",
+        userRole: auth?.role || "",
+      })
+      if (effectiveStore) params.set("storeFilter", effectiveStore)
+      const res = await apiFetch(`/api/getPayrollRecords?${params}`)
+      const data = await res.json()
+      if (data.success && data.list && Array.isArray(data.list)) {
+        const rows: PayrollRow[] = data.list.map((r: Record<string, unknown>) => ({
+          id: String(r.id || ""),
+          month: String(r.month || ""),
+          store: String(r.store || ""),
+          name: String(r.name || ""),
+          dept: String(r.dept || ""),
+          role: String(r.role || ""),
+          salary: Number(r.salary) || 0,
+          posAllow: Number(r.pos_allow) ?? 0,
+          hazAllow: Number(r.haz_allow) ?? 0,
+          birthBonus: Number(r.birth_bonus) ?? 0,
+          holidayPay: Number(r.holiday_pay) ?? 0,
+          holidayWorkDays: 0,
+          splBonus: Number(r.spl_bonus) ?? 0,
+          ot15: Number(r.ot_15) ?? 0,
+          ot20: Number(r.ot_20) ?? 0,
+          ot30: Number(r.ot_30) ?? 0,
+          otAmt: Number(r.ot_amt) ?? 0,
+          lateMin: Number(r.late_min) ?? 0,
+          lateDed: Number(r.late_ded) ?? 0,
+          sso: Number(r.sso) ?? 0,
+          tax: Number(r.tax) ?? 0,
+          otherDed: Number(r.other_ded) ?? 0,
+          netPay: Number(r.net_pay) ?? 0,
+          status: String(r.status || "대기"),
+        }))
+        setList(rows)
+        setError(null)
+        alert("✅ " + t("pay_load_done"))
+      } else {
+        setList([])
+        setError(data.msg || t("pay_no_data"))
+      }
+    } catch (e) {
+      setList([])
+      setError(e instanceof Error ? e.message : t("pay_error"))
+    } finally {
+      setLoading(false)
+      setQueried(true)
+    }
+  }
 
   const handleCalc = async () => {
     setLoading(true)
@@ -307,6 +363,15 @@ export function AdminPayrollCalc() {
           >
             <Calculator className="mr-1.5 h-3.5 w-3.5" />
             {loading ? t("loading") : t("pay_calc_run")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 font-medium"
+            onClick={handleLoad}
+            disabled={loading}
+          >
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+            {loading ? t("loading") : t("pay_load_from_db")}
           </Button>
           <Button
             className="h-9 font-medium bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"

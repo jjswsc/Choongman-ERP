@@ -27,7 +27,10 @@ import {
   useStoreList,
   getAttendanceRecordsAdmin,
   processAttendanceApproval,
+  getAttendanceNoRecordList,
+  createAttendanceFromSchedule,
   type AttendanceDailyRow,
+  type AttendanceNoRecordRow,
 } from "@/lib/api-client"
 import { RealtimeWork } from "@/components/erp/realtime-work"
 import { WeeklySchedule } from "@/components/erp/weekly-schedule"
@@ -77,6 +80,7 @@ export default function AdminAttendancePage() {
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [hasSearched, setHasSearched] = React.useState(false)
   const [list, setList] = React.useState<AttendanceDailyRow[]>([])
+  const [noRecordList, setNoRecordList] = React.useState<AttendanceNoRecordRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
@@ -116,19 +120,47 @@ export default function AdminAttendancePage() {
   const loadRecords = React.useCallback(() => {
     setLoading(true)
     setHasSearched(true)
-    getAttendanceRecordsAdmin({
-      startDate,
-      endDate,
-      storeFilter: storeFilter === "All" ? undefined : storeFilter,
-      employeeFilter: employeeFilter === "All" ? undefined : employeeFilter,
-      statusFilter,
+    if (statusFilter === "noRecord") {
+      getAttendanceNoRecordList({
+        startStr: startDate,
+        endStr: endDate,
+        store: storeFilter === "All" ? undefined : storeFilter,
+        userStore: auth?.store,
+        userRole: auth?.role,
+      })
+        .then(setNoRecordList)
+        .catch(() => setNoRecordList([]))
+        .finally(() => setLoading(false))
+    } else {
+      getAttendanceRecordsAdmin({
+        startDate,
+        endDate,
+        storeFilter: storeFilter === "All" ? undefined : storeFilter,
+        employeeFilter: employeeFilter === "All" ? undefined : employeeFilter,
+        statusFilter,
+        userStore: auth?.store,
+        userRole: auth?.role,
+      })
+        .then(setList)
+        .catch(() => setList([]))
+        .finally(() => setLoading(false))
+    }
+  }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
+
+  const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
+    const res = await createAttendanceFromSchedule({
+      date: row.date,
+      store: row.store,
+      name: row.name,
       userStore: auth?.store,
       userRole: auth?.role,
     })
-      .then(setList)
-      .catch(() => setList([]))
-      .finally(() => setLoading(false))
-  }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
+    if (res.success) {
+      loadRecords()
+    } else {
+      alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    }
+  }
 
   const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean) => {
     const res = await processAttendanceApproval({
@@ -228,6 +260,7 @@ export default function AdminAttendancePage() {
                     <SelectContent>
                       <SelectItem value="all">{t("noticeFilterAll")}</SelectItem>
                       <SelectItem value="pending">{t("att_pending_only")}</SelectItem>
+                      <SelectItem value="noRecord">{t("att_tab_no_record")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -247,6 +280,49 @@ export default function AdminAttendancePage() {
                 </div>
               ) : loading ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">{t("loading")}</div>
+              ) : statusFilter === "noRecord" ? (
+                noRecordList.length === 0 ? (
+                  <div className="py-16 text-center text-sm text-muted-foreground">
+                    {t("adminAttNoRecord")}
+                  </div>
+                ) : (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold">{t("stockFilterStore")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("emp_label_name")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
+                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_btn_emergency_approve")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {noRecordList
+                      .filter((row) => employeeFilter === "All" || row.name === employeeFilter)
+                      .map((row) => (
+                        <tr key={`${row.date}-${row.store}-${row.name}`} className="border-b last:border-b-0">
+                          <td className="px-3 py-2.5 text-center">{row.date}</td>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap text-[11px]">{row.store}</td>
+                          <td className="px-3 py-2.5 text-center font-medium">{row.name}</td>
+                          <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
+                          <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
+                          <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
+                          <td className="px-2 py-2.5 text-center">
+                            <Button
+                              size="sm"
+                              className="h-6 px-2 text-[10px]"
+                              onClick={() => handleEmergencyApprove(row)}
+                            >
+                              {t("att_btn_emergency_approve")}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+                )
               ) : list.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   {t("adminLeaveNoResult")}
@@ -332,12 +408,7 @@ export default function AdminAttendancePage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="center">
-                                  {row.inStatus?.includes("위치미확인") && (
-                                    <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, false)}>{t("att_approve_location_only")}</DropdownMenuItem>
-                                  )}
-                                  {(row.lateMin > 0 || !row.inStatus?.includes("위치미확인")) && (
-                                    <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, row.lateMin > 0 ? true : undefined)}>{t("att_approve_in")}</DropdownMenuItem>
-                                  )}
+                                  <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, row.lateMin > 0 ? true : undefined)}>{t("att_approve_in")}</DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem variant="destructive" onClick={() => handleReject(pendingIn)}>{t("att_btn_reject")}</DropdownMenuItem>
                                 </DropdownMenuContent>

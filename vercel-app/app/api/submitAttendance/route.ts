@@ -124,7 +124,8 @@ export async function POST(request: NextRequest) {
       )
       if (dist <= 100) locationOk = true
     }
-    const needManagerApproval = !locationOk
+    // GPS 미확인 시에도 승인 대기 없음 (매장 폰/태블릿 활용 정책)
+    const needManagerApproval = false
 
     let planIn = '',
       planOut = '',
