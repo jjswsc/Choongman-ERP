@@ -143,6 +143,7 @@ export function OrderApproval() {
   const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
   const [submittingId, setSubmittingId] = React.useState<string | null>(null)
   const [editedItemsByOrderId, setEditedItemsByOrderId] = React.useState<Record<string, OrderItem[]>>({})
+  const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -227,17 +228,30 @@ export function OrderApproval() {
   }
 
   const getDisplayItems = (order: Order): OrderItem[] => {
-    return editedItemsByOrderId[order.id] ?? order.items
+    const base = editedItemsByOrderId[order.id] ?? order.items
+    if (!detailSortByCode) return base
+    return [...base].sort((a, b) => {
+      const ca = (a.code || "").toLowerCase()
+      const cb = (b.code || "").toLowerCase()
+      const cmp = ca.localeCompare(cb)
+      return detailSortByCode === "asc" ? cmp : -cmp
+    })
+  }
+  const cycleCodeSort = () => {
+    setDetailSortByCode((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null))
   }
 
-  const updateOrderItem = (orderId: string, itemIndex: number, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => {
+  const updateOrderItem = (orderId: string, itemRef: { code: string; name: string }, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => {
     setEditedItemsByOrderId((prev) => {
       const order = orders.find((o) => o.id === orderId)
       if (!order) return prev
       const base = prev[orderId] ?? order.items
-      const newQty = updates.qty ?? base[itemIndex]?.qty
+      const realIndex = base.findIndex((it) => (it.code || "") === itemRef.code && (it.name || "") === itemRef.name)
+      if (realIndex === -1) return prev
+      const target = base[realIndex]
+      const newQty = updates.qty ?? target?.qty
       const next = base.map((it, i) =>
-        i === itemIndex
+        i === realIndex
           ? { ...it, ...updates, qty: newQty ?? it.qty, total: it.unitPrice * (newQty ?? it.qty) }
           : it
       )
@@ -535,6 +549,15 @@ export function OrderApproval() {
                                 <thead>
                                   <tr className="border-b bg-muted/30">
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-10 text-center">V</th>
+                                    <th
+                                      className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground w-20 cursor-pointer hover:bg-muted/50 select-none"
+                                      onClick={(e) => { e.stopPropagation(); cycleCodeSort() }}
+                                      title={t("orderColCode") || "코드 (클릭 시 정렬)"}
+                                    >
+                                      {t("orderColCode") || "코드"}
+                                      {detailSortByCode === "asc" && " ↑"}
+                                      {detailSortByCode === "desc" && " ↓"}
+                                    </th>
                                     <th className="px-3 py-2.5 text-[10px] font-bold text-muted-foreground min-w-[120px]">
                                       {t("orderItemName")}
                                     </th>
@@ -572,11 +595,14 @@ export function OrderApproval() {
                                         <Checkbox
                                           checked={item.checked}
                                           onCheckedChange={(v) =>
-                                            canEdit && updateOrderItem(order.id, idx, { checked: !!v })
+                                            canEdit && updateOrderItem(order.id, { code: item.code || "", name: item.name || "" }, { checked: !!v })
                                           }
                                           disabled={!canEdit}
                                           className="h-3.5 w-3.5"
                                         />
+                                      </td>
+                                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground w-20">
+                                        {item.code || "-"}
                                       </td>
                                       <td className="px-3 py-2.5 text-xs font-medium min-w-[120px]">
                                         <span className={item.qty !== item.originalQty ? "text-destructive" : "text-foreground"}>
@@ -608,7 +634,7 @@ export function OrderApproval() {
                                             value={item.qty}
                                             onChange={(e) => {
                                               const v = parseInt(e.target.value, 10)
-                                              updateOrderItem(order.id, idx, { qty: isNaN(v) || v < 0 ? 0 : v })
+                                              updateOrderItem(order.id, { code: item.code || "", name: item.name || "" }, { qty: isNaN(v) || v < 0 ? 0 : v })
                                             }}
                                           />
                                         ) : (

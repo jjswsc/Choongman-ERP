@@ -125,10 +125,18 @@
       <div id="usage-new-area">
         <div id="stockListWrapper" style="padding-bottom:120px;" data-i18n="m_loading_items">Loading Items...</div>
         <div class="input-area">
+          <div style="margin-bottom:8px;">
+            <span style="font-size:11px;color:#666;" data-i18n="m_use_qty_fraction">분수</span>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <button type="button" class="stepper-btn" style="flex:1;" onclick="setUsageFraction(0.5)">½</button>
+              <button type="button" class="stepper-btn" style="flex:1;" onclick="setUsageFraction(0.25)">¼</button>
+              <button type="button" class="stepper-btn" style="flex:1;" onclick="setUsageFraction(0.167)">⅙</button>
+            </div>
+          </div>
           <div style="display:flex; align-items:center; background:#f5f5f5; border-radius:10px; padding:5px;">
-            <button class="stepper-btn" onclick="adjustQty('usage', -1)">-</button>
-            <input type="number" id="qtyInputUsage" class="stepper-input" value="1" min="1">
-            <button class="stepper-btn" onclick="adjustQty('usage', 1)">+</button>
+            <button class="stepper-btn" onclick="adjustQty('usage', -0.25)">-</button>
+            <input type="number" id="qtyInputUsage" class="stepper-input" value="0.5" min="0.01" step="0.01">
+            <button class="stepper-btn" onclick="adjustQty('usage', 0.25)">+</button>
           </div>
           <button class="btn-add" id="btn-add-usage" style="background:#43a047;" onclick="addToCart('usage')" data-i18n="m_add_usage">Add Usage</button>
         </div>

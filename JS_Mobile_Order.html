@@ -21,8 +21,19 @@
         g[cat].push(r); 
       });
       
-      // 카테고리 이름 가나다순 정렬
-      var keys = Object.keys(g).sort();
+      // 카테고리 순서: 1=Chicken계, 2=Jidubang, 3=Packaging계, 4=기타(가나다순)
+      var catOrder = function(c) {
+        var x = String(c || '').trim().toLowerCase();
+        if (x === 'chicken' || x === 'chicken sauce & etc.' || x === 'chicken sauce & etc') return 1;
+        if (x === 'jidubang') return 2;
+        if (['packaging','korean food sauce','cleaning','uniform','unifrom','kitchen equipment','container'].indexOf(x) !== -1) return 3;
+        return 4;
+      };
+      var keys = Object.keys(g).sort(function(a, b) {
+        var oa = catOrder(a), ob = catOrder(b);
+        if (oa !== ob) return oa - ob;
+        return String(a).localeCompare(b);
+      });
       // 배송일 기준 그룹 색상: 1=Chicken계(amber), 2=Packaging계(blue), 3=Jidubang(green)
       var deliveryGroupStyle = function(cat) {
         var c = String(cat || '').trim().toLowerCase();
@@ -117,7 +128,8 @@
     function switchOrderTab(t){ document.getElementById('order-new-area').style.display = t==='new'?'block':'none'; document.getElementById('order-hist-area').style.display = t==='hist'?'block':'none'; document.getElementById('ord-sub-new').classList.toggle('active', t==='new'); document.getElementById('ord-sub-hist').classList.toggle('active', t==='hist'); if(t==='hist') loadHistory(); }
     
     function changeLanguage() { }
-    function adjustQty(type, delta){ var id = type==='order' ? 'qtyInputOrder' : 'qtyInputUsage'; var el = document.getElementById(id); if(el) { var val = Number(el.value) + delta; if(val < 1) val = 1; el.value = val; } }
+    function adjustQty(type, delta){ var id = type==='order' ? 'qtyInputOrder' : 'qtyInputUsage'; var el = document.getElementById(id); if(!el) return; var val = Number(el.value) + delta; if(type==='usage'){ if(val<0.01) val=0.01; el.value = Math.round(val*1000)/1000; } else { if(val<1) val=1; el.value = val; } }
+    function setUsageFraction(val){ var el=document.getElementById("qtyInputUsage"); if(el) el.value=val; }
     function addToCart(type){ var msg = (typeof I18N !== "undefined" && I18N[currentLang]) ? I18N[currentLang].m_select_item : "Select an Item first!"; if(type==='order'){ if(!selectedItem) return alert(msg); var q=document.getElementById("qtyInputOrder").value; cart.push({...selectedItem, qty:q}); updateCart('order'); } else { if(!selectedUsageItem) return alert(msg); var q=document.getElementById("qtyInputUsage").value; usageCart.push({...selectedUsageItem, qty:q}); updateCart('usage'); } }
 
     /* [수정] updateCart 함수 내부의 계산 부분 (약 275~280줄) */

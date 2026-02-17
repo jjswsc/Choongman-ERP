@@ -43,6 +43,12 @@ function formatStock(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1)
 }
 
+/** 사용(usage) 수량 표시 - 소수점 최대 3자리, 뒤 0 제거 */
+function formatUsageQty(n: number): string {
+  if (Number.isInteger(n)) return String(n)
+  return parseFloat(n.toFixed(3)).toString()
+}
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -66,7 +72,7 @@ export function UsageTab() {
   const [items, setItems] = useState<AppItem[]>([])
   const [stock, setStock] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState(0.5)
   const [selectedItem, setSelectedItem] = useState<AppItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -123,7 +129,7 @@ export function UsageTab() {
       return [...prev, { code: selectedItem.code, name: selectedItem.name, qty: quantity }]
     })
     setSelectedItem(null)
-    setQuantity(1)
+    setQuantity(0.5)
   }
 
   const removeFromCart = (code: string) => {
@@ -275,17 +281,40 @@ export function UsageTab() {
             </CardContent>
           </Card>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center rounded-xl border border-border bg-card">
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(1, quantity - 1))}>
-                <Minus className="h-4 w-4" />
-              </Button>
-              <span className="w-10 text-center text-sm font-semibold text-foreground">{quantity}</span>
-              <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + 1)}>
-                <Plus className="h-4 w-4" />
-              </Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground shrink-0">{t("useQtyFraction") || "분수"}:</span>
+              <div className="flex gap-1.5">
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(0.5)}>½</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(0.25)}>¼</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
+              </div>
             </div>
-            <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.01, quantity - 0.25))}>
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  value={quantity}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!isNaN(v) && v >= 0.01) setQuantity(v)
+                  }}
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (isNaN(v) || v < 0.01) setQuantity(0.5)
+                  }}
+                />
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + 0.25)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
               <ShoppingCart className="mr-2 h-4 w-4" />
               {t('addUsage')}
             </Button>
@@ -305,7 +334,7 @@ export function UsageTab() {
                     <div key={item.code} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-medium text-foreground">{item.name}</span>
-                        <Badge variant="outline" className="text-xs">{item.qty}</Badge>
+                        <Badge variant="outline" className="text-xs">{formatUsageQty(item.qty)}</Badge>
                       </div>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => removeFromCart(item.code)}>
                         <Trash2 className="h-3.5 w-3.5" />

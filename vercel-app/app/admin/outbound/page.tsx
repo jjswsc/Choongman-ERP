@@ -330,6 +330,7 @@ export default function OutboundPage() {
         deliveryStatus,
         items: g.items.map((it) => ({
           name: it.name || "",
+          code: it.code || "",
           spec: it.spec || "",
           qty: it.qty || 0,
           amount: it.amount || 0,

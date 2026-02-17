@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
@@ -24,7 +24,7 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
-  items: { name: string; spec: string; qty: number; amount: number; originalOrderQty?: number }[]
+  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -202,6 +202,19 @@ function TableRow({
   const hasDetails = row.items.length >= 1
   const orderBadge = getOrderTypeBadge(row.type)
   const outboundBadge = getOutboundTypeBadge(row.deliveryStatus)
+  const [codeSort, setCodeSort] = useState<"asc" | "desc" | null>(null)
+  const sortedItems = useMemo(() => {
+    if (!codeSort || row.items.length === 0) return row.items
+    return [...row.items].sort((a, b) => {
+      const ca = (a.code || "").toLowerCase()
+      const cb = (b.code || "").toLowerCase()
+      const cmp = ca.localeCompare(cb)
+      return codeSort === "asc" ? cmp : -cmp
+    })
+  }, [row.items, codeSort])
+  const toggleCodeSort = () => {
+    setCodeSort((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null))
+  }
 
   return (
     <>
@@ -289,6 +302,15 @@ function TableRow({
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/50">
+                    <th
+                      className="px-4 py-2 text-center font-semibold text-card-foreground cursor-pointer hover:bg-muted/70 select-none"
+                      onClick={toggleCodeSort}
+                      title={t("outColCode") || "코드 (클릭 시 정렬)"}
+                    >
+                      {t("outColCode") || "코드"}
+                      {codeSort === "asc" && " ↑"}
+                      {codeSort === "desc" && " ↓"}
+                    </th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
@@ -296,8 +318,9 @@ function TableRow({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {row.items.map((d, i) => (
+                  {sortedItems.map((d, i) => (
                     <tr key={i} className="hover:bg-primary/5 transition-colors">
+                      <td className="px-4 py-2 text-center text-muted-foreground font-mono text-[11px]">{d.code || "-"}</td>
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
                       <td className="px-4 py-2 text-center font-medium tabular-nums">
