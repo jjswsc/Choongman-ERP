@@ -323,14 +323,14 @@ ${rows.map((row, ri) => {
                 {listData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className={cn("w-full text-xs table-fixed", canSearchAll ? "min-w-[380px]" : "min-w-[320px]")}>
+                  <table className={cn("w-full text-xs table-fixed", canSearchAll ? "min-w-[420px]" : "min-w-[360px]")}>
                     <colgroup>
-                      <col style={{ width: "68px" }} />
-                      {canSearchAll && <col style={{ width: "56px" }} />}
+                      <col style={{ width: "92px" }} />
+                      {canSearchAll && <col style={{ width: "88px" }} />}
                       <col style={{ width: "42px" }} />
                       <col style={{ width: "64px" }} />
                       <col />
-                      <col style={{ width: "80px" }} />
+                      <col style={{ width: "100px" }} />
                       <col style={{ width: "36px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
@@ -488,15 +488,15 @@ ${rows.map((row, ri) => {
                 {monthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[380px]">
+                  <table className="w-full text-xs table-fixed min-w-[440px]">
                     <colgroup>
-                      <col style={{ width: "68px" }} />
-                      <col style={{ width: "56px" }} />
+                      <col style={{ width: "92px" }} />
+                      <col style={{ width: "88px" }} />
                       <col style={{ width: "42px" }} />
                       <col style={{ width: "64px" }} />
                       <col style={{ width: "72px" }} />
                       <col />
-                      <col style={{ width: "80px" }} />
+                      <col style={{ width: "100px" }} />
                       <col style={{ width: "36px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
