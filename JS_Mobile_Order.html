@@ -23,9 +23,19 @@
       
       // 카테고리 이름 가나다순 정렬
       var keys = Object.keys(g).sort();
+      // 배송일 기준 그룹 색상: 1=Chicken계(amber), 2=Packaging계(blue), 3=Jidubang(green)
+      var deliveryGroupStyle = function(cat) {
+        var c = String(cat || '').trim().toLowerCase();
+        if (c === 'chicken') return { bg: '#FFF8E1', border: '#FFA726' };
+        if (c === 'chicken sauce & etc.' || c === 'chicken sauce & etc') return { bg: '#FFF8E1', border: '#FFA726' };
+        if (['packaging','korean food sauce','cleaning','uniform','unifrom','kitchen equipment','container'].indexOf(c) !== -1) return { bg: '#E3F2FD', border: '#2196F3' };
+        if (c === 'jidubang') return { bg: '#E8F5E9', border: '#4CAF50' };
+        return { bg: '#FFF8E1', border: '#FFE0B2' };
+      };
 
       keys.forEach(c => {
-        var h=document.createElement("div"); h.className="category-header"; h.innerHTML=`<span>${c}</span><span>▼</span>`;
+        var style = deliveryGroupStyle(c);
+        var h=document.createElement("div"); h.className="category-header"; h.style.background=style.bg; h.style.borderLeft='4px solid '+style.border; h.innerHTML=`<span>${c}</span><span>▼</span>`;
         var con=document.createElement("div"); con.className="menu-container"; con.style.display="none"; 
         var grid=document.createElement("div"); grid.className="menu-grid";
         

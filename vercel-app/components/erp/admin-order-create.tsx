@@ -45,6 +45,23 @@ function toImageUrl(url: string): string {
   return s
 }
 
+/** 배송일 기준 카테고리 그룹 - 같은 색 = 같은 배송일 */
+const DELIVERY_GROUP_STYLES = [
+  { categories: ['Chicken', 'Chicken Sauce & ETC.'], triggerClass: 'bg-amber-50 dark:bg-amber-950/30 border-l-4 border-l-amber-500' },
+  { categories: ['Packaging', 'Korean Food Sauce', 'Cleaning', 'Uniform', 'Unifrom', 'Kitchen Equipment', 'Container'], triggerClass: 'bg-blue-50 dark:bg-blue-950/30 border-l-4 border-l-blue-500' },
+  { categories: ['Jidubang'], triggerClass: 'bg-emerald-50 dark:bg-emerald-950/30 border-l-4 border-l-emerald-500' },
+] as const
+
+function getDeliveryGroupClass(category: string): string {
+  const c = String(category || '').trim()
+  if (!c) return ''
+  const lower = c.toLowerCase()
+  for (const g of DELIVERY_GROUP_STYLES) {
+    if (g.categories.some((cat) => cat.toLowerCase() === lower)) return g.triggerClass
+  }
+  return ''
+}
+
 interface CartItem {
   code: string
   name: string
@@ -210,7 +227,7 @@ export function AdminOrderCreate() {
             <Accordion type="single" collapsible className="w-full">
               {categories.map(([catName, catItems]) => (
                 <AccordionItem key={catName} value={catName} className="border-b border-border/60 last:border-0">
-                  <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
+                  <AccordionTrigger className={`px-4 py-3.5 text-sm font-semibold hover:no-underline ${getDeliveryGroupClass(catName)}`}>
                     <div className="flex items-center gap-2">
                       <Package className="h-4 w-4 text-primary" />
                       {catName}
