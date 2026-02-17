@@ -486,6 +486,7 @@ export async function sendNotice(params: {
   targetRecipients?: Array<{ store: string; name: string }>
   userStore?: string
   userRole?: string
+  attachments?: Array<{ name: string; mime: string; url: string }>
 }) {
   const res = await apiFetch('/api/sendNotice', {
     method: 'POST',

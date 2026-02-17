@@ -767,6 +767,7 @@ function saveWorkLog() {
     function loadNoticeHistory() {
       var s = document.getElementById("notice-start").value;
       var e = document.getElementById("notice-end").value;
+      var senderFilter = (document.getElementById("notice-sender-filter") && document.getElementById("notice-sender-filter").value) ? document.getElementById("notice-sender-filter").value.trim() : "";
       
       if(!s) { 
          var today = new Date().toISOString().substring(0,10);
@@ -798,7 +799,7 @@ function saveWorkLog() {
             appendNoticeHistoryItem(box, n, titleText, contentText);
           });
         }).translateBatch(texts, targetLang);
-      }).getNoticeHistoryAdmin(s, e);
+      }).getNoticeHistoryAdmin(s, e, senderFilter);
     }
     
     // [추가] 내가 받은 공지 로드 (지나간 공지 포함, 날짜 필터)

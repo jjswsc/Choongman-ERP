@@ -17,6 +17,21 @@ export async function POST(request: NextRequest) {
     const targetRecipients = body?.targetRecipients ?? body?.target_recipients
     const userStore = String(body?.userStore ?? body?.user_store ?? '').trim()
     const userRole = String(body?.userRole ?? body?.user_role ?? '').toLowerCase()
+    let attachmentsStr = '[]'
+    const rawAttachments = body?.attachments
+    if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
+      const sanitized = rawAttachments
+        .filter((a: unknown) => a && typeof a === 'object' && 'name' in a && 'url' in a)
+        .map((a: { name?: string; mime?: string; url?: string }) => ({
+          name: String(a?.name ?? '').trim() || 'file',
+          mime: String(a?.mime ?? '').trim() || 'application/octet-stream',
+          url: String(a?.url ?? '').trim(),
+        }))
+        .filter((a) => a.url.length > 0)
+      if (sanitized.length > 0) {
+        attachmentsStr = JSON.stringify(sanitized)
+      }
+    }
 
     if (!title) {
       return NextResponse.json(
@@ -59,7 +74,7 @@ export async function POST(request: NextRequest) {
       target_role: targetRole,
       target_recipients: targetRecipientsStr,
       sender,
-      attachments: '[]',
+      attachments: attachmentsStr,
     })
 
     return NextResponse.json(

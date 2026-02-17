@@ -113,10 +113,11 @@ function logNoticeRead(id, store, name, action) {
   return "처리되었습니다.";
 }
 
-/* 1. 관리자용: 공지 발송 내역 조회 (Supabase notices, 날짜 검색 포함) */
-function getNoticeHistoryAdmin(startDate, endDate) {
+/* 1. 관리자용: 공지 발송 내역 조회 (Supabase notices, 날짜 검색 + 발신자 필터 포함) */
+function getNoticeHistoryAdmin(startDate, endDate, senderFilter) {
   var start = startDate ? new Date(startDate + "T00:00:00") : new Date("2000-01-01");
   var end = endDate ? new Date(endDate + "T23:59:59") : new Date();
+  var senderKey = (senderFilter && String(senderFilter).trim()) ? String(senderFilter).trim().toLowerCase() : "";
   var list = [];
   try {
     var rows = supabaseSelect("notices", { order: "created_at.desc" }) || [];
@@ -124,6 +125,7 @@ function getNoticeHistoryAdmin(startDate, endDate) {
       var r = rows[i];
       var rowDate = r.created_at ? new Date(r.created_at) : new Date(0);
       if (rowDate < start || rowDate > end) continue;
+      if (senderKey && String(r.sender || "").toLowerCase().indexOf(senderKey) === -1) continue;
       var att = [];
       if (r.attachments) { try { att = JSON.parse(r.attachments); } catch (e) {} }
       list.push({
@@ -173,18 +175,20 @@ function adminGetNoticeStats(noticeId, storeFilter) {
     if (eName === "" || (resignDate && resignDate !== "")) continue;
     if (eStore === "" || eStore === "매장명") continue;
     if (filterStore && eStore !== filterStore) continue;
-    var eRole = String(e.role || "").trim();
+    // 공지 대상 직급: 폼에서 job/role 기준 선택 → employees의 job 또는 role로 매칭
+    var eRole = String(e.job || e.role || "").trim();
     if (eRole === "") eRole = "Staff";
     var isStoreTarget = (targetStores === "전체" || targetStores.indexOf(eStore) > -1);
     var isRoleTarget = (targetRoles === "전체" || targetRoles.toLowerCase().indexOf(eRole.toLowerCase()) > -1);
     var key = eStore + "_" + eName;
     var readTime = readMap[key];
     if ((isStoreTarget && isRoleTarget) || readTime) {
+      var isRead = (readTime && readTime !== "-");
       result.push({
         store: eStore,
         name: eName,
         role: eRole,
-        status: readTime ? "확인" : "미확인",
+        status: isRead ? "확인" : "미확인",
         date: readTime || "-"
       });
     }

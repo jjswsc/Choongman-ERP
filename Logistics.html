@@ -133,7 +133,7 @@
         </div>
         <div class="col-md-7">
           <div class="card p-4 h-100">
-             <div class="d-flex justify-content-between mb-3"><h5 class="fw-bold" data-i18n="notice_history">📑 발송 내역</h5><div><input type="date" id="notice-start" class="form-control-sm border date-picker-lg"><input type="date" id="notice-end" class="form-control-sm border date-picker-lg"><button class="btn btn-sm btn-dark" onclick="loadNoticeHistory()" data-i18n="btn_query">조회</button></div></div>
+             <div class="d-flex justify-content-between mb-3"><h5 class="fw-bold" data-i18n="notice_history">📑 발송 내역</h5><div class="d-flex flex-wrap align-items-center gap-2"><input type="date" id="notice-start" class="form-control-sm border date-picker-lg"><input type="date" id="notice-end" class="form-control-sm border date-picker-lg"><input type="text" id="notice-sender-filter" class="form-control form-control-sm" data-i18n-ph="notice_sender_filter_ph" placeholder="발신자 검색" style="max-width:120px;" title="발신자 이름 입력 시 해당 공지만 조회 (비우면 전체)"><button class="btn btn-sm btn-dark" onclick="loadNoticeHistory()" data-i18n="btn_query">조회</button></div></div>
              <div id="noticeHistoryBox" style="height:500px;overflow-y:auto;"></div>
           </div>
         </div>

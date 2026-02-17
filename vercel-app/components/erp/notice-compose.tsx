@@ -29,7 +29,12 @@ interface AttachedFile {
   name: string
   size: string
   type: "image" | "pdf" | "doc"
+  dataUrl: string
+  mime: string
 }
+
+const MAX_FILE_SIZE = 1024 * 1024
+const MAX_FILES = 3
 
 export function NoticeCompose() {
   const { auth } = useAuth()
@@ -45,6 +50,7 @@ export function NoticeCompose() {
   const [positionsOpen, setPositionsOpen] = React.useState(false)
   const [files, setFiles] = React.useState<AttachedFile[]>([])
   const [sending, setSending] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     if (!auth?.store) return
@@ -93,6 +99,51 @@ export function NoticeCompose() {
     setFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target
+    const selected = input.files
+    if (!selected || selected.length === 0) return
+    const remaining = MAX_FILES - files.length
+    if (remaining <= 0) {
+      alert(t("noticeFileLimit") || "파일당 5MB, 최대 10개")
+      input.value = ""
+      return
+    }
+    const newFiles: AttachedFile[] = []
+    const processNext = (idx: number) => {
+      if (idx >= selected.length || newFiles.length >= remaining) {
+        if (newFiles.length > 0) setFiles((prev) => [...prev, ...newFiles])
+        input.value = ""
+        return
+      }
+      const file = selected[idx]
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`${file.name}: ` + (t("noticeFileLimit") || "파일당 1MB, 최대 3개"))
+        processNext(idx + 1)
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        const mime = file.type || "application/octet-stream"
+        let typ: "image" | "pdf" | "doc" = "doc"
+        if (mime.startsWith("image/")) typ = "image"
+        else if (mime.includes("pdf")) typ = "pdf"
+        newFiles.push({
+          id: `f-${Date.now()}-${idx}`,
+          name: file.name,
+          size: `${(file.size / 1024).toFixed(1)} KB`,
+          type: typ,
+          dataUrl,
+          mime,
+        })
+        processNext(idx + 1)
+      }
+      reader.readAsDataURL(file)
+    }
+    processNext(0)
+  }
+
   const storeLabel =
     selectedStores.length === 0
       ? t("noticeStorePlaceholder")
@@ -121,6 +172,7 @@ export function NoticeCompose() {
       selectedPositions.length === 0 || allPos ? "전체" : selectedPositions.join(",")
     setSending(true)
     try {
+      const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.dataUrl }))
       const res = await sendNotice({
         title: title.trim(),
         content: content.trim(),
@@ -129,12 +181,14 @@ export function NoticeCompose() {
         sender: auth.user,
         userStore: auth.store,
         userRole: auth.role,
+        attachments,
       })
       if (res.success) {
         setTitle("")
         setContent("")
         setSelectedStores([])
         setSelectedPositions([])
+        setFiles([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
         alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
       } else {
@@ -339,8 +393,17 @@ export function NoticeCompose() {
               ))}
             </div>
           )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
           <button
             type="button"
+            onClick={() => fileInputRef.current?.click()}
             className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border px-4 py-4 text-xs font-semibold text-muted-foreground transition-colors active:bg-muted/30"
           >
             <Paperclip className="h-4 w-4" />

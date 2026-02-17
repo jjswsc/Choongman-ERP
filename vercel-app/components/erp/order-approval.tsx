@@ -718,7 +718,7 @@ export function OrderApproval() {
                             {!isManager && (
                               <div className="ml-auto flex flex-wrap items-center gap-2">
                                 <span
-                                  className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-destructive hover:underline select-none"
+                                  className="text-sm font-semibold text-foreground cursor-pointer hover:text-destructive hover:underline select-none"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     setShowRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: !prev[order.id] }))
@@ -729,7 +729,7 @@ export function OrderApproval() {
                                 {showRejectReasonByOrderId[order.id] && (
                                   <Input
                                     type="text"
-                                    className="h-8 w-48 text-xs"
+                                    className="h-9 w-56 text-sm"
                                     placeholder={t("orderRejectReasonPh") || "거절 사유 입력"}
                                     value={rejectReasonByOrderId[order.id] || ""}
                                     onChange={(e) => {
