@@ -249,7 +249,10 @@ export function AdminScheduleEdit({
   }
 
   const copyToNext = () => {
-    if (!store || !monday) return
+    if (!store || !monday) {
+      alert(t("att_store_monday_required"))
+      return
+    }
     const nextMonday = addDays(monday, 7)
     if (!confirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
     setMonday(nextMonday)
@@ -681,7 +684,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <RotateCcw className="mr-1 h-3.5 w-3.5" />
               {t("att_reset_one")}
             </Button>
-            <Button size="sm" variant="outline" className="h-9" onClick={copyToNext}>
+            <Button size="sm" variant="outline" className="h-9" onClick={copyToNext} disabled={!store || !monday} title={!store ? t("att_store_monday_required") : undefined}>
               <Copy className="mr-1 h-3.5 w-3.5" />
               {t("att_copy_next")}
             </Button>
