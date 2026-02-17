@@ -120,6 +120,7 @@ export default function EmployeesPage() {
   const [allEmployees, setAllEmployees] = React.useState<EmployeeTableRow[]>([])
   const [stores, setStores] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
+  const [jobFilter, setJobFilter] = React.useState("")
   const [gradeFilter, setGradeFilter] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState("")
   const [searchText, setSearchText] = React.useState("")
@@ -188,18 +189,30 @@ export default function EmployeesPage() {
     loadEmployeeList({ updateDisplay: false })
   }, [loadEmployeeList])
 
+  const jobOptions = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const e of allEmployees) {
+      const j = String(e.job || "").trim()
+      if (j) set.add(j)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [allEmployees])
+
   const filteredRows = React.useMemo(() => {
     const s = storeFilter || "All"
+    const j = jobFilter || "All"
     const g = gradeFilter || "All"
     const st = statusFilter || "all"
     const k = searchText.toLowerCase().trim()
     return employeeCache.filter((e) => {
       const eStore = String(e.store || "")
+      const eJob = String(e.job || "").trim()
       const eName = String(e.name || "").toLowerCase()
       const eNick = String(e.nick || "").toLowerCase()
       const eGrade = String(e.finalGrade || "").trim()
       const hasResign = Boolean(String(e.resign || "").trim())
       const matchStore = s === "" || s === "All" || eStore === s
+      const matchJob = j === "" || j === "All" || eJob === j
       const matchGrade = g === "" || g === "All" || eGrade === g
       const matchStatus =
         st === "" ||
@@ -207,9 +220,9 @@ export default function EmployeesPage() {
         (st === "active" && !hasResign) ||
         (st === "resigned" && hasResign)
       const matchKey = k === "" || eName.includes(k) || eNick.includes(k)
-      return matchStore && matchGrade && matchStatus && matchKey
+      return matchStore && matchJob && matchGrade && matchStatus && matchKey
     })
-  }, [employeeCache, storeFilter, gradeFilter, statusFilter, searchText])
+  }, [employeeCache, storeFilter, jobFilter, gradeFilter, statusFilter, searchText])
 
   const handleSearch = () => {
     if (fullListRef.current.length > 0 && employeeCache.length === 0) {
@@ -330,6 +343,9 @@ export default function EmployeesPage() {
                     stores={storesForForm}
                     storeFilter={storeFilter}
                     onStoreFilterChange={setStoreFilter}
+                    jobOptions={jobOptions}
+                    jobFilter={jobFilter}
+                    onJobFilterChange={setJobFilter}
                     gradeFilter={gradeFilter}
                     onGradeFilterChange={setGradeFilter}
                     statusFilter={statusFilter}

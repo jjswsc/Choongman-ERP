@@ -8,6 +8,9 @@ interface EmployeeFilterBarProps {
   stores: string[]
   storeFilter: string
   onStoreFilterChange: (v: string) => void
+  jobOptions: string[]
+  jobFilter: string
+  onJobFilterChange: (v: string) => void
   gradeFilter: string
   onGradeFilterChange: (v: string) => void
   statusFilter: string
@@ -23,6 +26,9 @@ export function EmployeeFilterBar({
   stores,
   storeFilter,
   onStoreFilterChange,
+  jobOptions,
+  jobFilter,
+  onJobFilterChange,
   gradeFilter,
   onGradeFilterChange,
   statusFilter,
@@ -43,6 +49,16 @@ export function EmployeeFilterBar({
         <option value="All">{t("stockFilterStoreAll")}</option>
         {stores.map((s) => (
           <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <select
+        value={jobFilter || "All"}
+        onChange={(e) => onJobFilterChange(e.target.value === "All" ? "" : e.target.value)}
+        className="h-8 rounded border border-input bg-card px-2 pr-8 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer max-w-[140px]"
+      >
+        <option value="All">{t("emp_job_all")}</option>
+        {jobOptions.map((j) => (
+          <option key={j} value={j}>{j}</option>
         ))}
       </select>
       <select

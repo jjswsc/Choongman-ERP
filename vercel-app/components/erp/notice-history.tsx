@@ -173,7 +173,6 @@ export function NoticeHistory() {
 
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
         <div className="min-w-[120px]">
-          <label className="text-[9px] font-semibold text-muted-foreground block mb-0.5">{t("noticeSenderLabel")}</label>
           <Select value={senderFilter} onValueChange={setSenderFilter}>
             <SelectTrigger className="h-9 text-xs rounded-lg">
               <SelectValue placeholder={t("noticeSenderAll")} />

@@ -376,27 +376,27 @@ export function WorklogApproval() {
                                 </span>
                               </td>
                               <td className="px-5 py-2">
-                                <div className="flex flex-row items-center gap-1 flex-wrap">
+                                <div className="flex flex-row items-center gap-2">
                                   {it.managerCheck === "대기" && (
                                     <>
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-6 px-1.5 text-[9px] text-success min-w-0"
+                                        className="h-7 px-2 text-[10px] text-success shrink-0"
                                         onClick={() => handleConfirm(it.id)}
                                         disabled={updating === it.id}
                                       >
-                                        <CheckCircle2 className="mr-0.5 h-2.5 w-2.5 shrink-0" />
+                                        <CheckCircle2 className="mr-1 h-3 w-3" />
                                         {t("workLogConfirmBtn")}
                                       </Button>
                                       <Button
                                         size="sm"
                                         variant="outline"
-                                        className="h-6 px-1.5 text-[9px] text-primary min-w-0"
+                                        className="h-7 px-2 text-[10px] text-primary shrink-0"
                                         onClick={() => handleAddComment(it.id)}
                                         disabled={updating === it.id}
                                       >
-                                        <MessageSquarePlus className="mr-0.5 h-2.5 w-2.5 shrink-0" />
+                                        <MessageSquarePlus className="mr-1 h-3 w-3" />
                                         {t("workLogCommentBtn")}
                                       </Button>
                                     </>
@@ -404,12 +404,12 @@ export function WorklogApproval() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-6 px-1.5 text-[9px] text-destructive hover:text-destructive min-w-0"
+                                    className="h-7 px-2 text-[10px] text-destructive hover:text-destructive shrink-0"
                                     onClick={() => handleDelete(it.id)}
                                     disabled={updating === it.id}
                                     title={t("workLogDeleteBtn")}
                                   >
-                                    <Trash2 className="h-2.5 w-2.5" />
+                                    <Trash2 className="h-3 w-3" />
                                   </Button>
                                 </div>
                               </td>

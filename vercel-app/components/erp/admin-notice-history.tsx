@@ -174,7 +174,6 @@ export function AdminNoticeHistory() {
       {/* Date filter + Sender filter */}
       <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4 bg-muted/20">
         <div className="min-w-[140px]">
-          <label className="text-[10px] font-semibold text-muted-foreground block mb-1">{t("noticeSenderLabel")}</label>
           <Select value={senderFilter} onValueChange={setSenderFilter}>
             <SelectTrigger className="h-9 text-xs">
               <SelectValue placeholder={t("noticeSenderAll")} />
