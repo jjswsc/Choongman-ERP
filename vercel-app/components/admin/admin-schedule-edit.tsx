@@ -198,6 +198,24 @@ export function AdminScheduleEdit({
     setSlotData({})
   }
 
+  const resetOnePerson = () => {
+    if (!selectedStaff) {
+      alert(t("att_staff_select") + " " + t("att_select_first"))
+      return
+    }
+    const name = selectedStaff.name
+    const brkName = "BRK_" + name
+    setSlotData((prev) => {
+      const next = { ...prev }
+      for (const [key, vals] of Object.entries(prev)) {
+        const filtered = vals.filter((n) => n !== name && n !== brkName)
+        if (filtered.length === 0) delete next[key]
+        else if (filtered.length !== vals.length) next[key] = filtered
+      }
+      return next
+    })
+  }
+
   const applyQuick = (area: string) => {
     if (!selectedStaff) {
       alert(t("att_staff_select") + " " + t("att_select_first"))
@@ -658,6 +676,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             <Button size="sm" variant="outline" className="h-9" onClick={resetGrid}>
               <RotateCcw className="mr-1 h-3.5 w-3.5" />
               {t("att_reset")}
+            </Button>
+            <Button size="sm" variant="outline" className="h-9" onClick={resetOnePerson} disabled={!selectedStaff} title={selectedStaff ? t("att_reset_one") : t("att_staff_select")}>
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              {t("att_reset_one")}
             </Button>
             <Button size="sm" variant="outline" className="h-9" onClick={copyToNext}>
               <Copy className="mr-1 h-3.5 w-3.5" />
