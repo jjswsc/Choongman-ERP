@@ -8,9 +8,11 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
-/** 연차일 수: 직원관리에서 직접 입력한 값 우선(0은 제외, 미입력으로 간주), null이면 입사 1년 이상 6일/그 외 0일 */
+/** 연차일 수: Hourly(파트타임)는 0. 직원관리 직접 입력 우선(0은 미입력), null이면 입사 1년 이상 6일/그 외 0일 */
 function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
   if (!emp) return 0
+  const salType = String(emp.sal_type ?? emp.salType ?? '').trim()
+  if (salType.toLowerCase() === 'hourly') return 0
   const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
   if (directVal != null && directVal !== '' && Number(directVal) > 0) {
     const direct = Number(directVal)
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
     type LeaveRow = { store?: string; name?: string; type?: string; leave_date?: string; status?: string }
 
     let empRows: EmpRow[] = []
-    const empSelect = 'id,store,name,annual_leave_days,join_date'
+    const empSelect = 'id,store,name,annual_leave_days,join_date,sal_type'
     if (storeFilter) {
       empRows = (await supabaseSelectFilter(
         'employees',
