@@ -15,6 +15,25 @@ function toDateStr(val: unknown): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
+/** 연차 표시용: DB에 직접 입력된 값(>0) 우선. null/0이면 근속연수 기반 계산 (Hourly=0, 1년↑6일, 2년↑7일...) */
+function getAnnualLeaveDaysForDisplay(r: Record<string, unknown>): number {
+  const directVal = r.annual_leave_days
+  if (directVal != null && directVal !== '' && Number(directVal) > 0) {
+    const n = Number(directVal)
+    if (!Number.isNaN(n) && n >= 0) return n
+  }
+  const salType = String(r.sal_type ?? '').trim()
+  if (salType.toLowerCase() === 'hourly') return 0
+  const joinStr = toDateStr(r.join_date)
+  if (!joinStr) return 0
+  const joinDate = new Date(joinStr + 'T12:00:00')
+  if (isNaN(joinDate.getTime())) return 0
+  const msPerYear = 365.25 * 24 * 60 * 60 * 1000
+  const fullYears = Math.floor((Date.now() - joinDate.getTime()) / msPerYear)
+  if (fullYears < 1) return 0
+  return 6 + (fullYears - 1)
+}
+
 /** 직원 관리용 직원 목록. userStore/userRole로 필터링 */
 export async function GET(req: Request) {
   const headers = new Headers()
@@ -59,10 +78,7 @@ export async function GET(req: Request) {
         pw: '', // 비밀번호는 클라이언트에 전달하지 않음 (변경 시에만 입력)
         role: r.role || 'Staff',
         email: r.email || '',
-        annualLeaveDays:
-          r.annual_leave_days != null && r.annual_leave_days !== ''
-            ? Number(r.annual_leave_days)
-            : 15,
+        annualLeaveDays: getAnnualLeaveDaysForDisplay(r),
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',
         positionAllowance: r.position_allowance != null ? Number(r.position_allowance) : 0,

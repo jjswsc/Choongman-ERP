@@ -172,7 +172,7 @@ function updateCart(type){
         else if (o.status === "Approved" && o.deliveryStatus === "배송중") deliveryStatusBadge = "<span class=\"status-badge\" style=\"background:#2196F3;margin-left:4px;\">" + statusInTransit + "</span>";
         var btn = o.status == "Approved" && o.deliveryStatus !== "배송완료" && o.deliveryStatus !== "배송 완료" ? "<button class=\"login-btn\" style=\"padding:8px;margin-top:5px;background:#E91E63;\" onclick=\"doReceive(" + o.id + ")\">" + recTxt + "</button>" : ""; 
         var items = "<div class='detail-list'>"; 
-        o.items.forEach(function(i) { items += "<div class='detail-item'><span>" + i.name + "</span><span>x" + i.qty + "</span></div>"; }); 
+        o.items.forEach(function(i) { var dispQty = (i.receivedQty != null ? i.receivedQty : i.qty); items += "<div class='detail-item'><span>" + i.name + "</span><span>x" + dispQty + "</span></div>"; }); 
         items += "</div>"; 
         var orderDateLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_order_date) ? I18N[currentLang].m_order_date : "주문 일자";
         var deliveryDateLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_delivery_date) ? I18N[currentLang].m_delivery_date : "배송 일자";

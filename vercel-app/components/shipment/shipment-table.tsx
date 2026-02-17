@@ -199,7 +199,7 @@ function TableRow({
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
 }) {
-  const hasDetails = row.items.length > 1
+  const hasDetails = row.items.length >= 1
   const orderBadge = getOrderTypeBadge(row.type)
   const outboundBadge = getOutboundTypeBadge(row.deliveryStatus)
 

@@ -1040,12 +1040,24 @@ function getMyOrderHistory(store, startStr, endStr) {
     for (var i = 0; i < orderRows.length; i++) {
       var o = orderRows[i];
       var cart = []; try { cart = JSON.parse(o.cart_json || "[]"); } catch (e) { }
+      var receivedIndices = [];
+      try { if (o.received_indices) receivedIndices = JSON.parse(o.received_indices || "[]"); } catch (e) { }
+      var receivedQtyMap = {};
+      try { if (o.received_qty_json) receivedQtyMap = JSON.parse(o.received_qty_json || "{}"); } catch (e) { }
+      var isFullReceived = o.delivery_status === "배송완료" || o.delivery_status === "배송 완료";
+      var items = cart.map(function(it, idx) {
+        var origQty = Number(it.qty || 0);
+        var isReceived = isFullReceived || receivedIndices.indexOf(idx) !== -1;
+        var recQty = receivedQtyMap[String(idx)] ?? receivedQtyMap[idx];
+        var effectiveQty = (isReceived && typeof recQty === "number") ? recQty : origQty;
+        return Object.assign({}, it, { qty: origQty, receivedQty: isReceived ? effectiveQty : undefined });
+      });
       var summary = cart.length > 0 ? cart[0].name + (cart.length > 1 ? " 외 " + (cart.length - 1) + "건" : "") : "Items";
       var deliveryStatus = o.delivery_status || (o.status === "Approved" ? "배송중" : "");
       var deliveryDate = (o.delivery_date || "").trim();
       var orderDate = o.order_date ? new Date(o.order_date) : new Date();
       var userName = String(o.user_name || "").trim() || undefined;
-      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: cart, userName: userName });
+      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: items, userName: userName });
     }
     return list;
   } catch (e) {

@@ -92,6 +92,11 @@ function loginCheck(store, name, pw, isAdminPage) {
     var rows = supabaseSelectFilter('employees', filter);
     if (!rows || rows.length === 0) return { success: false, message: "Login Failed" };
     var row = rows[0];
+    var resignStr = row.resign_date ? String(row.resign_date).trim().slice(0, 10) : '';
+    if (resignStr) {
+      var todayStr = Utilities.formatDate(new Date(), "GMT+7", "yyyy-MM-dd");
+      if (todayStr > resignStr) return { success: false, message: "퇴사된 계정은 사용할 수 없습니다." };
+    }
     var sheetPw = String(row.password || '').trim();
     if (sheetPw !== iPw) return { success: false, message: "Login Failed" };
     var rawRole = String(row.role || '').toLowerCase().replace(/\./g, '');

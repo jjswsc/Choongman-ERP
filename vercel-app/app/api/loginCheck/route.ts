@@ -17,12 +17,19 @@ export async function POST(req: NextRequest) {
     const { store, name, pw, isAdminPage } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string }[]
+    const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string; resign_date?: string | null }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }
 
     const row = rows[0]
+    const resignStr = row.resign_date ? String(row.resign_date).trim().slice(0, 10) : ''
+    if (resignStr) {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      if (todayStr > resignStr) {
+        return NextResponse.json({ success: false, message: '퇴사된 계정은 사용할 수 없습니다.' }, { headers })
+      }
+    }
     const storedPw = String(row.password || '').trim()
     const ok = await verifyPassword(pw, storedPw)
     if (!ok) {
