@@ -1073,6 +1073,7 @@ export interface AdminVendor {
   phone: string
   email: string
   address: string
+  tax_no?: string
   type: 'purchase' | 'sales' | 'both'
   memo: string
 }
@@ -1124,6 +1125,7 @@ export async function saveVendor(params: {
   phone?: string
   email?: string
   address?: string
+  tax_no?: string
   type?: string
   memo?: string
   editingCode?: string

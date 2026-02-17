@@ -22,6 +22,7 @@ export async function GET() {
       manager?: string
       phone?: string
       addr?: string
+      tax_id?: string
       memo?: string
       gps_name?: string
     }[] | null
@@ -40,6 +41,7 @@ export async function GET() {
           phone: String(row.phone || ''),
           email: '',
           address: String(row.addr || ''),
+          tax_no: String((row as { tax_id?: string }).tax_id || '').trim() || undefined,
           type: t,
           memo: String(row.memo || ''),
         }

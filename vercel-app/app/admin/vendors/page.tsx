@@ -18,6 +18,7 @@ const emptyForm: VendorFormData = {
   phone: "",
   email: "",
   address: "",
+  tax_no: "",
   type: "purchase",
   memo: "",
 }
@@ -57,6 +58,7 @@ export default function VendorsPage() {
           phone: v.phone,
           email: v.email,
           address: v.address,
+          tax_no: v.tax_no ?? "",
           type: v.type,
           memo: v.memo,
         })
@@ -85,6 +87,7 @@ export default function VendorsPage() {
       phone: formData.phone.trim(),
       email: formData.email.trim(),
       address: formData.address.trim(),
+      tax_no: formData.tax_no.trim() || undefined,
       type: formData.type,
       memo: formData.memo.trim(),
       editingCode: editingCode || undefined,
@@ -101,6 +104,7 @@ export default function VendorsPage() {
       phone: formData.phone.trim(),
       email: formData.email.trim(),
       address: formData.address.trim(),
+      tax_no: formData.tax_no.trim() || undefined,
       type: formData.type,
       memo: formData.memo.trim(),
     }
@@ -124,6 +128,7 @@ export default function VendorsPage() {
       phone: vendor.phone,
       email: vendor.email,
       address: vendor.address,
+      tax_no: vendor.tax_no ?? "",
       type: vendor.type,
       memo: vendor.memo,
     })

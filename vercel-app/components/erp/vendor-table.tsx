@@ -30,6 +30,7 @@ export interface Vendor {
   phone: string
   email: string
   address: string
+  tax_no?: string
   type: "purchase" | "sales" | "both"
   memo: string
 }

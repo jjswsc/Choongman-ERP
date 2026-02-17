@@ -14,6 +14,7 @@ import {
   MapPin,
   RotateCcw,
   Map,
+  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,6 +34,7 @@ export interface VendorFormData {
   phone: string
   email: string
   address: string
+  tax_no: string
   type: "purchase" | "sales" | "both"
   memo: string
 }
@@ -152,6 +154,19 @@ export function VendorForm({ formData, setFormData, isEditing, onSave, onReset, 
             className="h-10 text-sm"
             value={formData.address}
             onChange={(e) => update("address", e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+            {t("vendorTaxNo")}
+          </label>
+          <Input
+            placeholder={t("vendorTaxNoPh")}
+            className="h-10 text-sm"
+            value={formData.tax_no}
+            onChange={(e) => update("tax_no", e.target.value)}
           />
         </div>
 

@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
       phone?: string
       email?: string
       address?: string
+      tax_no?: string
       type?: string
       memo?: string
       editingCode?: string
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       manager: String(body.contact || '').trim(),
       phone: String(body.phone || '').trim(),
       addr: String(body.address || '').trim(),
+      tax_id: String(body.tax_no || '').trim() || null,
       memo: String(body.memo || '').trim(),
     }
 
