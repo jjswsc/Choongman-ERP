@@ -638,6 +638,9 @@ export function OrderTab() {
                           <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
+                              {o.userName && (
+                                <span className="text-xs text-muted-foreground">({t("orderOrderedBy") || "발주자"} {o.userName})</span>
+                              )}
                               {o.deliveryDate && (
                                 <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
                               )}
@@ -694,7 +697,7 @@ export function OrderTab() {
                                       />
                                     </div>
                                   ) : (
-                                    <span className="text-muted-foreground shrink-0">× {it.qty ?? "-"}</span>
+                                    <span className="text-muted-foreground shrink-0">× {it.receivedQty ?? it.qty ?? "-"}</span>
                                   )}
                                   {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
                                 </div>

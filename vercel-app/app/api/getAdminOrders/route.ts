@@ -53,12 +53,15 @@ export async function GET(request: NextRequest) {
       id: number
       order_date?: string
       store_name?: string
+      user_name?: string
       cart_json?: string
       total?: number
       status?: string
       delivery_status?: string
       delivery_date?: string
       received_indices?: string
+      approved_indices?: string
+      approved_original_qty_json?: string
     }[]
 
     const list = (rowsTyped || []).map((o) => {
@@ -74,6 +77,14 @@ export async function GET(request: NextRequest) {
       try {
         if (o.received_indices) receivedIndices = JSON.parse(o.received_indices)
       } catch {}
+      let approvedOriginalQtyMap: Record<string, number> = {}
+      try {
+        if (o.approved_original_qty_json) approvedOriginalQtyMap = JSON.parse(o.approved_original_qty_json) || {}
+      } catch {}
+      const itemsWithOriginal = items.map((it, idx) => ({
+        ...it,
+        originalQty: approvedOriginalQtyMap[String(idx)] ?? it.qty,
+      }))
       const summary =
         items.length > 0
           ? (items[0].name || '') + (items.length > 1 ? ` 외 ${items.length - 1}건` : '')
@@ -85,11 +96,12 @@ export async function GET(request: NextRequest) {
         orderId: o.id,
         date: dateStr,
         store: o.store_name || '',
+        userName: String(o.user_name || '').trim() || undefined,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
         deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),
         deliveryDate: String(o.delivery_date || '').trim(),
-        items,
+        items: itemsWithOriginal,
         summary,
         receivedIndices,
       }

@@ -194,8 +194,9 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus?: string
-  items: { name?: string; qty?: number; price?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
+  userName?: string
 }
 
 export async function getMyOrderHistory(params: {
@@ -263,11 +264,12 @@ export interface AdminOrderItem {
   orderId: number
   date: string
   store: string
+  userName?: string
   total: number
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
+  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1824,7 +1826,8 @@ export interface PurchaseOrderRow {
 
 export async function getPurchaseOrders() {
   const res = await apiFetch('/api/getPurchaseOrders')
-  return res.json() as Promise<PurchaseOrderRow[]>
+  const data = await res.json()
+  return Array.isArray(data) ? data : []
 }
 
 export async function getMenuPermission(store: string, name: string) {

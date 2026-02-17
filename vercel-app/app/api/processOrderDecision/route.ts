@@ -48,24 +48,56 @@ export async function POST(request: NextRequest) {
     if (decision === 'Approved') patch.delivery_status = '배송중'
 
     if (decision === 'Approved' && updatedCart && updatedCart.length > 0) {
-      const validCart = updatedCart
-        .filter((i: { code?: string; name?: string; price?: number; qty?: number }) => i && (i.code || i.name))
-        .map((i: { code?: string; name?: string; price?: number; qty?: number; spec?: string }) => ({
-          code: String(i.code ?? ''),
-          name: String(i.name ?? ''),
-          price: Number(i.price ?? 0),
-          qty: Math.max(0, Math.floor(Number(i.qty ?? 0) || 0)),
-          spec: String(i.spec ?? ''),
-        }))
-        .filter((i: { qty: number }) => i.qty > 0)
-      if (validCart.length > 0) {
+      type CartItem = { code?: string; name?: string; price?: number; qty?: number; spec?: string; checked?: boolean; originalQty?: number }
+      const existingOrder = orders[0] as { cart_json?: string }
+      let origCart: { qty?: number }[] = []
+      try { origCart = JSON.parse(existingOrder.cart_json || '[]') } catch {}
+      const fullCart = updatedCart
+        .filter((i: CartItem) => i && (i.code || i.name))
+        .map((i: CartItem, idx: number) => {
+          const qty = Math.max(0, Math.floor(Number(i.qty ?? 0) || 0))
+          const origQty = Number(origCart[idx]?.qty ?? i.originalQty ?? i.qty ?? 0)
+          return {
+            code: String(i.code ?? ''),
+            name: String(i.name ?? ''),
+            price: Number(i.price ?? 0),
+            qty,
+            spec: String(i.spec ?? ''),
+            _origQty: origQty,
+          }
+        })
+      const approvedIndices: number[] = []
+      updatedCart.forEach((i: CartItem, idx: number) => {
+        if (i && (i.code || i.name) && i.checked && (Number(i.qty ?? 0) || 0) > 0) {
+          approvedIndices.push(idx)
+        }
+      })
+      const isPartialApproval = approvedIndices.length > 0 && approvedIndices.length < fullCart.length
+      if (fullCart.length > 0) {
         let subtotal = 0
-        validCart.forEach((i: { price: number; qty: number }) => { subtotal += i.price * i.qty })
+        approvedIndices.forEach((idx) => {
+          const it = fullCart[idx]
+          if (it) subtotal += it.price * it.qty
+        })
         const vat = Math.round(subtotal * 0.07)
-        patch.cart_json = JSON.stringify(validCart)
+        const cartForStorage = fullCart.map(({ _origQty, ...rest }) => rest)
+        patch.cart_json = JSON.stringify(cartForStorage)
         patch.subtotal = subtotal
         patch.vat = vat
         patch.total = subtotal + vat
+        if (isPartialApproval) {
+          patch.delivery_status = '일부배송완료'
+          patch.approved_indices = JSON.stringify(approvedIndices.sort((a, b) => a - b))
+        }
+        const originalQtyMap: Record<string, number> = {}
+        fullCart.forEach((it, idx) => {
+          if (it._origQty !== undefined && it._origQty !== it.qty) {
+            originalQtyMap[String(idx)] = it._origQty
+          }
+        })
+        if (Object.keys(originalQtyMap).length > 0) {
+          patch.approved_original_qty_json = JSON.stringify(originalQtyMap)
+        }
       }
     }
 

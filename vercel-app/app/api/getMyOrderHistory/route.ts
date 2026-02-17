@@ -10,8 +10,9 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus: string
-  items: { name?: string; qty?: number; price?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
+  userName?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest) {
       status?: string
       delivery_status?: string
       received_indices?: string
+      received_qty_json?: string
+      user_name?: string
     }[]
 
     const list: OrderHistoryItem[] = (rows || []).map((o) => {
@@ -55,6 +58,18 @@ export async function GET(request: NextRequest) {
       try {
         if (o.received_indices) receivedIndices = JSON.parse(o.received_indices)
       } catch {}
+      let receivedQtyMap: Record<string, number> = {}
+      try {
+        if (o.received_qty_json) receivedQtyMap = JSON.parse(o.received_qty_json) || {}
+      } catch {}
+      const isFullReceived = o.delivery_status === '배송완료' || o.delivery_status === '배송 완료'
+      const items = cart.map((it, idx) => {
+        const origQty = Number(it.qty || 0)
+        const recQty = receivedQtyMap[String(idx)] ?? receivedQtyMap[idx]
+        const isReceived = receivedIndices.includes(idx) || isFullReceived
+        const effectiveQty = isReceived && typeof recQty === 'number' ? recQty : origQty
+        return { ...it, qty: origQty, receivedQty: isReceived ? effectiveQty : undefined }
+      })
       const summary =
         cart.length > 0
           ? (cart[0].name || '') + (cart.length > 1 ? ` 외 ${cart.length - 1}건` : '')
@@ -69,8 +84,9 @@ export async function GET(request: NextRequest) {
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
         deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? (o.delivery_status === '일부 배송 완료' ? '일부배송완료' : o.delivery_status) ?? (o.status === 'Approved' ? '배송중' : ''),
-        items: cart,
+        items,
         receivedIndices,
+        userName: String(o.user_name || '').trim() || undefined,
       }
     })
 

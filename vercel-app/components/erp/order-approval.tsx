@@ -39,6 +39,7 @@ interface OrderItem {
   spec: string
   unitPrice: number
   qty: number
+  originalQty: number
   hqStock: number
   storeStock: number
   hqSafeQty: number
@@ -54,6 +55,7 @@ interface Order {
   orderDate: string
   deliveryDate: string
   store: string
+  userName?: string
   summary: string
   totalAmount: number
   status: OrderStatus
@@ -82,12 +84,14 @@ function mapApiToOrder(
   const items: OrderItem[] = (api.items || []).map((it) => {
     const price = Number(it.price) || 0
     const qty = Number(it.qty) || 0
+    const origQty = typeof it.originalQty === 'number' ? it.originalQty : qty
     const code = it.code || ""
     return {
       name: it.name || "-",
       spec: it.spec || "",
       unitPrice: price,
       qty,
+      originalQty: origQty,
       hqStock: code ? (hqStock[code] ?? 0) : 0,
       storeStock: code ? (storeStock[code] ?? 0) : 0,
       hqSafeQty: hqSafeMap[code] ?? 0,
@@ -104,6 +108,7 @@ function mapApiToOrder(
     orderDate: api.date,
     deliveryDate: api.deliveryDate || "-",
     store: api.store,
+    userName: api.userName,
     summary: api.summary,
     totalAmount: api.total,
     status: status in statusConfig ? status : "Pending",
@@ -230,8 +235,11 @@ export function OrderApproval() {
       const order = orders.find((o) => o.id === orderId)
       if (!order) return prev
       const base = prev[orderId] ?? order.items
+      const newQty = updates.qty ?? base[itemIndex]?.qty
       const next = base.map((it, i) =>
-        i === itemIndex ? { ...it, ...updates, total: it.unitPrice * (updates.qty ?? it.qty) } : it
+        i === itemIndex
+          ? { ...it, ...updates, qty: newQty ?? it.qty, total: it.unitPrice * (newQty ?? it.qty) }
+          : it
       )
       return { ...prev, [orderId]: next }
     })
@@ -252,12 +260,14 @@ export function OrderApproval() {
       alert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
       return
     }
-    const updatedCart = selectedItems.map((it) => ({
+    const updatedCart = displayItems.map((it) => ({
       code: it.code,
       name: it.name,
       spec: it.spec,
       price: it.unitPrice,
       qty: it.qty,
+      checked: it.checked,
+      originalQty: it.originalQty,
     }))
     setSubmittingId(idStr)
     try {
@@ -277,7 +287,7 @@ export function OrderApproval() {
         if (decision !== "Approved") {
           return prev.map((o) => (o.orderId === orderId ? { ...o, status: decision } : o))
         }
-        const sub = updatedCart.reduce((s, it) => s + it.price * it.qty, 0)
+        const sub = selectedItems.reduce((s, it) => s + it.unitPrice * it.qty, 0)
         const vat = Math.round(sub * 0.07)
         const newTotal = sub + vat
         return prev.map((o) =>
@@ -303,6 +313,7 @@ export function OrderApproval() {
       (o) =>
         o.id.toLowerCase().includes(q) ||
         o.store.toLowerCase().includes(q) ||
+        (o.userName || '').toLowerCase().includes(q) ||
         o.summary.toLowerCase().includes(q)
     )
   }, [orders, searchTerm])
@@ -391,7 +402,7 @@ export function OrderApproval() {
 
       {/* Order table */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-        <div className="grid grid-cols-[40px_36px_1fr_120px_100px_1fr_130px_100px] items-center gap-0 border-b bg-muted/40 px-4 py-3">
+        <div className="grid grid-cols-[40px_36px_1fr_120px_100px_90px_1fr_130px_100px] items-center gap-0 border-b bg-muted/40 px-4 py-3">
           <div className="flex items-center justify-center">
             <Checkbox checked={allChecked} onCheckedChange={toggleAll} className="h-4 w-4" />
           </div>
@@ -404,6 +415,9 @@ export function OrderApproval() {
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
             {t("orderColStore")}
+          </span>
+          <span className="text-[11px] font-bold text-muted-foreground">
+            {t("orderOrderedBy") || "발주자"}
           </span>
           <span className="text-[11px] font-bold text-muted-foreground">
             {t("orderColSummary")}
@@ -436,7 +450,7 @@ export function OrderApproval() {
                 >
                   <div
                     className={cn(
-                      "grid grid-cols-[40px_36px_1fr_120px_100px_1fr_130px_100px] items-center gap-0 px-4 py-3 cursor-pointer",
+                      "grid grid-cols-[40px_36px_1fr_120px_100px_90px_1fr_130px_100px] items-center gap-0 px-4 py-3 cursor-pointer",
                       "border-b",
                       isExpanded && "border-b-0"
                     )}
@@ -473,6 +487,7 @@ export function OrderApproval() {
                     </span>
                     <span className="text-xs text-muted-foreground">{order.deliveryDate}</span>
                     <span className="text-xs font-semibold text-foreground">{order.store}</span>
+                    <span className="text-xs text-muted-foreground truncate">{order.userName || "-"}</span>
                     <span className="text-xs text-muted-foreground truncate">{order.summary}</span>
                     <span className="text-sm font-bold tabular-nums text-primary text-right">
                       {order.totalAmount.toLocaleString()} ฿
@@ -563,23 +578,33 @@ export function OrderApproval() {
                                           className="h-3.5 w-3.5"
                                         />
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs font-medium text-foreground min-w-[120px]">
-                                        {item.name}
+                                      <td className="px-3 py-2.5 text-xs font-medium min-w-[120px]">
+                                        <span className={item.qty !== item.originalQty ? "text-destructive" : "text-foreground"}>
+                                          {item.name}
+                                        </span>
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs text-muted-foreground w-36 min-w-[80px] whitespace-nowrap">
-                                        {item.spec || "-"}
+                                      <td className="px-3 py-2.5 text-xs w-36 min-w-[80px] whitespace-nowrap">
+                                        <span className={item.qty !== item.originalQty ? "text-destructive" : "text-muted-foreground"}>
+                                          {item.spec || "-"}
+                                        </span>
                                       </td>
-                                      <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-foreground text-right">
-                                        {item.unitPrice > 0
-                                          ? item.unitPrice.toLocaleString()
-                                          : "0"}
+                                      <td className="px-3 py-2.5 text-right">
+                                        <span className={cn(
+                                          "text-xs font-semibold tabular-nums",
+                                          item.qty !== item.originalQty ? "text-destructive" : "text-foreground"
+                                        )}>
+                                          {item.unitPrice > 0 ? item.unitPrice.toLocaleString() : "0"}
+                                        </span>
                                       </td>
                                       <td className="px-3 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                         {canEdit ? (
                                           <Input
                                             type="number"
                                             min={0}
-                                            className="h-7 w-14 text-center text-xs tabular-nums"
+                                            className={cn(
+                                              "h-7 w-14 text-center text-xs tabular-nums",
+                                              item.qty !== item.originalQty && "text-destructive"
+                                            )}
                                             value={item.qty}
                                             onChange={(e) => {
                                               const v = parseInt(e.target.value, 10)
@@ -587,7 +612,10 @@ export function OrderApproval() {
                                             }}
                                           />
                                         ) : (
-                                          <span className="text-xs font-bold tabular-nums text-foreground">
+                                          <span className={cn(
+                                            "text-xs font-bold tabular-nums",
+                                            item.qty !== item.originalQty ? "text-destructive" : "text-foreground"
+                                          )}>
                                             {item.qty}
                                           </span>
                                         )}
@@ -625,7 +653,10 @@ export function OrderApproval() {
                                         </span>
                                       </td>
                                       <td className="px-3 py-2.5 text-right">
-                                        <span className="text-xs font-bold tabular-nums text-foreground">
+                                        <span className={cn(
+                                          "text-xs font-bold tabular-nums",
+                                          item.qty !== item.originalQty ? "text-destructive" : "text-foreground"
+                                        )}>
                                           {(item.unitPrice * item.qty > 0
                                             ? (item.unitPrice * item.qty).toLocaleString()
                                             : "0")}

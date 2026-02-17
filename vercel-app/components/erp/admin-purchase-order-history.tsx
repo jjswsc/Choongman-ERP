@@ -17,7 +17,7 @@ export function AdminPurchaseOrderHistory() {
   const load = React.useCallback(() => {
     setLoading(true)
     getPurchaseOrders()
-      .then((rows) => setList(rows || []))
+      .then((rows) => setList(Array.isArray(rows) ? rows : []))
       .catch(() => setList([]))
       .finally(() => setLoading(false))
   }, [])
