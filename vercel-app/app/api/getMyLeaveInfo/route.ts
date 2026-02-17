@@ -8,11 +8,11 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
-/** 연차일 수: 직원관리에서 직접 입력한 값 우선, null이면 입사 1년 이상 6일/그 외 0일 */
+/** 연차일 수: 직원관리에서 직접 입력한 값 우선(0은 제외, 미입력으로 간주), null이면 입사 1년 이상 6일/그 외 0일 */
 function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
   if (!emp) return 0
   const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
-  if (directVal != null) {
+  if (directVal != null && directVal !== '' && Number(directVal) > 0) {
     const direct = Number(directVal)
     if (!Number.isNaN(direct) && direct >= 0) return direct
   }
