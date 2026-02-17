@@ -9,17 +9,19 @@ function toDateStr(val: string | Date | null | undefined): string {
 }
 
 /** 연차일 수: 직원관리에서 직접 입력한 값 우선, null이면 입사 1년 이상 6일/그 외 0일 */
-function getAnnualLeaveDays(
-  emp: { annual_leave_days?: number | null; join_date?: string | Date | null } | null
-): number {
+function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
   if (!emp) return 0
-  if (emp.annual_leave_days != null) {
-    const direct = Number(emp.annual_leave_days)
+  const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
+  if (directVal != null) {
+    const direct = Number(directVal)
     if (!Number.isNaN(direct) && direct >= 0) return direct
   }
-  if (!emp.join_date) return 0
-  const joinStr = toDateStr(emp.join_date)
+  const joinVal = emp.join_date ?? emp.joinDate
+  if (joinVal == null || (typeof joinVal === 'string' && !joinVal.trim())) return 0
+  const joinStr = toDateStr(joinVal)
+  if (!joinStr) return 0
   const joinDate = new Date(joinStr + 'T12:00:00')
+  if (isNaN(joinDate.getTime())) return 0
   const oneYearAgo = new Date()
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
   return joinDate <= oneYearAgo ? 6 : 0
