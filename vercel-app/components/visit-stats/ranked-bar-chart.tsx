@@ -13,7 +13,7 @@ import {
   LabelList,
 } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { formatMinutes } from "@/lib/visit-data"
+import { formatMinutesWithT } from "@/lib/visit-data"
 
 type RankedBarChartProps = {
   title: string
@@ -52,12 +52,12 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
               axisLine={false}
               tickLine={false}
             />
-            <ChartTooltip
-              content={
+                <ChartTooltip
+                content={
                 <ChartTooltipContent
                   formatter={(value, name, item) => (
                     <span className="text-foreground font-medium">
-                      {formatMinutes(Number(value))} ({Number(item.payload?.visits ?? 0)}{t("visit_count_suffix")})
+                      {formatMinutesWithT(Number(value), t)} ({Number(item.payload?.visits ?? 0)}{t("visit_count_suffix")})
                     </span>
                   )}
                 />
@@ -72,7 +72,7 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
               <LabelList
                 dataKey="totalMin"
                 position="right"
-                formatter={(v: number) => formatMinutes(v)}
+                formatter={(v: number) => formatMinutesWithT(v, t)}
                 style={{ fontSize: 11, fill: "hsl(220, 8%, 46%)" }}
               />
             </Bar>

@@ -31,7 +31,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function StatsBlock({ items, maxMin }: { items: StoreVisitStatsItem[]; maxMin: number }) {
+function StatsBlock({ items, maxMin, minUnit }: { items: StoreVisitStatsItem[]; maxMin: number; minUnit: string }) {
   if (items.length === 0) return <p className="text-xs text-muted-foreground py-4">-</p>
   const m = Math.max(maxMin, 1)
   return (
@@ -49,7 +49,7 @@ function StatsBlock({ items, maxMin }: { items: StoreVisitStatsItem[]; maxMin: n
                       style={{ width: `${(it.minutes / m) * 100}%` }}
                     />
                   </div>
-                  <span className="shrink-0 font-medium w-12 text-right">{it.minutes}분</span>
+                  <span className="shrink-0 font-medium w-12 text-right">{it.minutes}{minUnit}</span>
                 </div>
               </td>
             </tr>
@@ -242,6 +242,7 @@ export function AdminStoreVisit() {
                       <SelectItem value="직원 교육">{t("visitPurposeTraining")}</SelectItem>
                       <SelectItem value="긴급 지원">{t("visitPurposeUrgent")}</SelectItem>
                       <SelectItem value="매장 미팅">{t("visitPurposeMeeting")}</SelectItem>
+                      <SelectItem value="물건 배송">{t("visitPurposeDelivery")}</SelectItem>
                       <SelectItem value="기타">{t("visitPurposeEtc")}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -282,7 +283,7 @@ export function AdminStoreVisit() {
                             <td className="p-2 text-center">{h.store}</td>
                             <td className="p-2 text-center">{h.type}</td>
                             <td className="p-2 text-center">{h.purpose || "-"}</td>
-                            <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}분` : "-"}</td>
+                            <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}${t("att_min_unit")}` : "-"}</td>
                           </tr>
                         ))
                       )}
@@ -348,28 +349,28 @@ export function AdminStoreVisit() {
                         <tr key={"dept-" + it.label} className="border-b border-border/40">
                           <td className="p-2">{t("visit_chart_dept")}</td>
                           <td className="p-2 font-medium">{it.label}</td>
-                          <td className="p-2 text-right">{it.minutes}분</td>
+                          <td className="p-2 text-right">{it.minutes}{t("att_min_unit")}</td>
                         </tr>
                       ))}
                       {statsShowEmployee && statsData.byEmployee.map((it) => (
                         <tr key={"emp-" + it.label} className="border-b border-border/40">
                           <td className="p-2">{t("visit_chart_employee")}</td>
                           <td className="p-2 font-medium">{it.label}</td>
-                          <td className="p-2 text-right">{it.minutes}분</td>
+                          <td className="p-2 text-right">{it.minutes}{t("att_min_unit")}</td>
                         </tr>
                       ))}
                       {statsShowStore && statsData.byStore.map((it) => (
                         <tr key={"store-" + it.label} className="border-b border-border/40">
                           <td className="p-2">{t("visit_chart_store")}</td>
                           <td className="p-2 font-medium">{it.label}</td>
-                          <td className="p-2 text-right">{it.minutes}분</td>
+                          <td className="p-2 text-right">{it.minutes}{t("att_min_unit")}</td>
                         </tr>
                       ))}
                       {statsShowPurpose && statsData.byPurpose.map((it) => (
                         <tr key={"purpose-" + it.label} className="border-b border-border/40">
                           <td className="p-2">{t("visit_chart_purpose")}</td>
                           <td className="p-2 font-medium">{it.label}</td>
-                          <td className="p-2 text-right">{it.minutes}분</td>
+                          <td className="p-2 text-right">{it.minutes}{t("att_min_unit")}</td>
                         </tr>
                       ))}
                       {!statsLoading && !statsError && statsData.byDept.length === 0 && statsData.byEmployee.length === 0 && statsData.byStore.length === 0 && statsData.byPurpose.length === 0 && (
@@ -384,25 +385,25 @@ export function AdminStoreVisit() {
                   {statsShowDept && (
                     <div className="rounded-lg border p-4">
                       <h6 className="font-semibold text-primary mb-3 text-sm">{t("visit_chart_dept")}</h6>
-                      <StatsBlock items={statsData.byDept} maxMin={maxMinutes} />
+                      <StatsBlock items={statsData.byDept} maxMin={maxMinutes} minUnit={t("att_min_unit")} />
                     </div>
                   )}
                   {statsShowEmployee && (
                     <div className="rounded-lg border p-4">
                       <h6 className="font-semibold text-green-600 dark:text-green-500 mb-3 text-sm">{t("visit_chart_employee")}</h6>
-                      <StatsBlock items={statsData.byEmployee} maxMin={maxMinutes} />
+                      <StatsBlock items={statsData.byEmployee} maxMin={maxMinutes} minUnit={t("att_min_unit")} />
                     </div>
                   )}
                   {statsShowStore && (
                     <div className="rounded-lg border p-4">
                       <h6 className="font-semibold text-blue-600 dark:text-blue-500 mb-3 text-sm">{t("visit_chart_store")}</h6>
-                      <StatsBlock items={statsData.byStore} maxMin={maxMinutes} />
+                      <StatsBlock items={statsData.byStore} maxMin={maxMinutes} minUnit={t("att_min_unit")} />
                     </div>
                   )}
                   {statsShowPurpose && (
                     <div className="rounded-lg border p-4">
                       <h6 className="font-semibold text-amber-600 dark:text-amber-500 mb-3 text-sm">{t("visit_chart_purpose")}</h6>
-                      <StatsBlock items={statsData.byPurpose} maxMin={maxMinutes} />
+                      <StatsBlock items={statsData.byPurpose} maxMin={maxMinutes} minUnit={t("att_min_unit")} />
                     </div>
                   )}
                   {!statsShowDept && !statsShowEmployee && !statsShowStore && !statsShowPurpose && (

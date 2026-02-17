@@ -142,6 +142,7 @@ export function VisitListTab() {
               <SelectItem value="직원 교육">{t("visitPurposeTraining")}</SelectItem>
               <SelectItem value="긴급 지원">{t("visitPurposeUrgent")}</SelectItem>
               <SelectItem value="매장 미팅">{t("visitPurposeMeeting")}</SelectItem>
+              <SelectItem value="물건 배송">{t("visitPurposeDelivery")}</SelectItem>
               <SelectItem value="기타">{t("visitPurposeEtc")}</SelectItem>
             </SelectContent>
           </Select>
@@ -182,7 +183,7 @@ export function VisitListTab() {
                     <td className="p-2 text-center">{h.store}</td>
                     <td className="p-2 text-center">{h.type}</td>
                     <td className="p-2 text-center">{h.purpose || "-"}</td>
-                    <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}분` : "-"}</td>
+                    <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}${t("att_min_unit")}` : "-"}</td>
                   </tr>
                 ))
               )}

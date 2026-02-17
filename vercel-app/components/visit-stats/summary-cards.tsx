@@ -1,7 +1,7 @@
 "use client"
 
 import { Clock, MapPin, Users, Target } from "lucide-react"
-import { formatMinutes } from "@/lib/visit-data"
+import { formatMinutesWithT } from "@/lib/visit-data"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -18,7 +18,7 @@ export function SummaryCards({ totalMin, totalVisits, uniqueStores, uniqueEmploy
   const cards = [
     {
       label: t("visit_summary_total"),
-      value: formatMinutes(totalMin),
+      value: formatMinutesWithT(totalMin, t),
       sub: `${totalVisits}${t("visit_count_suffix")}`,
       icon: Clock,
       accent: "#2563eb",
@@ -27,7 +27,7 @@ export function SummaryCards({ totalMin, totalVisits, uniqueStores, uniqueEmploy
     {
       label: t("visit_summary_stores"),
       value: `${uniqueStores}${t("visit_summary_count")}`,
-      sub: `${t("visit_summary_stores_sub")} ${formatMinutes(Math.round(totalMin / (uniqueStores || 1)))}`,
+      sub: `${t("visit_summary_stores_sub")} ${formatMinutesWithT(Math.round(totalMin / (uniqueStores || 1)), t)}`,
       icon: MapPin,
       accent: "#059669",
       bg: "#ecfdf5",
@@ -35,14 +35,14 @@ export function SummaryCards({ totalMin, totalVisits, uniqueStores, uniqueEmploy
     {
       label: t("visit_summary_employees"),
       value: `${uniqueEmployees}${t("visit_summary_count_people")}`,
-      sub: `${t("visit_summary_employees_sub")} ${formatMinutes(Math.round(totalMin / (uniqueEmployees || 1)))}`,
+      sub: `${t("visit_summary_employees_sub")} ${formatMinutesWithT(Math.round(totalMin / (uniqueEmployees || 1)), t)}`,
       icon: Users,
       accent: "#d97706",
       bg: "#fffbeb",
     },
     {
       label: t("visit_summary_avg"),
-      value: formatMinutes(Math.round(totalMin / (totalVisits || 1))),
+      value: formatMinutesWithT(Math.round(totalMin / (totalVisits || 1)), t),
       sub: `${totalVisits}${t("visit_count_suffix")} ${t("visit_summary_avg_sub")}`,
       icon: Target,
       accent: "#7c3aed",

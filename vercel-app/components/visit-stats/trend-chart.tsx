@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { formatMinutes } from "@/lib/visit-data"
+import { formatMinutesWithT } from "@/lib/visit-data"
 
 type TrendChartProps = {
   data: { week: string; totalMin: number; visits: number }[]
@@ -86,7 +86,7 @@ export function TrendChart({ data }: TrendChartProps) {
                 <ChartTooltipContent
                   formatter={(value, name) => (
                     <span className="text-foreground font-medium">
-                      {name === inputTimeLabel ? formatMinutes(Number(value)) : `${value}${t("visit_count_suffix")}`}
+                      {name === inputTimeLabel ? formatMinutesWithT(Number(value), t) : `${value}${t("visit_count_suffix")}`}
                     </span>
                   )}
                 />

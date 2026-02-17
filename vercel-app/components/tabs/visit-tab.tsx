@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ const VISIT_PURPOSES = [
   { value: "직원교육", labelKey: "visitPurposeTraining" },
   { value: "긴급지원", labelKey: "visitPurposeUrgent" },
   { value: "매장미팅", labelKey: "visitPurposeMeeting" },
+  { value: "물건배송", labelKey: "visitPurposeDelivery" },
   { value: "기타", labelKey: "visitPurposeEtc" },
 ]
 
@@ -47,6 +49,7 @@ export function VisitTab() {
   const [storeList, setStoreList] = useState<string[]>([])
   const [selectedStore, setSelectedStore] = useState("")
   const [purpose, setPurpose] = useState("정기점검")
+  const [purposeEtcReason, setPurposeEtcReason] = useState("")
   const [activeVisit, setActiveVisit] = useState<{ storeName: string; purpose?: string } | null>(null)
   const [visitLog, setVisitLog] = useState<TodayVisitItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -122,18 +125,21 @@ export function VisitTab() {
           : false
 
       const visitType = useForce ? forceType : type
+      const purposeToSend = purpose === "기타" && purposeEtcReason.trim()
+        ? `기타: ${purposeEtcReason.trim()}`
+        : (purpose || "")
       const result = await submitStoreVisit({
         userName: auth.user,
         storeName: store,
         type: visitType,
-        purpose: purpose || "",
+        purpose: purposeToSend,
         lat,
         lng,
       })
 
       if (result.success) {
         if (visitType === "방문시작" || visitType === "강제 방문시작") {
-          setActiveVisit({ storeName: store, purpose })
+          setActiveVisit({ storeName: store, purpose: purposeToSend })
         } else {
           setActiveVisit(null)
         }
@@ -215,11 +221,11 @@ export function VisitTab() {
               <Target className="h-3.5 w-3.5" />
               {t("visitPurpose") || "방문 목적"}
             </label>
-            <Select value={purpose} onValueChange={setPurpose} disabled={!!activeVisit}>
+            <Select value={purpose} onValueChange={(v) => { setPurpose(v); if (v !== "기타") setPurposeEtcReason("") }} disabled={!!activeVisit}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper" sideOffset={4}>
                 {VISIT_PURPOSES.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {t(opt.labelKey) || opt.value}
@@ -227,6 +233,21 @@ export function VisitTab() {
                 ))}
               </SelectContent>
             </Select>
+            {purpose === "기타" && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {t("visitPurposeEtcLabel") || "기타 사유 (선택)"}
+                </label>
+                <Input
+                  value={purposeEtcReason}
+                  onChange={(e) => setPurposeEtcReason(e.target.value)}
+                  placeholder={t("visitPurposeEtcPlaceholder") || "사유 입력 (선택)"}
+                  className="h-9 text-sm min-h-[2.25rem]"
+                  disabled={!!activeVisit}
+                  autoComplete="off"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2">
@@ -293,7 +314,7 @@ export function VisitTab() {
                       <td className="px-2 py-1.5 text-center font-medium">{r.store || "-"}</td>
                       <td className="px-2 py-1.5 text-center">{translateVisitType(r.type, t)}</td>
                       <td className="px-2 py-1.5 text-center">
-                        {r.duration > 0 ? `${r.duration}분` : "-"}
+                        {r.duration > 0 ? `${r.duration}${t("att_min_unit")}` : "-"}
                       </td>
                     </tr>
                   ))}

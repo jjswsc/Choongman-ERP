@@ -236,7 +236,10 @@ export const i18n = {
     visitPurposeTraining: '직원 교육',
     visitPurposeUrgent: '긴급 지원',
     visitPurposeMeeting: '매장 미팅',
+    visitPurposeDelivery: '물건 배송',
     visitPurposeEtc: '기타',
+    visitPurposeEtcLabel: '기타 사유 (선택)',
+    visitPurposeEtcPlaceholder: '사유 입력 (선택)',
     visitStart: '방문 시작',
     visitEnd: '방문 종료',
     visitSupporting: '방문 중',
@@ -1098,6 +1101,7 @@ export const i18n = {
     att_status_break_ok: '휴게정상',
     att_ot_label: '연장',
     att_min_unit: '분',
+    att_hour_unit: '시간',
     att_select_store_login: '매장을 선택하고 로그인해 주세요.',
     adminRecentActivity: '최근 활동',
     adminNoNoticesFound: '조회된 공지가 없습니다.',
@@ -1597,7 +1601,10 @@ export const i18n = {
     visitPurposeTraining: 'Staff training',
     visitPurposeUrgent: 'Urgent support',
     visitPurposeMeeting: 'Store meeting',
+    visitPurposeDelivery: 'Goods delivery',
     visitPurposeEtc: 'Other',
+    visitPurposeEtcLabel: 'Other reason (optional)',
+    visitPurposeEtcPlaceholder: 'Enter reason (optional)',
     visitStart: 'Start Visit',
     visitEnd: 'End Visit',
     visitSupporting: 'Visiting',
@@ -2456,6 +2463,7 @@ export const i18n = {
     att_status_break_ok: 'Break OK',
     att_ot_label: 'OT',
     att_min_unit: ' min',
+    att_hour_unit: ' h',
     att_select_store_login: 'Please select a store and log in.',
     adminRecentActivity: 'Recent Activity',
     adminNoNoticesFound: 'No notices found.',
@@ -2939,7 +2947,7 @@ export const i18n = {
     scheduleDetail: 'บันทึกรายวัน',
     scheduleStatusNormal: 'ปกติ', scheduleStatusLate: 'สาย', scheduleStatusAbsent: 'ขาด', scheduleStatusHoliday: 'หยุด', scheduleStatusLeave: 'ลางาน',
     visitTitle: 'เยี่ยมสาขา', visitSub: 'บันทึกกิจกรรมสนับสนุนและฝึกอบรม', visitStore: 'สาขาที่เยี่ยม', visitStorePlaceholder: 'เลือกสาขา',
-    visitPurpose: 'วัตถุประสงค์', visitPurposeInspect: 'ตรวจสอบ', visitPurposeTraining: 'ฝึกอบรม', visitPurposeUrgent: 'สนับสนุนด่วน', visitPurposeMeeting: 'ประชุม', visitPurposeEtc: 'อื่นๆ',
+    visitPurpose: 'วัตถุประสงค์', visitPurposeInspect: 'ตรวจสอบ', visitPurposeTraining: 'ฝึกอบรม', visitPurposeUrgent: 'สนับสนุนด่วน', visitPurposeMeeting: 'ประชุม', visitPurposeDelivery: 'จัดส่งสินค้า', visitPurposeEtc: 'อื่นๆ', visitPurposeEtcLabel: 'มูลเหตุอื่นๆ (ไม่บังคับ)', visitPurposeEtcPlaceholder: 'ใส่มูลเหตุ (ไม่บังคับ)',
     visitStart: 'เริ่มเยี่ยม', visitEnd: 'สิ้นสุดเยี่ยม', visitSupporting: 'กำลังเยี่ยม', todayVisitLog: 'บันทึกวันนี้', visitLogEmpty: 'ไม่มีบันทึก', visitErrSelectStore: 'เลือกสาขา', visitOfficeOnly: 'เฉพาะ HQ',     visitType: 'ประเภท', visitDuration: 'ระยะเวลา',
     visitStoreRequired: 'ต้องมีสาขาและผู้ใช้', visitInvalidType: 'ประเภทการเยี่ยมไม่ถูกต้อง', visitLocationTooFar: 'ตำแหน่งไม่เหมาะสม! ห่างจากสาขาเกิน 100ม. (ระยะทาง: {m}ม.)', visitComplete: 'เยี่ยมเสร็จ!', visitCompleteWithDuration: 'เยี่ยมเสร็จ! ({min} นาที)', visitServerError: 'ข้อผิดพลาดเซิร์ฟเวอร์',
     tabPettyCash: 'บัญชี', pettyCashTitle: 'เงินสดย่อย', pettyTabList: 'รายการ', pettyTabMonthly: 'รายเดือน', pettyNoData: 'ไม่มีข้อมูล', pettyColDate: 'วันที่', pettyColType: 'ประเภท',
@@ -3599,6 +3607,7 @@ export const i18n = {
     visit_col_purpose: 'วัตถุประสงค์',
     visit_col_duration: 'ระยะเวลา',
     visit_query_please: 'กรุณาค้นหา',
+    visit_stats_query_btn: '📊 ค้นหาสถิติ',
     visit_stats_querying: 'กำลังค้นหา...',
     visit_stats_result_count: 'ผลลัพธ์',
     visit_stats_filter_store: 'สาขา',
@@ -3733,6 +3742,7 @@ export const i18n = {
     att_status_break_ok: 'พักปกติ',
     att_ot_label: 'OT',
     att_min_unit: ' นาที',
+    att_hour_unit: ' ชม.',
     att_select_store_login: 'เลือกสาขาแล้วเข้าสู่ระบบ',
     adminRecentActivity: 'กิจกรรมล่าสุด',
     adminNoNoticesFound: 'ไม่พบประกาศ',
@@ -4154,7 +4164,7 @@ export const i18n = {
     scheduleDetail: 'နေ့စဉ်အသေးစိတ်',
     scheduleStatusNormal: 'ပုံမှန်', scheduleStatusLate: 'နောက်ကျ', scheduleStatusAbsent: 'ပျက်ကွက်', scheduleStatusHoliday: 'ကျန်', scheduleStatusLeave: 'ခွင့်ယူ',
     visitTitle: 'ဆိုင်သွားရောက်', visitSub: 'ပံ့ပိုးမှုမှတ်တမ်း', visitStore: 'သွားမည့်ဆိုင်', visitStorePlaceholder: 'ဆိုင်ရွေး',
-    visitPurpose: 'ဦးတည်ချက်', visitPurposeInspect: 'ကြည့်ရှု', visitPurposeTraining: 'သင်ကြား', visitPurposeUrgent: 'အရေးပေါ်', visitPurposeMeeting: 'တွေ့ဆုံ', visitPurposeEtc: 'အခြား',
+    visitPurpose: 'ဦးတည်ချက်', visitPurposeInspect: 'ကြည့်ရှု', visitPurposeTraining: 'သင်ကြား', visitPurposeUrgent: 'အရေးပေါ်', visitPurposeMeeting: 'တွေ့ဆုံ', visitPurposeDelivery: 'ကုန်ပစ္စည်းပို့ဆောင်', visitPurposeEtc: 'အခြား', visitPurposeEtcLabel: 'အခြားအကြောင်းပြချက် (ရွေးချယ်သည်)', visitPurposeEtcPlaceholder: 'အကြောင်းပြချက်ထည့်ပါ (ရွေးချယ်သည်)',
     visitStart: 'စတင်မည်', visitEnd: 'ပြီးမည်', visitSupporting: 'သွားနေသည်', todayVisitLog: 'ယနေ့မှတ်တမ်း', visitLogEmpty: 'မှတ်တမ်းမရှိ', visitErrSelectStore: 'ဆိုင်ရွေးပါ', visitOfficeOnly: 'HQ သက်သက်',     visitType: 'အမျိုးအစား', visitDuration: 'ကြာချိန်',
     visitStoreRequired: 'ဆိုင်နှင့်အသုံးပြုသူလိုသည်။', visitInvalidType: 'သွားရောက်မှုအမျိုးအစားမမှန်ပါ။', visitLocationTooFar: 'တည်နေရာမသင့်လျော်! ဆိုင်နားမဟုတ်ပါ။ (အကွာအဝေး: {m}m)', visitComplete: 'သွားပြီး!', visitCompleteWithDuration: 'သွားပြီး! ({min} မိနစ်)', visitServerError: 'ဆာဗာ သိမ်းမှုအမှား',
     tabPettyCash: 'စာရင်းကိုင်', pettyCashTitle: 'ငယ်ငယ်သုံးငွေ', pettyTabList: 'စာရင်း', pettyTabMonthly: 'လစဉ်', pettyNoData: 'ဒေတာမရှိပါ', pettyColDate: 'ရက်စွဲ', pettyColType: 'အမျိုးအစား',
@@ -4814,6 +4824,7 @@ export const i18n = {
     visit_col_purpose: 'ဦးတည်ချက်',
     visit_col_duration: 'ကြာချိန်',
     visit_query_please: 'ရှာပါ',
+    visit_stats_query_btn: '📊 စာရင်းဇယားရှာမည်',
     visit_stats_querying: 'ရှာနေသည်...',
     visit_stats_result_count: 'ရလဒ်',
     visit_stats_filter_store: 'ဆိုင်',
@@ -4948,6 +4959,7 @@ export const i18n = {
     att_status_break_ok: 'အနားပုံမှန်',
     att_ot_label: 'OT',
     att_min_unit: ' မိနစ်',
+    att_hour_unit: ' နာရီ',
     att_select_store_login: 'ဆိုင်ရွေးပြီး ဝင်ရောက်ပါ။',
     adminRecentActivity: 'လတ်တလောလုပ်ဆောင်မှု',
     adminNoNoticesFound: 'ကြေညာချက်မတွေ့ပါ',
@@ -5369,7 +5381,7 @@ export const i18n = {
     scheduleDetail: 'ບັນທຶກປະຈຳວັນ',
     scheduleStatusNormal: 'ປົກກະຕິ', scheduleStatusLate: 'ມາຊ້າ', scheduleStatusAbsent: 'ຂາດ', scheduleStatusHoliday: 'ພັກ', scheduleStatusLeave: 'ລາພັກ',
     visitTitle: 'ໄປສາຂາ', visitSub: 'ບັນທຶກການສະໜັບສະໜູນ', visitStore: 'ສາຂາທີ່ໄປ', visitStorePlaceholder: 'ເລືອກສາຂາ',
-    visitPurpose: 'ຈຸດປະສົງ', visitPurposeInspect: 'ກວດກາ', visitPurposeTraining: 'ຝຶກອົບຮົມ', visitPurposeUrgent: 'ດ່ວນ', visitPurposeMeeting: 'ປະຊຸມ', visitPurposeEtc: 'ອື່ນໆ',
+    visitPurpose: 'ຈຸດປະສົງ', visitPurposeInspect: 'ກວດກາ', visitPurposeTraining: 'ຝຶກອົບຮົມ', visitPurposeUrgent: 'ດ່ວນ', visitPurposeMeeting: 'ປະຊຸມ', visitPurposeDelivery: 'ສົ່ງສິນຄ້າ', visitPurposeEtc: 'ອື່ນໆ', visitPurposeEtcLabel: 'ເຫດຜົນອື່ນໆ (ບໍ່ບັງຄັບ)', visitPurposeEtcPlaceholder: 'ໃສ່ເຫດຜົນ (ບໍ່ບັງຄັບ)',
     visitStart: 'ເລີ່ມໄປ', visitEnd: 'ສິ້ນສຸດ', visitSupporting: 'ກຳລັງໄປ', todayVisitLog: 'ບັນທຶກມື້ນີ້', visitLogEmpty: 'ບໍ່ມີບັນທຶກ', visitErrSelectStore: 'ເລືອກສາຂາ', visitOfficeOnly: 'ເຈົ້າຫນ້າຮ້ານເທົ່ານັ້ນ',     visitType: 'ປະເພດ', visitDuration: 'ເວລາ',
     visitStoreRequired: 'ຕ້ອງມີສາຂາແລະຜູ້ໃຊ້', visitInvalidType: 'ປະເພດໄປເລີ່ມບໍ່ຖືກຕ້ອງ', visitLocationTooFar: 'ຕຳແໜ່ງບໍ່ເໝາະ! ຫ່າງຈາກສາຂາເກີນ 100ມ. (ມູນທີ່: {m}ມ.)', visitComplete: 'ໄປເລີ່ມແລ້ວ!', visitCompleteWithDuration: 'ໄປເລີ່ມແລ້ວ! ({min} ນາທີ)', visitServerError: 'ຜິດພາດບັນທຶກເຊີບເວີ',
     tabPettyCash: 'ບັນຊີ', pettyCashTitle: 'ເງິນສົດນ້ອຍ', pettyTabList: 'ລາຍການ', pettyTabMonthly: 'ປະຈຳເດືອນ', pettyNoData: 'ບໍ່ມີຂໍ້ມູນ', pettyColDate: 'ວັນທີ', pettyColType: 'ປະເພດ',
@@ -6029,6 +6041,7 @@ export const i18n = {
     visit_col_purpose: 'ຈຸດປະສົງ',
     visit_col_duration: 'ເວລາ',
     visit_query_please: 'ກະລຸນາຄົ້ນຫາ',
+    visit_stats_query_btn: '📊 ຄົ້ນຫາສະຖິຕິ',
     visit_stats_querying: 'ກຳລັງຄົ້ນຫາ...',
     visit_stats_result_count: 'ຜົນລັບ',
     visit_stats_filter_store: 'ສາຂາ',
@@ -6163,6 +6176,7 @@ export const i18n = {
     att_status_break_ok: 'ພັກປົກກະຕິ',
     att_ot_label: 'OT',
     att_min_unit: ' ນາທີ',
+    att_hour_unit: ' ຊົ່ວໂມງ',
     att_select_store_login: 'ເລືອກສາຂາແລ້ວເຂົ້າລະບົບ.',
     adminRecentActivity: 'ກິດຈະກໍາຫຼ້າສຸດ',
     adminNoNoticesFound: 'ບໍ່ພົບປະກາດ',

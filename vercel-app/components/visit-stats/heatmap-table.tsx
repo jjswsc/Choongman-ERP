@@ -1,6 +1,6 @@
 "use client"
 
-import { formatMinutes } from "@/lib/visit-data"
+import { formatMinutesWithT } from "@/lib/visit-data"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -19,18 +19,27 @@ const PURPOSE_COLORS: Record<string, string> = {
   "긴급 지원": "#dc2626",
   "매장미팅": "#d97706",
   "매장 미팅": "#d97706",
+  "물건배송": "#8b5cf6",
+  "물건 배송": "#8b5cf6",
   "기타": "#6b7280",
 }
 
 function purposeToKey(p: string): string {
+  if (p.startsWith("기타:") || p.startsWith("기타：")) return "visitPurposeEtc"
   const m: Record<string, string> = {
     "정기점검": "visitPurposeInspect", "정기 점검": "visitPurposeInspect",
     "직원교육": "visitPurposeTraining", "직원 교육": "visitPurposeTraining",
     "긴급지원": "visitPurposeUrgent", "긴급 지원": "visitPurposeUrgent",
     "매장미팅": "visitPurposeMeeting", "매장 미팅": "visitPurposeMeeting",
+    "물건배송": "visitPurposeDelivery", "물건 배송": "visitPurposeDelivery",
     "기타": "visitPurposeEtc",
   }
   return m[p] || ""
+}
+
+function getPurposeColor(p: string): string {
+  if (p.startsWith("기타:") || p.startsWith("기타：")) return PURPOSE_COLORS["기타"]
+  return PURPOSE_COLORS[p] || "#2563eb"
 }
 
 export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
@@ -41,7 +50,7 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
 
   function getCellBg(val: number, purpose: string): string {
     if (val === 0) return "transparent"
-    const base = PURPOSE_COLORS[purpose] || "#2563eb"
+    const base = getPurposeColor(purpose)
     const ratio = Math.min(val / maxVal, 1)
     const opacity = 0.1 + ratio * 0.5
     return `${base}${Math.round(opacity * 255).toString(16).padStart(2, "0")}`
@@ -63,9 +72,9 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
             <span key={p} className="flex items-center gap-1.5">
               <span
                 className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: PURPOSE_COLORS[p] || "#2563eb" }}
+                style={{ backgroundColor: getPurposeColor(p) }}
               />
-              {purposeToKey(p) ? t(purposeToKey(p)) : p}
+              {purposeToKey(p) ? (p.startsWith("기타:") || p.startsWith("기타：") ? `${t(purposeToKey(p))}: ${p.replace(/^기타[：:]\s*/, "")}` : t(purposeToKey(p))) : p}
             </span>
           ))}
         </div>
@@ -110,7 +119,7 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
                       >
                         {val > 0 ? (
                           <span className="font-medium text-foreground">
-                            {formatMinutes(val)}
+                            {formatMinutesWithT(val, t)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground/40">-</span>
@@ -119,7 +128,7 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
                     )
                   })}
                   <td className="p-2.5 text-right font-bold text-foreground border-b border-border/50">
-                    {formatMinutes(rowTotal)}
+                    {formatMinutesWithT(rowTotal, t)}
                   </td>
                 </tr>
               )
@@ -134,13 +143,13 @@ export function HeatmapTable({ stores, purposes, matrix }: HeatmapTableProps) {
                 <td
                   key={ci}
                   className="p-2.5 text-center font-bold border-t border-border"
-                  style={{ color: PURPOSE_COLORS[purposes[ci]] || "hsl(220, 13%, 18%)" }}
+                  style={{ color: getPurposeColor(purposes[ci]) || "hsl(220, 13%, 18%)" }}
                 >
-                  {formatMinutes(total)}
+                  {formatMinutesWithT(total, t)}
                 </td>
               ))}
               <td className="p-2.5 text-right font-bold text-foreground border-t border-border">
-                {formatMinutes(colTotals.reduce((s, v) => s + v, 0))}
+                {formatMinutesWithT(colTotals.reduce((s, v) => s + v, 0), t)}
               </td>
             </tr>
           </tfoot>

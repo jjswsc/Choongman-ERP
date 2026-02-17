@@ -50,7 +50,13 @@ export async function GET(request: NextRequest) {
   const filters = [`visit_date=gte.${startStr}`, `visit_date=lte.${endStr}`]
   if (storeFilter !== 'All') filters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
   if (empFilter !== 'All') filters.push(`name=eq.${encodeURIComponent(empFilter)}`)
-  if (purposeFilter) filters.push(`purpose=eq.${encodeURIComponent(purposeFilter)}`)
+  if (purposeFilter) {
+    if (purposeFilter === '기타') {
+      filters.push(`or=(purpose.eq.${encodeURIComponent('기타')},purpose.like.${encodeURIComponent('기타:*')})`)
+    } else {
+      filters.push(`purpose=eq.${encodeURIComponent(purposeFilter)}`)
+    }
+  }
 
   try {
     const list = (await supabaseSelectFilter('store_visits', filters.join('&'), {

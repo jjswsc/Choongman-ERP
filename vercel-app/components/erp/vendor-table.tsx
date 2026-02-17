@@ -106,6 +106,7 @@ export function VendorTable({
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColType")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28">{t("vendorColPhone")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
@@ -114,13 +115,13 @@ export function VendorTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorSearchHint")}
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={5} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorNoResults")}
                 </td>
               </tr>
@@ -136,6 +137,22 @@ export function VendorTable({
                   <td className="px-5 py-3">
                     <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-primary">
                       {vendor.code}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium",
+                        vendor.type === "purchase" && "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+                        vendor.type === "sales" && "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                        vendor.type === "both" && "bg-violet-500/15 text-violet-700 dark:text-violet-400"
+                      )}
+                    >
+                      {vendor.type === "purchase"
+                        ? t("vendorTypePurchase")
+                        : vendor.type === "sales"
+                          ? t("vendorTypeSales")
+                          : t("vendorTypeBoth")}
                     </span>
                   </td>
                   <td className="px-5 py-3 min-w-[140px]">

@@ -48,11 +48,25 @@ export const visitRecordsSample: VisitRecord[] = [
 /** V0 호환용 (visitRecords) */
 export const visitRecords = visitRecordsSample
 
+/** @deprecated Use formatMinutesWithT for i18n support */
 export function formatMinutes(min: number): string {
   if (min < 60) return `${min}분`
   const h = Math.floor(min / 60)
   const m = min % 60
   return m > 0 ? `${h}시간 ${m}분` : `${h}시간`
+}
+
+/** Format minutes for display with i18n unit labels */
+export function formatMinutesWithT(
+  min: number,
+  t: (k: string) => string
+): string {
+  const minUnit = t("att_min_unit")
+  const hourUnit = t("att_hour_unit")
+  if (min < 60) return `${min}${minUnit}`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m > 0 ? `${h}${hourUnit} ${m}${minUnit}` : `${h}${hourUnit}`
 }
 
 export function aggregateBy<T extends string>(

@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
   }
   if (store && store !== "__ALL__") filters.push(`store_name=eq.${encodeURIComponent(store)}`)
   if (employeeName && employeeName !== "__ALL__") filters.push(`name=eq.${encodeURIComponent(employeeName)}`)
-  if (purpose && purpose !== "__ALL__") filters.push(`purpose=eq.${encodeURIComponent(purpose)}`)
+  if (purpose && purpose !== "__ALL__") {
+    if (purpose === "기타") {
+      filters.push(`or=(purpose.eq.${encodeURIComponent("기타")},purpose.like.${encodeURIComponent("기타:*")})`)
+    } else {
+      filters.push(`purpose=eq.${encodeURIComponent(purpose)}`)
+    }
+  }
 
   try {
     const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name" })) as
