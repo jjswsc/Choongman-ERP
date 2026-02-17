@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAppData, processUsage, getMyUsageHistory, type AppItem } from "@/lib/api-client"
+import { getAppData, processUsage, getMyUsageHistory, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 
 function hasValidImage(url: string | undefined): boolean {
@@ -70,7 +70,7 @@ export function UsageTab() {
   const [selectedItem, setSelectedItem] = useState<AppItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [submitting, setSubmitting] = useState(false)
-  const [history, setHistory] = useState<{ date: string; dateTime: string; item: string; qty: number; amount: number }[]>([])
+  const [history, setHistory] = useState<UsageHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [histStart, setHistStart] = useState(() => daysAgoStr(7))
   const [histEnd, setHistEnd] = useState(todayStr)
