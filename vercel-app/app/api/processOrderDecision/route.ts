@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
           qty: Math.max(0, Math.floor(Number(i.qty ?? 0) || 0)),
           spec: String(i.spec ?? ''),
         }))
-        .filter((i) => i.qty > 0)
+        .filter((i: { qty: number }) => i.qty > 0)
       if (validCart.length > 0) {
         let subtotal = 0
-        validCart.forEach((i) => { subtotal += i.price * i.qty })
+        validCart.forEach((i: { price: number; qty: number }) => { subtotal += i.price * i.qty })
         const vat = Math.round(subtotal * 0.07)
         patch.cart_json = JSON.stringify(validCart)
         patch.subtotal = subtotal

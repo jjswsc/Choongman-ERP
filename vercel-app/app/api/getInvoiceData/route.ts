@@ -36,13 +36,14 @@ export async function GET() {
           projectName: 'CM True Digital Park',
         }
 
-    // 매출처 (type=매출처 또는 Sales, both)
+    // 매출처 (type=매출처 또는 Sales, both) - name(회사명)과 gps_name(매장명) 모두 키로 등록
     const clients: Record<string, { companyName: string; address: string; taxId: string; phone: string }> = {}
     let clientRows = (await supabaseSelectFilter('vendors', 'type=eq.매출처', { limit: 500 })) as {
       name?: string
       addr?: string
       tax_id?: string
       phone?: string
+      gps_name?: string
     }[] | null
     if (!clientRows || clientRows.length === 0) {
       clientRows = (await supabaseSelectFilter('vendors', 'type=eq.sales', { limit: 500 })) as typeof clientRows
@@ -51,14 +52,17 @@ export async function GET() {
       clientRows = (await supabaseSelectFilter('vendors', 'type=eq.both', { limit: 500 })) as typeof clientRows
     }
     for (const r of clientRows || []) {
-      const name = String(r.name || '').trim()
-      if (!name) continue
-      clients[name] = {
-        companyName: name,
+      const companyName = String(r.name || '').trim()
+      const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
+      if (!companyName && !gpsName) continue
+      const entry = {
+        companyName: companyName || gpsName,
         address: String(r.addr || '').trim() || '-',
         taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
         phone: String(r.phone || '').trim() || '-',
       }
+      if (companyName) clients[companyName] = entry
+      if (gpsName && gpsName !== companyName) clients[gpsName] = entry
     }
 
     return NextResponse.json({ company, clients }, { headers })

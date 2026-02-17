@@ -448,7 +448,12 @@ export default function OutboundPage() {
     </div>
     <div style="flex:1; padding-left:calc(16px + 5mm);">
       <div style="font-weight:700; margin-bottom:4px;">${inv.inv_client}</div>
-      <div style="font-size:11px; color:#475569;">${clientName}${clientTaxId ? "<br>" + inv.inv_tax_id + ": " + clientTaxId : ""}${clientAddr ? "<br>" + inv.inv_address + ": " + clientAddr : ""}${clientPhone ? "<br>" + inv.inv_phone + ": " + clientPhone : ""}</div>
+      <div style="font-size:11px; color:#475569; line-height:1.5;">
+        ${clientName}
+        ${clientAddr ? "<br>" + inv.inv_address + ": " + clientAddr : ""}
+        ${clientTaxId ? "<br>" + inv.inv_tax_id + ": " + clientTaxId : ""}
+        ${clientPhone ? "<br>" + inv.inv_phone + ": " + clientPhone : ""}
+      </div>
     </div>
   </div>
   <table class="table table-bordered" style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${inv.inv_description}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${inv.inv_amount}</th></tr></thead><tbody>${rows}</tbody></table>
