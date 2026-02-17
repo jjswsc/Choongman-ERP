@@ -681,6 +681,11 @@ export function OrderTab() {
                               )}
                             </div>
                             <div className="text-sm text-muted-foreground">{o.summary}</div>
+                            {o.status === "Rejected" && o.rejectReason && (
+                              <div className="text-xs text-destructive/90 mt-0.5">
+                                {t("reasonPh") || "사유"}: {o.rejectReason}
+                              </div>
+                            )}
                           </div>
                           <span className="shrink-0 font-bold text-primary">{o.total} ฿</span>
                         </div>

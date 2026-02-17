@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const orderId = Number(body.orderId ?? body.row ?? body.orderRowId)
     const decision = String(body.decision ?? '').trim()
     const deliveryDate = body.deliveryDate ? String(body.deliveryDate).trim() : ''
+    const rejectReason = body.rejectReason != null ? String(body.rejectReason).trim() : ''
     const userRole = String(body.userRole ?? '').toLowerCase()
     const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = { status: decision }
     if (deliveryDate) patch.delivery_date = deliveryDate
     if (decision === 'Approved') patch.delivery_status = '배송중'
+    if (decision === 'Rejected' && rejectReason) patch.reject_reason = rejectReason
 
     if (decision === 'Approved' && updatedCart && updatedCart.length > 0) {
       type CartItem = { code?: string; name?: string; price?: number; qty?: number; spec?: string; checked?: boolean; originalQty?: number }

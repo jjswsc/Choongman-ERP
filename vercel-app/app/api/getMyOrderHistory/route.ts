@@ -13,6 +13,7 @@ export interface OrderHistoryItem {
   items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
   userName?: string
+  rejectReason?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -47,6 +48,7 @@ export async function GET(request: NextRequest) {
       received_indices?: string
       received_qty_json?: string
       user_name?: string
+      reject_reason?: string
     }[]
 
     const list: OrderHistoryItem[] = (rows || []).map((o) => {
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
         items,
         receivedIndices,
         userName: String(o.user_name || '').trim() || undefined,
+        rejectReason: String(o.reject_reason || '').trim() || undefined,
       }
     })
 

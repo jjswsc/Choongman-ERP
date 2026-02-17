@@ -203,7 +203,12 @@ function updateCart(type){
         if (deliveryDateStr) dateLine += " <span style=\"margin-left:8px;\">" + deliveryDateLabel + " " + deliveryDateStr + "</span>";
         var orderedByLabel = (typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].m_ordered_by) ? I18N[currentLang].m_ordered_by : "발주자";
         if (o.userName) dateLine += " <span style=\"margin-left:8px;font-size:11px;color:#666;\">" + orderedByLabel + " " + o.userName + "</span>";
-        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
+        var rejectReasonHtml = "";
+        if (o.status === "Rejected" && o.rejectReason) {
+          var reasonLabel = (typeof I18N !== "undefined" && I18N[currentLang] && (I18N[currentLang].reasonPh || I18N[currentLang].m_reason_ph)) ? (I18N[currentLang].reasonPh || I18N[currentLang].m_reason_ph) : "사유";
+          rejectReasonHtml = "<div style=\"font-size:11px;color:#C62828;margin-top:4px;\">" + reasonLabel + ": " + (o.rejectReason || "").replace(/</g, "&lt;") + "</div>";
+        }
+        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + rejectReasonHtml + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
       }); 
     }).getMyOrderHistory(loggedInStore, s, e); 
   }

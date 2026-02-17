@@ -830,6 +830,11 @@ function buildOrderDetailHtml(o) {
 }
   function processOrderInline(row, decision) {
       var t = function(k, d){ if (typeof invT === "undefined") return d; var v = invT(k); return (v && v !== k) ? v : d; };
+      var rejectReason = "";
+      if (decision === "Rejected") {
+          rejectReason = prompt(t("orderRejectReasonPh", "거절 사유를 입력하세요 (선택)") || "거절 사유를 입력하세요 (선택)", "") || "";
+          if (rejectReason === null) return;
+      }
       var confirmMsg = decision === "Hold" ? t("ord_confirm_hold", "Process as Hold?") : decision === "Rejected" ? t("ord_confirm_rejected", "Process as Rejected?") : (decision + "?");
       if(decision!=='Approved' && !confirm(confirmMsg)) return;
       var checkboxes = document.querySelectorAll('.order-item-check-' + row);
@@ -843,7 +848,7 @@ function buildOrderDetailHtml(o) {
           if (!confirm(noDeliveryMsg)) return;
       }
       load(1);
-      google.script.run.withSuccessHandler(function(res) { load(0); alert(typeof invT !== "undefined" && invT(res) ? invT(res) : res); loadOrders(); }).processOrderDecision(row, decision, newCart, deliveryDate);
+      google.script.run.withSuccessHandler(function(res) { load(0); alert(typeof invT !== "undefined" && invT(res) ? invT(res) : res); loadOrders(); }).processOrderDecision(row, decision, newCart, deliveryDate, rejectReason);
   }
 
   /** 승인된 주문의 배송 일자만 변경 */

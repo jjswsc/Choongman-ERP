@@ -197,6 +197,7 @@ export interface OrderHistoryItem {
   items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
   userName?: string
+  rejectReason?: string
 }
 
 export async function getMyOrderHistory(params: {
@@ -336,6 +337,7 @@ export async function processOrderDecision(params: {
   orderId: number
   decision: 'Approved' | 'Rejected' | 'Hold'
   deliveryDate?: string
+  rejectReason?: string
   userRole?: string
   updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
 }) {

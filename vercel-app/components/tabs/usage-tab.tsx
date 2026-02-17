@@ -315,9 +315,10 @@ export function UsageTab() {
                 </Button>
               </div>
               <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
-              <ShoppingCart className="mr-2 h-4 w-4" />
-              {t('addUsage')}
-            </Button>
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                {t("addUsage")}
+              </Button>
+            </div>
           </div>
 
           <Card className="shadow-sm">
@@ -351,11 +352,10 @@ export function UsageTab() {
             onClick={handleConfirmUsage}
             disabled={cart.length === 0 || submitting}
           >
-            {submitting ? t('loading') : t('confirmUsage')}
+            {submitting ? t("loading") : t("confirmUsage")}
           </Button>
         </TabsContent>
-
-        <TabsContent value="history" className="mt-4">
+        <TabsContent value="history" className="mt-4 flex flex-col gap-4">
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-col gap-2">

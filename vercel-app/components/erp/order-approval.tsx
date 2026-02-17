@@ -144,6 +144,8 @@ export function OrderApproval() {
   const [submittingId, setSubmittingId] = React.useState<string | null>(null)
   const [editedItemsByOrderId, setEditedItemsByOrderId] = React.useState<Record<string, OrderItem[]>>({})
   const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
+  const [rejectReasonByOrderId, setRejectReasonByOrderId] = React.useState<Record<string, string>>({})
+  const [showRejectReasonByOrderId, setShowRejectReasonByOrderId] = React.useState<Record<string, boolean>>({})
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -289,6 +291,7 @@ export function OrderApproval() {
         orderId,
         decision,
         deliveryDate: deliveryDate || undefined,
+        rejectReason: decision === "Rejected" ? (rejectReasonByOrderId[idStr] || "").trim() : undefined,
         userRole: auth?.role,
         updatedCart: decision === "Approved" ? updatedCart : undefined,
       })
@@ -713,7 +716,29 @@ export function OrderApproval() {
                               readOnly={isManager}
                             />
                             {!isManager && (
-                              <div className="ml-auto flex items-center gap-2">
+                              <div className="ml-auto flex flex-wrap items-center gap-2">
+                                <span
+                                  className="text-[11px] font-medium text-muted-foreground cursor-pointer hover:text-destructive hover:underline select-none"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setShowRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: !prev[order.id] }))
+                                  }}
+                                >
+                                  {t("reasonPh") || "사유"}
+                                </span>
+                                {showRejectReasonByOrderId[order.id] && (
+                                  <Input
+                                    type="text"
+                                    className="h-8 w-48 text-xs"
+                                    placeholder={t("orderRejectReasonPh") || "거절 사유 입력"}
+                                    value={rejectReasonByOrderId[order.id] || ""}
+                                    onChange={(e) => {
+                                      e.stopPropagation()
+                                      setRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                )}
                                 <Button
                                   variant="outline"
                                   size="sm"

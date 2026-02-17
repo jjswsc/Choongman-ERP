@@ -325,7 +325,7 @@ function processUsage(data) {
   }
 }
 
-function processOrderDecision(row, decision, updatedCart, deliveryDate) {
+function processOrderDecision(row, decision, updatedCart, deliveryDate, rejectReason) {
   try {
     var orderId = Number(row);
     var orders = supabaseSelectFilter('orders', "id=eq." + orderId);
@@ -333,6 +333,7 @@ function processOrderDecision(row, decision, updatedCart, deliveryDate) {
     var o = orders[0];
     if (o.status === "Approved") return "ord_already_approved";
     var patch = { status: decision };
+    if (decision === "Rejected" && rejectReason && String(rejectReason).trim()) patch.reject_reason = String(rejectReason).trim();
     if (updatedCart) {
       var newSub = 0;
       updatedCart.forEach(function(i) { newSub += Number(i.price) * Number(i.qty); });
@@ -1060,7 +1061,8 @@ function getMyOrderHistory(store, startStr, endStr) {
       var deliveryDate = (o.delivery_date || "").trim();
       var orderDate = o.order_date ? new Date(o.order_date) : new Date();
       var userName = String(o.user_name || "").trim() || undefined;
-      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: items, userName: userName });
+      var rejectReason = String(o.reject_reason || "").trim() || undefined;
+      list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: items, userName: userName, rejectReason: rejectReason });
     }
     return list;
   } catch (e) {
