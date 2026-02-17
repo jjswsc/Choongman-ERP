@@ -111,9 +111,21 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const contentsToTranslate = React.useMemo(() => {
     const set = new Set<string>()
-    for (const it of localFinish) if (it.content?.trim()) set.add(it.content.trim())
-    for (const it of localContinue) if (it.content?.trim()) set.add(it.content.trim())
-    for (const it of localToday) if (it.content?.trim()) set.add(it.content.trim())
+    for (const it of localFinish) {
+      if (it.content?.trim()) set.add(it.content.trim())
+      const c = it.managerComment?.trim()
+      if (c && !c.startsWith("⚡")) set.add(c)
+    }
+    for (const it of localContinue) {
+      if (it.content?.trim()) set.add(it.content.trim())
+      const c = it.managerComment?.trim()
+      if (c && !c.startsWith("⚡")) set.add(c)
+    }
+    for (const it of localToday) {
+      if (it.content?.trim()) set.add(it.content.trim())
+      const c = it.managerComment?.trim()
+      if (c && !c.startsWith("⚡")) set.add(c)
+    }
     return Array.from(set)
   }, [localFinish, localContinue, localToday])
 
@@ -226,6 +238,13 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       .replace(/부터/g, t("workLogFrom") || "from")
   }
 
+  const getTransComment = (comment: string) => {
+    const trimmed = comment?.trim()
+    if (!trimmed) return ""
+    if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
+    return contentTransMap[trimmed] || formatManagerComment(trimmed)
+  }
+
   const ManagerFeedback = ({ item }: { item: WorkLogItem }) => {
     const confirmed = item.managerCheck === "승인"
     const rawComment = item.managerComment?.trim() || ""
@@ -242,7 +261,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         {hasComment && (
           <p className="mt-1 text-foreground">
             <span className="font-semibold text-muted-foreground">{t("workLogManagerFeedback")}:</span>{" "}
-            {formatManagerComment(rawComment)}
+            {getTransComment(rawComment)}
           </p>
         )}
       </div>

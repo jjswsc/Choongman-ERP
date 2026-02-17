@@ -775,6 +775,15 @@ export async function updateWorkLogPriority(params: { id: string; priority: stri
   return res.json() as Promise<{ success: boolean; messageKey?: string }>
 }
 
+export async function deleteWorkLogItem(params: { id: string }) {
+  const res = await apiFetch('/api/deleteWorkLogItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; messageKey?: string; message?: string }>
+}
+
 export interface WorkLogManagerItem {
   id: string
   date: string

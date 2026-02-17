@@ -9,6 +9,7 @@ import {
   MessageSquarePlus,
   Building2,
   User,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +28,7 @@ import {
   getWorkLogManagerReport,
   updateWorkLogManagerCheck,
   updateWorkLogPriority,
+  deleteWorkLogItem,
   getWorkLogOfficeOptions,
   translateTexts,
   type WorkLogManagerItem,
@@ -87,7 +89,11 @@ export function WorklogApproval() {
   }, [loadData])
 
   React.useEffect(() => {
-    const texts = [...new Set(list.map((it) => it.content).filter(Boolean))]
+    const contents = [...new Set(list.map((it) => it.content).filter(Boolean))]
+    const comments = list
+      .map((it) => (it.managerComment || "").trim())
+      .filter((c) => c && !c.startsWith("⚡"))
+    const texts = [...new Set([...contents, ...comments])]
     if (texts.length === 0) {
       setContentTransMap({})
       return
@@ -108,6 +114,12 @@ export function WorklogApproval() {
     return comment
       .replace(/이월됨/g, t("workLogCarriedOver"))
       .replace(/부터/g, t("workLogFrom"))
+  }
+  const getTransComment = (comment: string) => {
+    const trimmed = (comment || "").trim()
+    if (!trimmed) return ""
+    if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
+    return contentTransMap[trimmed] || formatManagerComment(trimmed)
   }
   const getReviewStatusDisplay = (item: WorkLogManagerItem) => {
     const check = item.managerCheck || ""
@@ -164,6 +176,20 @@ export function WorklogApproval() {
       else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
     } catch {
       alert(t("workLogProcessError"))
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(t("workLogDeleteConfirm"))) return
+    setUpdating(id)
+    try {
+      const res = await deleteWorkLogItem({ id })
+      if (res.success) loadData()
+      else alert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage((res as { message?: string }).message, t) || t("workLogDeleteFail")))
+    } catch {
+      alert(t("workLogDeleteFail"))
     } finally {
       setUpdating(null)
     }
@@ -303,7 +329,7 @@ export function WorklogApproval() {
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-16">{t("workLogPriority")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColReviewStatus")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-32">{t("workLogColAction")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-44">{t("workLogColAction")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -313,7 +339,7 @@ export function WorklogApproval() {
                               <td className="px-5 py-2">
                                 <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatManagerComment(it.managerComment)}</p>
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{getTransComment(it.managerComment)}</p>
                                 )}
                               </td>
                               <td className="px-5 py-2 text-center">
@@ -350,30 +376,42 @@ export function WorklogApproval() {
                                 </span>
                               </td>
                               <td className="px-5 py-2">
-                                {it.managerCheck === "대기" && (
-                                  <div className="flex items-center gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 px-2 text-[10px] text-success"
-                                      onClick={() => handleConfirm(it.id)}
-                                      disabled={updating === it.id}
-                                    >
-                                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                                      {t("workLogConfirmBtn")}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 px-2 text-[10px] text-primary"
-                                      onClick={() => handleAddComment(it.id)}
-                                      disabled={updating === it.id}
-                                    >
-                                      <MessageSquarePlus className="mr-1 h-3 w-3" />
-                                      {t("workLogCommentBtn")}
-                                    </Button>
-                                  </div>
-                                )}
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {it.managerCheck === "대기" && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[10px] text-success"
+                                        onClick={() => handleConfirm(it.id)}
+                                        disabled={updating === it.id}
+                                      >
+                                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                                        {t("workLogConfirmBtn")}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 px-2 text-[10px] text-primary"
+                                        onClick={() => handleAddComment(it.id)}
+                                        disabled={updating === it.id}
+                                      >
+                                        <MessageSquarePlus className="mr-1 h-3 w-3" />
+                                        {t("workLogCommentBtn")}
+                                      </Button>
+                                    </>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[10px] text-destructive hover:text-destructive"
+                                    onClick={() => handleDelete(it.id)}
+                                    disabled={updating === it.id}
+                                    title={t("workLogDeleteBtn")}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
