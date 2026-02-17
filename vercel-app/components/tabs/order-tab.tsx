@@ -81,6 +81,10 @@ export function OrderTab() {
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
   const [inspectedItems, setInspectedItems] = useState<Record<number, Set<number>>>({})
   const [receivedQtys, setReceivedQtys] = useState<Record<number, Record<number, number>>>({})
+  const receivedQtysRef = useRef<Record<number, Record<number, number>>>({})
+  useEffect(() => {
+    receivedQtysRef.current = receivedQtys
+  }, [receivedQtys])
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -210,11 +214,16 @@ export function OrderTab() {
   }
 
   const setReceivedQty = (orderId: number, itemIdx: number, value: number) => {
-    setReceivedQtys((prev) => {
-      const orderMap = prev[orderId] ?? {}
-      const nextOrder = { ...orderMap, [itemIdx]: Math.max(0, value) }
-      return { ...prev, [orderId]: nextOrder }
-    })
+    const v = Math.max(0, value)
+    const prev = receivedQtysRef.current
+    const orderMap = prev[orderId] ?? {}
+    const next = { ...prev, [orderId]: { ...orderMap, [itemIdx]: v } }
+    receivedQtysRef.current = next
+    setReceivedQtys(next)
+  }
+
+  const getReceivedQtyLatest = (orderId: number, itemIdx: number, defaultQty: number) => {
+    return receivedQtysRef.current[orderId]?.[itemIdx] ?? receivedQtys[orderId]?.[itemIdx] ?? defaultQty
   }
 
   const isAllInspected = (o: OrderHistoryItem) => {
@@ -286,11 +295,11 @@ export function OrderTab() {
           inspectedIndices.forEach((idx) => {
             const it = items[idx]
             const origQty = it?.qty ?? 0
-            receivedQtysMap[idx] = getReceivedQty(modal.order!.id, idx, origQty)
+            receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, origQty)
           })
         } else {
           items.forEach((it, idx) => {
-            receivedQtysMap[idx] = getReceivedQty(modal.order!.id, idx, it?.qty ?? 0)
+            receivedQtysMap[idx] = getReceivedQtyLatest(modal.order!.id, idx, it?.qty ?? 0)
           })
         }
         const res = await processOrderReceive({
@@ -313,6 +322,7 @@ export function OrderTab() {
           setReceivedQtys((prev) => {
             const next = { ...prev }
             delete next[modal.orderId]
+            receivedQtysRef.current = next
             return next
           })
           setReceiveSubmitting(false)
