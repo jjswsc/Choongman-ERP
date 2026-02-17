@@ -8,9 +8,14 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
-/** 연차일 수: 입사 1년 이상만 6일, 그 외 0일 (기본연차 없음) */
-function getAnnualLeaveDays(emp: { join_date?: string | Date | null } | null): number {
-  if (!emp || !emp.join_date) return 0
+/** 연차일 수: 직원관리에서 직접 입력한 값 우선, null이면 입사 1년 이상 6일/그 외 0일 */
+function getAnnualLeaveDays(emp: { annual_leave_days?: number | null; join_date?: string | Date | null } | null): number {
+  if (!emp) return 0
+  if (emp.annual_leave_days != null) {
+    const direct = Number(emp.annual_leave_days)
+    if (!Number.isNaN(direct) && direct >= 0) return direct
+  }
+  if (!emp.join_date) return 0
   const joinStr = toDateStr(emp.join_date)
   const joinDate = new Date(joinStr + 'T12:00:00')
   const oneYearAgo = new Date()

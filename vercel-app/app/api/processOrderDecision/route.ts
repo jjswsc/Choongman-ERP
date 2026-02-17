@@ -80,7 +80,13 @@ export async function POST(request: NextRequest) {
           if (it) subtotal += it.price * it.qty
         })
         const vat = Math.round(subtotal * 0.07)
-        const cartForStorage = fullCart.map(({ _origQty, ...rest }) => rest)
+        const cartForStorage = fullCart.map((it) => ({
+          code: it.code,
+          name: it.name,
+          price: it.price,
+          qty: it.qty,
+          spec: it.spec,
+        }))
         patch.cart_json = JSON.stringify(cartForStorage)
         patch.subtotal = subtotal
         patch.vat = vat
