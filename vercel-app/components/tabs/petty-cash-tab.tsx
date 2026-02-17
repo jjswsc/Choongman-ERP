@@ -16,7 +16,9 @@ import { Search, Plus, Camera, Download } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
+import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import { useStoreList } from "@/lib/api-client"
 import {
   getPettyCashList,
@@ -71,21 +73,21 @@ export function PettyCashTab() {
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
   const { stores: storeList } = useStoreList()
+  const canSearchAll = isOfficeRole(auth?.role || "")
   useEffect(() => {
     if (!auth?.store) return
-    const isOffice = ["director", "officer", "ceo", "hr"].includes(auth.role || "")
-    if (isOffice && storeList.length > 0) {
-      setStores(["All", ...storeList])
+    if (canSearchAll) {
+      setStores(storeList.length > 0 ? ["All", ...storeList] : ["All"])
       setListStore("All")
       setMonthlyStore("All")
-      setAddStore(storeList[0] || "")
-    } else if (!isOffice) {
+      setAddStore(storeList[0] || auth.store || "")
+    } else {
       setStores([auth.store!])
       setListStore(auth.store!)
       setMonthlyStore(auth.store!)
       setAddStore(auth.store!)
     }
-  }, [auth?.store, auth?.role, storeList])
+  }, [auth?.store, auth?.role, storeList, canSearchAll])
 
   // 내용(memo) 로그인 언어로 번역
   useEffect(() => {
@@ -306,7 +308,7 @@ ${rows.map((row, ri) => {
                   </SelectTrigger>
                   <SelectContent>
                     {stores.map((st) => (
-                      <SelectItem key={st} value={st}>{st}</SelectItem>
+                      <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -321,9 +323,10 @@ ${rows.map((row, ri) => {
                 {listData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[320px]">
+                  <table className={cn("w-full text-xs table-fixed", canSearchAll ? "min-w-[380px]" : "min-w-[320px]")}>
                     <colgroup>
                       <col style={{ width: "68px" }} />
+                      {canSearchAll && <col style={{ width: "56px" }} />}
                       <col style={{ width: "42px" }} />
                       <col style={{ width: "64px" }} />
                       <col />
@@ -333,6 +336,7 @@ ${rows.map((row, ri) => {
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
                         <th className="p-2 text-center">{t("pettyColDate") || "날짜"}</th>
+                        {canSearchAll && <th className="p-2 text-center">{t("store") || "매장"}</th>}
                         <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
@@ -344,6 +348,7 @@ ${rows.map((row, ri) => {
                       {listData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2 text-center">{r.trans_date}</td>
+                          {canSearchAll && <td className="p-2 text-center truncate text-xs">{r.store}</td>}
                           <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
@@ -456,7 +461,7 @@ ${rows.map((row, ri) => {
                   </SelectTrigger>
                   <SelectContent>
                     {stores.map((st) => (
-                      <SelectItem key={st} value={st}>{st}</SelectItem>
+                      <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

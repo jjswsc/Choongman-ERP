@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
           if (it) subtotal += it.price * it.qty
         })
         const vat = Math.round(subtotal * 0.07)
-        const cartForStorage = fullCart.map((it) => ({
+        type FullCartItem = { code: string; name: string; price: number; qty: number; spec: string }
+        const cartForStorage = fullCart.map((it: FullCartItem) => ({
           code: it.code,
           name: it.name,
           price: it.price,
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
           patch.approved_indices = JSON.stringify(approvedIndices.sort((a, b) => a - b))
         }
         const originalQtyMap: Record<string, number> = {}
-        fullCart.forEach((it, idx) => {
+        fullCart.forEach((it: { _origQty?: number; qty?: number }, idx: number) => {
           if (it._origQty !== undefined && it._origQty !== it.qty) {
             originalQtyMap[String(idx)] = it._origQty
           }
