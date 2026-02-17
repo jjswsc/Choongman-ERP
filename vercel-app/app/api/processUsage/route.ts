@@ -26,19 +26,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const userName = String(body.userName || body.user_name || '').trim()
     const now = new Date().toISOString()
     const rows = items
       .filter((k: { code?: string; qty?: number }) => k && (k.code || (k as { name?: string }).name) && Number((k as { qty?: number }).qty) > 0)
-      .map((k: { code?: string; name?: string; qty?: number }) => ({
-        location: storeName,
-        item_code: String((k as { code?: string }).code || '').trim(),
-        item_name: String((k as { name?: string }).name || '').trim(),
-        spec: 'Usage',
-        qty: -Math.abs(Number((k as { qty?: number }).qty) || 0),
-        log_date: now,
-        vendor_target: 'Store',
-        log_type: 'Usage',
-      }))
+      .map((k: { code?: string; name?: string; qty?: number }) => {
+        const r: Record<string, unknown> = {
+          location: storeName,
+          item_code: String((k as { code?: string }).code || '').trim(),
+          item_name: String((k as { name?: string }).name || '').trim(),
+          spec: 'Usage',
+          qty: -Math.abs(Number((k as { qty?: number }).qty) || 0),
+          log_date: now,
+          vendor_target: 'Store',
+          log_type: 'Usage',
+        }
+        if (userName) r.user_name = userName
+        return r
+      })
       .filter((r: { qty: number }) => r.qty !== 0)
 
     if (rows.length === 0) {

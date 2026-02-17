@@ -215,6 +215,7 @@ export interface UsageHistoryItem {
   item: string
   qty: number
   amount: number
+  userName?: string
 }
 
 export async function processUsage(params: {

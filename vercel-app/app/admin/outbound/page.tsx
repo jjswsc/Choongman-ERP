@@ -554,9 +554,11 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
         prevTarget = g.target
         const targetNorm = (g.target || "").trim()
         const targetLower = targetNorm.toLowerCase()
-        let client: InvoiceDataClient | { companyName: string } =
-          (clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])) as InvoiceDataClient | undefined
-        if (!client) {
+        const foundClient = clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])
+        let client: InvoiceDataClient | { companyName: string }
+        if (foundClient) {
+          client = foundClient
+        } else {
           const isOfficeTarget = OFFICE_STORES.some((s) => (g.target || "").toLowerCase().includes(s.toLowerCase()))
           if (isOfficeTarget && company) {
             client = {

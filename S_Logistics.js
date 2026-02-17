@@ -302,9 +302,10 @@ function processOrder(data) {
 function processUsage(data) {
   try {
     var now = new Date().toISOString();
+    var userName = String(data.userName || data.user_name || '').trim();
     var rows = [];
     (data.items || []).forEach(function(k) {
-      rows.push({
+      var row = {
         location: data.storeName,
         item_code: k.code,
         item_name: k.name || '',
@@ -313,7 +314,9 @@ function processUsage(data) {
         log_date: now,
         vendor_target: 'Store',
         log_type: 'Usage'
-      });
+      };
+      if (userName) row.user_name = userName;
+      rows.push(row);
     });
     if (rows.length) supabaseInsertMany('stock_logs', rows);
     return "✅ 출고 등록 완료";
@@ -1083,7 +1086,8 @@ function getMyUsageHistory(store, startStr, endStr) {
       var name = String(row.item_name || "").trim();
       var qty = Math.abs(Number(row.qty) || 0);
       var price = priceByCode[code] != null ? priceByCode[code] : 0;
-      list.push({ date: dateStr, dateTime: dateTimeStr, item: name, qty: qty, amount: price * qty });
+      var userName = String(row.user_name || "").trim() || undefined;
+      list.push({ date: dateStr, dateTime: dateTimeStr, item: name, qty: qty, amount: price * qty, userName: userName });
     }
     return list;
   } catch (e) {

@@ -361,7 +361,10 @@ export function UsageTab() {
                   {history.map((h, i) => (
                     <div key={i} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
                       <div>
-                        <p className="text-xs text-muted-foreground">{h.dateTime}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {h.dateTime}
+                          {h.userName && <span className="ml-2">({t('useUsedBy') || '사용자'} {h.userName})</span>}
+                        </p>
                         <p className="font-medium">{h.item}</p>
                       </div>
                       <span className="font-bold text-primary">-{formatStock(h.qty)}</span>
