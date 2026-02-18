@@ -284,11 +284,14 @@ export function UsageTab() {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">{t("useQtyFraction") || "분수"}:</span>
-              <div className="flex gap-1.5">
-                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(1)}>1</Button>
-                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(0.5)}>½</Button>
-                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(0.25)}>¼</Button>
-                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
+              <div className="flex gap-1.5 flex-nowrap">
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.5)}>½</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.25)}>¼</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>1/5</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>1/10</Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.02)}>1/50</Button>
               </div>
             </div>
             <div className="flex items-center gap-3">
