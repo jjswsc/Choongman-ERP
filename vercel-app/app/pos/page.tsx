@@ -8,7 +8,9 @@ import {
   getPosMenuOptions,
   getPosOrders,
   getPosTodaySales,
+  getPosTableLayout,
   savePosOrder,
+  validatePosCoupon,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -62,6 +64,15 @@ export default function PosPage() {
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
   const [storeCode, setStoreCode] = React.useState("")
   const [tableName, setTableName] = React.useState("")
+  const [tableOptions, setTableOptions] = React.useState<{ id: string; name: string }[]>([])
+  const [couponCode, setCouponCode] = React.useState("")
+  const [discountAmount, setDiscountAmount] = React.useState(0)
+  const [appliedCoupon, setAppliedCoupon] = React.useState<{
+    code: string
+    name: string
+    type: string
+    value: number
+  } | null>(null)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -74,6 +85,8 @@ export default function PosPage() {
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
     items: CartItem[]
+    subtotal: number
+    discount: number
     total: number
     storeCode: string
     orderType: string
@@ -97,6 +110,21 @@ export default function PosPage() {
   React.useEffect(() => {
     loadTodaySales()
   }, [loadTodaySales])
+
+  const loadTableLayout = React.useCallback(() => {
+    if (!storeCode) return
+    getPosTableLayout({ storeCode })
+      .then(({ layout }) =>
+        setTableOptions(
+          (layout || []).map((t) => ({ id: t.id, name: t.name }))
+        )
+      )
+      .catch(() => setTableOptions([]))
+  }, [storeCode])
+
+  React.useEffect(() => {
+    loadTableLayout()
+  }, [loadTableLayout])
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions()])
@@ -219,7 +247,33 @@ export default function PosPage() {
   }
 
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
-  const total = subtotal
+  const discount = Math.min(discountAmount, subtotal)
+  const total = Math.max(0, subtotal - discount)
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase()
+    if (!code) return
+    try {
+      const res = await validatePosCoupon({ code })
+      if (!res.valid) {
+        alert(res.message || "유효하지 않은 쿠폰입니다.")
+        return
+      }
+      const t = res.discountType || "amount"
+      const v = res.discountValue ?? 0
+      const amt = t === "percent" ? Math.round((subtotal * v) / 100) : Math.min(v, subtotal)
+      setDiscountAmount(amt)
+      setAppliedCoupon({ code: res.couponCode || code, name: res.couponName || code, type: t, value: v })
+    } catch (e) {
+      alert(String(e))
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setDiscountAmount(0)
+    setAppliedCoupon(null)
+    setCouponCode("")
+  }
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -234,11 +288,15 @@ export default function PosPage() {
         tableName: orderType === "dine_in" ? tableName : "",
         memo: memo.trim() || undefined,
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
+        discountAmount: discount,
+        couponCode: appliedCoupon?.code || undefined,
       })
       if (res.success) {
         setReceiptData({
           orderNo: res.orderNo ?? "",
           items: [...cart],
+          subtotal,
+          discount,
           total,
           storeCode: storeCode || "ST01",
           orderType,
@@ -246,6 +304,7 @@ export default function PosPage() {
           memo: memo.trim(),
         })
         clearCart()
+        handleRemoveCoupon()
         setMemo("")
         loadTodaySales()
       } else {
@@ -423,12 +482,43 @@ export default function PosPage() {
               <span className="shrink-0 text-xs text-slate-400 w-12">
                 {t("posTable") || "테이블"}
               </span>
-              <Input
-                placeholder={t("posTablePh") || "1번"}
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
-              />
+              {tableOptions.length > 0 ? (
+                <>
+                  <Select
+                    value={tableOptions.some((x) => x.name === tableName) ? tableName : "_"}
+                    onValueChange={(v) => setTableName(v === "_" ? "" : v)}
+                  >
+                    <SelectTrigger className="h-8 min-w-[80px] border-slate-600 bg-slate-800 text-sm">
+                      <SelectValue placeholder={t("posTablePh") || "1번"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">
+                        {t("posTableOther") || "직접 입력"}
+                      </SelectItem>
+                      {tableOptions.map((t) => (
+                        <SelectItem key={t.id} value={t.name}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {(!tableName || !tableOptions.some((x) => x.name === tableName)) && (
+                    <Input
+                      placeholder={t("posTableCustomPh") || "테이블명"}
+                      value={tableName}
+                      onChange={(e) => setTableName(e.target.value)}
+                      className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
+                    />
+                  )}
+                </>
+              ) : (
+                <Input
+                  placeholder={t("posTablePh") || "1번"}
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
+                />
+              )}
             </div>
           )}
           <div className="flex gap-2">
@@ -530,9 +620,54 @@ export default function PosPage() {
               className="mt-1 h-9 border-slate-600 bg-slate-800 text-sm"
             />
           </div>
-          <div className="flex justify-between text-sm text-slate-400">
-            <span>{t("posSubtotal") || "소계"}</span>
-            <span className="font-bold tabular-nums text-white">{subtotal.toLocaleString()} ฿</span>
+          <div>
+            <label className="text-xs text-slate-400">{t("posCoupon") || "쿠폰"}</label>
+            {appliedCoupon ? (
+              <div className="mt-1 flex items-center justify-between rounded-lg border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm">
+                <span className="text-green-400">{appliedCoupon.name} -{discount.toLocaleString()} ฿</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  {t("posCouponRemove") || "해제"}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 flex gap-2">
+                <Input
+                  placeholder={t("posCouponPh") || "쿠폰 코드"}
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 border-slate-600"
+                  onClick={handleApplyCoupon}
+                  disabled={cart.length === 0}
+                >
+                  {t("posCouponApply") || "적용"}
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between text-sm text-slate-400">
+              <span>{t("posSubtotal") || "소계"}</span>
+              <span className="tabular-nums text-white">{subtotal.toLocaleString()} ฿</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-sm text-green-400">
+                <span>{t("posDiscount") || "할인"}</span>
+                <span className="tabular-nums">-{discount.toLocaleString()} ฿</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm font-bold text-white">
+              <span>{t("posInputTotal") || "합계"}</span>
+              <span className="tabular-nums">{total.toLocaleString()} ฿</span>
+            </div>
           </div>
           <Button
             className="w-full bg-amber-500 font-bold text-slate-900 hover:bg-amber-400"
@@ -615,9 +750,21 @@ export default function PosPage() {
                     {t("posCustomerMemo") || "메모"}: {receiptData.memo}
                   </div>
                 )}
-                <div className="receipt-total flex justify-between">
-                  <span>{t("posInputTotal") || "합계"}</span>
-                  <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
+                <div className="space-y-1 border-t pt-2 mt-2">
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posSubtotal") || "소계"}</span>
+                    <span className="tabular-nums">{receiptData.subtotal.toLocaleString()} ฿</span>
+                  </div>
+                  {(receiptData.discount ?? 0) > 0 && (
+                    <div className="receipt-row flex justify-between text-xs text-green-600">
+                      <span>{t("posDiscount") || "할인"}</span>
+                      <span className="tabular-nums">-{receiptData.discount!.toLocaleString()} ฿</span>
+                    </div>
+                  )}
+                  <div className="receipt-total flex justify-between font-bold">
+                    <span>{t("posInputTotal") || "합계"}</span>
+                    <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
+                  </div>
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-0">

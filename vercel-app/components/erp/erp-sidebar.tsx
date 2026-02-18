@@ -6,7 +6,9 @@ import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
+  LayoutGrid,
   Megaphone,
+  Tag,
   ClipboardList,
   Package,
   ShoppingCart,
@@ -61,6 +63,8 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
       { titleKey: "adminPosOrderList", icon: Receipt, href: "/admin/pos-orders" },
       { titleKey: "adminPosSettlement", icon: Wallet, href: "/admin/pos-settlement" },
+      { titleKey: "adminPosTables", icon: LayoutGrid, href: "/admin/pos-tables" },
+      { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/pos-coupons" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
     ],
   },

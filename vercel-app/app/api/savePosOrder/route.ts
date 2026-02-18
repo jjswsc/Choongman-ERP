@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
     const tableName = String(body.tableName ?? '')
     const memo = String(body.memo ?? '').trim()
     const items = Array.isArray(body.items) ? body.items : []
+    const discountAmount = Math.max(0, Number(body.discountAmount) ?? 0)
+    const couponCode = String(body.couponCode ?? '').trim() || null
 
     if (items.length === 0) {
       return NextResponse.json({ success: false, message: '주문 항목이 없습니다.' }, { headers })
@@ -32,9 +34,11 @@ export async function POST(req: NextRequest) {
       const qty = Number(it.qty ?? 1)
       subtotal += price * qty
     }
-    // 태국 VAT 7% (VAT 포함가 기준: vat = subtotal * 7/107)
-    const vat = Math.round(subtotal * (7 / 107) * 100) / 100
-    const total = subtotal
+
+    const afterDiscount = Math.max(0, subtotal - discountAmount)
+    // 태국 VAT 7% (VAT 포함가 기준: vat = afterDiscount * 7/107)
+    const vat = Math.round(afterDiscount * (7 / 107) * 100) / 100
+    const total = afterDiscount
 
     const orderNo = generateOrderNo(storeCode)
     const row = {
@@ -45,6 +49,8 @@ export async function POST(req: NextRequest) {
       memo,
       items_json: JSON.stringify(items),
       subtotal,
+      discount_amount: discountAmount,
+      coupon_code: couponCode,
       vat,
       total,
       status: 'pending',
