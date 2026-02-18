@@ -271,7 +271,7 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: { code?: string; name?: string; spec?: string; category?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1204,6 +1204,27 @@ export async function deletePosMenu(params: { id: string }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface PosOrderItem {
+  id: string
+  name: string
+  price: number
+  qty: number
+}
+
+export async function savePosOrder(params: {
+  storeCode?: string
+  orderType?: string
+  tableName?: string
+  items: PosOrderItem[]
+}) {
+  const res = await apiFetch('/api/savePosOrder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; orderId?: number; orderNo?: string; message?: string }>
 }
 
 export async function saveVendor(params: {

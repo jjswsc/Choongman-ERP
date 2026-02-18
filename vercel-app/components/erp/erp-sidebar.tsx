@@ -56,6 +56,13 @@ const mainItems: MenuItem[] = [
 
 const menuSections: MenuSection[] = [
   {
+    titleKey: "adminSectionPos",
+    items: [
+      { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
+      { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
+    ],
+  },
+  {
     titleKey: "adminSectionLogistics",
     items: [
       { titleKey: "adminItems", icon: Package, href: "/admin/items" },
@@ -105,6 +112,7 @@ export function ErpSidebar() {
   const showSettings = canAccessSettings(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
+    adminSectionPos: true,
     adminSectionLogistics: true,
     adminSectionHr: true,
     adminSectionAccounting: true,

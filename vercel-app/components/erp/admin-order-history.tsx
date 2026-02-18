@@ -14,16 +14,18 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
 import { getAdminOrders, type AdminOrderItem } from "@/lib/api-client"
-import { Printer, FileSpreadsheet, Search, RefreshCw } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Printer, FileSpreadsheet, Search } from "lucide-react"
 
 const HQ_STORES = ["본사", "Office", "오피스", "본점"]
+const inputClass = "h-9 rounded-md border border-input bg-background px-3 text-sm w-full min-w-0"
 
 export function AdminOrderHistory() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
+  const isManager = isManagerRole(auth?.role || "")
   const isHQ = HQ_STORES.some((h) => userStore.toLowerCase().includes(h.toLowerCase()))
 
   const [list, setList] = React.useState<AdminOrderItem[]>([])
@@ -33,6 +35,8 @@ export function AdminOrderHistory() {
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [storeFilter, setStoreFilter] = React.useState(isManager && userStore ? userStore : "All")
   const [statusFilter, setStatusFilter] = React.useState("All")
+  const [categoryFilter, setCategoryFilter] = React.useState("All")
+  const [itemNameFilter, setItemNameFilter] = React.useState("")
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -59,11 +63,44 @@ export function AdminOrderHistory() {
     load()
   }, [load])
 
+  const categories = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const o of list) {
+      for (const it of o.items || []) {
+        const c = String(it.category || "").trim()
+        if (c) set.add(c)
+      }
+    }
+    return Array.from(set).sort()
+  }, [list])
+
+  const filteredList = React.useMemo(() => {
+    let out = list
+    if (categoryFilter && categoryFilter !== "All") {
+      out = out.filter((o) =>
+        (o.items || []).some((it) => String(it.category || "").trim().toLowerCase() === categoryFilter.toLowerCase())
+      )
+    }
+    if (itemNameFilter.trim()) {
+      const kw = itemNameFilter.trim().toLowerCase()
+      out = out.filter((o) =>
+        (o.items || []).some(
+          (it) =>
+            (it.name || "").toLowerCase().includes(kw) ||
+            (it.code || "").toLowerCase().includes(kw)
+        )
+      )
+    }
+    return out
+  }, [list, categoryFilter, itemNameFilter])
+
   const dateShort = (d: string) => {
     if (!d) return "-"
     const m = d.match(/(\d{4})-(\d{2})-(\d{2})/)
     return m ? `${m[1]}-${m[2]}-${m[3]}` : d.substring(0, 10)
   }
+
+  const displayList = filteredList
 
   const handlePrint = () => {
     const win = window.open("", "_blank")
@@ -81,7 +118,7 @@ export function AdminOrderHistory() {
 <th>${t("orderOrderedBy")}</th><th>${t("orderColSummary")}</th><th class="num">${t("orderColTotal")}</th><th>${t("orderColStatus")}</th>
 </tr></thead>
 <tbody>
-${list.map((o) => {
+${displayList.map((o) => {
   const delDate = (o.deliveryDate || "").trim().substring(0, 10) || "-"
   const statusLabel = o.status === "Pending" ? (t("orderStatusPending") || "대기") : o.status === "Approved" ? (t("orderStatusApproved") || "승인") : o.status === "Rejected" ? (t("orderStatusRejected") || "거절") : o.status === "Hold" ? (t("orderStatusHold") || "보류") : o.status || ""
   return `<tr><td>${dateShort(o.date)}</td><td>${delDate}</td><td>${(o.store || "").replace(/</g, "&lt;")}</td><td>${(o.userName || "-").replace(/</g, "&lt;")}</td><td>${(o.summary || "-").replace(/</g, "&lt;")}</td><td class="num">${(Number(o.total) || 0).toLocaleString()} ฿</td><td>${statusLabel}</td></tr>`
@@ -105,7 +142,7 @@ ${list.map((o) => {
       return t
     }
     const headers = [t("orderColDate"), t("orderColDeliveryDate"), t("orderColStore"), t("orderOrderedBy"), t("orderColSummary"), t("orderColTotal"), t("orderColStatus")]
-    const rows = list.map((o) => [
+    const rows = displayList.map((o) => [
       dateShort(o.date),
       (o.deliveryDate || "").toString().substring(0, 10) || "",
       o.store || "",
@@ -125,69 +162,65 @@ ${list.map((o) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         {isHQ && (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">{t("orderFilterStore")}</label>
-            <Select value={storeFilter} onValueChange={setStoreFilter}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">{t("orderFilterStoreAll")}</SelectItem>
-                {stores.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">{t("orderFilterPeriod")}</label>
-          <div className="flex gap-1">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
-            />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">{t("orderFilterStatus")}</label>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[110px]">
-              <SelectValue />
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className={inputClass + " w-[130px]"}>
+              <SelectValue placeholder={t("orderFilterStore")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="All">{t("orderStatusAll")}</SelectItem>
-              <SelectItem value="Pending">{t("orderStatusPending")}</SelectItem>
-              <SelectItem value="Approved">{t("orderStatusApproved")}</SelectItem>
-              <SelectItem value="Rejected">{t("orderStatusRejected")}</SelectItem>
-              <SelectItem value="Hold">{t("orderStatusHold")}</SelectItem>
+              <SelectItem value="All">{t("orderFilterStoreAll")}</SelectItem>
+              {stores.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
-        </div>
-        <Button size="sm" onClick={load} disabled={loading}>
+        )}
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[130px]"} />
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[130px]"} />
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className={inputClass + " w-[110px]"}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">{t("orderStatusAll")}</SelectItem>
+            <SelectItem value="Pending">{t("orderStatusPending")}</SelectItem>
+            <SelectItem value="Approved">{t("orderStatusApproved")}</SelectItem>
+            <SelectItem value="Rejected">{t("orderStatusRejected")}</SelectItem>
+            <SelectItem value="Hold">{t("orderStatusHold")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className={inputClass + " w-[130px]"}>
+            <SelectValue placeholder={t("itemsCategory")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">{t("label_all")}</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          placeholder={t("itemsColName")}
+          value={itemNameFilter}
+          onChange={(e) => setItemNameFilter(e.target.value)}
+          className={inputClass + " w-[140px]"}
+        />
+        <Button size="sm" onClick={load} disabled={loading} className="h-9">
           <Search className="mr-1.5 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handlePrint} disabled={list.length === 0}>
+        <Button variant="outline" size="sm" onClick={handlePrint} disabled={displayList.length === 0} className="h-9">
           <Printer className="mr-1.5 h-4 w-4" />
           {t("printBtn")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExcel} disabled={list.length === 0}>
+        <Button variant="outline" size="sm" onClick={handleExcel} disabled={displayList.length === 0} className="h-9">
           <FileSpreadsheet className="mr-1.5 h-4 w-4" />
           {t("excelBtn")}
         </Button>
-        {list.length > 0 && (
-          <span className="text-sm font-medium text-primary ml-1">{list.length} {t("orderDetailCount")}</span>
+        {displayList.length > 0 && (
+          <span className="text-sm font-medium text-primary shrink-0">{displayList.length} {t("orderDetailCount")}</span>
         )}
       </div>
 
@@ -210,8 +243,10 @@ ${list.map((o) => {
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
               ) : list.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
+              ) : displayList.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
               ) : (
-                list.map((o) => {
+                displayList.map((o) => {
                   const statusBg = o.status === "Pending" ? "bg-warning/10 text-warning" : o.status === "Approved" ? "bg-success/10 text-success" : o.status === "Rejected" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
                   const statusLabel = o.status === "Pending" ? t("orderStatusPending") : o.status === "Approved" ? t("orderStatusApproved") : o.status === "Rejected" ? t("orderStatusRejected") : o.status === "Hold" ? t("orderStatusHold") : o.status || ""
                   return (
