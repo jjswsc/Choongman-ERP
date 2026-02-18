@@ -9,8 +9,8 @@ import {
   getPosOrders,
   getPosTodaySales,
   getPosTableLayout,
+  getPosPrinterSettings,
   savePosOrder,
-  validatePosCoupon,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -68,13 +68,6 @@ export default function PosPage() {
   const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
   const [discountValue, setDiscountValue] = React.useState("")
   const [discountReason, setDiscountReason] = React.useState("")
-  const [couponCode, setCouponCode] = React.useState("")
-  const [appliedCoupon, setAppliedCoupon] = React.useState<{
-    code: string
-    discountAmt: number
-    reason: string
-  } | null>(null)
-  const [couponLoading, setCouponLoading] = React.useState(false)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -250,37 +243,11 @@ export default function PosPage() {
   }
 
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
-  const manualDiscount =
+  const discountAmt =
     discountType === "pct"
       ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
       : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
-  const discountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
   const total = Math.max(0, subtotal - discountAmt)
-
-  const handleApplyCoupon = async () => {
-    const code = couponCode.trim().toUpperCase()
-    if (!code) return
-    setCouponLoading(true)
-    try {
-      const res = await validatePosCoupon({ code, subtotal })
-      if (res.valid && res.discountAmt != null && res.discountReason) {
-        setAppliedCoupon({ code, discountAmt: res.discountAmt, reason: res.discountReason })
-        setDiscountValue("")
-        setDiscountReason("")
-      } else {
-        alert(res.message || t("posCouponInvalid") || "유효하지 않은 쿠폰입니다.")
-      }
-    } catch (e) {
-      alert(String(e))
-    } finally {
-      setCouponLoading(false)
-    }
-  }
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null)
-    setCouponCode("")
-  }
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -358,6 +325,84 @@ export default function PosPage() {
       printWindow.print()
       printWindow.close()
     }, 250)
+  }
+
+  const handlePrintKitchenSlip = async () => {
+    if (!receiptData || !receiptData.storeCode) return
+    const win = window.open("", "_blank")
+    if (!win) {
+      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      return
+    }
+    try {
+      const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
+      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
+      const kitchen1 = settings.kitchen1Categories || []
+      const kitchen2 = settings.kitchen2Categories || []
+      const mode = settings.kitchenMode || 1
+
+      const toSlips = (): { label: string; items: CartItem[] }[] => {
+        if (mode === 1) {
+          return [{ label: t("posKitchenOrder") || "주방 주문서", items: receiptData.items }]
+        }
+        const slip1: CartItem[] = []
+        const slip2: CartItem[] = []
+        for (const it of receiptData.items) {
+          const menuId = String(it.id ?? "").split("-")[0]
+          const cat = categoryByMenuId[menuId] ?? ""
+          if (kitchen2.includes(cat)) {
+            slip2.push(it)
+          } else {
+            slip1.push(it)
+          }
+        }
+        const result: { label: string; items: CartItem[] }[] = []
+        if (slip1.length) result.push({ label: `${t("posKitchen1") || "주방 1"}`, items: slip1 })
+        if (slip2.length) result.push({ label: `${t("posKitchen2") || "주방 2"}`, items: slip2 })
+        return result.length ? result : [{ label: t("posKitchenOrder") || "주방 주문서", items: receiptData.items }]
+      }
+      const slips = toSlips()
+      const printOne = (idx: number) => {
+        if (idx >= slips.length) return
+        const slip = slips[idx]
+        const w = idx === 0 ? win : window.open("", "_blank")
+        if (!w) return
+        const html = `
+          <!DOCTYPE html>
+          <html><head><title>${slip.label}</title>
+          <style>
+            body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
+            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
+            .k-row { margin: 6px 0; font-size: 18px; }
+            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
+          </style></head><body>
+          <div class="k-header">${slip.label}</div>
+          <div class="k-row"><strong>${receiptData.orderNo}</strong></div>
+          <div class="k-row">${receiptData.storeCode} · ${orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}${receiptData.tableName ? ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}` : ""}</div>
+          <div class="k-row">${new Date().toLocaleString("ko-KR")}</div>
+          <hr style="margin: 10px 0;" />
+          ${slip.items.map((it) => `<div class="k-row">${it.name} × ${it.qty}</div>`).join("")}
+          ${receiptData.memo ? `<div class="k-memo">${t("posCustomerMemo") || "메모"}: ${receiptData.memo}</div>` : ""}
+          </body></html>`
+        w.document.write(html)
+        w.document.close()
+        w.focus()
+        let done = false
+        const afterPrint = () => {
+          if (done) return
+          done = true
+          w.close()
+          if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+        }
+        w.onafterprint = afterPrint
+        setTimeout(() => w.print(), 250)
+        setTimeout(afterPrint, 30000)
+      }
+      printOne(0)
+    } catch (e) {
+      win.close()
+      alert(String(e))
+    }
   }
 
   const orderTypeLabels: Record<OrderType, string> = {
@@ -791,6 +836,15 @@ export default function PosPage() {
                 >
                   <Printer className="h-4 w-4" />
                   {t("posPrint") || "인쇄"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handlePrintKitchenSlip}
+                >
+                  <Printer className="h-4 w-4" />
+                  {t("posKitchenSlip") || "주방 주문서"}
                 </Button>
                 <Button size="sm" onClick={() => setReceiptData(null)}>
                   {t("close") || "닫기"}

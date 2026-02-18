@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react"
+import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -23,6 +23,7 @@ import { useT } from "@/lib/i18n"
 import {
   getPosOrders,
   getPosMenus,
+  getPosPrinterSettings,
   updatePosOrder,
   updatePosOrderStatus,
   useStoreList,
@@ -209,6 +210,84 @@ export default function PosOrdersPage() {
     }
   }
 
+  const handlePrintKitchenSlip = async (o: PosOrder) => {
+    const storeCode = (o.storeCode ?? "").trim()
+    if (!storeCode || !o.items?.length) {
+      alert(t("posPrintUnavailable") || "인쇄할 수 없습니다.")
+      return
+    }
+    const win = window.open("", "_blank")
+    if (!win) {
+      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      return
+    }
+    try {
+      const settings = await getPosPrinterSettings({ storeCode })
+      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
+      const kitchen1 = settings.kitchen1Categories || []
+      const kitchen2 = settings.kitchen2Categories || []
+      const mode = settings.kitchenMode || 1
+      const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
+
+      const toSlips = (): { label: string; items: typeof items }[] => {
+        if (mode === 1) return [{ label: t("posKitchenOrder") || "주방 주문서", items }]
+        const slip1: typeof items = []
+        const slip2: typeof items = []
+        for (const it of items) {
+          const menuId = String(it.id ?? "").split("-")[0]
+          const cat = categoryByMenuId[menuId] ?? ""
+          if (kitchen2.includes(cat)) slip2.push(it)
+          else slip1.push(it)
+        }
+        const result: { label: string; items: typeof items }[] = []
+        if (slip1.length) result.push({ label: t("posKitchen1") || "주방 1", items: slip1 })
+        if (slip2.length) result.push({ label: t("posKitchen2") || "주방 2", items: slip2 })
+        return result.length ? result : [{ label: t("posKitchenOrder") || "주방 주문서", items }]
+      }
+      const slips = toSlips()
+      const printOne = (idx: number) => {
+        if (idx >= slips.length) return
+        const slip = slips[idx]
+        const w = idx === 0 ? win : window.open("", "_blank")
+        if (!w) return
+        const html = `
+          <!DOCTYPE html>
+          <html><head><title>${slip.label}</title>
+          <style>
+            body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
+            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
+            .k-row { margin: 6px 0; font-size: 18px; }
+            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
+          </style></head><body>
+          <div class="k-header">${slip.label}</div>
+          <div class="k-row"><strong>${o.orderNo}</strong></div>
+          <div class="k-row">${storeCode} · ${orderTypeLabels[o.orderType] || o.orderType}${o.tableName ? ` · ${t("posTable") || "테이블"}: ${o.tableName}` : ""}</div>
+          <div class="k-row">${o.createdAt ? new Date(o.createdAt).toLocaleString("ko-KR") : "-"}</div>
+          <hr style="margin: 10px 0;" />
+          ${slip.items.map((it) => `<div class="k-row">${it.name ?? "-"} × ${it.qty ?? 1}</div>`).join("")}
+          ${o.memo ? `<div class="k-memo">${t("posCustomerMemo") || "메모"}: ${o.memo}</div>` : ""}
+          </body></html>`
+        w.document.write(html)
+        w.document.close()
+        w.focus()
+        let done = false
+        const afterPrint = () => {
+          if (done) return
+          done = true
+          w.close()
+          if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+        }
+        w.onafterprint = afterPrint
+        setTimeout(() => w.print(), 250)
+        setTimeout(afterPrint, 30000)
+      }
+      printOne(0)
+    } catch (e) {
+      win.close()
+      alert(String(e))
+    }
+  }
+
   const loadOrders = React.useCallback(() => {
     setLoading(true)
     getPosOrders({
@@ -225,6 +304,10 @@ export default function PosOrdersPage() {
   React.useEffect(() => {
     loadOrders()
   }, [loadOrders])
+
+  React.useEffect(() => {
+    getPosMenus().then(setMenus).catch(() => setMenus([]))
+  }, [])
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const isToday = startStr === todayStr && endStr === todayStr && statusFilter === "all"
@@ -513,8 +596,20 @@ export default function PosOrdersPage() {
                               ) : (
                                 <span className="text-muted-foreground">-</span>
                               )}
-                              {EDITABLE_STATUSES.includes(o.status) && (
-                                <div className="pt-2">
+                              <div className="pt-2 flex flex-wrap gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 px-2 text-xs"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handlePrintKitchenSlip(o)
+                                  }}
+                                >
+                                  <Printer className="h-3 w-3" />
+                                  {t("posKitchenSlip") || "주방 주문서"}
+                                </Button>
+                                {EDITABLE_STATUSES.includes(o.status) && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -527,8 +622,8 @@ export default function PosOrdersPage() {
                                     <Pencil className="h-3 w-3" />
                                     {t("posOrderEdit") || "수정"}
                                   </Button>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>

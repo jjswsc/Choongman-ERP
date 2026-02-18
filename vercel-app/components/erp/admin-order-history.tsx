@@ -454,7 +454,7 @@ ${rowsToPrint.map((r) => {
           <Search className="mr-1 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
-        {isHQ && (
+        {isHQ && !isManager && (
           vendorCountInSelection > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -534,7 +534,7 @@ ${rowsToPrint.map((r) => {
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColStore")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[52px]">{t("emp_label_nickname")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColCode")}</th>
-                <th className="px-3 py-2 text-center font-medium whitespace-nowrap min-w-[120px]">{t("orderItemName")}</th>
+                <th className="px-3 py-2 text-center font-medium whitespace-nowrap min-w-[260px]">{t("orderItemName")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsCategory")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsVendor")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemQty")}</th>
@@ -572,7 +572,7 @@ ${rowsToPrint.map((r) => {
                       <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{r.store || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap w-[52px] text-xs">{r.userNick || r.userName || "-"}</td>
                       <td className="px-2 py-1.5 text-center text-muted-foreground whitespace-nowrap">{r.code || "-"}</td>
-                      <td className="px-3 py-1.5 font-medium min-w-[120px]">{r.name || "-"}</td>
+                      <td className="px-3 py-1.5 font-medium min-w-[260px]">{r.name || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.category || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.vendor || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>

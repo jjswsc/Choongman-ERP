@@ -271,7 +271,7 @@ export default function PosPrintersPage() {
 
             <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
               {t("posPrinterNote") ||
-                "※ 손님 영수증은 카운터에서 결제 완료 시 브라우저 인쇄로 출력됩니다. 주방 주문서는 추후 연동 예정입니다."}
+                "※ 손님 영수증·주방 주문서는 결제 완료 후 영수증 모달에서 인쇄 버튼으로 출력합니다."}
             </div>
 
             <Button className="w-full" onClick={handleSave} disabled={saving}>

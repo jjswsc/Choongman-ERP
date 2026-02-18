@@ -45,7 +45,6 @@ import {
   canAccessPosTables,
   canAccessPosMenus,
   canAccessPosPrinters,
-  canAccessPosCoupons,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
@@ -78,7 +77,6 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosTables", icon: LayoutGrid, href: "/admin/pos-tables" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
-      { titleKey: "adminPosCoupons", icon: Receipt, href: "/admin/pos-coupons" },
     ],
   },
   {
@@ -129,7 +127,6 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
   "/admin/pos-printers": canAccessPosPrinters,
-  "/admin/pos-coupons": canAccessPosCoupons,
 }
 
 export function ErpSidebar() {
@@ -143,7 +140,7 @@ export function ErpSidebar() {
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
-    adminSectionPos: true,
+    adminSectionPos: false,
     adminSectionLogistics: true,
     adminSectionHr: true,
     adminSectionAccounting: true,

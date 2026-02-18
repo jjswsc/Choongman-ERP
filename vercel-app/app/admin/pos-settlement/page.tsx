@@ -111,7 +111,7 @@ export default function PosSettlementPage() {
   const qrNum = parseFloat(qrAmt) || 0
   const deliveryNum = parseFloat(deliveryAppAmt) || 0
   const otherNum = parseFloat(otherAmt) || 0
-  const totalInput = cashActualNum + cardNum + qrNum + deliveryNum + otherNum
+  const totalInput = cardNum + qrNum + deliveryNum + otherNum
   const diff = totalInput - systemTotal
 
   const handleSave = async () => {
