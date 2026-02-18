@@ -353,6 +353,7 @@ export function UsageTab() {
                 {t("addUsage")}
               </Button>
             </div>
+            </div>
           </div>
 
           <Card className="shadow-sm">
