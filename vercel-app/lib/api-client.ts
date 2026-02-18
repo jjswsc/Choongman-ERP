@@ -271,7 +271,7 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; category?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1211,6 +1211,35 @@ export interface PosOrderItem {
   name: string
   price: number
   qty: number
+}
+
+export interface PosOrder {
+  id: number
+  orderNo: string
+  storeCode: string
+  orderType: string
+  tableName: string
+  items: PosOrderItem[]
+  subtotal: number
+  vat: number
+  total: number
+  status: string
+  createdAt: string
+}
+
+export async function getPosOrders(params?: {
+  startStr?: string
+  endStr?: string
+  storeCode?: string
+  status?: string
+}) {
+  const q = new URLSearchParams()
+  if (params?.startStr) q.set('startStr', params.startStr)
+  if (params?.endStr) q.set('endStr', params.endStr)
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.status) q.set('status', params.status)
+  const res = await apiFetch('/api/getPosOrders?' + q.toString())
+  return res.json() as Promise<PosOrder[]>
 }
 
 export async function savePosOrder(params: {

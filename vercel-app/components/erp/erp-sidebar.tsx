@@ -59,6 +59,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionPos",
     items: [
       { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
+      { titleKey: "adminPosOrderList", icon: Receipt, href: "/admin/pos-orders" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
     ],
   },

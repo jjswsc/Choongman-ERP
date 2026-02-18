@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
-import { getAdminOrders, type AdminOrderItem } from "@/lib/api-client"
+import { getAdminOrders, type AdminOrderItem, useStoreList } from "@/lib/api-client"
 import { Input } from "@/components/ui/input"
 import { Printer, FileSpreadsheet, Search } from "lucide-react"
 
@@ -28,12 +28,13 @@ export function AdminOrderHistory() {
   const isManager = isManagerRole(auth?.role || "")
   const isHQ = HQ_STORES.some((h) => userStore.toLowerCase().includes(h.toLowerCase()))
 
+  const { stores: storeListFromApi } = useStoreList()
   const [list, setList] = React.useState<AdminOrderItem[]>([])
-  const [stores, setStores] = React.useState<string[]>([])
+  const [storesFromOrders, setStoresFromOrders] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
-  const [storeFilter, setStoreFilter] = React.useState(isManager && userStore ? userStore : "All")
+  const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [categoryFilter, setCategoryFilter] = React.useState("All")
   const [itemNameFilter, setItemNameFilter] = React.useState("")
@@ -51,7 +52,7 @@ export function AdminOrderHistory() {
         userRole: auth?.role,
       })
       setList(rows || [])
-      setStores(s || [])
+      setStoresFromOrders(s || [])
     } catch {
       setList([])
     } finally {
@@ -62,6 +63,12 @@ export function AdminOrderHistory() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  const stores = React.useMemo(() => {
+    const fromApi = storeListFromApi || []
+    const fromOrders = storesFromOrders || []
+    return [...new Set([...fromApi, ...fromOrders])].filter(Boolean).sort()
+  }, [storeListFromApi, storesFromOrders])
 
   const categories = React.useMemo(() => {
     const set = new Set<string>()
@@ -162,10 +169,10 @@ ${displayList.map((o) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
         {isHQ && (
           <Select value={storeFilter} onValueChange={setStoreFilter}>
-            <SelectTrigger className={inputClass + " w-[130px]"}>
+            <SelectTrigger className={inputClass + " w-[100px] shrink-0"}>
               <SelectValue placeholder={t("orderFilterStore")} />
             </SelectTrigger>
             <SelectContent>
@@ -176,10 +183,10 @@ ${displayList.map((o) => {
             </SelectContent>
           </Select>
         )}
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[130px]"} />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[130px]"} />
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[108px] shrink-0"} />
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[108px] shrink-0"} />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className={inputClass + " w-[110px]"}>
+          <SelectTrigger className={inputClass + " w-[85px] shrink-0"}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -191,11 +198,11 @@ ${displayList.map((o) => {
           </SelectContent>
         </Select>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className={inputClass + " w-[130px]"}>
+          <SelectTrigger className={inputClass + " w-[95px] shrink-0"}>
             <SelectValue placeholder={t("itemsCategory")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="All">{t("label_all")}</SelectItem>
+            <SelectItem value="All">{t("itemsCategoryAll")}</SelectItem>
             {categories.map((c) => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
@@ -205,18 +212,18 @@ ${displayList.map((o) => {
           placeholder={t("itemsColName")}
           value={itemNameFilter}
           onChange={(e) => setItemNameFilter(e.target.value)}
-          className={inputClass + " w-[140px]"}
+          className={inputClass + " w-[90px] shrink-0 min-w-[90px]"}
         />
-        <Button size="sm" onClick={load} disabled={loading} className="h-9">
-          <Search className="mr-1.5 h-4 w-4" />
+        <Button size="sm" onClick={load} disabled={loading} className="h-9 shrink-0">
+          <Search className="mr-1 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handlePrint} disabled={displayList.length === 0} className="h-9">
-          <Printer className="mr-1.5 h-4 w-4" />
+        <Button variant="outline" size="sm" onClick={handlePrint} disabled={displayList.length === 0} className="h-9 shrink-0">
+          <Printer className="mr-1 h-4 w-4" />
           {t("printBtn")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExcel} disabled={displayList.length === 0} className="h-9">
-          <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+        <Button variant="outline" size="sm" onClick={handleExcel} disabled={displayList.length === 0} className="h-9 shrink-0">
+          <FileSpreadsheet className="mr-1 h-4 w-4" />
           {t("excelBtn")}
         </Button>
         {displayList.length > 0 && (
