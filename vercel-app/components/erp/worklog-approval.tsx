@@ -53,6 +53,8 @@ export function WorklogApproval() {
   const [deptFilter, setDeptFilter] = React.useState("all")
   const [employeeFilter, setEmployeeFilter] = React.useState("all")
   const [statusFilter, setStatusFilter] = React.useState("all")
+  const [workTypeFilter, setWorkTypeFilter] = React.useState<string>("all")
+  const [contentSearch, setContentSearch] = React.useState("")
   const [depts, setDepts] = React.useState<string[]>([])
   const [staffList, setStaffList] = React.useState<{ name: string; displayName: string }[]>([])
   const [list, setList] = React.useState<WorkLogManagerItem[]>([])
@@ -123,9 +125,9 @@ export function WorklogApproval() {
   }
   const getWorkTypeDisplay = (status: string) => {
     const s = (status || "").trim()
-    if (s === "Finish") return t("workLogFinishWork")
-    if (s === "Continue" || s === "Carry Over") return t("workLogContinueWork")
-    if (s === "Today") return t("workLogTodayWork")
+    if (s === "Finish") return "Finish Work"
+    if (s === "Continue" || s === "Carry Over") return "Continue Work"
+    if (s === "Today") return "Today Work"
     return s || "-"
   }
 
@@ -203,10 +205,30 @@ export function WorklogApproval() {
     }
   }
 
-  const pendingItems = list.filter((it) => it.managerCheck === "대기")
+  const filteredList = React.useMemo(() => {
+    const q = (contentSearch || "").trim().toLowerCase()
+    if (!q) return list
+    return list.filter((it) => {
+      const content = (it.content || "").toLowerCase()
+      const name = (it.name || "").toLowerCase()
+      const dept = (it.dept || "").toLowerCase()
+      const displayName = (staffList.find((s) => s.name === it.name || s.displayName === it.name)?.displayName || "").toLowerCase()
+      return content.includes(q) || name.includes(q) || dept.includes(q) || displayName.includes(q)
+    })
+  }, [list, contentSearch, staffList])
+
+  const filteredByWorkType = React.useMemo(() => {
+    if (!workTypeFilter || workTypeFilter === "all") return filteredList
+    if (workTypeFilter === "Continue") {
+      return filteredList.filter((it) => (it.status || "").trim() === "Continue" || (it.status || "").trim() === "Carry Over")
+    }
+    return filteredList.filter((it) => (it.status || "").trim() === workTypeFilter)
+  }, [filteredList, workTypeFilter])
+
+  const pendingItems = filteredByWorkType.filter((it) => it.managerCheck === "대기")
   const byDept = React.useMemo(() => {
     const map: Record<string, Record<string, WorkLogManagerItem[]>> = {}
-    for (const it of list) {
+    for (const it of filteredByWorkType) {
       const d = it.dept || "기타"
       const n = it.name || ""
       if (!map[d]) map[d] = {}
@@ -214,7 +236,7 @@ export function WorklogApproval() {
       map[d][n].push(it)
     }
     return map
-  }, [list])
+  }, [filteredByWorkType])
 
   return (
     <div className="flex flex-col gap-6">
@@ -281,6 +303,19 @@ export function WorklogApproval() {
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Search className="h-3.5 w-3.5 text-primary" />
+              {t("search")}
+            </label>
+            <Input
+              type="text"
+              placeholder={t("workLogSearchPlaceholder")}
+              value={contentSearch}
+              onChange={(e) => setContentSearch(e.target.value)}
+              className="h-9 w-48 text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogStatus")}</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-9 w-28 text-xs">
@@ -290,6 +325,20 @@ export function WorklogApproval() {
                 <SelectItem value="all">{t("all")}</SelectItem>
                 <SelectItem value="대기">{t("statusPending")}</SelectItem>
                 <SelectItem value="승인">{t("workLogStatusConfirmed")} / {t("workLogStatusCommented")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-foreground">{t("workLogColWorkType")}</label>
+            <Select value={workTypeFilter} onValueChange={setWorkTypeFilter}>
+              <SelectTrigger className="h-9 w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("all")}</SelectItem>
+                <SelectItem value="Finish">Finish Work</SelectItem>
+                <SelectItem value="Continue">Continue Work</SelectItem>
+                <SelectItem value="Today">Today Work</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -319,6 +368,10 @@ export function WorklogApproval() {
           ) : list.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               {t("workLogNoResult")}
+            </div>
+          ) : filteredByWorkType.length === 0 ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              {t("workLogNoSearchResult")}
             </div>
           ) : (
             <div className="divide-y">
