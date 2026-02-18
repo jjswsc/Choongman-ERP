@@ -69,6 +69,13 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
     }
   }, [vendorOpen, vendorList.length])
 
+  // 표시: 기존 데이터가 code로 저장된 경우 name으로 변환, 아니면 그대로
+  const vendorDisplay = React.useMemo(() => {
+    if (!formData.vendor) return ""
+    const v = vendorList.find((x) => x.code === formData.vendor || x.name === formData.vendor)
+    return v ? v.name : formData.vendor
+  }, [formData.vendor, vendorList])
+
   return (
     <div className="rounded-xl border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b px-6 py-4">
@@ -159,7 +166,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                 <Input
                   placeholder={t("itemsVendorPh")}
                   className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  value={formData.vendor}
+                  value={vendorDisplay}
                   onChange={(e) => update("vendor", e.target.value)}
                   onFocus={() => setVendorOpen(true)}
                 />
@@ -177,7 +184,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                     <DropdownMenuItem
                       key={v.code}
                       onClick={() => {
-                        update("vendor", v.code)
+                        update("vendor", v.name)
                         setVendorOpen(false)
                       }}
                     >

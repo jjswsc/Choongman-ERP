@@ -10,6 +10,7 @@ import {
   getPosTodaySales,
   getPosTableLayout,
   savePosOrder,
+  validatePosCoupon,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -67,6 +68,13 @@ export default function PosPage() {
   const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
   const [discountValue, setDiscountValue] = React.useState("")
   const [discountReason, setDiscountReason] = React.useState("")
+  const [couponCode, setCouponCode] = React.useState("")
+  const [appliedCoupon, setAppliedCoupon] = React.useState<{
+    code: string
+    discountAmt: number
+    reason: string
+  } | null>(null)
+  const [couponLoading, setCouponLoading] = React.useState(false)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -242,11 +250,37 @@ export default function PosPage() {
   }
 
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
-  const discountAmt =
+  const manualDiscount =
     discountType === "pct"
       ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
       : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
+  const discountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
   const total = Math.max(0, subtotal - discountAmt)
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase()
+    if (!code) return
+    setCouponLoading(true)
+    try {
+      const res = await validatePosCoupon({ code, subtotal })
+      if (res.valid && res.discountAmt != null && res.discountReason) {
+        setAppliedCoupon({ code, discountAmt: res.discountAmt, reason: res.discountReason })
+        setDiscountValue("")
+        setDiscountReason("")
+      } else {
+        alert(res.message || t("posCouponInvalid") || "유효하지 않은 쿠폰입니다.")
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCode("")
+  }
 
   const handleCheckout = async () => {
     if (cart.length === 0) {

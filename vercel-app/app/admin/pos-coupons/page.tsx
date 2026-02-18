@@ -1,44 +1,39 @@
 "use client"
 
 import * as React from "react"
-import { Tag, Plus, Save, Pencil, Trash2 } from "lucide-react"
+import { Tag, Save, Plus, Trash2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { translateApiMessage } from "@/lib/translate-api-message"
-import { getPosCoupons, savePosCoupon, deletePosCoupon, type PosCoupon } from "@/lib/api-client"
+import {
+  getPosCoupons,
+  savePosCoupon,
+  deletePosCoupon,
+  type PosCoupon,
+} from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
+import { canAccessPosCoupons } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
-const emptyForm = {
-  code: "",
-  name: "",
-  discountType: "amount" as "amount" | "percent",
-  discountValue: "",
-  startDate: "",
-  endDate: "",
-  maxUses: "",
-  isActive: true,
-}
-
 export default function PosCouponsPage() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const [coupons, setCoupons] = React.useState<PosCoupon[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [formData, setFormData] = React.useState(emptyForm)
-  const [editingId, setEditingId] = React.useState<number | null>(null)
   const [saving, setSaving] = React.useState(false)
+  const [editingId, setEditingId] = React.useState<number | null>(null)
+  const [form, setForm] = React.useState({
+    code: "",
+    name: "",
+    discountType: "fixed" as "percent" | "fixed",
+    discountValue: "",
+    validFrom: "",
+    validTo: "",
+  })
 
-  const loadCoupons = React.useCallback(() => {
-    setLoading(true)
+  const loadData = React.useCallback(() => {
     getPosCoupons()
       .then(setCoupons)
       .catch(() => setCoupons([]))
@@ -46,37 +41,42 @@ export default function PosCouponsPage() {
   }, [])
 
   React.useEffect(() => {
-    loadCoupons()
-  }, [loadCoupons])
+    loadData()
+  }, [loadData])
 
   const handleNew = () => {
-    setFormData(emptyForm)
     setEditingId(null)
+    setForm({
+      code: "",
+      name: "",
+      discountType: "fixed",
+      discountValue: "",
+      validFrom: "",
+      validTo: "",
+    })
   }
 
   const handleEdit = (c: PosCoupon) => {
-    setFormData({
+    setEditingId(c.id)
+    setForm({
       code: c.code,
-      name: c.name || "",
-      discountType: c.discountType || "amount",
-      discountValue: String(c.discountValue ?? 0),
-      startDate: c.startDate || "",
-      endDate: c.endDate || "",
-      maxUses: c.maxUses != null ? String(c.maxUses) : "",
-      isActive: c.isActive !== false,
+      name: c.name,
+      discountType: c.discountType,
+      discountValue: String(c.discountValue),
+      validFrom: c.validFrom || "",
+      validTo: c.validTo || "",
     })
-    setEditingId(c.id ?? null)
   }
 
   const handleSave = async () => {
-    const code = formData.code.trim().toUpperCase()
+    const code = form.code.trim().toUpperCase()
+    const val = Number(form.discountValue) || 0
     if (!code) {
       alert(t("posCouponCodeRequired") || "쿠폰 코드를 입력하세요.")
       return
     }
-    const val = Number(formData.discountValue) ?? 0
-    if (val <= 0) {
-      alert(t("posCouponValueRequired") || "할인 값을 입력하세요.")
+    if (form.discountType === "percent" && (val < 1 || val > 100)) {
+      alert(t("posCouponPercentRange") || "할인율은 1~100입니다.")
       return
     }
     setSaving(true)
@@ -84,20 +84,18 @@ export default function PosCouponsPage() {
       const res = await savePosCoupon({
         id: editingId ?? undefined,
         code,
-        name: formData.name.trim() || code,
-        discountType: formData.discountType,
+        name: form.name.trim() || code,
+        discountType: form.discountType,
         discountValue: val,
-        startDate: formData.startDate.trim() || null,
-        endDate: formData.endDate.trim() || null,
-        maxUses: formData.maxUses.trim() ? Number(formData.maxUses) : null,
-        isActive: formData.isActive,
+        validFrom: form.validFrom.trim() || null,
+        validTo: form.validTo.trim() || null,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
-        loadCoupons()
+        loadData()
         handleNew()
       } else {
-        alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
+        alert(res.message)
       }
     } catch (e) {
       alert(String(e))
@@ -107,32 +105,50 @@ export default function PosCouponsPage() {
   }
 
   const handleDelete = async (c: PosCoupon) => {
-    if (!confirm(`"${c.code}" ${t("posMenuConfirmDelete")}`)) return
-    const res = await deletePosCoupon({ id: c.id! })
+    if (!confirm(`${c.code} ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
+    const res = await deletePosCoupon({ id: c.id })
     if (res.success) {
-      loadCoupons()
+      loadData()
       if (editingId === c.id) handleNew()
-      alert(t("itemsAlertDeleted"))
     } else {
       alert(res.message)
     }
   }
 
+  if (!canAccessPosCoupons(auth?.role || "")) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Tag className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("posCouponMgmt") || "쿠폰 관리"}
+              {t("adminPosCoupons") || "POS 쿠폰"}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {t("posCouponMgmtSub") || "POS 주문 시 적용할 쿠폰을 등록합니다."}
+              {t("posCouponSub") || "주문 시 쿠폰 코드 입력으로 할인 적용"}
             </p>
           </div>
+        </div>
+
+        <div className="mb-4 flex gap-2">
+          <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
+            <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            {t("posRefresh") || "새로고침"}
+          </Button>
+          <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
+            <Plus className="h-4 w-4" />
+            {t("posCouponAdd") || "쿠폰 추가"}
+          </Button>
         </div>
 
         {loading && (
@@ -141,187 +157,146 @@ export default function PosCouponsPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          <div className="rounded-xl border bg-card p-6">
-            <h3 className="mb-4 text-sm font-bold">{t("posCouponForm") || "쿠폰 등록"}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-medium">{t("posCouponCode") || "코드"}</label>
-                <Input
-                  placeholder="WELCOME10"
-                  className="mt-1 h-10 uppercase"
-                  value={formData.code}
-                  onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
-                  disabled={!!editingId}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCouponName") || "이름"}</label>
-                <Input
-                  placeholder={t("posCouponNamePh") || "웰컴 할인"}
-                  className="mt-1 h-10"
-                  value={formData.name}
-                  onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCouponType") || "할인 유형"}</label>
-                <Select
-                  value={formData.discountType}
-                  onValueChange={(v: "percent" | "amount") =>
-                    setFormData((p) => ({ ...p, discountType: v }))
-                  }
-                >
-                  <SelectTrigger className="mt-1 h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="amount">{t("posCouponAmount") || "금액 (฿)"}</SelectItem>
-                    <SelectItem value="percent">{t("posCouponPercent") || "비율 (%)"}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCouponValue") || "할인 값"}</label>
-                <Input
-                  type="number"
-                  placeholder={formData.discountType === "percent" ? "10" : "50"}
-                  className="mt-1 h-10"
-                  value={formData.discountValue}
-                  onChange={(e) => setFormData((p) => ({ ...p, discountValue: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-4">
+          {(editingId !== null || form.code) && (
+            <div className="rounded-xl border bg-card p-4">
+              <h3 className="mb-3 text-sm font-semibold">
+                {editingId ? t("posCouponEdit") || "쿠폰 수정" : t("posCouponAdd") || "쿠폰 추가"}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium">{t("posCouponStart") || "시작일"}</label>
+                  <label className="text-xs text-muted-foreground">{t("posCouponCode") || "쿠폰 코드"}</label>
                   <Input
-                    type="date"
-                    className="mt-1 h-10"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData((p) => ({ ...p, startDate: e.target.value }))}
+                    value={form.code}
+                    onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    placeholder="SUMMER10"
+                    className="mt-1"
+                    disabled={!!editingId}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium">{t("posCouponEnd") || "종료일"}</label>
+                  <label className="text-xs text-muted-foreground">{t("posCouponName") || "쿠폰명"}</label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder={t("posCouponNamePh") || "선택"}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posCouponType") || "할인 유형"}</label>
+                  <div className="mt-1 flex gap-2">
+                    <Button
+                      type="button"
+                      variant={form.discountType === "fixed" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setForm((f) => ({ ...f, discountType: "fixed" }))}
+                    >
+                      ฿ {t("posFixed") || "고정"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={form.discountType === "percent" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setForm((f) => ({ ...f, discountType: "percent" }))}
+                    >
+                      % {t("posPercent") || "퍼센트"}
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">
+                    {form.discountType === "percent"
+                      ? t("posDiscountRate") || "할인율 (%)"
+                      : t("posDiscountAmt") || "할인 금액 (฿)"}
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={form.discountType === "percent" ? 100 : undefined}
+                    value={form.discountValue}
+                    onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posValidFrom") || "유효 기간 시작"}</label>
                   <Input
                     type="date"
-                    className="mt-1 h-10"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData((p) => ({ ...p, endDate: e.target.value }))}
+                    value={form.validFrom}
+                    onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posValidTo") || "유효 기간 종료"}</label>
+                  <Input
+                    type="date"
+                    value={form.validTo}
+                    onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
+                    className="mt-1"
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCouponMaxUses") || "최대 사용 횟수"}</label>
-                <Input
-                  type="number"
-                  placeholder={t("posCouponUnlimited") || "무제한"}
-                  className="mt-1 h-10"
-                  value={formData.maxUses}
-                  onChange={(e) => setFormData((p) => ({ ...p, maxUses: e.target.value }))}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))}
-                />
-                {t("posMenuActive") || "활성"}
-              </label>
-              <div className="flex gap-2 pt-2">
-                <Button className="flex-1" onClick={handleSave} disabled={saving}>
+              <div className="mt-3 flex gap-2">
+                <Button onClick={handleSave} disabled={saving}>
                   <Save className="mr-2 h-4 w-4" />
-                  {t("itemsBtnSave")}
+                  {saving ? "..." : t("itemsBtnSave") || "저장"}
                 </Button>
                 <Button variant="outline" onClick={handleNew}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {t("itemsBtnNewRegister")}
+                  {t("posCancel") || "취소"}
                 </Button>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="border-b px-6 py-4">
-              <h3 className="text-sm font-bold">{t("itemsList") || "목록"}</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">코드</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[100px]">이름</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-20">할인</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">기간</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-16">사용</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-16">상태</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coupons.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                        {t("itemsNoResults")}
-                      </td>
-                    </tr>
-                  ) : (
-                    coupons.map((c) => (
-                      <tr
-                        key={c.id}
-                        className={cn(
-                          "border-b hover:bg-muted/20",
-                          !c.isActive && "opacity-60"
-                        )}
-                      >
-                        <td className="px-5 py-3 font-mono text-xs">{c.code}</td>
-                        <td className="px-5 py-3">{c.name || "-"}</td>
-                        <td className="px-5 py-3 text-right">
-                          {c.discountType === "percent"
-                            ? `${c.discountValue}%`
-                            : `${c.discountValue} ฿`}
-                        </td>
-                        <td className="px-5 py-3 text-xs text-muted-foreground">
-                          {c.startDate || "-"} ~ {c.endDate || "-"}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          {c.maxUses != null ? `${c.usedCount}/${c.maxUses}` : c.usedCount}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          {c.isActive ? (
-                            <span className="text-[10px] text-green-600">Y</span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">N</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px]"
-                              onClick={() => handleEdit(c)}
-                            >
-                              <Pencil className="mr-1 h-2.5 w-2.5" />
-                              {t("itemsBtnEdit")}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2 text-[10px] text-destructive"
-                              onClick={() => handleDelete(c)}
-                            >
-                              <Trash2 className="mr-1 h-2.5 w-2.5" />
-                              {t("itemsBtnDelete")}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+          <div className="rounded-xl border bg-card">
+            <h3 className="border-b px-4 py-3 text-sm font-semibold">{t("posCouponList") || "쿠폰 목록"}</h3>
+            <div className="divide-y">
+              {coupons.length === 0 && !loading && (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {t("posCouponEmpty") || "등록된 쿠폰이 없습니다."}
+                </p>
+              )}
+              {coupons.map((c) => (
+                <div
+                  key={c.id}
+                  className={cn(
+                    "flex items-center justify-between px-4 py-3",
+                    editingId === c.id && "bg-primary/5"
                   )}
-                </tbody>
-              </table>
+                >
+                  <div>
+                    <span className="font-mono font-bold">{c.code}</span>
+                    {c.name && c.name !== c.code && (
+                      <span className="ml-2 text-sm text-muted-foreground">{c.name}</span>
+                    )}
+                    <span className="ml-2 text-sm">
+                      {c.discountType === "percent"
+                        ? `${c.discountValue}%`
+                        : `${c.discountValue} ฿`}
+                    </span>
+                    {(c.validFrom || c.validTo) && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {c.validFrom || "~"} ~ {c.validTo || "~"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(c)}>
+                      {t("posEdit") || "수정"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(c)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

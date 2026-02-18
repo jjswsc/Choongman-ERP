@@ -1370,6 +1370,63 @@ export async function getPosPrinterSettings(params: { storeCode: string }) {
   return res.json() as Promise<PosPrinterSettings>
 }
 
+export async function validatePosCoupon(params: { code: string; subtotal: number }) {
+  const q = new URLSearchParams()
+  q.set('code', params.code)
+  q.set('subtotal', String(params.subtotal))
+  const res = await apiFetch('/api/validatePosCoupon?' + q.toString())
+  return res.json() as Promise<{
+    valid: boolean
+    message?: string
+    couponName?: string
+    discountAmt?: number
+    discountReason?: string
+  }>
+}
+
+export interface PosCoupon {
+  id: number
+  code: string
+  name: string
+  discountType: 'percent' | 'fixed'
+  discountValue: number
+  validFrom: string | null
+  validTo: string | null
+  isActive: boolean
+}
+
+export async function getPosCoupons() {
+  const res = await apiFetch('/api/getPosCoupons')
+  return res.json() as Promise<PosCoupon[]>
+}
+
+export async function savePosCoupon(params: {
+  id?: number
+  code: string
+  name?: string
+  discountType: 'percent' | 'fixed'
+  discountValue: number
+  validFrom?: string | null
+  validTo?: string | null
+  isActive?: boolean
+}) {
+  const res = await apiFetch('/api/savePosCoupon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosCoupon(params: { id: number }) {
+  const res = await apiFetch('/api/deletePosCoupon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function savePosPrinterSettings(params: {
   storeCode: string
   kitchenMode: 1 | 2
