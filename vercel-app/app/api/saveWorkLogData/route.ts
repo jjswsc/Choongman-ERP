@@ -24,20 +24,33 @@ export async function POST(req: NextRequest) {
     let savedName = name
     let savedDept = '기타'
     const sk = name.toLowerCase().replace(/\s+/g, '')
+    // 1) Exact match first (전체이름/닉네임 완전 일치)
     for (let i = 0; i < staffList.length; i++) {
       const fn = String(staffList[i].name || '').toLowerCase().replace(/\s+/g, '')
       const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
-      if (
-        sk.includes(fn) ||
-        fn.includes(sk) ||
-        (nn && sk.includes(nn))
-      ) {
+      if (sk === fn || (nn && sk === nn)) {
         savedName =
           staffList[i].nick && String(staffList[i].nick).trim()
             ? staffList[i].nick!
             : staffList[i].name!
         savedDept = staffList[i].job || 'Staff'
         break
+      }
+    }
+    // 2) Partial match only if no exact match (닉네임 포함 시 3자 이상만 - "Mo" 같은 짧은 닉 오매칭 방지)
+    if (savedName === name) {
+      for (let i = 0; i < staffList.length; i++) {
+        const fn = String(staffList[i].name || '').toLowerCase().replace(/\s+/g, '')
+        const nn = String(staffList[i].nick || '').toLowerCase().replace(/\s+/g, '')
+        const nickMatch = nn && nn.length >= 3 && sk.includes(nn)
+        if (sk.includes(fn) || fn.includes(sk) || nickMatch) {
+          savedName =
+            staffList[i].nick && String(staffList[i].nick).trim()
+              ? staffList[i].nick!
+              : staffList[i].name!
+          savedDept = staffList[i].job || 'Staff'
+          break
+        }
       }
     }
 

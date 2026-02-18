@@ -225,10 +225,26 @@ export function WorklogApproval() {
     return filteredList.filter((it) => (it.status || "").trim() === workTypeFilter)
   }, [filteredList, workTypeFilter])
 
+  const sortedList = React.useMemo(() => {
+    const statusOrder: Record<string, number> = {
+      Finish: 0,
+      "Carry Over": 1,
+      Continue: 1,
+      Today: 2,
+    }
+    return [...filteredByWorkType].sort((a, b) => {
+      const dateCmp = (a.date || "").localeCompare(b.date || "")
+      if (dateCmp !== 0) return dateCmp
+      const orderA = statusOrder[(a.status || "").trim()] ?? 3
+      const orderB = statusOrder[(b.status || "").trim()] ?? 3
+      return orderA - orderB
+    })
+  }, [filteredByWorkType])
+
   const pendingItems = filteredByWorkType.filter((it) => it.managerCheck === "대기")
   const byDept = React.useMemo(() => {
     const map: Record<string, Record<string, WorkLogManagerItem[]>> = {}
-    for (const it of filteredByWorkType) {
+    for (const it of sortedList) {
       const d = it.dept || "기타"
       const n = it.name || ""
       if (!map[d]) map[d] = {}
@@ -236,7 +252,7 @@ export function WorklogApproval() {
       map[d][n].push(it)
     }
     return map
-  }, [filteredByWorkType])
+  }, [sortedList])
 
   return (
     <div className="flex flex-col gap-6">

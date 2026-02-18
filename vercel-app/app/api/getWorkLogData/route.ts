@@ -18,12 +18,25 @@ export async function GET(req: NextRequest) {
     const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) || []) as { name?: string; nick?: string }[]
     let targetName = name
     const searchKey = String(name).toLowerCase().replace(/\s+/g, '')
+    // 1) 완전 일치 (employees.name 또는 employees.nick과 정확히 일치)
     for (let k = 0; k < staffList.length; k++) {
       const fName = String(staffList[k].name || '').toLowerCase().replace(/\s+/g, '')
       const nName = String(staffList[k].nick || '').toLowerCase().replace(/\s+/g, '')
-      if (searchKey.includes(fName) || fName.includes(searchKey) || (nName && searchKey.includes(nName))) {
+      if (searchKey === fName || (nName && searchKey === nName)) {
         targetName = (staffList[k].nick && String(staffList[k].nick).trim()) ? staffList[k].nick! : staffList[k].name!
         break
+      }
+    }
+    // 2) 부분 일치 (닉네임 3자 이상만 - "Mo" 같은 짧은 닉 오매칭 방지)
+    if (targetName === name) {
+      for (let k = 0; k < staffList.length; k++) {
+        const fName = String(staffList[k].name || '').toLowerCase().replace(/\s+/g, '')
+        const nName = String(staffList[k].nick || '').toLowerCase().replace(/\s+/g, '')
+        const nickMatch = nName && nName.length >= 3 && searchKey.includes(nName)
+        if (searchKey.includes(fName) || fName.includes(searchKey) || nickMatch) {
+          targetName = (staffList[k].nick && String(staffList[k].nick).trim()) ? staffList[k].nick! : staffList[k].name!
+          break
+        }
       }
     }
 
