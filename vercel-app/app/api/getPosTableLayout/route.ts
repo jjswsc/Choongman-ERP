@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     if (raw?.layout_json) {
       const arr = Array.isArray(raw.layout_json) ? raw.layout_json : []
       layout = arr
-        .filter((t): t is Record<string, unknown> => t && typeof t === 'object')
+        .filter((t): t is Record<string, unknown> => Boolean(t && typeof t === 'object' && t !== null))
         .map((t) => ({
           id: String(t.id ?? ''),
           name: String(t.name ?? ''),

@@ -1256,6 +1256,52 @@ export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolea
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface PosCoupon {
+  id?: number
+  code: string
+  name?: string
+  discountType: 'percent' | 'amount'
+  discountValue: number
+  startDate?: string | null
+  endDate?: string | null
+  maxUses?: number | null
+  usedCount?: number
+  isActive?: boolean
+}
+
+export async function getPosCoupons() {
+  const res = await apiFetch('/api/getPosCoupons')
+  return res.json() as Promise<PosCoupon[]>
+}
+
+export async function savePosCoupon(params: {
+  id?: number
+  code: string
+  name?: string
+  discountType?: 'percent' | 'amount'
+  discountValue: number
+  startDate?: string | null
+  endDate?: string | null
+  maxUses?: number | null
+  isActive?: boolean
+}) {
+  const res = await apiFetch('/api/savePosCoupon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosCoupon(params: { id: number }) {
+  const res = await apiFetch('/api/deletePosCoupon', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface PosTableItem {
   id: string
   name: string
