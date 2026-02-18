@@ -82,6 +82,7 @@ export function UsageTab() {
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
+  const [fractionRow, setFractionRow] = useState<0 | 1>(0)
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -204,6 +205,79 @@ export function UsageTab() {
         </TabsList>
 
         <TabsContent value="input" className="mt-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-2 shrink-0">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">{t("useQtyFraction") || "분수"}:</span>
+                <div className="flex rounded-md border border-input bg-muted/50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFractionRow(0)}
+                    className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${fractionRow === 0 ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    1~1/50
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFractionRow(1)}
+                    className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${fractionRow === 1 ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    1/100~
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-1.5 flex-wrap min-h-[36px]">
+                {fractionRow === 0 ? (
+                  <>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.5)}>½</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.25)}>¼</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>1/5</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>1/10</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.04)}>1/25</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.02)}>1/50</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.01)}>1/100</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.005)}>1/200</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1 / 1200)}>1/1200</Button>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.0001, quantity - 0.25))}>
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  step="0.0001"
+                  min="0.0001"
+                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  value={quantity}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!isNaN(v) && v >= 0.0001) setQuantity(v)
+                  }}
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (isNaN(v) || v < 0.0001) setQuantity(0.5)
+                  }}
+                />
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + 0.25)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                {t("addUsage")}
+              </Button>
+            </div>
+          </div>
+
           <Card className="shadow-sm">
             <CardContent className="p-0">
               {loading ? (
@@ -280,58 +354,6 @@ export function UsageTab() {
               )}
             </CardContent>
           </Card>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted-foreground">{t("useQtyFraction") || "분수"}:</span>
-              <div className="flex flex-col gap-1.5">
-                <div className="flex gap-1.5 flex-wrap">
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.5)}>½</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.25)}>¼</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>1/5</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>1/10</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.04)}>1/25</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.02)}>1/50</Button>
-                </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.01)}>1/100</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.005)}>1/200</Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1 / 1200)}>1/1200</Button>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.0001, quantity - 0.25))}>
-                  <Minus className="h-4 w-4" />
-                </Button>
-                <Input
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  value={quantity}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!isNaN(v) && v >= 0.0001) setQuantity(v)
-                  }}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (isNaN(v) || v < 0.0001) setQuantity(0.5)
-                  }}
-                />
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + 0.25)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                {t("addUsage")}
-              </Button>
-            </div>
-          </div>
 
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
