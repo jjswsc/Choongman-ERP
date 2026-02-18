@@ -9,12 +9,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const storeCode = String(body?.storeCode ?? '').trim()
-    const kitchenCount = Math.min(2, Math.max(1, Number(body?.kitchenCount ?? 1)))
+    const kitchenMode = Math.min(2, Math.max(1, Number(body?.kitchenMode) || 1))
     const kitchen1Categories = Array.isArray(body?.kitchen1Categories)
-      ? body.kitchen1Categories.map(String).filter(Boolean)
+      ? body.kitchen1Categories.filter((c: unknown) => typeof c === 'string')
       : []
     const kitchen2Categories = Array.isArray(body?.kitchen2Categories)
-      ? body.kitchen2Categories.map(String).filter(Boolean)
+      ? body.kitchen2Categories.filter((c: unknown) => typeof c === 'string')
       : []
 
     if (!storeCode) {
@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
       { limit: 1 }
     )) as { store_code?: string }[] | null
 
-    const row = {
-      kitchen_count: kitchenCount,
+    const patch = {
+      kitchen_mode: kitchenMode,
       kitchen1_categories: kitchen1Categories,
       kitchen2_categories: kitchen2Categories,
       updated_at: new Date().toISOString(),
@@ -38,12 +38,12 @@ export async function POST(req: NextRequest) {
       await supabaseUpdateByFilter(
         'pos_printer_settings',
         `store_code=eq.${encodeURIComponent(storeCode)}`,
-        row
+        patch
       )
     } else {
       await supabaseInsert('pos_printer_settings', {
         store_code: storeCode,
-        ...row,
+        ...patch,
       })
     }
 

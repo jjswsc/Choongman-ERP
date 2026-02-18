@@ -18,13 +18,18 @@ import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuOptions,
+  getPosMenuIngredients,
+  getItems,
   savePosMenu,
   savePosMenuOption,
+  savePosMenuIngredient,
   deletePosMenu,
   deletePosMenuOption,
+  deletePosMenuIngredient,
   updatePosMenuSoldOut,
   type PosMenu,
   type PosMenuOption,
+  type PosMenuIngredient,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -51,8 +56,12 @@ export default function PosMenusPage() {
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
   const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
+  const [menuIngredients, setMenuIngredients] = React.useState<PosMenuIngredient[]>([])
+  const [items, setItems] = React.useState<{ code: string; name: string }[]>([])
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
+  const [newIngredientCode, setNewIngredientCode] = React.useState("")
+  const [newIngredientQty, setNewIngredientQty] = React.useState("1")
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -70,12 +79,28 @@ export default function PosMenusPage() {
   React.useEffect(() => {
     if (!editingId) {
       setMenuOptions([])
+      setMenuIngredients([])
       return
     }
-    getPosMenuOptions({ menuId: editingId })
-      .then(setMenuOptions)
-      .catch(() => setMenuOptions([]))
+    Promise.all([
+      getPosMenuOptions({ menuId: editingId }),
+      getPosMenuIngredients({ menuId: editingId }),
+    ])
+      .then(([opts, ings]) => {
+        setMenuOptions(opts || [])
+        setMenuIngredients(ings || [])
+      })
+      .catch(() => {
+        setMenuOptions([])
+        setMenuIngredients([])
+      })
   }, [editingId])
+
+  React.useEffect(() => {
+    getItems()
+      .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name }))))
+      .catch(() => setItems([]))
+  }, [])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -179,6 +204,32 @@ export default function PosMenusPage() {
       getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
       setNewOptionName("")
       setNewOptionModifier("0")
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleAddIngredient = async () => {
+    if (!editingId || !newIngredientCode.trim()) return
+    const res = await savePosMenuIngredient({
+      menuId: Number(editingId),
+      itemCode: newIngredientCode.trim(),
+      quantity: Number(newIngredientQty) || 1,
+    })
+    if (res.success) {
+      getPosMenuIngredients({ menuId: editingId }).then(setMenuIngredients)
+      setNewIngredientCode("")
+      setNewIngredientQty("1")
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleDeleteIngredient = async (ing: PosMenuIngredient) => {
+    if (!confirm(`${ing.itemCode} ${t("posMenuConfirmDelete")}`)) return
+    const res = await deletePosMenuIngredient({ id: ing.id })
+    if (res.success) {
+      setMenuIngredients((prev) => prev.filter((i) => i.id !== ing.id))
     } else {
       alert(res.message)
     }
@@ -389,6 +440,55 @@ export default function PosMenusPage() {
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+                </div>
+              )}
+              {editingId && (
+                <div className="rounded border border-dashed border-amber-500/50 p-3">
+                  <h4 className="mb-2 text-xs font-semibold">{t("posMenuIngredients") || "재료 (BOM)"}</h4>
+                  <ul className="mb-2 space-y-1">
+                    {menuIngredients.map((ing) => (
+                      <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
+                        <span>{ing.itemCode} × {ing.quantity}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-5 px-1 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteIngredient(ing)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
+                      <SelectTrigger className="h-8 flex-1 text-xs">
+                        <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {items.map((it) => (
+                          <SelectItem key={it.code} value={it.code}>
+                            {it.code} — {it.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={0.001}
+                      step={0.1}
+                      placeholder="1"
+                      className="h-8 w-16 text-right text-xs"
+                      value={newIngredientQty}
+                      onChange={(e) => setNewIngredientQty(e.target.value)}
+                    />
+                    <Button size="sm" className="h-8 px-2" onClick={handleAddIngredient}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {t("posIngredientHint") || "판매 시 해당 재료가 자동 차감됩니다."}
+                  </p>
                 </div>
               )}
               <div className="flex gap-3 pt-2">

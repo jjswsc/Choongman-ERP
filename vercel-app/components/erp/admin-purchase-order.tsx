@@ -32,7 +32,7 @@ import {
   type ItemByVendor,
 } from "@/lib/api-client"
 import { useOrderCreate } from "@/lib/order-create-context"
-import { Minus, Plus, ShoppingCart, Trash2, Package, Printer, FileSpreadsheet } from "lucide-react"
+import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
 
 interface CartItem {
   code: string
@@ -173,7 +173,7 @@ export function AdminPurchaseOrder() {
         locationName: locationSelect.name,
         locationAddress: locationSelect.address,
         locationCode: locationSelect.location_code,
-        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty })),
+        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store })),
         userName: auth.user,
       })
       if (res.success) {
@@ -187,133 +187,6 @@ export function AdminPurchaseOrder() {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  const getPoHtml = (poNo: string) => {
-    const loc = locationSelect
-    const ven = vendorSelect
-    if (!loc || !ven) return ""
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
-    const dateStr = new Date().toLocaleDateString(locale)
-    return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>${t("poTitle")} - ${poNo}</title>
-<style>
-body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}
-h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}
-table{width:100%;border-collapse:collapse;margin:16px 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f5f5f5}
-.num{text-align:right}
-.tot{font-weight:bold}
-.info{p{margin:4px 0}
-</style>
-</head>
-<body>
-<h1>${t("poTitle")}</h1>
-<p><strong>${t("poNo")}:</strong> ${poNo}</p>
-<p><strong>${t("poDate")}:</strong> ${dateStr}</p>
-<hr/>
-<h3>${t("poShipTo")}</h3>
-<p><strong>${loc.name}</strong></p>
-<p>${loc.address}</p>
-<hr/>
-<h3>${t("poVendor")}</h3>
-<p><strong>${ven.name}</strong></p>
-<p>${ven.address || "-"}</p>
-<hr/>
-<table>
-<thead><tr><th>No</th><th>${t("item")}</th><th>${t("orderItemSpec")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemTotal")}</th></tr></thead>
-<tbody>
-${cart
-  .map(
-    (c, i) =>
-      `<tr><td>${i + 1}</td><td>${c.name}</td><td>-</td><td class="num">${c.price}</td><td class="num">${c.qty}</td><td class="num">${c.price * c.qty}</td></tr>`
-  )
-  .join("")}
-</tbody>
-<tfoot>
-<tr><td colspan="4" class="num">${t("subtotal")}</td><td class="num"></td><td class="num">${subtotal}</td></tr>
-<tr><td colspan="4" class="num">${t("vat")} (7%)</td><td class="num"></td><td class="num">${vat}</td></tr>
-<tr class="tot"><td colspan="4" class="num">${t("total")}</td><td class="num"></td><td class="num">${total}</td></tr>
-</tfoot>
-</table>
-<p style="margin-top:24px;font-size:12px;color:#666">${t("poPreparedBy")}: ${auth?.user || "-"}</p>
-</body>
-</html>
-`
-  }
-
-  const handlePrint = () => {
-    const poNo = "PO-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + String(Date.now()).slice(-4)
-    const html = getPoHtml(poNo)
-    if (!html) return
-    const w = window.open("", "_blank")
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-      w.focus()
-      setTimeout(() => {
-        w.print()
-        w.close()
-      }, 300)
-    }
-  }
-
-  const handleExcel = () => {
-    const poNo = "PO-" + new Date().toISOString().slice(0, 10).replace(/-/g, "") + "-" + String(Date.now()).slice(-4)
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
-    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-    const pad = (r: (string | number)[], n: number) => {
-      const arr = [...r.map((v) => String(v))]
-      while (arr.length < n) arr.push("")
-      return arr.slice(0, n)
-    }
-    const headers = ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
-    const dataRows = cart.map((c, i) => [i + 1, c.name, "-", c.price, c.qty, c.price * c.qty])
-    const allRows = [
-      pad([t("poTitle"), poNo], 6),
-      pad([t("poDate"), new Date().toLocaleDateString(locale)], 6),
-      pad([t("poShipTo"), locationSelect?.name || "", locationSelect?.address || ""], 6),
-      pad([t("poVendor"), vendorSelect?.name || "", vendorSelect?.address || ""], 6),
-      pad([], 6),
-      pad(headers, 6),
-      ...dataRows.map((r) => pad(r.map((v) => String(v)), 6)),
-      pad([], 6),
-      pad([t("subtotal"), "", "", "", "", String(subtotal)], 6),
-      pad([t("vat"), "", "", "", "", String(vat)], 6),
-      pad([t("total"), "", "", "", "", String(total)], 6),
-    ]
-    const pxPerChar = 8
-    const minW = 50
-    const colWidths = Array.from({ length: 6 }, (_, c) => {
-      let maxLen = minW / pxPerChar
-      for (const row of allRows) {
-        const len = String(row[c] ?? "").length
-        if (len > maxLen) maxLen = len
-      }
-      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 400))
-    })
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
-<body>
-<table>
-<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
-${allRows.map((row, ri) => {
-      const isHead = ri === 5 || ri >= allRows.length - 3
-      return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`
-    }).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `PO_${poNo}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
@@ -554,14 +427,6 @@ ${allRows.map((row, ri) => {
           disabled={cart.length === 0 || submitting}
         >
           {submitting ? t("loading") : t("purchaseOrderSave")}
-        </Button>
-        <Button variant="outline" onClick={handlePrint} disabled={cart.length === 0}>
-          <Printer className="mr-2 h-4 w-4" />
-          {t("purchaseOrderPrint")}
-        </Button>
-        <Button variant="outline" onClick={handleExcel} disabled={cart.length === 0}>
-          <FileSpreadsheet className="mr-2 h-4 w-4" />
-          {t("purchaseOrderExcel")}
         </Button>
       </div>
     </div>

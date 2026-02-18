@@ -1210,6 +1210,43 @@ export async function savePosMenuOption(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface PosMenuIngredient {
+  id: string
+  menuId: string
+  itemCode: string
+  quantity: number
+}
+
+export async function getPosMenuIngredients(params: { menuId: string }) {
+  const q = new URLSearchParams()
+  q.set('menuId', params.menuId)
+  const res = await apiFetch('/api/getPosMenuIngredients?' + q.toString())
+  return res.json() as Promise<PosMenuIngredient[]>
+}
+
+export async function savePosMenuIngredient(params: {
+  id?: string
+  menuId: number
+  itemCode: string
+  quantity?: number
+}) {
+  const res = await apiFetch('/api/savePosMenuIngredient', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosMenuIngredient(params: { id: string }) {
+  const res = await apiFetch('/api/deletePosMenuIngredient', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function deletePosMenuOption(params: { id: string }) {
   const res = await apiFetch('/api/deletePosMenuOption', {
     method: 'POST',
@@ -1318,21 +1355,9 @@ export async function getPosTableLayout(params: { storeCode: string }) {
   return res.json() as Promise<{ layout: PosTableItem[]; storeCode: string }>
 }
 
-export async function savePosTableLayout(params: {
-  storeCode: string
-  layout: PosTableItem[]
-}) {
-  const res = await apiFetch('/api/savePosTableLayout', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{ success: boolean; message?: string }>
-}
-
 export interface PosPrinterSettings {
   storeCode: string
-  kitchenCount: number
+  kitchenMode: 1 | 2
   kitchen1Categories: string[]
   kitchen2Categories: string[]
 }
@@ -1341,16 +1366,28 @@ export async function getPosPrinterSettings(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
   const res = await apiFetch('/api/getPosPrinterSettings?' + q.toString())
-  return res.json() as Promise<PosPrinterSettings & { kitchen1Categories: string[]; kitchen2Categories: string[] }>
+  return res.json() as Promise<PosPrinterSettings>
 }
 
 export async function savePosPrinterSettings(params: {
   storeCode: string
-  kitchenCount: number
+  kitchenMode: 1 | 2
   kitchen1Categories: string[]
   kitchen2Categories: string[]
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function savePosTableLayout(params: {
+  storeCode: string
+  layout: PosTableItem[]
+}) {
+  const res = await apiFetch('/api/savePosTableLayout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

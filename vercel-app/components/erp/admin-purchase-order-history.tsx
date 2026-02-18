@@ -33,34 +33,59 @@ export function AdminPurchaseOrderHistory() {
     const dateStr = po.created_at ? new Date(po.created_at).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
-    const headers = ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
-    const dataRows: (string | number)[][] = cart.map((c: { name?: string; price?: number; qty?: number }, i: number) => [
-      i + 1,
-      c.name || "-",
-      "-",
-      c.price ?? 0,
-      c.qty ?? 0,
-      (c.price ?? 0) * (c.qty ?? 0),
-    ])
+    const hasStore = cart.some((c) => c.store && String(c.store).trim())
+    const colCount = hasStore ? 7 : 6
+    const headers = hasStore
+      ? [t("orderColStore"), "No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
+      : ["No", t("item"), t("orderItemSpec"), t("orderItemUnitPrice"), t("orderItemQty"), t("orderItemTotal")]
+
+    let dataRows: (string | number)[][]
+    if (hasStore) {
+      const byStore = groupCartByStore(cart)
+      dataRows = []
+      for (const [storeName, items] of byStore.entries()) {
+        dataRows.push([`${t("orderColStore")}: ${storeName}`, "", "", "", "", "", ""])
+        items.forEach((c, i) => {
+          dataRows.push([
+            "",
+            i + 1,
+            c.name || "-",
+            "-",
+            c.price ?? 0,
+            c.qty ?? 0,
+            (c.price ?? 0) * (c.qty ?? 0),
+          ])
+        })
+      }
+    } else {
+      dataRows = cart.map((c, i) => [
+        i + 1,
+        c.name || "-",
+        "-",
+        c.price ?? 0,
+        c.qty ?? 0,
+        (c.price ?? 0) * (c.qty ?? 0),
+      ])
+    }
+
     const pad = (r: (string | number)[], n: number) => {
       const arr = [...r]
       while (arr.length < n) arr.push("")
       return arr.slice(0, n).map((v) => String(v))
     }
     const allRows = [
-      pad([t("poTitle"), poNo], 6),
-      pad([t("poDate"), dateStr], 6),
-      pad([t("poShipTo"), po.location_name || "", po.location_address || ""], 6),
-      pad([t("poVendor"), po.vendor_name || ""], 6),
-      pad([], 6),
-      pad(headers, 6),
-      ...dataRows.map((r) => pad(r.map((v) => String(v)), 6)),
-      pad([], 6),
-      pad([t("subtotal"), "", "", "", "", String(po.subtotal ?? 0)], 6),
-      pad([t("vat"), "", "", "", "", String(po.vat ?? 0)], 6),
-      pad([t("total"), "", "", "", "", String(po.total ?? 0)], 6),
+      pad([t("poTitle"), poNo], colCount),
+      pad([t("poDate"), dateStr], colCount),
+      pad([t("poShipTo"), po.location_name || "", po.location_address || ""], colCount),
+      pad([t("poVendor"), po.vendor_name || ""], colCount),
+      pad([], colCount),
+      pad(headers, colCount),
+      ...dataRows.map((r) => pad(r.map((v) => String(v)), colCount)),
+      pad([], colCount),
+      pad([t("subtotal"), ...Array(colCount - 2).fill(""), String(po.subtotal ?? 0)], colCount),
+      pad([t("vat"), ...Array(colCount - 2).fill(""), String(po.vat ?? 0)], colCount),
+      pad([t("total"), ...Array(colCount - 2).fill(""), String(po.total ?? 0)], colCount),
     ]
-    const colCount = 6
     const pxPerChar = 8
     const minW = 50
     const colWidths = Array.from({ length: colCount }, (_, c) => {
@@ -102,6 +127,30 @@ ${allRows.map((row, ri) => {
       ? new Date(po.created_at).toLocaleDateString(locale)
       : new Date().toLocaleDateString(locale)
 
+    const hasStore = cart.some((c) => c.store && String(c.store).trim())
+    let tbodyHtml: string
+    if (hasStore) {
+      const byStore = groupCartByStore(cart)
+      tbodyHtml = Array.from(byStore.entries())
+        .map(([storeName, items]) => {
+          const rows = items
+            .map(
+              (c, i) =>
+                `<tr><td>${i + 1}</td><td>${(c.name || "-").replace(/</g, "&lt;")}</td><td>-</td><td class="num">${c.price ?? 0}</td><td class="num">${c.qty ?? 0}</td><td class="num">${((c.price ?? 0) * (c.qty ?? 0))}</td></tr>`
+            )
+            .join("")
+          return `<tr class="store-header"><td colspan="6" style="background:#e8e8e8;font-weight:bold;padding:8px">${t("orderColStore")}: ${storeName.replace(/</g, "&lt;")}</td></tr>${rows}`
+        })
+        .join("")
+    } else {
+      tbodyHtml = cart
+        .map(
+          (c, i) =>
+            `<tr><td>${i + 1}</td><td>${(c.name || "-").replace(/</g, "&lt;")}</td><td>-</td><td class="num">${c.price ?? 0}</td><td class="num">${c.qty ?? 0}</td><td class="num">${((c.price ?? 0) * (c.qty ?? 0))}</td></tr>`
+        )
+        .join("")
+    }
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -122,29 +171,22 @@ th{background:#f5f5f5}
 <p><strong>${t("poDate")}:</strong> ${dateStr}</p>
 <hr/>
 <h3>${t("poShipTo")}</h3>
-<p><strong>${po.location_name || "-"}</strong></p>
-<p>${po.location_address || "-"}</p>
+<p><strong>${(po.location_name || "-").replace(/</g, "&lt;")}</strong></p>
+<p>${(po.location_address || "-").replace(/</g, "&lt;")}</p>
 <hr/>
 <h3>${t("poVendor")}</h3>
-<p><strong>${po.vendor_name || "-"}</strong></p>
+<p><strong>${(po.vendor_name || "-").replace(/</g, "&lt;")}</strong></p>
 <hr/>
 <table>
 <thead><tr><th>No</th><th>${t("item")}</th><th>${t("orderItemSpec")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemTotal")}</th></tr></thead>
-<tbody>
-${cart
-  .map(
-    (c: { name?: string; price?: number; qty?: number }, i: number) =>
-      `<tr><td>${i + 1}</td><td>${c.name || "-"}</td><td>-</td><td class="num">${c.price ?? 0}</td><td class="num">${c.qty ?? 0}</td><td class="num">${((c.price ?? 0) * (c.qty ?? 0))}</td></tr>`
-  )
-  .join("")}
-</tbody>
+<tbody>${tbodyHtml}</tbody>
 <tfoot>
 <tr><td colspan="4" class="num">${t("subtotal")}</td><td class="num"></td><td class="num">${po.subtotal ?? 0}</td></tr>
 <tr><td colspan="4" class="num">${t("vat")} (7%)</td><td class="num"></td><td class="num">${po.vat ?? 0}</td></tr>
 <tr class="tot"><td colspan="4" class="num">${t("total")}</td><td class="num"></td><td class="num">${po.total ?? 0}</td></tr>
 </tfoot>
 </table>
-<p style="margin-top:24px;font-size:12px;color:#666">${t("poPreparedBy")}: ${po.user_name || "-"}</p>
+<p style="margin-top:24px;font-size:12px;color:#666">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
 </body>
 </html>
 `
@@ -239,7 +281,9 @@ ${cart
   )
 }
 
-function parseCart(json: string | undefined): { name?: string; price?: number; qty?: number }[] {
+type CartItem = { name?: string; price?: number; qty?: number; store?: string }
+
+function parseCart(json: string | undefined): CartItem[] {
   if (!json || typeof json !== "string") return []
   try {
     const arr = JSON.parse(json)
@@ -247,4 +291,15 @@ function parseCart(json: string | undefined): { name?: string; price?: number; q
   } catch {
     return []
   }
+}
+
+function groupCartByStore(cart: CartItem[]): Map<string, CartItem[]> {
+  const byStore = new Map<string, CartItem[]>()
+  for (const c of cart) {
+    const store = (c.store && String(c.store).trim()) || "-"
+    const arr = byStore.get(store) || []
+    arr.push(c)
+    byStore.set(store, arr)
+  }
+  return byStore
 }

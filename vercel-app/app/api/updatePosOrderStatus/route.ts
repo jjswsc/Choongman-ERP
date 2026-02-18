@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled']
 
@@ -20,12 +21,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '유효하지 않은 상태입니다.' }, { headers })
     }
 
-    const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, { limit: 1 })) as { id?: number }[] | null
+    const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, { limit: 1 })) as { id?: number; status?: string }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
 
     await supabaseUpdate('pos_orders', id, { status })
+
+    if (status === 'completed') {
+      try {
+        await processPosStockDeduction(id)
+      } catch (e) {
+        console.error('processPosStockDeduction:', e)
+      }
+    }
+
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {
     console.error('updatePosOrderStatus:', e)

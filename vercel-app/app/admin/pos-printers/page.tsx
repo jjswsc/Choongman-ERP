@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Printer, Save } from "lucide-react"
+import { Printer, Save, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -19,7 +19,8 @@ import {
   useStoreList,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
 export default function PosPrintersPage() {
   const { auth } = useAuth()
@@ -28,14 +29,34 @@ export default function PosPrintersPage() {
   const { stores } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
-  const [kitchenCount, setKitchenCount] = React.useState(1)
+  const [kitchenMode, setKitchenMode] = React.useState<1 | 2>(1)
   const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
   const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
-  const [allCategories, setAllCategories] = React.useState<string[]>([])
+  const [categories, setCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
+
+  const loadData = React.useCallback(() => {
+    if (!effectiveStore) return
+    setLoading(true)
+    Promise.all([
+      getPosPrinterSettings({ storeCode: effectiveStore }),
+      getPosMenuCategories(),
+    ])
+      .then(([settings, { categories: cats }]) => {
+        setKitchenMode((settings.kitchenMode as 1 | 2) || 1)
+        setKitchen1Categories(settings.kitchen1Categories || [])
+        setKitchen2Categories(settings.kitchen2Categories || [])
+        setCategories(cats || [])
+      })
+      .catch(() => {
+        setCategories([])
+      })
+      .finally(() => setLoading(false))
+  }, [effectiveStore])
 
   React.useEffect(() => {
     if (canSearchAll && stores.length && !storeCode) {
@@ -45,53 +66,38 @@ export default function PosPrintersPage() {
     }
   }, [canSearchAll, stores, auth?.store, storeCode])
 
-  const loadData = React.useCallback(() => {
-    if (!storeCode) return
-    setLoading(true)
-    Promise.all([
-      getPosPrinterSettings({ storeCode }),
-      getPosMenuCategories(),
-    ])
-      .then(([settings, { categories }]) => {
-        setKitchenCount(settings.kitchenCount ?? 1)
-        setKitchen1Categories(settings.kitchen1Categories ?? [])
-        setKitchen2Categories(settings.kitchen2Categories ?? [])
-        setAllCategories(categories || [])
-      })
-      .catch(() => {
-        setAllCategories([])
-      })
-      .finally(() => setLoading(false))
-  }, [storeCode])
-
   React.useEffect(() => {
     loadData()
   }, [loadData])
 
-  const toggleCategory = (
-    category: string,
-    target: "kitchen1" | "kitchen2",
-    current: string[],
-    setter: React.Dispatch<React.SetStateAction<string[]>>
-  ) => {
-    const has = current.includes(category)
-    if (has) {
-      setter((prev) => prev.filter((c) => c !== category))
+  const toggleKitchen1 = (cat: string) => {
+    if (kitchen1Categories.includes(cat)) {
+      setKitchen1Categories((prev) => prev.filter((c) => c !== cat))
     } else {
-      setter((prev) => [...prev, category])
+      setKitchen1Categories((prev) => [...prev, cat])
+      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
+    }
+  }
+
+  const toggleKitchen2 = (cat: string) => {
+    if (kitchen2Categories.includes(cat)) {
+      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
+    } else {
+      setKitchen2Categories((prev) => [...prev, cat])
+      setKitchen1Categories((prev) => prev.filter((c) => c !== cat))
     }
   }
 
   const handleSave = async () => {
-    if (!storeCode) {
+    if (!effectiveStore) {
       alert(t("store") || "매장을 선택하세요.")
       return
     }
     setSaving(true)
     try {
       const res = await savePosPrinterSettings({
-        storeCode,
-        kitchenCount,
+        storeCode: effectiveStore,
+        kitchenMode,
         kitchen1Categories,
         kitchen2Categories,
       })
@@ -108,6 +114,14 @@ export default function PosPrintersPage() {
     }
   }
 
+  if (!canAccessPosPrinters(auth?.role || "")) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
@@ -120,12 +134,12 @@ export default function PosPrintersPage() {
               {t("posPrinterSettings") || "프린터 설정"}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {t("posPrinterSettingsSub") || "매장별 주방 프린터 구성을 설정합니다."}
+              {t("posPrinterSettingsSub") || "매장별 주방 프린터·카테고리 출력 설정"}
             </p>
           </div>
         </div>
 
-        <div className="mb-4 flex gap-3">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <Select value={storeCode} onValueChange={setStoreCode}>
             <SelectTrigger className="h-10 w-40">
               <SelectValue placeholder={t("store") || "매장"} />
@@ -138,7 +152,14 @@ export default function PosPrintersPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 gap-1.5"
+            onClick={loadData}
+            disabled={loading}
+          >
+            <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
             {t("posRefresh") || "새로고침"}
           </Button>
         </div>
@@ -149,84 +170,90 @@ export default function PosPrintersPage() {
           </div>
         )}
 
-        {storeCode && !loading && (
+        {effectiveStore && !loading && (
           <div className="space-y-6 rounded-xl border bg-card p-6">
             <div>
-              <label className="text-sm font-medium">{t("posKitchenPrinterCount") || "주방 프린터"}</label>
-              <div className="mt-2 flex gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="kitchenCount"
-                    checked={kitchenCount === 1}
-                    onChange={() => setKitchenCount(1)}
-                  />
-                  {t("posKitchen1Unit") || "1대 (통합)"}
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="kitchenCount"
-                    checked={kitchenCount === 2}
-                    onChange={() => setKitchenCount(2)}
-                  />
-                  {t("posKitchen2Units") || "2대 (카테고리별)"}
-                </label>
-              </div>
+              <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
+              <Select
+                value={String(kitchenMode)}
+                onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2)}
+              >
+                <SelectTrigger className="mt-1 h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">{t("posKitchenMode1") || "1대 (통합)"}</SelectItem>
+                  <SelectItem value="2">{t("posKitchenMode2") || "2대 (카테고리별)"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
+              </p>
             </div>
 
-            {kitchenCount === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("posKitchen1Categories") || "주방 1 (예: 치킨)"}
-                  </label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {allCategories.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          toggleCategory(c, "kitchen1", kitchen1Categories, setKitchen1Categories)
-                        }
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                          kitchen1Categories.includes(c)
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
+            {kitchenMode === 2 && categories.length > 0 && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <h3 className="mb-2 text-sm font-semibold">
+                    {t("posKitchen1") || "주방 1"}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((cat) => (
+                      <label
+                        key={cat}
+                        className={cn(
+                          "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                          kitchen1Categories.includes(cat)
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-muted bg-muted/30 text-muted-foreground"
+                        )}
                       >
-                        {c}
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={kitchen1Categories.includes(cat)}
+                          onChange={() => toggleKitchen1(cat)}
+                          className="mr-1.5"
+                        />
+                        {cat}
+                      </label>
                     ))}
                   </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("posKitchen2Categories") || "주방 2 (예: 한식)"}
-                  </label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {allCategories.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          toggleCategory(c, "kitchen2", kitchen2Categories, setKitchen2Categories)
-                        }
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                          kitchen2Categories.includes(c)
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
+                <div className="rounded-lg border p-4">
+                  <h3 className="mb-2 text-sm font-semibold">
+                    {t("posKitchen2") || "주방 2"}
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((cat) => (
+                      <label
+                        key={cat}
+                        className={cn(
+                          "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                          kitchen2Categories.includes(cat)
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-muted bg-muted/30 text-muted-foreground"
+                        )}
                       >
-                        {c}
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={kitchen2Categories.includes(cat)}
+                          onChange={() => toggleKitchen2(cat)}
+                          className="mr-1.5"
+                        />
+                        {cat}
+                      </label>
                     ))}
                   </div>
                 </div>
               </div>
             )}
 
-            <Button onClick={handleSave} disabled={saving}>
+            <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
+              {t("posPrinterNote") ||
+                "※ 손님 영수증은 카운터에서 결제 완료 시 브라우저 인쇄로 출력됩니다. 주방 주문서는 추후 연동 예정입니다."}
+            </div>
+
+            <Button className="w-full" onClick={handleSave} disabled={saving}>
               <Save className="mr-2 h-4 w-4" />
               {saving ? "..." : t("itemsBtnSave") || "저장"}
             </Button>

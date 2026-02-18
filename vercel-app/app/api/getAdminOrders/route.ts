@@ -127,13 +127,7 @@ export async function GET(request: NextRequest) {
         userNick: userNick || undefined,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
-        deliveryStatus: (() => {
-          if (o.delivery_status === '배송완료' || o.delivery_status === '배송 완료') return '배송완료'
-          if (o.received_indices && receivedIndices.length > 0) {
-            return receivedIndices.length >= items.length ? '배송완료' : '일부배송완료'
-          }
-          return o.delivery_status ?? (o.status === 'Approved' ? '배송중' : '')
-        })(),
+        deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),
         deliveryDate: String(o.delivery_date || '').trim(),
         items: itemsWithOriginal,
         summary,
