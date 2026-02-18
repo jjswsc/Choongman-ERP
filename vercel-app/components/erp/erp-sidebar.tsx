@@ -35,7 +35,17 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { isManagerRole, canAccessSettings } from "@/lib/permissions"
+import {
+  isManagerRole,
+  canAccessSettings,
+  canAccessPosOrder,
+  canAccessPosSettlement,
+  canAccessPosOrders,
+  canAccessPosTables,
+  canAccessPosMenus,
+  isPosOrderOnlyRole,
+  isPosSettlementOnlyRole,
+} from "@/lib/permissions"
 interface MenuItem {
   titleKey: string
   icon: React.ElementType
@@ -106,6 +116,15 @@ const menuSections: MenuSection[] = [
 /** 매니저에게 숨길 메뉴 href */
 const MANAGER_HIDDEN_HREFS = new Set(["/admin/items", "/admin/vendors"])
 
+/** POS 메뉴별 href → 권한 체크 함수 */
+const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
+  "/pos": canAccessPosOrder,
+  "/admin/pos-orders": canAccessPosOrders,
+  "/admin/pos-settlement": canAccessPosSettlement,
+  "/admin/pos-tables": canAccessPosTables,
+  "/admin/pos-menus": canAccessPosMenus,
+}
+
 export function ErpSidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -114,6 +133,7 @@ export function ErpSidebar() {
   const t = useT(lang)
   const isManager = isManagerRole(auth?.role || "")
   const showSettings = canAccessSettings(auth?.role || "")
+  const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     adminSectionPos: true,
@@ -173,7 +193,8 @@ export function ErpSidebar() {
       <SidebarContent className="flex-1 overflow-y-auto px-2 pb-4">
         <ScrollArea className="h-full">
           <nav className="space-y-1">
-            {/* Top-level (no section title) */}
+            {/* Top-level (no section title) - POS 직원은 숨김 */}
+            {!isPosStaff && (
             <div className="mb-1">
               <div className="space-y-0.5">
                 {mainItems.map((item) => (
@@ -193,6 +214,7 @@ export function ErpSidebar() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Grouped sections */}
             {menuSections.map((section) => {
@@ -215,6 +237,12 @@ export function ErpSidebar() {
                     <div className="space-y-0.5">
                       {section.items
                         .filter((item) => !(isManager && MANAGER_HIDDEN_HREFS.has(item.href)))
+                        .filter((item) => {
+                          if (!isPosStaff) return true
+                          if (section.titleKey !== "adminSectionPos") return false
+                          const check = POS_MENU_ACCESS[item.href]
+                          return check ? check(auth?.role || "") : false
+                        })
                         .map((item) => (
                         <Link
                           key={item.href}

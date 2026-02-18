@@ -6,7 +6,14 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, canManagerAccessPath, canAccessAdmin } from "@/lib/permissions"
+import {
+  isManagerRole,
+  canManagerAccessPath,
+  canAccessAdmin,
+  canPosStaffAccessPath,
+  isPosOrderOnlyRole,
+  isPosSettlementOnlyRole,
+} from "@/lib/permissions"
 
 export default function AdminLayout({
   children,
@@ -30,6 +37,21 @@ export default function AdminLayout({
     }
     if (auth && !isLoginPage && isManagerRole(auth.role || "") && !canManagerAccessPath(pathname)) {
       router.replace("/admin")
+    }
+    if (auth && !isLoginPage && (isPosOrderOnlyRole(auth.role || "") || isPosSettlementOnlyRole(auth.role || ""))) {
+      if (!canPosStaffAccessPath(pathname, auth.role || "")) {
+        if (isPosOrderOnlyRole(auth.role || "")) {
+          router.replace("/pos")
+        } else {
+          router.replace("/admin/pos-settlement")
+        }
+      } else if (pathname === "/admin" || pathname === "/admin/") {
+        if (isPosOrderOnlyRole(auth.role || "")) {
+          router.replace("/pos")
+        } else {
+          router.replace("/admin/pos-settlement")
+        }
+      }
     }
   }, [auth, initialized, isLoginPage, pathname, router])
 

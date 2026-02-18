@@ -1428,6 +1428,22 @@ export async function savePosSettlement(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function updatePosOrder(params: {
+  id: number
+  items: PosOrderItem[]
+  tableName?: string
+  memo?: string
+  discountAmt?: number
+  discountReason?: string
+}) {
+  const res = await apiFetch('/api/updatePosOrder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function updatePosOrderStatus(params: { id: number; status: string }) {
   const res = await apiFetch('/api/updatePosOrderStatus', {
     method: 'POST',

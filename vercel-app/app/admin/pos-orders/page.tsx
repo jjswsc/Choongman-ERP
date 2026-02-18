@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Receipt, Search, ChevronDown } from "lucide-react"
+import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -11,9 +11,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPosOrders, updatePosOrderStatus, useStoreList, type PosOrder } from "@/lib/api-client"
+import {
+  getPosOrders,
+  getPosMenus,
+  updatePosOrder,
+  updatePosOrderStatus,
+  useStoreList,
+  type PosOrder,
+  type PosMenu,
+} from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -51,6 +66,14 @@ export default function PosOrdersPage() {
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [updatingId, setUpdatingId] = React.useState<number | null>(null)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [editOrder, setEditOrder] = React.useState<PosOrder | null>(null)
+  const [editItems, setEditItems] = React.useState<{ id: string; name: string; price: number; qty: number }[]>([])
+  const [editTableName, setEditTableName] = React.useState("")
+  const [editMemo, setEditMemo] = React.useState("")
+  const [editDiscountAmt, setEditDiscountAmt] = React.useState("")
+  const [editDiscountReason, setEditDiscountReason] = React.useState("")
+  const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [addMenuId, setAddMenuId] = React.useState("")
 
   const canSearchAll = isOfficeRole(auth?.role || "")
 
@@ -75,6 +98,94 @@ export default function PosOrdersPage() {
       () => alert(t("posOrderNoCopied") || "주문번호가 복사되었습니다."),
       () => {}
     )
+  }
+
+  const EDITABLE_STATUSES = ["pending", "paid"]
+
+  const handleOpenEdit = (o: PosOrder) => {
+    if (!EDITABLE_STATUSES.includes(o.status)) return
+    setEditOrder(o)
+    setEditItems(
+      (o.items || []).map((it: { id?: string; name?: string; price?: number; qty?: number }) => ({
+        id: String(it.id ?? ""),
+        name: String(it.name ?? ""),
+        price: Number(it.price ?? 0),
+        qty: Number(it.qty ?? 1),
+      }))
+    )
+    setEditTableName(o.tableName ?? "")
+    setEditMemo(o.memo ?? "")
+    setEditDiscountAmt(String(o.discountAmt ?? 0))
+    setEditDiscountReason(o.discountReason ?? "")
+    setAddMenuId("")
+    getPosMenus().then(setMenus).catch(() => setMenus([]))
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editOrder) return
+    if (editItems.length === 0) {
+      alert(t("posEditItemsRequired") || "항목이 하나 이상 필요합니다.")
+      return
+    }
+    setUpdatingId(editOrder.id)
+    try {
+      const res = await updatePosOrder({
+        id: editOrder.id,
+        items: editItems,
+        tableName: editOrder.orderType === "dine_in" ? editTableName : "",
+        memo: editMemo || undefined,
+        discountAmt: Number(editDiscountAmt) || 0,
+        discountReason: editDiscountReason || undefined,
+      })
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((order) => {
+            if (order.id !== editOrder.id) return order
+            const subtotal = editItems.reduce((s, it) => s + it.price * it.qty, 0)
+            const discount = Number(editDiscountAmt) || 0
+            const total = Math.max(0, subtotal - discount)
+            return {
+              ...order,
+              items: editItems,
+              tableName: editTableName,
+              memo: editMemo,
+              discountAmt: discount,
+              discountReason: editDiscountReason,
+              subtotal,
+              total,
+            }
+          })
+        )
+        setEditOrder(null)
+      } else {
+        alert(res.message || t("msg_save_fail_detail"))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  const handleEditItemQty = (idx: number, delta: number) => {
+    setEditItems((prev) => {
+      const n = [...prev]
+      const q = (n[idx].qty || 1) + delta
+      if (q <= 0) return prev.filter((_, i) => i !== idx)
+      n[idx] = { ...n[idx], qty: q }
+      return n
+    })
+  }
+
+  const handleRemoveEditItem = (idx: number) => {
+    setEditItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleAddEditItem = () => {
+    const m = menus.find((x) => x.id === addMenuId)
+    if (!m) return
+    setEditItems((prev) => [...prev, { id: m.id, name: m.name, price: m.price, qty: 1 }])
+    setAddMenuId("")
   }
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
@@ -402,6 +513,22 @@ export default function PosOrdersPage() {
                               ) : (
                                 <span className="text-muted-foreground">-</span>
                               )}
+                              {EDITABLE_STATUSES.includes(o.status) && (
+                                <div className="pt-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 gap-1 px-2 text-xs"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleOpenEdit(o)
+                                    }}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                    {t("posOrderEdit") || "수정"}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -414,6 +541,137 @@ export default function PosOrdersPage() {
           </div>
         </div>
       </div>
+
+      {/* 주문 수정 모달 */}
+      <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {t("posOrderEdit") || "주문 수정"} — {editOrder?.orderNo}
+            </DialogTitle>
+          </DialogHeader>
+          {editOrder && (
+            <div className="space-y-4 py-2">
+              {editOrder.orderType === "dine_in" && (
+                <div>
+                  <label className="text-xs font-medium">{t("posTable") || "테이블"}</label>
+                  <Input
+                    value={editTableName}
+                    onChange={(e) => setEditTableName(e.target.value)}
+                    className="mt-1 h-9"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-xs font-medium">{t("posCustomerMemo") || "메모"}</label>
+                <Input
+                  value={editMemo}
+                  onChange={(e) => setEditMemo(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium">{t("itemsList") || "항목"}</label>
+                <div className="mt-1 space-y-1.5 max-h-40 overflow-y-auto">
+                  {editItems.map((it, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded border px-2 py-1.5 text-sm"
+                    >
+                      <span className="flex-1 truncate">{it.name}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleEditItemQty(idx, -1)}
+                          className="rounded p-0.5 hover:bg-muted"
+                        >
+                          -
+                        </button>
+                        <span className="w-6 text-center tabular-nums">{it.qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleEditItemQty(idx, 1)}
+                          className="rounded p-0.5 hover:bg-muted"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="w-16 text-right tabular-nums">
+                        {(it.price * it.qty).toLocaleString()} ฿
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0 text-destructive"
+                        onClick={() => handleRemoveEditItem(idx)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Select value={addMenuId} onValueChange={setAddMenuId}>
+                    <SelectTrigger className="h-9 flex-1">
+                      <SelectValue placeholder={t("posAddItem") || "항목 추가"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {menus
+                        .filter((m) => m.isActive)
+                        .map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name} — {m.price.toLocaleString()} ฿
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={handleAddEditItem} disabled={!addMenuId}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium">{t("posDiscount") || "할인 (฿)"}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={editDiscountAmt}
+                    onChange={(e) => setEditDiscountAmt(e.target.value)}
+                    className="mt-1 h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium">{t("posDiscountReasonPh") || "사유"}</label>
+                  <Input
+                    value={editDiscountReason}
+                    onChange={(e) => setEditDiscountReason(e.target.value)}
+                    className="mt-1 h-9"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end border-t pt-3">
+                <span className="text-sm font-bold">
+                  {t("posInputTotal") || "합계"}:{" "}
+                  {Math.max(
+                    0,
+                    editItems.reduce((s, it) => s + it.price * it.qty, 0) - (Number(editDiscountAmt) || 0)
+                  ).toLocaleString()}{" "}
+                  ฿
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOrder(null)}>
+              {t("close") || "닫기"}
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updatingId === editOrder?.id}>
+              {updatingId === editOrder?.id ? "..." : t("itemsBtnSave") || "저장"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -40,9 +40,14 @@ export function isManagerRole(role: string): boolean {
   return r.includes(MANAGER_ROLE)
 }
 
-/** 관리자 페이지 접근 가능 (본사 + 매니저) */
+/** 관리자 페이지 접근 가능 (본사 + 매니저 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
-  return isOfficeRole(role) || isManagerRole(role)
+  return (
+    isOfficeRole(role) ||
+    isManagerRole(role) ||
+    isPosOrderOnlyRole(role) ||
+    isPosSettlementOnlyRole(role)
+  )
 }
 
 /** 설정 페이지 접근 가능 (Director, Officer만) */
@@ -63,4 +68,71 @@ export function canManagerAccessPath(pathname: string): boolean {
   const p = String(pathname || "").trim()
   if (!p.startsWith("/admin")) return true
   return !MANAGER_DENIED_PATHS.some((denied) => p === denied || p.startsWith(denied + "/"))
+}
+
+// ─── POS 직원·권한 (주문만 / 결산만 / 관리자) ───
+
+/** 주문만 역할 (POS 주문 접수만 가능) */
+const POS_ORDER_ONLY_ROLES = ["staff", "pos_staff", "pos"]
+
+/** 결산만 역할 (결산만 가능) */
+const POS_SETTLEMENT_ONLY_ROLES = ["settlement", "pos_settlement"]
+
+/** 주문만 역할인지 */
+export function isPosOrderOnlyRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return POS_ORDER_ONLY_ROLES.some((x) => r === x || r.includes(x))
+}
+
+/** 결산만 역할인지 */
+export function isPosSettlementOnlyRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return POS_SETTLEMENT_ONLY_ROLES.some((x) => r === x || r.includes(x))
+}
+
+/** POS 주문 접수 가능 */
+export function canAccessPosOrder(role: string): boolean {
+  return (
+    isPosOrderOnlyRole(role) ||
+    isPosSettlementOnlyRole(role) ||
+    isManagerRole(role) ||
+    isOfficeRole(role)
+  )
+}
+
+/** POS 결산 가능 */
+export function canAccessPosSettlement(role: string): boolean {
+  return isPosSettlementOnlyRole(role) || isManagerRole(role) || isOfficeRole(role)
+}
+
+/** POS 주문 내역 가능 (관리자) */
+export function canAccessPosOrders(role: string): boolean {
+  return isManagerRole(role) || isOfficeRole(role)
+}
+
+/** POS 테이블 배치 가능 (관리자) */
+export function canAccessPosTables(role: string): boolean {
+  return isManagerRole(role) || isOfficeRole(role)
+}
+
+/** POS 메뉴 관리 가능 (관리자) */
+export function canAccessPosMenus(role: string): boolean {
+  return isManagerRole(role) || isOfficeRole(role)
+}
+
+/** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
+export function canPosStaffAccessPath(pathname: string, role: string): boolean {
+  const p = String(pathname || "").trim()
+  if (!isPosOrderOnlyRole(role) && !isPosSettlementOnlyRole(role)) return true
+  if (p === "/pos") return canAccessPosOrder(role)
+  if (p === "/admin/pos-settlement" || p.startsWith("/admin/pos-settlement"))
+    return canAccessPosSettlement(role)
+  if (p === "/admin/pos-orders" || p.startsWith("/admin/pos-orders"))
+    return canAccessPosOrders(role)
+  if (p === "/admin/pos-tables" || p.startsWith("/admin/pos-tables"))
+    return canAccessPosTables(role)
+  if (p === "/admin/pos-menus" || p.startsWith("/admin/pos-menus"))
+    return canAccessPosMenus(role)
+  if (p === "/admin" || p === "/admin/") return true
+  return false
 }

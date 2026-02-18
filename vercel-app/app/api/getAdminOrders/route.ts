@@ -52,10 +52,22 @@ export async function GET(request: NextRequest) {
       filter += `&store_name=eq.${encodeURIComponent(storeFilter)}`
     }
     const baseFilter = `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
-    const [rows, storeRows] = await Promise.all([
+    const [rows, storeRows, empRows] = await Promise.all([
       supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 }),
       supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 500 }),
+      supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' }),
     ])
+
+    const nameToNick: Record<string, string> = {}
+    const empList = (empRows || []) as { store?: string; name?: string; nick?: string }[]
+    for (const e of empList) {
+      const storeKey = String(e.store || '').trim()
+      const n = String(e.name || '').trim()
+      const nickStr = String(e.nick || '').trim()
+      const displayVal = nickStr || n
+      if (storeKey && n) nameToNick[storeKey + '|' + n] = displayVal
+      if (storeKey && nickStr) nameToNick[storeKey + '|' + nickStr] = displayVal
+    }
 
     const rowsTyped = rows as {
       id: number
@@ -101,12 +113,18 @@ export async function GET(request: NextRequest) {
           : '내용 없음'
       const dateVal = o.order_date
       const dateStr = dateVal ? String(dateVal).substring(0, 16).replace('T', ' ') : ''
+      const storeKey = String(o.store_name || '').trim()
+      const userName = String(o.user_name || '').trim()
+      const userNick = (storeKey && userName)
+        ? (nameToNick[storeKey + '|' + userName] ?? userName)
+        : userName || undefined
       return {
         row: o.id,
         orderId: o.id,
         date: dateStr,
         store: o.store_name || '',
-        userName: String(o.user_name || '').trim() || undefined,
+        userName: userName || undefined,
+        userNick: userNick || undefined,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
         deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),

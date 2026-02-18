@@ -159,12 +159,12 @@ export function AdminOrderHistory() {
     let out = list
     if (categoryFilter && categoryFilter !== "All") {
       out = out.filter((o) =>
-        (o.items || []).some((it) => String(it.category || "").trim().toLowerCase() === categoryFilter.toLowerCase())
+        (o.items || []).some((it) => String(it.category || "").trim() === categoryFilter)
       )
     }
     if (vendorFilter && vendorFilter !== "All") {
       out = out.filter((o) =>
-        (o.items || []).some((it) => String(it.vendor || "").trim().toLowerCase() === vendorFilter.toLowerCase())
+        (o.items || []).some((it) => String(it.vendor || "").trim() === vendorFilter)
       )
     }
     if (itemNameFilter.trim()) {
@@ -188,7 +188,9 @@ export function AdminOrderHistory() {
         const qty = it.originalQty ?? it.qty ?? 0
         const price = Number(it.price) || 0
         const vendorStr = String(it.vendor || "").trim()
-        if (vendorFilter && vendorFilter !== "All" && vendorStr.toLowerCase() !== vendorFilter.toLowerCase()) continue
+        const categoryStr = String(it.category || "").trim()
+        if (vendorFilter && vendorFilter !== "All" && vendorStr !== vendorFilter) continue
+        if (categoryFilter && categoryFilter !== "All" && categoryStr !== categoryFilter) continue
         rows.push({
           id: `${o.orderId}-${itemIdx}`,
           orderId: o.orderId,
@@ -208,7 +210,7 @@ export function AdminOrderHistory() {
       }
     }
     return rows
-  }, [filteredOrders, vendorFilter])
+  }, [filteredOrders, vendorFilter, categoryFilter])
 
   const dateShort = (d: string) => {
     if (!d) return "-"

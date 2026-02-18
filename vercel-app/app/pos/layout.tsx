@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 
 /** POS 전용 레이아웃 - 풀스크린, 태블릿 터치 UI (로그인 필수) */
 export default function PosLayout({
@@ -19,6 +20,14 @@ export default function PosLayout({
     if (!initialized) return
     if (!auth) {
       router.replace("/admin/login?redirect=/pos")
+      return
+    }
+    if (!canAccessPosOrder(auth.role || "")) {
+      if (isPosSettlementOnlyRole(auth.role || "")) {
+        router.replace("/admin/pos-settlement")
+      } else {
+        router.replace("/admin/login?redirect=/pos")
+      }
       return
     }
   }, [auth, initialized, router])
