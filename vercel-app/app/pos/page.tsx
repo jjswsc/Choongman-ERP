@@ -2,12 +2,27 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { getPosMenus, getPosMenuCategories, savePosOrder, type PosMenu } from "@/lib/api-client"
+import {
+  getPosMenus,
+  getPosMenuCategories,
+  savePosOrder,
+  useStoreList,
+  type PosMenu,
+} from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -19,16 +34,24 @@ interface CartItem {
 }
 
 export default function PosPage() {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const { stores } = useStoreList()
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
-  const [storeCode, setStoreCode] = React.useState("ST01")
+  const [storeCode, setStoreCode] = React.useState("")
+  const [tableName, setTableName] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
+
+  React.useEffect(() => {
+    const def = auth?.store || stores[0] || "ST01"
+    if (!storeCode && def) setStoreCode(def)
+  }, [auth?.store, stores, storeCode])
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -93,9 +116,9 @@ export default function PosPage() {
     setSubmitting(true)
     try {
       const res = await savePosOrder({
-        storeCode,
+        storeCode: storeCode || "ST01",
         orderType,
-        tableName: "",
+        tableName: orderType === "dine_in" ? tableName : "",
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
       })
       if (res.success) {
@@ -204,19 +227,53 @@ export default function PosPage() {
             {t("posClear") || "비우기"}
           </Button>
         </div>
-        <div className="flex shrink-0 gap-2 border-b border-slate-800 px-4 py-2">
-          {(["dine_in", "takeout", "delivery"] as OrderType[]).map((typ) => (
-            <button
-              key={typ}
-              onClick={() => setOrderType(typ)}
-              className={cn(
-                "flex-1 rounded-lg py-1.5 text-xs font-medium",
-                orderType === typ ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-400"
-              )}
-            >
-              {orderTypeLabels[typ]}
-            </button>
-          ))}
+        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-800 px-4 py-3">
+          {stores.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs text-slate-400 w-12">
+                {t("store") || "매장"}
+              </span>
+              <Select value={storeCode || stores[0]} onValueChange={setStoreCode}>
+                <SelectTrigger className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {orderType === "dine_in" && (
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs text-slate-400 w-12">
+                {t("posTable") || "테이블"}
+              </span>
+              <Input
+                placeholder={t("posTablePh") || "1번"}
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
+              />
+            </div>
+          )}
+          <div className="flex gap-2">
+            {(["dine_in", "takeout", "delivery"] as OrderType[]).map((typ) => (
+              <button
+                key={typ}
+                onClick={() => setOrderType(typ)}
+                className={cn(
+                  "flex-1 rounded-lg py-2 text-xs font-medium",
+                  orderType === typ ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-400"
+                )}
+              >
+                {orderTypeLabels[typ]}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {cart.length === 0 ? (

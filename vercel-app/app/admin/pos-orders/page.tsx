@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPosOrders, useStoreList, type PosOrder } from "@/lib/api-client"
+import { getPosOrders, updatePosOrderStatus, useStoreList, type PosOrder } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -49,8 +49,27 @@ export default function PosOrdersPage() {
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
+  const [updatingId, setUpdatingId] = React.useState<number | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+
+  const handleStatusChange = async (orderId: number, newStatus: string) => {
+    setUpdatingId(orderId)
+    try {
+      const res = await updatePosOrderStatus({ id: orderId, status: newStatus })
+      if (res.success) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+        )
+      } else {
+        alert(res.message || t("msg_save_fail_detail"))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   const loadOrders = React.useCallback(() => {
     setLoading(true)
@@ -200,8 +219,29 @@ export default function PosOrdersPage() {
                         <td className="px-5 py-3 text-right font-bold tabular-nums">
                           {o.total?.toLocaleString()} ฿
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          {statusLabels[o.status] || o.status}
+                        <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            value={o.status}
+                            onValueChange={(v) => handleStatusChange(o.id, v)}
+                            disabled={updatingId === o.id}
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                "h-8 w-full max-w-[110px] border-0 shadow-none focus:ring-0",
+                                o.status === "completed" && "text-green-600",
+                                o.status === "cancelled" && "text-muted-foreground"
+                              )}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(statusLabels).map(([k, v]) => (
+                                <SelectItem key={k} value={k}>
+                                  {v}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="px-5 py-3 text-center text-muted-foreground">
                           {o.createdAt

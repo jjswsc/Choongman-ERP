@@ -271,7 +271,7 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: { code?: string; name?: string; spec?: string; category?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1240,6 +1240,61 @@ export async function getPosOrders(params?: {
   if (params?.status) q.set('status', params.status)
   const res = await apiFetch('/api/getPosOrders?' + q.toString())
   return res.json() as Promise<PosOrder[]>
+}
+
+export interface PosSettlement {
+  id?: number
+  storeCode: string
+  settleDate: string
+  cashActual: number | null
+  cardAmt: number
+  qrAmt: number
+  deliveryAppAmt: number
+  otherAmt: number
+  memo: string
+  closed: boolean
+}
+
+export async function getPosSettlement(params: {
+  settleDate: string
+  storeCode?: string
+}) {
+  const q = new URLSearchParams()
+  q.set('settleDate', params.settleDate)
+  if (params.storeCode) q.set('storeCode', params.storeCode)
+  const res = await apiFetch('/api/getPosSettlement?' + q.toString())
+  return res.json() as Promise<{
+    systemTotal: number
+    settlement: PosSettlement | PosSettlement[] | null
+  }>
+}
+
+export async function savePosSettlement(params: {
+  storeCode?: string
+  settleDate: string
+  cashActual?: number | null
+  cardAmt?: number
+  qrAmt?: number
+  deliveryAppAmt?: number
+  otherAmt?: number
+  memo?: string
+  closed?: boolean
+}) {
+  const res = await apiFetch('/api/savePosSettlement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updatePosOrderStatus(params: { id: number; status: string }) {
+  const res = await apiFetch('/api/updatePosOrderStatus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function savePosOrder(params: {
