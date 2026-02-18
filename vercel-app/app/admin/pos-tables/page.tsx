@@ -246,31 +246,31 @@ export default function PosTablesPage() {
           className="relative rounded-xl border-2 border-dashed bg-muted/20"
           style={{ width: FLOOR_W, height: FLOOR_H }}
         >
-          {layout.map((t) => (
+          {layout.map((item) => (
             <div
-              key={t.id}
+              key={item.id}
               className={cn(
                 "absolute flex flex-col items-center justify-center rounded-lg border-2 border-primary/60 bg-primary/10 cursor-move select-none",
                 "hover:border-primary hover:bg-primary/15",
-                draggingId === t.id && "z-10 ring-2 ring-primary"
+                draggingId === item.id && "z-10 ring-2 ring-primary"
               )}
               style={{
-                left: t.x,
-                top: t.y,
-                width: t.w,
-                height: t.h,
+                left: item.x,
+                top: item.y,
+                width: item.w,
+                height: item.h,
               }}
-              onMouseDown={(e) => handleMouseDown(e, t.id)}
+              onMouseDown={(e) => handleMouseDown(e, item.id)}
             >
-              {editingNameId === t.id ? (
+              {editingNameId === item.id ? (
                 <Input
-                  defaultValue={t.name}
+                  defaultValue={item.name}
                   className="h-7 w-16 px-1 text-center text-xs"
                   autoFocus
-                  onBlur={(e) => handleUpdateName(t.id, e.target.value)}
+                  onBlur={(e) => handleUpdateName(item.id, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      handleUpdateName(t.id, (e.target as HTMLInputElement).value)
+                      handleUpdateName(item.id, (e.target as HTMLInputElement).value)
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
@@ -278,9 +278,9 @@ export default function PosTablesPage() {
               ) : (
                 <span
                   className="text-xs font-bold"
-                  onDoubleClick={() => setEditingNameId(t.id)}
+                  onDoubleClick={() => setEditingNameId(item.id)}
                 >
-                  {t.name}
+                  {item.name}
                 </span>
               )}
               <button
@@ -288,7 +288,7 @@ export default function PosTablesPage() {
                 className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-60 hover:opacity-100 transition"
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleRemoveTable(t.id)
+                  handleRemoveTable(item.id)
                 }}
                 title={t("itemsBtnDelete") || "삭제"}
               >

@@ -1284,66 +1284,6 @@ export async function savePosTableLayout(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-export async function validatePosCoupon(params: { code: string }) {
-  const q = new URLSearchParams()
-  q.set('code', params.code)
-  const res = await apiFetch('/api/validatePosCoupon?' + q.toString())
-  return res.json() as Promise<{
-    valid: boolean
-    message?: string
-    couponCode?: string
-    couponName?: string
-    discountType?: 'percent' | 'amount'
-    discountValue?: number
-  }>
-}
-
-export interface PosCoupon {
-  id?: number
-  code: string
-  name: string
-  discountType: 'percent' | 'amount'
-  discountValue: number
-  startDate: string | null
-  endDate: string | null
-  maxUses: number | null
-  usedCount: number
-  isActive: boolean
-}
-
-export async function getPosCoupons() {
-  const res = await apiFetch('/api/getPosCoupons')
-  return res.json() as Promise<PosCoupon[]>
-}
-
-export async function savePosCoupon(params: {
-  id?: number
-  code: string
-  name?: string
-  discountType?: 'percent' | 'amount'
-  discountValue?: number
-  startDate?: string | null
-  endDate?: string | null
-  maxUses?: number | null
-  isActive?: boolean
-}) {
-  const res = await apiFetch('/api/savePosCoupon', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{ success: boolean; message?: string }>
-}
-
-export async function deletePosCoupon(params: { id: number }) {
-  const res = await apiFetch('/api/deletePosCoupon', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return res.json() as Promise<{ success: boolean; message?: string }>
-}
-
 export interface PosOrderItem {
   id: string
   name: string
@@ -1358,6 +1298,8 @@ export interface PosOrder {
   orderType: string
   tableName: string
   memo: string
+  discountAmt?: number
+  discountReason?: string
   items: PosOrderItem[]
   subtotal: number
   vat: number
@@ -1454,9 +1396,9 @@ export async function savePosOrder(params: {
   orderType?: string
   tableName?: string
   memo?: string
+  discountAmt?: number
+  discountReason?: string
   items: PosOrderItem[]
-  discountAmount?: number
-  couponCode?: string
 }) {
   const res = await apiFetch('/api/savePosOrder', {
     method: 'POST',

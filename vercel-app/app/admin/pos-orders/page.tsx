@@ -364,7 +364,7 @@ export default function PosOrdersPage() {
                         <tr className="border-b bg-muted/10">
                           <td colSpan={8} className="px-5 py-4">
                             <div className="space-y-2 text-xs">
-                              {(o.tableName || o.memo) && (
+                              {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0)) && (
                                 <div className="mb-2 pb-2 border-b">
                                   {o.tableName && (
                                     <div className="text-muted-foreground">
@@ -374,6 +374,12 @@ export default function PosOrdersPage() {
                                   {o.memo && (
                                     <div className="text-muted-foreground mt-0.5">
                                       {t("posCustomerMemo") || "메모"}: {o.memo}
+                                    </div>
+                                  )}
+                                  {o.discountAmt && o.discountAmt > 0 && (
+                                    <div className="text-green-600 mt-0.5">
+                                      {t("posDiscount") || "할인"}: -{o.discountAmt.toLocaleString()} ฿
+                                      {o.discountReason && ` (${o.discountReason})`}
                                     </div>
                                   )}
                                 </div>

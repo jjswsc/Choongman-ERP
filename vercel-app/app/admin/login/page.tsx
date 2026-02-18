@@ -12,13 +12,9 @@ function AdminLoginContent() {
   return <LoginForm redirectTo={redirectTo} isAdminPage={!isPosRedirect} />
 }
 
-function LoginFormFallback() {
-  return <LoginForm redirectTo="/admin" isAdminPage />
-}
-
 export default function AdminLoginPage() {
   return (
-    <Suspense fallback={<LoginFormFallback />}>
+    <Suspense fallback={<LoginForm redirectTo="/admin" isAdminPage />}>
       <AdminLoginContent />
     </Suspense>
   )

@@ -10,7 +10,6 @@ import {
   getPosTodaySales,
   getPosTableLayout,
   savePosOrder,
-  validatePosCoupon,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
@@ -65,14 +64,9 @@ export default function PosPage() {
   const [storeCode, setStoreCode] = React.useState("")
   const [tableName, setTableName] = React.useState("")
   const [tableOptions, setTableOptions] = React.useState<{ id: string; name: string }[]>([])
-  const [couponCode, setCouponCode] = React.useState("")
-  const [discountAmount, setDiscountAmount] = React.useState(0)
-  const [appliedCoupon, setAppliedCoupon] = React.useState<{
-    code: string
-    name: string
-    type: string
-    value: number
-  } | null>(null)
+  const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
+  const [discountValue, setDiscountValue] = React.useState("")
+  const [discountReason, setDiscountReason] = React.useState("")
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -86,12 +80,13 @@ export default function PosPage() {
     orderNo: string
     items: CartItem[]
     subtotal: number
-    discount: number
+    discountAmt: number
     total: number
     storeCode: string
     orderType: string
     tableName: string
     memo: string
+    discountReason: string
   } | null>(null)
   const receiptRef = React.useRef<HTMLDivElement>(null)
 
@@ -247,33 +242,11 @@ export default function PosPage() {
   }
 
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
-  const discount = Math.min(discountAmount, subtotal)
-  const total = Math.max(0, subtotal - discount)
-
-  const handleApplyCoupon = async () => {
-    const code = couponCode.trim().toUpperCase()
-    if (!code) return
-    try {
-      const res = await validatePosCoupon({ code })
-      if (!res.valid) {
-        alert(res.message || "유효하지 않은 쿠폰입니다.")
-        return
-      }
-      const t = res.discountType || "amount"
-      const v = res.discountValue ?? 0
-      const amt = t === "percent" ? Math.round((subtotal * v) / 100) : Math.min(v, subtotal)
-      setDiscountAmount(amt)
-      setAppliedCoupon({ code: res.couponCode || code, name: res.couponName || code, type: t, value: v })
-    } catch (e) {
-      alert(String(e))
-    }
-  }
-
-  const handleRemoveCoupon = () => {
-    setDiscountAmount(0)
-    setAppliedCoupon(null)
-    setCouponCode("")
-  }
+  const discountAmt =
+    discountType === "pct"
+      ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
+      : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
+  const total = Math.max(0, subtotal - discountAmt)
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -287,25 +260,27 @@ export default function PosPage() {
         orderType,
         tableName: orderType === "dine_in" ? tableName : "",
         memo: memo.trim() || undefined,
+        discountAmt: discountAmt || undefined,
+        discountReason: discountReason.trim() || undefined,
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
-        discountAmount: discount,
-        couponCode: appliedCoupon?.code || undefined,
       })
       if (res.success) {
         setReceiptData({
           orderNo: res.orderNo ?? "",
           items: [...cart],
           subtotal,
-          discount,
+          discountAmt,
           total,
           storeCode: storeCode || "ST01",
           orderType,
           tableName: orderType === "dine_in" ? tableName : "",
           memo: memo.trim(),
+          discountReason: discountReason.trim(),
         })
         clearCart()
-        handleRemoveCoupon()
         setMemo("")
+        setDiscountValue("")
+        setDiscountReason("")
         loadTodaySales()
       } else {
         alert(res.message || "저장 실패")
@@ -621,50 +596,58 @@ export default function PosPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400">{t("posCoupon") || "쿠폰"}</label>
-            {appliedCoupon ? (
-              <div className="mt-1 flex items-center justify-between rounded-lg border border-green-500/50 bg-green-500/10 px-3 py-2 text-sm">
-                <span className="text-green-400">{appliedCoupon.name} -{discount.toLocaleString()} ฿</span>
+            <label className="text-xs text-slate-400">{t("posDiscount") || "할인"}</label>
+            <div className="mt-1 flex gap-2">
+              <div className="flex rounded-lg border border-slate-600 bg-slate-800 overflow-hidden">
                 <button
                   type="button"
-                  onClick={handleRemoveCoupon}
-                  className="text-xs text-slate-400 hover:text-white"
+                  onClick={() => setDiscountType("amt")}
+                  className={cn(
+                    "px-2 py-1.5 text-xs",
+                    discountType === "amt" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
+                  )}
                 >
-                  {t("posCouponRemove") || "해제"}
+                  ฿
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountType("pct")}
+                  className={cn(
+                    "px-2 py-1.5 text-xs",
+                    discountType === "pct" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
+                  )}
+                >
+                  %
                 </button>
               </div>
-            ) : (
-              <div className="mt-1 flex gap-2">
-                <Input
-                  placeholder={t("posCouponPh") || "쿠폰 코드"}
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 shrink-0 border-slate-600"
-                  onClick={handleApplyCoupon}
-                  disabled={cart.length === 0}
-                >
-                  {t("posCouponApply") || "적용"}
-                </Button>
-              </div>
-            )}
+              <Input
+                type="number"
+                min={0}
+                placeholder={discountType === "pct" ? "10" : "0"}
+                value={discountValue}
+                onChange={(e) => setDiscountValue(e.target.value)}
+                className="h-9 w-20 border-slate-600 bg-slate-800 text-sm text-right"
+              />
+              <Input
+                placeholder={t("posDiscountReasonPh") || "사유"}
+                value={discountReason}
+                onChange={(e) => setDiscountReason(e.target.value)}
+                className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm"
+              />
+            </div>
           </div>
           <div className="space-y-1">
             <div className="flex justify-between text-sm text-slate-400">
               <span>{t("posSubtotal") || "소계"}</span>
               <span className="tabular-nums text-white">{subtotal.toLocaleString()} ฿</span>
             </div>
-            {discount > 0 && (
+            {discountAmt > 0 && (
               <div className="flex justify-between text-sm text-green-400">
                 <span>{t("posDiscount") || "할인"}</span>
-                <span className="tabular-nums">-{discount.toLocaleString()} ฿</span>
+                <span className="tabular-nums">-{discountAmt.toLocaleString()} ฿</span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-bold text-white">
+            <div className="flex justify-between text-sm font-bold text-white border-t border-slate-700 pt-2">
               <span>{t("posInputTotal") || "합계"}</span>
               <span className="tabular-nums">{total.toLocaleString()} ฿</span>
             </div>
@@ -745,26 +728,24 @@ export default function PosPage() {
                     </div>
                   ))}
                 </div>
+                <div className="receipt-row flex justify-between text-xs border-t pt-2 mt-2">
+                  <span>{t("posSubtotal") || "소계"}</span>
+                  <span className="tabular-nums">{receiptData.subtotal.toLocaleString()} ฿</span>
+                </div>
+                {receiptData.discountAmt > 0 && (
+                  <div className="receipt-row flex justify-between text-xs text-green-600">
+                    <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` (${receiptData.discountReason})` : ""}</span>
+                    <span className="tabular-nums">-{receiptData.discountAmt.toLocaleString()} ฿</span>
+                  </div>
+                )}
                 {receiptData.memo && (
-                  <div className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                  <div className="text-xs text-muted-foreground">
                     {t("posCustomerMemo") || "메모"}: {receiptData.memo}
                   </div>
                 )}
-                <div className="space-y-1 border-t pt-2 mt-2">
-                  <div className="receipt-row flex justify-between text-xs">
-                    <span>{t("posSubtotal") || "소계"}</span>
-                    <span className="tabular-nums">{receiptData.subtotal.toLocaleString()} ฿</span>
-                  </div>
-                  {(receiptData.discount ?? 0) > 0 && (
-                    <div className="receipt-row flex justify-between text-xs text-green-600">
-                      <span>{t("posDiscount") || "할인"}</span>
-                      <span className="tabular-nums">-{receiptData.discount!.toLocaleString()} ฿</span>
-                    </div>
-                  )}
-                  <div className="receipt-total flex justify-between font-bold">
-                    <span>{t("posInputTotal") || "합계"}</span>
-                    <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
-                  </div>
+                <div className="receipt-total flex justify-between">
+                  <span>{t("posInputTotal") || "합계"}</span>
+                  <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-0">
