@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS pos_orders (
   store_code TEXT DEFAULT '',
   order_type TEXT DEFAULT 'dine_in',
   table_name TEXT DEFAULT '',
+  memo TEXT DEFAULT '',
   items_json TEXT NOT NULL DEFAULT '[]',
   subtotal NUMERIC(12,2) DEFAULT 0,
   vat NUMERIC(12,2) DEFAULT 0,

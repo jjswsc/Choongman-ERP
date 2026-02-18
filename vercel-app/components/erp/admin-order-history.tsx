@@ -13,12 +13,35 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
-import { getAdminOrders, type AdminOrderItem, useStoreList } from "@/lib/api-client"
+import {
+  getAdminOrders,
+  getVendorsForPurchase,
+  type AdminOrderItem,
+  useStoreList,
+} from "@/lib/api-client"
 import { Input } from "@/components/ui/input"
-import { Printer, FileSpreadsheet, Search } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Printer, FileSpreadsheet, Search, ArrowRightCircle } from "lucide-react"
+import { useOrderCreate } from "@/lib/order-create-context"
 
 const HQ_STORES = ["본사", "Office", "오피스", "본점"]
 const inputClass = "h-9 rounded-md border border-input bg-background px-3 text-sm w-full min-w-0"
+
+interface ItemRow {
+  id: string
+  orderId: number
+  date: string
+  deliveryDate: string
+  store: string
+  userName: string
+  code: string
+  name: string
+  category: string
+  vendor: string
+  qty: number
+  price: number
+  status: string
+}
 
 export function AdminOrderHistory() {
   const { auth } = useAuth()
@@ -27,32 +50,43 @@ export function AdminOrderHistory() {
   const userStore = (auth?.store || "").trim()
   const isManager = isManagerRole(auth?.role || "")
   const isHQ = HQ_STORES.some((h) => userStore.toLowerCase().includes(h.toLowerCase()))
-
   const { stores: storeListFromApi } = useStoreList()
+  const orderCtx = useOrderCreate()
+  const setActiveTab = orderCtx?.setActiveTab ?? (() => {})
+  const setTransferToPo = orderCtx?.setTransferToPo ?? (() => {})
+
   const [list, setList] = React.useState<AdminOrderItem[]>([])
   const [storesFromOrders, setStoresFromOrders] = React.useState<string[]>([])
+  const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
   const [loading, setLoading] = React.useState(false)
   const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [categoryFilter, setCategoryFilter] = React.useState("All")
+  const [vendorFilter, setVendorFilter] = React.useState("All")
   const [itemNameFilter, setItemNameFilter] = React.useState("")
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
 
   const load = React.useCallback(async () => {
     setLoading(true)
     try {
       const effectiveStore = !isHQ && userStore ? userStore : storeFilter === "All" ? undefined : storeFilter
-      const { list: rows, stores: s } = await getAdminOrders({
-        startStr: startDate,
-        endStr: endDate,
-        store: effectiveStore,
-        status: statusFilter === "All" ? undefined : statusFilter,
-        userStore: userStore || undefined,
-        userRole: auth?.role,
-      })
+      const [ordersRes, venRes] = await Promise.all([
+        getAdminOrders({
+          startStr: startDate,
+          endStr: endDate,
+          store: effectiveStore,
+          status: statusFilter === "All" ? undefined : statusFilter,
+          userStore: userStore || undefined,
+          userRole: auth?.role,
+        }),
+        getVendorsForPurchase(),
+      ])
+      const { list: rows, stores: s } = ordersRes
       setList(rows || [])
       setStoresFromOrders(s || [])
+      setVendors((venRes || []).map((v) => ({ code: v.code, name: v.name })))
     } catch {
       setList([])
     } finally {
@@ -63,6 +97,27 @@ export function AdminOrderHistory() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  React.useEffect(() => {
+    setSelectedIds(new Set())
+  }, [startDate, endDate, storeFilter, statusFilter, categoryFilter, vendorFilter, itemNameFilter])
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size >= itemRows.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(itemRows.map((r) => r.id)))
+    }
+  }
 
   const stores = React.useMemo(() => {
     const fromApi = storeListFromApi || []
@@ -81,11 +136,27 @@ export function AdminOrderHistory() {
     return Array.from(set).sort()
   }, [list])
 
-  const filteredList = React.useMemo(() => {
+  const vendorList = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const o of list) {
+      for (const it of o.items || []) {
+        const v = String(it.vendor || "").trim()
+        if (v) set.add(v)
+      }
+    }
+    return Array.from(set).sort()
+  }, [list])
+
+  const filteredOrders = React.useMemo(() => {
     let out = list
     if (categoryFilter && categoryFilter !== "All") {
       out = out.filter((o) =>
         (o.items || []).some((it) => String(it.category || "").trim().toLowerCase() === categoryFilter.toLowerCase())
+      )
+    }
+    if (vendorFilter && vendorFilter !== "All") {
+      out = out.filter((o) =>
+        (o.items || []).some((it) => String(it.vendor || "").trim().toLowerCase() === vendorFilter.toLowerCase())
       )
     }
     if (itemNameFilter.trim()) {
@@ -99,7 +170,36 @@ export function AdminOrderHistory() {
       )
     }
     return out
-  }, [list, categoryFilter, itemNameFilter])
+  }, [list, categoryFilter, vendorFilter, itemNameFilter])
+
+  const itemRows: ItemRow[] = React.useMemo(() => {
+    const rows: ItemRow[] = []
+    for (const o of filteredOrders) {
+      for (let itemIdx = 0; itemIdx < (o.items || []).length; itemIdx++) {
+        const it = o.items![itemIdx]
+        const qty = it.originalQty ?? it.qty ?? 0
+        const price = Number(it.price) || 0
+        const vendorStr = String(it.vendor || "").trim()
+        if (vendorFilter && vendorFilter !== "All" && vendorStr.toLowerCase() !== vendorFilter.toLowerCase()) continue
+        rows.push({
+          id: `${o.orderId}-${itemIdx}`,
+          orderId: o.orderId,
+          date: o.date,
+          deliveryDate: o.deliveryDate || "",
+          store: o.store || "",
+          userName: o.userName || "",
+          code: it.code || "",
+          name: it.name || "",
+          category: String(it.category || "").trim(),
+          vendor: vendorStr,
+          qty,
+          price,
+          status: o.status || "Pending",
+        })
+      }
+    }
+    return rows
+  }, [filteredOrders, vendorFilter])
 
   const dateShort = (d: string) => {
     if (!d) return "-"
@@ -107,7 +207,66 @@ export function AdminOrderHistory() {
     return m ? `${m[1]}-${m[2]}-${m[3]}` : d.substring(0, 10)
   }
 
-  const displayList = filteredList
+  const selectedRows = React.useMemo(
+    () => itemRows.filter((r) => selectedIds.has(r.id)),
+    [itemRows, selectedIds]
+  )
+  const selectedByVendor = React.useMemo(() => {
+    const byVendor = new Map<string, { code: string; name: string; price: number; qty: number }[]>()
+    for (const r of selectedRows) {
+      const v = String(r.vendor || "").trim()
+      if (!v) continue
+      const arr = byVendor.get(v) || []
+      const existing = arr.find((x) => x.code === r.code)
+      if (existing) {
+        existing.qty += r.qty
+      } else {
+        arr.push({ code: r.code, name: r.name, price: r.price || 0, qty: r.qty })
+      }
+      byVendor.set(v, arr)
+    }
+    return byVendor
+  }, [selectedRows])
+
+  const vendorCountInSelection = selectedByVendor.size
+  const canTransferToPo = isHQ && selectedIds.size > 0 && vendorCountInSelection === 1
+  const transferVendorItems = React.useMemo(() => {
+    if (vendorCountInSelection !== 1) return []
+    const [, items] = Array.from(selectedByVendor.entries())[0] || [[], []]
+    const byCode = new Map<string, { code: string; name: string; price: number; qty: number }>()
+    for (const x of items) {
+      const existing = byCode.get(x.code)
+      if (existing) {
+        existing.qty += x.qty
+      } else {
+        byCode.set(x.code, { ...x })
+      }
+    }
+    return Array.from(byCode.values())
+  }, [selectedByVendor, vendorCountInSelection])
+
+  const handleTransferToPo = () => {
+    if (!canTransferToPo || transferVendorItems.length === 0) return
+    const [[vendorStr]] = Array.from(selectedByVendor.entries()) as [string, unknown][]
+    const matched = vendors.find(
+      (v) =>
+        v.code.toLowerCase() === vendorStr.toLowerCase() ||
+        v.name.toLowerCase() === vendorStr.toLowerCase()
+    )
+    const vendorCode = matched?.code ?? vendorStr
+    const vendorName = matched?.name ?? vendorStr
+    setTransferToPo({
+      vendorCode,
+      vendorName,
+      cart: transferVendorItems.map((x) => ({
+        code: x.code,
+        name: x.name,
+        price: x.price,
+        qty: x.qty,
+      })),
+    })
+    setActiveTab("hq")
+  }
 
   const handlePrint = () => {
     const win = window.open("", "_blank")
@@ -115,20 +274,22 @@ export function AdminOrderHistory() {
     const html = `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</title>
-<style>body{font-family:Arial,sans-serif;padding:16px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style>
+<style>body{font-family:Arial,sans-serif;padding:16px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}.num{text-align:right}</style>
 </head><body>
 <h1>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</h1>
 <p>${t("orderFilterPeriod")}: ${startDate} ~ ${endDate}</p>
 <table>
 <thead><tr>
 <th>${t("orderColDate")}</th><th>${t("orderColDeliveryDate")}</th><th>${t("orderColStore")}</th>
-<th>${t("orderOrderedBy")}</th><th>${t("orderColSummary")}</th><th class="num">${t("orderColTotal")}</th><th>${t("orderColStatus")}</th>
+<th>${t("orderOrderedBy")}</th><th>${t("orderColCode")}</th><th>${t("orderItemName")}</th>
+<th>${t("itemsCategory")}</th><th>${t("itemsVendor")}</th>
+<th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemTotal")}</th>
+<th>${t("orderColStatus")}</th>
 </tr></thead>
 <tbody>
-${displayList.map((o) => {
-  const delDate = (o.deliveryDate || "").trim().substring(0, 10) || "-"
-  const statusLabel = o.status === "Pending" ? (t("orderStatusPending") || "대기") : o.status === "Approved" ? (t("orderStatusApproved") || "승인") : o.status === "Rejected" ? (t("orderStatusRejected") || "거절") : o.status === "Hold" ? (t("orderStatusHold") || "보류") : o.status || ""
-  return `<tr><td>${dateShort(o.date)}</td><td>${delDate}</td><td>${(o.store || "").replace(/</g, "&lt;")}</td><td>${(o.userName || "-").replace(/</g, "&lt;")}</td><td>${(o.summary || "-").replace(/</g, "&lt;")}</td><td class="num">${(Number(o.total) || 0).toLocaleString()} ฿</td><td>${statusLabel}</td></tr>`
+${itemRows.map((r) => {
+  const statusLabel = r.status === "Pending" ? t("orderStatusPending") : r.status === "Approved" ? t("orderStatusApproved") : r.status === "Rejected" ? t("orderStatusRejected") : r.status === "Hold" ? t("orderStatusHold") : r.status || ""
+  return `<tr><td>${dateShort(r.date)}</td><td>${dateShort(r.deliveryDate)}</td><td>${(r.store || "").replace(/</g, "&lt;")}</td><td>${(r.userName || "").replace(/</g, "&lt;")}</td><td>${(r.code || "").replace(/</g, "&lt;")}</td><td>${(r.name || "").replace(/</g, "&lt;")}</td><td>${(r.category || "").replace(/</g, "&lt;")}</td><td>${(r.vendor || "").replace(/</g, "&lt;")}</td><td class="num">${r.qty}</td><td class="num">${r.price}</td><td class="num">${r.price * r.qty}</td><td>${statusLabel}</td></tr>`
 }).join("")}
 </tbody>
 </table>
@@ -144,21 +305,39 @@ ${displayList.map((o) => {
 
   const handleExcel = () => {
     const escapeCsv = (s: string | number) => {
-      const t = String(s ?? "")
-      if (t.indexOf(",") !== -1 || t.indexOf('"') !== -1 || t.indexOf("\n") !== -1) return `"${t.replace(/"/g, '""')}"`
-      return t
+      const str = String(s ?? "")
+      if (str.indexOf(",") !== -1 || str.indexOf('"') !== -1 || str.indexOf("\n") !== -1) return `"${str.replace(/"/g, '""')}"`
+      return str
     }
-    const headers = [t("orderColDate"), t("orderColDeliveryDate"), t("orderColStore"), t("orderOrderedBy"), t("orderColSummary"), t("orderColTotal"), t("orderColStatus")]
-    const rows = displayList.map((o) => [
-      dateShort(o.date),
-      (o.deliveryDate || "").toString().substring(0, 10) || "",
-      o.store || "",
-      o.userName || "",
-      o.summary || "",
-      Number(o.total) || 0,
-      o.status || "",
+    const headers = [
+      t("orderColDate"),
+      t("orderColDeliveryDate"),
+      t("orderColStore"),
+      t("orderOrderedBy"),
+      t("orderColCode"),
+      t("orderItemName"),
+      t("itemsCategory"),
+      t("itemsVendor"),
+      t("orderItemQty"),
+      t("orderItemUnitPrice"),
+      t("orderItemTotal"),
+      t("orderColStatus"),
+    ]
+    const rows = itemRows.map((r) => [
+      dateShort(r.date),
+      dateShort(r.deliveryDate),
+      r.store,
+      r.userName,
+      r.code,
+      r.name,
+      r.category,
+      r.vendor,
+      r.qty,
+      r.price,
+      r.price * r.qty,
+      r.status,
     ])
-    const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows.map((r) => r.map(escapeCsv).join(","))].join("\r\n")
+    const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\r\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
     const a = document.createElement("a")
     a.href = URL.createObjectURL(blob)
@@ -183,8 +362,8 @@ ${displayList.map((o) => {
             </SelectContent>
           </Select>
         )}
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[108px] shrink-0"} />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[108px] shrink-0"} />
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[92px] shrink-0 text-[13px]"} />
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[92px] shrink-0 text-[13px]"} />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className={inputClass + " w-[85px] shrink-0"}>
             <SelectValue />
@@ -208,6 +387,17 @@ ${displayList.map((o) => {
             ))}
           </SelectContent>
         </Select>
+        <Select value={vendorFilter} onValueChange={setVendorFilter}>
+          <SelectTrigger className={inputClass + " w-[95px] shrink-0"}>
+            <SelectValue placeholder={t("itemsVendor")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">{t("orderFilterVendorAll")}</SelectItem>
+            {vendorList.map((v) => (
+              <SelectItem key={v} value={v}>{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           placeholder={t("itemsColName")}
           value={itemNameFilter}
@@ -218,16 +408,35 @@ ${displayList.map((o) => {
           <Search className="mr-1 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handlePrint} disabled={displayList.length === 0} className="h-9 shrink-0">
+        {isHQ && (
+          <Button
+            size="sm"
+            variant="default"
+            onClick={handleTransferToPo}
+            disabled={!canTransferToPo}
+            className="h-9 shrink-0"
+            title={
+              selectedIds.size === 0
+                ? (t("orderSelectItemsFirst") || "품목을 선택해 주세요")
+                : vendorCountInSelection > 1
+                  ? (t("orderSelectOneVendor") || "한 거래처의 품목만 선택해 주세요")
+                  : ""
+            }
+          >
+            <ArrowRightCircle className="mr-1 h-4 w-4" />
+            {t("orderTransferToPo")}{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={handlePrint} disabled={itemRows.length === 0} className="h-9 shrink-0">
           <Printer className="mr-1 h-4 w-4" />
           {t("printBtn")}
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExcel} disabled={displayList.length === 0} className="h-9 shrink-0">
+        <Button variant="outline" size="sm" onClick={handleExcel} disabled={itemRows.length === 0} className="h-9 shrink-0">
           <FileSpreadsheet className="mr-1 h-4 w-4" />
           {t("excelBtn")}
         </Button>
-        {displayList.length > 0 && (
-          <span className="text-sm font-medium text-primary shrink-0">{displayList.length} {t("orderDetailCount")}</span>
+        {itemRows.length > 0 && (
+          <span className="text-sm font-medium text-primary shrink-0">{itemRows.length} {t("orderDetailCount")}</span>
         )}
       </div>
 
@@ -236,35 +445,63 @@ ${displayList.map((o) => {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-muted/80 backdrop-blur">
               <tr>
-                <th className="px-4 py-2.5 text-left font-medium">{t("orderColDate")}</th>
-                <th className="px-4 py-2.5 text-left font-medium">{t("orderColDeliveryDate")}</th>
-                <th className="px-4 py-2.5 text-left font-medium">{t("orderColStore")}</th>
-                <th className="px-4 py-2.5 text-left font-medium">{t("orderOrderedBy")}</th>
-                <th className="px-4 py-2.5 text-left font-medium">{t("orderColSummary")}</th>
-                <th className="px-4 py-2.5 text-right font-medium">{t("orderColTotal")}</th>
-                <th className="px-4 py-2.5 text-center font-medium">{t("orderColStatus")}</th>
+                {isHQ && (
+                  <th className="w-10 px-2 py-2 text-center">
+                    <Checkbox
+                      checked={itemRows.length > 0 && selectedIds.size >= itemRows.length}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label={t("orderSelectAll") || "전체 선택"}
+                    />
+                  </th>
+                )}
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColDate")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColDeliveryDate")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColStore")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderOrderedBy")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColCode")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderItemName")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("itemsCategory")}</th>
+                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("itemsVendor")}</th>
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemQty")}</th>
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
+                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
+                <th className="px-3 py-2 text-center font-medium whitespace-nowrap">{t("orderColStatus")}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
+                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
               ) : list.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
-              ) : displayList.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
+                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
+              ) : itemRows.length === 0 ? (
+                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
               ) : (
-                displayList.map((o) => {
-                  const statusBg = o.status === "Pending" ? "bg-warning/10 text-warning" : o.status === "Approved" ? "bg-success/10 text-success" : o.status === "Rejected" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
-                  const statusLabel = o.status === "Pending" ? t("orderStatusPending") : o.status === "Approved" ? t("orderStatusApproved") : o.status === "Rejected" ? t("orderStatusRejected") : o.status === "Hold" ? t("orderStatusHold") : o.status || ""
+                itemRows.map((r) => {
+                  const statusBg = r.status === "Pending" ? "bg-warning/10 text-warning" : r.status === "Approved" ? "bg-success/10 text-success" : r.status === "Rejected" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
+                  const statusLabel = r.status === "Pending" ? t("orderStatusPending") : r.status === "Approved" ? t("orderStatusApproved") : r.status === "Rejected" ? t("orderStatusRejected") : r.status === "Hold" ? t("orderStatusHold") : r.status || ""
                   return (
-                    <tr key={o.orderId} className="border-t hover:bg-muted/30">
-                      <td className="px-4 py-2">{dateShort(o.date)}</td>
-                      <td className="px-4 py-2">{(o.deliveryDate || "").toString().substring(0, 10) || "-"}</td>
-                      <td className="px-4 py-2 font-medium">{o.store || "-"}</td>
-                      <td className="px-4 py-2">{o.userName || "-"}</td>
-                      <td className="px-4 py-2">{o.summary || "-"}</td>
-                      <td className="px-4 py-2 text-right font-medium">{(Number(o.total) || 0).toLocaleString()} ฿</td>
-                      <td className="px-4 py-2 text-center">
+                    <tr key={r.id} className="border-t hover:bg-muted/30">
+                      {isHQ && (
+                        <td className="w-10 px-2 py-1.5 text-center">
+                          <Checkbox
+                            checked={selectedIds.has(r.id)}
+                            onCheckedChange={() => toggleSelect(r.id)}
+                            aria-label={r.name || r.code}
+                          />
+                        </td>
+                      )}
+                      <td className="px-3 py-1.5 whitespace-nowrap">{dateShort(r.date)}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{dateShort(r.deliveryDate) || "-"}</td>
+                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">{r.store || "-"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{r.userName || "-"}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">{r.code || "-"}</td>
+                      <td className="px-3 py-1.5 font-medium">{r.name || "-"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{r.category || "-"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{r.vendor || "-"}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{r.qty}</td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-center">
                         <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${statusBg}`}>{statusLabel}</span>
                       </td>
                     </tr>

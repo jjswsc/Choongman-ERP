@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
       store_code?: string
       order_type?: string
       table_name?: string
+      memo?: string
       items_json?: string
       subtotal?: number
       vat?: number
@@ -39,13 +40,13 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
         storeCode: String(r.store_code ?? ''),
         orderType: String(r.order_type ?? 'dine_in'),
         tableName: String(r.table_name ?? ''),
+        memo: String(r.memo ?? ''),
         items: (() => {
           try {
             const arr = JSON.parse(r.items_json || '[]')

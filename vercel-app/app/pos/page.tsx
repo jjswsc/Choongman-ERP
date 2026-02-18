@@ -5,15 +5,18 @@ import Image from "next/image"
 import {
   getPosMenus,
   getPosMenuCategories,
+  getPosOrders,
+  getPosTodaySales,
   savePosOrder,
   useStoreList,
   type PosMenu,
+  type PosOrder,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react"
+import { Minus, Plus, Printer, RotateCcw, ShoppingCart, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -23,6 +26,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -46,12 +56,41 @@ export default function PosPage() {
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
   const [storeCode, setStoreCode] = React.useState("")
   const [tableName, setTableName] = React.useState("")
+  const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
+  const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
+  const [recentLoading, setRecentLoading] = React.useState(false)
+  const [todaySales, setTodaySales] = React.useState<{
+    completedCount: number
+    completedTotal: number
+    pendingCount: number
+  } | null>(null)
+  const [receiptData, setReceiptData] = React.useState<{
+    orderNo: string
+    items: CartItem[]
+    total: number
+    storeCode: string
+    orderType: string
+    tableName: string
+    memo: string
+  } | null>(null)
+  const receiptRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
     const def = auth?.store || stores[0] || "ST01"
     if (!storeCode && def) setStoreCode(def)
   }, [auth?.store, stores, storeCode])
+
+  const loadTodaySales = React.useCallback(() => {
+    if (!storeCode) return
+    getPosTodaySales({ storeCode })
+      .then(setTodaySales)
+      .catch(() => setTodaySales(null))
+  }, [storeCode])
+
+  React.useEffect(() => {
+    loadTodaySales()
+  }, [loadTodaySales])
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -105,6 +144,40 @@ export default function PosPage() {
 
   const clearCart = () => setCart([])
 
+  const loadRecentOrders = React.useCallback(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    setRecentLoading(true)
+    getPosOrders({
+      startStr: today,
+      endStr: today,
+      storeCode: storeCode || undefined,
+    })
+      .then((list) => setRecentOrders((list || []).slice(0, 10)))
+      .catch(() => setRecentOrders([]))
+      .finally(() => setRecentLoading(false))
+  }, [storeCode])
+
+  const reorderFrom = (order: PosOrder) => {
+    if (!order.items?.length) return
+    setCart((prev) => {
+      const next = [...prev]
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number }[]) {
+        const id = String(it.id ?? "")
+        const name = String(it.name ?? "")
+        const price = Number(it.price ?? 0)
+        const qty = Number(it.qty ?? 1)
+        if (!id) continue
+        const i = next.findIndex((x) => x.id === id)
+        if (i >= 0) {
+          next[i] = { ...next[i], qty: next[i].qty + qty }
+        } else {
+          next.push({ id, name, price, qty })
+        }
+      }
+      return next
+    })
+  }
+
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
   const total = subtotal
 
@@ -119,11 +192,22 @@ export default function PosPage() {
         storeCode: storeCode || "ST01",
         orderType,
         tableName: orderType === "dine_in" ? tableName : "",
+        memo: memo.trim() || undefined,
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
       })
       if (res.success) {
-        alert(`${t("posOrderSuccess") || "주문 완료"}: ${res.orderNo}`)
+        setReceiptData({
+          orderNo: res.orderNo ?? "",
+          items: [...cart],
+          total,
+          storeCode: storeCode || "ST01",
+          orderType,
+          tableName: orderType === "dine_in" ? tableName : "",
+          memo: memo.trim(),
+        })
         clearCart()
+        setMemo("")
+        loadTodaySales()
       } else {
         alert(res.message || "저장 실패")
       }
@@ -132,6 +216,40 @@ export default function PosPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const handlePrintReceipt = () => {
+    if (!receiptRef.current) return
+    const printContent = receiptRef.current.innerHTML
+    const printWindow = window.open("", "_blank")
+    if (!printWindow) {
+      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      return
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${t("posReceipt") || "영수증"}</title>
+          <style>
+            body { font-family: 'Courier New', monospace; font-size: 12px; padding: 16px; max-width: 280px; }
+            .receipt-content { }
+            .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+            .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
+            .space-y-2 > * + * { margin-top: 8px; }
+            .space-y-1 > * + * { margin-top: 4px; }
+          </style>
+        </head>
+        <body>${printContent}</body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 250)
   }
 
   const orderTypeLabels: Record<OrderType, string> = {
@@ -149,7 +267,20 @@ export default function PosPage() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      {todaySales != null && (
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-800/50 px-4 py-2 text-xs">
+          <span className="text-slate-400">
+            {t("posTodayCompleted") || "오늘 완료"}:{" "}
+            <span className="font-bold text-amber-400">{todaySales.completedCount}</span>
+            {t("posCount") || "건"}
+          </span>
+          <span className="font-bold tabular-nums text-white">
+            {todaySales.completedTotal.toLocaleString()} ฿
+          </span>
+        </div>
+      )}
+      <div className="flex flex-1 overflow-hidden">
       {/* 메뉴 영역 */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 bg-slate-900/50 px-3 py-2">
@@ -274,7 +405,37 @@ export default function PosPage() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 flex-1 border-slate-600 bg-slate-800 text-xs text-slate-300 hover:bg-slate-700"
+              onClick={loadRecentOrders}
+              disabled={recentLoading}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              {recentLoading ? "..." : t("posReorder") || "재주문"}
+            </Button>
+          </div>
         </div>
+        {recentOrders.length > 0 && (
+          <div className="shrink-0 overflow-x-auto border-b border-slate-800 px-3 py-2">
+            <div className="flex gap-2">
+              {recentOrders.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => reorderFrom(o)}
+                  className="shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-left transition hover:border-amber-500/50"
+                >
+                  <div className="text-[10px] font-bold text-amber-400">{o.orderNo}</div>
+                  <div className="text-[11px] text-slate-300">
+                    {o.total?.toLocaleString()} ฿
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {cart.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">
@@ -319,8 +480,17 @@ export default function PosPage() {
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t border-slate-800 p-4">
-          <div className="mb-2 flex justify-between text-sm text-slate-400">
+        <div className="shrink-0 border-t border-slate-800 p-4 space-y-3">
+          <div>
+            <label className="text-xs text-slate-400">{t("posCustomerMemo") || "손님 메모"}</label>
+            <Input
+              placeholder={t("posCustomerMemoPh") || "알레르기, 맵기 조절 등"}
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="mt-1 h-9 border-slate-600 bg-slate-800 text-sm"
+            />
+          </div>
+          <div className="flex justify-between text-sm text-slate-400">
             <span>{t("posSubtotal") || "소계"}</span>
             <span className="font-bold tabular-nums text-white">{subtotal.toLocaleString()} ฿</span>
           </div>
@@ -333,6 +503,74 @@ export default function PosPage() {
           </Button>
         </div>
       </div>
+      </div>
+
+      <Dialog open={!!receiptData} onOpenChange={(open) => !open && setReceiptData(null)}>
+        <DialogContent className="max-w-xs sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              {t("posOrderSuccess") || "주문 완료"}
+            </DialogTitle>
+          </DialogHeader>
+          {receiptData && (
+            <>
+              <div
+                ref={receiptRef}
+                className="receipt-content space-y-2 rounded border p-4 text-sm"
+              >
+                <div className="receipt-header">
+                  <div className="font-bold">CHOONGMAN</div>
+                  <div className="text-xs text-muted-foreground">
+                    {receiptData.orderNo}
+                  </div>
+                  <div className="text-xs">
+                    {receiptData.storeCode} · {orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}
+                    {receiptData.tableName && ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date().toLocaleString("ko-KR")}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {receiptData.items.map((it) => (
+                    <div key={it.id} className="receipt-row flex justify-between">
+                      <span>
+                        {it.name} × {it.qty}
+                      </span>
+                      <span className="tabular-nums">
+                        {(it.price * it.qty).toLocaleString()} ฿
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {receiptData.memo && (
+                  <div className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                    {t("posCustomerMemo") || "메모"}: {receiptData.memo}
+                  </div>
+                )}
+                <div className="receipt-total flex justify-between">
+                  <span>{t("posInputTotal") || "합계"}</span>
+                  <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
+                </div>
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handlePrintReceipt}
+                >
+                  <Printer className="h-4 w-4" />
+                  {t("posPrint") || "인쇄"}
+                </Button>
+                <Button size="sm" onClick={() => setReceiptData(null)}>
+                  {t("close") || "닫기"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

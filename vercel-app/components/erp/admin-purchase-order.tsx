@@ -31,6 +31,7 @@ import {
   type VendorForPurchase,
   type ItemByVendor,
 } from "@/lib/api-client"
+import { useOrderCreate } from "@/lib/order-create-context"
 import { Minus, Plus, ShoppingCart, Trash2, Package, Printer, FileSpreadsheet } from "lucide-react"
 
 interface CartItem {
@@ -44,6 +45,8 @@ export function AdminPurchaseOrder() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const { transferToPo, setTransferToPo } = useOrderCreate() || {}
+  const pendingTransferCart = React.useRef<CartItem[] | null>(null)
 
   const [locations, setLocations] = React.useState<PurchaseLocation[]>([])
   const [locationSelect, setLocationSelect] = React.useState<PurchaseLocation | null>(null)
@@ -83,6 +86,23 @@ export function AdminPurchaseOrder() {
   }, [])
 
   React.useEffect(() => {
+    if (transferToPo && vendors.length > 0) {
+      const matched = vendors.find(
+        (v) =>
+          v.code === transferToPo.vendorCode ||
+          v.name === transferToPo.vendorName ||
+          v.code.toLowerCase() === transferToPo.vendorCode.toLowerCase() ||
+          v.name.toLowerCase() === transferToPo.vendorName.toLowerCase()
+      )
+      if (matched && transferToPo.cart.length > 0) {
+        pendingTransferCart.current = transferToPo.cart as CartItem[]
+        setVendorSelect(matched)
+        setTransferToPo?.(null)
+      }
+    }
+  }, [transferToPo, vendors, setTransferToPo])
+
+  React.useEffect(() => {
     if (!vendorSelect) {
       setItems([])
       setStock({})
@@ -98,7 +118,8 @@ export function AdminPurchaseOrder() {
       .then(([itms, st]) => {
         setItems(itms || [])
         setStock(st || {})
-        setCart([])
+        setCart(pendingTransferCart.current ?? [])
+        pendingTransferCart.current = null
         setSelectedItem(null)
       })
       .catch(() => {

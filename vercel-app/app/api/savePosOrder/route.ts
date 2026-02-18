@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     const storeCode = String(body.storeCode ?? '').trim()
     const orderType = String(body.orderType ?? 'dine_in')
     const tableName = String(body.tableName ?? '')
+    const memo = String(body.memo ?? '').trim()
     const items = Array.isArray(body.items) ? body.items : []
 
     if (items.length === 0) {
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
       store_code: storeCode,
       order_type: orderType,
       table_name: tableName,
+      memo,
       items_json: JSON.stringify(items),
       subtotal,
       vat,

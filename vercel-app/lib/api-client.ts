@@ -271,7 +271,7 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; category?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1219,12 +1219,24 @@ export interface PosOrder {
   storeCode: string
   orderType: string
   tableName: string
+  memo: string
   items: PosOrderItem[]
   subtotal: number
   vat: number
   total: number
   status: string
   createdAt: string
+}
+
+export async function getPosTodaySales(params?: { storeCode?: string }) {
+  const q = new URLSearchParams()
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  const res = await apiFetch('/api/getPosTodaySales?' + q.toString())
+  return res.json() as Promise<{
+    completedCount: number
+    completedTotal: number
+    pendingCount: number
+  }>
 }
 
 export async function getPosOrders(params?: {
@@ -1301,6 +1313,7 @@ export async function savePosOrder(params: {
   storeCode?: string
   orderType?: string
   tableName?: string
+  memo?: string
   items: PosOrderItem[]
 }) {
   const res = await apiFetch('/api/savePosOrder', {

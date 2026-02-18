@@ -28,15 +28,22 @@ export async function GET(request: NextRequest) {
   try {
     const endIso = e + 'T23:59:59.999Z'
 
-    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec' })) as {
+    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,category,spec,vendor' })) as {
       code?: string
-      name?: string
+      category?: string
       spec?: string
+      vendor?: string
     }[] | null
     const itemSpecMap: Record<string, string> = {}
+    const itemCategoryMap: Record<string, string> = {}
+    const itemVendorMap: Record<string, string> = {}
     for (const row of itemsRows || []) {
       const code = String(row.code || '').trim()
-      if (code) itemSpecMap[code] = String(row.spec || '').trim()
+      if (code) {
+        itemSpecMap[code] = String(row.spec || '').trim()
+        itemCategoryMap[code] = String(row.category || '').trim()
+        itemVendorMap[code] = String(row.vendor || '').trim()
+      }
     }
 
     let filter =
@@ -73,6 +80,8 @@ export async function GET(request: NextRequest) {
       items = items.map((it) => ({
         ...it,
         spec: it.spec || itemSpecMap[it.code || ''] || '',
+        category: (it as { category?: string }).category || itemCategoryMap[it.code || ''] || '',
+        vendor: (it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '',
       }))
       let receivedIndices: number[] = []
       try {
