@@ -121,6 +121,14 @@ export function WorklogApproval() {
     if (trimmed.startsWith("⚡")) return formatManagerComment(trimmed)
     return contentTransMap[trimmed] || formatManagerComment(trimmed)
   }
+  const getWorkTypeDisplay = (status: string) => {
+    const s = (status || "").trim()
+    if (s === "Finish") return t("workLogFinishWork")
+    if (s === "Continue" || s === "Carry Over") return t("workLogContinueWork")
+    if (s === "Today") return t("workLogTodayWork")
+    return s || "-"
+  }
+
   const getReviewStatusDisplay = (item: WorkLogManagerItem) => {
     const check = item.managerCheck || ""
     const comment = (item.managerComment || "").trim()
@@ -325,6 +333,7 @@ export function WorklogApproval() {
                         <thead>
                           <tr className="border-b bg-muted/10">
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-32 whitespace-nowrap">{t("workLogColDate")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-28 whitespace-nowrap">{t("workLogColWorkType")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center">{t("workLogColContent")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-16">{t("workLogPriority")}</th>
                             <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
@@ -336,6 +345,18 @@ export function WorklogApproval() {
                           {items.map((it) => (
                             <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5">
                               <td className="px-5 py-2 text-xs tabular-nums text-center whitespace-nowrap">{it.date}</td>
+                              <td className="px-5 py-2 text-center whitespace-nowrap">
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
+                                    it.status === "Finish" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+                                    (it.status === "Continue" || it.status === "Carry Over") && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+                                    it.status === "Today" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
+                                  )}
+                                >
+                                  {getWorkTypeDisplay(it.status)}
+                                </span>
+                              </td>
                               <td className="px-5 py-2">
                                 <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
