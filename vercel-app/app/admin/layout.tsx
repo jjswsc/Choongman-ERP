@@ -8,6 +8,7 @@ import { ErpHeader } from "@/components/erp/erp-header"
 import { useAuth } from "@/lib/auth-context"
 import {
   isManagerRole,
+  isFranchiseeRole,
   canManagerAccessPath,
   canAccessAdmin,
   canPosStaffAccessPath,
@@ -35,7 +36,7 @@ export default function AdminLayout({
       router.replace("/?msg=no_admin")
       return
     }
-    if (auth && !isLoginPage && isManagerRole(auth.role || "") && !canManagerAccessPath(pathname)) {
+    if (auth && !isLoginPage && (isManagerRole(auth.role || "") || isFranchiseeRole(auth.role || "")) && !canManagerAccessPath(pathname)) {
       router.replace("/admin")
     }
     if (auth && !isLoginPage && (isPosOrderOnlyRole(auth.role || "") || isPosSettlementOnlyRole(auth.role || ""))) {

@@ -39,6 +39,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   isManagerRole,
+  isFranchiseeRole,
   canAccessSettings,
   canAccessPosOrder,
   canAccessPosSettlement,
@@ -46,6 +47,7 @@ import {
   canAccessPosTables,
   canAccessPosMenus,
   canAccessPosPrinters,
+  canAccessPosCoupons,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
@@ -129,7 +131,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
   "/admin/pos-printers": canAccessPosPrinters,
-  "/admin/pos-coupons": canAccessPosMenus,
+  "/admin/pos-coupons": canAccessPosCoupons,
 }
 
 export function ErpSidebar() {
@@ -138,7 +140,7 @@ export function ErpSidebar() {
   const { auth, logout } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const isManager = isManagerRole(auth?.role || "")
+  const isManager = isManagerRole(auth?.role || "") || isFranchiseeRole(auth?.role || "")
   const showSettings = canAccessSettings(auth?.role || "")
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 

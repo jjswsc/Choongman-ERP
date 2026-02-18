@@ -5,7 +5,7 @@
  * - Director급: director, ceo, hr → 전체 권한, Office 검색 가능
  * - Officer: officer → Office 제외한 전체 권한 (급여/직원 관리)
  * - Manager: manager → 매장 매니저, 자기 매장 한정
- * - Franchisee: franchisee (추후)
+ * - Franchisee: franchisee → 매장 소유자, 매니저와 동일 수준 (자기 매장 한정)
  *
  * store=Office → Officer로 인식 (employees.store가 본사/Office/오피스/본점이면)
  */
@@ -21,6 +21,7 @@ export const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 const DIRECTOR_ROLES = ["director", "ceo", "hr"]
 const OFFICE_ROLES = ["director", "ceo", "hr", "officer"]
 const MANAGER_ROLE = "manager"
+const FRANCHISEE_ROLE = "franchisee"
 
 /** Director급인지 (전체 권한 + Office 검색) */
 export function isDirectorRole(role: string): boolean {
@@ -40,11 +41,23 @@ export function isManagerRole(role: string): boolean {
   return r.includes(MANAGER_ROLE)
 }
 
-/** 관리자 페이지 접근 가능 (본사 + 매니저 + POS 직원) */
+/** 가맹점주인지 */
+export function isFranchiseeRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return r.includes(FRANCHISEE_ROLE)
+}
+
+/** 매장 관리자급인지 (매니저 또는 가맹점주) */
+export function isManagerOrFranchiseeRole(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role)
+}
+
+/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (
     isOfficeRole(role) ||
     isManagerRole(role) ||
+    isFranchiseeRole(role) ||
     isPosOrderOnlyRole(role) ||
     isPosSettlementOnlyRole(role)
   )
@@ -63,7 +76,7 @@ const MANAGER_DENIED_PATHS = [
   "/admin/settings",
 ]
 
-/** 매니저가 해당 경로에 접근할 수 있는지 */
+/** 매니저·가맹점주가 해당 경로에 접근할 수 있는지 */
 export function canManagerAccessPath(pathname: string): boolean {
   const p = String(pathname || "").trim()
   if (!p.startsWith("/admin")) return true
@@ -96,33 +109,39 @@ export function canAccessPosOrder(role: string): boolean {
     isPosOrderOnlyRole(role) ||
     isPosSettlementOnlyRole(role) ||
     isManagerRole(role) ||
+    isFranchiseeRole(role) ||
     isOfficeRole(role)
   )
 }
 
 /** POS 결산 가능 */
 export function canAccessPosSettlement(role: string): boolean {
-  return isPosSettlementOnlyRole(role) || isManagerRole(role) || isOfficeRole(role)
+  return isPosSettlementOnlyRole(role) || isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
 /** POS 주문 내역 가능 (관리자) */
 export function canAccessPosOrders(role: string): boolean {
-  return isManagerRole(role) || isOfficeRole(role)
+  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
 /** POS 테이블 배치 가능 (관리자) */
 export function canAccessPosTables(role: string): boolean {
-  return isManagerRole(role) || isOfficeRole(role)
+  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
 /** POS 메뉴 관리 가능 (관리자) */
 export function canAccessPosMenus(role: string): boolean {
-  return isManagerRole(role) || isOfficeRole(role)
+  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
 /** POS 프린터 설정 가능 (관리자) */
 export function canAccessPosPrinters(role: string): boolean {
-  return isManagerRole(role) || isOfficeRole(role)
+  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
+}
+
+/** POS 쿠폰 관리 가능 (관리자) */
+export function canAccessPosCoupons(role: string): boolean {
+  return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
 /** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
@@ -141,7 +160,7 @@ export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   if (p === "/admin/pos-printers" || p.startsWith("/admin/pos-printers"))
     return canAccessPosPrinters(role)
   if (p === "/admin/pos-coupons" || p.startsWith("/admin/pos-coupons"))
-    return canAccessPosMenus(role)
+    return canAccessPosCoupons(role)
   if (p === "/admin" || p === "/admin/") return true
   return false
 }

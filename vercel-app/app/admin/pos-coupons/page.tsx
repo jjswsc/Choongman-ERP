@@ -59,12 +59,12 @@ export default function PosCouponsPage() {
   const handleEdit = (c: PosCoupon) => {
     setEditingId(c.id != null ? c.id : null)
     setForm({
-      code: c.code,
-      name: c.name,
-      discountType: c.discountType,
-      discountValue: String(c.discountValue),
-      validFrom: c.validFrom || "",
-      validTo: c.validTo || "",
+      code: c.code ?? "",
+      name: c.name ?? "",
+      discountType: (c.discountType === "percent" ? "percent" : "fixed") as "percent" | "fixed",
+      discountValue: String(c.discountValue ?? 0),
+      validFrom: c.validFrom ?? c.startDate ?? "",
+      validTo: c.validTo ?? c.endDate ?? "",
     })
   }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Wallet, Save, RotateCw } from "lucide-react"
+import { Wallet, Save, RotateCw, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -194,6 +194,50 @@ export default function PosSettlementPage() {
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
             {t("posRefresh") || "새로고침"}
           </Button>
+          {effectiveStore && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 gap-1.5"
+              onClick={() => {
+                const w = window.open("", "_blank")
+                if (!w) {
+                  alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+                  return
+                }
+                const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
+                w.document.write(`
+                  <!DOCTYPE html>
+                  <html><head><title>${t("posSettlementReport") || "POS 결산 리포트"} - ${storeLabel} - ${settleDate}</title>
+                  <style>body{font-family:sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
+                  </head><body>
+                  <h2>${t("posSettlementReport") || "POS 결산 리포트"}</h2>
+                  <p><strong>${t("store") || "매장"}</strong>: ${storeLabel} &nbsp;|&nbsp; <strong>${t("posSettleDate") || "결산일"}</strong>: ${settleDate}</p>
+                  <table>
+                  <tr><td>${t("posSystemSubtotal") || "공급가액"}</td><td class="r">${systemSubtotal.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posSystemVat") || "VAT (7%)"}</td><td class="r">${systemVat.toLocaleString()} ฿</td></tr>
+                  <tr class="t"><td class="b">${t("posSystemTotal") || "시스템 매출"}</td><td class="r b">${systemTotal.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posCashActual") || "돈통 시제"}</td><td class="r">${cashActualNum.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posCard") || "카드"}</td><td class="r">${cardNum.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posQr") || "QR/모바일"}</td><td class="r">${qrNum.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posDeliveryApp") || "배달앱"}</td><td class="r">${deliveryNum.toLocaleString()} ฿</td></tr>
+                  <tr><td>${t("posOther") || "기타"}</td><td class="r">${otherNum.toLocaleString()} ฿</td></tr>
+                  <tr class="t"><td class="b">${t("posInputTotal") || "입력 합계"}</td><td class="r b">${totalInput.toLocaleString()} ฿</td></tr>
+                  <tr class="t"><td class="b">${t("posDifference") || "차액"}</td><td class="r b">${diff >= 0 ? "+" : ""}${diff.toLocaleString()} ฿</td></tr>
+                  </table>
+                  ${memo ? `<p class="t"><strong>${t("posMemo") || "비고"}</strong>: ${memo}</p>` : ""}
+                  ${closed ? `<p><strong>${t("posClosed") || "마감"}</strong></p>` : ""}
+                  <p class="t" style="font-size:12px;color:#666">${new Date().toLocaleString("ko-KR")}</p>
+                  </body></html>`)
+                w.document.close()
+                w.focus()
+                setTimeout(() => { w.print(); w.close() }, 250)
+              }}
+            >
+              <Printer className="h-4 w-4" />
+              {t("printBtn") || "인쇄"}
+            </Button>
+          )}
         </div>
 
         {loading && (
