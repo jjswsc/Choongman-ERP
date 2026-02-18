@@ -135,8 +135,8 @@ export function WorklogApproval() {
     const check = item.managerCheck || ""
     const comment = (item.managerComment || "").trim()
     const hasComment = !!comment && !comment.startsWith("⚡")
-    if (check === "대기") return t("statusPending")
-    if (check === "승인") return hasComment ? t("workLogStatusCommented") : t("workLogStatusConfirmed")
+    if (check === "대기") return "Wait"
+    if (check === "승인") return hasComment ? "Commented" : "OK"
     return check
   }
   const PRIORITIES = [
@@ -172,8 +172,8 @@ export function WorklogApproval() {
     }
   }
 
-  const handleAddComment = async (id: string) => {
-    const comment = prompt(t("workLogCommentPrompt"))
+  const handleAddComment = async (id: string, existingComment?: string) => {
+    const comment = prompt(t("workLogCommentPrompt"), existingComment ?? "")
     if (comment === null) return
     setUpdating(id)
     try {
@@ -323,8 +323,8 @@ export function WorklogApproval() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                <SelectItem value="대기">{t("statusPending")}</SelectItem>
-                <SelectItem value="승인">{t("workLogStatusConfirmed")} / {t("workLogStatusCommented")}</SelectItem>
+                <SelectItem value="대기">Wait</SelectItem>
+                <SelectItem value="승인">OK / Commented</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -452,29 +452,27 @@ export function WorklogApproval() {
                               <td className="px-5 py-2">
                                 <div className="flex flex-row items-center gap-2">
                                   {it.managerCheck === "대기" && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-[10px] text-success shrink-0"
-                                        onClick={() => handleConfirm(it.id)}
-                                        disabled={updating === it.id}
-                                      >
-                                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                                        {t("workLogConfirmBtn")}
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-[10px] text-primary shrink-0"
-                                        onClick={() => handleAddComment(it.id)}
-                                        disabled={updating === it.id}
-                                      >
-                                        <MessageSquarePlus className="mr-1 h-3 w-3" />
-                                        {t("workLogCommentBtn")}
-                                      </Button>
-                                    </>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-[10px] text-success shrink-0"
+                                      onClick={() => handleConfirm(it.id)}
+                                      disabled={updating === it.id}
+                                    >
+                                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                                      {t("workLogConfirmBtn")}
+                                    </Button>
                                   )}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-[10px] text-primary shrink-0"
+                                    onClick={() => handleAddComment(it.id, it.managerComment)}
+                                    disabled={updating === it.id}
+                                    title={t("workLogCommentBtn")}
+                                  >
+                                    <MessageSquarePlus className="h-3.5 w-3.5" />
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"

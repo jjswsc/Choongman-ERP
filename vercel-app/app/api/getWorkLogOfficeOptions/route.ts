@@ -30,6 +30,17 @@ export async function GET() {
       const job = String((e as { job?: string }).job || '').trim()
       if (job) deptSet.add(job)
     }
+    // work_logs에 저장된 부서도 포함 (직원 직무 변경 후 과거 데이터 조회용)
+    try {
+      const logRows =
+        (await supabaseSelect('work_logs', { select: 'dept', limit: 5000 })) as { dept?: string }[]
+      for (const r of logRows) {
+        const d = String(r.dept || '').trim()
+        if (d) deptSet.add(d)
+      }
+    } catch {
+      // ignore
+    }
     const depts = Array.from(deptSet).sort()
 
     return NextResponse.json({ staff, depts }, { headers })
