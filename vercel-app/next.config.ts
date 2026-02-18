@@ -4,6 +4,11 @@ import path from "path";
 const vercelAppDir = __dirname;
 
 const nextConfig: NextConfig = {
+  // API 요청 body 크기 제한 증가 (휴가 진단서/증빙 등 base64 이미지 업로드)
+  experimental: {
+    serverActions: { bodySizeLimit: "10mb" },
+    proxyClientMaxBodySize: "10mb",
+  },
   // outputFileTracingRoot와 turbopack.root 동일하게 맞춤 (Vercel 빌드 경고 해결)
   outputFileTracingRoot: vercelAppDir,
   turbopack: {

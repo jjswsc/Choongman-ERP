@@ -5,11 +5,13 @@ import Image from "next/image"
 import {
   getPosMenus,
   getPosMenuCategories,
+  getPosMenuOptions,
   getPosOrders,
   getPosTodaySales,
   savePosOrder,
   useStoreList,
   type PosMenu,
+  type PosMenuOption,
   type PosOrder,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
@@ -41,6 +43,8 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  optionId?: string
+  optionName?: string
 }
 
 export default function PosPage() {
@@ -50,7 +54,9 @@ export default function PosPage() {
   const { stores } = useStoreList()
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
+  const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [optionPickerMenu, setOptionPickerMenu] = React.useState<PosMenu | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
@@ -93,35 +99,69 @@ export default function PosPage() {
   }, [loadTodaySales])
 
   React.useEffect(() => {
-    Promise.all([getPosMenus(), getPosMenuCategories()])
-      .then(([list, { categories: cats }]) => {
+    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions()])
+      .then(([list, { categories: cats }, opts]) => {
         setMenus(list || [])
         setCategories(cats || [])
+        setAllOptions(opts || [])
         if (cats?.length) setSelectedCategory(cats[0])
       })
       .catch(() => {
         setMenus([])
         setCategories([])
+        setAllOptions([])
       })
       .finally(() => setLoading(false))
   }, [])
 
+  const optionsByMenuId = React.useMemo(() => {
+    const m: Record<string, PosMenuOption[]> = {}
+    for (const o of allOptions) {
+      const mid = o.menuId
+      if (!m[mid]) m[mid] = []
+      m[mid].push(o)
+    }
+    return m
+  }, [allOptions])
+
+  const todayStr = new Date().toISOString().slice(0, 10)
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
-    if (!selectedCategory) return active
-    return active.filter((m) => m.category === selectedCategory)
-  }, [menus, selectedCategory])
+    const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
+    if (!selectedCategory) return notSoldOut
+    return notSoldOut.filter((m) => m.category === selectedCategory)
+  }, [menus, selectedCategory, todayStr])
 
-  const addToCart = (menu: PosMenu) => {
+  const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null) => {
+    const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
+    const name = opt ? `${menu.name} (${opt.name})` : menu.name
+    const price = menu.price + (opt?.priceModifier ?? 0)
     setCart((prev) => {
-      const i = prev.findIndex((x) => x.id === menu.id)
+      const i = prev.findIndex((x) => x.id === cartId)
       if (i >= 0) {
         const n = [...prev]
         n[i] = { ...n[i], qty: n[i].qty + 1 }
         return n
       }
-      return [...prev, { id: menu.id, name: menu.name, price: menu.price, qty: 1 }]
+      return [...prev, {
+        id: cartId,
+        name,
+        price,
+        qty: 1,
+        optionId: opt?.id,
+        optionName: opt?.name,
+      }]
     })
+    setOptionPickerMenu(null)
+  }
+
+  const addToCart = (menu: PosMenu) => {
+    const opts = optionsByMenuId[menu.id]
+    if (opts && opts.length > 0) {
+      setOptionPickerMenu(menu)
+      return
+    }
+    addToCartWithOption(menu, null)
   }
 
   const updateQty = (id: string, delta: number) => {
@@ -504,6 +544,33 @@ export default function PosPage() {
         </div>
       </div>
       </div>
+
+      {/* 옵션 선택 모달 */}
+      <Dialog open={!!optionPickerMenu} onOpenChange={(open) => !open && setOptionPickerMenu(null)}>
+        <DialogContent className="max-w-xs sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {optionPickerMenu?.name} — {t("posSelectOption") || "옵션 선택"}
+            </DialogTitle>
+          </DialogHeader>
+          {optionPickerMenu && (
+            <div className="flex flex-col gap-2 py-2">
+              {optionsByMenuId[optionPickerMenu.id]?.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => addToCartWithOption(optionPickerMenu, opt)}
+                  className="flex justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
+                >
+                  <span>{opt.name}</span>
+                  <span className="font-bold text-amber-400">
+                    {(optionPickerMenu.price + (opt.priceModifier || 0)).toLocaleString()} ฿
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!receiptData} onOpenChange={(open) => !open && setReceiptData(null)}>
         <DialogContent className="max-w-xs sm:max-w-sm">

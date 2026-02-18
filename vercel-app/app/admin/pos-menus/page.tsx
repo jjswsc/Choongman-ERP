@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Search } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Search, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -17,10 +17,14 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getPosMenus,
   getPosMenuCategories,
+  getPosMenuOptions,
   savePosMenu,
+  savePosMenuOption,
   deletePosMenu,
+  deletePosMenuOption,
   updatePosMenuSoldOut,
   type PosMenu,
+  type PosMenuOption,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -46,6 +50,9 @@ export default function PosMenusPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
+  const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
+  const [newOptionName, setNewOptionName] = React.useState("")
+  const [newOptionModifier, setNewOptionModifier] = React.useState("0")
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -59,6 +66,16 @@ export default function PosMenusPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  React.useEffect(() => {
+    if (!editingId) {
+      setMenuOptions([])
+      return
+    }
+    getPosMenuOptions({ menuId: editingId })
+      .then(setMenuOptions)
+      .catch(() => setMenuOptions([]))
+  }, [editingId])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -146,6 +163,35 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
     })
     setEditingId(menu.id)
+    setNewOptionName("")
+    setNewOptionModifier("0")
+  }
+
+  const handleAddOption = async () => {
+    if (!editingId || !newOptionName.trim()) return
+    const res = await savePosMenuOption({
+      menuId: Number(editingId),
+      name: newOptionName.trim(),
+      priceModifier: Number(newOptionModifier) || 0,
+      sortOrder: menuOptions.length,
+    })
+    if (res.success) {
+      getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
+      setNewOptionName("")
+      setNewOptionModifier("0")
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleDeleteOption = async (opt: PosMenuOption) => {
+    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    const res = await deletePosMenuOption({ id: opt.id })
+    if (res.success) {
+      setMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
+    } else {
+      alert(res.message)
+    }
   }
 
   const handleDelete = async (menu: PosMenu) => {
@@ -307,6 +353,44 @@ export default function PosMenusPage() {
                   {t("posMenuActive")}
                 </label>
               </div>
+              {editingId && (
+                <div className="rounded border border-dashed p-3">
+                  <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
+                  <ul className="mb-2 space-y-1">
+                    {menuOptions.map((o) => (
+                      <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
+                        <span>{o.name} {o.priceModifier ? `(+${o.priceModifier} ฿)` : ""}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-5 px-1 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteOption(o)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={t("posOptionNamePh") || "옵션명"}
+                      className="h-8 text-xs flex-1"
+                      value={newOptionName}
+                      onChange={(e) => setNewOptionName(e.target.value)}
+                    />
+                    <Input
+                      type="number"
+                      placeholder="+0"
+                      className="h-8 w-20 text-right text-xs"
+                      value={newOptionModifier}
+                      onChange={(e) => setNewOptionModifier(e.target.value)}
+                    />
+                    <Button size="sm" className="h-8 px-2" onClick={handleAddOption}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3 pt-2">
                 <Button className="flex-1" onClick={handleSave}>
                   <Save className="mr-2 h-4 w-4" />

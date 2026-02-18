@@ -1195,6 +1195,30 @@ export async function getPosMenuOptions(params?: { menuId?: string }) {
   return res.json() as Promise<PosMenuOption[]>
 }
 
+export async function savePosMenuOption(params: {
+  id?: string
+  menuId: number
+  name: string
+  priceModifier?: number
+  sortOrder?: number
+}) {
+  const res = await apiFetch('/api/savePosMenuOption', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosMenuOption(params: { id: string }) {
+  const res = await apiFetch('/api/deletePosMenuOption', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function savePosMenu(params: {
   id?: string
   code: string

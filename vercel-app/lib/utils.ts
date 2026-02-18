@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /** 모바일 사진 업로드 전 압축 (base64 크기 제한 회피). HEIC/일부 포맷 실패 시 FileReader fallback */
-export function compressImageForUpload(file: File, maxWidth = 1200, quality = 0.75): Promise<string> {
+export function compressImageForUpload(file: File, maxWidth = 1024, quality = 0.65): Promise<string> {
   const tryCompress = (): Promise<string> =>
     new Promise((resolve, reject) => {
       const img = new Image()
@@ -44,9 +44,9 @@ export function compressImageForUpload(file: File, maxWidth = 1200, quality = 0.
     })
 
   return tryCompress().catch((err) => {
-    // 모바일 HEIC/일부 포맷에서 Image 로드 실패 시 FileReader로 fallback (압축 없이)
-    if (file.size > 4 * 1024 * 1024) {
-      return Promise.reject(err)
+    // 모바일 HEIC/일부 포맷에서 Image 로드 실패 시 FileReader로 fallback (압축 없이, 2MB 제한)
+    if (file.size > 2 * 1024 * 1024) {
+      return Promise.reject(new Error('Image too large or unsupported format (max 2MB for HEIC)'))
     }
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
