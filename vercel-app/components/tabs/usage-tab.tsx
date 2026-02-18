@@ -214,14 +214,14 @@ export function UsageTab() {
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.5)}>½</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.25)}>¼</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>⅕</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>1/5</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>1/10</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>⅒</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.04)}>1/25</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
                   </>
                 ) : (
                   <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.04)}>1/25</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.02)}>1/50</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.01)}>1/100</Button>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.005)}>1/200</Button>
