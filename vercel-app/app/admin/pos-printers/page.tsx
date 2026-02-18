@@ -32,6 +32,7 @@ export default function PosPrintersPage() {
   const [kitchenMode, setKitchenMode] = React.useState<1 | 2>(1)
   const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
   const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
+  const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
   const [categories, setCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -50,6 +51,7 @@ export default function PosPrintersPage() {
         setKitchenMode((settings.kitchenMode as 1 | 2) || 1)
         setKitchen1Categories(settings.kitchen1Categories || [])
         setKitchen2Categories(settings.kitchen2Categories || [])
+        setAutoStockDeduction(Boolean(settings.autoStockDeduction))
         setCategories(cats || [])
       })
       .catch(() => {
@@ -100,6 +102,7 @@ export default function PosPrintersPage() {
         kitchenMode,
         kitchen1Categories,
         kitchen2Categories,
+        autoStockDeduction,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -247,6 +250,24 @@ export default function PosPrintersPage() {
                 </div>
               </div>
             )}
+
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div>
+                <p className="text-sm font-medium">{t("posAutoStockDeduction") || "자동 재고 차감"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t("posAutoStockDeductionHint") || "주문 완료 시 메뉴 BOM에 따라 재고가 자동 차감됩니다. 매장 적응 후 사용하세요."}
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={autoStockDeduction}
+                  onChange={(e) => setAutoStockDeduction(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">{t("posUse") || "사용"}</span>
+              </label>
+            </div>
 
             <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
               {t("posPrinterNote") ||

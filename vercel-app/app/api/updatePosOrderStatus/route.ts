@@ -21,7 +21,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: '유효하지 않은 상태입니다.' }, { headers })
     }
 
-    const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, { limit: 1 })) as { id?: number; status?: string }[] | null
+    const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
+      limit: 1,
+      select: 'id,store_code',
+    })) as { id?: number; store_code?: string }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
@@ -29,10 +32,20 @@ export async function POST(req: NextRequest) {
     await supabaseUpdate('pos_orders', id, { status })
 
     if (status === 'completed') {
-      try {
-        await processPosStockDeduction(id)
-      } catch (e) {
-        console.error('processPosStockDeduction:', e)
+      const storeCode = String(existing[0]?.store_code ?? '').trim()
+      if (storeCode) {
+        try {
+          const settings = (await supabaseSelectFilter(
+            'pos_printer_settings',
+            `store_code=eq.${encodeURIComponent(storeCode)}`,
+            { limit: 1, select: 'auto_stock_deduction' }
+          )) as { auto_stock_deduction?: boolean }[] | null
+          if (settings?.[0]?.auto_stock_deduction) {
+            await processPosStockDeduction(id)
+          }
+        } catch (e) {
+          console.error('processPosStockDeduction:', e)
+        }
       }
     }
 

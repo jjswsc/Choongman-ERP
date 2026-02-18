@@ -19,7 +19,7 @@ import {
   getPosMenuCategories,
   getPosMenuOptions,
   getPosMenuIngredients,
-  getItems,
+  getAdminItems,
   savePosMenu,
   savePosMenuOption,
   savePosMenuIngredient,
@@ -97,7 +97,7 @@ export default function PosMenusPage() {
   }, [editingId])
 
   React.useEffect(() => {
-    getItems()
+    getAdminItems()
       .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name }))))
       .catch(() => setItems([]))
   }, [])

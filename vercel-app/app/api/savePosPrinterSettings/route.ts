@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const kitchen2Categories = Array.isArray(body?.kitchen2Categories)
       ? body.kitchen2Categories.filter((c: unknown) => typeof c === 'string')
       : []
+    const autoStockDeduction = Boolean(body?.autoStockDeduction)
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
       kitchen_mode: kitchenMode,
       kitchen1_categories: kitchen1Categories,
       kitchen2_categories: kitchen2Categories,
+      auto_stock_deduction: autoStockDeduction,
       updated_at: new Date().toISOString(),
     }
 

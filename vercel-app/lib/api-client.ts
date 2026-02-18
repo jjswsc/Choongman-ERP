@@ -1360,6 +1360,7 @@ export interface PosPrinterSettings {
   kitchenMode: 1 | 2
   kitchen1Categories: string[]
   kitchen2Categories: string[]
+  autoStockDeduction?: boolean
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -1374,6 +1375,7 @@ export async function savePosPrinterSettings(params: {
   kitchenMode: 1 | 2
   kitchen1Categories: string[]
   kitchen2Categories: string[]
+  autoStockDeduction?: boolean
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
     method: 'POST',
