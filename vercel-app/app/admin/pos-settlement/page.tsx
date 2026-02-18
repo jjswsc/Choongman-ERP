@@ -15,13 +15,14 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getPosSettlement,
-  savePosSettlement,
   useStoreList,
   type PosSettlement,
 } from "@/lib/api-client"
+import { savePosSettlementWithOffline } from "@/lib/offline"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessSettings } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { OfflineBanner } from "@/components/offline-banner"
 
 export default function PosSettlementPage() {
   const { auth } = useAuth()
@@ -122,7 +123,7 @@ export default function PosSettlementPage() {
     }
     setSaving(true)
     try {
-      const res = await savePosSettlement({
+      const res = await savePosSettlementWithOffline({
         storeCode: effectiveStore,
         settleDate,
         cashActual: cashActual ? cashActualNum : null,
@@ -149,6 +150,12 @@ export default function PosSettlementPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 lg:px-8">
+        <OfflineBanner
+          onSyncComplete={loadData}
+          offlineMsg={t("posSettlementOfflineSaved") || "오프라인 모드 - 결산이 로컬에 저장됩니다. 복구 후 자동 전송됩니다."}
+          syncingMsg={t("posSyncing") || "동기화 중..."}
+          retryLabel={t("posRetrySync") || "재시도"}
+        />
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Wallet className="h-5 w-5 text-primary" />

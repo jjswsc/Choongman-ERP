@@ -23,6 +23,10 @@ export async function GET(request: NextRequest) {
       discount_reason?: string
       delivery_fee?: number
       packaging_fee?: number
+      payment_cash?: number
+      payment_card?: number
+      payment_qr?: number
+      payment_other?: number
       items_json?: string
       subtotal?: number
       vat?: number
@@ -44,13 +48,13 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -76,6 +80,10 @@ export async function GET(request: NextRequest) {
         discountReason: String(r.discount_reason ?? ''),
         deliveryFee: Number(r.delivery_fee) ?? 0,
         packagingFee: Number(r.packaging_fee) ?? 0,
+        paymentCash: Number(r.payment_cash) ?? 0,
+        paymentCard: Number(r.payment_card) ?? 0,
+        paymentQr: Number(r.payment_qr) ?? 0,
+        paymentOther: Number(r.payment_other) ?? 0,
         items: (() => {
           try {
             const arr = JSON.parse(r.items_json || '[]')

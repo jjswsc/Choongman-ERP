@@ -83,6 +83,11 @@ export default function PosPage() {
     pendingCount: number
   } | null>(null)
   const [storeFees, setStoreFees] = React.useState({ deliveryFee: 0, packagingFee: 0 })
+  const [showPaymentModal, setShowPaymentModal] = React.useState(false)
+  const [payCash, setPayCash] = React.useState("")
+  const [payCard, setPayCard] = React.useState("")
+  const [payQr, setPayQr] = React.useState("")
+  const [payOther, setPayOther] = React.useState("")
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
     items: CartItem[]
@@ -305,9 +310,23 @@ export default function PosPage() {
     if (appliedCoupon) setAppliedCoupon(null)
   }, [cart])
 
-  const handleCheckout = async () => {
+  const openPaymentModal = () => {
     if (cart.length === 0) {
       alert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
+      return
+    }
+    setPayCash(String(total))
+    setPayCard("0")
+    setPayQr("0")
+    setPayOther("0")
+    setShowPaymentModal(true)
+  }
+
+  const handleCheckout = async (payment: { cash: number; card: number; qr: number; other: number }) => {
+    if (cart.length === 0) return
+    const sum = payment.cash + payment.card + payment.qr + payment.other
+    if (Math.abs(sum - total) > 0.01) {
+      alert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
       return
     }
     setSubmitting(true)
@@ -321,9 +340,14 @@ export default function PosPage() {
         discountReason: effectiveDiscountReason || undefined,
         deliveryFee: deliveryFeeAmt || undefined,
         packagingFee: packagingFeeAmt || undefined,
+        paymentCash: payment.cash || undefined,
+        paymentCard: payment.card || undefined,
+        paymentQr: payment.qr || undefined,
+        paymentOther: payment.other || undefined,
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
       })
       if (res.success) {
+        setShowPaymentModal(false)
         setReceiptData({
           orderNo: res.orderNo ?? "",
           items: [...cart],
@@ -855,13 +879,113 @@ export default function PosPage() {
           <Button
             className="w-full bg-amber-500 font-bold text-slate-900 hover:bg-amber-400"
             disabled={cart.length === 0 || submitting}
-            onClick={handleCheckout}
+            onClick={openPaymentModal}
           >
             {submitting ? "..." : t("posCheckout") || "결제"}
           </Button>
         </div>
       </div>
       </div>
+
+      {/* 분할 결제 모달 */}
+      <Dialog open={showPaymentModal} onOpenChange={(open) => !open && setShowPaymentModal(false)}>
+        <DialogContent className="max-w-xs sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("posSplitPayment") || "결제 수단 입력"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
+              <span className="text-xs text-muted-foreground">{t("posInputTotal") || "합계"}</span>
+              <div className="text-xl font-bold tabular-nums">{total.toLocaleString()} ฿</div>
+            </div>
+            <div className="grid gap-2">
+              <div className="flex items-center gap-2">
+                <label className="w-16 text-sm">{t("posPaymentCash") || "현금"}</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={payCash}
+                  onChange={(e) => setPayCash(e.target.value)}
+                  className="h-9 text-right"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-16 text-sm">{t("posPaymentCard") || "카드"}</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={payCard}
+                  onChange={(e) => setPayCard(e.target.value)}
+                  className="h-9 text-right"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-16 text-sm">{t("posPaymentQr") || "QR"}</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={payQr}
+                  onChange={(e) => setPayQr(e.target.value)}
+                  className="h-9 text-right"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-16 text-sm">{t("posPaymentOther") || "기타"}</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={payOther}
+                  onChange={(e) => setPayOther(e.target.value)}
+                  className="h-9 text-right"
+                />
+              </div>
+            </div>
+            <div className="flex justify-between text-sm border-t pt-2">
+              <span>{t("posPaymentSum") || "입력 합계"}</span>
+              <span className={cn(
+                "tabular-nums font-medium",
+                Math.abs((parseFloat(payCash) || 0) + (parseFloat(payCard) || 0) + (parseFloat(payQr) || 0) + (parseFloat(payOther) || 0) - total) < 0.01
+                  ? "text-green-600"
+                  : "text-amber-600"
+              )}>
+                {((parseFloat(payCash) || 0) + (parseFloat(payCard) || 0) + (parseFloat(payQr) || 0) + (parseFloat(payOther) || 0)).toLocaleString()} ฿
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setPayCash(String(total))
+                  setPayCard("0")
+                  setPayQr("0")
+                  setPayOther("0")
+                }}
+              >
+                {t("posPaymentFullCash") || "전액 현금"}
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 bg-amber-500 font-bold text-slate-900 hover:bg-amber-400"
+                disabled={submitting}
+                onClick={() => handleCheckout({
+                  cash: parseFloat(payCash) || 0,
+                  card: parseFloat(payCard) || 0,
+                  qr: parseFloat(payQr) || 0,
+                  other: parseFloat(payOther) || 0,
+                })}
+              >
+                {submitting ? "..." : t("posCheckout") || "결제"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 옵션 선택 모달 */}
       <Dialog open={!!optionPickerMenu} onOpenChange={(open) => !open && setOptionPickerMenu(null)}>

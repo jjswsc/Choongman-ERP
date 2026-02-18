@@ -1437,6 +1437,10 @@ export interface PosOrder {
   discountReason?: string
   deliveryFee?: number
   packagingFee?: number
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
   items: PosOrderItem[]
   subtotal: number
   vat: number
@@ -1553,6 +1557,10 @@ export async function savePosOrder(params: {
   discountReason?: string
   deliveryFee?: number
   packagingFee?: number
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
   items: PosOrderItem[]
 }) {
   const res = await apiFetch('/api/savePosOrder', {

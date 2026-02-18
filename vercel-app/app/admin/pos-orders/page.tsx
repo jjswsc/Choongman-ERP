@@ -558,7 +558,7 @@ export default function PosOrdersPage() {
                         <tr className="border-b bg-muted/10">
                           <td colSpan={8} className="px-5 py-4">
                             <div className="space-y-2 text-xs">
-                              {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0) || (o.deliveryFee ?? 0) > 0 || (o.packagingFee ?? 0) > 0) && (
+                              {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0) || (o.deliveryFee ?? 0) > 0 || (o.packagingFee ?? 0) > 0 || ((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0) && (
                                 <div className="mb-2 pb-2 border-b">
                                   {o.tableName && (
                                     <div className="text-muted-foreground">
@@ -584,6 +584,14 @@ export default function PosOrdersPage() {
                                   {(o.packagingFee ?? 0) > 0 && (
                                     <div className="text-muted-foreground mt-0.5">
                                       {t("posPackagingFee") || "포장 수수료"}: +{(o.packagingFee ?? 0).toLocaleString()} ฿
+                                    </div>
+                                  )}
+                                  {((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0 && (
+                                    <div className="mt-1 pt-1 border-t border-dashed text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                                      {(o.paymentCash ?? 0) > 0 && <span>{t("posPaymentCash") || "현금"}: {(o.paymentCash ?? 0).toLocaleString()} ฿</span>}
+                                      {(o.paymentCard ?? 0) > 0 && <span>{t("posPaymentCard") || "카드"}: {(o.paymentCard ?? 0).toLocaleString()} ฿</span>}
+                                      {(o.paymentQr ?? 0) > 0 && <span>{t("posPaymentQr") || "QR"}: {(o.paymentQr ?? 0).toLocaleString()} ฿</span>}
+                                      {(o.paymentOther ?? 0) > 0 && <span>{t("posPaymentOther") || "기타"}: {(o.paymentOther ?? 0).toLocaleString()} ฿</span>}
                                     </div>
                                   )}
                                 </div>
