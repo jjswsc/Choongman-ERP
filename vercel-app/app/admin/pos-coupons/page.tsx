@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 const emptyForm = {
   code: "",
   name: "",
-  discountType: "amount" as const,
+  discountType: "amount" as "amount" | "percent",
   discountValue: "",
   startDate: "",
   endDate: "",
