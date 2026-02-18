@@ -78,6 +78,9 @@ export default function PosOrdersPage() {
   }
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
+    if (newStatus === "cancelled") {
+      if (!confirm(t("posCancelConfirm") || "이 주문을 취소하시겠습니까?")) return
+    }
     setUpdatingId(orderId)
     try {
       const res = await updatePosOrderStatus({ id: orderId, status: newStatus })
@@ -147,19 +150,33 @@ export default function PosOrdersPage() {
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Input
-            type="date"
-            value={startStr}
-            onChange={(e) => setStartStr(e.target.value)}
-            className="h-9 w-40 text-sm"
-          />
-          <span className="text-muted-foreground">~</span>
-          <Input
-            type="date"
-            value={endStr}
-            onChange={(e) => setEndStr(e.target.value)}
-            className="h-9 w-40 text-sm"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={startStr}
+              onChange={(e) => setStartStr(e.target.value)}
+              className="h-9 w-40 text-sm"
+            />
+            <span className="text-muted-foreground">~</span>
+            <Input
+              type="date"
+              value={endStr}
+              onChange={(e) => setEndStr(e.target.value)}
+              className="h-9 w-40 text-sm"
+            />
+            <Button
+              variant={isToday ? "secondary" : "outline"}
+              size="sm"
+              className="h-9 px-3 text-xs"
+              onClick={() => {
+                const d = new Date().toISOString().slice(0, 10)
+                setStartStr(d)
+                setEndStr(d)
+              }}
+            >
+              {t("posToday") || "오늘"}
+            </Button>
+          </div>
           {canSearchAll && (
             <Select value={storeFilter} onValueChange={setStoreFilter}>
               <SelectTrigger className="h-9 w-28 text-sm">

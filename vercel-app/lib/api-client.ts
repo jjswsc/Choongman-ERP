@@ -267,6 +267,7 @@ export interface AdminOrderItem {
   date: string
   store: string
   userName?: string
+  userNick?: string
   total: number
   status: string
   deliveryStatus: string
