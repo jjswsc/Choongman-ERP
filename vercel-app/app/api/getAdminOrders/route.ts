@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   try {
     const endIso = e + 'T23:59:59.999Z'
 
-    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000 })) as {
+    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec' })) as {
       code?: string
       name?: string
       spec?: string

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const dateStr = searchParams.get('dateStr') || searchParams.get('date') || ''
     const name = searchParams.get('name') || ''
 
-    const staffList = ((await supabaseSelect('employees', { order: 'id.asc' })) || []) as { name?: string; nick?: string }[]
+    const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick' })) || []) as { name?: string; nick?: string }[]
     let targetName = name
     const searchKey = String(name).toLowerCase().replace(/\s+/g, '')
     for (let k = 0; k < staffList.length; k++) {

@@ -204,11 +204,12 @@ export async function GET(request: NextRequest) {
     }
 
     type EmpRow = { store?: string; name?: string; job?: string; sal_type?: string; sal_amt?: number; position_allowance?: number; haz_allow?: number; birth?: string; join_date?: string; role?: string }
+    const empSelect = 'store,name,job,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date,role'
     let empRows: EmpRow[] = []
     if (storeFilter) {
-      empRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(storeFilter)}`, { order: 'id.asc' })) as EmpRow[]
+      empRows = (await supabaseSelectFilter('employees', `store=ilike.${encodeURIComponent(storeFilter)}`, { order: 'id.asc', select: empSelect })) as EmpRow[]
     } else {
-      empRows = (await supabaseSelect('employees', { order: 'id.asc' })) as EmpRow[]
+      empRows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as EmpRow[]
     }
 
     if (!isDirector) {

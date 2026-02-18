@@ -1578,7 +1578,8 @@ function initWeeklyGrid(type = 'sch') {
         var parts = dayStr.split("-");
         var dateStr = (parts.length >= 3) ? (parseInt(parts[1],10) + "/" + parseInt(parts[2],10)) : dayStr;
 
-        headerRow.innerHTML += `<th colspan="${areas.length}" class="bg-dark text-white sch-date-header text-center">${dateStr}</th>`;
+        var resetBtn = (type === 'sch') ? ' <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-warning" onclick="resetStaffOnDay(' + i + '); event.stopPropagation();" title="직원 선택 시: 해당 요일 해당 직원만 초기화 / 미선택 시: 해당 요일 전체 초기화">↺</button>' : '';
+        headerRow.innerHTML += '<th colspan="' + areas.length + '" class="bg-dark text-white sch-date-header text-center"><span>' + dateStr + '</span>' + resetBtn + '</th>';
 
         areas.forEach(function(area) {
             areaRow.innerHTML += `<th class="small py-1 text-center" style="min-width:60px;${areaStyles[area] || ''}">${areaLabels[area] || area}<br><span id="${type}-count-${i}-${area}" class="area-count fw-bold">0</span>명</th>`;
@@ -1633,6 +1634,97 @@ function updateDailyCounts(type = 'sch') {
     }
 }
 
+
+/* 해당 요일 전체 초기화 */
+function resetDay(day) {
+    var slots = document.querySelectorAll('#sch-body-slots .half-slot[data-day="' + day + '"]');
+    slots.forEach(function(s) {
+        s.classList.remove('active-fill');
+        s.innerHTML = '';
+        s.removeAttribute('data-names');
+        s.removeAttribute('data-nicks');
+        s.style.backgroundColor = '';
+    });
+    if (typeof updateDailyCounts === 'function') updateDailyCounts('sch');
+}
+
+/* 해당 요일에 선택된 직원만 초기화 (직원 미선택 시 요일 전체 초기화) */
+function resetStaffOnDay(day) {
+    if (!selectedName) {
+        resetDay(day);
+        return;
+    }
+    var slots = document.querySelectorAll('#sch-body-slots .half-slot[data-day="' + day + '"]');
+    slots.forEach(function(s) {
+        var namesStr = s.getAttribute('data-names');
+        if (!namesStr) return;
+        var names = namesStr.split(',');
+        var nicks = (s.getAttribute('data-nicks') || '').split(',');
+        var idx = names.indexOf(selectedName);
+        var idxBrk = names.indexOf('BRK_' + selectedName);
+        if (idx < 0 && idxBrk < 0) return;
+        var removeIdx = idx >= 0 ? idx : idxBrk;
+        names.splice(removeIdx, 1);
+        if (nicks.length > removeIdx) nicks.splice(removeIdx, 1);
+        if (names.length === 0) {
+            s.classList.remove('active-fill');
+            s.innerHTML = '';
+            s.removeAttribute('data-names');
+            s.removeAttribute('data-nicks');
+            s.style.backgroundColor = '';
+        } else {
+            s.setAttribute('data-names', names.join(','));
+            s.setAttribute('data-nicks', nicks.join(','));
+            var area = s.getAttribute('data-area');
+            var chipColor = (area === 'Service') ? '#E65100' : (area === 'Office') ? '#1976D2' : '#2E7D32';
+            s.innerHTML = '';
+            nicks.forEach(function(n) { s.innerHTML += '<span class="nick-chip" style="background:' + chipColor + ';color:white;">' + n + '</span>'; });
+            var bgColor = (area === 'Service') ? '#FFF3E0' : (area === 'Office') ? '#E3F2FD' : '#E8F5E9';
+            s.classList.add('active-fill');
+            s.style.backgroundColor = bgColor;
+        }
+    });
+    if (typeof updateDailyCounts === 'function') updateDailyCounts('sch');
+}
+
+/* 선택한 직원의 해당 주 전체 스케줄 삭제 */
+function resetOnePerson() {
+    if (!selectedName) return alert('직원을 먼저 선택하세요!');
+    if (!confirm(selectedNick + ' 님의 이번 주 스케줄 전체를 삭제할까요?')) return;
+    var slots = document.querySelectorAll('#sch-body-slots .half-slot.active-fill');
+    slots.forEach(function(s) {
+        var namesStr = s.getAttribute('data-names');
+        if (!namesStr) return;
+        var names = namesStr.split(',');
+        var nicks = (s.getAttribute('data-nicks') || '').split(',');
+        var filtered = [];
+        var filteredNicks = [];
+        for (var i = 0; i < names.length; i++) {
+            var nm = (names[i] || '').trim();
+            if (nm !== selectedName && nm !== 'BRK_' + selectedName) {
+                filtered.push(nm);
+                filteredNicks.push(nicks[i] || '');
+            }
+        }
+        if (filtered.length === 0) {
+            s.classList.remove('active-fill');
+            s.innerHTML = '';
+            s.removeAttribute('data-names');
+            s.removeAttribute('data-nicks');
+            s.style.backgroundColor = '';
+        } else {
+            s.setAttribute('data-names', filtered.join(','));
+            s.setAttribute('data-nicks', filteredNicks.join(','));
+            var area = s.getAttribute('data-area');
+            var chipColor = (area === 'Service') ? '#E65100' : (area === 'Office') ? '#1976D2' : '#2E7D32';
+            s.innerHTML = '';
+            filteredNicks.forEach(function(n) { s.innerHTML += '<span class="nick-chip" style="background:' + chipColor + ';color:white;">' + n + '</span>'; });
+            var bgColor = (area === 'Service') ? '#FFF3E0' : (area === 'Office') ? '#E3F2FD' : '#E8F5E9';
+            s.style.backgroundColor = bgColor;
+        }
+    });
+    if (typeof updateDailyCounts === 'function') updateDailyCounts('sch');
+}
 
 // 페이지 로드 시 선택지 먼저 채우기 실행
 fillHourSelectors();

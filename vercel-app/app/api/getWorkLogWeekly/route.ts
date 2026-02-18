@@ -30,9 +30,7 @@ export async function GET(req: NextRequest) {
         order: 'log_date.asc',
       })) || []
 
-    const empList = ((await supabaseSelect('employees', {
-      order: 'id.asc',
-    })) || []) as { name?: string; nick?: string; job?: string }[]
+    const empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job' })) || []) as { name?: string; nick?: string; job?: string }[]
 
     const nameToRole: Record<string, string> = {}
     for (const e of empList) {

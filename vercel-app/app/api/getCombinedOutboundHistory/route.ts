@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = (await supabaseSelect('items', { order: 'id.asc' })) as { code?: string; spec?: string; price?: number }[]
+    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price' })) as { code?: string; spec?: string; price?: number }[]
     const itemMap: Record<string, { spec: string; price: number }> = {}
     for (const it of items || []) {
       const c = String(it.code || '').trim()

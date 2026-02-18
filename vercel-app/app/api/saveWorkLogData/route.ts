@@ -20,9 +20,7 @@ export async function POST(req: NextRequest) {
         ? JSON.parse(body.jsonStr)
         : []
 
-    const staffList = ((await supabaseSelect('employees', {
-      order: 'id.asc',
-    })) || []) as { name?: string; nick?: string; job?: string }[]
+    const staffList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job' })) || []) as { name?: string; nick?: string; job?: string }[]
     let savedName = name
     let savedDept = '기타'
     const sk = name.toLowerCase().replace(/\s+/g, '')

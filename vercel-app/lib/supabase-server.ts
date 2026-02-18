@@ -129,6 +129,32 @@ export async function supabaseDeleteByFilter(
   return true
 }
 
+/**
+ * count만 필요할 때 사용. PostgREST Prefer: count=exact + Range: 0-0 으로
+ * 실제 row는 거의 가져오지 않고 Content-Range 헤더에서 total count 반환.
+ * egress 최소화용.
+ */
+export async function supabaseCountFilter(table: string, filter: string): Promise<number> {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=id&${filter}`
+  const res = await fetch(pathStr, {
+    method: 'GET',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Prefer: 'count=exact',
+      Range: '0-0',
+    },
+  })
+  if (!res.ok) throw new Error('Supabase count failed: ' + (await res.text()))
+  const range = res.headers.get('Content-Range')
+  if (range) {
+    const match = range.match(/\/(\d+)$/)
+    if (match) return parseInt(match[1], 10)
+  }
+  return 0
+}
+
 export async function supabaseInsertMany(table: string, rows: Record<string, unknown>[]) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`

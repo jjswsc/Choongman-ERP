@@ -14,7 +14,7 @@ export interface AppItem {
 }
 
 async function getItems(storeName: string): Promise<AppItem[]> {
-  const rows = (await supabaseSelect('items', { order: 'id.asc' })) as {
+  const rows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,category,name,spec,price,cost,tax,image' })) as {
     code?: string
     category?: string
     name?: string

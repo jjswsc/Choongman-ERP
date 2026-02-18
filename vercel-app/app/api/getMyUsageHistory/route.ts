@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc' })) as { code?: string; price?: number }[]
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,price' })) as { code?: string; price?: number }[]
     const priceByCode: Record<string, number> = {}
     ;(itemRows || []).forEach((it) => {
       priceByCode[String(it.code || '')] = Number(it.price) || 0

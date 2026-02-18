@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const list = (await supabaseSelect('employees', { order: 'id.asc' })) as { store?: string; job?: string; role?: string }[] || []
+    const list = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,role' })) as { store?: string; job?: string; role?: string }[] || []
     const stores: Record<string, boolean> = {}
     const jobs: Record<string, boolean> = {}
 

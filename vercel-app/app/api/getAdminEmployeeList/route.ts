@@ -38,7 +38,8 @@ export async function GET(req: Request) {
     const userStore = String(searchParams.get('userStore') || '').trim()
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
-    const rows = (await supabaseSelect('employees', { order: 'id.asc' })) as Record<string, unknown>[] | null
+    const empSelect = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,annual_leave_days,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as Record<string, unknown>[] | null
     const role = userRole
     const list: Record<string, unknown>[] = []
 

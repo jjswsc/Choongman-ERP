@@ -13,7 +13,7 @@ export interface NoticeItem {
 
 async function getMyNoticesHandler(store: string, name: string): Promise<NoticeItem[]> {
   let myJob = ''
-  const empList = (await supabaseSelect('employees', { order: 'id.asc' })) as { store?: string; name?: string; job?: string; role?: string }[] || []
+  const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as { store?: string; name?: string; job?: string; role?: string }[] || []
   for (let i = 0; i < empList.length; i++) {
     const s = String(empList[i].store || '').trim()
     const n = String(empList[i].name || '').trim()

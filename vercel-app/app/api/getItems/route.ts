@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000 })) as {
+    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax' })) as {
       id?: number
       code?: string
       category?: string

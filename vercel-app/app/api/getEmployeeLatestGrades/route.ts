@@ -43,7 +43,7 @@ export async function GET() {
       }
     }
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc' })) as {
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,nick' })) as {
       store?: string
       name?: string
       nick?: string

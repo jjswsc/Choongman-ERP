@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const { store, name, pw, isAdminPage } = validated.parsed
 
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const rows = await supabaseSelectFilter('employees', filter) as { store?: string; name?: string; password?: string; role?: string; job?: string; resign_date?: string | null }[]
+    const rows = (await supabaseSelectFilter('employees', filter, { limit: 1, select: 'store,name,password,role,job,resign_date' })) as { store?: string; name?: string; password?: string; role?: string; job?: string; resign_date?: string | null }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: 'Login Failed' }, { headers })
     }

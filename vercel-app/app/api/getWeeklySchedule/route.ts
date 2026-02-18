@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
     }
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500 })) as { name?: string; nick?: string; store?: string }[]
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store' })) as { name?: string; nick?: string; store?: string }[]
     const nameToNick: Record<string, string> = {}
     for (const e of empList || []) {
       const nm = String(e.name || '').trim()

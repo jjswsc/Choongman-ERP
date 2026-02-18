@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     const nameToDept: Record<string, string> = {}
-    const empList = (await supabaseSelect('employees', { order: 'id.asc' })) as { store?: string; job?: string; nick?: string; name?: string }[] || []
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,nick,name' })) as { store?: string; job?: string; nick?: string; name?: string }[] || []
     for (const e of empList) {
       const st = String(e.store || '').toLowerCase()
       if (st.indexOf('office') === -1 && st !== '본사' && st !== '오피스') continue

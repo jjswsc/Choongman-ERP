@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 직원 이메일 조회 (employees 테이블)
-    const employees = (await supabaseSelect('employees', { order: 'id.asc', limit: 2000 })) as { store?: string; name?: string; email?: string }[]
+    const employees = (await supabaseSelect('employees', { order: 'id.asc', limit: 2000, select: 'store,name,email' })) as { store?: string; name?: string; email?: string }[]
     const emailMap = new Map<string, string>()
     for (const e of employees || []) {
       if (e.store && e.name && e.email) {

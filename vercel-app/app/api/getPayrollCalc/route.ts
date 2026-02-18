@@ -208,8 +208,9 @@ export async function GET(request: NextRequest) {
     const lastDay = new Date(parseInt(normMonth.slice(0, 4), 10), parseInt(normMonth.slice(5, 7), 10) - 1, 0)
     const endStr = lastDay.toISOString().slice(0, 10)
 
+    const empSelect = 'id,store,name,job,role,sal_type,sal_amt,position_allowance,haz_allow,birth,join_date'
     const [empRows, attRows, phRows, leaveRows] = await Promise.all([
-      supabaseSelect('employees', { order: 'id.asc' }) as Promise<{
+      supabaseSelect('employees', { order: 'id.asc', select: empSelect }) as Promise<{
         id?: number
         store?: string
         name?: string

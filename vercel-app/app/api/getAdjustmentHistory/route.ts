@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       vendor_target?: string
     }[] | null
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000 })) as {
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec' })) as {
       code?: string
       spec?: string
     }[] | null

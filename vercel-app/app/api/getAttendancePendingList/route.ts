@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 
     const nickMap: Record<string, string> = {}
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500 })) as { store?: string; name?: string; nick?: string }[] | null
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' })) as { store?: string; name?: string; nick?: string }[] | null
     for (const e of empList || []) {
       const s = String(e.store || '').trim()
       const n = String(e.name || '').trim()

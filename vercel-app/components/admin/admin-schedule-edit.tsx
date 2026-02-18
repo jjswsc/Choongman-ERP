@@ -227,7 +227,7 @@ export function AdminScheduleEdit({
     })
   }
 
-  /** 해당 요일에 선택된 직원만 초기화 */
+  /** 일별 초기화: 직원 선택 시 해당 요일 해당 직원만, 미선택 시 해당 요일 전체 */
   const resetStaffOnDay = (day: number) => {
     if (!selectedStaff) {
       resetDay(day)
@@ -627,7 +627,9 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
               <button
                 key={s.name}
                 type="button"
-                onClick={() => setSelectedStaff({ name: s.name, nick: s.nick })}
+                onClick={() =>
+                  setSelectedStaff((prev) => (prev?.name === s.name ? null : { name: s.name, nick: s.nick }))
+                }
                 className={cn(
                   "w-full text-left rounded px-2 py-1.5 text-xs",
                   selectedStaff?.name === s.name ? "bg-primary text-primary-foreground" : "hover:bg-muted"
@@ -640,8 +642,15 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
           </div>
         </div>
 
-        {/* Grid */}
-        <div className="lg:col-span-10 space-y-3">
+        {/* Grid - 슬롯이 아닌 영역 클릭 시 직원 선택 해제 */}
+        <div
+          className="lg:col-span-10 space-y-3"
+          onClick={(e) => {
+            if (selectedStaff && !(e.target as HTMLElement).closest("[data-slot]")) {
+              setSelectedStaff(null)
+            }
+          }}
+        >
           {/* 인쇄용 영역 - 검색한 스케줄만 매장/기간과 함께 출력 */}
           {scheduleForExport.length > 0 && (
             <div id="admin-schedule-print-area" className="hidden print:block">
@@ -857,6 +866,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               return (
                                 <div
                                   key={time}
+                                  data-slot
                                   onClick={() => toggleSlot(day, area, time)}
                                   className={cn(
                                     "cursor-pointer flex flex-wrap items-center justify-center gap-1 p-1.5 transition-colors",

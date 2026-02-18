@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       created_at?: string
     }[]
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc' })) as {
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as {
       store?: string
       name?: string
       job?: string

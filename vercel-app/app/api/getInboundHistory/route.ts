@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000 })) as {
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost' })) as {
       code?: string
       spec?: string
       cost?: number
