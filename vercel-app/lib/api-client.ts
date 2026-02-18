@@ -1155,6 +1155,57 @@ export async function deleteItem(params: { code: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── POS 메뉴 관리 ───
+export interface PosMenu {
+  id: string
+  code: string
+  name: string
+  category: string
+  price: number
+  imageUrl: string
+  vatIncluded: boolean
+  isActive: boolean
+  sortOrder: number
+}
+
+export async function getPosMenus() {
+  const res = await apiFetch('/api/getPosMenus')
+  return res.json() as Promise<PosMenu[]>
+}
+
+export async function getPosMenuCategories() {
+  const res = await apiFetch('/api/getPosMenuCategories')
+  return res.json() as Promise<{ categories: string[] }>
+}
+
+export async function savePosMenu(params: {
+  id?: string
+  code: string
+  name: string
+  category?: string
+  price?: number
+  imageUrl?: string
+  vatIncluded?: boolean
+  isActive?: boolean
+  sortOrder?: number
+}) {
+  const res = await apiFetch('/api/savePosMenu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosMenu(params: { id: string }) {
+  const res = await apiFetch('/api/deletePosMenu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function saveVendor(params: {
   code: string
   name: string

@@ -2,6 +2,7 @@
 
 import { ShoppingCart } from "lucide-react"
 import { AdminOrderCreate } from "@/components/erp/admin-order-create"
+import { AdminOrderHistory } from "@/components/erp/admin-order-history"
 import { AdminPurchaseOrder } from "@/components/erp/admin-purchase-order"
 import { AdminPurchaseOrderHistory } from "@/components/erp/admin-purchase-order-history"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -36,13 +37,17 @@ export default function OrderCreatePage() {
 
         {showHqTab ? (
           <Tabs defaultValue="store" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="store">{t("orderTabStore")}</TabsTrigger>
+              <TabsTrigger value="storeHist">{t("orderTabStoreOrderHist")}</TabsTrigger>
               <TabsTrigger value="hq">{t("orderTabHq")}</TabsTrigger>
               <TabsTrigger value="history">{t("orderTabPoHistory")}</TabsTrigger>
             </TabsList>
             <TabsContent value="store">
               <AdminOrderCreate />
+            </TabsContent>
+            <TabsContent value="storeHist">
+              <AdminOrderHistory />
             </TabsContent>
             <TabsContent value="hq">
               <AdminPurchaseOrder />
@@ -52,7 +57,18 @@ export default function OrderCreatePage() {
             </TabsContent>
           </Tabs>
         ) : (
-          <AdminOrderCreate />
+          <Tabs defaultValue="store" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="store">{t("orderTabStore")}</TabsTrigger>
+              <TabsTrigger value="storeHist">{t("orderTabStoreOrderHist")}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="store">
+              <AdminOrderCreate />
+            </TabsContent>
+            <TabsContent value="storeHist">
+              <AdminOrderHistory />
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </div>

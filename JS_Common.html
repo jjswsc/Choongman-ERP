@@ -29,7 +29,7 @@
     ko: {
       login_title: "CM ERP SYSTEM", btn_login: "로그인",
       login_store_ph: "매장 선택", login_label_store: "소속", login_label_name: "성명", login_label_pw: "P/W", menu_dashboard: "📊 대시보드", menu_notices: "📢 공지사항 관리", menu_work_log: "📝 업무일지",
-      menu_header_logistics: "물류 관리", menu_item_manage: "📦 품목 관리", menu_vendor: "🏢 거래처 관리", menu_outbound: "🚚 주문 승인", menu_stock: "⚖️ 재고 현황", menu_inbound: "📦 입고 관리", menu_force: "📤 출고 관리",
+      menu_header_logistics: "물류 관리", menu_item_manage: "📦 품목 관리", menu_vendor: "🏢 거래처 관리", menu_outbound: "🚚 주문 승인", menu_stock: "⚖️ 재고 현황", menu_inbound: "📦 입고 관리", menu_force: "📤 출고 관리", menu_order_create: "🛒 발주하기", tab_order_new: "✍️ 신규 발주", tab_order_hist: "📋 발주 내역",
       menu_header_hr: "인사 관리", menu_hr_employee: "👥 직원 관리", menu_attendance: "📅 근태/스케줄 관리", menu_payroll: "💰 급여 관리", menu_hr_leave: "🏖️ 휴가 관리",
       menu_header_accounting: "회계 관리", menu_petty_cash: "💵 패티 캐쉬", menu_accounting: "회계",
       menu_header_store: "매장 관리", menu_store_check: "🏢 매장 점검", menu_store_visit: "📍 매장 방문 현황", menu_store_complaint: "📋 컴플레인 일지", menu_header_settings: "설정",
@@ -100,7 +100,7 @@
     en: {
       login_title: "CM ERP SYSTEM", btn_login: "Login",
       login_store_ph: "Select Store", login_label_store: "Store", login_label_name: "Name", login_label_pw: "P/W", menu_dashboard: "📊 Dashboard", menu_notices: "📢 Notices", menu_work_log: "📝 Work Log",
-      menu_header_logistics: "Logistics", menu_item_manage: "📦 Items", menu_vendor: "🏢 Vendors", menu_outbound: "🚚 Orders", menu_stock: "⚖️ Stock", menu_inbound: "📦 Inbound", menu_force: "📤 Outbound",
+      menu_header_logistics: "Logistics", menu_item_manage: "📦 Items", menu_vendor: "🏢 Vendors", menu_outbound: "🚚 Orders", menu_stock: "⚖️ Stock", menu_inbound: "📦 Inbound", menu_force: "📤 Outbound", menu_order_create: "🛒 Order Create", tab_order_new: "✍️ New Order", tab_order_hist: "📋 Order History",
       menu_header_hr: "HR", menu_hr_employee: "👥 Employees", menu_attendance: "📅 Attendance/Schedule", menu_payroll: "💰 Payroll", menu_hr_leave: "🏖️ Leave",
       menu_header_accounting: "Accounting", menu_petty_cash: "💵 Petty Cash", menu_accounting: "Accounting",
       menu_header_store: "Stores", menu_store_check: "🏢 Store Check", menu_store_visit: "📍 Store Visit", menu_store_complaint: "📋 Complaint Log", menu_header_settings: "Settings",
@@ -889,7 +889,7 @@ function login() {
           "emp-store", "filter-store-select", "stock-store-selector", "os-store",
           "hr-store-selector", "leave-store-select", "ord-store-selector",
           "a-store", "adj-store-selector", "eval-store",
-          "sch-store-select", "complaint-store", "complaint-list-store"
+          "sch-store-select", "complaint-store", "complaint-list-store",
       ];
       if(!loginInfo) return;
       var keys = Object.keys(loginInfo);
