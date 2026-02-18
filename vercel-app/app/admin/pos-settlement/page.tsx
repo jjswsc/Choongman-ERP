@@ -111,7 +111,7 @@ export default function PosSettlementPage() {
   const qrNum = parseFloat(qrAmt) || 0
   const deliveryNum = parseFloat(deliveryAppAmt) || 0
   const otherNum = parseFloat(otherAmt) || 0
-  const totalInput = cardNum + qrNum + deliveryNum + otherNum
+  const totalInput = cashActualNum + cardNum + qrNum + deliveryNum + otherNum
   const diff = totalInput - systemTotal
 
   const handleSave = async () => {
@@ -274,19 +274,27 @@ export default function PosSettlementPage() {
               </label>
             </div>
 
-            <div className="flex justify-between items-center rounded-lg border px-4 py-2">
-              <span className="font-medium">{t("posInputTotal") || "입력 합계"}</span>
-              <span className="font-bold tabular-nums">
-                {totalInput.toLocaleString()} ฿
-              </span>
+            <div className="space-y-1 rounded-lg border px-4 py-2 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>{t("posCashActual") || "현금"}</span>
+                <span className="tabular-nums">{cashActualNum.toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>{t("posCard") || "카드"} + {t("posQr") || "QR"} + {t("posDeliveryApp") || "배달앱"} + {t("posOther") || "기타"}</span>
+                <span className="tabular-nums">{(cardNum + qrNum + deliveryNum + otherNum).toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t font-medium">
+                <span>{t("posInputTotal") || "입력 합계"}</span>
+                <span className="font-bold tabular-nums">{totalInput.toLocaleString()} ฿</span>
+              </div>
             </div>
 
             <div
-              className={`flex justify-between items-center rounded-lg px-4 py-2 ${
+              className={`flex justify-between items-center rounded-lg px-4 py-3 ${
                 diff === 0 ? "bg-green-500/10 text-green-700" : "bg-amber-500/10 text-amber-700"
               }`}
             >
-              <span className="font-medium">{t("posDifference") || "차액"}</span>
+              <span className="font-medium">{t("posDifference") || "차액"} ({t("posDifferenceHint") || "입력−시스템"})</span>
               <span className="font-bold tabular-nums">
                 {diff >= 0 ? "+" : ""}
                 {diff.toLocaleString()} ฿

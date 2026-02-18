@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
     const discountReason = String(body.discountReason ?? '').trim()
+    const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0))
+    const packagingFee = Math.max(0, Number(body.packagingFee ?? 0))
     const items = Array.isArray(body.items) ? body.items : []
 
     if (items.length === 0) {
@@ -35,9 +37,10 @@ export async function POST(req: NextRequest) {
       subtotal += price * qty
     }
     const afterDiscount = Math.max(0, subtotal - discountAmt)
+    const afterFees = afterDiscount + deliveryFee + packagingFee
     // 태국 VAT 7% (VAT 포함가 기준)
-    const vat = Math.round(afterDiscount * (7 / 107) * 100) / 100
-    const total = afterDiscount
+    const vat = Math.round(afterFees * (7 / 107) * 100) / 100
+    const total = afterFees
 
     const orderNo = generateOrderNo(storeCode)
     const row = {
@@ -48,6 +51,8 @@ export async function POST(req: NextRequest) {
       memo,
       discount_amt: discountAmt,
       discount_reason: discountReason,
+      delivery_fee: deliveryFee,
+      packaging_fee: packagingFee,
       items_json: JSON.stringify(items),
       subtotal,
       vat,

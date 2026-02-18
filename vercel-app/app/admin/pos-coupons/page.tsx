@@ -13,7 +13,7 @@ import {
   type PosCoupon,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { canAccessPosCoupons } from "@/lib/permissions"
+import { canAccessPosMenus } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 export default function PosCouponsPage() {
@@ -115,7 +115,7 @@ export default function PosCouponsPage() {
     }
   }
 
-  if (!canAccessPosCoupons(auth?.role || "")) {
+  if (!canAccessPosMenus(auth?.role || "")) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>

@@ -29,6 +29,7 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  Tag,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -77,6 +78,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosTables", icon: LayoutGrid, href: "/admin/pos-tables" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
+      { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/pos-coupons" },
     ],
   },
   {
@@ -127,6 +129,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
   "/admin/pos-printers": canAccessPosPrinters,
+  "/admin/pos-coupons": canAccessPosMenus,
 }
 
 export function ErpSidebar() {

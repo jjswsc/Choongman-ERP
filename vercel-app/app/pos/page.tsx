@@ -10,6 +10,7 @@ import {
   getPosTodaySales,
   getPosTableLayout,
   getPosPrinterSettings,
+  validatePosCoupon,
   savePosOrder,
   useStoreList,
   type PosMenu,
@@ -20,7 +21,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { Minus, Plus, Printer, RotateCcw, ShoppingCart, Trash2 } from "lucide-react"
+import { Minus, Plus, Printer, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -68,6 +69,9 @@ export default function PosPage() {
   const [discountType, setDiscountType] = React.useState<"pct" | "amt">("amt")
   const [discountValue, setDiscountValue] = React.useState("")
   const [discountReason, setDiscountReason] = React.useState("")
+  const [couponCode, setCouponCode] = React.useState("")
+  const [appliedCoupon, setAppliedCoupon] = React.useState<{ name: string; discountAmt: number; discountReason: string } | null>(null)
+  const [couponLoading, setCouponLoading] = React.useState(false)
   const [memo, setMemo] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
   const [recentOrders, setRecentOrders] = React.useState<PosOrder[]>([])
@@ -77,11 +81,14 @@ export default function PosPage() {
     completedTotal: number
     pendingCount: number
   } | null>(null)
+  const [storeFees, setStoreFees] = React.useState({ deliveryFee: 0, packagingFee: 0 })
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
     items: CartItem[]
     subtotal: number
     discountAmt: number
+    deliveryFee: number
+    packagingFee: number
     total: number
     storeCode: string
     orderType: string
@@ -121,6 +128,17 @@ export default function PosPage() {
   React.useEffect(() => {
     loadTableLayout()
   }, [loadTableLayout])
+
+  const loadStoreFees = React.useCallback(() => {
+    if (!storeCode) return
+    getPosPrinterSettings({ storeCode })
+      .then((s) => setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 }))
+      .catch(() => setStoreFees({ deliveryFee: 0, packagingFee: 0 }))
+  }, [storeCode])
+
+  React.useEffect(() => {
+    loadStoreFees()
+  }, [loadStoreFees])
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions()])
@@ -243,11 +261,48 @@ export default function PosPage() {
   }
 
   const subtotal = cart.reduce((s, it) => s + it.price * it.qty, 0)
-  const discountAmt =
+  const manualDiscount =
     discountType === "pct"
       ? Math.round(subtotal * (Number(discountValue) || 0) / 100)
       : Math.min(subtotal, Math.max(0, Number(discountValue) || 0))
-  const total = Math.max(0, subtotal - discountAmt)
+  const discountAmt = appliedCoupon ? appliedCoupon.discountAmt : manualDiscount
+  const effectiveDiscountReason = appliedCoupon ? appliedCoupon.discountReason : discountReason.trim()
+  const deliveryFeeAmt = orderType === "delivery" ? storeFees.deliveryFee : 0
+  const packagingFeeAmt = orderType === "takeout" ? storeFees.packagingFee : 0
+  const total = Math.max(0, subtotal - discountAmt + deliveryFeeAmt + packagingFeeAmt)
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase()
+    if (!code) return
+    setCouponLoading(true)
+    try {
+      const res = await validatePosCoupon({ code, subtotal })
+      if (res.valid && res.discountAmt != null) {
+        setAppliedCoupon({
+          name: res.couponName ?? code,
+          discountAmt: res.discountAmt,
+          discountReason: res.discountReason ?? `쿠폰: ${code}`,
+        })
+        setDiscountValue("")
+        setDiscountReason("")
+      } else {
+        alert(res.message ?? (t("posCouponInvalid") || "유효하지 않은 쿠폰입니다."))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleClearCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCode("")
+  }
+
+  React.useEffect(() => {
+    if (appliedCoupon) setAppliedCoupon(null)
+  }, [cart])
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -262,7 +317,9 @@ export default function PosPage() {
         tableName: orderType === "dine_in" ? tableName : "",
         memo: memo.trim() || undefined,
         discountAmt: discountAmt || undefined,
-        discountReason: discountReason.trim() || undefined,
+        discountReason: effectiveDiscountReason || undefined,
+        deliveryFee: deliveryFeeAmt || undefined,
+        packagingFee: packagingFeeAmt || undefined,
         items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
       })
       if (res.success) {
@@ -271,17 +328,20 @@ export default function PosPage() {
           items: [...cart],
           subtotal,
           discountAmt,
+          deliveryFee: deliveryFeeAmt,
+          packagingFee: packagingFeeAmt,
           total,
           storeCode: storeCode || "ST01",
           orderType,
           tableName: orderType === "dine_in" ? tableName : "",
           memo: memo.trim(),
-          discountReason: discountReason.trim(),
+          discountReason: effectiveDiscountReason,
         })
         clearCart()
         setMemo("")
         setDiscountValue("")
         setDiscountReason("")
+        handleClearCoupon()
         loadTodaySales()
       } else {
         alert(res.message || "저장 실패")
@@ -675,12 +735,51 @@ export default function PosPage() {
             />
           </div>
           <div>
+            <label className="text-xs text-slate-400">{t("posCoupon") || "쿠폰"}</label>
+            {appliedCoupon ? (
+              <div className="mt-1 flex items-center justify-between rounded-lg border border-green-600/50 bg-green-500/10 px-2 py-1.5 text-sm">
+                <span className="text-green-400 truncate">{appliedCoupon.name}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                  onClick={handleClearCoupon}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-1 flex gap-1">
+                <Input
+                  placeholder={t("posCouponCodePh") || "쿠폰 코드"}
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
+                  className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm uppercase"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 border-slate-600 bg-slate-800 px-3"
+                  onClick={handleApplyCoupon}
+                  disabled={!couponCode.trim() || couponLoading}
+                >
+                  <Tag className="mr-1 h-3.5 w-3.5" />
+                  {couponLoading ? "..." : t("posCouponApply") || "적용"}
+                </Button>
+              </div>
+            )}
+          </div>
+          <div>
             <label className="text-xs text-slate-400">{t("posDiscount") || "할인"}</label>
-            <div className="mt-1 flex gap-2">
+            <div className={cn("mt-1 flex gap-2", appliedCoupon && "opacity-50")}>
               <div className="flex rounded-lg border border-slate-600 bg-slate-800 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setDiscountType("amt")}
+                  onClick={() => !appliedCoupon && setDiscountType("amt")}
+                  disabled={!!appliedCoupon}
                   className={cn(
                     "px-2 py-1.5 text-xs",
                     discountType === "amt" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
@@ -690,7 +789,8 @@ export default function PosPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDiscountType("pct")}
+                  onClick={() => !appliedCoupon && setDiscountType("pct")}
+                  disabled={!!appliedCoupon}
                   className={cn(
                     "px-2 py-1.5 text-xs",
                     discountType === "pct" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
@@ -706,12 +806,14 @@ export default function PosPage() {
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
                 className="h-9 w-20 border-slate-600 bg-slate-800 text-sm text-right"
+                disabled={!!appliedCoupon}
               />
               <Input
                 placeholder={t("posDiscountReasonPh") || "사유"}
                 value={discountReason}
                 onChange={(e) => setDiscountReason(e.target.value)}
                 className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm"
+                disabled={!!appliedCoupon}
               />
             </div>
           </div>
@@ -724,6 +826,18 @@ export default function PosPage() {
               <div className="flex justify-between text-sm text-green-400">
                 <span>{t("posDiscount") || "할인"}</span>
                 <span className="tabular-nums">-{discountAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
+            {deliveryFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-400">
+                <span>{t("posDeliveryFee") || "배달 수수료"}</span>
+                <span className="tabular-nums">+{deliveryFeeAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
+            {packagingFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-400">
+                <span>{t("posPackagingFee") || "포장 수수료"}</span>
+                <span className="tabular-nums">+{packagingFeeAmt.toLocaleString()} ฿</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-bold text-white border-t border-slate-700 pt-2">
@@ -813,8 +927,20 @@ export default function PosPage() {
                 </div>
                 {receiptData.discountAmt > 0 && (
                   <div className="receipt-row flex justify-between text-xs text-green-600">
-                    <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` (${receiptData.discountReason})` : ""}</span>
+                    <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` ${receiptData.discountReason}` : ""}</span>
                     <span className="tabular-nums">-{receiptData.discountAmt.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {(receiptData.deliveryFee ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posDeliveryFee") || "배달 수수료"}</span>
+                    <span className="tabular-nums">+{receiptData.deliveryFee?.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {(receiptData.packagingFee ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posPackagingFee") || "포장 수수료"}</span>
+                    <span className="tabular-nums">+{receiptData.packagingFee?.toLocaleString()} ฿</span>
                   </div>
                 )}
                 {receiptData.memo && (

@@ -33,6 +33,8 @@ export default function PosPrintersPage() {
   const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
   const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
   const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
+  const [deliveryFee, setDeliveryFee] = React.useState("0")
+  const [packagingFee, setPackagingFee] = React.useState("0")
   const [categories, setCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
@@ -52,6 +54,8 @@ export default function PosPrintersPage() {
         setKitchen1Categories(settings.kitchen1Categories || [])
         setKitchen2Categories(settings.kitchen2Categories || [])
         setAutoStockDeduction(Boolean(settings.autoStockDeduction))
+        setDeliveryFee(String(settings.deliveryFee ?? 0))
+        setPackagingFee(String(settings.packagingFee ?? 0))
         setCategories(cats || [])
       })
       .catch(() => {
@@ -103,6 +107,8 @@ export default function PosPrintersPage() {
         kitchen1Categories,
         kitchen2Categories,
         autoStockDeduction,
+        deliveryFee: Number(deliveryFee) || 0,
+        packagingFee: Number(packagingFee) || 0,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -251,6 +257,28 @@ export default function PosPrintersPage() {
               </div>
             )}
 
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">{t("posDeliveryFee") || "배달 수수료"} (฿)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={deliveryFee}
+                  onChange={(e) => setDeliveryFee(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t("posPackagingFee") || "포장 수수료"} (฿)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={packagingFee}
+                  onChange={(e) => setPackagingFee(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+            </div>
             <div className="flex items-center justify-between rounded-lg border p-4">
               <div>
                 <p className="text-sm font-medium">{t("posAutoStockDeduction") || "자동 재고 차감"}</p>

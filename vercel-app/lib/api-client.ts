@@ -1330,6 +1330,20 @@ export async function savePosCoupon(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function validatePosCoupon(params: { code: string; subtotal: number }) {
+  const q = new URLSearchParams()
+  q.set('code', params.code.trim().toUpperCase())
+  q.set('subtotal', String(Math.max(0, params.subtotal)))
+  const res = await apiFetch('/api/validatePosCoupon?' + q.toString())
+  return res.json() as Promise<{
+    valid: boolean
+    message?: string
+    couponName?: string
+    discountAmt?: number
+    discountReason?: string
+  }>
+}
+
 export async function deletePosCoupon(params: { id: number }) {
   const res = await apiFetch('/api/deletePosCoupon', {
     method: 'POST',
@@ -1361,6 +1375,8 @@ export interface PosPrinterSettings {
   kitchen1Categories: string[]
   kitchen2Categories: string[]
   autoStockDeduction?: boolean
+  deliveryFee?: number
+  packagingFee?: number
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -1376,6 +1392,8 @@ export async function savePosPrinterSettings(params: {
   kitchen1Categories: string[]
   kitchen2Categories: string[]
   autoStockDeduction?: boolean
+  deliveryFee?: number
+  packagingFee?: number
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
     method: 'POST',
@@ -1527,6 +1545,8 @@ export async function savePosOrder(params: {
   memo?: string
   discountAmt?: number
   discountReason?: string
+  deliveryFee?: number
+  packagingFee?: number
   items: PosOrderItem[]
 }) {
   const res = await apiFetch('/api/savePosOrder', {

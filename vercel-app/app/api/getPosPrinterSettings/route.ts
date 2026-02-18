@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   if (!storeCode) {
     return NextResponse.json(
-      { kitchenMode: 1, kitchen1Categories: [], kitchen2Categories: [], autoStockDeduction: false },
+      { kitchenMode: 1, kitchen1Categories: [], kitchen2Categories: [], autoStockDeduction: false, deliveryFee: 0, packagingFee: 0 },
       { headers }
     )
   }
@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
       kitchen1_categories?: unknown
       kitchen2_categories?: unknown
       auto_stock_deduction?: boolean
+      delivery_fee?: number
+      packaging_fee?: number
     }[] | null
 
     const raw = rows?.[0]
@@ -42,11 +44,13 @@ export async function GET(request: NextRequest) {
       kitchen1Categories: kitchen1.filter((c) => typeof c === 'string'),
       kitchen2Categories: kitchen2.filter((c) => typeof c === 'string'),
       autoStockDeduction: Boolean(raw?.auto_stock_deduction),
+      deliveryFee: Math.max(0, Number(raw?.delivery_fee ?? 0)),
+      packagingFee: Math.max(0, Number(raw?.packaging_fee ?? 0)),
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)
     return NextResponse.json(
-      { kitchenMode: 1, kitchen1Categories: [], kitchen2Categories: [], autoStockDeduction: false },
+      { kitchenMode: 1, kitchen1Categories: [], kitchen2Categories: [], autoStockDeduction: false, deliveryFee: 0, packagingFee: 0 },
       { headers }
     )
   }
