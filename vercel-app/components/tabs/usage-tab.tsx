@@ -207,8 +207,8 @@ export function UsageTab() {
         <TabsContent value="input" className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-2 shrink-0">
             <div className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted-foreground">{t("useQtyFraction") || "분수"}:</span>
               <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0 py-1.5">{t("useQtyFraction") || "분수"}:</span>
                 {fractionRow === 0 ? (
                   <>
                     <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
