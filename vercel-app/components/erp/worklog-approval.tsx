@@ -125,9 +125,9 @@ export function WorklogApproval() {
   }
   const getWorkTypeDisplay = (status: string) => {
     const s = (status || "").trim()
-    if (s === "Finish") return "Finish Work"
-    if (s === "Continue" || s === "Carry Over") return "Continue Work"
-    if (s === "Today") return "Today Work"
+    if (s === "Finish") return "Finish"
+    if (s === "Continue" || s === "Carry Over") return "Continue"
+    if (s === "Today") return "Today"
     return s || "-"
   }
 
@@ -242,25 +242,25 @@ export function WorklogApproval() {
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div className="rounded-xl border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
               <CalendarIcon className="h-3.5 w-3.5 text-primary" />
               {t("workLogPeriod")}
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Input
                 type="date"
                 value={startStr}
                 onChange={(e) => setStartStr(e.target.value)}
-                className="h-9 w-36 text-xs"
+                className="h-9 w-32 text-xs shrink-0"
               />
-              <span className="text-xs text-muted-foreground">~</span>
+              <span className="text-xs text-muted-foreground shrink-0">~</span>
               <Input
                 type="date"
                 value={endStr}
                 onChange={(e) => setEndStr(e.target.value)}
-                className="h-9 w-36 text-xs"
+                className="h-9 w-32 text-xs shrink-0"
               />
             </div>
           </div>
@@ -270,7 +270,7 @@ export function WorklogApproval() {
               {t("workLogDept")}
             </label>
             <Select value={deptFilter} onValueChange={setDeptFilter}>
-              <SelectTrigger className="h-9 w-32 text-xs">
+              <SelectTrigger className="h-9 w-28 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -289,7 +289,7 @@ export function WorklogApproval() {
               {t("workLogEmployee")}
             </label>
             <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
-              <SelectTrigger className="h-9 w-36 text-xs">
+              <SelectTrigger className="h-9 w-32 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -312,13 +312,13 @@ export function WorklogApproval() {
               placeholder={t("workLogSearchPlaceholder")}
               value={contentSearch}
               onChange={(e) => setContentSearch(e.target.value)}
-              className="h-9 w-48 text-xs"
+              className="h-9 w-36 text-xs min-w-0"
             />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogStatus")}</label>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="h-9 w-28 text-xs">
+              <SelectTrigger className="h-9 w-24 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -331,14 +331,14 @@ export function WorklogApproval() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogColWorkType")}</label>
             <Select value={workTypeFilter} onValueChange={setWorkTypeFilter}>
-              <SelectTrigger className="h-9 w-32 text-xs">
+              <SelectTrigger className="h-9 w-28 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("all")}</SelectItem>
-                <SelectItem value="Finish">Finish Work</SelectItem>
-                <SelectItem value="Continue">Continue Work</SelectItem>
-                <SelectItem value="Today">Today Work</SelectItem>
+                <SelectItem value="Finish">Finish</SelectItem>
+                <SelectItem value="Continue">Continue</SelectItem>
+                <SelectItem value="Today">Today</SelectItem>
               </SelectContent>
             </Select>
           </div>
