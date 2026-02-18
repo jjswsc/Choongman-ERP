@@ -216,6 +216,38 @@ export function AdminScheduleEdit({
     })
   }
 
+  /** 해당 요일 전체 초기화 */
+  const resetDay = (day: number) => {
+    setSlotData((prev) => {
+      const next = { ...prev }
+      for (const key of Object.keys(prev)) {
+        if (key.startsWith(`${day}-`)) delete next[key]
+      }
+      return next
+    })
+  }
+
+  /** 해당 요일에 선택된 직원만 초기화 */
+  const resetStaffOnDay = (day: number) => {
+    if (!selectedStaff) {
+      resetDay(day)
+      return
+    }
+    const name = selectedStaff.name
+    const brkName = "BRK_" + name
+    setSlotData((prev) => {
+      const next = { ...prev }
+      for (const key of Object.keys(prev)) {
+        if (!key.startsWith(`${day}-`)) continue
+        const vals = prev[key] || []
+        const filtered = vals.filter((n) => n !== name && n !== brkName)
+        if (filtered.length === 0) delete next[key]
+        else if (filtered.length !== vals.length) next[key] = filtered
+      }
+      return next
+    })
+  }
+
   const applyQuick = (area: string) => {
     if (!selectedStaff) {
       alert(t("att_staff_select") + " " + t("att_select_first"))
@@ -756,7 +788,22 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                   <th className="border border-border px-3 py-2 w-16 bg-muted font-semibold">{t("att_time")}</th>
                   {dayStrs.map((d, i) => (
                     <th key={d} colSpan={areas.length} className="border border-border px-2 py-2 text-center font-semibold">
-                      {t(DAY_LABELS[i])} {d.slice(5)}
+                      <span className="inline-flex items-center gap-1">
+                        {t(DAY_LABELS[i])} {d.slice(5)}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 rounded hover:bg-destructive/20"
+                          title={selectedStaff ? t("att_reset_staff_on_day").replace("{name}", selectedStaff.nick) : t("att_reset_day")}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            resetStaffOnDay(i)
+                          }}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                      </span>
                     </th>
                   ))}
                 </tr>
