@@ -287,18 +287,18 @@ export function UsageTab() {
 
           <div className="flex flex-col gap-2 shrink-0">
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-xs text-muted-foreground shrink-0 py-1.5">{t("useQtyFraction") || "분수"}:</span>
                 {fractionRow === 0 ? (
                   <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(1); setFractionStep(1); }}>1</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.5); setFractionStep(0.5); }}>½</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.25); setFractionStep(0.25); }}>¼</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.2); setFractionStep(0.2); }}>⅕</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { const v = Math.round((1 / 6) * 1000) / 1000; setQuantity(v); setFractionStep(v); }}>⅙</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.1); setFractionStep(0.1); }}>⅒</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 font-medium shrink-0" onClick={() => { setQuantity(0.04); setFractionStep(0.04); }}>1/25</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(1); setFractionStep(1); }}>1</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(0.5); setFractionStep(0.5); }}>½</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(0.25); setFractionStep(0.25); }}>¼</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(0.2); setFractionStep(0.2); }}>⅕</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { const v = Math.round((1 / 6) * 1000) / 1000; setQuantity(v); setFractionStep(v); }}>⅙</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(0.1); setFractionStep(0.1); }}>⅒</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-1.5 min-w-0 text-base font-medium shrink-0" onClick={() => { setQuantity(0.04); setFractionStep(0.04); }}>1/25</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-base font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
                   </>
                 ) : (
                   <>
@@ -312,12 +312,11 @@ export function UsageTab() {
               </div>
               {fractionRow === 1 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground shrink-0">×</span>
                   <Input
                     type="number"
                     min={1}
                     step={1}
-                    className="h-9 w-20 text-center text-sm"
+                    className="h-9 w-14 text-center text-sm shrink-0"
                     value={smallFractionMultiplier}
                     onChange={(e) => {
                       const v = parseInt(e.target.value, 10)
@@ -328,7 +327,7 @@ export function UsageTab() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-9 px-3 text-xs"
+                    className="h-9 px-2.5 text-xs shrink-0"
                     onClick={() => {
                       const m = Math.max(1, smallFractionMultiplier)
                       setQuantity(m * selectedSmallFraction)
