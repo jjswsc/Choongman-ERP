@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       | { store?: string; job?: string; nick?: string; name?: string }[]
       | []
 
-    let namesInDept: string[] = []
+    const namesInDept: string[] = []
     if (department && department !== "__ALL__") {
       for (const e of empList) {
         const st = String(e.store || "").toLowerCase()

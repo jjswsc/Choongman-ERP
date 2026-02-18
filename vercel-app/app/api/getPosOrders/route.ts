@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
       memo?: string
       discount_amt?: number
       discount_reason?: string
+      delivery_fee?: number
+      packaging_fee?: number
       items_json?: string
       subtotal?: number
       vat?: number
@@ -42,13 +44,13 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -72,6 +74,8 @@ export async function GET(request: NextRequest) {
         memo: String(r.memo ?? ''),
         discountAmt: Number(r.discount_amt) ?? 0,
         discountReason: String(r.discount_reason ?? ''),
+        deliveryFee: Number(r.delivery_fee) ?? 0,
+        packagingFee: Number(r.packaging_fee) ?? 0,
         items: (() => {
           try {
             const arr = JSON.parse(r.items_json || '[]')

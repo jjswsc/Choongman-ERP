@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const storeName = String(row.store || '').trim()
     const empIsOfficeStore = isOfficeStore(storeName)
-    let rawRole = String((row.role || row.job || '')).toLowerCase().replace(/\./g, '')
+    const rawRole = String((row.role || row.job || '')).toLowerCase().replace(/\./g, '')
     let finalRole = 'staff'
     if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
     else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'

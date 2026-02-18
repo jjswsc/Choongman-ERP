@@ -296,7 +296,9 @@ export function MyAttendance() {
   const { lang } = useLang()
   const t = useT(lang)
   const tRef = React.useRef(t)
-  tRef.current = t
+  React.useEffect(() => {
+    tRef.current = t
+  }, [t])
 
   const [myMonth, setMyMonth] = React.useState(() => {
     const d = new Date()

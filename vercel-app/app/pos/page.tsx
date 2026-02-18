@@ -11,12 +11,12 @@ import {
   getPosTableLayout,
   getPosPrinterSettings,
   validatePosCoupon,
-  savePosOrder,
   useStoreList,
   type PosMenu,
   type PosMenuOption,
   type PosOrder,
 } from "@/lib/api-client"
+import { savePosOrderWithOffline } from "@/lib/offline"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { OfflineBanner } from "@/components/offline-banner"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -311,7 +312,7 @@ export default function PosPage() {
     }
     setSubmitting(true)
     try {
-      const res = await savePosOrder({
+      const res = await savePosOrderWithOffline({
         storeCode: storeCode || "ST01",
         orderType,
         tableName: orderType === "dine_in" ? tableName : "",
@@ -481,6 +482,12 @@ export default function PosPage() {
 
   return (
     <div className="flex h-full flex-col">
+      <OfflineBanner
+          onSyncComplete={loadTodaySales}
+          offlineMsg={t("posOfflineSaved") || "오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다."}
+          syncingMsg={t("posSyncing") || "동기화 중..."}
+          retryLabel={t("posRetrySync") || "재시도"}
+        />
       {todaySales != null && (
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-800/50 px-4 py-2 text-xs">
           <span className="text-slate-400">

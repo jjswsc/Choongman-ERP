@@ -1435,6 +1435,8 @@ export interface PosOrder {
   memo: string
   discountAmt?: number
   discountReason?: string
+  deliveryFee?: number
+  packagingFee?: number
   items: PosOrderItem[]
   subtotal: number
   vat: number

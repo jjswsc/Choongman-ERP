@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 function fmtTime(visitTime: string | null | undefined, createdAt?: string | null): string {
-  let t = String(visitTime != null ? visitTime : '').trim()
+  const t = String(visitTime != null ? visitTime : '').trim()
   if (t.length >= 5) {
     if (t.indexOf('T') >= 0) {
       const iso = t.substring(t.indexOf('T') + 1)
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   const empFilter = employeeName === 'All' || !employeeName ? 'All' : employeeName
   const deptFilter = department === 'All' || !department ? null : department
 
-  let namesInDept: string[] = []
+  const namesInDept: string[] = []
   if (deptFilter) {
     const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,nick,name' })) as { store?: string; job?: string; nick?: string; name?: string }[] || []
     for (const e of empList) {

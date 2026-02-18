@@ -48,12 +48,14 @@ export function AdminLeaveStats() {
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'officer' || auth.role === 'ceo' || auth.role === 'hr'
-    if (isOffice) {
-      setStores(["All", ...storeKeys.filter((s) => s !== "All")])
-    } else {
-      setStores([auth.store!])
-      setStoreFilter(auth.store)
-    }
+    queueMicrotask(() => {
+      if (isOffice) {
+        setStores(["All", ...storeKeys.filter((s) => s !== "All")])
+      } else {
+        setStores([auth.store!])
+        setStoreFilter(auth.store)
+      }
+    })
   }, [auth?.store, auth?.role, storeKeys])
 
   const loadStats = () => {

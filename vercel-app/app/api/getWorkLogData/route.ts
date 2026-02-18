@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    let existingContent = continueItems.map((x) => x.content)
+    const existingContent = continueItems.map((x) => x.content)
     for (let j = 0; j < rows.length; j++) {
       const r2 = rows[j] as { log_date: string | Date; name: string; status?: string; content?: string }
       const rowDateStr2 = toDateStr(r2.log_date)

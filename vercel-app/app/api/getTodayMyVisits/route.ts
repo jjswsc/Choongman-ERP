@@ -4,7 +4,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 const TZ = 'Asia/Bangkok'
 
 function formatVisitTime(visitTime: string | null | undefined, createdAt?: string | null): string {
-  let t = String(visitTime != null ? visitTime : '').trim()
+  const t = String(visitTime != null ? visitTime : '').trim()
   if (t.length >= 5) {
     if (t.indexOf('T') >= 0) {
       const iso = t.substring(t.indexOf('T') + 1)

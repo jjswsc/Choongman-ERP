@@ -90,7 +90,7 @@ function buildAttendanceSummary(
   for (const dk of Object.keys(byDay)) {
     if (mergedPrevDay.has(dk)) continue
     const v = byDay[dk]
-    let inMs = v.inMs
+    const inMs = v.inMs
     let outMs = v.outMs
     let breakMin = v.breakMin || 0
     let otMin = v.otMin || 0
@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 해당 월 평일 수 (공휴일 제외) - 결석 산정용
-    let holidaySet = new Set<string>()
+    const holidaySet = new Set<string>()
     if (phRows && phRows.length > 0) {
       const startStr = normMonth + '-01'
       const lastDay = new Date(year, targetMonth + 1, 0)

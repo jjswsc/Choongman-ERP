@@ -24,7 +24,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
     tax?: string
     image?: string
   }[] | null
-  let safeMap: Record<string, number> = {}
+  const safeMap: Record<string, number> = {}
   if (storeName) {
     const storeNorm = String(storeName).toLowerCase().trim()
     const settings = (await supabaseSelectFilter(

@@ -267,7 +267,7 @@ export function AdminScheduleEdit({
           const time = `${String(h).padStart(2, "0")}:${String(half).padStart(2, "0")}`
           const currMin = h * 60 + half
           const key = getSlotKey(quickDay, area, time)
-          let names = (next[key] || []).filter((n) => n !== selectedStaff.name && n !== "BRK_" + selectedStaff.name)
+          const names = (next[key] || []).filter((n) => n !== selectedStaff.name && n !== "BRK_" + selectedStaff.name)
           if (currMin >= startMin && currMin < endMin) {
             const val = currMin >= bStartMin && currMin < bEndMin ? "BRK_" + selectedStaff.name : selectedStaff.name
             if (!names.includes(val)) names.push(val)

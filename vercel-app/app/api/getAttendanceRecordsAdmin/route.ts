@@ -211,16 +211,16 @@ export async function GET(request: NextRequest) {
     for (const rec of Object.values(byKey)) {
       if (!rec.inTime) continue
       let dateForRow = rec.date
-      let inTimeForRow = rec.inTime
+      const inTimeForRow = rec.inTime
       let outTimeForRow = rec.outTime
       let breakMinForRow = rec.breakMin
-      let lateMinForRow = rec.lateMin
+      const lateMinForRow = rec.lateMin
       let earlyMinForRow = rec.earlyMin
       let otMinForRow = rec.otMin
       let statusForRow = rec.status
       let outApprovedForRow = rec.outApproved
       let outIdForRow = rec.outId
-      let inIdForRow = rec.inId
+      const inIdForRow = rec.inId
       const inStatusForRow = rec.inStatus || ''
 
       if (!outTimeForRow) {

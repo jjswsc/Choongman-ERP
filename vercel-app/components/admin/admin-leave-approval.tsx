@@ -44,12 +44,14 @@ export function AdminLeaveApproval() {
   useEffect(() => {
     if (!auth?.store) return
     const isOffice = auth.role === 'director' || auth.role === 'officer'
-    if (isOffice) {
-      setLeaveStores(["All", ...storeList.filter((s) => s !== "All")])
-    } else {
-      setLeaveStores([auth.store])
-      setLeaveStoreFilter(auth.store)
-    }
+    queueMicrotask(() => {
+      if (isOffice) {
+        setLeaveStores(["All", ...storeList.filter((s) => s !== "All")])
+      } else {
+        setLeaveStores([auth.store])
+        setLeaveStoreFilter(auth.store)
+      }
+    })
   }, [auth?.store, auth?.role, storeList])
 
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
