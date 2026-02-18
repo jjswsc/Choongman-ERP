@@ -26,17 +26,19 @@ export async function GET(request: NextRequest) {
 
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
       limit: 5000,
-      select: 'total,status',
-    })) as { total?: number; status?: string }[] | null
+      select: 'subtotal,vat,total,status',
+    })) as { subtotal?: number; vat?: number; total?: number; status?: string }[] | null
 
     const completedStatuses = ['completed', 'paid', 'ready']
-    const systemTotal =
-      (orders || []).reduce((sum, o) => {
-        if (completedStatuses.includes(o.status || '')) {
-          return sum + (Number(o.total) || 0)
-        }
-        return sum
-      }, 0) || 0
+    let systemTotal = 0
+    let systemSubtotal = 0
+    let systemVat = 0
+    for (const o of orders || []) {
+      if (!completedStatuses.includes(o.status || '')) continue
+      systemTotal += Number(o.total) || 0
+      systemSubtotal += Number(o.subtotal) ?? Number(o.total) ?? 0
+      systemVat += Number(o.vat) ?? 0
+    }
 
     const storeFilter =
       storeCode && storeCode !== 'All'
@@ -74,6 +76,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         systemTotal,
+        systemSubtotal,
+        systemVat,
         settlement: storeCode && storeCode !== 'All' ? list[0] ?? null : list,
       },
       { headers }

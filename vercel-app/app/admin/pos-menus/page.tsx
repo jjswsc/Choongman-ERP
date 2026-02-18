@@ -19,6 +19,7 @@ import {
   getPosMenuCategories,
   savePosMenu,
   deletePosMenu,
+  updatePosMenuSoldOut,
   type PosMenu,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -44,6 +45,7 @@ export default function PosMenusPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
+  const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -162,6 +164,30 @@ export default function PosMenusPage() {
   }
 
   const handleSearch = () => setHasSearched(true)
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const handleSoldOutToggle = async (menu: PosMenu) => {
+    const isSoldOut = menu.soldOutDate === todayStr
+    setSoldOutTogglingId(menu.id)
+    try {
+      const res = await updatePosMenuSoldOut({ id: menu.id, soldOut: !isSoldOut })
+      if (res.success) {
+        setMenus((prev) =>
+          prev.map((m) =>
+            m.id === menu.id
+              ? { ...m, soldOutDate: !isSoldOut ? todayStr : null }
+              : m
+          )
+        )
+      } else {
+        alert(res.message || t("msg_save_fail_detail"))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setSoldOutTogglingId(null)
+    }
+  }
 
   const filteredMenus = React.useMemo(() => {
     if (!hasSearched) return []
@@ -334,24 +360,27 @@ export default function PosMenusPage() {
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuPrice")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posMenuActive")}</th>
+                    <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posSoldOut")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("itemsColAction")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {!hasSearched ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsSearchHint")}
                       </td>
                     </tr>
                   ) : filteredMenus.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsNoResults")}
                       </td>
                     </tr>
                   ) : (
-                    filteredMenus.map((m, idx) => (
+                    filteredMenus.map((m, idx) => {
+                      const isSoldOutToday = m.soldOutDate === todayStr
+                      return (
                       <tr
                         key={m.id}
                         className={cn(
@@ -376,6 +405,17 @@ export default function PosMenusPage() {
                             <span className="text-[10px] text-muted-foreground">-</span>
                           )}
                         </td>
+                        <td className="px-5 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant={isSoldOutToday ? "destructive" : "outline"}
+                            className="h-6 px-2 text-[10px]"
+                            onClick={() => handleSoldOutToggle(m)}
+                            disabled={soldOutTogglingId === m.id || !m.isActive}
+                          >
+                            {soldOutTogglingId === m.id ? "..." : isSoldOutToday ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
+                          </Button>
+                        </td>
                         <td className="px-5 py-3">
                           <div className="flex justify-center gap-1">
                             <Button
@@ -399,7 +439,7 @@ export default function PosMenusPage() {
                           </div>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>

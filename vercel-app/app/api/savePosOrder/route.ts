@@ -32,8 +32,9 @@ export async function POST(req: NextRequest) {
       const qty = Number(it.qty ?? 1)
       subtotal += price * qty
     }
-    const vat = 0
-    const total = subtotal + vat
+    // 태국 VAT 7% (VAT 포함가 기준: vat = subtotal * 7/107)
+    const vat = Math.round(subtotal * (7 / 107) * 100) / 100
+    const total = subtotal
 
     const orderNo = generateOrderNo(storeCode)
     const row = {

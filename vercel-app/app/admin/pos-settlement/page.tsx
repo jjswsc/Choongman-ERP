@@ -37,6 +37,8 @@ export default function PosSettlementPage() {
   const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [systemSubtotal, setSystemSubtotal] = React.useState(0)
+  const [systemVat, setSystemVat] = React.useState(0)
 
   const [cashActual, setCashActual] = React.useState<string>("")
   const [cardAmt, setCardAmt] = React.useState<string>("")
@@ -56,8 +58,10 @@ export default function PosSettlementPage() {
       settleDate,
       storeCode: effectiveStore,
     })
-      .then(({ systemTotal: st, settlement: s }) => {
+      .then(({ systemTotal: st, systemSubtotal: sub, systemVat: vat, settlement: s }) => {
         setSystemTotal(st)
+        setSystemSubtotal(sub ?? st)
+        setSystemVat(vat ?? 0)
         const single = Array.isArray(s) ? s[0] : s
         if (single) {
           setSettlement(single)
@@ -70,6 +74,8 @@ export default function PosSettlementPage() {
           setClosed(single.closed ?? false)
         } else {
           setSettlement(null)
+          setSystemSubtotal(0)
+          setSystemVat(0)
           setCashActual("")
           setCardAmt("0")
           setQrAmt("0")
@@ -81,6 +87,8 @@ export default function PosSettlementPage() {
       })
       .catch(() => {
         setSystemTotal(0)
+        setSystemSubtotal(0)
+        setSystemVat(0)
         setSettlement(null)
       })
       .finally(() => setLoading(false))
@@ -195,11 +203,21 @@ export default function PosSettlementPage() {
 
         {effectiveStore && !loading && (
           <div className="space-y-4 rounded-xl border bg-card p-6">
-            <div className="flex justify-between items-center rounded-lg bg-muted/30 px-4 py-3">
-              <span className="font-medium">{t("posSystemTotal") || "시스템 매출"}</span>
-              <span className="text-lg font-bold tabular-nums">
-                {systemTotal.toLocaleString()} ฿
-              </span>
+            <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">{t("posSystemSubtotal") || "공급가액"}</span>
+                <span className="tabular-nums">{systemSubtotal.toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">{t("posSystemVat") || "VAT (7%)"}</span>
+                <span className="tabular-nums">{systemVat.toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-border">
+                <span className="font-medium">{t("posSystemTotal") || "시스템 매출"}</span>
+                <span className="text-lg font-bold tabular-nums">
+                  {systemTotal.toLocaleString()} ฿
+                </span>
+              </div>
             </div>
 
             <div className="space-y-3">

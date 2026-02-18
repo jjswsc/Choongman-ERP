@@ -1167,6 +1167,7 @@ export interface PosMenu {
   vatIncluded: boolean
   isActive: boolean
   sortOrder: number
+  soldOutDate?: string | null
 }
 
 export interface PosMenuOption {
@@ -1215,6 +1216,15 @@ export async function savePosMenu(params: {
 
 export async function deletePosMenu(params: { id: string }) {
   const res = await apiFetch('/api/deletePosMenu', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolean }) {
+  const res = await apiFetch('/api/updatePosMenuSoldOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1293,6 +1303,8 @@ export async function getPosSettlement(params: {
   const res = await apiFetch('/api/getPosSettlement?' + q.toString())
   return res.json() as Promise<{
     systemTotal: number
+    systemSubtotal?: number
+    systemVat?: number
     settlement: PosSettlement | PosSettlement[] | null
   }>
 }
