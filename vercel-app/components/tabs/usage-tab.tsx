@@ -83,6 +83,9 @@ export function UsageTab() {
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [fractionRow, setFractionRow] = useState<0 | 1>(0)
+  const [fractionStep, setFractionStep] = useState(0.25)
+  const [smallFractionMultiplier, setSmallFractionMultiplier] = useState(1)
+  const [selectedSmallFraction, setSelectedSmallFraction] = useState(0.02)
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -205,63 +208,6 @@ export function UsageTab() {
         </TabsList>
 
         <TabsContent value="input" className="mt-4 flex flex-col gap-4">
-          <div className="flex flex-col gap-2 shrink-0">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-muted-foreground shrink-0 py-1.5">{t("useQtyFraction") || "분수"}:</span>
-                {fractionRow === 0 ? (
-                  <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1)}>1</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.5)}>½</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.25)}>¼</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.2)}>⅕</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(Math.round((1 / 6) * 1000) / 1000)}>⅙</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.1)}>⅒</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.04)}>1/25</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
-                  </>
-                ) : (
-                  <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.02)}>1/50</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.01)}>1/100</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(0.005)}>1/200</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => setQuantity(1 / 1200)}>1/1200</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(0)} title={t("switchFraction") || "전환"}>⇄</Button>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.0001, quantity - 0.25))}>
-                  <Minus className="h-4 w-4" />
-                </Button>
-                <Input
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  value={quantity}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!isNaN(v) && v >= 0.0001) setQuantity(v)
-                  }}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (isNaN(v) || v < 0.0001) setQuantity(0.5)
-                  }}
-                />
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + 0.25)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                {t("addUsage")}
-              </Button>
-            </div>
-          </div>
-
           <Card className="shadow-sm">
             <CardContent className="p-0">
               {loading ? (
@@ -338,6 +284,91 @@ export function UsageTab() {
               )}
             </CardContent>
           </Card>
+
+          <div className="flex flex-col gap-2 shrink-0">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0 py-1.5">{t("useQtyFraction") || "분수"}:</span>
+                {fractionRow === 0 ? (
+                  <>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(1); setFractionStep(1); }}>1</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.5); setFractionStep(0.5); }}>½</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.25); setFractionStep(0.25); }}>¼</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.2); setFractionStep(0.2); }}>⅕</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { const v = Math.round((1 / 6) * 1000) / 1000; setQuantity(v); setFractionStep(v); }}>⅙</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.1); setFractionStep(0.1); }}>⅒</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 font-medium shrink-0" onClick={() => { setQuantity(0.04); setFractionStep(0.04); }}>1/25</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.02); setFractionStep(0.02); setSelectedSmallFraction(0.02); }}>1/50</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.01); setFractionStep(0.01); setSelectedSmallFraction(0.01); }}>1/100</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.005); setFractionStep(0.005); setSelectedSmallFraction(0.005); }}>1/200</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { const v = 1 / 1200; setQuantity(v); setFractionStep(v); setSelectedSmallFraction(v); }}>1/1200</Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(0)} title={t("switchFraction") || "전환"}>⇄</Button>
+                  </>
+                )}
+              </div>
+              {fractionRow === 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0">×</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className="h-9 w-20 text-center text-sm"
+                    value={smallFractionMultiplier}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10)
+                      if (!isNaN(v) && v >= 1) setSmallFractionMultiplier(v)
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-3 text-xs"
+                    onClick={() => {
+                      const m = Math.max(1, smallFractionMultiplier)
+                      setQuantity(m * selectedSmallFraction)
+                    }}
+                  >
+                    {t("posCouponApply") || "적용"}
+                  </Button>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.0001, quantity - fractionStep))}>
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="number"
+                  step="0.0001"
+                  min="0.0001"
+                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  value={quantity}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (!isNaN(v) && v >= 0.0001) setQuantity(v)
+                  }}
+                  onBlur={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (isNaN(v) || v < 0.0001) setQuantity(0.5)
+                  }}
+                />
+                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + fractionStep)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                {t("addUsage")}
+              </Button>
+            </div>
+          </div>
 
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
