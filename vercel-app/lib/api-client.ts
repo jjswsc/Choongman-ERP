@@ -1116,6 +1116,11 @@ export async function getAdminItems() {
   return res.json() as Promise<AdminItem[]>
 }
 
+export async function getItemCategories() {
+  const res = await apiFetch('/api/getItemCategories')
+  return res.json() as Promise<{ categories: string[] }>
+}
+
 export async function getAdminVendors() {
   const res = await apiFetch('/api/getVendors')
   return res.json() as Promise<AdminVendor[]>

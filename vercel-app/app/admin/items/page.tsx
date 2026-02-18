@@ -7,7 +7,7 @@ import { ItemTable } from "@/components/erp/item-table"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminItems, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, getItemCategories, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
 
@@ -27,6 +27,7 @@ export default function ItemsPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const [products, setProducts] = React.useState<Product[]>([])
+  const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState<ItemFormData>(emptyForm)
   const [editingCode, setEditingCode] = React.useState<string | null>(null)
@@ -35,9 +36,15 @@ export default function ItemsPage() {
   const [categoryFilter, setCategoryFilter] = React.useState("all")
 
   React.useEffect(() => {
-    getAdminItems()
-      .then((list) => setProducts(list))
-      .catch(() => setProducts([]))
+    Promise.all([getAdminItems(), getItemCategories()])
+      .then(([list, { categories }]) => {
+        setProducts(list || [])
+        setAllCategories(categories || [])
+      })
+      .catch(() => {
+        setProducts([])
+        setAllCategories([])
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -113,6 +120,10 @@ export default function ItemsPage() {
       setProducts((prev) => [...prev, newItem])
       alert(t("itemsAlertSaved"))
     }
+    const newCat = formData.category.trim()
+    if (newCat && !allCategories.includes(newCat)) {
+      setAllCategories((prev) => [...prev, newCat].sort())
+    }
     setFormData(emptyForm)
     setEditingCode(null)
   }
@@ -161,9 +172,10 @@ export default function ItemsPage() {
   }, [products, hasSearched, searchTerm, categoryFilter])
 
   const categories = React.useMemo(() => {
-    const set = new Set(products.map((p) => p.category).filter(Boolean))
-    return Array.from(set).sort()
-  }, [products])
+    const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))
+    const fromDb = new Set(allCategories)
+    return Array.from(new Set([...fromDb, ...fromProducts])).sort()
+  }, [products, allCategories])
 
   return (
     <div className="flex-1 overflow-auto">

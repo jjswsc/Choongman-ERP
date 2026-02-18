@@ -117,21 +117,22 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("itemsColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("itemsCategory")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("itemsColPrice")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColAction")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsSearchHint")}
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsNoResults")}
                 </td>
               </tr>
@@ -169,6 +170,9 @@ export function ItemTable({
                   </td>
                   <td className="px-5 py-3 min-w-[120px]">
                     <span className="text-sm font-medium text-foreground">{product.name}</span>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className="text-[11px] text-muted-foreground">{product.category || "-"}</span>
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
