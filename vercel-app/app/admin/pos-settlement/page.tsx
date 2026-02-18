@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Wallet, Save } from "lucide-react"
+import { Wallet, Save, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 
 export default function PosSettlementPage() {
   const { auth } = useAuth()
@@ -174,8 +175,15 @@ export default function PosSettlementPage() {
               </SelectContent>
             </Select>
           )}
-          <Button size="sm" className="h-10" onClick={loadData}>
-            {t("itemsBtnSearch") || "조회"}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 gap-1.5"
+            onClick={loadData}
+            disabled={loading}
+          >
+            <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            {t("posRefresh") || "새로고침"}
           </Button>
         </div>
 

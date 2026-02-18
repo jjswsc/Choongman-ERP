@@ -52,21 +52,6 @@ export async function GET(request: NextRequest) {
       filter += `&store_name=eq.${encodeURIComponent(storeFilter)}`
     }
     const baseFilter = `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
-    const empRows = (await supabaseSelect('employees', { order: 'id.asc', limit: 2000, select: 'store,name,nick' })) as {
-      store?: string
-      name?: string
-      nick?: string
-    }[] | null
-    const nickMap: Record<string, string> = {}
-    for (const e of empRows || []) {
-      const s = String(e.store || '').trim()
-      const n = String(e.name || '').trim()
-      if (s && n) {
-        const key = `${s}|${n}`
-        nickMap[key] = String(e.nick || '').trim() || n
-      }
-    }
-
     const [rows, storeRows] = await Promise.all([
       supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 }),
       supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 500 }),
@@ -116,16 +101,12 @@ export async function GET(request: NextRequest) {
           : '내용 없음'
       const dateVal = o.order_date
       const dateStr = dateVal ? String(dateVal).substring(0, 16).replace('T', ' ') : ''
-      const storeName = String(o.store_name || '').trim()
-      const userName = String(o.user_name || '').trim()
-      const userNick = (storeName && userName) ? nickMap[`${storeName}|${userName}`] || userName : userName
       return {
         row: o.id,
         orderId: o.id,
         date: dateStr,
-        store: storeName || '',
-        userName: userName || undefined,
-        userNick: userNick || undefined,
+        store: o.store_name || '',
+        userName: String(o.user_name || '').trim() || undefined,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
         deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),

@@ -1,30 +1,35 @@
-import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** POS 메뉴 옵션 목록 (menu_id별) */
-export async function GET() {
+/** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
+export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const { searchParams } = new URL(request.url)
+  const menuId = searchParams.get('menuId')?.trim()
 
   try {
-    const rows = (await supabaseSelect('pos_menu_options', {
-      order: 'menu_id.asc,sort_order.asc,name.asc',
-      limit: 2000,
-      select: 'id,menu_id,name,price_modifier,sort_order',
-    })) as {
-      id?: number
-      menu_id?: number
-      name?: string
-      price_modifier?: number
-      sort_order?: number
-    }[] | null
+    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; sort_order?: number }[] | null
+    if (menuId) {
+      rows = (await supabaseSelectFilter(
+        'pos_menu_options',
+        `menu_id=eq.${encodeURIComponent(menuId)}`,
+        { order: 'sort_order.asc,name.asc', limit: 200 }
+      )) as typeof rows
+    } else {
+      rows = (await supabaseSelect('pos_menu_options', {
+        order: 'menu_id.asc,sort_order.asc,name.asc',
+        limit: 1000,
+        select: 'id,menu_id,name,price_modifier,sort_order',
+      })) as typeof rows
+    }
 
-    const list = (rows || []).map((r) => ({
-      id: String(r.id ?? ''),
-      menuId: String(r.menu_id ?? ''),
-      name: String(r.name ?? ''),
-      priceModifier: Number(r.price_modifier) ?? 0,
-      sortOrder: Number(r.sort_order) ?? 0,
+    const list = (rows || []).map((row) => ({
+      id: String(row.id ?? ''),
+      menuId: String(row.menu_id ?? ''),
+      name: String(row.name ?? ''),
+      priceModifier: Number(row.price_modifier) ?? 0,
+      sortOrder: Number(row.sort_order) ?? 0,
     }))
 
     return NextResponse.json(list, { headers })

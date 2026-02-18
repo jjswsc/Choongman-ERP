@@ -267,7 +267,6 @@ export interface AdminOrderItem {
   date: string
   store: string
   userName?: string
-  userNick?: string
   total: number
   status: string
   deliveryStatus: string
@@ -1169,6 +1168,14 @@ export interface PosMenu {
   sortOrder: number
 }
 
+export interface PosMenuOption {
+  id: string
+  menuId: string
+  name: string
+  priceModifier: number
+  sortOrder: number
+}
+
 export async function getPosMenus() {
   const res = await apiFetch('/api/getPosMenus')
   return res.json() as Promise<PosMenu[]>
@@ -1177,6 +1184,13 @@ export async function getPosMenus() {
 export async function getPosMenuCategories() {
   const res = await apiFetch('/api/getPosMenuCategories')
   return res.json() as Promise<{ categories: string[] }>
+}
+
+export async function getPosMenuOptions(params?: { menuId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.menuId) q.set('menuId', params.menuId)
+  const res = await apiFetch('/api/getPosMenuOptions?' + q.toString())
+  return res.json() as Promise<PosMenuOption[]>
 }
 
 export async function savePosMenu(params: {
