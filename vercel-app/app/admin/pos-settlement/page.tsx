@@ -20,7 +20,7 @@ import {
   type PosSettlement,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, canAccessSettings } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 export default function PosSettlementPage() {
@@ -49,6 +49,7 @@ export default function PosSettlementPage() {
   const [closed, setClosed] = React.useState(false)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const canUnclose = canAccessSettings(auth?.role || "")
   const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ""
 
   const loadData = React.useCallback(() => {
@@ -312,14 +313,22 @@ export default function PosSettlementPage() {
               />
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={closed}
-                onChange={(e) => setClosed(e.target.checked)}
-              />
-              {t("posClosed") || "마감"}
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={closed}
+                  onChange={(e) => setClosed(e.target.checked)}
+                  disabled={closed && !canUnclose}
+                />
+                {t("posClosed") || "마감"}
+              </label>
+              {closed && !canUnclose && (
+                <span className="text-xs text-muted-foreground">
+                  {t("posClosedByAdminOnly") || "마감 해제는 본사 관리자만 가능합니다."}
+                </span>
+              )}
+            </div>
 
             <Button
               className="w-full"

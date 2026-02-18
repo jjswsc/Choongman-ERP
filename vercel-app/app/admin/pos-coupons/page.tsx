@@ -57,7 +57,7 @@ export default function PosCouponsPage() {
   }
 
   const handleEdit = (c: PosCoupon) => {
-    setEditingId(c.id)
+    setEditingId(c.id != null ? c.id : null)
     setForm({
       code: c.code,
       name: c.name,
@@ -105,6 +105,7 @@ export default function PosCouponsPage() {
   }
 
   const handleDelete = async (c: PosCoupon) => {
+    if (c.id == null) return
     if (!confirm(`${c.code} ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
     const res = await deletePosCoupon({ id: c.id })
     if (res.success) {

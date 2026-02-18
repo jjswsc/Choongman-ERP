@@ -1297,10 +1297,12 @@ export interface PosCoupon {
   id?: number
   code: string
   name?: string
-  discountType: 'percent' | 'amount'
+  discountType: 'percent' | 'amount' | 'fixed'
   discountValue: number
   startDate?: string | null
   endDate?: string | null
+  validFrom?: string | null
+  validTo?: string | null
   maxUses?: number | null
   usedCount?: number
   isActive?: boolean
@@ -1315,10 +1317,12 @@ export async function savePosCoupon(params: {
   id?: number
   code: string
   name?: string
-  discountType?: 'percent' | 'amount'
+  discountType?: 'percent' | 'amount' | 'fixed'
   discountValue: number
   startDate?: string | null
   endDate?: string | null
+  validFrom?: string | null
+  validTo?: string | null
   maxUses?: number | null
   isActive?: boolean
 }) {
