@@ -1176,6 +1176,8 @@ export const i18n = {
     orderSelectAll: '전체 선택',
     orderSelectItemsFirst: '품목을 선택해 주세요',
     orderSelectOneVendor: '한 거래처의 품목만 선택해 주세요',
+    orderSelectedItems: '선택',
+    orderTransferToPoByVendor: '거래처별로 선택하여 보내기',
     orderFilterVendorAll: '전체 거래처',
     orderFilterStore: '매장',
     orderFilterStoreAll: '전체 매장',

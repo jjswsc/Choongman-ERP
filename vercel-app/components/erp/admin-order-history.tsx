@@ -21,11 +21,18 @@ import {
 } from "@/lib/api-client"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Printer, FileSpreadsheet, Search, ArrowRightCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Printer, FileSpreadsheet, Search, ArrowRightCircle, ChevronDown } from "lucide-react"
 import { useOrderCreate } from "@/lib/order-create-context"
 
 const HQ_STORES = ["본사", "Office", "오피스", "본점"]
 const inputClass = "h-9 rounded-md border border-input bg-background px-3 text-sm w-full min-w-0"
+const filterClass = "h-9 rounded-md border border-input bg-background px-2 text-sm shrink-0"
 
 interface ItemRow {
   id: string
@@ -34,6 +41,7 @@ interface ItemRow {
   deliveryDate: string
   store: string
   userName: string
+  userNick: string
   code: string
   name: string
   category: string
@@ -188,6 +196,7 @@ export function AdminOrderHistory() {
           deliveryDate: o.deliveryDate || "",
           store: o.store || "",
           userName: o.userName || "",
+          userNick: o.userNick || o.userName || "",
           code: it.code || "",
           name: it.name || "",
           category: String(it.category || "").trim(),
@@ -245,9 +254,16 @@ export function AdminOrderHistory() {
     return Array.from(byCode.values())
   }, [selectedByVendor, vendorCountInSelection])
 
-  const handleTransferToPo = () => {
-    if (!canTransferToPo || transferVendorItems.length === 0) return
-    const [[vendorStr]] = Array.from(selectedByVendor.entries()) as [string, unknown][]
+  const doTransferForVendor = (vendorStr: string) => {
+    const items = selectedByVendor.get(vendorStr)
+    if (!items || items.length === 0) return
+    const byCode = new Map<string, { code: string; name: string; price: number; qty: number }>()
+    for (const x of items) {
+      const existing = byCode.get(x.code)
+      if (existing) existing.qty += x.qty
+      else byCode.set(x.code, { ...x })
+    }
+    const cart = Array.from(byCode.values())
     const matched = vendors.find(
       (v) =>
         v.code.toLowerCase() === vendorStr.toLowerCase() ||
@@ -258,38 +274,41 @@ export function AdminOrderHistory() {
     setTransferToPo({
       vendorCode,
       vendorName,
-      cart: transferVendorItems.map((x) => ({
-        code: x.code,
-        name: x.name,
-        price: x.price,
-        qty: x.qty,
-      })),
+      cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty })),
     })
     setActiveTab("hq")
+  }
+
+  const handleTransferToPo = () => {
+    if (canTransferToPo && transferVendorItems.length > 0) {
+      const [[vendorStr]] = Array.from(selectedByVendor.entries()) as [string, unknown][]
+      doTransferForVendor(vendorStr)
+    }
   }
 
   const handlePrint = () => {
     const win = window.open("", "_blank")
     if (!win) return
+    const rowsToPrint = selectedIds.size > 0 ? selectedRows : itemRows
     const html = `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</title>
-<style>body{font-family:Arial,sans-serif;padding:16px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5}.num{text-align:right}</style>
+<style>body{font-family:Arial,sans-serif;padding:16px;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px}th{background:#f5f5f5;text-align:center}.num{text-align:center}</style>
 </head><body>
 <h1>${t("orderTabStoreOrderHist") || "매장 발주 내역"}</h1>
-<p>${t("orderFilterPeriod")}: ${startDate} ~ ${endDate}</p>
+<p>${t("orderFilterPeriod")}: ${startDate} ~ ${endDate}${selectedIds.size > 0 ? ` (${t("orderSelectedItems") || "선택"} ${rowsToPrint.length}건)` : ""}</p>
 <table>
 <thead><tr>
 <th>${t("orderColDate")}</th><th>${t("orderColDeliveryDate")}</th><th>${t("orderColStore")}</th>
-<th>${t("orderOrderedBy")}</th><th>${t("orderColCode")}</th><th>${t("orderItemName")}</th>
+<th>${t("emp_label_nickname")}</th><th>${t("orderColCode")}</th><th>${t("orderItemName")}</th>
 <th>${t("itemsCategory")}</th><th>${t("itemsVendor")}</th>
 <th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemTotal")}</th>
 <th>${t("orderColStatus")}</th>
 </tr></thead>
 <tbody>
-${itemRows.map((r) => {
+${rowsToPrint.map((r) => {
   const statusLabel = r.status === "Pending" ? t("orderStatusPending") : r.status === "Approved" ? t("orderStatusApproved") : r.status === "Rejected" ? t("orderStatusRejected") : r.status === "Hold" ? t("orderStatusHold") : r.status || ""
-  return `<tr><td>${dateShort(r.date)}</td><td>${dateShort(r.deliveryDate)}</td><td>${(r.store || "").replace(/</g, "&lt;")}</td><td>${(r.userName || "").replace(/</g, "&lt;")}</td><td>${(r.code || "").replace(/</g, "&lt;")}</td><td>${(r.name || "").replace(/</g, "&lt;")}</td><td>${(r.category || "").replace(/</g, "&lt;")}</td><td>${(r.vendor || "").replace(/</g, "&lt;")}</td><td class="num">${r.qty}</td><td class="num">${r.price}</td><td class="num">${r.price * r.qty}</td><td>${statusLabel}</td></tr>`
+  return `<tr><td>${dateShort(r.date)}</td><td>${dateShort(r.deliveryDate)}</td><td>${(r.store || "").replace(/</g, "&lt;")}</td><td>${(r.userNick || r.userName || "").replace(/</g, "&lt;")}</td><td>${(r.code || "").replace(/</g, "&lt;")}</td><td>${(r.name || "").replace(/</g, "&lt;")}</td><td>${(r.category || "").replace(/</g, "&lt;")}</td><td>${(r.vendor || "").replace(/</g, "&lt;")}</td><td class="num">${r.qty}</td><td class="num">${r.price}</td><td class="num">${r.price * r.qty}</td><td>${statusLabel}</td></tr>`
 }).join("")}
 </tbody>
 </table>
@@ -309,11 +328,12 @@ ${itemRows.map((r) => {
       if (str.indexOf(",") !== -1 || str.indexOf('"') !== -1 || str.indexOf("\n") !== -1) return `"${str.replace(/"/g, '""')}"`
       return str
     }
+    const rowsToExport = selectedIds.size > 0 ? selectedRows : itemRows
     const headers = [
       t("orderColDate"),
       t("orderColDeliveryDate"),
       t("orderColStore"),
-      t("orderOrderedBy"),
+      t("emp_label_nickname"),
       t("orderColCode"),
       t("orderItemName"),
       t("itemsCategory"),
@@ -323,11 +343,11 @@ ${itemRows.map((r) => {
       t("orderItemTotal"),
       t("orderColStatus"),
     ]
-    const rows = itemRows.map((r) => [
+    const rows = rowsToExport.map((r) => [
       dateShort(r.date),
       dateShort(r.deliveryDate),
       r.store,
-      r.userName,
+      r.userNick || r.userName,
       r.code,
       r.name,
       r.category,
@@ -348,10 +368,10 @@ ${itemRows.map((r) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2">
         {isHQ && (
           <Select value={storeFilter} onValueChange={setStoreFilter}>
-            <SelectTrigger className={inputClass + " w-[100px] shrink-0"}>
+            <SelectTrigger className={filterClass + " w-[100px]"}>
               <SelectValue placeholder={t("orderFilterStore")} />
             </SelectTrigger>
             <SelectContent>
@@ -362,10 +382,10 @@ ${itemRows.map((r) => {
             </SelectContent>
           </Select>
         )}
-        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass + " w-[92px] shrink-0 text-[13px]"} />
-        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass + " w-[92px] shrink-0 text-[13px]"} />
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={filterClass + " w-[110px] min-w-[110px] max-w-[110px] text-[13px]"} />
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={filterClass + " w-[110px] min-w-[110px] max-w-[110px] text-[13px]"} />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className={inputClass + " w-[85px] shrink-0"}>
+          <SelectTrigger className={filterClass + " w-[85px]"}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -377,7 +397,7 @@ ${itemRows.map((r) => {
           </SelectContent>
         </Select>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className={inputClass + " w-[95px] shrink-0"}>
+          <SelectTrigger className={filterClass + " w-[95px]"}>
             <SelectValue placeholder={t("itemsCategory")} />
           </SelectTrigger>
           <SelectContent>
@@ -388,7 +408,7 @@ ${itemRows.map((r) => {
           </SelectContent>
         </Select>
         <Select value={vendorFilter} onValueChange={setVendorFilter}>
-          <SelectTrigger className={inputClass + " w-[95px] shrink-0"}>
+          <SelectTrigger className={filterClass + " w-[95px]"}>
             <SelectValue placeholder={t("itemsVendor")} />
           </SelectTrigger>
           <SelectContent>
@@ -402,30 +422,59 @@ ${itemRows.map((r) => {
           placeholder={t("itemsColName")}
           value={itemNameFilter}
           onChange={(e) => setItemNameFilter(e.target.value)}
-          className={inputClass + " w-[90px] shrink-0 min-w-[90px]"}
+          className={filterClass + " w-[100px] min-w-[100px] max-w-[100px]"}
         />
         <Button size="sm" onClick={load} disabled={loading} className="h-9 shrink-0">
           <Search className="mr-1 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
         {isHQ && (
-          <Button
-            size="sm"
-            variant="default"
-            onClick={handleTransferToPo}
-            disabled={!canTransferToPo}
-            className="h-9 shrink-0"
-            title={
-              selectedIds.size === 0
-                ? (t("orderSelectItemsFirst") || "품목을 선택해 주세요")
-                : vendorCountInSelection > 1
-                  ? (t("orderSelectOneVendor") || "한 거래처의 품목만 선택해 주세요")
+          vendorCountInSelection > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-9 shrink-0"
+                  disabled={selectedIds.size === 0}
+                  title={t("orderTransferToPoByVendor") || "거래처별로 선택하여 보내기"}
+                >
+                  <ArrowRightCircle className="mr-1 h-4 w-4" />
+                  {t("orderTransferToPo")} ({selectedIds.size})
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {Array.from(selectedByVendor.entries()).map(([vendorName, items]) => {
+                  const count = items.reduce((s, x) => s + (x.qty ?? 0), 0)
+                  return (
+                    <DropdownMenuItem
+                      key={vendorName}
+                      onClick={() => doTransferForVendor(vendorName)}
+                    >
+                      {vendorName} ({items.length}품목, {count}개)
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleTransferToPo}
+              disabled={!canTransferToPo}
+              className="h-9 shrink-0"
+              title={
+                selectedIds.size === 0
+                  ? (t("orderSelectItemsFirst") || "품목을 선택해 주세요")
                   : ""
-            }
-          >
-            <ArrowRightCircle className="mr-1 h-4 w-4" />
-            {t("orderTransferToPo")}{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
-          </Button>
+              }
+            >
+              <ArrowRightCircle className="mr-1 h-4 w-4" />
+              {t("orderTransferToPo")}{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+            </Button>
+          )
         )}
         <Button variant="outline" size="sm" onClick={handlePrint} disabled={itemRows.length === 0} className="h-9 shrink-0">
           <Printer className="mr-1 h-4 w-4" />
@@ -454,18 +503,18 @@ ${itemRows.map((r) => {
                     />
                   </th>
                 )}
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColDate")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColDeliveryDate")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColStore")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderOrderedBy")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderColCode")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("orderItemName")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("itemsCategory")}</th>
-                <th className="px-3 py-2 text-left font-medium whitespace-nowrap">{t("itemsVendor")}</th>
-                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemQty")}</th>
-                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
-                <th className="px-3 py-2 text-right font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
-                <th className="px-3 py-2 text-center font-medium whitespace-nowrap">{t("orderColStatus")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColDate")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColDeliveryDate")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColStore")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[52px]">{t("emp_label_nickname")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColCode")}</th>
+                <th className="px-3 py-2 text-center font-medium whitespace-nowrap min-w-[120px]">{t("orderItemName")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsCategory")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsVendor")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemQty")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColStatus")}</th>
               </tr>
             </thead>
             <tbody>
@@ -490,17 +539,17 @@ ${itemRows.map((r) => {
                           />
                         </td>
                       )}
-                      <td className="px-3 py-1.5 whitespace-nowrap">{dateShort(r.date)}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{dateShort(r.deliveryDate) || "-"}</td>
-                      <td className="px-3 py-1.5 font-medium whitespace-nowrap">{r.store || "-"}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{r.userName || "-"}</td>
-                      <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">{r.code || "-"}</td>
-                      <td className="px-3 py-1.5 font-medium">{r.name || "-"}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{r.category || "-"}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{r.vendor || "-"}</td>
-                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{r.qty}</td>
-                      <td className="px-3 py-1.5 text-right whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-right font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{dateShort(r.date)}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{dateShort(r.deliveryDate) || "-"}</td>
+                      <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{r.store || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap w-[52px] text-xs">{r.userNick || r.userName || "-"}</td>
+                      <td className="px-2 py-1.5 text-center text-muted-foreground whitespace-nowrap">{r.code || "-"}</td>
+                      <td className="px-3 py-1.5 font-medium min-w-[120px]">{r.name || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.category || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.vendor || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
                       <td className="px-3 py-1.5 text-center">
                         <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${statusBg}`}>{statusLabel}</span>
                       </td>

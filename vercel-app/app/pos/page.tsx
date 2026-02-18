@@ -5,11 +5,13 @@ import Image from "next/image"
 import {
   getPosMenus,
   getPosMenuCategories,
+  getPosMenuOptions,
   getPosOrders,
   getPosTodaySales,
   savePosOrder,
   useStoreList,
   type PosMenu,
+  type PosMenuOption,
   type PosOrder,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
@@ -41,6 +43,9 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  optionId?: string
+  optionName?: string
+  cartKey: string
 }
 
 export default function PosPage() {
@@ -49,7 +54,9 @@ export default function PosPage() {
   const t = useT(lang)
   const { stores } = useStoreList()
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
+  const [optionModalMenu, setOptionModalMenu] = React.useState<PosMenu | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
@@ -92,15 +99,26 @@ export default function PosPage() {
     loadTodaySales()
   }, [loadTodaySales])
 
+  const optionsByMenu = React.useMemo(() => {
+    const m: Record<string, PosMenuOption[]> = {}
+    for (const o of menuOptions) {
+      if (!m[o.menuId]) m[o.menuId] = []
+      m[o.menuId].push(o)
+    }
+    return m
+  }, [menuOptions])
+
   React.useEffect(() => {
-    Promise.all([getPosMenus(), getPosMenuCategories()])
-      .then(([list, { categories: cats }]) => {
+    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions()])
+      .then(([list, { categories: cats }, opts]) => {
         setMenus(list || [])
+        setMenuOptions(opts || [])
         setCategories(cats || [])
         if (cats?.length) setSelectedCategory(cats[0])
       })
       .catch(() => {
         setMenus([])
+        setMenuOptions([])
         setCategories([])
       })
       .finally(() => setLoading(false))
@@ -112,34 +130,61 @@ export default function PosPage() {
     return active.filter((m) => m.category === selectedCategory)
   }, [menus, selectedCategory])
 
-  const addToCart = (menu: PosMenu) => {
+  const addToCart = (menu: PosMenu, option?: PosMenuOption) => {
+    const optionId = option?.id ?? ""
+    const optionName = option?.name ?? ""
+    const priceMod = option?.priceModifier ?? 0
+    const finalPrice = menu.price + priceMod
+    const cartKey = `${menu.id}-${optionId}`
+    const displayName = optionName ? `${menu.name} (${optionName})` : menu.name
+
     setCart((prev) => {
-      const i = prev.findIndex((x) => x.id === menu.id)
+      const i = prev.findIndex((x) => x.cartKey === cartKey)
       if (i >= 0) {
         const n = [...prev]
         n[i] = { ...n[i], qty: n[i].qty + 1 }
         return n
       }
-      return [...prev, { id: menu.id, name: menu.name, price: menu.price, qty: 1 }]
+      return [
+        ...prev,
+        {
+          id: menu.id,
+          name: displayName,
+          price: finalPrice,
+          qty: 1,
+          optionId: optionId || undefined,
+          optionName: optionName || undefined,
+          cartKey,
+        },
+      ]
     })
   }
 
-  const updateQty = (id: string, delta: number) => {
+  const handleMenuClick = (menu: PosMenu) => {
+    const opts = optionsByMenu[menu.id]
+    if (opts?.length) {
+      setOptionModalMenu(menu)
+    } else {
+      addToCart(menu)
+    }
+  }
+
+  const updateQty = (cartKey: string, delta: number) => {
     setCart((prev) => {
-      const i = prev.findIndex((x) => x.id === id)
+      const i = prev.findIndex((x) => x.cartKey === cartKey)
       if (i < 0) return prev
       const n = [...prev]
       const nextQty = n[i].qty + delta
       if (nextQty <= 0) {
-        return prev.filter((x) => x.id !== id)
+        return prev.filter((x) => x.cartKey !== cartKey)
       }
       n[i] = { ...n[i], qty: nextQty }
       return n
     })
   }
 
-  const removeFromCart = (id: string) => {
-    setCart((prev) => prev.filter((x) => x.id !== id))
+  const removeFromCart = (cartKey: string) => {
+    setCart((prev) => prev.filter((x) => x.cartKey !== cartKey))
   }
 
   const clearCart = () => setCart([])
@@ -167,11 +212,12 @@ export default function PosPage() {
         const price = Number(it.price ?? 0)
         const qty = Number(it.qty ?? 1)
         if (!id) continue
-        const i = next.findIndex((x) => x.id === id)
+        const cartKey = `${id}-${name}-${price}`
+        const i = next.findIndex((x) => x.cartKey === cartKey)
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
-          next.push({ id, name, price, qty })
+          next.push({ id, name, price, qty, cartKey })
         }
       }
       return next
@@ -304,7 +350,7 @@ export default function PosPage() {
             {filteredMenus.map((m) => (
               <button
                 key={m.id}
-                onClick={() => addToCart(m)}
+                onClick={() => handleMenuClick(m)}
                 className="flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 text-left transition hover:border-amber-500/50 hover:bg-slate-700/80 active:scale-[0.98]"
               >
                 <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-700">
@@ -445,13 +491,13 @@ export default function PosPage() {
             <div className="space-y-2">
               {cart.map((it) => (
                 <div
-                  key={it.id}
+                  key={it.cartKey}
                   className="flex items-center gap-2 rounded-lg bg-slate-800/60 px-3 py-2"
                 >
                   <div className="flex-1 truncate text-sm text-white">{it.name}</div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => updateQty(it.id, -1)}
+                      onClick={() => updateQty(it.cartKey, -1)}
                       className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
                     >
                       <Minus className="h-3.5 w-3.5" />
@@ -460,7 +506,7 @@ export default function PosPage() {
                       {it.qty}
                     </span>
                     <button
-                      onClick={() => updateQty(it.id, 1)}
+                      onClick={() => updateQty(it.cartKey, 1)}
                       className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -470,7 +516,7 @@ export default function PosPage() {
                     {(it.price * it.qty).toLocaleString()} ฿
                   </span>
                   <button
-                    onClick={() => removeFromCart(it.id)}
+                    onClick={() => removeFromCart(it.cartKey)}
                     className="rounded p-1 text-slate-500 hover:text-red-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -504,6 +550,47 @@ export default function PosPage() {
         </div>
       </div>
       </div>
+
+      <Dialog open={!!optionModalMenu} onOpenChange={(open) => !open && setOptionModalMenu(null)}>
+        <DialogContent className="max-w-xs border-slate-700 bg-slate-900">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              {optionModalMenu?.name} – {t("posSelectOption") || "옵션 선택"}
+            </DialogTitle>
+          </DialogHeader>
+          {optionModalMenu && (
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  addToCart(optionModalMenu)
+                  setOptionModalMenu(null)
+                }}
+                className="flex w-full justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50"
+              >
+                <span className="text-white">{t("posOptionDefault") || "기본"}</span>
+                <span className="tabular-nums text-amber-400">
+                  {optionModalMenu.price.toLocaleString()} ฿
+                </span>
+              </button>
+              {(optionsByMenu[optionModalMenu.id] || []).map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => {
+                    addToCart(optionModalMenu, opt)
+                    setOptionModalMenu(null)
+                  }}
+                  className="flex w-full justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50"
+                >
+                  <span className="text-white">{opt.name}</span>
+                  <span className="tabular-nums text-amber-400">
+                    {(optionModalMenu.price + opt.priceModifier).toLocaleString()} ฿
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!receiptData} onOpenChange={(open) => !open && setReceiptData(null)}>
         <DialogContent className="max-w-xs sm:max-w-sm">
