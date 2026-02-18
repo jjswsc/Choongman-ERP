@@ -123,9 +123,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                 </DropdownMenuTrigger>
               </div>
               <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
-                {categories
-                  .filter((c) => !formData.category || c.toLowerCase().includes(formData.category.toLowerCase()))
-                  .map((c) => (
+                {categories.map((c) => (
                     <DropdownMenuItem
                       key={c}
                       onClick={() => {

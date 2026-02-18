@@ -114,25 +114,24 @@ export function ItemTable({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-muted/30">
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("itemsColImage")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px]">{t("itemsColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24">{t("itemsCategory")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-right">{t("itemsColPrice")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColPrice")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsSearchHint")}
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsNoResults")}
                 </td>
               </tr>
@@ -154,15 +153,15 @@ export function ItemTable({
                     {product.hasImage && product.imageUrl ? (
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-6 px-1.5 text-[10px] font-semibold gap-0.5"
+                        size="icon"
+                        className="h-6 w-6 shrink-0"
                         onClick={() => {
                           setImageLoadError(false)
                           setImagePreview({ url: toImageUrl(product.imageUrl!), name: product.name })
                         }}
+                        title={t("photo")}
                       >
-                        <ImageIcon className="h-2.5 w-2.5" />
-                        {t("photo")}
+                        <ImageIcon className="h-3 w-3" />
                       </Button>
                     ) : (
                       <span className="text-[10px] text-muted-foreground">-</span>
@@ -170,9 +169,6 @@ export function ItemTable({
                   </td>
                   <td className="px-5 py-3 min-w-[120px]">
                     <span className="text-sm font-medium text-foreground">{product.name}</span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="text-[11px] text-muted-foreground">{product.category || "-"}</span>
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>

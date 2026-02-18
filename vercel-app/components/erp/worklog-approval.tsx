@@ -131,12 +131,21 @@ export function WorklogApproval() {
     return s || "-"
   }
 
-  const getReviewStatusDisplay = (item: WorkLogManagerItem) => {
+  const getReviewStatusDisplay = (item: WorkLogManagerItem): React.ReactNode => {
     const check = item.managerCheck || ""
     const comment = (item.managerComment || "").trim()
     const hasComment = !!comment && !comment.startsWith("⚡")
     if (check === "대기") return "Wait"
-    if (check === "승인") return hasComment ? "Commented" : "OK"
+    if (check === "승인") {
+      if (hasComment) {
+        return (
+          <span title={t("workLogCommentBtn")}>
+            <MessageSquarePlus className="inline h-3.5 w-3.5" />
+          </span>
+        )
+      }
+      return "OK"
+    }
     return check
   }
   const PRIORITIES = [
