@@ -120,6 +120,11 @@ export function canAccessPosMenus(role: string): boolean {
   return isManagerRole(role) || isOfficeRole(role)
 }
 
+/** POS 프린터 설정 가능 (관리자) */
+export function canAccessPosPrinters(role: string): boolean {
+  return isManagerRole(role) || isOfficeRole(role)
+}
+
 /** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
 export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   const p = String(pathname || "").trim()
@@ -133,6 +138,8 @@ export function canPosStaffAccessPath(pathname: string, role: string): boolean {
     return canAccessPosTables(role)
   if (p === "/admin/pos-menus" || p.startsWith("/admin/pos-menus"))
     return canAccessPosMenus(role)
+  if (p === "/admin/pos-printers" || p.startsWith("/admin/pos-printers"))
+    return canAccessPosPrinters(role)
   if (p === "/admin" || p === "/admin/") return true
   return false
 }

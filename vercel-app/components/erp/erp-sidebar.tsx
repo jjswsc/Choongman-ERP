@@ -26,6 +26,7 @@ import {
   MessageSquareWarning,
   Settings,
   LogOut,
+  Printer,
   ChevronDown,
   ChevronRight,
 } from "lucide-react"
@@ -43,6 +44,7 @@ import {
   canAccessPosOrders,
   canAccessPosTables,
   canAccessPosMenus,
+  canAccessPosPrinters,
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
@@ -74,6 +76,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosSettlement", icon: Wallet, href: "/admin/pos-settlement" },
       { titleKey: "adminPosTables", icon: LayoutGrid, href: "/admin/pos-tables" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
+      { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
     ],
   },
   {
@@ -123,6 +126,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-settlement": canAccessPosSettlement,
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
+  "/admin/pos-printers": canAccessPosPrinters,
 }
 
 export function ErpSidebar() {

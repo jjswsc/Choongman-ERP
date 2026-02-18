@@ -7,12 +7,14 @@ export interface TransferToPoItem {
   name: string
   price: number
   qty: number
+  store?: string
 }
 
 export interface TransferToPo {
   vendorCode: string
   vendorName: string
   cart: TransferToPoItem[]
+  groupByStore?: boolean
 }
 
 interface OrderCreateContextValue {

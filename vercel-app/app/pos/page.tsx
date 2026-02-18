@@ -9,6 +9,7 @@ import {
   getPosOrders,
   getPosTodaySales,
   getPosTableLayout,
+  getPosPrinterSettings,
   savePosOrder,
   useStoreList,
   type PosMenu,
@@ -44,6 +45,7 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  category?: string
   optionId?: string
   optionName?: string
 }
@@ -171,6 +173,7 @@ export default function PosPage() {
         name,
         price,
         qty: 1,
+        category: menu.category,
         optionId: opt?.id,
         optionName: opt?.name,
       }]
@@ -224,17 +227,19 @@ export default function PosPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; category?: string }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
         const qty = Number(it.qty ?? 1)
+        const cat = String(it.category ?? "")
+        const category = cat || menus.find((m) => id === m.id || id.startsWith(m.id + "-"))?.category || ""
         if (!id) continue
         const i = next.findIndex((x) => x.id === id)
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
-          next.push({ id, name, price, qty })
+          next.push({ id, name, price, qty, category })
         }
       }
       return next
@@ -289,6 +294,88 @@ export default function PosPage() {
       alert(String(e))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handlePrintKitchen = async () => {
+    if (!receiptData?.storeCode || !receiptData.items.length) return
+    try {
+      const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
+      const k1 = new Set(settings.kitchen1Categories ?? [])
+      const k2 = new Set(settings.kitchen2Categories ?? [])
+
+      const toSlip1 =
+        settings.kitchenCount === 1
+          ? receiptData.items
+          : receiptData.items.filter((it) => k1.has(it.category ?? "") || !k2.has(it.category ?? ""))
+      const toSlip2 =
+        settings.kitchenCount === 2
+          ? receiptData.items.filter((it) => k2.has(it.category ?? ""))
+          : []
+
+      const buildSlipHtml = (title: string, items: CartItem[]) => {
+        const rows = items
+          .map(
+            (it) =>
+              `<div style="display:flex;justify-content:space-between;margin:4px 0">` +
+              `<span>${it.name} × ${it.qty}</span>` +
+              `</div>`
+          )
+          .join("")
+        return `
+          <div style="border-bottom:1px dashed #000;padding-bottom:8px;margin-bottom:8px">
+            <div style="font-weight:bold;text-align:center;margin-bottom:4px">${title}</div>
+            <div style="font-size:11px">${receiptData?.orderNo}</div>
+            <div style="font-size:11px">${receiptData?.tableName ? `테이블: ${receiptData.tableName}` : receiptData?.orderType || ""}</div>
+            <div style="font-size:10px;color:#666">${new Date().toLocaleString("ko-KR")}</div>
+            ${receiptData?.memo ? `<div style="font-size:10px;margin-top:4px">★ ${receiptData.memo}</div>` : ""}
+            <div style="margin-top:8px">${rows}</div>
+          </div>
+        `
+      }
+
+      const slips: string[] = []
+      if (toSlip1.length) {
+        slips.push(
+          buildSlipHtml(
+            settings.kitchenCount === 1 ? t("posKitchenOrder") || "주방 주문서" : t("posKitchen1") || "주방 1",
+            toSlip1
+          )
+        )
+      }
+      if (toSlip2.length) {
+        slips.push(buildSlipHtml(t("posKitchen2") || "주방 2", toSlip2))
+      }
+      if (slips.length === 0) {
+        slips.push(buildSlipHtml(t("posKitchenOrder") || "주방 주문서", receiptData.items))
+      }
+
+      const printWindow = window.open("", "_blank")
+      if (!printWindow) {
+        alert(t("posPrintBlocked") || "팝업이 차단되었습니다.")
+        return
+      }
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>${t("posKitchenOrder") || "주방 주문서"}</title>
+            <style>
+              body { font-family: 'Courier New', monospace; font-size: 14px; padding: 16px; max-width: 300px; }
+              .slip { font-size: 16px; font-weight: bold; }
+            </style>
+          </head>
+          <body>${slips.join("")}</body>
+        </html>
+      `)
+      printWindow.document.close()
+      printWindow.focus()
+      setTimeout(() => {
+        printWindow.print()
+        printWindow.close()
+      }, 250)
+    } catch (e) {
+      alert(String(e))
     }
   }
 
@@ -757,6 +844,15 @@ export default function PosPage() {
                 >
                   <Printer className="h-4 w-4" />
                   {t("posPrint") || "인쇄"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handlePrintKitchen}
+                >
+                  <Printer className="h-4 w-4" />
+                  {t("posPrintKitchen") || "주방 인쇄"}
                 </Button>
                 <Button size="sm" onClick={() => setReceiptData(null)}>
                   {t("close") || "닫기"}

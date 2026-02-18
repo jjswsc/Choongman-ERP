@@ -27,6 +27,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Printer, FileSpreadsheet, Search, ArrowRightCircle, ChevronDown } from "lucide-react"
 import { useOrderCreate } from "@/lib/order-create-context"
 
@@ -75,6 +82,8 @@ export function AdminOrderHistory() {
   const [vendorFilter, setVendorFilter] = React.useState("All")
   const [itemNameFilter, setItemNameFilter] = React.useState("")
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+  const [hasSearched, setHasSearched] = React.useState(false)
+  const [transferGroupDialog, setTransferGroupDialog] = React.useState<string | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -95,16 +104,14 @@ export function AdminOrderHistory() {
       setList(rows || [])
       setStoresFromOrders(s || [])
       setVendors((venRes || []).map((v) => ({ code: v.code, name: v.name })))
+      setHasSearched(true)
     } catch {
       setList([])
+      setHasSearched(true)
     } finally {
       setLoading(false)
     }
   }, [startDate, endDate, storeFilter, statusFilter, userStore, auth?.role, isHQ])
-
-  React.useEffect(() => {
-    load()
-  }, [load])
 
   React.useEffect(() => {
     setSelectedIds(new Set())
@@ -256,16 +263,9 @@ export function AdminOrderHistory() {
     return Array.from(byCode.values())
   }, [selectedByVendor, vendorCountInSelection])
 
-  const doTransferForVendor = (vendorStr: string) => {
-    const items = selectedByVendor.get(vendorStr)
-    if (!items || items.length === 0) return
-    const byCode = new Map<string, { code: string; name: string; price: number; qty: number }>()
-    for (const x of items) {
-      const existing = byCode.get(x.code)
-      if (existing) existing.qty += x.qty
-      else byCode.set(x.code, { ...x })
-    }
-    const cart = Array.from(byCode.values())
+  const doTransferForVendor = (vendorStr: string, groupByStore: boolean) => {
+    const vendorRows = selectedRows.filter((r) => String(r.vendor || "").trim() === vendorStr)
+    if (vendorRows.length === 0) return
     const matched = vendors.find(
       (v) =>
         v.code.toLowerCase() === vendorStr.toLowerCase() ||
@@ -273,19 +273,43 @@ export function AdminOrderHistory() {
     )
     const vendorCode = matched?.code ?? vendorStr
     const vendorName = matched?.name ?? vendorStr
+    let cart: { code: string; name: string; price: number; qty: number; store?: string }[]
+    if (groupByStore) {
+      cart = vendorRows.map((r) => ({
+        code: r.code,
+        name: r.name,
+        price: r.price || 0,
+        qty: r.qty,
+        store: r.store || "",
+      }))
+    } else {
+      const byCode = new Map<string, { code: string; name: string; price: number; qty: number }>()
+      for (const r of vendorRows) {
+        const existing = byCode.get(r.code)
+        if (existing) existing.qty += r.qty
+        else byCode.set(r.code, { code: r.code, name: r.name, price: r.price || 0, qty: r.qty })
+      }
+      cart = Array.from(byCode.values())
+    }
     setTransferToPo({
       vendorCode,
       vendorName,
-      cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty })),
+      cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty, store: x.store })),
+      groupByStore,
     })
+    setTransferGroupDialog(null)
     setActiveTab("hq")
   }
 
   const handleTransferToPo = () => {
     if (canTransferToPo && transferVendorItems.length > 0) {
       const [[vendorStr]] = Array.from(selectedByVendor.entries()) as [string, unknown][]
-      doTransferForVendor(vendorStr)
+      setTransferGroupDialog(vendorStr)
     }
+  }
+
+  const handleTransferVendorClick = (vendorStr: string) => {
+    setTransferGroupDialog(vendorStr)
   }
 
   const handlePrint = () => {
@@ -426,7 +450,7 @@ ${rowsToPrint.map((r) => {
           onChange={(e) => setItemNameFilter(e.target.value)}
           className={filterClass + " w-[100px] min-w-[100px] max-w-[100px]"}
         />
-        <Button size="sm" onClick={load} disabled={loading} className="h-9 shrink-0">
+        <Button size="sm" onClick={() => load()} disabled={loading} className="h-9 shrink-0">
           <Search className="mr-1 h-4 w-4" />
           {t("orderBtnSearch")}
         </Button>
@@ -452,7 +476,7 @@ ${rowsToPrint.map((r) => {
                   return (
                     <DropdownMenuItem
                       key={vendorName}
-                      onClick={() => doTransferForVendor(vendorName)}
+                      onClick={() => handleTransferVendorClick(vendorName)}
                     >
                       {vendorName} ({items.length}품목, {count}개)
                     </DropdownMenuItem>
@@ -522,6 +546,8 @@ ${rowsToPrint.map((r) => {
             <tbody>
               {loading ? (
                 <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
+              ) : !hasSearched ? (
+                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("orderSearchHint") || "조회 버튼을 눌러 주세요."}</td></tr>
               ) : list.length === 0 ? (
                 <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
               ) : itemRows.length === 0 ? (
@@ -563,6 +589,30 @@ ${rowsToPrint.map((r) => {
           </table>
         </div>
       </div>
+
+      <Dialog open={!!transferGroupDialog} onOpenChange={(open) => !open && setTransferGroupDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("orderTransferDisplayMode") || "품목 표시 방식"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t("orderTransferDisplayModeHint") || "주문 품목을 매장별로 나눠서 보여줄까요, 합쳐서 보여줄까요?"}
+          </p>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => transferGroupDialog && doTransferForVendor(transferGroupDialog, true)}
+            >
+              {t("orderTransferByStore") || "매장별로"}
+            </Button>
+            <Button
+              onClick={() => transferGroupDialog && doTransferForVendor(transferGroupDialog, false)}
+            >
+              {t("orderTransferMerged") || "합쳐서"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

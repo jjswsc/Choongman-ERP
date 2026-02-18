@@ -1330,6 +1330,34 @@ export async function savePosTableLayout(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface PosPrinterSettings {
+  storeCode: string
+  kitchenCount: number
+  kitchen1Categories: string[]
+  kitchen2Categories: string[]
+}
+
+export async function getPosPrinterSettings(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', params.storeCode)
+  const res = await apiFetch('/api/getPosPrinterSettings?' + q.toString())
+  return res.json() as Promise<PosPrinterSettings & { kitchen1Categories: string[]; kitchen2Categories: string[] }>
+}
+
+export async function savePosPrinterSettings(params: {
+  storeCode: string
+  kitchenCount: number
+  kitchen1Categories: string[]
+  kitchen2Categories: string[]
+}) {
+  const res = await apiFetch('/api/savePosPrinterSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface PosOrderItem {
   id: string
   name: string

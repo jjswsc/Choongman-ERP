@@ -39,6 +39,7 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  store?: string
 }
 
 export function AdminPurchaseOrder() {
@@ -47,6 +48,7 @@ export function AdminPurchaseOrder() {
   const t = useT(lang)
   const { transferToPo, setTransferToPo } = useOrderCreate() || {}
   const pendingTransferCart = React.useRef<CartItem[] | null>(null)
+  const [cartGroupByStore, setCartGroupByStore] = React.useState(false)
 
   const [locations, setLocations] = React.useState<PurchaseLocation[]>([])
   const [locationSelect, setLocationSelect] = React.useState<PurchaseLocation | null>(null)
@@ -96,6 +98,7 @@ export function AdminPurchaseOrder() {
       )
       if (matched && transferToPo.cart.length > 0) {
         pendingTransferCart.current = transferToPo.cart as CartItem[]
+        setCartGroupByStore(!!transferToPo.groupByStore)
         setVendorSelect(matched)
         setTransferToPo?.(null)
       }
@@ -152,8 +155,12 @@ export function AdminPurchaseOrder() {
     setQuantity(1)
   }
 
-  const removeFromCart = (code: string) => {
-    setCart((prev) => prev.filter((x) => x.code !== code))
+  const removeFromCart = (codeOrIdx: string | number) => {
+    if (typeof codeOrIdx === "number") {
+      setCart((prev) => prev.filter((_, i) => i !== codeOrIdx))
+    } else {
+      setCart((prev) => prev.filter((x) => x.code !== codeOrIdx))
+    }
   }
 
   const handleSave = async () => {
@@ -484,6 +491,9 @@ ${allRows.map((row, ri) => {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
+                      {cartGroupByStore && (
+                        <th className="px-3 py-2 text-left font-medium">{t("orderColStore")}</th>
+                      )}
                       <th className="px-3 py-2 text-left font-medium">{t("item")}</th>
                       <th className="px-3 py-2 text-right font-medium">{t("price")}</th>
                       <th className="px-3 py-2 text-right font-medium">{t("qty")}</th>
@@ -492,8 +502,11 @@ ${allRows.map((row, ri) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {cart.map((c) => (
-                      <tr key={c.code} className="border-b border-border/60 last:border-0">
+                    {cart.map((c, idx) => (
+                      <tr key={cartGroupByStore ? `${c.code}-${c.store || ""}-${idx}` : c.code} className="border-b border-border/60 last:border-0">
+                        {cartGroupByStore && (
+                          <td className="px-3 py-2 font-medium">{c.store || "-"}</td>
+                        )}
                         <td className="px-3 py-2 font-medium">{c.name}</td>
                         <td className="px-3 py-2 text-right">{c.price}</td>
                         <td className="px-3 py-2 text-right">{c.qty}</td>
@@ -505,7 +518,7 @@ ${allRows.map((row, ri) => {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                            onClick={() => removeFromCart(c.code)}
+                            onClick={() => removeFromCart(cartGroupByStore ? idx : c.code)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
