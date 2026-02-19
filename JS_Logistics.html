@@ -288,6 +288,8 @@ function editItem(idx) {
     // ★ 추가된 부분
     document.getElementById("itm-image").value = item.image || "";   // G열
     document.getElementById("itm-vendor").value = item.vendor || ""; // H열
+    var outEl = document.getElementById("itm-outbound");
+    if (outEl) outEl.value = item.outbound_location || "";
     
     document.getElementById("itm-tax").value = String(item.tax).includes("면") ? "면세" : "과세";
 }
@@ -307,6 +309,7 @@ function saveItem() {
         // ★ 추가된 부분
         image: document.getElementById("itm-image").value,   // G열
         vendor: document.getElementById("itm-vendor").value, // H열
+        outbound_location: (document.getElementById("itm-outbound") || {}).value || "",
         
         tax: taxVal 
     };
@@ -335,6 +338,8 @@ function createNewItem() {
     // ★ 추가된 부분
     document.getElementById("itm-image").value = ""; 
     document.getElementById("itm-vendor").value = ""; 
+    var outEl = document.getElementById("itm-outbound");
+    if (outEl) outEl.value = "";
     
     document.getElementById("itm-tax").value = "과세";
 }
@@ -392,6 +397,9 @@ function saveItem() {
         spec: document.getElementById("itm-spec").value,
         price: document.getElementById("itm-price").value,
         cost: document.getElementById("itm-cost").value,
+        image: (document.getElementById("itm-image") || {}).value || "",
+        vendor: (document.getElementById("itm-vendor") || {}).value || "",
+        outbound_location: (document.getElementById("itm-outbound") || {}).value || "",
         tax: taxVal
     };
     
@@ -418,6 +426,10 @@ function editItem(idx) {
     document.getElementById("itm-spec").value = item.spec;
     document.getElementById("itm-price").value = item.price;
     document.getElementById("itm-cost").value = item.cost;
+    var outEl = document.getElementById("itm-outbound");
+    if (outEl && item.outbound_location) outEl.value = item.outbound_location;
+    if (document.getElementById("itm-image")) document.getElementById("itm-image").value = item.image || "";
+    if (document.getElementById("itm-vendor")) document.getElementById("itm-vendor").value = item.vendor || "";
     
     // ★ 핵심: 가져온 값이 '면세'면 면세 선택, 아니면 무조건 '과세' 선택
     // (시트에 빈칸이어도 '과세'로 간주하여 선택되게 함)

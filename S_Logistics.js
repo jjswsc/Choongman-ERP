@@ -23,7 +23,8 @@ function getAdminItemsList() {
         cost: r.cost,
         image: r.image || '',
         vendor: r.vendor || '',
-        tax: (r.tax === '면세') ? '면세' : '과세'
+        tax: (r.tax === '면세') ? '면세' : '과세',
+        outbound_location: r.outbound_location || ''
       });
     }
     return list;
@@ -45,7 +46,8 @@ function saveAdminItem(data) {
       spec: String(data.spec || '').trim(),
       price: Number(data.price) || 0,
       cost: Number(data.cost) || 0,
-      tax: taxVal
+      tax: taxVal,
+      outbound_location: String(data.outbound_location || '').trim()
     };
     if (rowId === 0) {
       payload.image = String(data.image || '').trim();

@@ -15,6 +15,7 @@ import { useT } from "@/lib/i18n"
 import { isManagerRole } from "@/lib/permissions"
 import {
   getAdminOrders,
+  getOrderFilterOptions,
   getVendorsForPurchase,
   type AdminOrderItem,
   useStoreList,
@@ -73,6 +74,8 @@ export function AdminOrderHistory() {
   const [list, setList] = React.useState<AdminOrderItem[]>([])
   const [storesFromOrders, setStoresFromOrders] = React.useState<string[]>([])
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
+  const [filterCategories, setFilterCategories] = React.useState<string[]>([])
+  const [filterVendors, setFilterVendors] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
@@ -114,6 +117,15 @@ export function AdminOrderHistory() {
   }, [startDate, endDate, storeFilter, statusFilter, userStore, auth?.role, isHQ])
 
   React.useEffect(() => {
+    getOrderFilterOptions()
+      .then(({ categories, vendors: v }) => {
+        setFilterCategories(categories || [])
+        setFilterVendors(v || [])
+      })
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
     setSelectedIds(new Set())
   }, [startDate, endDate, storeFilter, statusFilter, categoryFilter, vendorFilter, itemNameFilter])
 
@@ -140,7 +152,7 @@ export function AdminOrderHistory() {
     return [...new Set([...fromApi, ...fromOrders])].filter(Boolean).sort()
   }, [storeListFromApi, storesFromOrders])
 
-  const categories = React.useMemo(() => {
+  const categoriesFromList = React.useMemo(() => {
     const set = new Set<string>()
     for (const o of list) {
       for (const it of o.items || []) {
@@ -151,7 +163,7 @@ export function AdminOrderHistory() {
     return Array.from(set).sort()
   }, [list])
 
-  const vendorList = React.useMemo(() => {
+  const vendorListFromList = React.useMemo(() => {
     const set = new Set<string>()
     for (const o of list) {
       for (const it of o.items || []) {
@@ -161,6 +173,16 @@ export function AdminOrderHistory() {
     }
     return Array.from(set).sort()
   }, [list])
+
+  const categories = React.useMemo(
+    () => Array.from(new Set([...filterCategories, ...categoriesFromList])).sort(),
+    [filterCategories, categoriesFromList]
+  )
+
+  const vendorList = React.useMemo(
+    () => Array.from(new Set([...filterVendors, ...vendorListFromList])).sort(),
+    [filterVendors, vendorListFromList]
+  )
 
   const filteredOrders = React.useMemo(() => {
     let out = list

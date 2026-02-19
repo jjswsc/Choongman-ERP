@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const vendorCode = String(searchParams.get('vendorCode') || searchParams.get('vendor') || '').trim()
   const vendorName = String(searchParams.get('vendorName') || '').trim()
+  const outboundLocation = String(searchParams.get('outboundLocation') || '').trim()
 
   if (!vendorCode && !vendorName) {
     return NextResponse.json([], { headers })
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
       cost?: number
       category?: string
       image?: string
+      outbound_location?: string
     }[] | null = []
 
     if (vendorCode) {
@@ -41,7 +43,14 @@ export async function GET(request: NextRequest) {
       )) as typeof rows
     }
 
-    const list = (rows || []).map((row) => ({
+    let filtered = rows || []
+    if (outboundLocation) {
+      filtered = filtered.filter(
+        (r) => !r.outbound_location || r.outbound_location === outboundLocation
+      )
+    }
+
+    const list = filtered.map((row) => ({
       code: String(row.code || ''),
       name: String(row.name || ''),
       spec: String(row.spec || ''),
@@ -49,6 +58,7 @@ export async function GET(request: NextRequest) {
       cost: Number(row.cost) || 0,
       category: String(row.category || ''),
       image: String(row.image || ''),
+      outbound_location: String(row.outbound_location || ''),
     }))
 
     return NextResponse.json(list, { headers })

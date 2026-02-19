@@ -88,21 +88,30 @@ export function AdminPurchaseOrder() {
   }, [])
 
   React.useEffect(() => {
-    if (transferToPo && vendors.length > 0) {
-      const matched = vendors.find(
-        (v) =>
-          v.code === transferToPo.vendorCode ||
-          v.name === transferToPo.vendorName ||
-          v.code.toLowerCase() === transferToPo.vendorCode.toLowerCase() ||
-          v.name.toLowerCase() === transferToPo.vendorName.toLowerCase()
-      )
-      if (matched && transferToPo.cart.length > 0) {
-        pendingTransferCart.current = transferToPo.cart as CartItem[]
-        setCartGroupByStore(!!transferToPo.groupByStore)
-        setVendorSelect(matched)
-        setTransferToPo?.(null)
-      }
+    if (!transferToPo || transferToPo.cart.length === 0) return
+    const matched = vendors.find(
+      (v) =>
+        v.code === transferToPo!.vendorCode ||
+        v.name === transferToPo!.vendorName ||
+        v.code.toLowerCase() === transferToPo!.vendorCode.toLowerCase() ||
+        v.name.toLowerCase() === transferToPo!.vendorName.toLowerCase()
+    )
+    const vendorToUse = matched ?? {
+      code: transferToPo.vendorCode,
+      name: transferToPo.vendorName,
+      address: "",
     }
+    pendingTransferCart.current = transferToPo.cart as CartItem[]
+    setCartGroupByStore(!!transferToPo.groupByStore)
+    setVendorSelect(vendorToUse)
+    if (!matched) {
+      setVendors((prev) =>
+        prev.some((v) => v.code === vendorToUse.code || v.name === vendorToUse.name)
+          ? prev
+          : [...prev, vendorToUse]
+      )
+    }
+    setTransferToPo?.(null)
   }, [transferToPo, vendors, setTransferToPo])
 
   React.useEffect(() => {
@@ -113,7 +122,13 @@ export function AdminPurchaseOrder() {
     }
     setLoading(true)
     Promise.all([
-      getItemsByVendor(vendorSelect.code, vendorSelect.name),
+      getItemsByVendor(
+        vendorSelect.code,
+        vendorSelect.name,
+        locationSelect?.location_code && locationSelect.location_code !== "본사"
+          ? locationSelect.location_code
+          : undefined
+      ),
       locationSelect
         ? getHqStockByLocation(locationSelect.location_code)
         : Promise.resolve({}),
@@ -249,7 +264,7 @@ export function AdminPurchaseOrder() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">{t("ordNew")}</CardTitle>
           <p className="text-xs text-muted-foreground">
-            {t("purchaseOrderSelectVendor")} • {t("orderStockHq")} 표시
+            {t("purchaseOrderSelectLocationFirst")} • {t("purchaseOrderSelectVendor")} • {t("orderStockHq")} 표시
           </p>
         </CardHeader>
         <CardContent className="p-0">

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 
-/** 본사 발주용 배송지 목록: 본사(vendors type=본사) + 창고(warehouse_locations) */
+/** 본사 발주용 출고지 목록: 본사(vendors type=본사) + 창고(warehouse_locations) */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

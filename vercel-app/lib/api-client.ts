@@ -303,6 +303,15 @@ export async function getAdminOrders(params: {
   }
 }
 
+export async function getOrderFilterOptions() {
+  const res = await apiFetch('/api/getOrderFilterOptions')
+  const data = await res.json()
+  return {
+    categories: (data.categories || []) as string[],
+    vendors: (data.vendors || []) as string[],
+  }
+}
+
 export interface AdminDashboardStats {
   unapprovedOrders: number
   thisMonthInbound: number
@@ -2315,6 +2324,7 @@ export interface ItemByVendor {
   cost: number
   category: string
   image: string
+  outbound_location?: string
 }
 
 export async function getPurchaseLocations() {
@@ -2327,9 +2337,14 @@ export async function getVendorsForPurchase() {
   return res.json() as Promise<VendorForPurchase[]>
 }
 
-export async function getItemsByVendor(vendorCode: string, vendorName?: string) {
+export async function getItemsByVendor(
+  vendorCode: string,
+  vendorName?: string,
+  outboundLocation?: string
+) {
   const q = new URLSearchParams({ vendorCode })
   if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
+  if (outboundLocation?.trim()) q.set('outboundLocation', outboundLocation.trim())
   const res = await apiFetch(`/api/getItemsByVendor?${q}`)
   return res.json() as Promise<ItemByVendor[]>
 }
