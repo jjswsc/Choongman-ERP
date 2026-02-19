@@ -56,19 +56,27 @@ async function getItems(storeName: string): Promise<AppItem[]> {
   return list
 }
 
+const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
+
 async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
   try {
     const storeNorm = String(store || '').toLowerCase().trim()
     if (!storeNorm) return {}
-    let filter = `location=ilike.${encodeURIComponent(storeNorm)}`
-    if (asOfDate && asOfDate.trim()) {
-      const endOfDay = asOfDate.trim() + 'T23:59:59.999Z'
-      filter += `&log_date=lte.${encodeURIComponent(endOfDay)}`
-    }
+
+    const isOffice = OFFICE_LOCATIONS.some((x) => storeNorm === x || storeNorm.includes(x))
+    const locFilter = isOffice
+      ? `or=(${OFFICE_LOCATIONS.map((l) => `location.ilike.${l}`).join(',')})`
+      : `location=ilike.${encodeURIComponent(storeNorm)}`
+    const dateSuffix = asOfDate?.trim()
+      ? `&log_date=lte.${encodeURIComponent(asOfDate.trim() + 'T23:59:59.999Z')}`
+      : ''
+    const filter = `${locFilter}${dateSuffix}`
+
     const rows = (await supabaseSelectFilter(
       'stock_logs',
       filter
     )) as { item_code?: string; qty?: number }[] | null
+
     const m: Record<string, number> = {}
     for (let i = 0; i < (rows || []).length; i++) {
       const code = rows![i].item_code

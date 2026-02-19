@@ -9,18 +9,18 @@ export async function GET(request: NextRequest) {
   const menuId = searchParams.get('menuId')?.trim()
 
   try {
-    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; sort_order?: number }[] | null
+    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; sort_order?: number }[] | null
     if (menuId) {
       rows = (await supabaseSelectFilter(
         'pos_menu_options',
         `menu_id=eq.${encodeURIComponent(menuId)}`,
-        { order: 'sort_order.asc,name.asc', limit: 200 }
+        { order: 'sort_order.asc,name.asc', limit: 200, select: 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order' }
       )) as typeof rows
     } else {
       rows = (await supabaseSelect('pos_menu_options', {
         order: 'menu_id.asc,sort_order.asc,name.asc',
         limit: 1000,
-        select: 'id,menu_id,name,price_modifier,sort_order',
+        select: 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order',
       })) as typeof rows
     }
 
@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       menuId: String(row.menu_id ?? ''),
       name: String(row.name ?? ''),
       priceModifier: Number(row.price_modifier) ?? 0,
+      priceModifierDelivery: row.price_modifier_delivery != null ? Number(row.price_modifier_delivery) : null,
       sortOrder: Number(row.sort_order) ?? 0,
     }))
 

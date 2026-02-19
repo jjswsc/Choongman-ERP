@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
-/** POS 메뉴 목록 조회 */
+/** POS 프로모션 목록 조회 */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('pos_menus', {
+    const rows = (await supabaseSelect('pos_promos', {
       order: 'sort_order.asc,name.asc',
-      limit: 1000,
-      select: 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date',
+      limit: 500,
+      select: 'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order',
     })) as {
       id?: number
       code?: string
@@ -18,11 +18,9 @@ export async function GET() {
       category?: string
       price?: number
       price_delivery?: number | null
-      image?: string
       vat_included?: boolean
       is_active?: boolean
       sort_order?: number
-      sold_out_date?: string | null
     }[] | null
 
     const list = (rows || []).map((row) => ({
@@ -32,16 +30,14 @@ export async function GET() {
       category: String(row.category ?? ''),
       price: Number(row.price) ?? 0,
       priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
-      imageUrl: String(row.image ?? ''),
       vatIncluded: !!row.vat_included,
       isActive: row.is_active !== false,
       sortOrder: Number(row.sort_order) ?? 0,
-      soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
     }))
 
     return NextResponse.json(list, { headers })
   } catch (e) {
-    console.error('getPosMenus:', e)
+    console.error('getPosPromos:', e)
     return NextResponse.json([], { headers })
   }
 }

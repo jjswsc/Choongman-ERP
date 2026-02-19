@@ -13,6 +13,7 @@ const menuItems = [
   { href: "/admin/work-log", label: "업무일지" },
   { header: "POS" },
   { href: "/admin/pos-menus", label: "메뉴 관리" },
+  { href: "/admin/pos-promos", label: "프로모션 관리" },
   { header: "물류 관리" },
   { href: "/admin/items", label: "품목 관리" },
   { href: "/admin/vendors", label: "거래처 관리" },

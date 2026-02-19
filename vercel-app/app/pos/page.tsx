@@ -6,6 +6,7 @@ import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuOptions,
+  getPosPromosWithItems,
   getPosOrders,
   getPosTodaySales,
   getPosTableLayout,
@@ -15,13 +16,14 @@ import {
   type PosMenu,
   type PosMenuOption,
   type PosOrder,
+  type PosPromoWithItems,
 } from "@/lib/api-client"
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { Minus, Plus, Printer, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
+import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -49,6 +51,8 @@ interface CartItem {
   qty: number
   optionId?: string
   optionName?: string
+  promoId?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
 export default function PosPage() {
@@ -57,6 +61,7 @@ export default function PosPage() {
   const t = useT(lang)
   const { stores } = useStoreList()
   const [menus, setMenus] = React.useState<PosMenu[]>([])
+  const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -146,21 +151,30 @@ export default function PosPage() {
     loadStoreFees()
   }, [loadStoreFees])
 
-  React.useEffect(() => {
-    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions()])
-      .then(([list, { categories: cats }, opts]) => {
+  const loadMenusAndPromos = React.useCallback(() => {
+    setLoading(true)
+    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions(), getPosPromosWithItems()])
+      .then(([list, { categories: cats }, opts, promoList]) => {
         setMenus(list || [])
-        setCategories(cats || [])
+        setPromos(promoList || [])
         setAllOptions(opts || [])
-        if (cats?.length) setSelectedCategory(cats[0])
+        const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
+        const merged = [...new Set([...(cats || []), ...promoCategories])].sort()
+        setCategories(merged)
+        setSelectedCategory((prev) => (merged.includes(prev) ? prev : merged[0] || ""))
       })
       .catch(() => {
         setMenus([])
+        setPromos([])
         setCategories([])
         setAllOptions([])
       })
       .finally(() => setLoading(false))
   }, [])
+
+  React.useEffect(() => {
+    loadMenusAndPromos()
+  }, [loadMenusAndPromos])
 
   const optionsByMenuId = React.useMemo(() => {
     const m: Record<string, PosMenuOption[]> = {}
@@ -180,10 +194,24 @@ export default function PosPage() {
     return notSoldOut.filter((m) => m.category === selectedCategory)
   }, [menus, selectedCategory, todayStr])
 
+  const filteredPromos = React.useMemo(() => {
+    const active = promos.filter((p) => p.isActive)
+    if (!selectedCategory) return active
+    return active.filter((p) => p.category === selectedCategory)
+  }, [promos, selectedCategory])
+
+  const getPromoPrice = (p: PosPromoWithItems) =>
+    orderType === "delivery" && p.priceDelivery != null ? p.priceDelivery : p.price
+
+  const getMenuPrice = (menu: PosMenu) =>
+    orderType === "delivery" && menu.priceDelivery != null ? menu.priceDelivery : menu.price
+  const getOptionModifier = (opt: PosMenuOption) =>
+    orderType === "delivery" && opt.priceModifierDelivery != null ? opt.priceModifierDelivery : (opt.priceModifier ?? 0)
+
   const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null) => {
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
     const name = opt ? `${menu.name} (${opt.name})` : menu.name
-    const price = menu.price + (opt?.priceModifier ?? 0)
+    const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
     setCart((prev) => {
       const i = prev.findIndex((x) => x.id === cartId)
       if (i >= 0) {
@@ -210,6 +238,27 @@ export default function PosPage() {
       return
     }
     addToCartWithOption(menu, null)
+  }
+
+  const addPromoToCart = (promo: PosPromoWithItems) => {
+    const cartId = `promo-${promo.id}`
+    const price = getPromoPrice(promo)
+    setCart((prev) => {
+      const i = prev.findIndex((x) => x.id === cartId)
+      if (i >= 0) {
+        const n = [...prev]
+        n[i] = { ...n[i], qty: n[i].qty + 1 }
+        return n
+      }
+      return [...prev, {
+        id: cartId,
+        name: promo.name,
+        price,
+        qty: 1,
+        promoId: promo.id,
+        promoItems: promo.items || [],
+      }]
+    })
   }
 
   const updateQty = (id: string, delta: number) => {
@@ -249,17 +298,18 @@ export default function PosPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
         const qty = Number(it.qty ?? 1)
         if (!id) continue
         const i = next.findIndex((x) => x.id === id)
+        const item = { id, name, price, qty, ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
-          next.push({ id, name, price, qty })
+          next.push(item)
         }
       }
       return next
@@ -344,7 +394,13 @@ export default function PosPage() {
         paymentCard: payment.card || undefined,
         paymentQr: payment.qr || undefined,
         paymentOther: payment.other || undefined,
-        items: cart.map((it) => ({ id: it.id, name: it.name, price: it.price, qty: it.qty })),
+        items: cart.map((it) => ({
+          id: it.id,
+          name: it.name,
+          price: it.price,
+          qty: it.qty,
+          ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }),
+        })),
       })
       if (res.success) {
         setShowPaymentModal(false)
@@ -527,7 +583,18 @@ export default function PosPage() {
       <div className="flex flex-1 overflow-hidden">
       {/* 메뉴 영역 */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 bg-slate-900/50 px-3 py-2">
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900/50 px-3 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 shrink-0 text-slate-400 hover:text-white"
+            onClick={loadMenusAndPromos}
+            disabled={loading}
+            title="메뉴·프로모션 새로고침"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          </Button>
+          <div className="flex flex-1 gap-2 overflow-x-auto">
           {categories.map((c) => (
             <button
               key={c}
@@ -542,9 +609,25 @@ export default function PosPage() {
               {c}
             </button>
           ))}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {filteredPromos.map((p) => (
+              <button
+                key={`promo-${p.id}`}
+                onClick={() => addPromoToCart(p)}
+                className="flex flex-col overflow-hidden rounded-xl border border-amber-600/50 bg-amber-900/30 p-2 text-left transition hover:border-amber-500 hover:bg-amber-800/40 active:scale-[0.98]"
+              >
+                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-700/80 flex items-center justify-center">
+                  <span className="text-3xl">🏷️</span>
+                </div>
+                <div className="mt-2 truncate text-sm font-medium text-white">{p.name}</div>
+                <div className="text-xs font-bold text-amber-400">
+                  {(getPromoPrice(p)) > 0 ? `${(getPromoPrice(p)).toLocaleString()} ฿` : "-"}
+                </div>
+              </button>
+            ))}
             {filteredMenus.map((m) => (
               <button
                 key={m.id}
@@ -572,12 +655,12 @@ export default function PosPage() {
                 </div>
                 <div className="mt-2 truncate text-sm font-medium text-white">{m.name}</div>
                 <div className="text-xs font-bold text-amber-400">
-                  {m.price > 0 ? `${m.price.toLocaleString()} ฿` : "-"}
+                  {(getMenuPrice(m)) > 0 ? `${(getMenuPrice(m)).toLocaleString()} ฿` : "-"}
                 </div>
               </button>
             ))}
           </div>
-          {filteredMenus.length === 0 && (
+          {filteredMenus.length === 0 && filteredPromos.length === 0 && (
             <div className="py-12 text-center text-slate-400">
               {t("posNoMenus") || "등록된 메뉴가 없습니다."}
             </div>
@@ -1005,7 +1088,7 @@ export default function PosPage() {
                 >
                   <span>{opt.name}</span>
                   <span className="font-bold text-amber-400">
-                    {(optionPickerMenu.price + (opt.priceModifier || 0)).toLocaleString()} ฿
+                    {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
                   </span>
                 </button>
               ))}

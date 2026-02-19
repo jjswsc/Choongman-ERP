@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     const menuId = Number(body?.menuId)
     const name = String(body?.name ?? '').trim()
     const priceModifier = Number(body?.priceModifier) ?? 0
+    const priceModifierDelivery = body?.priceModifierDelivery != null ? Number(body.priceModifierDelivery) : null
     const sortOrder = Number(body?.sortOrder) ?? 0
 
     if (!menuId || !name) {
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
       await supabaseUpdateByFilter('pos_menu_options', `id=eq.${id}`, {
         name,
         price_modifier: priceModifier,
+        price_modifier_delivery: priceModifierDelivery,
         sort_order: sortOrder,
       })
     } else {
@@ -29,6 +31,7 @@ export async function POST(req: NextRequest) {
         menu_id: menuId,
         name,
         price_modifier: priceModifier,
+        price_modifier_delivery: priceModifierDelivery,
         sort_order: sortOrder,
       })
     }

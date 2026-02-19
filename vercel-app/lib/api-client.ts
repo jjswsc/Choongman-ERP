@@ -1163,6 +1163,7 @@ export interface PosMenu {
   name: string
   category: string
   price: number
+  priceDelivery?: number | null
   imageUrl: string
   vatIncluded: boolean
   isActive: boolean
@@ -1175,6 +1176,7 @@ export interface PosMenuOption {
   menuId: string
   name: string
   priceModifier: number
+  priceModifierDelivery?: number | null
   sortOrder: number
 }
 
@@ -1200,6 +1202,7 @@ export async function savePosMenuOption(params: {
   menuId: number
   name: string
   priceModifier?: number
+  priceModifierDelivery?: number | null
   sortOrder?: number
 }) {
   const res = await apiFetch('/api/savePosMenuOption', {
@@ -1262,6 +1265,7 @@ export async function savePosMenu(params: {
   name: string
   category?: string
   price?: number
+  priceDelivery?: number | null
   imageUrl?: string
   vatIncluded?: boolean
   isActive?: boolean
@@ -1286,6 +1290,102 @@ export async function deletePosMenu(params: { id: string }) {
 
 export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolean }) {
   const res = await apiFetch('/api/updatePosMenuSoldOut', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+// ─── POS 프로모션(세트) ───
+export interface PosPromo {
+  id: string
+  code: string
+  name: string
+  category: string
+  price: number
+  priceDelivery?: number | null
+  vatIncluded: boolean
+  isActive: boolean
+  sortOrder: number
+}
+
+export interface PosPromoItem {
+  id: string
+  promoId: string
+  menuId: string
+  optionId: string | null
+  quantity: number
+  sortOrder: number
+}
+
+export async function getPosPromos() {
+  const res = await apiFetch('/api/getPosPromos')
+  return res.json() as Promise<PosPromo[]>
+}
+
+export interface PosPromoWithItems extends PosPromo {
+  items: { menuId: string; optionId: string | null; quantity: number }[]
+}
+
+export async function getPosPromosWithItems() {
+  const res = await apiFetch('/api/getPosPromosWithItems')
+  return res.json() as Promise<PosPromoWithItems[]>
+}
+
+export async function getPosPromoItems(params: { promoId: string }) {
+  const q = new URLSearchParams()
+  q.set('promoId', params.promoId)
+  const res = await apiFetch('/api/getPosPromoItems?' + q.toString())
+  return res.json() as Promise<PosPromoItem[]>
+}
+
+export async function savePosPromo(params: {
+  id?: string
+  code: string
+  name: string
+  category?: string
+  price?: number
+  priceDelivery?: number | null
+  vatIncluded?: boolean
+  isActive?: boolean
+  sortOrder?: number
+}) {
+  const res = await apiFetch('/api/savePosPromo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function savePosPromoItem(params: {
+  id?: string
+  promoId: number
+  menuId: number
+  optionId?: number | null
+  quantity?: number
+  sortOrder?: number
+}) {
+  const res = await apiFetch('/api/savePosPromoItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosPromoItem(params: { id: string }) {
+  const res = await apiFetch('/api/deletePosPromoItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosPromo(params: { id: string }) {
+  const res = await apiFetch('/api/deletePosPromo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

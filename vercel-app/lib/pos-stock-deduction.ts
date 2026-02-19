@@ -21,7 +21,7 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
   } catch {
   }
 
-  let items: { id?: string; qty?: number }[] = []
+  let items: { id?: string; qty?: number; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[] = []
   try {
     items = JSON.parse(order.items_json || '[]')
   } catch {
@@ -37,21 +37,46 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
   const now = new Date().toISOString().slice(0, 19)
 
   for (const it of items) {
-    const menuId = String(it.id ?? '').split('-')[0]
-    const menuQty = Math.max(0, Number(it.qty ?? 1))
-    if (!menuId || menuQty <= 0) continue
+    const cartQty = Math.max(0, Number(it.qty ?? 1))
+    if (cartQty <= 0) continue
 
-    const bomRows = (await supabaseSelectFilter(
-      'pos_menu_ingredients',
-      `menu_id=eq.${encodeURIComponent(menuId)}`,
-      { limit: 200 }
-    )) as { item_code?: string; quantity?: number }[] | null
+    if (it.promoId && Array.isArray(it.promoItems) && it.promoItems.length > 0) {
+      for (const pi of it.promoItems) {
+        const menuId = String(pi.menuId ?? '').trim()
+        if (!menuId) continue
+        const menuQty = cartQty * (Number(pi.quantity) ?? 1)
+        if (menuQty <= 0) continue
 
-    for (const b of bomRows || []) {
-      const code = String(b.item_code ?? '').trim()
-      if (!code) continue
-      const need = menuQty * (Number(b.quantity) ?? 1)
-      usageByItem[code] = (usageByItem[code] ?? 0) + need
+        const bomRows = (await supabaseSelectFilter(
+          'pos_menu_ingredients',
+          `menu_id=eq.${encodeURIComponent(menuId)}`,
+          { limit: 200 }
+        )) as { item_code?: string; quantity?: number }[] | null
+
+        for (const b of bomRows || []) {
+          const code = String(b.item_code ?? '').trim()
+          if (!code) continue
+          const need = menuQty * (Number(b.quantity) ?? 1)
+          usageByItem[code] = (usageByItem[code] ?? 0) + need
+        }
+      }
+    } else {
+      const menuId = String(it.id ?? '').split('-')[0]
+      const menuQty = cartQty
+      if (!menuId) continue
+
+      const bomRows = (await supabaseSelectFilter(
+        'pos_menu_ingredients',
+        `menu_id=eq.${encodeURIComponent(menuId)}`,
+        { limit: 200 }
+      )) as { item_code?: string; quantity?: number }[] | null
+
+      for (const b of bomRows || []) {
+        const code = String(b.item_code ?? '').trim()
+        if (!code) continue
+        const need = menuQty * (Number(b.quantity) ?? 1)
+        usageByItem[code] = (usageByItem[code] ?? 0) + need
+      }
     }
   }
 

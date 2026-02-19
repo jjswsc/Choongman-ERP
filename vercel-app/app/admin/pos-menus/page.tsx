@@ -38,6 +38,7 @@ const emptyForm = {
   name: "",
   category: "",
   price: "",
+  priceDelivery: "",
   imageUrl: "",
   vatIncluded: true,
   isActive: true,
@@ -60,6 +61,7 @@ export default function PosMenusPage() {
   const [items, setItems] = React.useState<{ code: string; name: string }[]>([])
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
+  const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
   const [newIngredientQty, setNewIngredientQty] = React.useState("1")
 
@@ -116,6 +118,7 @@ export default function PosMenusPage() {
           name: m.name,
           category: m.category,
           price: String(m.price),
+          priceDelivery: m.priceDelivery != null ? String(m.priceDelivery) : "",
           imageUrl: m.imageUrl,
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
@@ -143,6 +146,7 @@ export default function PosMenusPage() {
       name,
       category: formData.category.trim(),
       price: Number(formData.price) || 0,
+      priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
@@ -157,6 +161,7 @@ export default function PosMenusPage() {
       name,
       category: formData.category.trim(),
       price: Number(formData.price) || 0,
+      priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
@@ -183,6 +188,7 @@ export default function PosMenusPage() {
       name: menu.name,
       category: menu.category,
       price: String(menu.price),
+      priceDelivery: menu.priceDelivery != null ? String(menu.priceDelivery) : "",
       imageUrl: menu.imageUrl,
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
@@ -190,6 +196,7 @@ export default function PosMenusPage() {
     setEditingId(menu.id)
     setNewOptionName("")
     setNewOptionModifier("0")
+    setNewOptionModifierDelivery("")
   }
 
   const handleAddOption = async () => {
@@ -198,12 +205,14 @@ export default function PosMenusPage() {
       menuId: Number(editingId),
       name: newOptionName.trim(),
       priceModifier: Number(newOptionModifier) || 0,
+      priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
       sortOrder: menuOptions.length,
     })
     if (res.success) {
       getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
       setNewOptionName("")
       setNewOptionModifier("0")
+      setNewOptionModifierDelivery("")
     } else {
       alert(res.message)
     }
@@ -377,13 +386,23 @@ export default function PosMenusPage() {
                 </Select>
               </div>
               <div>
-                <label className="text-xs font-semibold">{t("posMenuPrice")}</label>
+                <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
                 <Input
                   type="number"
                   placeholder="0"
                   className="mt-1 h-10 text-right"
                   value={formData.price}
                   onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
+                <Input
+                  type="number"
+                  placeholder="비워두면 홀과 동일"
+                  className="mt-1 h-10 text-right"
+                  value={formData.priceDelivery}
+                  onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))}
                 />
               </div>
               <div className="flex items-center gap-4">
@@ -410,7 +429,12 @@ export default function PosMenusPage() {
                   <ul className="mb-2 space-y-1">
                     {menuOptions.map((o) => (
                       <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                        <span>{o.name} {o.priceModifier ? `(+${o.priceModifier} ฿)` : ""}</span>
+                        <span>
+                          {o.name}
+                          {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
+                            ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)`
+                            : ""}
+                        </span>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -422,23 +446,36 @@ export default function PosMenusPage() {
                       </li>
                     ))}
                   </ul>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder={t("posOptionNamePh") || "옵션명"}
-                      className="h-8 text-xs flex-1"
-                      value={newOptionName}
-                      onChange={(e) => setNewOptionName(e.target.value)}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="+0"
-                      className="h-8 w-20 text-right text-xs"
-                      value={newOptionModifier}
-                      onChange={(e) => setNewOptionModifier(e.target.value)}
-                    />
-                    <Button size="sm" className="h-8 px-2" onClick={handleAddOption}>
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder={t("posOptionNamePh") || "옵션명"}
+                        className="h-8 text-xs flex-1"
+                        value={newOptionName}
+                        onChange={(e) => setNewOptionName(e.target.value)}
+                      />
+                      <Button size="sm" className="h-8 px-2 shrink-0" onClick={handleAddOption}>
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="flex gap-2 text-xs">
+                      <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
+                      <Input
+                        type="number"
+                        placeholder="+0"
+                        className="h-8 w-20 text-right text-xs"
+                        value={newOptionModifier}
+                        onChange={(e) => setNewOptionModifier(e.target.value)}
+                      />
+                      <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
+                      <Input
+                        type="number"
+                        placeholder="홀과 동일"
+                        className="h-8 w-20 text-right text-xs"
+                        value={newOptionModifierDelivery}
+                        onChange={(e) => setNewOptionModifierDelivery(e.target.value)}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -542,7 +579,7 @@ export default function PosMenusPage() {
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("itemsColCode")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[140px]">{t("posMenuName")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuPrice")}</th>
+                    <th className="px-5 py-3 text-[11px] font-bold text-center w-36">{t("posMenuPriceHall")} / {t("posMenuPriceDelivery")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posMenuActive")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posSoldOut")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("itemsColAction")}</th>
@@ -579,8 +616,9 @@ export default function PosMenusPage() {
                         </td>
                         <td className="px-5 py-3">{m.name}</td>
                         <td className="px-5 py-3 text-center text-muted-foreground">{m.category || "-"}</td>
-                        <td className="px-5 py-3 text-right font-bold tabular-nums">
+                        <td className="px-5 py-3 text-right font-bold tabular-nums text-xs">
                           {m.price > 0 ? `${m.price.toLocaleString()} ฿` : "-"}
+                          {m.priceDelivery != null ? ` / ${m.priceDelivery.toLocaleString()} ฿` : ""}
                         </td>
                         <td className="px-5 py-3 text-center">
                           {m.isActive ? (

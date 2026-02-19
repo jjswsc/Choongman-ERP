@@ -12,20 +12,38 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import {
-  getStockStores,
+  useStoreList,
   getAppData,
   adjustStock,
   saveSafetyStock,
   type StockStatusItem,
 } from "@/lib/api-client"
+import { OFFICE_STORES } from "@/lib/permissions"
 
 const OFFICE_ROLES = ["director", "officer", "ceo", "hr"]
+
+/** 본사/오피스/본점 → Office 로 통일 (중복 제거) */
+function normalizeStoreList(stores: string[]): string[] {
+  const result: string[] = []
+  let hasOffice = false
+  for (const s of stores) {
+    const isOfficeVariant = OFFICE_STORES.some((o) => s === o || s.toLowerCase() === o.toLowerCase())
+    if (isOfficeVariant) {
+      hasOffice = true
+    } else {
+      result.push(s)
+    }
+  }
+  if (hasOffice) result.push("Office")
+  return [...new Set(result)].sort()
+}
 
 export default function StockPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
-  const [stores, setStores] = React.useState<string[]>([])
+  const { stores: rawStores } = useStoreList()
+  const stores = React.useMemo(() => normalizeStoreList(rawStores || []), [rawStores])
   const [list, setList] = React.useState<StockStatusItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [storeFilter, setStoreFilter] = React.useState("")
@@ -38,15 +56,6 @@ export default function StockPage() {
     const role = (auth?.role || "").toLowerCase()
     return OFFICE_ROLES.some((r) => role.includes(r))
   }, [auth?.role])
-
-  const fetchStores = React.useCallback(async () => {
-    try {
-      const s = await getStockStores()
-      setStores(s || [])
-    } catch {
-      setStores([])
-    }
-  }, [])
 
   const fetchStock = React.useCallback(async () => {
     const store = storeFilter.trim()
@@ -80,10 +89,6 @@ export default function StockPage() {
   React.useEffect(() => {
     setStockDateFilter(new Date().toISOString().slice(0, 10))
   }, [])
-
-  React.useEffect(() => {
-    fetchStores()
-  }, [fetchStores])
 
   React.useEffect(() => {
     const isManager = isManagerRole(auth?.role || "")

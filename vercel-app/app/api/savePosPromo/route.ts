@@ -5,23 +5,22 @@ import {
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 
-/** POS 메뉴 저장 (등록/수정) */
+/** POS 프로모션 저장 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
     const body = (await req.json()) as {
+      id?: string
       code?: string
       name?: string
       category?: string
       price?: number
       priceDelivery?: number | null
-      imageUrl?: string
       vatIncluded?: boolean
       isActive?: boolean
       sortOrder?: number
-      id?: string
     }
 
     const code = String(body.code ?? '').trim()
@@ -30,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     if (!code || !name) {
       return NextResponse.json(
-        { success: false, message: '코드와 메뉴명이 필요합니다.' },
+        { success: false, message: '코드와 프로모션명이 필요합니다.' },
         { headers }
       )
     }
@@ -38,10 +37,9 @@ export async function POST(req: NextRequest) {
     const row = {
       code,
       name,
-      category: String(body.category ?? '').trim(),
+      category: String(body.category ?? '프로모션').trim(),
       price: Number(body.price) ?? 0,
       price_delivery: body.priceDelivery != null ? Number(body.priceDelivery) : null,
-      image: String(body.imageUrl ?? '').trim(),
       vat_included: body.vatIncluded !== false,
       is_active: body.isActive !== false,
       sort_order: Number(body.sortOrder) ?? 0,
@@ -49,32 +47,35 @@ export async function POST(req: NextRequest) {
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
-        'pos_menus',
+        'pos_promos',
         `id=eq.${editingId}`,
         { limit: 1 }
       )) as { id?: number }[] | null
       if (existing && existing.length > 0) {
-        await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
-        return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+        await supabaseUpdateByFilter('pos_promos', `id=eq.${editingId}`, row)
+        return NextResponse.json({ success: true, message: '수정되었습니다.', id: editingId }, { headers })
       }
     }
 
     const codeExists = (await supabaseSelectFilter(
-      'pos_menus',
+      'pos_promos',
       `code=eq.${encodeURIComponent(code)}`,
       { limit: 1 }
     )) as { id?: number }[] | null
     if (codeExists && codeExists.length > 0 && !editingId) {
       return NextResponse.json(
-        { success: false, message: '이미 존재하는 메뉴 코드입니다.' },
+        { success: false, message: '이미 존재하는 프로모션 코드입니다.' },
         { headers }
       )
     }
 
-    await supabaseInsert('pos_menus', row)
-    return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
+    const inserted = await supabaseInsert('pos_promos', row) as { id?: number }[]
+    const created = Array.isArray(inserted) ? inserted[0] : inserted
+    const newId = created?.id
+
+    return NextResponse.json({ success: true, message: '저장되었습니다.', id: newId ? String(newId) : null }, { headers })
   } catch (e) {
-    console.error('savePosMenu:', e)
+    console.error('savePosPromo:', e)
     return NextResponse.json(
       { success: false, message: e instanceof Error ? e.message : '저장 실패' },
       { headers }
