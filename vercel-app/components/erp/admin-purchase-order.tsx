@@ -32,7 +32,7 @@ import {
   type ItemByVendor,
 } from "@/lib/api-client"
 import { useOrderCreate } from "@/lib/order-create-context"
-import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
+import { Minus, Plus, Search, ShoppingCart, Trash2, Package } from "lucide-react"
 
 interface CartItem {
   code: string
@@ -63,6 +63,7 @@ export function AdminPurchaseOrder() {
   const [selectedItem, setSelectedItem] = React.useState<ItemByVendor | null>(null)
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [submitting, setSubmitting] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
 
   const categories = React.useMemo(() => {
     const cats = new Map<string, ItemByVendor[]>()
@@ -110,6 +111,7 @@ export function AdminPurchaseOrder() {
       const locMatch = locations.find((l) => l.location_code === transferToPo!.outboundLocation)
       if (locMatch) setLocationSelect(locMatch)
     }
+    setHasSearched(true)
     if (!matched) {
       setVendors((prev) =>
         prev.some((v) => v.code === vendorToUse.code || v.name === vendorToUse.name)
@@ -121,14 +123,18 @@ export function AdminPurchaseOrder() {
   }, [transferToPo, vendors, locations, setTransferToPo])
 
   React.useEffect(() => {
-    if (!vendorSelect) {
+    if (!vendorSelect || !locationSelect) {
       setItems([])
       setStock({})
-      setCart([])
-      appliedTransferRef.current = false
-      prevVendorRef.current = null
+      if (!vendorSelect) {
+        setCart([])
+        appliedTransferRef.current = false
+        prevVendorRef.current = null
+      }
       return
     }
+    if (!hasSearched && !pendingTransferCart.current) return
+
     const vendorChanged = prevVendorRef.current?.code !== vendorSelect.code
     prevVendorRef.current = vendorSelect
     if (vendorChanged && !pendingTransferCart.current) {
@@ -139,13 +145,9 @@ export function AdminPurchaseOrder() {
       getItemsByVendor(
         vendorSelect.code,
         vendorSelect.name,
-        locationSelect?.location_code && locationSelect.location_code !== "본사"
-          ? locationSelect.location_code
-          : undefined
+        locationSelect.location_code !== "본사" ? locationSelect.location_code : undefined
       ),
-      locationSelect
-        ? getHqStockByLocation(locationSelect.location_code)
-        : Promise.resolve({}),
+      getHqStockByLocation(locationSelect.location_code),
     ])
       .then(([itms, st]) => {
         setItems(itms || [])
@@ -166,7 +168,7 @@ export function AdminPurchaseOrder() {
         setStock({})
       })
       .finally(() => setLoading(false))
-  }, [vendorSelect, locationSelect?.location_code])
+  }, [vendorSelect, locationSelect?.location_code, hasSearched])
 
   const addToCart = () => {
     if (!selectedItem) return
@@ -238,6 +240,7 @@ export function AdminPurchaseOrder() {
               onValueChange={(v) => {
                 const loc = locations.find((l) => l.location_code === v)
                 setLocationSelect(loc || null)
+                setHasSearched(false)
               }}
             >
               <SelectTrigger className="w-full">
@@ -264,6 +267,7 @@ export function AdminPurchaseOrder() {
               onValueChange={(v) => {
                 const ven = vendors.find((x) => x.code === v)
                 setVendorSelect(ven || null)
+                setHasSearched(false)
               }}
             >
               <SelectTrigger className="w-full">
@@ -281,6 +285,21 @@ export function AdminPurchaseOrder() {
         </Card>
       </div>
 
+      {locationSelect && vendorSelect && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => setHasSearched(true)}
+            disabled={loading}
+            className="h-9 gap-1.5"
+          >
+            <Search className="h-4 w-4" />
+            {t("orderBtnSearch")}
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">{t("ordNew")}</CardTitle>
@@ -289,9 +308,13 @@ export function AdminPurchaseOrder() {
           </p>
         </CardHeader>
         <CardContent className="p-0">
-          {!vendorSelect ? (
+          {!vendorSelect || !locationSelect ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              {t("purchaseOrderSelectVendor")}
+              {!vendorSelect ? t("purchaseOrderSelectVendor") : t("purchaseOrderSelectLocation")}
+            </div>
+          ) : !hasSearched ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
             </div>
           ) : loading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</div>

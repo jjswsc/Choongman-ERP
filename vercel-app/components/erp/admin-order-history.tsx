@@ -17,6 +17,7 @@ import {
   getAdminOrders,
   getOrderFilterOptions,
   getVendorsForPurchase,
+  getWarehouseLocations,
   type AdminOrderItem,
   useStoreList,
 } from "@/lib/api-client"
@@ -77,6 +78,9 @@ export function AdminOrderHistory() {
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
   const [filterCategories, setFilterCategories] = React.useState<string[]>([])
   const [filterVendors, setFilterVendors] = React.useState<string[]>([])
+  const [outboundLocationsFromWarehouse, setOutboundLocationsFromWarehouse] = React.useState<
+    { location_code: string; name: string }[]
+  >([])
   const [loading, setLoading] = React.useState(false)
   const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
@@ -124,6 +128,21 @@ export function AdminOrderHistory() {
       .then(({ categories, vendors: v }) => {
         setFilterCategories(categories || [])
         setFilterVendors(v || [])
+      })
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
+    getWarehouseLocations()
+      .then((locs) => {
+        setOutboundLocationsFromWarehouse(
+          (locs || [])
+            .map((l) => ({
+              location_code: String(l.location_code || l.name || "").trim(),
+              name: String(l.name || l.location_code || "").trim(),
+            }))
+            .filter((l) => l.location_code)
+        )
       })
       .catch(() => {})
   }, [])
@@ -187,6 +206,19 @@ export function AdminOrderHistory() {
     }
     return Array.from(set).sort()
   }, [list])
+
+  const outboundList = React.useMemo(() => {
+    const byCode = new Map<string, string>()
+    for (const w of outboundLocationsFromWarehouse) {
+      if (w.location_code) byCode.set(w.location_code, w.name || w.location_code)
+    }
+    for (const loc of outboundListFromList) {
+      if (loc && !byCode.has(loc)) byCode.set(loc, loc)
+    }
+    return Array.from(byCode.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, label]) => ({ value, label }))
+  }, [outboundLocationsFromWarehouse, outboundListFromList])
 
   const categories = React.useMemo(
     () => Array.from(new Set([...filterCategories, ...categoriesFromList])).sort(),
@@ -511,8 +543,8 @@ ${rowsToPrint.map((r) => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="All">{t("orderFilterOutboundAll") || "전체 출고지"}</SelectItem>
-            {outboundListFromList.map((loc) => (
-              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+            {outboundList.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
