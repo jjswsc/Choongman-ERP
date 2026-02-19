@@ -41,8 +41,8 @@ export function AppHeader() {
         {canAdmin && (
           <Link
             href="/admin"
-            className="hidden rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground sm:flex"
-            title="관리자"
+            className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title={t("adminDashboard") || "관리자"}
           >
             <LayoutDashboard className="h-4 w-4" />
           </Link>
