@@ -1584,6 +1584,9 @@
             <li class="nav-item">
                 <a id="force-nav-order" class="nav-link" onclick="showForceTab('order')" style="cursor:pointer;" data-i18n="tab_order_status">📋 발주현황조회</a>
             </li>
+            <li class="nav-item">
+                <a id="force-nav-warehouse" class="nav-link" onclick="showForceTab('warehouse')" style="cursor:pointer;" data-i18n="tab_force_by_warehouse">📦 창고별 출고 목록</a>
+            </li>
          </ul>
 
          <div id="force-tab-new">
@@ -1724,6 +1727,29 @@
                     </div>
                     <p id="order-summary-empty" class="text-center text-muted py-5 mb-0" style="display:none;" data-i18n="order_no_data">조회 조건에 맞는 데이터가 없습니다.</p>
                 </div>
+            </div>
+         </div>
+
+         <div id="force-tab-warehouse" style="display:none;" class="warehouse-outbound-print-area">
+            <div class="card-box">
+                <p class="text-muted small no-print mb-3" data-i18n="tab_force_by_warehouse_hint">승인된 매장 발주와 강제 출고를 출고지(창고)별로 분류합니다. 각 창고 담당자가 집품할 품목을 확인할 수 있습니다.</p>
+                <div class="search-toolbar mb-3 no-print">
+                    <div class="input-group input-group-sm flex-wrap align-items-center gap-2">
+                        <span class="input-group-text" data-i18n="wh_filter_by">조회 기준</span>
+                        <select id="wh-filter-by" class="form-select" style="max-width:120px;">
+                            <option value="delivery" data-i18n="wh_filter_delivery">배송 일자</option>
+                            <option value="order" data-i18n="wh_filter_order">주문 일자</option>
+                        </select>
+                        <span class="input-group-text" data-i18n="label_period">기간</span>
+                        <input type="date" id="wh-start" class="form-control" style="max-width:130px;">
+                        <input type="date" id="wh-end" class="form-control" style="max-width:130px;">
+                        <button class="btn btn-primary btn-sm" onclick="loadOutboundByWarehouse()" data-i18n="btn_query">조회</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="printWarehouseOutbound()" data-i18n="order_btn_print">🖨️ 인쇄</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="downloadWarehouseOutboundExcel()" data-i18n="excel_btn">📥 엑셀 다운로드</button>
+                    </div>
+                </div>
+                <div id="warehouse-outbound-accordion" class="accordion"></div>
+                <p id="warehouse-outbound-empty" class="text-center text-muted py-5 mb-0" style="display:none;" data-i18n="order_no_data">조회 조건에 맞는 데이터가 없습니다.</p>
             </div>
          </div>
     </div>

@@ -69,6 +69,7 @@ export function WorklogWeekly() {
     overallAvg: number
   } | null>(null)
   const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
 
   const dateRange = React.useMemo(() => {
     const d = new Date(today)
@@ -105,9 +106,10 @@ export function WorklogWeekly() {
     }
   }, [dateRange.start, dateRange.end, deptFilter, employeeFilter])
 
-  React.useEffect(() => {
+  const handleSearch = () => {
+    setHasSearched(true)
     loadData()
-  }, [loadData])
+  }
 
   const weeklyData = data?.summaries || []
   const totalTasks = data?.totalTasks ?? 0
@@ -122,7 +124,7 @@ export function WorklogWeekly() {
         <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogPeriodType")}</label>
-            <Select value={periodType} onValueChange={(v) => { setPeriodType(v as "week" | "month"); setPeriodOffset(0) }}>
+            <Select value={periodType} onValueChange={(v) => { setPeriodType(v as "week" | "month"); setPeriodOffset(0); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-28 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -142,7 +144,7 @@ export function WorklogWeekly() {
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => setPeriodOffset((o) => o - 1)}
+                onClick={() => { setPeriodOffset((o) => o - 1); setHasSearched(false) }}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -153,7 +155,7 @@ export function WorklogWeekly() {
                 variant="outline"
                 size="icon"
                 className="h-9 w-9"
-                onClick={() => setPeriodOffset((o) => o + 1)}
+                onClick={() => { setPeriodOffset((o) => o + 1); setHasSearched(false) }}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -161,7 +163,7 @@ export function WorklogWeekly() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogDept")}</label>
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <Select value={deptFilter} onValueChange={(v) => { setDeptFilter(v); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-36 text-xs">
                 <SelectValue />
               </SelectTrigger>
@@ -177,7 +179,7 @@ export function WorklogWeekly() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogEmployee")}</label>
-            <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-36 text-xs">
                 <SelectValue placeholder={t("all")} />
               </SelectTrigger>
@@ -191,7 +193,7 @@ export function WorklogWeekly() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
+          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("workLogSearch")}
           </Button>
@@ -248,6 +250,10 @@ export function WorklogWeekly() {
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : !hasSearched ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
             </div>
           ) : weeklyData.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">

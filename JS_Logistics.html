@@ -1245,6 +1245,8 @@ function showForceTab(t) {
     document.getElementById("force-tab-hist").style.display = "none";
     var orderTab = document.getElementById("force-tab-order");
     if (orderTab) orderTab.style.display = "none";
+    var whTab = document.getElementById("force-tab-warehouse");
+    if (whTab) whTab.style.display = "none";
     var tabEl = document.getElementById("force-tab-" + t);
     if (tabEl) tabEl.style.display = "block";
     
@@ -1253,6 +1255,8 @@ function showForceTab(t) {
     document.getElementById("force-nav-hist").classList.remove("active");
     var navOrder = document.getElementById("force-nav-order");
     if (navOrder) navOrder.classList.remove("active");
+    var navWh = document.getElementById("force-nav-warehouse");
+    if (navWh) navWh.classList.remove("active");
     var navEl = document.getElementById("force-nav-" + t);
     if (navEl) navEl.classList.add("active");
 
@@ -1270,7 +1274,18 @@ function showForceTab(t) {
       if (document.getElementById("order-vendor") && document.getElementById("order-vendor").options.length <= 1)
         loadOrderVendorOptions();
     }
-}
+    if(t === 'warehouse') {
+      var whs = document.getElementById("wh-start");
+      var whe = document.getElementById("wh-end");
+      if (whs && !whs.value) {
+        var now = new Date();
+        var first = new Date(now.getFullYear(), now.getMonth(), 1);
+        whs.value = first.toISOString().substring(0, 10);
+      }
+      if (whe && !whe.value) whe.value = new Date().toISOString().substring(0, 10);
+      loadOutboundByWarehouse();
+    }
+  }
 /* [수정됨] 출고 내역 화면 (표 형태 정렬 + 더블 마이너스 해결 + 기간 총액 + 월별 검색) */
 function loadForceHistory() {
     var monthEl = document.getElementById("fh-month");
@@ -1866,6 +1881,135 @@ function downloadOrderSummaryExcel() {
   var start = (res.period && res.period.start) ? res.period.start : new Date().toISOString().slice(0, 10);
   var end = (res.period && res.period.end) ? res.period.end : start;
   a.download = "order_summary_" + start + "_" + end + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+/* [창고별 출고 목록] 출고지(창고)별 집품 목록 조회 및 렌더 */
+function loadOutboundByWarehouse() {
+  var startEl = document.getElementById("wh-start");
+  var endEl = document.getElementById("wh-end");
+  var filterByEl = document.getElementById("wh-filter-by");
+  var startStr = startEl && startEl.value ? startEl.value : "";
+  var endStr = endEl && endEl.value ? endEl.value : "";
+  var filterBy = filterByEl ? filterByEl.value : "delivery";
+  if (!startStr || !endStr) {
+    alert(typeof invT === "function" ? invT("mgr_prompt_date") : "시작일과 종료일을 선택해 주세요.");
+    return;
+  }
+  if (typeof load === "function") load(1);
+  google.script.run.withSuccessHandler(function(res) {
+    if (typeof load === "function") load(0);
+    window.warehouseOutboundCache = res;
+    var accEl = document.getElementById("warehouse-outbound-accordion");
+    var emptyEl = document.getElementById("warehouse-outbound-empty");
+    if (!accEl) return;
+    accEl.innerHTML = "";
+    var order = res.warehouseOrder || [];
+    var byWh = res.byWarehouse || {};
+    if (order.length === 0 && Object.keys(byWh).length === 0) {
+      if (emptyEl) { emptyEl.style.display = "block"; emptyEl.textContent = (typeof invT === "function" ? invT("order_no_data") : "조회 조건에 맞는 데이터가 없습니다."); }
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
+    var lblStore = (typeof invT === "function" ? invT("force_col_store") : "출고처");
+    var lblCode = (typeof invT === "function" ? invT("item_col_code") : "코드");
+    var lblName = (typeof invT === "function" ? invT("force_col_item") : "품목명");
+    var lblSpec = (typeof invT === "function" ? invT("item_spec") : "규격");
+    var lblQty = (typeof invT === "function" ? invT("force_col_qty") : "수량");
+    var lblDelivery = (typeof invT === "function" ? invT("ord_delivery_date") : "배송 일자");
+    for (var wi = 0; wi < order.length; wi++) {
+      var whName = order[wi];
+      var rows = byWh[whName] || [];
+      if (rows.length === 0) continue;
+      var accId = "wh-acc-" + wi;
+      var bodyId = "wh-body-" + wi;
+      var collapseId = "wh-collapse-" + wi;
+      var h = "<div class=\"accordion-item\">";
+      h += "<h2 class=\"accordion-header\"><button class=\"accordion-button collapsed\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#" + collapseId + "\" aria-expanded=\"false\" aria-controls=\"" + collapseId + "\">";
+      h += "<span class=\"fw-bold\">" + (whName || "(미지정)") + "</span> <span class=\"badge bg-primary ms-2\">" + rows.length + "건</span></button></h2>";
+      h += "<div id=\"" + collapseId + "\" class=\"accordion-collapse collapse\" data-bs-parent=\"#warehouse-outbound-accordion\"><div class=\"accordion-body p-0\">";
+      h += "<table class=\"table table-bordered table-sm mb-0\"><thead class=\"table-light\"><tr>";
+      h += "<th>" + lblStore + "</th><th>" + lblCode + "</th><th>" + lblName + "</th><th>" + lblSpec + "</th><th class=\"text-end\">" + lblQty + "</th><th>" + lblDelivery + "</th></tr></thead><tbody>";
+      rows.forEach(function(r) {
+        h += "<tr><td>" + (r.store || "") + "</td><td>" + (r.code || "") + "</td><td>" + (r.name || "") + "</td><td>" + (r.spec || "-") + "</td><td class=\"text-end\">" + (Number(r.qty) || 0) + "</td><td>" + (r.deliveryDate || "") + "</td></tr>";
+      });
+      h += "</tbody></table></div></div></div>";
+      accEl.innerHTML += h;
+    }
+    var accordion = accEl.closest(".card-box");
+    if (accordion && typeof bootstrap !== "undefined" && bootstrap.Collapse) {
+      var firstBtn = accEl.querySelector(".accordion-button");
+      if (firstBtn && firstBtn.getAttribute("data-bs-target")) {
+        var firstCollapse = document.querySelector(firstBtn.getAttribute("data-bs-target"));
+        if (firstCollapse) new bootstrap.Collapse(firstCollapse, { toggle: true });
+      }
+    }
+  }).getOutboundByWarehouse(startStr, endStr, filterBy);
+}
+
+function printWarehouseOutbound() {
+  var res = window.warehouseOutboundCache;
+  if (!res) {
+    alert((typeof invT === "function" ? invT("order_no_data") : "조회 결과가 없습니다. 먼저 조회해 주세요."));
+    return;
+  }
+  var area = document.getElementById("warehouse-outbound-accordion");
+  if (!area || !area.innerHTML.trim()) return;
+  var clone = area.cloneNode(true);
+  var wrap = document.createElement("div");
+  wrap.className = "p-3 bg-white";
+  var title = document.createElement("div");
+  title.className = "mb-2 fw-bold";
+  var filterLabel = (res.filterBy === "delivery") ? (typeof invT === "function" ? invT("wh_filter_delivery") : "배송 일자") : (typeof invT === "function" ? invT("wh_filter_order") : "주문 일자");
+  title.textContent = (typeof invT === "function" ? invT("tab_force_by_warehouse") : "창고별 출고 목록") + " [" + filterLabel + "] (" + (res.period && res.period.start ? res.period.start : "") + " ~ " + (res.period && res.period.end ? res.period.end : "") + ")";
+  wrap.appendChild(title);
+  wrap.appendChild(clone);
+  clone.querySelectorAll(".collapse").forEach(function(el) { el.classList.add("show"); });
+  clone.querySelectorAll(".accordion-button").forEach(function(el) { el.classList.remove("collapsed"); el.setAttribute("aria-expanded", "true"); });
+  document.body.appendChild(wrap);
+  window.print();
+  setTimeout(function() { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 100);
+}
+
+function downloadWarehouseOutboundExcel() {
+  var res = window.warehouseOutboundCache;
+  if (!res) {
+    alert((typeof invT === "function" ? invT("order_no_data") : "조회 결과가 없습니다. 먼저 조회해 주세요."));
+    return;
+  }
+  function escapeCsv(s) {
+    var t = String(s == null ? "" : s);
+    if (t.indexOf(",") !== -1 || t.indexOf('"') !== -1 || t.indexOf("\n") !== -1 || t.indexOf("\r") !== -1)
+      return '"' + t.replace(/"/g, '""') + '"';
+    return t;
+  }
+  var rows = [];
+  var order = res.warehouseOrder || [];
+  var byWh = res.byWarehouse || {};
+  var filterLabel = (res.filterBy === "delivery") ? "배송일자" : "주문일자";
+  rows.push(["창고별 출고 목록"]);
+  rows.push(["조회 기준: " + filterLabel + ", 기간: " + (res.period && res.period.start ? res.period.start : "") + " ~ " + (res.period && res.period.end ? res.period.end : "")]);
+  rows.push([]);
+  rows.push(["출고지", "매장", "코드", "품목명", "규격", "수량", "배송 일자"]);
+  order.forEach(function(whName) {
+    (byWh[whName] || []).forEach(function(r) {
+      rows.push([whName || "", r.store || "", r.code || "", r.name || "", r.spec || "-", Number(r.qty) || 0, r.deliveryDate || ""]);
+    });
+  });
+  if (rows.length <= 4) {
+    alert((typeof invT === "function" ? invT("order_no_data") : "다운로드할 데이터가 없습니다."));
+    return;
+  }
+  var csv = "\uFEFF" + rows.map(function(r) { return r.map(escapeCsv).join(","); }).join("\r\n");
+  var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  var start = (res.period && res.period.start) ? res.period.start : new Date().toISOString().slice(0, 10);
+  var end = (res.period && res.period.end) ? res.period.end : start;
+  a.download = "warehouse_outbound_" + start + "_" + end + ".csv";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

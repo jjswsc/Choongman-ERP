@@ -201,10 +201,6 @@ export function OrderApproval() {
     if (isManager && userStore) setStoreFilter(userStore)
   }, [isManager, userStore])
 
-  React.useEffect(() => {
-    fetchOrders()
-  }, [fetchOrders])
-
   const toggleAll = () => {
     if (allChecked) {
       setCheckedOrders(new Set())
@@ -450,6 +446,10 @@ export function OrderApproval() {
         {loading ? (
           <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
             {t("loading")}
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="py-16 text-center text-sm text-muted-foreground">
+            {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
           </div>
         ) : (
           <div className="flex flex-col">

@@ -1214,6 +1214,95 @@ function getOrderSummaryForPurchase(startStr, endStr, viewBy, vendorFilter, item
   }
 }
 
+/**
+ * [창고별 출고 목록] 승인된 주문 + 강제 출고를 출고지(창고)별로 그룹핑하여 반환
+ * @param {string} filterBy - 'order' | 'delivery' (주문 일자 / 배송 일자 기준)
+ * @returns { byWarehouse, warehouseOrder, period, filterBy }
+ */
+function getOutboundByWarehouse(startStr, endStr, filterBy) {
+  try {
+    var filterByOrder = (filterBy !== "delivery");
+    var itemRows = supabaseSelect('items', { select: 'code,name,spec,outbound_location' });
+    var itemMap = {};
+    for (var k = 0; k < itemRows.length; k++) {
+      var it = itemRows[k];
+      if (it.code) itemMap[it.code] = { name: it.name || "", spec: it.spec || "-", outbound_location: String(it.outbound_location || "").trim() };
+    }
+    var byWarehouse = {};
+    function addRow(warehouse, store, code, name, spec, qty, deliveryDate, source) {
+      var wh = warehouse || "(미지정)";
+      if (!byWarehouse[wh]) byWarehouse[wh] = [];
+      byWarehouse[wh].push({ store: store, code: code, name: name, spec: spec, qty: qty, deliveryDate: deliveryDate || "", source: source || "Order" });
+    }
+    var endIso = endStr + "T23:59:59.999Z";
+    var orderFilter;
+    if (filterByOrder) {
+      orderFilter = "status=eq.Approved&order_date=gte." + encodeURIComponent(startStr) + "&order_date=lte." + encodeURIComponent(endIso);
+    } else {
+      orderFilter = "status=eq.Approved&delivery_date=gte." + encodeURIComponent(startStr) + "&delivery_date=lte." + encodeURIComponent(endIso);
+    }
+    var orderRows = supabaseSelectFilter('orders', orderFilter, { order: 'order_date.desc', limit: 300 });
+    for (var i = 0; i < orderRows.length; i++) {
+      var o = orderRows[i];
+      var store = String(o.store_name || "").trim();
+      var deliveryDate = (o.delivery_date || "").trim().substring(0, 10);
+      var cart = [];
+      try { if (o.cart_json) cart = JSON.parse(o.cart_json); } catch (e) {}
+      for (var j = 0; j < cart.length; j++) {
+        var p = cart[j];
+        var code = String(p.code || "").trim();
+        var name = String(p.name || "").trim();
+        var spec = (itemMap[code] && itemMap[code].spec) ? itemMap[code].spec : (p.spec || "-");
+        var qty = Number(p.qty) || 0;
+        if (!code || qty <= 0) continue;
+        var wh = (itemMap[code] && itemMap[code].outbound_location) ? itemMap[code].outbound_location : "(미지정)";
+        addRow(wh, store, code, name, spec, qty, deliveryDate, "Order");
+      }
+    }
+    var allLogs = supabaseSelectFilter('stock_logs', "location=eq.본사&log_type=eq.ForceOutbound", { order: 'log_date.desc', limit: 500 });
+    var startDate = new Date(startStr); startDate.setHours(0, 0, 0, 0);
+    var endDate = new Date(endStr); endDate.setHours(23, 59, 59, 999);
+    for (var idx = 0; idx < allLogs.length; idx++) {
+      var row = allLogs[idx];
+      var dateToCheck;
+      if (filterByOrder) {
+        dateToCheck = new Date(row.log_date);
+      } else {
+        var dStr = (row.delivery_status && String(row.delivery_status).match(/^\d{4}-\d{2}-\d{2}/)) ? String(row.delivery_status).substring(0, 10) : "";
+        if (!dStr) continue;
+        dateToCheck = new Date(dStr);
+        dateToCheck.setHours(12, 0, 0, 0);
+      }
+      if (dateToCheck < startDate || dateToCheck > endDate) continue;
+      var code = String(row.item_code || "").trim();
+      var name = String(row.item_name || "").trim();
+      var store = String(row.vendor_target || "").trim();
+      var qty = Math.abs(Number(row.qty) || 0);
+      var deliveryDate = (row.delivery_status && String(row.delivery_status).match(/^\d{4}-\d{2}-\d{2}/)) ? String(row.delivery_status).substring(0, 10) : "";
+      if (!code || qty <= 0) continue;
+      var info = itemMap[code] || { name: name, spec: "-", outbound_location: "" };
+      var wh = info.outbound_location || "(미지정)";
+      addRow(wh, store, code, info.name || name, info.spec, qty, deliveryDate, "Force");
+    }
+    var warehouseOrder = [];
+    try {
+      var whRows = supabaseSelect('warehouse_locations', { order: 'sort_order.asc', limit: 50 });
+      for (var w = 0; w < whRows.length; w++) {
+        var wn = String(whRows[w].name || "").trim();
+        if (wn && byWarehouse[wn]) warehouseOrder.push(wn);
+      }
+    } catch (e) {}
+    for (var k in byWarehouse) {
+      if (warehouseOrder.indexOf(k) === -1) warehouseOrder.push(k);
+    }
+    if (warehouseOrder.indexOf("(미지정)") === -1 && byWarehouse["(미지정)"]) warehouseOrder.push("(미지정)");
+    return { byWarehouse: byWarehouse, warehouseOrder: warehouseOrder, period: { start: startStr, end: endStr }, filterBy: filterByOrder ? "order" : "delivery" };
+  } catch (e) {
+    Logger.log('getOutboundByWarehouse: ' + e.message);
+    return { byWarehouse: {}, warehouseOrder: [], period: { start: startStr, end: endStr }, filterBy: filterByOrder ? "order" : "delivery" };
+  }
+}
+
 /* [Code.gs] 출고 대상 목록 통합 (Supabase vendors type=판매처) */
 function getAllOutboundTargets() {
   try {

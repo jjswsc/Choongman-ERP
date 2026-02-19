@@ -60,6 +60,7 @@ export function WorklogApproval() {
   const [list, setList] = React.useState<WorkLogManagerItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [updating, setUpdating] = React.useState<string | null>(null)
+  const [hasSearched, setHasSearched] = React.useState(false)
 
   React.useEffect(() => {
     getWorkLogOfficeOptions().then((r) => {
@@ -86,9 +87,10 @@ export function WorklogApproval() {
     }
   }, [startStr, endStr, deptFilter, employeeFilter, statusFilter])
 
-  React.useEffect(() => {
+  const handleSearch = () => {
+    setHasSearched(true)
     loadData()
-  }, [loadData])
+  }
 
   React.useEffect(() => {
     const contents = [...new Set(list.map((it) => it.content).filter(Boolean))]
@@ -277,14 +279,14 @@ export function WorklogApproval() {
               <Input
                 type="date"
                 value={startStr}
-                onChange={(e) => setStartStr(e.target.value)}
+                onChange={(e) => { setStartStr(e.target.value); setHasSearched(false) }}
                 className="h-9 w-32 text-xs shrink-0"
               />
               <span className="text-xs text-muted-foreground shrink-0">~</span>
               <Input
                 type="date"
                 value={endStr}
-                onChange={(e) => setEndStr(e.target.value)}
+                onChange={(e) => { setEndStr(e.target.value); setHasSearched(false) }}
                 className="h-9 w-32 text-xs shrink-0"
               />
             </div>
@@ -294,7 +296,7 @@ export function WorklogApproval() {
               <Building2 className="h-3.5 w-3.5 text-primary" />
               {t("workLogDept")}
             </label>
-            <Select value={deptFilter} onValueChange={setDeptFilter}>
+            <Select value={deptFilter} onValueChange={(v) => { setDeptFilter(v); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-28 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -313,7 +315,7 @@ export function WorklogApproval() {
               <User className="h-3.5 w-3.5 text-primary" />
               {t("workLogEmployee")}
             </label>
-            <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+            <Select value={employeeFilter} onValueChange={(v) => { setEmployeeFilter(v); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-32 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -342,7 +344,7 @@ export function WorklogApproval() {
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-foreground">{t("workLogStatus")}</label>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setHasSearched(false) }}>
               <SelectTrigger className="h-9 w-24 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
@@ -367,7 +369,7 @@ export function WorklogApproval() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
+          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("workLogSearch")}
           </Button>
@@ -389,6 +391,10 @@ export function WorklogApproval() {
           {loading ? (
             <div className="flex items-center justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : !hasSearched ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
             </div>
           ) : list.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">

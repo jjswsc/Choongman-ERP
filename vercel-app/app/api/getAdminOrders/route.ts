@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     ])
 
     const nameToNick: Record<string, string> = {}
+    const nameToNickByUser: Record<string, string> = {}
     const empList = (empRows || []) as { store?: string; name?: string; nick?: string }[]
     for (const e of empList) {
       const storeKey = String(e.store || '').trim()
@@ -70,6 +71,7 @@ export async function GET(request: NextRequest) {
       const displayVal = nickStr || n
       if (storeKey && n) nameToNick[storeKey + '|' + n] = displayVal
       if (storeKey && nickStr) nameToNick[storeKey + '|' + nickStr] = displayVal
+      if (n) nameToNickByUser[n] = displayVal
     }
 
     const rowsTyped = rows as {
@@ -120,7 +122,7 @@ export async function GET(request: NextRequest) {
       const storeKey = String(o.store_name || '').trim()
       const userName = String(o.user_name || '').trim()
       const userNick = (storeKey && userName)
-        ? (nameToNick[storeKey + '|' + userName] ?? userName)
+        ? (nameToNick[storeKey + '|' + userName] ?? nameToNickByUser[userName] ?? userName)
         : userName || undefined
       return {
         row: o.id,

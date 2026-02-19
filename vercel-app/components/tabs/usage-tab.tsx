@@ -117,10 +117,6 @@ export function UsageTab() {
       .finally(() => setHistoryLoading(false))
   }, [auth?.store, histStart, histEnd])
 
-  useEffect(() => {
-    if (auth?.store) loadHistory()
-  }, [auth?.store, loadHistory])
-
   const addToCart = () => {
     if (!selectedItem) return
     setCart((prev) => {

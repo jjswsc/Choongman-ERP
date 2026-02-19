@@ -1853,6 +1853,37 @@ export async function getCombinedOutboundHistory(params: {
   return res.json() as Promise<OutboundHistoryItem[]>
 }
 
+export interface WarehouseOutboundRow {
+  store: string
+  code: string
+  name: string
+  spec: string
+  qty: number
+  deliveryDate: string
+  source: 'Order' | 'Force'
+}
+
+export interface GetOutboundByWarehouseResult {
+  byWarehouse: Record<string, WarehouseOutboundRow[]>
+  warehouseOrder: string[]
+  period: { start: string; end: string }
+  filterBy: 'order' | 'delivery'
+}
+
+export async function getOutboundByWarehouse(params: {
+  startStr: string
+  endStr: string
+  filterBy?: 'order' | 'delivery'
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.filterBy) q.set('filterBy', params.filterBy)
+  const res = await apiFetch(`/api/getOutboundByWarehouse?${q}`)
+  return res.json() as Promise<GetOutboundByWarehouseResult>
+}
+
 export interface InvoiceDataCompany {
   companyName: string
   address: string

@@ -90,10 +90,6 @@ export function AdminNoticeHistory() {
   }, [startDate, endDate])
 
   React.useEffect(() => {
-    if (auth?.store && auth?.user) loadNotices()
-  }, [auth?.store, auth?.user, loadNotices])
-
-  React.useEffect(() => {
     loadSenders()
   }, [loadSenders])
 

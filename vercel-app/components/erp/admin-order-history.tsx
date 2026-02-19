@@ -43,6 +43,18 @@ const HQ_STORES = ["본사", "Office", "오피스", "본점"]
 const inputClass = "h-9 rounded-md border border-input bg-background px-3 text-sm w-full min-w-0"
 const filterClass = "h-9 rounded-md border border-input bg-background px-2 text-sm shrink-0"
 
+/** 풀네임이 올 경우 첫 이름만 표시 (닉네임 칸 공간 절약) */
+function displayNick(nick: string, full: string): string {
+  const s = (nick || full || "").trim()
+  if (!s) return "-"
+  if (s.length <= 10) return s
+  const m = s.match(/(?:Mr\.|Mrs\.|Ms\.|Dr\.)\s*(\S+)/i)
+  if (m && m[1]) return m[1]
+  const parts = s.split(/\s+/).filter(Boolean)
+  if (parts.length > 1) return parts[0]
+  return s.slice(0, 8) + "…"
+}
+
 interface ItemRow {
   id: string
   orderId: number
@@ -418,16 +430,16 @@ export function AdminOrderHistory() {
 <p>${t("orderFilterPeriod")}: ${startDate} ~ ${endDate}${selectedIds.size > 0 ? ` (${t("orderSelectedItems") || "선택"} ${rowsToPrint.length}건)` : ""}</p>
 <table>
 <thead><tr>
-<th>${t("orderColDate")}</th><th>${t("orderColDeliveryDate")}</th><th>${t("orderColStore")}</th>
+<th>${t("orderColStatus")}</th><th>${t("orderColDate")}</th><th>${t("orderColDeliveryDate")}</th><th>${t("orderColStore")}</th>
 <th>${t("emp_label_nickname")}</th><th>${t("orderColCode")}</th><th>${t("orderItemName")}</th>
 <th>${t("itemsCategory")}</th><th>${t("itemsVendor")}</th>
 <th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemTotal")}</th>
-<th>${t("orderColStatus")}</th>
 </tr></thead>
 <tbody>
 ${rowsToPrint.map((r) => {
   const statusLabel = r.status === "Pending" ? t("orderStatusPending") : r.status === "Approved" ? t("orderStatusApproved") : r.status === "Rejected" ? t("orderStatusRejected") : r.status === "Hold" ? t("orderStatusHold") : r.status || ""
-  return `<tr><td>${dateShort(r.date)}</td><td>${dateShort(r.deliveryDate)}</td><td>${(r.store || "").replace(/</g, "&lt;")}</td><td>${(r.userNick || r.userName || "").replace(/</g, "&lt;")}</td><td>${(r.code || "").replace(/</g, "&lt;")}</td><td>${(r.name || "").replace(/</g, "&lt;")}</td><td>${(r.category || "").replace(/</g, "&lt;")}</td><td>${(r.vendor || "").replace(/</g, "&lt;")}</td><td class="num">${r.qty}</td><td class="num">${r.price}</td><td class="num">${r.price * r.qty}</td><td>${statusLabel}</td></tr>`
+  const nickDisplay = displayNick(r.userNick || "", r.userName || "")
+  return `<tr><td>${statusLabel}</td><td>${dateShort(r.date)}</td><td>${dateShort(r.deliveryDate)}</td><td>${(r.store || "").replace(/</g, "&lt;")}</td><td>${nickDisplay.replace(/</g, "&lt;")}</td><td>${(r.code || "").replace(/</g, "&lt;")}</td><td>${(r.name || "").replace(/</g, "&lt;")}</td><td>${(r.category || "").replace(/</g, "&lt;")}</td><td>${(r.vendor || "").replace(/</g, "&lt;")}</td><td class="num">${r.qty}</td><td class="num">${r.price}</td><td class="num">${r.price * r.qty}</td></tr>`
 }).join("")}
 </tbody>
 </table>
@@ -449,6 +461,7 @@ ${rowsToPrint.map((r) => {
     }
     const rowsToExport = selectedIds.size > 0 ? selectedRows : itemRows
     const headers = [
+      t("orderColStatus"),
       t("orderColDate"),
       t("orderColDeliveryDate"),
       t("orderColStore"),
@@ -460,13 +473,13 @@ ${rowsToPrint.map((r) => {
       t("orderItemQty"),
       t("orderItemUnitPrice"),
       t("orderItemTotal"),
-      t("orderColStatus"),
     ]
     const rows = rowsToExport.map((r) => [
+      r.status,
       dateShort(r.date),
       dateShort(r.deliveryDate),
       r.store,
-      r.userNick || r.userName,
+      displayNick(r.userNick || "", r.userName || ""),
       r.code,
       r.name,
       r.category,
@@ -474,7 +487,6 @@ ${rowsToPrint.map((r) => {
       r.qty,
       r.price,
       r.price * r.qty,
-      r.status,
     ])
     const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\r\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
@@ -633,10 +645,11 @@ ${rowsToPrint.map((r) => {
                     />
                   </th>
                 )}
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[72px]">{t("orderColStatus")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColDate")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColDeliveryDate")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColStore")}</th>
-                <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[52px]">{t("emp_label_nickname")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[56px]">{t("emp_label_nickname")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColCode")}</th>
                 <th className="px-3 py-2 text-center font-medium whitespace-nowrap min-w-[260px]">{t("orderItemName")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsCategory")}</th>
@@ -645,7 +658,6 @@ ${rowsToPrint.map((r) => {
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemQty")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
-                <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderColStatus")}</th>
               </tr>
             </thead>
             <tbody>
@@ -672,10 +684,13 @@ ${rowsToPrint.map((r) => {
                           />
                         </td>
                       )}
+                      <td className="px-2 py-1.5 text-center">
+                        <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${statusBg}`}>{statusLabel}</span>
+                      </td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{dateShort(r.date)}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{dateShort(r.deliveryDate) || "-"}</td>
                       <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{r.store || "-"}</td>
-                      <td className="px-2 py-1.5 text-center whitespace-nowrap w-[52px] text-xs">{r.userNick || r.userName || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap w-[56px] text-xs truncate max-w-[56px]" title={r.userNick || r.userName}>{displayNick(r.userNick || "", r.userName || "")}</td>
                       <td className="px-2 py-1.5 text-center text-muted-foreground whitespace-nowrap">{r.code || "-"}</td>
                       <td className="px-3 py-1.5 font-medium min-w-[260px]">{r.name || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.category || "-"}</td>
@@ -684,9 +699,6 @@ ${rowsToPrint.map((r) => {
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
                       <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
-                      <td className="px-3 py-1.5 text-center">
-                        <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${statusBg}`}>{statusLabel}</span>
-                      </td>
                     </tr>
                   )
                 })

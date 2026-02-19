@@ -65,6 +65,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const [localToday, setLocalToday] = React.useState<WorkLogItem[]>([])
   const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
+  const [hasSearched, setHasSearched] = React.useState(false)
 
   React.useEffect(() => {
     if (userName) setSelectedStaff(userName)
@@ -105,9 +106,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
     }
   }, [dateStr, selectedStaff])
 
-  React.useEffect(() => {
-    if (selectedStaff) loadData()
-  }, [selectedStaff, dateStr, loadData])
+  const handleSearch = () => {
+    setHasSearched(true)
+    loadData()
+  }
 
   const contentsToTranslate = React.useMemo(() => {
     const set = new Set<string>()
@@ -345,7 +347,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
             <Input
               type="date"
               value={dateStr}
-              onChange={(e) => setDateStr(e.target.value)}
+              onChange={(e) => { setDateStr(e.target.value); setHasSearched(false) }}
               className="h-9 w-40 text-xs"
             />
           </div>
@@ -358,7 +360,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
               {staffList.find((s) => s.name === selectedStaff || s.displayName === selectedStaff)?.displayName || selectedStaff || userName}
             </div>
           </div>
-          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={loadData} disabled={loading}>
+          <Button size="sm" className="h-9 px-4 text-xs font-semibold" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("workLogSearch")}
           </Button>
@@ -373,7 +375,11 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         </div>
       </div>
 
-      {loading ? (
+      {!hasSearched ? (
+        <div className="rounded-xl border bg-card py-16 text-center text-sm text-muted-foreground">
+          {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center rounded-xl border bg-card py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
