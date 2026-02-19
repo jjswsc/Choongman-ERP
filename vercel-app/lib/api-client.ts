@@ -1881,6 +1881,10 @@ export async function getOutboundByWarehouse(params: {
   })
   if (params.filterBy) q.set('filterBy', params.filterBy)
   const res = await apiFetch(`/api/getOutboundByWarehouse?${q}`)
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
+  }
   return res.json() as Promise<GetOutboundByWarehouseResult>
 }
 

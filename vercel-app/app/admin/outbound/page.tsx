@@ -100,6 +100,9 @@ export default function OutboundPage() {
   const [whFilterBy, setWhFilterBy] = React.useState<"order" | "delivery">("delivery")
   const [whLoading, setWhLoading] = React.useState(false)
   const [whData, setWhData] = React.useState<GetOutboundByWarehouseResult | null>(null)
+  const [whWarehouseFilter, setWhWarehouseFilter] = React.useState("")
+  const [whStoreFilter, setWhStoreFilter] = React.useState("")
+  const [whItemFilter, setWhItemFilter] = React.useState("")
 
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()
@@ -118,10 +121,9 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
-    const first = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
-    const last = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10)
-    setWhStart((p) => p || first)
-    setWhEnd((p) => p || last)
+    const today = new Date().toISOString().slice(0, 10)
+    setWhStart((p) => p || today)
+    setWhEnd((p) => p || today)
   }, [])
 
   React.useEffect(() => {
@@ -225,22 +227,46 @@ export default function OutboundPage() {
       return
     }
     setWhLoading(true)
+    setWhData(null)
     try {
       const res = await getOutboundByWarehouse({
         startStr: whStart,
         endStr: whEnd,
         filterBy: whFilterBy,
       })
-      setWhData(res)
-    } catch {
+      if (res && typeof res === "object" && ("byWarehouse" in res || "warehouseOrder" in res)) {
+        setWhData(res)
+      } else {
+        setWhData({ byWarehouse: {}, warehouseOrder: [], period: { start: whStart, end: whEnd }, filterBy: whFilterBy })
+      }
+    } catch (err) {
+      console.error("getOutboundByWarehouse:", err)
       setWhData(null)
+      const msg = err instanceof Error ? err.message : String(err)
+      alert(t("orderNoData") + "\n\n오류: " + msg)
     } finally {
       setWhLoading(false)
     }
   }, [whStart, whEnd, whFilterBy, t])
 
+  const whFilteredData = React.useMemo(() => {
+    if (!whData || !whData.byWarehouse) return { order: [] as string[], byWarehouse: {} as Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> }
+    const whQ = whWarehouseFilter.trim().toLowerCase()
+    const storeQ = whStoreFilter.trim().toLowerCase()
+    const itemQ = whItemFilter.trim().toLowerCase()
+    const filteredOrder = whQ ? whData.warehouseOrder.filter((wn) => (wn || "(미지정)").toLowerCase().includes(whQ)) : whData.warehouseOrder
+    const filteredByWh: Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> = {}
+    for (const wn of filteredOrder) {
+      let rows = whData.byWarehouse[wn] || []
+      if (storeQ) rows = rows.filter((r) => (r.store || "").toLowerCase().includes(storeQ))
+      if (itemQ) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(itemQ) || (r.code || "").toLowerCase().includes(itemQ))
+      if (rows.length > 0) filteredByWh[wn] = rows
+    }
+    return { order: Object.keys(filteredByWh).filter((wn) => (filteredByWh[wn] || []).length > 0), byWarehouse: filteredByWh }
+  }, [whData, whWarehouseFilter, whStoreFilter, whItemFilter])
+
   const handleWarehousePrint = () => {
-    if (!whData || Object.keys(whData.byWarehouse).length === 0) {
+    if (!whData || whFilteredData.order.length === 0) {
       alert(t("orderNoData") || "조회 결과가 없습니다. 먼저 조회해 주세요.")
       return
     }
@@ -248,8 +274,8 @@ export default function OutboundPage() {
     const title = `${t("outTabByWarehouse")} [${filterLabel}] (${whData.period.start} ~ ${whData.period.end})`
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
-    const rows = whData.warehouseOrder.flatMap((wn) =>
-      (whData.byWarehouse[wn] || []).map(
+    const rows = whFilteredData.order.flatMap((wn) =>
+      (whFilteredData.byWarehouse[wn] || []).map(
         (r) =>
           `<tr><td>${wn}</td><td>${r.store}</td><td>${r.code}</td><td>${r.name}</td><td>${r.spec}</td><td class="text-right">${r.qty}</td><td>${r.deliveryDate}</td></tr>`
       )
@@ -264,7 +290,7 @@ export default function OutboundPage() {
   }
 
   const handleWarehouseExcel = () => {
-    if (!whData || Object.keys(whData.byWarehouse).length === 0) {
+    if (!whData || whFilteredData.order.length === 0) {
       alert(t("orderNoData") || "조회 결과가 없습니다. 먼저 조회해 주세요.")
       return
     }
@@ -280,8 +306,8 @@ export default function OutboundPage() {
       [],
       ["출고지", t("outColStore"), "코드", t("outColItem"), "규격", t("outColQty"), t("orderColDeliveryDate")],
     ]
-    whData.warehouseOrder.forEach((wn) => {
-      ;(whData.byWarehouse[wn] || []).forEach((r) => {
+    whFilteredData.order.forEach((wn) => {
+      ;(whFilteredData.byWarehouse[wn] || []).forEach((r) => {
         rows.push([wn, r.store, r.code, r.name, r.spec, String(r.qty), r.deliveryDate])
       })
     })
@@ -722,9 +748,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     setTabValue(isOffice ? "new" : "hist")
   }, [isOffice])
 
-  React.useEffect(() => {
-    if (tabValue === "warehouse") fetchWarehouseOutbound()
-  }, [tabValue, fetchWarehouseOutbound])
 
   if (loading) {
     return (
@@ -921,19 +944,50 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   <Button size="sm" onClick={fetchWarehouseOutbound} disabled={whLoading}>
                     {whLoading ? t("loading") : t("btn_query")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleWarehousePrint} disabled={!whData || Object.keys(whData.byWarehouse).length === 0}>
+                  <Button size="sm" variant="outline" onClick={handleWarehousePrint} disabled={!whData || whFilteredData.order.length === 0}>
                     🖨️ {t("outPrintInvoice")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleWarehouseExcel} disabled={!whData || Object.keys(whData.byWarehouse).length === 0}>
+                  <Button size="sm" variant="outline" onClick={handleWarehouseExcel} disabled={!whData || whFilteredData.order.length === 0}>
                     📥 {t("outExcelDownload")}
                   </Button>
                 </div>
+                {whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) && (
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">출고지(창고)</span>
+                      <Input
+                        placeholder="창고명"
+                        value={whWarehouseFilter}
+                        onChange={(e) => setWhWarehouseFilter(e.target.value)}
+                        className="w-[120px] h-9"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColStore")}</span>
+                      <Input
+                        placeholder={t("outStorePlaceholder")}
+                        value={whStoreFilter}
+                        onChange={(e) => setWhStoreFilter(e.target.value)}
+                        className="w-[120px] h-9"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColItem")}</span>
+                      <Input
+                        placeholder={t("outItemSearchPh")}
+                        value={whItemFilter}
+                        onChange={(e) => setWhItemFilter(e.target.value)}
+                        className="w-[140px] h-9"
+                      />
+                    </div>
+                  </div>
+                )}
                 {whLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">{t("loading")}</div>
                 ) : whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) ? (
                   <Accordion type="single" collapsible className="w-full">
-                    {whData.warehouseOrder.map((wn) => {
-                      const items = whData.byWarehouse[wn] || []
+                    {whFilteredData.order.map((wn) => {
+                      const items = whFilteredData.byWarehouse[wn] || []
                       if (items.length === 0) return null
                       return (
                         <AccordionItem key={wn} value={wn} className="border-b border-border/60 last:border-0">
