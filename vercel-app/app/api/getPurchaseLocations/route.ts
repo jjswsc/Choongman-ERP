@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelect } from '@/lib/supabase-server'
 
-/** 본사 발주용 출고지 목록: 본사(vendors type=본사) + 창고(warehouse_locations) */
+/** 본사 발주용 출고지 목록: warehouse_locations에서만 조회 (출고지 설정에서 관리) */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -9,28 +9,7 @@ export async function GET() {
   try {
     const locations: { name: string; address: string; location_code: string }[] = []
 
-    // 1. 본사 (vendors type=본사)
-    const hqRows = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as {
-      name?: string
-      addr?: string
-    }[] | null
-    const hq = (hqRows || [])[0]
-    if (hq?.addr || hq?.name) {
-      locations.push({
-        name: String(hq.name || '본사').trim(),
-        address: String(hq.addr || '').trim() || '-',
-        location_code: '본사',
-      })
-    } else {
-      // 본사 정보 없어도 기본값
-      locations.push({
-        name: '본사',
-        address: '-',
-        location_code: '본사',
-      })
-    }
-
-    // 2. 창고 (warehouse_locations)
+    // warehouse_locations (출고지 설정)
     try {
       const whRows = (await supabaseSelect('warehouse_locations', { order: 'sort_order.asc', limit: 50 })) as {
         name?: string
@@ -50,8 +29,8 @@ export async function GET() {
       // 테이블 없을 수 있음
     }
 
-    // 기본 창고가 없으면 시드
-    if (locations.length === 1) {
+    // 출고지 설정에 데이터가 없으면 기본 시드
+    if (locations.length === 0) {
       locations.push({
         name: '창고',
         address: 'JIDUBANG(ASIA) 262 3 Bangkok-Chon Buri New Line Rd, Prawet, Bangkok 10250',
@@ -64,7 +43,6 @@ export async function GET() {
     console.error('getPurchaseLocations:', e)
     return NextResponse.json(
       [
-        { name: '본사', address: '-', location_code: '본사' },
         {
           name: '창고',
           address: 'JIDUBANG(ASIA) 262 3 Bangkok-Chon Buri New Line Rd, Prawet, Bangkok 10250',

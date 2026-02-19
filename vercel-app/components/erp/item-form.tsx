@@ -203,7 +203,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               <SelectValue placeholder={t("itemsOutboundLocationPh")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">— 선택 —</SelectItem>
+              <SelectItem value="none">{t("itemsOutboundLocationNone") || "— 선택 —"}</SelectItem>
               {outboundLocations.map((loc) => (
                 <SelectItem key={loc.location_code} value={loc.location_code}>
                   {loc.name || loc.location_code}

@@ -120,7 +120,7 @@ export function OutboundLocationSettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl sm:max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -128,7 +128,7 @@ export function OutboundLocationSettingsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto">
           {editing ? (
             <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
               <h4 className="text-sm font-semibold">{editing.id ? (t("emp_edit") || "수정") : (t("btn_add") || "추가")}</h4>
@@ -138,7 +138,7 @@ export function OutboundLocationSettingsDialog({
                   <Input
                     value={form.name}
                     onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="예: Jidubang"
+                    placeholder={t("outboundLocationNamePh") || "예: Jidubang"}
                     className="h-9 mt-0.5"
                   />
                 </div>
@@ -147,7 +147,7 @@ export function OutboundLocationSettingsDialog({
                   <Input
                     value={form.location_code}
                     onChange={(e) => setForm((p) => ({ ...p, location_code: e.target.value }))}
-                    placeholder="예: Jidubang (품목에서 참조)"
+                    placeholder={t("outboundLocationCodePh") || "예: Jidubang (품목에서 참조)"}
                     className="h-9 mt-0.5"
                   />
                 </div>
@@ -156,7 +156,7 @@ export function OutboundLocationSettingsDialog({
                   <Input
                     value={form.address}
                     onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
-                    placeholder="선택"
+                    placeholder={t("optional") || "선택"}
                     className="h-9 mt-0.5"
                   />
                 </div>
@@ -180,7 +180,7 @@ export function OutboundLocationSettingsDialog({
             </Button>
           )}
 
-          <div className="rounded-lg border">
+          <div className="rounded-lg border min-h-[200px] max-h-[50vh] overflow-y-auto">
             {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">{t("loading")}</div>
             ) : list.length === 0 ? (
