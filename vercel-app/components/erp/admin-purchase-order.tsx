@@ -104,6 +104,10 @@ export function AdminPurchaseOrder() {
     pendingTransferCart.current = transferToPo.cart as CartItem[]
     setCartGroupByStore(!!transferToPo.groupByStore)
     setVendorSelect(vendorToUse)
+    if (transferToPo.outboundLocation && locations.length > 0) {
+      const locMatch = locations.find((l) => l.location_code === transferToPo!.outboundLocation)
+      if (locMatch) setLocationSelect(locMatch)
+    }
     if (!matched) {
       setVendors((prev) =>
         prev.some((v) => v.code === vendorToUse.code || v.name === vendorToUse.name)
@@ -112,7 +116,7 @@ export function AdminPurchaseOrder() {
       )
     }
     setTransferToPo?.(null)
-  }, [transferToPo, vendors, setTransferToPo])
+  }, [transferToPo, vendors, locations, setTransferToPo])
 
   React.useEffect(() => {
     if (!vendorSelect) {

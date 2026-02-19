@@ -34,6 +34,7 @@ export interface ItemFormData {
   code: string
   category: string
   vendor: string
+  outboundLocation: string
   name: string
   imageUrl: string
   taxType: "taxable" | "exempt" | "zero"
@@ -50,9 +51,10 @@ export interface ItemFormProps {
   onReset: () => void
   onNewRegister: () => void
   categories?: string[]
+  outboundLocations?: { location_code: string; name: string }[]
 }
 
-export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister, categories = [] }: ItemFormProps) {
+export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, onNewRegister, categories = [], outboundLocations = [] }: ItemFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [vendorList, setVendorList] = React.useState<{ code: string; name: string; address: string }[]>([])
@@ -189,6 +191,26 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-foreground">{t("itemsOutboundLocation")}</label>
+          <Select
+            value={formData.outboundLocation || "none"}
+            onValueChange={(v) => update("outboundLocation", v === "none" ? "" : v)}
+          >
+            <SelectTrigger className="h-10 text-sm">
+              <SelectValue placeholder={t("itemsOutboundLocationPh")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— 선택 —</SelectItem>
+              {outboundLocations.map((loc) => (
+                <SelectItem key={loc.location_code} value={loc.location_code}>
+                  {loc.name || loc.location_code}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-col gap-2">

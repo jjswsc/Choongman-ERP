@@ -15,6 +15,7 @@ export interface TransferToPo {
   vendorName: string
   cart: TransferToPoItem[]
   groupByStore?: boolean
+  outboundLocation?: string
 }
 
 interface OrderCreateContextValue {

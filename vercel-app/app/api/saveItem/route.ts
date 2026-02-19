@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       name?: string
       category?: string
       vendor?: string
+      outboundLocation?: string
       spec?: string
       price?: number
       cost?: number
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
       name,
       category: String(body.category || '').trim(),
       vendor: String(body.vendor || '').trim(),
+      outbound_location: String(body.outboundLocation || '').trim(),
       spec: String(body.spec || '').trim(),
       price: Number(body.price) || 0,
       cost: Number(body.cost) || 0,

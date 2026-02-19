@@ -1,13 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Tags } from "lucide-react"
+import { Tags, Settings } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
+import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminItems, getItemCategories, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
 
@@ -15,6 +17,7 @@ const emptyForm: ItemFormData = {
   code: "",
   category: "",
   vendor: "",
+  outboundLocation: "",
   name: "",
   imageUrl: "",
   taxType: "taxable",
@@ -34,16 +37,29 @@ export default function ItemsPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
+  const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
+  const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
+
+  const loadOutboundLocations = React.useCallback(async () => {
+    try {
+      const locs = await getWarehouseLocations()
+      setOutboundLocations((locs || []).map((l) => ({ location_code: l.location_code, name: l.name })))
+    } catch {
+      setOutboundLocations([])
+    }
+  }, [])
 
   React.useEffect(() => {
-    Promise.all([getAdminItems(), getItemCategories()])
-      .then(([list, { categories }]) => {
+    Promise.all([getAdminItems(), getItemCategories(), getWarehouseLocations()])
+      .then(([list, { categories }, locs]) => {
         setProducts(list || [])
         setAllCategories(categories || [])
+        setOutboundLocations((locs || []).map((l) => ({ location_code: l.location_code, name: l.name })))
       })
       .catch(() => {
         setProducts([])
         setAllCategories([])
+        setOutboundLocations([])
       })
       .finally(() => setLoading(false))
   }, [])
@@ -61,6 +77,7 @@ export default function ItemsPage() {
           code: p.code,
           category: p.category,
           vendor: p.vendor,
+          outboundLocation: p.outboundLocation ?? "",
           name: p.name,
           imageUrl: p.imageUrl,
           taxType: p.taxType,
@@ -90,6 +107,7 @@ export default function ItemsPage() {
       name,
       category: formData.category.trim(),
       vendor: formData.vendor.trim(),
+      outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
@@ -106,6 +124,7 @@ export default function ItemsPage() {
       name,
       category: formData.category.trim(),
       vendor: formData.vendor.trim(),
+      outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
@@ -133,6 +152,7 @@ export default function ItemsPage() {
       code: product.code,
       category: product.category,
       vendor: product.vendor,
+      outboundLocation: product.outboundLocation ?? "",
       name: product.name,
       imageUrl: product.imageUrl,
       taxType: product.taxType,
@@ -180,15 +200,32 @@ export default function ItemsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Tags className="h-5 w-5 text-primary" />
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Tags className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">{t("itemsMgmt")}</h1>
+              <p className="text-xs text-muted-foreground">{t("itemsMgmtSub")}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("itemsMgmt")}</h1>
-            <p className="text-xs text-muted-foreground">{t("itemsMgmtSub")}</p>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 px-3 text-xs"
+            onClick={() => setOutboundSettingsOpen(true)}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            {t("outboundLocationSettings") || "출고지 설정"}
+          </Button>
         </div>
+
+        <OutboundLocationSettingsDialog
+          open={outboundSettingsOpen}
+          onOpenChange={setOutboundSettingsOpen}
+          onSaved={loadOutboundLocations}
+        />
 
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
@@ -204,6 +241,7 @@ export default function ItemsPage() {
             onReset={handleReset}
             onNewRegister={handleNewRegister}
             categories={categories}
+            outboundLocations={outboundLocations}
           />
           <ItemTable
             products={filteredProducts}

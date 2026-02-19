@@ -28,21 +28,24 @@ export async function GET(request: NextRequest) {
   try {
     const endIso = e + 'T23:59:59.999Z'
 
-    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,category,spec,vendor' })) as {
+    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,category,spec,vendor,outbound_location' })) as {
       code?: string
       category?: string
       spec?: string
       vendor?: string
+      outbound_location?: string
     }[] | null
     const itemSpecMap: Record<string, string> = {}
     const itemCategoryMap: Record<string, string> = {}
     const itemVendorMap: Record<string, string> = {}
+    const itemOutboundMap: Record<string, string> = {}
     for (const row of itemsRows || []) {
       const code = String(row.code || '').trim()
       if (code) {
         itemSpecMap[code] = String(row.spec || '').trim()
         itemCategoryMap[code] = String(row.category || '').trim()
         itemVendorMap[code] = String(row.vendor || '').trim()
+        itemOutboundMap[code] = String(row.outbound_location || '').trim()
       }
     }
 
@@ -94,6 +97,7 @@ export async function GET(request: NextRequest) {
         spec: it.spec || itemSpecMap[it.code || ''] || '',
         category: (it as { category?: string }).category || itemCategoryMap[it.code || ''] || '',
         vendor: (it as { vendor?: string }).vendor || itemVendorMap[it.code || ''] || '',
+        outboundLocation: itemOutboundMap[it.code || ''] || '',
       }))
       let receivedIndices: number[] = []
       try {

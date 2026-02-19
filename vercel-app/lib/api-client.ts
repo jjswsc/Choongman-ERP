@@ -272,7 +272,7 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
-  items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; qty?: number; price?: number; originalQty?: number }[]
+  items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; outboundLocation?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
 }
@@ -1100,6 +1100,7 @@ export interface AdminItem {
   name: string
   category: string
   vendor: string
+  outboundLocation?: string
   spec: string
   price: number
   cost: number
@@ -1126,6 +1127,43 @@ export async function getAdminItems() {
   return res.json() as Promise<AdminItem[]>
 }
 
+export interface WarehouseLocation {
+  id?: number
+  name: string
+  address: string
+  location_code: string
+  sort_order: number
+}
+
+export async function getWarehouseLocations() {
+  const res = await apiFetch('/api/getWarehouseLocations')
+  return res.json() as Promise<WarehouseLocation[]>
+}
+
+export async function saveWarehouseLocation(params: {
+  id?: number
+  name: string
+  address?: string
+  location_code?: string
+  sort_order?: number
+}) {
+  const res = await apiFetch('/api/saveWarehouseLocation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteWarehouseLocation(params: { id?: number; location_code?: string }) {
+  const res = await apiFetch('/api/deleteWarehouseLocation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getItemCategories() {
   const res = await apiFetch('/api/getItemCategories')
   return res.json() as Promise<{ categories: string[] }>
@@ -1141,6 +1179,7 @@ export async function saveItem(params: {
   name: string
   category?: string
   vendor?: string
+  outboundLocation?: string
   spec?: string
   price?: number
   cost?: number

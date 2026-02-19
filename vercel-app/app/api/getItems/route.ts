@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax' })) as {
+    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax,outbound_location' })) as {
       id?: number
       code?: string
       category?: string
@@ -18,6 +18,7 @@ export async function GET() {
       image?: string
       vendor?: string
       tax?: string
+      outbound_location?: string
     }[] | null
 
     const list = (rows || [])
@@ -30,6 +31,7 @@ export async function GET() {
           name: String(row.name || ''),
           category: String(row.category || ''),
           vendor: String(row.vendor || ''),
+          outboundLocation: String(row.outbound_location || ''),
           spec: String(row.spec || ''),
           price: Number(row.price) || 0,
           cost: Number(row.cost) || 0,

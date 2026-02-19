@@ -54,6 +54,7 @@ interface ItemRow {
   name: string
   category: string
   vendor: string
+  outboundLocation: string
   qty: number
   price: number
   status: string
@@ -83,10 +84,12 @@ export function AdminOrderHistory() {
   const [statusFilter, setStatusFilter] = React.useState("All")
   const [categoryFilter, setCategoryFilter] = React.useState("All")
   const [vendorFilter, setVendorFilter] = React.useState("All")
+  const [outboundFilter, setOutboundFilter] = React.useState("All")
   const [itemNameFilter, setItemNameFilter] = React.useState("")
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [hasSearched, setHasSearched] = React.useState(false)
   const [transferGroupDialog, setTransferGroupDialog] = React.useState<string | null>(null)
+  const [transferOutboundLocation, setTransferOutboundLocation] = React.useState<string>("")
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -127,7 +130,7 @@ export function AdminOrderHistory() {
 
   React.useEffect(() => {
     setSelectedIds(new Set())
-  }, [startDate, endDate, storeFilter, statusFilter, categoryFilter, vendorFilter, itemNameFilter])
+  }, [startDate, endDate, storeFilter, statusFilter, categoryFilter, vendorFilter, outboundFilter, itemNameFilter])
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -174,6 +177,17 @@ export function AdminOrderHistory() {
     return Array.from(set).sort()
   }, [list])
 
+  const outboundListFromList = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const o of list) {
+      for (const it of o.items || []) {
+        const loc = String((it as { outboundLocation?: string }).outboundLocation || "").trim()
+        if (loc) set.add(loc)
+      }
+    }
+    return Array.from(set).sort()
+  }, [list])
+
   const categories = React.useMemo(
     () => Array.from(new Set([...filterCategories, ...categoriesFromList])).sort(),
     [filterCategories, categoriesFromList]
@@ -196,6 +210,13 @@ export function AdminOrderHistory() {
         (o.items || []).some((it) => String(it.vendor || "").trim() === vendorFilter)
       )
     }
+    if (outboundFilter && outboundFilter !== "All") {
+      out = out.filter((o) =>
+        (o.items || []).some(
+          (it) => String((it as { outboundLocation?: string }).outboundLocation || "").trim() === outboundFilter
+        )
+      )
+    }
     if (itemNameFilter.trim()) {
       const kw = itemNameFilter.trim().toLowerCase()
       out = out.filter((o) =>
@@ -207,7 +228,7 @@ export function AdminOrderHistory() {
       )
     }
     return out
-  }, [list, categoryFilter, vendorFilter, itemNameFilter])
+  }, [list, categoryFilter, vendorFilter, outboundFilter, itemNameFilter])
 
   const itemRows: ItemRow[] = React.useMemo(() => {
     const rows: ItemRow[] = []
@@ -218,8 +239,10 @@ export function AdminOrderHistory() {
         const price = Number(it.price) || 0
         const vendorStr = String(it.vendor || "").trim()
         const categoryStr = String(it.category || "").trim()
+        const outboundStr = String((it as { outboundLocation?: string }).outboundLocation || "").trim()
         if (vendorFilter && vendorFilter !== "All" && vendorStr !== vendorFilter) continue
         if (categoryFilter && categoryFilter !== "All" && categoryStr !== categoryFilter) continue
+        if (outboundFilter && outboundFilter !== "All" && outboundStr !== outboundFilter) continue
         rows.push({
           id: `${o.orderId}-${itemIdx}`,
           orderId: o.orderId,
@@ -232,6 +255,7 @@ export function AdminOrderHistory() {
           name: it.name || "",
           category: String(it.category || "").trim(),
           vendor: vendorStr,
+          outboundLocation: outboundStr,
           qty,
           price,
           status: o.status || "Pending",
@@ -239,7 +263,7 @@ export function AdminOrderHistory() {
       }
     }
     return rows
-  }, [filteredOrders, vendorFilter, categoryFilter])
+  }, [filteredOrders, vendorFilter, categoryFilter, outboundFilter])
 
   const dateShort = (d: string) => {
     if (!d) return "-"
@@ -285,8 +309,11 @@ export function AdminOrderHistory() {
     return Array.from(byCode.values())
   }, [selectedByVendor, vendorCountInSelection])
 
-  const doTransferForVendor = (vendorStr: string, groupByStore: boolean) => {
-    const vendorRows = selectedRows.filter((r) => String(r.vendor || "").trim() === vendorStr)
+  const doTransferForVendor = (vendorStr: string, groupByStore: boolean, outboundLoc: string) => {
+    let vendorRows = selectedRows.filter((r) => String(r.vendor || "").trim() === vendorStr)
+    if (outboundLoc) {
+      vendorRows = vendorRows.filter((r) => String(r.outboundLocation || "").trim() === outboundLoc)
+    }
     if (vendorRows.length === 0) return
     const matched = vendors.find(
       (v) =>
@@ -318,14 +345,26 @@ export function AdminOrderHistory() {
       vendorName,
       cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty, store: x.store })),
       groupByStore,
+      outboundLocation: outboundLoc || undefined,
     })
     setTransferGroupDialog(null)
+    setTransferOutboundLocation("")
     setActiveTab("hq")
   }
+
+  const selectedOutboundLocations = React.useMemo(() => {
+    const set = new Set<string>()
+    for (const r of selectedRows) {
+      const loc = String(r.outboundLocation || "").trim()
+      if (loc) set.add(loc)
+    }
+    return Array.from(set).sort()
+  }, [selectedRows])
 
   const handleTransferToPo = () => {
     if (canTransferToPo && transferVendorItems.length > 0) {
       const [[vendorStr]] = Array.from(selectedByVendor.entries()) as [string, unknown][]
+      setTransferOutboundLocation(selectedOutboundLocations.length === 1 ? selectedOutboundLocations[0] : "")
       setTransferGroupDialog(vendorStr)
     }
   }
@@ -466,6 +505,17 @@ ${rowsToPrint.map((r) => {
             ))}
           </SelectContent>
         </Select>
+        <Select value={outboundFilter} onValueChange={setOutboundFilter}>
+          <SelectTrigger className={filterClass + " w-[90px]"}>
+            <SelectValue placeholder={t("purchaseOrderLocation")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">{t("orderFilterOutboundAll") || "전체 출고지"}</SelectItem>
+            {outboundListFromList.map((loc) => (
+              <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           placeholder={t("itemsColName")}
           value={itemNameFilter}
@@ -559,6 +609,7 @@ ${rowsToPrint.map((r) => {
                 <th className="px-3 py-2 text-center font-medium whitespace-nowrap min-w-[260px]">{t("orderItemName")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsCategory")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("itemsVendor")}</th>
+                <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[70px]">{t("purchaseOrderLocation")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemQty")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
@@ -567,13 +618,13 @@ ${rowsToPrint.map((r) => {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
+                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
               ) : !hasSearched ? (
-                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("orderSearchHint") || "조회 버튼을 눌러 주세요."}</td></tr>
+                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderSearchHint") || "조회 버튼을 눌러 주세요."}</td></tr>
               ) : list.length === 0 ? (
-                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
+                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
               ) : itemRows.length === 0 ? (
-                <tr><td colSpan={isHQ ? 13 : 12} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
+                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
               ) : (
                 itemRows.map((r) => {
                   const statusBg = r.status === "Pending" ? "bg-warning/10 text-warning" : r.status === "Approved" ? "bg-success/10 text-success" : r.status === "Rejected" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
@@ -597,6 +648,7 @@ ${rowsToPrint.map((r) => {
                       <td className="px-3 py-1.5 font-medium min-w-[260px]">{r.name || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.category || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.vendor || "-"}</td>
+                      <td className="px-2 py-1.5 text-center whitespace-nowrap text-xs">{r.outboundLocation || "-"}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
                       <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
@@ -612,23 +664,56 @@ ${rowsToPrint.map((r) => {
         </div>
       </div>
 
-      <Dialog open={!!transferGroupDialog} onOpenChange={(open) => !open && setTransferGroupDialog(null)}>
+      <Dialog open={!!transferGroupDialog} onOpenChange={(open) => { if (!open) { setTransferGroupDialog(null); setTransferOutboundLocation("") } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t("orderTransferDisplayMode") || "품목 표시 방식"}</DialogTitle>
           </DialogHeader>
+          {selectedOutboundLocations.length > 1 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t("purchaseOrderLocation") || "출고지"}</label>
+              <Select value={transferOutboundLocation} onValueChange={setTransferOutboundLocation}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={t("orderTransferSelectOutbound") || "출고지를 선택하세요"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedOutboundLocations.map((loc) => (
+                    <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t("orderTransferSelectOutboundHint") || "선택한 품목이 여러 출고지에 있어 출고지를 선택해 주세요."}
+              </p>
+            </div>
+          )}
+          {selectedOutboundLocations.length === 1 && (
+            <p className="text-sm text-muted-foreground">
+              {t("orderTransferOutboundSingle") || "출고지"}: <strong>{selectedOutboundLocations[0]}</strong>
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
             {t("orderTransferDisplayModeHint") || "주문 품목을 매장별로 나눠서 보여줄까요, 합쳐서 보여줄까요?"}
           </p>
           <DialogFooter className="flex gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => transferGroupDialog && doTransferForVendor(transferGroupDialog, true)}
+              disabled={selectedOutboundLocations.length > 1 && !transferOutboundLocation}
+              onClick={() => transferGroupDialog && doTransferForVendor(
+                transferGroupDialog,
+                true,
+                selectedOutboundLocations.length === 1 ? selectedOutboundLocations[0] : transferOutboundLocation
+              )}
             >
               {t("orderTransferByStore") || "매장별로"}
             </Button>
             <Button
-              onClick={() => transferGroupDialog && doTransferForVendor(transferGroupDialog, false)}
+              disabled={selectedOutboundLocations.length > 1 && !transferOutboundLocation}
+              onClick={() => transferGroupDialog && doTransferForVendor(
+                transferGroupDialog,
+                false,
+                selectedOutboundLocations.length === 1 ? selectedOutboundLocations[0] : transferOutboundLocation
+              )}
             >
               {t("orderTransferMerged") || "합쳐서"}
             </Button>
