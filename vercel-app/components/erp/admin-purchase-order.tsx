@@ -48,6 +48,8 @@ export function AdminPurchaseOrder() {
   const t = useT(lang)
   const { transferToPo, setTransferToPo } = useOrderCreate() || {}
   const pendingTransferCart = React.useRef<CartItem[] | null>(null)
+  const appliedTransferRef = React.useRef(false)
+  const prevVendorRef = React.useRef<VendorForPurchase | null>(null)
   const [cartGroupByStore, setCartGroupByStore] = React.useState(false)
 
   const [locations, setLocations] = React.useState<PurchaseLocation[]>([])
@@ -122,7 +124,15 @@ export function AdminPurchaseOrder() {
     if (!vendorSelect) {
       setItems([])
       setStock({})
+      setCart([])
+      appliedTransferRef.current = false
+      prevVendorRef.current = null
       return
+    }
+    const vendorChanged = prevVendorRef.current?.code !== vendorSelect.code
+    prevVendorRef.current = vendorSelect
+    if (vendorChanged && !pendingTransferCart.current) {
+      appliedTransferRef.current = false
     }
     setLoading(true)
     Promise.all([
@@ -140,8 +150,15 @@ export function AdminPurchaseOrder() {
       .then(([itms, st]) => {
         setItems(itms || [])
         setStock(st || {})
-        setCart(pendingTransferCart.current ?? [])
-        pendingTransferCart.current = null
+        if (pendingTransferCart.current) {
+          setCart(pendingTransferCart.current)
+          pendingTransferCart.current = null
+          appliedTransferRef.current = true
+        } else if (!appliedTransferRef.current) {
+          setCart([])
+        } else {
+          appliedTransferRef.current = false
+        }
         setSelectedItem(null)
       })
       .catch(() => {
