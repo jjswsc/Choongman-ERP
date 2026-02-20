@@ -27,6 +27,7 @@ const menuItems = [
   { href: "/admin/leave", label: "휴가 관리" },
   { header: "회계 관리" },
   { href: "/admin/payroll", label: "급여 관리" },
+  { href: "/admin/receivable-payable", label: "미수금 관리" },
   { href: "/admin/petty-cash", label: "패티 캐쉬" },
   { header: "매장 관리" },
   { href: "/admin/store-check", label: "매장 점검" },

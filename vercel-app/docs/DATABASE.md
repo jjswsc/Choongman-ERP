@@ -6,6 +6,8 @@ Supabase (PostgreSQL) 사용. 다른 개발자가 수정·확장 시 참고용 �
 
 1. **supabase_schema.sql** - 기본 테이블 생성
 2. **supabase_migration_consolidated.sql** - 중복 제거, 유니크 제약, 추가 테이블/컬럼
+3. **supabase_receivable_payable.sql** - 미수금/미지급금 트랜잭션 테이블 (선택)
+4. **scripts/migrate_vendors_balance_to_payable.sql** - vendors.balance → 기초잔액 이전 (1회, 선택)
 
 ※ 위치: 프로젝트 루트 (`c:\CM_ERP\`)
 
@@ -76,6 +78,8 @@ Supabase (PostgreSQL) 사용. 다른 개발자가 수정·확장 시 참고용 �
 | `evaluation_results` | 평가 결과 |
 | `complaint_logs` | 불만 접수 |
 | `petty_cash_transactions` | 경비 거래 |
+| `payable_transactions` | 매입채무. vendor_code, amount, ref_type(PO/Payment/Opening) |
+| `receivable_transactions` | 매출채권. store_name, amount, ref_type(Order/Receive) |
 
 ## 3. 주요 관계
 

@@ -1094,6 +1094,49 @@ export async function addPettyCashTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 미수금/미지급금 관리 ───
+export interface ReceivablePayableItem {
+  storeName?: string
+  vendorCode?: string
+  balance: number
+  items: { id?: number; trans_date?: string; ref_type?: string; amount?: number; memo?: string }[]
+}
+
+export async function getReceivablePayableList(params: {
+  type: 'receivable' | 'payable'
+  storeFilter?: string
+  vendorFilter?: string
+  startStr: string
+  endStr: string
+}) {
+  const q = new URLSearchParams({
+    type: params.type,
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
+  const data = await res.json()
+  return data as { type: string; list: ReceivablePayableItem[] }
+}
+
+export async function addBalanceTransaction(params: {
+  type: 'payable' | 'receivable'
+  vendorCode?: string
+  storeName?: string
+  amount: number
+  transDate: string
+  memo?: string
+}) {
+  const res = await apiFetch('/api/addBalanceTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 품목/거래처 관리 (Admin) ───
 export interface AdminItem {
   code: string

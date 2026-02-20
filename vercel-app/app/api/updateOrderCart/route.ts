@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '❌ 해당 주문이 없습니다.' }, { headers })
     }
 
-    const o = orders[0] as { status?: string; cart_json?: string }
+    const o = orders[0] as { status?: string; cart_json?: string; store_name?: string; delivery_date?: string; order_date?: string }
     if (o.status !== 'Approved') {
       return NextResponse.json(
         { success: false, message: '❌ 승인된 주문만 수정할 수 있습니다.' },
@@ -102,6 +103,13 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('orders', orderId, patch)
+
+    const storeName = String(o.store_name || '').trim()
+    const transDate = String(o.delivery_date || o.order_date || '').slice(0, 10)
+    if (storeName && total > 0) {
+      await upsertReceivableFromOrder({ orderId, storeName, total, transDate })
+    }
+
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('updateOrderCart:', e)

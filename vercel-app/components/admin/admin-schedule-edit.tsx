@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet } from "lucide-react"
+import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet, CalendarDays } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -15,6 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 
@@ -75,6 +82,9 @@ export function AdminScheduleEdit({
   const [staffList, setStaffList] = React.useState<StaffItem[]>([])
   const [selectedStaff, setSelectedStaff] = React.useState<{ name: string; nick: string } | null>(null)
   const [slotData, setSlotData] = React.useState<Record<string, string[]>>({})
+  const [leaveByDay, setLeaveByDay] = React.useState<Record<number, Set<string>>>({})
+  const [leaveDetails, setLeaveDetails] = React.useState<{ name: string; dayIdx: number; dateStr: string; type: string }[]>([])
+  const [leaveModalOpen, setLeaveModalOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
 
@@ -104,6 +114,11 @@ export function AdminScheduleEdit({
       )
     })
   }, [store, auth?.store, auth?.role])
+
+  // 매장·주 선택 시 자동으로 저장된 시간표 불러오기 (휴가 정보 포함)
+  React.useEffect(() => {
+    if (store && monday) loadSaved()
+  }, [store, monday])
 
   const snapToMonday = (v: string) => {
     const m = getMondayOfWeek(v)
@@ -137,6 +152,8 @@ export function AdminScheduleEdit({
     getWeeklySchedule({ store, monday })
       .then((data) => {
         const next: Record<string, string[]> = {}
+        const leaveMap: Record<number, Set<string>> = {}
+        const leaveDetailList: { name: string; dayIdx: number; dateStr: string; type: string }[] = []
         const dayStrsLocal = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
         for (const row of data || []) {
           const dateStr = row.date?.slice(0, 10)
@@ -147,6 +164,16 @@ export function AdminScheduleEdit({
           const isLeave = !!(row as { leaveType?: string }).leaveType
           const leaveType = (row as { leaveType?: string }).leaveType
           const slotVal = isLeave ? `LEAVE_${leaveType}_${row.name}` : row.name
+          if (isLeave && displayDayIdx >= 0) {
+            if (!leaveMap[displayDayIdx]) leaveMap[displayDayIdx] = new Set()
+            leaveMap[displayDayIdx].add(row.name)
+            leaveDetailList.push({
+              name: row.name,
+              dayIdx: displayDayIdx,
+              dateStr: dateStr ? `${dateStr.slice(5).replace("-", "/")}` : "",
+              type: leaveType || "휴가",
+            })
+          }
           const pIn = row.pIn || "09:00"
           const pOut = row.pOut || "18:00"
           const [, oh, om] = pOut.match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/) || [null, 0, 0]
@@ -164,6 +191,8 @@ export function AdminScheduleEdit({
           }
         }
         setSlotData(next)
+        setLeaveByDay(leaveMap)
+        setLeaveDetails(leaveDetailList)
       })
       .catch(() => alert(t("att_load_failed")))
       .finally(() => setLoading(false))
@@ -171,7 +200,14 @@ export function AdminScheduleEdit({
 
   const resetGrid = () => {
     setSlotData({})
+    // leaveByDay, leaveDetails는 유지 (휴가 정보는 주 단위로 loadSaved 시 설정됨)
   }
+
+  const staffWithLeave = React.useMemo(() => {
+    const set = new Set<string>()
+    Object.values(leaveByDay).forEach((names) => names.forEach((n) => set.add(n)))
+    return set
+  }, [leaveByDay])
 
   const resetOnePerson = () => {
     if (!selectedStaff) {
@@ -228,6 +264,11 @@ export function AdminScheduleEdit({
   const applyQuick = (area: string) => {
     if (!selectedStaff) {
       alert(t("att_staff_select") + " " + t("att_select_first"))
+      return
+    }
+    const namesOnLeave = leaveByDay[quickDay]
+    if (namesOnLeave?.has(selectedStaff.name)) {
+      alert(t("leaveDayCannotSchedule") || "해당 요일은 휴가일이라 스케줄을 넣을 수 없습니다.")
       return
     }
     const [sh, sm] = quickStart.split(":").map(Number)
@@ -424,7 +465,7 @@ export function AdminScheduleEdit({
       if (!byPerson[pk]) byPerson[pk] = { name, area, workDays: ["", "", "", "", "", "", ""], breakDays: ["", "", "", "", "", "", ""], leaveType: v.leaveType }
       const all = [...v.work, ...v.break].sort()
       if (all.length === 0) continue
-      const workStr = v.leaveType ? `[${v.leaveType}]` : (() => {
+      const workStr = v.leaveType ? (t("scheduleLeaveShort") || "휴가") : (() => {
         const pIn = all[0]
         const last = all[all.length - 1]
         const [lh, lm] = last.split(":").map(Number)
@@ -616,7 +657,42 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Staff list */}
         <div className="lg:col-span-2 rounded-lg border bg-card p-3 max-h-[500px] overflow-auto">
-          <h6 className="mb-2 font-bold border-b pb-2">{t("att_staff_select")}</h6>
+          <div className="mb-2 flex items-center justify-between border-b pb-2">
+            <h6 className="font-bold">{t("att_staff_select")}</h6>
+            <Dialog open={leaveModalOpen} onOpenChange={setLeaveModalOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                  <CalendarDays className="mr-1 h-3.5 w-3.5" />
+                  {t("scheduleLeaveThisWeek") || "이번 주 휴가"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>{t("scheduleLeaveThisWeek") || "이번 주 휴가 현황"}</DialogTitle>
+                </DialogHeader>
+                <div className="max-h-64 overflow-y-auto space-y-2 text-sm">
+                  {leaveDetails.length === 0 ? (
+                    <p className="text-muted-foreground py-4 text-center">{t("scheduleNoLeaveThisWeek") || "이번 주 휴가 신청이 없습니다."}</p>
+                  ) : (
+                    (() => {
+                      const byName = new Map<string, { dayIdx: number; dateStr: string; type: string }[]>()
+                      for (const L of leaveDetails) {
+                        if (!byName.has(L.name)) byName.set(L.name, [])
+                        byName.get(L.name)!.push({ dayIdx: L.dayIdx, dateStr: L.dateStr, type: L.type })
+                      }
+                      return Array.from(byName.entries()).map(([name, items]) => (
+                        <div key={name} className="rounded border p-2">
+                          <span className="font-semibold">{staffList.find((x) => x.name === name)?.nick || name}</span>
+                          <span className="text-muted-foreground ml-1">: </span>
+                          <span>{items.map((i) => `${t(DAY_LABELS[i.dayIdx])} ${i.dateStr} ${i.type}`).join(", ")}</span>
+                        </div>
+                      ))
+                    })()
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
           <div className="space-y-1">
             {staffList.map((s) => (
               <button
@@ -627,7 +703,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 }
                 className={cn(
                   "w-full text-left rounded px-2 py-1.5 text-xs",
-                  selectedStaff?.name === s.name ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                  selectedStaff?.name === s.name ? "bg-primary text-primary-foreground" : staffWithLeave.has(s.name) ? "bg-pink-100 dark:bg-pink-950/40 hover:bg-pink-200 dark:hover:bg-pink-950/60" : "hover:bg-muted"
                 )}
               >
                 <span className="font-medium">{s.name}</span>
@@ -866,14 +942,14 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                                     const displayName = n.startsWith("BRK_")
                                       ? "R"
                                       : isLeave
-                                        ? `${staffList.find((s) => s.name === leaveName)?.nick || leaveName} (${leaveType})`
+                                        ? (staffList.find((s) => s.name === leaveName)?.nick || leaveName)
                                         : staffList.find((s) => s.name === n)?.nick || n
                                     return (
                                       <span
                                         key={n}
                                         className={cn(
                                           "px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-full",
-                                          n.startsWith("BRK_") ? "bg-gray-600 text-white" : isLeave ? "bg-emerald-600/80 text-white" : area === "Service" ? "bg-orange-500 text-white" : area === "Kitchen" ? "bg-green-600 text-white" : "bg-blue-500 text-white"
+                                          n.startsWith("BRK_") ? "bg-gray-600 text-white" : isLeave ? "bg-slate-500 text-white" : area === "Service" ? "bg-orange-500 text-white" : area === "Kitchen" ? "bg-green-600 text-white" : "bg-blue-500 text-white"
                                         )}
                                       >
                                         {displayName}

@@ -5,14 +5,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPurchaseOrders, type PurchaseOrderRow } from "@/lib/api-client"
-import { Printer, FileSpreadsheet, History, RefreshCw } from "lucide-react"
+import { getPurchaseOrders, processPurchaseOrderApproval, type PurchaseOrderRow } from "@/lib/api-client"
+import { translateApiMessage } from "@/lib/translate-api-message"
+import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle } from "lucide-react"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
   const t = useT(lang)
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [approvingId, setApprovingId] = React.useState<number | null>(null)
+
+  const handleApprove = React.useCallback(
+    async (po: PurchaseOrderRow) => {
+      const id = po.id
+      if (!id) return
+      setApprovingId(id)
+      try {
+        const res = await processPurchaseOrderApproval({ poId: id })
+        if (res.success) {
+          load()
+        } else {
+          alert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+        }
+      } catch (e) {
+        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setApprovingId(null)
+      }
+    },
+    [load, t]
+  )
 
   const load = React.useCallback(() => {
     setLoading(true)
@@ -227,9 +250,10 @@ th{background:#f5f5f5}
                   <th className="px-3 py-2 text-left font-medium">{t("poDate")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poVendor")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poShipTo")}</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("status")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("total")}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poPreparedBy")}</th>
-                  <th className="w-24 px-1 py-2" />
+                  <th className="w-28 px-1 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -243,12 +267,31 @@ th{background:#f5f5f5}
                       <td className="px-3 py-2 text-muted-foreground">{dateStr}</td>
                       <td className="px-3 py-2">{po.vendor_name || "-"}</td>
                       <td className="px-3 py-2">{po.location_name || "-"}</td>
+                      <td className="px-3 py-2">
+                        {po.status === "Approved" ? (
+                          <span className="rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">{t("statusApproved")}</span>
+                        ) : (
+                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{po.status || "Draft"}</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-semibold text-primary">
                         {po.total != null ? po.total.toLocaleString() : "-"}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
+                          {po.status !== "Approved" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-success hover:bg-success/10"
+                              onClick={() => handleApprove(po)}
+                              disabled={approvingId === po.id}
+                              title={t("adminApproved")}
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

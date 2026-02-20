@@ -6,9 +6,11 @@
  * - Approved 시 delivery_date, approved_indices(일부 승인), approved_original_qty_json 저장
  * - updatedCart: 프론트에서 수정한 수량. checked=true인 행만 승인. cart_json 덮어씀
  * - manager 권한은 승인 불가 (userRole 검사)
+ * - Approved 시 receivable_transactions에 미수금 생성
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
 
@@ -120,6 +122,15 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('orders', orderId, patch)
+    if (decision === 'Approved') {
+      const updated = patch as { total?: number; delivery_date?: string; cart_json?: string }
+      const total = Number(updated.total ?? 0)
+      const storeName = String((orders[0] as { store_name?: string }).store_name || '').trim()
+      const transDate = String(updated.delivery_date || (orders[0] as { order_date?: string }).order_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
+      if (storeName && total > 0) {
+        await upsertReceivableFromOrder({ orderId, storeName, total, transDate })
+      }
+    }
     return NextResponse.json({ success: true, message: '처리되었습니다.' }, { headers })
   } catch (e) {
     console.error('processOrderDecision:', e)

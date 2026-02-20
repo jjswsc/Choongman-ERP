@@ -4,6 +4,7 @@ import {
   supabaseUpdate,
   supabaseInsertMany,
 } from '@/lib/supabase-server'
+import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 
 const TZ = 'Asia/Bangkok'
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let cart: { code?: string; name?: string; spec?: string; qty?: number }[] = []
+    let cart: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
     try {
       cart = JSON.parse((o.cart_json as string) || '[]')
     } catch {}
@@ -147,8 +148,28 @@ export async function POST(request: NextRequest) {
         qtyMap[String(idx)] = getQtyForIdx(idx)
       })
       patch.received_qty_json = JSON.stringify(qtyMap)
+      const newCart = cart.map((item, idx) => ({
+        ...item,
+        qty: getQtyForIdx(idx),
+      }))
+      let subtotal = 0
+      newCart.forEach((it) => { subtotal += Number(it.price || 0) * Number(it.qty || 0) })
+      const vat = Math.round(subtotal * 0.07)
+      const total = subtotal + vat
+      patch.cart_json = JSON.stringify(newCart.map(({ code, name, price, qty, spec }) => ({ code, name, price, qty, spec })))
+      patch.subtotal = subtotal
+      patch.vat = vat
+      patch.total = total
     }
     await supabaseUpdate('orders', orderId, patch)
+    if (hasQtyAdjustments && receivedQtysRaw) {
+      const newTotal = Number(patch.total ?? 0)
+      const storeName = String(o.store_name || '').trim()
+      const transDate = today
+      if (storeName && newTotal > 0) {
+        await upsertReceivableFromOrder({ orderId, storeName, total: newTotal, transDate })
+      }
+    }
 
     return NextResponse.json({ success: true, message: '완료되었습니다.' }, { headers })
   } catch (e) {
