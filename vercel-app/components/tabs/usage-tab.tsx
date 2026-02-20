@@ -13,6 +13,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
+import { useStoreView } from "@/lib/store-view-context"
+import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -67,8 +69,11 @@ interface CartItem {
 
 export function UsageTab() {
   const { auth } = useAuth()
+  const { viewStore } = useStoreView()
   const { lang } = useLang()
   const t = useT(lang)
+  const isOffice = auth && (isOfficeRole(auth.role || "") || isOfficeStore(auth.store || ""))
+  const effectiveStore = isOffice && viewStore ? viewStore : auth?.store ?? ""
   const [items, setItems] = useState<AppItem[]>([])
   const [stock, setStock] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -98,24 +103,24 @@ export function UsageTab() {
   }, [items, t])
 
   useEffect(() => {
-    if (!auth?.store) return
+    if (!effectiveStore) return
     setLoading(true)
-    getAppData(auth.store)
+    getAppData(effectiveStore)
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false))
-  }, [auth?.store])
+  }, [effectiveStore])
 
   const loadHistory = useCallback(() => {
-    if (!auth?.store) return
+    if (!effectiveStore) return
     setHistoryLoading(true)
-    getMyUsageHistory({ store: auth.store, startStr: histStart, endStr: histEnd })
+    getMyUsageHistory({ store: effectiveStore, startStr: histStart, endStr: histEnd })
       .then(setHistory)
       .finally(() => setHistoryLoading(false))
-  }, [auth?.store, histStart, histEnd])
+  }, [effectiveStore, histStart, histEnd])
 
   const addToCart = () => {
     if (!selectedItem) return
@@ -137,11 +142,11 @@ export function UsageTab() {
   }
 
   const handleConfirmUsage = async () => {
-    if (!auth?.store || cart.length === 0) return
+    if (!effectiveStore || cart.length === 0) return
     setSubmitting(true)
     try {
       const res = await processUsage({
-        storeName: auth.store,
+        storeName: effectiveStore,
         userName: auth.user,
         items: cart.map((c) => ({ code: c.code, name: c.name, qty: c.qty })),
       })
@@ -149,7 +154,7 @@ export function UsageTab() {
         alert(t('confirmUsage') + ' ✓')
         setCart([])
         loadHistory()
-        getAppData(auth.store).then((r) => setStock(r.stock || {}))
+        getAppData(effectiveStore).then((r) => setStock(r.stock || {}))
       } else {
         alert(translateApiMessage(res.message, t) || t('orderFail'))
       }
@@ -160,11 +165,13 @@ export function UsageTab() {
     }
   }
 
-  if (!auth?.store) {
+  if (!effectiveStore) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <Package className="h-12 w-12 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">매장을 선택해 주세요.</p>
+        <p className="text-center text-sm text-muted-foreground">
+          {isOffice ? (t("adminOrderCreateSelectStore") || "상단에서 매장을 선택해 주세요.") : (t("msg_select_store_name") || "매장을 선택해 주세요.")}
+        </p>
       </div>
     )
   }

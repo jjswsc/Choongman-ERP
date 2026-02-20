@@ -20,6 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/auth-context"
+import { useStoreView } from "@/lib/store-view-context"
+import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -83,8 +85,11 @@ interface CartItem {
 
 export function OrderTab() {
   const { auth } = useAuth()
+  const { viewStore } = useStoreView()
   const { lang } = useLang()
   const t = useT(lang)
+  const isOffice = auth && (isOfficeRole(auth.role || "") || isOfficeStore(auth.store || ""))
+  const effectiveStore = isOffice && viewStore ? viewStore : auth?.store ?? ""
   const [items, setItems] = useState<AppItem[]>([])
   const [stock, setStock] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -121,16 +126,16 @@ export function OrderTab() {
   }, [items, t])
 
   useEffect(() => {
-    if (!auth?.store) return
+    if (!effectiveStore) return
     setLoading(true)
-    getAppData(auth.store)
+    getAppData(effectiveStore)
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false))
-  }, [auth?.store])
+  }, [effectiveStore])
 
   const addToCart = () => {
     if (!selectedItem) return
@@ -159,11 +164,11 @@ export function OrderTab() {
   }, [cart])
 
   const handlePlaceOrder = async () => {
-    if (!auth?.store || !auth?.user || cart.length === 0) return
+    if (!effectiveStore || !auth?.user || cart.length === 0) return
     setSubmitting(true)
     try {
       const res = await processOrder({
-        storeName: auth.store,
+        storeName: effectiveStore,
         userName: auth.user,
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty })),
       })
@@ -181,9 +186,9 @@ export function OrderTab() {
   }
 
   const loadHistory = () => {
-    if (!auth?.store) return
+    if (!effectiveStore) return
     setHistoryLoading(true)
-    getMyOrderHistory({ store: auth.store, startStr: histStart, endStr: histEnd })
+    getMyOrderHistory({ store: effectiveStore, startStr: histStart, endStr: histEnd })
       .then(setHistory)
       .catch(() => setHistory([]))
       .finally(() => setHistoryLoading(false))
@@ -337,8 +342,8 @@ export function OrderTab() {
           receiveCameraRef.current && (receiveCameraRef.current.value = "")
           receiveFileRef.current && (receiveFileRef.current.value = "")
           loadHistory()
-          if (auth?.store) {
-            getAppData(auth.store).then((r) => setStock(r.stock || {}))
+          if (effectiveStore) {
+            getAppData(effectiveStore).then((r) => setStock(r.stock || {}))
           }
           setReceivePhotoPreview((p) => { if (p) URL.revokeObjectURL(p); return null })
           setReceiveModal(null)
@@ -365,6 +370,17 @@ export function OrderTab() {
       alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       setReceiveSubmitting(false)
     }
+  }
+
+  if (!effectiveStore) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 p-8">
+        <Package className="h-12 w-12 text-muted-foreground/50" />
+        <p className="text-center text-sm text-muted-foreground">
+          {isOffice ? (t("adminOrderCreateSelectStore") || "상단에서 매장을 선택해 주세요.") : (t("msg_select_store_name") || "매장을 선택해 주세요.")}
+        </p>
+      </div>
+    )
   }
 
   return (

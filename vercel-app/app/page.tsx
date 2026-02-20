@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { AppNavigation } from "@/components/app-navigation"
+import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
+import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import { HomeTab } from "@/components/tabs/home-tab"
 import { OrderTab } from "@/components/tabs/order-tab"
@@ -36,9 +38,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-lg bg-background">
-      <AppHeader />
-      <AppNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+    <StoreViewProvider>
+      <div className="mx-auto min-h-screen max-w-lg bg-background">
+        <AppHeader />
+        <MobileStoreSelectorBar />
+        <AppNavigation activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="pb-8">
         {activeTab === "home" && <HomeTab />}
         {activeTab === "orders" && <OrderTab />}
@@ -50,5 +54,6 @@ export default function DashboardPage() {
         {activeTab === "admin" && <AdminTab />}
       </main>
     </div>
+    </StoreViewProvider>
   )
 }
