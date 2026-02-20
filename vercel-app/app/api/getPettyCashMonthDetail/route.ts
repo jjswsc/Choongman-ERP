@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
+  const scopeFilter = String(searchParams.get('scopeFilter') || searchParams.get('scope') || '').trim()
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+  const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
   let yearMonth = String(searchParams.get('yearMonth') || searchParams.get('yearMonth') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
@@ -23,7 +25,9 @@ export async function GET(request: NextRequest) {
   const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
   let effectiveStore = ''
   if (!isOffice && userStore) effectiveStore = userStore
-  else if (storeFilter) effectiveStore = storeFilter
+  else if (scopeFilter === 'office') {
+    effectiveStore = departmentFilter ? 'Office-' + departmentFilter : 'Office'
+  } else if (storeFilter) effectiveStore = storeFilter
 
   if (yearMonth.length < 7) {
     const n = new Date()
@@ -39,11 +43,19 @@ export async function GET(request: NextRequest) {
   try {
     let rows: { id?: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; receipt_url?: string; user_name?: string }[] = []
     if (effectiveStore) {
-      rows = (await supabaseSelectFilter(
-        'petty_cash_transactions',
-        'store=eq.' + encodeURIComponent(effectiveStore),
-        { order: 'trans_date.asc,id.asc', limit: 2000 }
-      )) as typeof rows
+      if (effectiveStore === 'Office' && !departmentFilter) {
+        rows = (await supabaseSelectFilter(
+          'petty_cash_transactions',
+          'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
+          { order: 'trans_date.asc,id.asc', limit: 2000 }
+        )) as typeof rows
+      } else {
+        rows = (await supabaseSelectFilter(
+          'petty_cash_transactions',
+          'store=eq.' + encodeURIComponent(effectiveStore),
+          { order: 'trans_date.asc,id.asc', limit: 2000 }
+        )) as typeof rows
+      }
     } else {
       rows = (await supabaseSelect('petty_cash_transactions', {
         order: 'trans_date.asc,id.asc',

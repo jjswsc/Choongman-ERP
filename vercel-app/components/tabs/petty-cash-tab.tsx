@@ -19,8 +19,8 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
-import { useStoreList } from "@/lib/api-client"
 import {
+  getPettyCashOptions,
   getPettyCashList,
   getPettyCashMonthDetail,
   addPettyCashTransaction,
@@ -46,13 +46,18 @@ export function PettyCashTab() {
   const t = useT(lang)
 
   const [stores, setStores] = useState<string[]>([])
+  const [officeDepartments, setOfficeDepartments] = useState<string[]>([])
+  const [listScope, setListScope] = useState<"store" | "office">("store")
   const [listStore, setListStore] = useState("All")
+  const [listDepartment, setListDepartment] = useState("All")
   const [listStart, setListStart] = useState(todayStr)
   const [listEnd, setListEnd] = useState(todayStr)
   const [listData, setListData] = useState<PettyCashItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
+  const [monthlyScope, setMonthlyScope] = useState<"store" | "office">("store")
   const [monthlyStore, setMonthlyStore] = useState("All")
+  const [monthlyDepartment, setMonthlyDepartment] = useState("All")
   const [monthlyYm, setMonthlyYm] = useState(() => {
     const n = new Date()
     return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0")
@@ -60,7 +65,9 @@ export function PettyCashTab() {
   const [monthlyData, setMonthlyData] = useState<PettyCashItem[]>([])
   const [monthlyLoading, setMonthlyLoading] = useState(false)
 
+  const [addTargetType, setAddTargetType] = useState<"store" | "office">("store")
   const [addStore, setAddStore] = useState("")
+  const [addDepartment, setAddDepartment] = useState("")
   const [addDate, setAddDate] = useState(todayStr)
   const [addType, setAddType] = useState("expense")
   const [addAmount, setAddAmount] = useState("")
@@ -72,22 +79,35 @@ export function PettyCashTab() {
   const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
-  const { stores: storeList } = useStoreList()
   const canSearchAll = isOfficeRole(auth?.role || "")
   useEffect(() => {
     if (!auth?.store) return
-    if (canSearchAll) {
-      setStores(storeList.length > 0 ? ["All", ...storeList] : ["All"])
-      setListStore("All")
-      setMonthlyStore("All")
-      setAddStore(storeList[0] || auth.store || "")
-    } else {
-      setStores([auth.store!])
-      setListStore(auth.store!)
-      setMonthlyStore(auth.store!)
-      setAddStore(auth.store!)
-    }
-  }, [auth?.store, auth?.role, storeList, canSearchAll])
+    getPettyCashOptions().then((opts) => {
+      if (canSearchAll) {
+        setStores(opts.stores?.length ? ["All", ...opts.stores] : ["All"])
+        setOfficeDepartments(opts.officeDepartments?.length ? ["All", ...opts.officeDepartments] : ["All"])
+        setListStore("All")
+        setListDepartment("All")
+        setMonthlyStore("All")
+        setMonthlyDepartment("All")
+        setAddStore(opts.stores?.[0] || auth.store || "")
+        setAddDepartment(opts.officeDepartments?.[0] || "")
+      } else {
+        const st = opts.stores?.includes(auth.store!) ? [auth.store!] : (opts.stores?.length ? opts.stores : [auth.store!])
+        setStores(st)
+        setListStore(auth.store!)
+        setMonthlyStore(auth.store!)
+        setAddStore(auth.store!)
+      }
+    }).catch(() => {
+      if (auth?.store) {
+        setStores([auth.store])
+        setListStore(auth.store)
+        setMonthlyStore(auth.store)
+        setAddStore(auth.store)
+      }
+    })
+  }, [auth?.store, auth?.role, canSearchAll])
 
   // 내용(memo) 로그인 언어로 번역
   useEffect(() => {
@@ -112,6 +132,8 @@ export function PettyCashTab() {
   }, [listData, monthlyData, lang])
 
   const getMemo = (memo: string) => (memo && memoTransMap[memo]) || memo || "-"
+  const formatStoreLabel = (store: string) =>
+    store.startsWith("Office-") ? `${t("pettyScopeOffice") || "본사"} (${store.slice(7)})` : store
 
   const loadList = () => {
     if (!auth?.store) return
@@ -119,7 +141,9 @@ export function PettyCashTab() {
     getPettyCashList({
       startStr: listStart,
       endStr: listEnd,
-      storeFilter: listStore === "All" ? undefined : listStore,
+      scopeFilter: canSearchAll ? listScope : undefined,
+      storeFilter: listScope === "store" && listStore !== "All" ? listStore : undefined,
+      departmentFilter: listScope === "office" && listDepartment !== "All" ? listDepartment : undefined,
       userStore: auth.store,
       userRole: auth.role,
     })
@@ -133,7 +157,9 @@ export function PettyCashTab() {
     setMonthlyLoading(true)
     getPettyCashMonthDetail({
       yearMonth: monthlyYm,
-      storeFilter: monthlyStore === "All" ? undefined : monthlyStore,
+      scopeFilter: canSearchAll ? monthlyScope : undefined,
+      storeFilter: monthlyScope === "store" && monthlyStore !== "All" ? monthlyStore : undefined,
+      departmentFilter: monthlyScope === "office" && monthlyDepartment !== "All" ? monthlyDepartment : undefined,
       userStore: auth.store,
       userRole: auth.role,
     })
@@ -171,9 +197,11 @@ export function PettyCashTab() {
 
   const handleAdd = async () => {
     if (!auth?.store || !auth?.user) return
-    const store = addStore || (stores.includes("All") ? stores.find((s) => s !== "All") : stores[0])
+    const store = addTargetType === "office"
+      ? (addDepartment ? "Office-" + addDepartment : null)
+      : (addStore || (stores.includes("All") ? stores.find((s) => s !== "All") : stores[0]))
     if (!store || store === "All") {
-      alert(t("pettyAlertStore"))
+      alert(addTargetType === "office" ? (t("pettySelectDepartment") || "부서를 선택하세요.") : t("pettyAlertStore"))
       return
     }
     const amt = parseInt(addAmount, 10) || 0
@@ -239,7 +267,9 @@ export function PettyCashTab() {
       t("pettyColMemo") || "내용",
       t("pettyColUser") || "등록자",
     ]
-    const storeLabel = monthlyStore === "All" ? t("all") || "전체" : monthlyStore
+    const storeLabel = monthlyScope === "office"
+      ? (monthlyDepartment === "All" ? `${t("pettyScopeOffice") || "본사"} ${t("all") || "전체"}` : `${t("pettyScopeOffice") || "본사"} (${monthlyDepartment})`)
+      : (monthlyStore === "All" ? t("all") || "전체" : monthlyStore)
     const rows: string[][] = [
       [t("pettyTabMonthly") || "월별 현황", "", "", "", "", "", ""],
       [t("pettyYearMonth") || "기간", monthlyYm, "", "", "", "", ""],
@@ -302,16 +332,40 @@ ${rows.map((row, ri) => {
 
             <TabsContent value="list" className="space-y-3">
               <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
-                <Select value={listStore} onValueChange={setListStore}>
-                  <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                    <SelectValue placeholder={t("store")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((st) => (
-                      <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {canSearchAll && (
+                  <Select value={listScope} onValueChange={(v) => { setListScope(v as "store" | "office"); setListStore("All"); setListDepartment("All"); }}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
+                      <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {listScope === "store" ? (
+                  <Select value={listStore} onValueChange={setListStore}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
+                      <SelectValue placeholder={t("store")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((st) => (
+                        <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={listDepartment} onValueChange={setListDepartment}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
+                      <SelectValue placeholder={t("pettySelectDepartment")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {officeDepartments.map((d) => (
+                        <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
                 <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadList} disabled={listLoading}>
@@ -348,7 +402,7 @@ ${rows.map((row, ri) => {
                       {listData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2 text-center">{r.trans_date}</td>
-                          {canSearchAll && <td className="p-2 text-center truncate text-xs">{r.store}</td>}
+                          {canSearchAll && <td className="p-2 text-center truncate text-xs">{formatStoreLabel(r.store)}</td>}
                           <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}
@@ -380,16 +434,40 @@ ${rows.map((row, ri) => {
               <div className="border-t pt-3 mt-3">
                 <p className="text-sm font-medium mb-2">{t("pettyAddTitle") || "등록"}</p>
                 <div className="flex flex-col gap-2">
-                  <Select value={addStore} onValueChange={setAddStore}>
-                    <SelectTrigger className="h-9 text-xs">
-                      <SelectValue placeholder={t("store")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stores.filter((s) => s !== "All").map((st) => (
-                        <SelectItem key={st} value={st}>{st}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {canSearchAll && (
+                    <Select value={addTargetType} onValueChange={(v) => { setAddTargetType(v as "store" | "office"); setAddStore(stores.find((s) => s !== "All") || ""); setAddDepartment(officeDepartments.find((d) => d !== "All") || ""); }}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
+                        <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {addTargetType === "store" ? (
+                    <Select value={addStore} onValueChange={setAddStore}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder={t("store")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stores.filter((s) => s !== "All").map((st) => (
+                          <SelectItem key={st} value={st}>{st}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={addDepartment} onValueChange={setAddDepartment}>
+                      <SelectTrigger className="h-9 text-xs">
+                        <SelectValue placeholder={t("pettySelectDepartment")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {officeDepartments.filter((d) => d !== "All").map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="h-9 text-xs" />
                   <Select value={addType} onValueChange={setAddType}>
                     <SelectTrigger className="h-9 text-xs">
@@ -455,16 +533,40 @@ ${rows.map((row, ri) => {
 
             <TabsContent value="monthly" className="space-y-3">
               <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
-                <Select value={monthlyStore} onValueChange={setMonthlyStore}>
-                  <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
-                    <SelectValue placeholder={t("store")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.map((st) => (
-                      <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {canSearchAll && (
+                  <Select value={monthlyScope} onValueChange={(v) => { setMonthlyScope(v as "store" | "office"); setMonthlyStore("All"); setMonthlyDepartment("All"); }}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="store">{t("pettyScopeStore") || "매장"}</SelectItem>
+                      <SelectItem value="office">{t("pettyScopeOffice") || "본사"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {monthlyScope === "store" ? (
+                  <Select value={monthlyStore} onValueChange={setMonthlyStore}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
+                      <SelectValue placeholder={t("store")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((st) => (
+                        <SelectItem key={st} value={st}>{st === "All" ? (t("all") || "전체") : st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Select value={monthlyDepartment} onValueChange={setMonthlyDepartment}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[80px]">
+                      <SelectValue placeholder={t("pettySelectDepartment")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {officeDepartments.map((d) => (
+                        <SelectItem key={d} value={d}>{d === "All" ? (t("all") || "전체") : d}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Select value={monthlyYm} onValueChange={setMonthlyYm}>
                   <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[100px]">
                     <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
@@ -515,7 +617,7 @@ ${rows.map((row, ri) => {
                       {monthlyData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2 text-center">{r.trans_date}</td>
-                          <td className="p-2 text-center truncate">{r.store}</td>
+                          <td className="p-2 text-center truncate">{formatStoreLabel(r.store)}</td>
                           <td className="p-2 text-center truncate">{t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}</td>
                           <td className={`p-2 text-center ${r.amount < 0 ? "text-destructive" : "text-green-600"}`}>
                             {r.amount >= 0 ? "" : "-"}

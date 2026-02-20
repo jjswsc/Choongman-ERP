@@ -1033,10 +1033,17 @@ export interface PettyCashItem {
   user_name: string
 }
 
+export async function getPettyCashOptions(): Promise<{ stores: string[]; officeDepartments: string[] }> {
+  const res = await apiFetch('/api/getPettyCashOptions')
+  return res.json()
+}
+
 export async function getPettyCashList(params: {
   startStr: string
   endStr: string
+  scopeFilter?: string
   storeFilter?: string
+  departmentFilter?: string
   userStore?: string
   userRole?: string
 }) {
@@ -1044,7 +1051,9 @@ export async function getPettyCashList(params: {
     startStr: params.startStr,
     endStr: params.endStr,
   })
+  if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetch(`/api/getPettyCashList?${q}`)
@@ -1054,12 +1063,16 @@ export async function getPettyCashList(params: {
 /** 해당 월 거래 전체 + 실시간 잔액 */
 export async function getPettyCashMonthDetail(params: {
   yearMonth: string
+  scopeFilter?: string
   storeFilter?: string
+  departmentFilter?: string
   userStore?: string
   userRole?: string
 }) {
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
+  if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetch(`/api/getPettyCashMonthDetail?${q}`)
