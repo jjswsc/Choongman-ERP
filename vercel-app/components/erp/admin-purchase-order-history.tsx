@@ -16,6 +16,14 @@ export function AdminPurchaseOrderHistory() {
   const [loading, setLoading] = React.useState(true)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
 
+  const load = React.useCallback(() => {
+    setLoading(true)
+    getPurchaseOrders()
+      .then((rows) => setList(Array.isArray(rows) ? rows : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+  }, [])
+
   const handleApprove = React.useCallback(
     async (po: PurchaseOrderRow) => {
       const id = po.id
@@ -36,14 +44,6 @@ export function AdminPurchaseOrderHistory() {
     },
     [load, t]
   )
-
-  const load = React.useCallback(() => {
-    setLoading(true)
-    getPurchaseOrders()
-      .then((rows) => setList(Array.isArray(rows) ? rows : []))
-      .catch(() => setList([]))
-      .finally(() => setLoading(false))
-  }, [])
 
   React.useEffect(() => {
     load()
