@@ -377,7 +377,7 @@ export function OrderTab() {
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <Package className="h-12 w-12 text-muted-foreground/50" />
         <p className="text-center text-sm text-muted-foreground">
-          {isOffice ? (t("adminOrderCreateSelectStore") || "상단에서 매장을 선택해 주세요.") : (t("msg_select_store_name") || "매장을 선택해 주세요.")}
+          {isOffice ? t("orderStoreSelectFromTop") : t("msg_select_store_name")}
         </p>
       </div>
     )
