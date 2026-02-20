@@ -19,6 +19,7 @@ import {
   Users,
   CalendarClock,
   Wallet,
+  Banknote,
   Palmtree,
   Printer,
   Receipt,
@@ -107,6 +108,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionAccounting",
     items: [
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
+      { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
     ],
   },

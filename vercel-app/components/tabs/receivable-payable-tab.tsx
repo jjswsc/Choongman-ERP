@@ -23,6 +23,9 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
+import { isManagerOrFranchiseeRole } from "@/lib/permissions"
+import { cn } from "@/lib/utils"
 import { getVendorsForPurchase } from "@/lib/api-client"
 import {
   getReceivablePayableList,
@@ -37,11 +40,17 @@ function todayStr() {
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
   const { stores: storeList } = useStoreList()
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
 
+  const isManager = isManagerOrFranchiseeRole(auth?.role || "")
+  const managerStore = (auth?.store || "").trim()
+
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
-  const [storeFilter, setStoreFilter] = React.useState("All")
+  const [storeFilter, setStoreFilter] = React.useState(() =>
+    isManager && managerStore ? managerStore : "All"
+  )
   const [vendorFilter, setVendorFilter] = React.useState("All")
   const [startStr, setStartStr] = React.useState(() => {
     const d = new Date()
@@ -62,6 +71,25 @@ export function ReceivablePayableTab() {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
   }, [])
 
+  // 매니저: storeFilter를 자기 매장으로 고정
+  React.useEffect(() => {
+    if (isManager && managerStore) {
+      setStoreFilter(managerStore)
+    }
+  }, [isManager, managerStore])
+
+  // 매니저 + receivable 탭: 수령 입력 시 자기 매장 자동 선택
+  React.useEffect(() => {
+    if (tab === "receivable" && isManager && managerStore && !addEntity) {
+      setAddEntity(managerStore)
+    }
+  }, [tab, isManager, managerStore])
+
+  // 매니저: 미지급금 탭 접근 불가 → receivable로 고정
+  React.useEffect(() => {
+    if (isManager && tab === "payable") setTab("receivable")
+  }, [isManager, tab])
+
   const loadList = React.useCallback(() => {
     setLoading(true)
     getReceivablePayableList({
@@ -70,11 +98,13 @@ export function ReceivablePayableTab() {
       vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
       startStr,
       endStr,
+      userStore: auth?.store || undefined,
+      userRole: auth?.role || undefined,
     })
       .then((r) => setListData(r.list || []))
       .catch(() => setListData([]))
       .finally(() => setLoading(false))
-  }, [tab, storeFilter, vendorFilter, startStr, endStr])
+  }, [tab, storeFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
 
   React.useEffect(() => {
     loadList()
@@ -99,6 +129,8 @@ export function ReceivablePayableTab() {
         amount,
         transDate: addDate,
         memo: addMemo || undefined,
+        userStore: auth?.store || undefined,
+        userRole: auth?.role || undefined,
       })
       if (res.success) {
         setAddAmount("")
@@ -114,34 +146,42 @@ export function ReceivablePayableTab() {
     }
   }
 
-  const entityOptions = tab === "receivable"
-    ? (storeList?.length ? ["", "All", ...storeList] : [""])
-    : ["", ...vendors.map((v) => v.code)]
+  const receivableStores = tab === "receivable"
+    ? (isManager && managerStore ? [managerStore] : (storeList || []))
+    : []
 
   return (
     <div className="space-y-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "receivable" | "payable")}>
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className={cn("grid w-full max-w-md", isManager ? "grid-cols-1" : "grid-cols-2")}>
           <TabsTrigger value="receivable" className="flex items-center gap-2">
             <Wallet className="h-4 w-4" />
             {t("receivableTab") || "미수금 (매출)"}
           </TabsTrigger>
-          <TabsTrigger value="payable" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            {t("payableTab") || "미지급금 (매입)"}
-          </TabsTrigger>
+          {!isManager && (
+            <TabsTrigger value="payable" className="flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              {t("payableTab") || "미지급금 (매입)"}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="receivable" className="space-y-4 mt-4">
           <Card>
             <CardContent className="pt-4">
               <div className="flex flex-wrap items-center gap-3 mb-4">
-                <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <Select
+                  value={storeFilter}
+                  onValueChange={setStoreFilter}
+                  disabled={isManager && !!managerStore}
+                >
                   <SelectTrigger className="w-[160px] h-9">
                     <SelectValue placeholder={t("outColStore")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="All">{t("outFilterStoreAll") || "전체"}</SelectItem>
+                    {!(isManager && managerStore) && (
+                      <SelectItem value="All">{t("outFilterStoreAll") || "전체"}</SelectItem>
+                    )}
                     {(storeList || []).map((s) => (
                       <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
@@ -286,7 +326,7 @@ export function ReceivablePayableTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {tab === "receivable"
-                    ? (storeList || []).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)
+                    ? receivableStores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)
                     : vendors.map((v) => <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>)}
                 </SelectContent>
               </Select>

@@ -12,10 +12,21 @@ export async function GET(request: NextRequest) {
   headers.set('Access-Control-Allow-Origin', '*')
   const { searchParams } = new URL(request.url)
   const type = String(searchParams.get('type') || 'receivable').trim().toLowerCase()
-  const storeFilter = searchParams.get('storeFilter') || searchParams.get('store') || ''
+  let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = searchParams.get('vendorFilter') || searchParams.get('vendor') || ''
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim().slice(0, 10)
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim().slice(0, 10)
+  const userStore = String(searchParams.get('userStore') || '').trim()
+  const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+
+  // 매니저/가맹점주: receivable는 자기 매장만, payable은 조회 불가
+  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+  if (type === 'receivable' && isManager && userStore) {
+    storeFilter = userStore
+  }
+  if (type === 'payable' && isManager) {
+    return NextResponse.json({ type: 'payable', list: [] }, { headers })
+  }
 
   try {
     if (type === 'payable') {

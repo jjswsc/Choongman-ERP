@@ -19,7 +19,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const type = String(body.type || '').trim().toLowerCase()
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
-    const storeName = String(body.storeName || body.store_name || '').trim()
+    let storeName = String(body.storeName || body.store_name || '').trim()
+    const userStore = String(body.userStore || body.user_store || '').trim()
+    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
     const amount = Number(body.amount ?? 0)
     const transDate = String(body.transDate || body.trans_date || '').trim().slice(0, 10)
     const memo = String(body.memo || '').trim()
@@ -27,6 +29,14 @@ export async function POST(request: NextRequest) {
     if (type !== 'payable' && type !== 'receivable') {
       return NextResponse.json(
         { success: false, message: 'type은 payable 또는 receivable이어야 합니다.' },
+        { headers }
+      )
+    }
+    // 매니저/가맹점주: 미지급금(지급) 입력 불가
+    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+    if (type === 'payable' && isManager) {
+      return NextResponse.json(
+        { success: false, message: '매입 대금 지급은 본사에서만 등록할 수 있습니다.' },
         { headers }
       )
     }
@@ -64,6 +74,14 @@ export async function POST(request: NextRequest) {
     if (!storeName) {
       return NextResponse.json(
         { success: false, message: '매출처(storeName)를 입력해 주세요.' },
+        { headers }
+      )
+    }
+    // 매니저/가맹점주: 자기 매장만 수령 입력 가능
+    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+    if (isManager && userStore && storeName !== userStore) {
+      return NextResponse.json(
+        { success: false, message: '자기 매장만 수령 입력할 수 있습니다.' },
         { headers }
       )
     }

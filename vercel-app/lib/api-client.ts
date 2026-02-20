@@ -1108,6 +1108,8 @@ export async function getReceivablePayableList(params: {
   vendorFilter?: string
   startStr: string
   endStr: string
+  userStore?: string
+  userRole?: string
 }) {
   const q = new URLSearchParams({
     type: params.type,
@@ -1116,6 +1118,8 @@ export async function getReceivablePayableList(params: {
   })
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
   const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
   const data = await res.json()
   return data as { type: string; list: ReceivablePayableItem[] }
@@ -1128,6 +1132,8 @@ export async function addBalanceTransaction(params: {
   amount: number
   transDate: string
   memo?: string
+  userStore?: string
+  userRole?: string
 }) {
   const res = await apiFetch('/api/addBalanceTransaction', {
     method: 'POST',
