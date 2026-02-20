@@ -16,3 +16,4 @@ credentials.json
 
 # 백업 폴더 (선택)
 # backup_before_680/
+backups/

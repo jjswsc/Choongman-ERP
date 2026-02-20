@@ -1,0 +1,52 @@
+# Supabase DB 백업 - GitHub Actions
+# - 스케줄: UTC 0, 5, 12시 = KST 9, 14, 21시 (하루 3회)
+# - 수동 실행: Actions 탭에서 "Run workflow" 클릭
+# - SUPABASE_DB_URL 시크릿 필요 (Supabase → Settings → Database → Connection string URI)
+
+name: Supabase DB Backup
+
+on:
+  schedule:
+    - cron: '0 0,5,12 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create backup directory
+        run: mkdir -p backups
+
+      - name: Dump database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Add it in GitHub Settings → Secrets."
+            exit 1
+          fi
+          TIMESTAMP=$(date +%Y%m%d-%H%M)
+          supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP.sql"
+          echo "Backup created: backup-$TIMESTAMP.sql"
+
+      - name: Compress backup
+        run: |
+          cd backups && gzip -9 *.sql && ls -la
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 14

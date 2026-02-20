@@ -78,7 +78,6 @@ export async function POST(request: NextRequest) {
       )
     }
     // 매니저/가맹점주: 자기 매장만 수령 입력 가능
-    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
     if (isManager && userStore && storeName !== userStore) {
       return NextResponse.json(
         { success: false, message: '자기 매장만 수령 입력할 수 있습니다.' },
