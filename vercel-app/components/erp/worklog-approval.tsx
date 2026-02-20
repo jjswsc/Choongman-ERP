@@ -48,7 +48,7 @@ export function WorklogApproval() {
   const { lang } = useLang()
   const t = useT(lang)
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
-  const [startStr, setStartStr] = React.useState(defaultStartStr)
+  const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [deptFilter, setDeptFilter] = React.useState("all")
   const [employeeFilter, setEmployeeFilter] = React.useState("all")

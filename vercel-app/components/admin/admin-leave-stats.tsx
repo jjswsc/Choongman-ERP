@@ -37,8 +37,8 @@ export function AdminLeaveStats() {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const [startStr, setStartStr] = useState(firstDayOfMonth())
-  const [endStr, setEndStr] = useState(lastDayOfMonth())
+  const [startStr, setStartStr] = useState(todayStr())
+  const [endStr, setEndStr] = useState(todayStr())
   const [storeFilter, setStoreFilter] = useState("All")
   const [stores, setStores] = useState<string[]>([])
   const [statsList, setStatsList] = useState<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>([])

@@ -28,7 +28,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
-import { getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
+import { useStoreList, getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
 
@@ -122,9 +122,9 @@ export function OrderApproval() {
   const { auth } = useAuth()
   const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
+  const { stores: storeList } = useStoreList()
   const [orders, setOrders] = React.useState<Order[]>([])
-  const [stores, setStores] = React.useState<string[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [checkedOrders, setCheckedOrders] = React.useState<Set<string>>(new Set())
   const [allChecked, setAllChecked] = React.useState(false)
@@ -134,10 +134,7 @@ export function OrderApproval() {
     d.setDate(1)
     return d.toISOString().slice(0, 10)
   })
-  const [endDate, setEndDate] = React.useState(() => {
-    const d = new Date()
-    return d.toISOString().slice(0, 10)
-  })
+  const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [statusFilter, setStatusFilter] = React.useState("pending")
   const [searchTerm, setSearchTerm] = React.useState("")
   const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
@@ -152,7 +149,7 @@ export function OrderApproval() {
   const fetchOrders = React.useCallback(async () => {
     setLoading(true)
     try {
-      const { list, stores: s } = await getAdminOrders({
+      const { list } = await getAdminOrders({
         startStr: startDate,
         endStr: endDate,
         store: effectiveStore,
@@ -160,7 +157,6 @@ export function OrderApproval() {
         userStore: isManager ? userStore : undefined,
         userRole: isManager ? auth?.role : undefined,
       })
-      setStores(s || [])
 
       const storesInList = [...new Set(list.map((o) => o.store).filter(Boolean))]
       const hqStore = HQ_STORES[0]
@@ -191,7 +187,6 @@ export function OrderApproval() {
       setEditedItemsByOrderId({})
     } catch {
       setOrders([])
-      setStores([])
     } finally {
       setLoading(false)
     }
@@ -348,7 +343,7 @@ export function OrderApproval() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("orderFilterStoreAll")}</SelectItem>
-                  {stores.map((s) => (
+                  {storeList.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>

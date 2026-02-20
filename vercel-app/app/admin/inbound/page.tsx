@@ -62,8 +62,8 @@ export default function InboundPage() {
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
   const [saving, setSaving] = React.useState(false)
 
-  const [histStart, setHistStart] = React.useState("")
-  const [histEnd, setHistEnd] = React.useState("")
+  const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histVendor, setHistVendor] = React.useState("")
   const [histMonth, setHistMonth] = React.useState("")
 

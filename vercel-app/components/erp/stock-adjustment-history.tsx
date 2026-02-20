@@ -22,15 +22,9 @@ export function StockAdjustmentHistory() {
   const [stores, setStores] = React.useState<string[]>([])
   const [list, setList] = React.useState<AdjustmentHistoryItem[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [startStr, setStartStr] = React.useState("")
-  const [endStr, setEndStr] = React.useState("")
+  const [startStr, setStartStr] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [endStr, setEndStr] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [storeFilter, setStoreFilter] = React.useState("")
-
-  React.useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    setStartStr(today)
-    setEndStr(today)
-  }, [])
 
   React.useEffect(() => {
     getStockStores().then((s) => setStores(s || []))

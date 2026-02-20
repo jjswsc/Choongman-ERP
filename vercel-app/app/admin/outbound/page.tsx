@@ -86,8 +86,8 @@ export default function OutboundPage() {
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
   const [saving, setSaving] = React.useState(false)
 
-  const [histStart, setHistStart] = React.useState("")
-  const [histEnd, setHistEnd] = React.useState("")
+  const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histMonth, setHistMonth] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
   const [histType, setHistType] = React.useState("")

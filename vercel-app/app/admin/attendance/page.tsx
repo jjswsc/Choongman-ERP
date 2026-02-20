@@ -73,7 +73,7 @@ export default function AdminAttendancePage() {
   const [stores, setStores] = React.useState<string[]>([])
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
 
-  const [startDate, setStartDate] = React.useState(weekAgoStr)
+  const [startDate, setStartDate] = React.useState(todayStr)
   const [endDate, setEndDate] = React.useState(todayStr)
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [employeeFilter, setEmployeeFilter] = React.useState("All")

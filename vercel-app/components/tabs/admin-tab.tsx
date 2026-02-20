@@ -44,7 +44,7 @@ export function AdminTab() {
   const t = useT(lang)
 
   // 근태 승인
-  const [attStart, setAttStart] = useState(weekAgoStr)
+  const [attStart, setAttStart] = useState(todayStr)
   const [attEnd, setAttEnd] = useState(todayStr)
   const [attStoreFilter, setAttStoreFilter] = useState("All")
   const [attStores, setAttStores] = useState<string[]>([])

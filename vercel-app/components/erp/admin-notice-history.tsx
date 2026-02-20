@@ -54,7 +54,7 @@ export function AdminNoticeHistory() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const [startDate, setStartDate] = React.useState(defaultStartStr)
+  const [startDate, setStartDate] = React.useState(todayStr)
   const [endDate, setEndDate] = React.useState(todayStr)
   const [senderFilter, setSenderFilter] = React.useState<string>("mine")
   const [senders, setSenders] = React.useState<string[]>([])

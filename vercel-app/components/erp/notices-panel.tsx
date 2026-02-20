@@ -28,7 +28,7 @@ export function NoticesPanel() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const [startDate, setStartDate] = React.useState(() => daysAgoStr(30))
+  const [startDate, setStartDate] = React.useState(todayStr)
   const [endDate, setEndDate] = React.useState(todayStr)
   const [notices, setNotices] = React.useState<NoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)

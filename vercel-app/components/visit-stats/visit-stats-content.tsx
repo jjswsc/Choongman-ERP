@@ -38,7 +38,7 @@ export function VisitStatsContent() {
   const isManager = isManagerRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
 
-  const [startDate, setStartDate] = useState(defaultStartDate)
+  const [startDate, setStartDate] = useState(defaultEndDate)
   const [endDate, setEndDate] = useState(defaultEndDate)
   const [storeFilter, setStoreFilter] = useState(ALL)
   const [employeeFilter, setEmployeeFilter] = useState(ALL)

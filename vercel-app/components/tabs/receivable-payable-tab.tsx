@@ -52,11 +52,7 @@ export function ReceivablePayableTab() {
     isManager && managerStore ? managerStore : "All"
   )
   const [vendorFilter, setVendorFilter] = React.useState("All")
-  const [startStr, setStartStr] = React.useState(() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - 1)
-    return d.toISOString().slice(0, 10)
-  })
+  const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
   const [loading, setLoading] = React.useState(false)

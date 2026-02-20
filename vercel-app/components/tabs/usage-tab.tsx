@@ -78,7 +78,7 @@ export function UsageTab() {
   const [submitting, setSubmitting] = useState(false)
   const [history, setHistory] = useState<UsageHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [histStart, setHistStart] = useState(() => daysAgoStr(7))
+  const [histStart, setHistStart] = useState(todayStr)
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)

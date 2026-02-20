@@ -39,7 +39,7 @@ export function HomeTab() {
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 첫화면: 미확인 기본
-  const [dateFrom, setDateFrom] = useState(() => daysAgoStr(30)) // 기본: 최근 30일
+  const [dateFrom, setDateFrom] = useState(todayStr)
   const [dateTo, setDateTo] = useState(todayStr)
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
