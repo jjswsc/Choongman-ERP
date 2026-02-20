@@ -206,7 +206,7 @@ export function ReceivablePayableTab() {
     const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
     const rows: string[][] = [[entityCol, t("amount") || "금액", t("receivPayCount") || "건수"]]
     for (const item of summaryData) {
-      const name = isRec ? (item.storeName ?? "") : (vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode ?? "")
+      const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
       rows.push([name, String(item.balance ?? 0), String(item.count ?? 0)])
     }
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
@@ -235,7 +235,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
     const typeReceive = isRec ? "수령" : "지급"
     const rows: string[][] = [[entityCol, t("date") || "날짜", t("type") || "구분", t("amount") || "금액", t("memo") || "메모"]]
     for (const item of listData) {
-      const name = isRec ? (item.storeName ?? "") : (vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode ?? "")
+      const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
       const typeLabel = (ref: string) => (ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
       for (const row of item.items || []) {
         rows.push([
@@ -294,7 +294,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
             </thead>
             <tbody>
               {summaryData.map((item) => {
-                const name = isRec ? (item.storeName ?? "") : (vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode ?? "")
+                const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
                 const bal = item.balance ?? 0
                 return (
                   <tr key={name} className="border-b">
@@ -310,7 +310,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         {subTab === "detail" && listData.length > 0 && (
           <div className="space-y-6">
             {listData.map((item) => {
-              const name = isRec ? (item.storeName ?? "") : (vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode ?? "")
+              const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
               return (
                 <div key={name} className="break-inside-avoid">
                   <h2 className="font-semibold text-sm mb-1">{name}</h2>
