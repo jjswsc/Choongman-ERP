@@ -13,6 +13,12 @@ import {
 } from "@/components/ui/accordion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
@@ -96,6 +102,7 @@ export function OrderTab() {
   const [receivePhotoFile, setReceivePhotoFile] = useState<File | null>(null)
   const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
+  const [rejectReasonModal, setRejectReasonModal] = useState<{ order: OrderHistoryItem } | null>(null)
   const [inspectedItems, setInspectedItems] = useState<Record<number, Set<number>>>({})
   const [receivedQtys, setReceivedQtys] = useState<Record<number, Record<number, number>>>({})
   const receivedQtysRef = useRef<Record<number, Record<number, number>>>({})
@@ -665,27 +672,26 @@ export function OrderTab() {
                           <div className="min-w-0 flex-1 space-y-1">
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="text-sm font-semibold">{t("orderDate")} {o.date}</span>
-                              {o.userName && (
-                                <span className="text-xs text-muted-foreground">({t("orderOrderedBy") || "발주자"} {o.userName})</span>
+                              {(o.userNick || o.userName) && (
+                                <span className="text-xs text-muted-foreground">({t("orderOrderedBy") || "발주자"} {o.userNick || o.userName})</span>
                               )}
                               {o.deliveryDate && (
                                 <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
                               )}
-                              <Badge variant="outline" className="text-xs">
+                              <Badge
+                                variant={o.status === "Rejected" ? "destructive" : "outline"}
+                                className={`text-sm px-2.5 py-0.5 ${o.status === "Rejected" ? "bg-destructive text-destructive-foreground border-0" : ""} ${o.status === "Rejected" && o.rejectReason ? "cursor-pointer" : ""}`}
+                                onClick={o.status === "Rejected" && o.rejectReason ? (e) => { e.stopPropagation(); setRejectReasonModal({ order: o }); } : undefined}
+                              >
                                 {translateOrderStatus(o.status || "")}
                               </Badge>
                               {(o.deliveryStatus === "배송중" || o.deliveryStatus === "배송 완료" || o.deliveryStatus === "배송완료" || o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
-                                <Badge className={`text-xs ${deliveryStatusColor(o.deliveryStatus)}`}>
+                                <Badge className={`text-sm px-2.5 py-0.5 ${deliveryStatusColor(o.deliveryStatus)}`}>
                                   {translateDeliveryStatus(o.deliveryStatus)}
                                 </Badge>
                               )}
                             </div>
                             <div className="text-sm text-muted-foreground">{o.summary}</div>
-                            {o.status === "Rejected" && o.rejectReason && (
-                              <div className="text-xs text-destructive/90 mt-0.5">
-                                {t("reasonPh") || "사유"}: {o.rejectReason}
-                              </div>
-                            )}
                           </div>
                           <span className="shrink-0 font-bold text-primary">{o.total} ฿</span>
                         </div>
@@ -755,6 +761,15 @@ export function OrderTab() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!rejectReasonModal} onOpenChange={(open) => !open && setRejectReasonModal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("reasonPh") || "사유"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{rejectReasonModal?.order?.rejectReason || "-"}</p>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

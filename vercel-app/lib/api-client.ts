@@ -197,6 +197,7 @@ export interface OrderHistoryItem {
   items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
   userName?: string
+  userNick?: string
   rejectReason?: string
 }
 
@@ -217,6 +218,7 @@ export interface UsageHistoryItem {
   qty: number
   amount: number
   userName?: string
+  userNick?: string
 }
 
 export async function processUsage(params: {

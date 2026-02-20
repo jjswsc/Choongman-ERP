@@ -423,7 +423,7 @@ export function UsageTab() {
                       <div>
                         <p className="text-xs text-muted-foreground">
                           {h.dateTime}
-                          {h.userName && <span className="ml-2">({t('useUsedBy') || '사용자'} {h.userName})</span>}
+                          {(h.userNick || h.userName) && <span className="ml-2">({t('useUsedBy') || '사용자'} {h.userNick || h.userName})</span>}
                         </p>
                         <p className="font-medium">{h.item}</p>
                       </div>

@@ -13,6 +13,7 @@ export interface OrderHistoryItem {
   items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
   receivedIndices?: number[]
   userName?: string
+  userNick?: string
   rejectReason?: string
 }
 
@@ -51,6 +52,17 @@ export async function GET(request: NextRequest) {
       reject_reason?: string
     }[]
 
+    const nameToNick: Record<string, string> = {}
+    if (store) {
+      try {
+        const empFilter = `store=eq.${encodeURIComponent(store)}`
+        const emps = (await supabaseSelectFilter('employees', empFilter, { select: 'name,nick', limit: 500 })) as { name?: string; nick?: string }[]
+        for (const e of emps || []) {
+          const n = String(e.name || '').trim()
+          if (n) nameToNick[n] = String(e.nick || e.name || '').trim() || n
+        }
+      } catch {}
+    }
     const list: OrderHistoryItem[] = (rows || []).map((o) => {
       let cart: { name?: string; qty?: number; price?: number }[] = []
       try {
@@ -89,6 +101,7 @@ export async function GET(request: NextRequest) {
         items,
         receivedIndices,
         userName: String(o.user_name || '').trim() || undefined,
+        userNick: nameToNick[String(o.user_name || '').trim()] || undefined,
         rejectReason: String(o.reject_reason || '').trim() || undefined,
       }
     })
