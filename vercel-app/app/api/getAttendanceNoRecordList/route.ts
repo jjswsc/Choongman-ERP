@@ -82,6 +82,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 승인된 휴가(연차/병가/무급휴가 등)가 있는 날짜·매장·직원은 미기록 목록에서 제외
+    const leaveFilter = `leave_date=gte.${startStr}&leave_date=lte.${endStr}`
+    const leaveRows = (await supabaseSelectFilter(
+      'leave_requests',
+      leaveFilter,
+      { limit: 1000, select: 'store,name,leave_date,status' }
+    )) as { store?: string; name?: string; leave_date?: string; status?: string }[]
+    const hasApprovedLeave = new Set<string>()
+    for (const lr of leaveRows || []) {
+      if (String(lr.status || '').trim() !== '승인') continue
+      const store = String(lr.store || '').trim()
+      const name = String(lr.name || '').trim()
+      const date = toDateStr(lr.leave_date)
+      if (date && store && name && date >= startStr && date <= endStr) {
+        hasApprovedLeave.add(`${date}|${store}|${name}`)
+      }
+    }
+
     const nickMap: Record<string, string> = {}
     const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' })) as { store?: string; name?: string; nick?: string }[] | null
     for (const e of empList || []) {
@@ -99,6 +117,7 @@ export async function GET(request: NextRequest) {
       if (!store || !name) continue
       const key = `${date}|${store}|${name}`
       if (hasAttendance.has(key)) continue
+      if (hasApprovedLeave.has(key)) continue // 휴가일은 미기록 목록에서 제외
 
       const planIn = formatTime(s.plan_in) || '09:00'
       const planOut = formatTime(s.plan_out) || '18:00'

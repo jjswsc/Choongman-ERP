@@ -128,34 +128,6 @@ export function AdminScheduleEdit({
     }
   }
 
-  const toggleSlot = (day: number, area: string, time: string) => {
-    if (!selectedStaff) {
-      alert(t("att_staff_select") + " " + t("att_select_first"))
-      return
-    }
-    const key = getSlotKey(day, area, time)
-    const current = slotData[key] || []
-    const brkName = "BRK_" + selectedStaff.name
-    const idx = current.indexOf(selectedStaff.name)
-    const idxBrk = current.indexOf(brkName)
-    let next: string[] = []
-    if (idx >= 0) {
-      next = current.filter((_, i) => i !== idx)
-    } else if (idxBrk >= 0) {
-      next = current.filter((_, i) => i !== idxBrk)
-    } else {
-      const otherSlots = Object.entries(slotData).filter(
-        ([k]) => k.startsWith(`${day}-`) && (slotData[k]?.includes(selectedStaff.name) || slotData[k]?.includes(brkName))
-      )
-      if (otherSlots.length > 0) {
-        alert(t("att_already_assigned"))
-        return
-      }
-      next = [...current, selectedStaff.name]
-    }
-    setSlotNames(day, area, time, next)
-  }
-
   const loadSaved = () => {
     if (!store || !monday) {
       alert(t("att_store_monday_required"))
@@ -172,6 +144,9 @@ export function AdminScheduleEdit({
           const displayDayIdx = row.plan_in_prev_day && dayIdx > 0 ? dayIdx - 1 : dayIdx
           if (displayDayIdx < 0) continue
           const area = row.area || "Service"
+          const isLeave = !!(row as { leaveType?: string }).leaveType
+          const leaveType = (row as { leaveType?: string }).leaveType
+          const slotVal = isLeave ? `LEAVE_${leaveType}_${row.name}` : row.name
           const pIn = row.pIn || "09:00"
           const pOut = row.pOut || "18:00"
           const [, oh, om] = pOut.match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/) || [null, 0, 0]
@@ -179,11 +154,11 @@ export function AdminScheduleEdit({
           const outM = parseInt(String(om), 10)
           const endSlot = row.plan_in_prev_day ? `${String(outH + 24).padStart(2, "0")}:${String(outM).padStart(2, "0")}` : pOut
           const workTimes = get30MinIntervals(pIn, endSlot)
-          const breakTimes = row.pBS && row.pBE ? get30MinIntervals(row.pBS, row.pBE) : []
+          const breakTimes = !isLeave && row.pBS && row.pBE ? get30MinIntervals(row.pBS, row.pBE) : []
           for (const t of workTimes) {
             const key = getSlotKey(displayDayIdx, area, t)
             const names = next[key] || []
-            const val = breakTimes.includes(t) ? "BRK_" + row.name : row.name
+            const val = breakTimes.includes(t) ? "BRK_" + row.name : slotVal
             if (!names.includes(val)) names.push(val)
             next[key] = names
           }
@@ -205,10 +180,11 @@ export function AdminScheduleEdit({
     }
     const name = selectedStaff.name
     const brkName = "BRK_" + name
+    const isLeaveEntry = (n: string) => n.startsWith("LEAVE_") && n.split("_").slice(2).join("_") === name
     setSlotData((prev) => {
       const next = { ...prev }
       for (const [key, vals] of Object.entries(prev)) {
-        const filtered = vals.filter((n) => n !== name && n !== brkName)
+        const filtered = vals.filter((n) => n !== name && n !== brkName && !isLeaveEntry(n))
         if (filtered.length === 0) delete next[key]
         else if (filtered.length !== vals.length) next[key] = filtered
       }
@@ -235,12 +211,13 @@ export function AdminScheduleEdit({
     }
     const name = selectedStaff.name
     const brkName = "BRK_" + name
+    const isLeaveEntry = (n: string) => n.startsWith("LEAVE_") && n.split("_").slice(2).join("_") === name
     setSlotData((prev) => {
       const next = { ...prev }
       for (const key of Object.keys(prev)) {
         if (!key.startsWith(`${day}-`)) continue
         const vals = prev[key] || []
-        const filtered = vals.filter((n) => n !== name && n !== brkName)
+        const filtered = vals.filter((n) => n !== name && n !== brkName && !isLeaveEntry(n))
         if (filtered.length === 0) delete next[key]
         else if (filtered.length !== vals.length) next[key] = filtered
       }
@@ -304,6 +281,7 @@ export function AdminScheduleEdit({
       const day = parseInt(dayStr, 10)
       const datePart = dayStrs[day]
       for (const n of names) {
+        if (n.startsWith("LEAVE_")) continue // 휴가는 저장에서 제외
         const realName = n.startsWith("BRK_") ? n.replace("BRK_", "") : n
         const recKey = `${datePart}_${realName}_${area}`
         if (!map[recKey]) map[recKey] = { work: [], break: [] }
@@ -388,6 +366,7 @@ export function AdminScheduleEdit({
         for (const [key, vals] of Object.entries(slotData)) {
           if (!key.startsWith(`${d}-${ar}-`)) continue
           for (const n of vals) {
+            if (n.startsWith("LEAVE_")) continue // 휴가는 인원/일별 요약 집계에서 제외
             names.add(n.startsWith("BRK_") ? n.replace("BRK_", "") : n)
           }
         }
@@ -403,20 +382,34 @@ export function AdminScheduleEdit({
     ["00", "30"].map((m) => `${String(i).padStart(2, "0")}:${m}`)
   ).flat()
 
-  type PersonSchedule = { name: string; area: string; workDays: string[]; breakDays: string[] }
+  type PersonSchedule = { name: string; area: string; workDays: string[]; breakDays: string[]; leaveType?: string }
   const scheduleForExport = React.useMemo(() => {
-    const map: Record<string, { work: string[]; break: string[] }> = {}
+    const map: Record<string, { work: string[]; break: string[]; leaveType?: string }> = {}
     for (const [key, names] of Object.entries(slotData)) {
       if (!names.length) continue
       const [dayStr, area, time] = key.split("-")
       const day = parseInt(dayStr, 10)
       const datePart = dayStrs[day]
       for (const n of names) {
-        const realName = n.startsWith("BRK_") ? n.replace("BRK_", "") : n
+        let realName: string
+        let leaveType: string | undefined
+        if (n.startsWith("LEAVE_")) {
+          const parts = n.split("_")
+          leaveType = parts[1] || "휴가"
+          realName = parts.slice(2).join("_") || n
+        } else {
+          realName = n.startsWith("BRK_") ? n.replace("BRK_", "") : n
+        }
         const recKey = `${datePart}_${realName}_${area}`
         if (!map[recKey]) map[recKey] = { work: [], break: [] }
-        if (n.startsWith("BRK_")) map[recKey].break.push(time)
-        else map[recKey].work.push(time)
+        if (n.startsWith("LEAVE_")) {
+          map[recKey].leaveType = leaveType
+          map[recKey].work.push(time)
+        } else if (n.startsWith("BRK_")) {
+          map[recKey].break.push(time)
+        } else {
+          map[recKey].work.push(time)
+        }
       }
     }
     const byPerson: Record<string, PersonSchedule> = {}
@@ -428,20 +421,23 @@ export function AdminScheduleEdit({
       const dayIdx = dayStrs.indexOf(date)
       if (dayIdx < 0) continue
       const pk = `${name}|${area}`
-      if (!byPerson[pk]) byPerson[pk] = { name, area, workDays: ["", "", "", "", "", "", ""], breakDays: ["", "", "", "", "", "", ""] }
+      if (!byPerson[pk]) byPerson[pk] = { name, area, workDays: ["", "", "", "", "", "", ""], breakDays: ["", "", "", "", "", "", ""], leaveType: v.leaveType }
       const all = [...v.work, ...v.break].sort()
       if (all.length === 0) continue
-      const pIn = all[0]
-      const last = all[all.length - 1]
-      const [lh, lm] = last.split(":").map(Number)
-      let lm2 = lm + 30
-      let lh2 = lh
-      if (lm2 >= 60) { lm2 -= 60; lh2++ }
-      const outH = lh2 >= 24 ? lh2 - 24 : lh2
-      const outM = lm2
-      const pOutDisplay = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+      const workStr = v.leaveType ? `[${v.leaveType}]` : (() => {
+        const pIn = all[0]
+        const last = all[all.length - 1]
+        const [lh, lm] = last.split(":").map(Number)
+        let lm2 = lm + 30
+        let lh2 = lh
+        if (lm2 >= 60) { lm2 -= 60; lh2++ }
+        const outH = lh2 >= 24 ? lh2 - 24 : lh2
+        const outM = lm2
+        const pOutDisplay = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+        return `${pIn}-${pOutDisplay}`
+      })()
       let breakStr = ""
-      if (v.break.length > 0) {
+      if (!v.leaveType && v.break.length > 0) {
         const bSorted = v.break.sort()
         const pBS = bSorted[0]
         const bLast = bSorted[bSorted.length - 1]
@@ -452,7 +448,6 @@ export function AdminScheduleEdit({
         const pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
         breakStr = `${pBS}-${pBE}`
       }
-      const workStr = `${pIn}-${pOutDisplay}`
       byPerson[pk].workDays[dayIdx] = workStr
       byPerson[pk].breakDays[dayIdx] = breakStr
     }
@@ -642,15 +637,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
           </div>
         </div>
 
-        {/* Grid - 슬롯이 아닌 영역 클릭 시 직원 선택 해제 */}
-        <div
-          className="lg:col-span-10 space-y-3"
-          onClick={(e) => {
-            if (selectedStaff && !(e.target as HTMLElement).closest("[data-slot]")) {
-              setSelectedStaff(null)
-            }
-          }}
-        >
+        {/* Grid - 보기 전용 (클릭 수정 비활성화) */}
+        <div className="lg:col-span-10 space-y-3">
           {/* 인쇄용 영역 - 검색한 스케줄만 매장/기간과 함께 출력 */}
           {scheduleForExport.length > 0 && (
             <div id="admin-schedule-print-area" className="hidden print:block">
@@ -862,31 +850,36 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               const time = `${String(hourNum).padStart(2, "0")}:${String(hx).padStart(2, "0")}`
                               const names = getSlotNames(day, area, time)
                               const hasData = names.length > 0
-                              const areaHover = area === "Service" ? "hover:bg-orange-50 dark:hover:bg-orange-950/20" : area === "Kitchen" ? "hover:bg-green-50 dark:hover:bg-green-950/20" : "hover:bg-blue-50 dark:hover:bg-blue-950/20"
                               return (
                                 <div
                                   key={time}
-                                  data-slot
-                                  onClick={() => toggleSlot(day, area, time)}
                                   className={cn(
-                                    "cursor-pointer flex flex-wrap items-center justify-center gap-1 p-1.5 transition-colors",
+                                    "flex flex-wrap items-center justify-center gap-1 p-1.5",
                                     hasData && "bg-primary/10",
-                                    areaHover,
                                     slotViewHour && ti === 1 && "border-t border-dashed border-border"
                                   )}
                                   style={{ minHeight: slotMinH }}
                                 >
-                                  {names.map((n) => (
-                                    <span
-                                      key={n}
-                                      className={cn(
-                                        "px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-full",
-                                        n.startsWith("BRK_") ? "bg-gray-600 text-white" : area === "Service" ? "bg-orange-500 text-white" : area === "Kitchen" ? "bg-green-600 text-white" : "bg-blue-500 text-white"
-                                      )}
-                                    >
-                                      {n.startsWith("BRK_") ? "R" : staffList.find((s) => s.name === n)?.nick || n}
-                                    </span>
-                                  ))}
+                                  {names.map((n) => {
+                                    const isLeave = n.startsWith("LEAVE_")
+                                    const [leaveType, leaveName] = isLeave ? [n.split("_")[1] || "휴가", n.split("_").slice(2).join("_")] : [null, ""]
+                                    const displayName = n.startsWith("BRK_")
+                                      ? "R"
+                                      : isLeave
+                                        ? `${staffList.find((s) => s.name === leaveName)?.nick || leaveName} (${leaveType})`
+                                        : staffList.find((s) => s.name === n)?.nick || n
+                                    return (
+                                      <span
+                                        key={n}
+                                        className={cn(
+                                          "px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-full",
+                                          n.startsWith("BRK_") ? "bg-gray-600 text-white" : isLeave ? "bg-emerald-600/80 text-white" : area === "Service" ? "bg-orange-500 text-white" : area === "Kitchen" ? "bg-green-600 text-white" : "bg-blue-500 text-white"
+                                        )}
+                                      >
+                                        {displayName}
+                                      </span>
+                                    )
+                                  })}
                                 </div>
                               )
                             })}

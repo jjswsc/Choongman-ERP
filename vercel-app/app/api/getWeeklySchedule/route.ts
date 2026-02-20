@@ -74,11 +74,59 @@ export async function GET(request: NextRequest) {
       scheduleRows = (await supabaseSelectFilter('schedules', filter, { order: 'schedule_date.asc', limit: 500 })) as SchRow[]
     }
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store' })) as { name?: string; nick?: string; store?: string }[]
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store,job' })) as { name?: string; nick?: string; store?: string; job?: string }[]
     const nameToNick: Record<string, string> = {}
+    const storeNameToJob: Record<string, string> = {}
     for (const e of empList || []) {
       const nm = String(e.name || '').trim()
-      if (nm) nameToNick[nm] = String(e.nick || e.name || nm).trim() || nm
+      const st = String(e.store || '').trim()
+      if (nm) {
+        nameToNick[nm] = String(e.nick || e.name || nm).trim() || nm
+        if (st) storeNameToJob[st + '|' + nm] = String(e.job || '').trim()
+      }
+    }
+
+    const scheduleKeySet = new Set<string>()
+    for (const r of scheduleRows || []) {
+      const d = toDateStr(r.schedule_date)
+      const st = String(r.store_name || '').trim()
+      const nm = String(r.name || '').trim()
+      if (d && st && nm) scheduleKeySet.add(`${d}|${st}|${nm}`)
+    }
+
+    // 승인된 휴가: schedules에 없고 leave에만 있는 (date, store, name) → 휴가 행 병합
+    let leaveFilter = `leave_date=gte.${start}&leave_date=lte.${end}&status=eq.승인`
+    if (!isAll && store) {
+      leaveFilter += `&store=ilike.${encodeURIComponent(store)}`
+    }
+    const leaveRows = (await supabaseSelectFilter(
+      'leave_requests',
+      leaveFilter,
+      { order: 'leave_date.asc', limit: 200, select: 'store,name,leave_date,type' }
+    )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+    const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType?: string }[] = []
+    for (const lr of leaveRows || []) {
+      const date = toDateStr(lr.leave_date)
+      const store = String(lr.store || '').trim()
+      const name = String(lr.name || '').trim()
+      const type = String(lr.type || '').trim() || '휴가'
+      if (!date || !store || !name || date < start || date > end) continue
+      const key = `${date}|${store}|${name}`
+      if (scheduleKeySet.has(key)) continue // 이미 스케줄에 있으면 휴가 행 추가 안 함
+      const area = parseAreaFromMemo(storeNameToJob[store + '|' + name] || '')
+      leaveMerged.push({
+        date,
+        store,
+        name,
+        nick: nameToNick[name] || name,
+        pIn: '09:00',
+        pOut: '18:00',
+        pBS: '',
+        pBE: '',
+        area: area || 'Service',
+        plan_in_prev_day: false,
+        leaveType: type,
+      })
     }
 
     let list = (scheduleRows || []).map((r) => {
@@ -97,9 +145,20 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    list = [...list, ...leaveMerged]
+
     if (areaFilter && areaFilter.toLowerCase() !== 'all' && areaFilter !== '전체') {
       list = list.filter((r) => (r.area || 'Service') === areaFilter)
     }
+
+    list.sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1
+      if (a.store !== b.store) return a.store.localeCompare(b.store)
+      const an = (a as { leaveType?: string }).leaveType ? '휴가' : ''
+      const bn = (b as { leaveType?: string }).leaveType ? '휴가' : ''
+      if (an !== bn) return an < bn ? -1 : 1
+      return (a.name || '').localeCompare(b.name || '')
+    })
 
     return NextResponse.json(list, { headers })
   } catch (e) {

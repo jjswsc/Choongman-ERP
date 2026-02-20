@@ -11,6 +11,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "승인 또는 반려를 선택해 주세요.": "selectApproveOrReject",
   "해당 휴가 신청을 찾을 수 없습니다.": "leaveRequestNotFound",
   "해당 매장의 휴가만 승인할 수 있습니다.": "leaveStoreOnly",
+  "해당 날짜는 휴가일입니다. 긴급 인정할 수 없습니다.": "leaveDayCannotEmergencyApprove",
 
   // 사용 확정
   "✅ 사용 확정 완료": "confirmUsageDone",

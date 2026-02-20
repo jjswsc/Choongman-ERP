@@ -84,6 +84,16 @@ export async function POST(request: NextRequest) {
     const planBE = String(sch.break_end || '').trim()
     const planInPrevDay = !!sch.plan_in_prev_day
 
+    // 해당 날짜에 승인된 휴가가 있으면 긴급 인정 불가
+    const leaveFilter = `leave_date=eq.${dateStr}&store=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&status=eq.승인`
+    const leaveRows = (await supabaseSelectFilter('leave_requests', leaveFilter, { limit: 5 })) as { id?: number }[]
+    if (leaveRows && leaveRows.length > 0) {
+      return NextResponse.json(
+        { success: false, message: '해당 날짜는 휴가일입니다. 긴급 인정할 수 없습니다.' },
+        { headers }
+      )
+    }
+
     // 이미 출근 기록 있는지 확인
     const nextD = new Date(dateStr + 'T12:00:00')
     nextD.setDate(nextD.getDate() + 1)
