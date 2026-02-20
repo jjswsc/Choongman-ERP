@@ -2512,6 +2512,15 @@ export async function getPurchaseOrders() {
   return Array.isArray(data) ? data : []
 }
 
+export async function processPurchaseOrderApproval(params: { poId: number }) {
+  const res = await apiFetch('/api/processPurchaseOrderApproval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getMenuPermission(store: string, name: string) {
   const q = new URLSearchParams({ store, name })
   const res = await apiFetch(`/api/getMenuPermission?${q}`)
