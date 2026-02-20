@@ -27,6 +27,19 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function getAttendanceDateRange() {
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const hour = now.getHours()
+  // 0~5시(자정~새벽): 전날 출근 후 퇴근 안 한 경우를 위해 전날도 포함
+  if (hour >= 0 && hour < 6) {
+    const d = new Date(today + 'T12:00:00')
+    d.setDate(d.getDate() - 1)
+    return { startDate: d.toISOString().slice(0, 10), endDate: today }
+  }
+  return { startDate: today, endDate: today }
+}
+
 const ATT_TYPE_TO_KEY: Record<string, string> = {
   출근: "attIn",
   퇴근: "attOut",
@@ -136,10 +149,10 @@ export function HrTab() {
 
   const loadTodayLog = useCallback(() => {
     if (!auth?.store || !auth?.user) return
-    const today = todayStr()
+    const { startDate, endDate } = getAttendanceDateRange()
     getAttendanceList({
-      startDate: today,
-      endDate: today,
+      startDate,
+      endDate,
       storeFilter: auth.store,
       employeeFilter: auth.user,
     }).then(setAttLog)

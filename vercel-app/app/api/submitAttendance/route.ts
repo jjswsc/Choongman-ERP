@@ -146,6 +146,16 @@ export async function POST(request: NextRequest) {
       const prevDayFilter = `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
       schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
     }
+    // 퇴근: 당일 스케줄 없으면 전날(자정 넘는 근무) 스케줄 확인
+    if ((!schRows || schRows.length === 0) && logType === '퇴근') {
+      const yesterday = (() => {
+        const d = new Date(todayStrVal + 'T12:00:00')
+        d.setDate(d.getDate() - 1)
+        return d.toISOString().slice(0, 10)
+      })()
+      const yesterdayFilter = `schedule_date=eq.${yesterday}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
+      schRows = (await supabaseSelectFilter('schedules', yesterdayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+    }
     if (schRows && schRows.length > 0) {
       planIn = String(schRows[0].plan_in || '').trim()
       planOut = String(schRows[0].plan_out || '').trim()

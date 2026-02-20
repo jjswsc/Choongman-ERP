@@ -48,12 +48,18 @@ function buildAttendanceSummary(
   const firstDay = new Date(monthStr + '-01')
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
+  // 익월 1일 포함 (월 경계: 말일 출근 → 익월 1일 퇴근 병합용)
+  const nextMonthFirst = (() => {
+    const d = new Date(monthStr + '-01')
+    d.setMonth(d.getMonth() + 1)
+    return d.toISOString().slice(0, 10)
+  })()
   const map: Record<string, AttSummary> = {}
   const byDay: Record<string, { inMs: number; outMs: number; breakMin: number; otMin: number; outApproved: boolean; lateMin?: number }> = {}
 
   for (const r of attRows || []) {
     const rowDateStr = toDateStr(r.log_at)
-    if (!rowDateStr || rowDateStr < startStr || rowDateStr > endStr) continue
+    if (!rowDateStr || rowDateStr < startStr || rowDateStr > nextMonthFirst) continue
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (!store || !name) continue
@@ -115,22 +121,24 @@ function buildAttendanceSummary(
       }
     }
     if (inMs > 0 && outMs > 0 && outApproved && outMs > inMs) {
+      const dateStr = dk.split('_')[0]
+      // 말일 기준: 출근일이 해당 월이어야 집계 (익월 1일 단독 근무는 제외)
+      if (!dateStr || dateStr < startStr || dateStr > endStr) continue
       const storeName = dk.slice(11)
       if (!map[storeName]) map[storeName] = { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
       const minWork = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMin)
       map[storeName].workMin += minWork
       map[storeName].otMin += otMin
       map[storeName].workDays += 1
-      const dateStr = dk.split('_')[0]
-      if (dateStr) map[storeName].workDates.add(dateStr)
+      map[storeName].workDates!.add(dateStr)
     }
   }
-  // 10분 이상 지각 일수 집계 (매장 직원 반차 공제 규정용)
+  // 10분 이상 지각 일수 집계 (매장 직원 반차 공제 규정용) - 해당 월만
   for (const dk of Object.keys(byDay)) {
     const parts = dk.split('_')
     const dateStr = parts[0]
     const key = parts.slice(1).join('_')
-    if (!key || !dateStr) continue
+    if (!key || !dateStr || dateStr < startStr || dateStr > endStr) continue
     const v = byDay[dk]
     const dayLateMin = v.lateMin || 0
     if (dayLateMin >= LATE_HALF_DAY_MIN && map[key]) {
@@ -203,6 +211,11 @@ export async function GET(request: NextRequest) {
   try {
     const [y, m] = normMonth.split('-').map(Number)
     const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+    const nextMonthNextDay = (() => {
+      const d = new Date(nextMonth + '-01')
+      d.setDate(d.getDate() + 1)
+      return d.toISOString().slice(0, 10)
+    })()
 
     const startStr = normMonth + '-01'
     const lastDay = new Date(parseInt(normMonth.slice(0, 4), 10), parseInt(normMonth.slice(5, 7), 10) - 1, 0)
@@ -225,7 +238,7 @@ export async function GET(request: NextRequest) {
       }[] | null>,
       supabaseSelectFilter(
         'attendance_logs',
-        `log_at=gte.${normMonth}-01&log_at=lt.${nextMonth}-01`,
+        `log_at=gte.${normMonth}-01&log_at=lt.${nextMonthNextDay}`,
         { order: 'log_at.asc', limit: 3000 }
       ) as Promise<{
         log_at?: string
