@@ -56,6 +56,10 @@ function get30MinIntervals(start: string, end: string): string[] {
 
 const AREAS = ["Service", "Kitchen", "Office"] as const
 const DAY_LABELS = ["att_mon", "att_tue", "att_wed", "att_thu", "att_fri", "att_sat", "att_sun"] as const
+const LEAVE_TYPE_KEYS: Record<string, string> = {
+  연차: "annual", 반차: "half", 병가: "sick", 무급휴가: "unpaid",
+  "ลากิจ": "lakij", Annual: "annual", Half: "half", Sick: "sick", Unpaid: "unpaid",
+}
 
 interface StaffItem {
   name: string
@@ -657,7 +661,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Staff list */}
         <div className="lg:col-span-2 rounded-lg border bg-card p-3 max-h-[500px] overflow-auto">
-          <div className="mb-2 flex items-center justify-between border-b pb-2">
+          <div className="mb-2 space-y-2 border-b pb-2">
             <h6 className="font-bold">{t("att_staff_select")}</h6>
             <Dialog open={leaveModalOpen} onOpenChange={setLeaveModalOpen}>
               <DialogTrigger asChild>
@@ -684,7 +688,10 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                         <div key={name} className="rounded border p-2">
                           <span className="font-semibold">{staffList.find((x) => x.name === name)?.nick || name}</span>
                           <span className="text-muted-foreground ml-1">: </span>
-                          <span>{items.map((i) => `${t(DAY_LABELS[i.dayIdx])} ${i.dateStr} ${i.type}`).join(", ")}</span>
+                          <span>{items.map((i) => {
+                            const typeLabel = LEAVE_TYPE_KEYS[i.type] ? t(LEAVE_TYPE_KEYS[i.type]) : i.type
+                            return `${t(DAY_LABELS[i.dayIdx])} ${i.dateStr} ${typeLabel}`
+                          }).join(", ")}</span>
                         </div>
                       ))
                     })()
