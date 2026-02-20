@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
+import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
+import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import {
   isManagerRole,
@@ -71,12 +73,15 @@ export default function AdminLayout({
   }
 
   return (
-    <SidebarProvider>
-      <ErpSidebar />
-      <SidebarInset>
-        <ErpHeader />
-        {children}
-      </SidebarInset>
-    </SidebarProvider>
+    <StoreViewProvider>
+      <SidebarProvider>
+        <ErpSidebar />
+        <SidebarInset>
+          <MobileStoreSelectorBar />
+          <ErpHeader />
+          {children}
+        </SidebarInset>
+      </SidebarProvider>
+    </StoreViewProvider>
   )
 }
