@@ -147,7 +147,7 @@ export function UsageTab() {
     try {
       const res = await processUsage({
         storeName: effectiveStore,
-        userName: auth.user,
+        userName: auth?.user ?? "",
         items: cart.map((c) => ({ code: c.code, name: c.name, qty: c.qty })),
       })
       if (res.success) {
