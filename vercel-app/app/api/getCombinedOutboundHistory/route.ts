@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
         order_date?: string
         received_indices?: number[]
         received_qty_json?: Record<string, number>
+        original_order_qty_json?: Record<string, number>
         cart?: { code?: string; name?: string; qty?: number }[]
       }> = {}
 
@@ -144,6 +145,7 @@ export async function GET(request: NextRequest) {
           order_date?: string
           received_indices?: string | number[]
           received_qty_json?: string
+          original_order_qty_json?: string
           cart_json?: string
         }[]
         if (ords && ords.length > 0) {
@@ -160,6 +162,10 @@ export async function GET(request: NextRequest) {
           try {
             if (o.received_qty_json) recQtyMap = JSON.parse(String(o.received_qty_json)) || {}
           } catch {}
+          let origQtyMap: Record<string, number> = {}
+          try {
+            if (o.original_order_qty_json) origQtyMap = JSON.parse(String(o.original_order_qty_json)) || {}
+          } catch {}
           let cart: { code?: string; name?: string; qty?: number }[] = []
           try {
             if (o.cart_json) cart = JSON.parse(o.cart_json) || []
@@ -171,6 +177,7 @@ export async function GET(request: NextRequest) {
             order_date: o.order_date,
             received_indices: recIdx,
             received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
+            original_order_qty_json: Object.keys(origQtyMap).length > 0 ? origQtyMap : undefined,
             cart,
           }
         }
@@ -225,8 +232,8 @@ export async function GET(request: NextRequest) {
         if (usedByOrder[uk]) continue
         usedByOrder[uk] = true
         const cartItem = cart[matchIdx]
-        const originalQty = Number(cartItem?.qty ?? 0)
-        if (o.received_qty_json && originalQty > 0 && originalQty !== r.qty) {
+        const originalQty = o.original_order_qty_json?.[String(matchIdx)] ?? Number(cartItem?.qty ?? 0)
+        if (originalQty > 0 && originalQty !== r.qty) {
           r.originalOrderQty = originalQty
         }
         filteredList.push(r)

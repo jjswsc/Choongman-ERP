@@ -10,7 +10,7 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus: string
-  items: { name?: string; qty?: number; price?: number; receivedQty?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number }[]
   receivedIndices?: number[]
   userName?: string
   userNick?: string
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       delivery_status?: string
       received_indices?: string
       received_qty_json?: string
+      original_order_qty_json?: string
       user_name?: string
       reject_reason?: string
     }[]
@@ -76,13 +77,22 @@ export async function GET(request: NextRequest) {
       try {
         if (o.received_qty_json) receivedQtyMap = JSON.parse(o.received_qty_json) || {}
       } catch {}
+      let originalOrderQtyMap: Record<string, number> = {}
+      try {
+        if (o.original_order_qty_json) originalOrderQtyMap = JSON.parse(o.original_order_qty_json) || {}
+      } catch {}
       const isFullReceived = o.delivery_status === '배송완료' || o.delivery_status === '배송 완료'
       const items = cart.map((it, idx) => {
-        const origQty = Number(it.qty || 0)
+        const origFromMap = originalOrderQtyMap[String(idx)]
         const recQty = receivedQtyMap[String(idx)] ?? receivedQtyMap[idx]
         const isReceived = receivedIndices.includes(idx) || isFullReceived
-        const effectiveQty = isReceived && typeof recQty === 'number' ? recQty : origQty
-        return { ...it, qty: origQty, receivedQty: isReceived ? effectiveQty : undefined }
+        const effectiveQty = isReceived && typeof recQty === 'number' ? recQty : Number(it.qty || 0)
+        return {
+          ...it,
+          qty: Number(it.qty || 0),
+          receivedQty: isReceived ? effectiveQty : undefined,
+          originalQty: isReceived && origFromMap != null ? origFromMap : undefined,
+        }
       })
       const summary =
         cart.length > 0

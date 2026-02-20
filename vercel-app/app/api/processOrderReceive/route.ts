@@ -143,11 +143,18 @@ export async function POST(request: NextRequest) {
     if (imageUrl) patch.image_url = imageUrl
     if (hasQtyAdjustments && receivedQtysRaw) {
       const qtyMap: Record<string, number> = {}
+      const originalQtyMap: Record<string, number> = {}
       const indices = isPartialReceive && inspectedIndices.length > 0 ? inspectedIndices : cart.map((_, i) => i)
       indices.forEach((idx) => {
-        qtyMap[String(idx)] = getQtyForIdx(idx)
+        const orig = Number(cart[idx]?.qty || 0)
+        const received = getQtyForIdx(idx)
+        qtyMap[String(idx)] = received
+        if (orig !== received) originalQtyMap[String(idx)] = orig
       })
       patch.received_qty_json = JSON.stringify(qtyMap)
+      if (Object.keys(originalQtyMap).length > 0) {
+        patch.original_order_qty_json = JSON.stringify(originalQtyMap)
+      }
       const newCart = cart.map((item, idx) => ({
         ...item,
         qty: getQtyForIdx(idx),

@@ -751,7 +751,11 @@ export function OrderTab() {
                                       />
                                     </div>
                                   ) : (
-                                    <span className="text-muted-foreground shrink-0">× {it.receivedQty ?? it.qty ?? "-"}</span>
+                                    <span className="text-muted-foreground shrink-0">
+                                      × {it.originalQty != null && it.receivedQty != null && it.originalQty !== it.receivedQty
+                                        ? `${it.originalQty} → ${it.receivedQty}`
+                                        : (it.receivedQty ?? it.qty ?? "-")}
+                                    </span>
                                   )}
                                   {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
                                 </div>

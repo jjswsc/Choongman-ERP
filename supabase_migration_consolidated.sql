@@ -78,6 +78,7 @@ ALTER TABLE evaluation_items ADD CONSTRAINT evaluation_items_eval_type_item_id_k
 -- orders
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS received_indices TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS received_qty_json TEXT DEFAULT NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_order_qty_json TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS approved_indices TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS approved_original_qty_json TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reject_reason TEXT DEFAULT '';
