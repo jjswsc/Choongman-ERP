@@ -356,7 +356,7 @@ export default function OutboundPage() {
     }
     printWindow.document.write(`
       <html><head><meta charset="utf-8"/><title>${escape(title)}</title>
-      <style>body{font-family:sans-serif;padding:16px;font-size:12px} table{border-collapse:collapse;width:100%;margin-top:0} th,td{border:1px solid #ccc;padding:6px 8px;text-align:left} th{background:#0369a1;color:#fff} .num{text-align:right} .store-header td{border-color:#999}</style>
+      <style>body{font-family:sans-serif;padding:16px;font-size:11px} h2,h3{font-size:1.05em} table{border-collapse:collapse;width:100%;margin-top:0;font-size:11px} th,td{border:1px solid #ccc;padding:5px 6px;text-align:center} th{background:#0369a1;color:#fff} .num{text-align:center} .store-header td{border-color:#999;text-align:left}</style>
       </head><body><h2>${escape(title)}</h2>${sections.join("")}</body></html>`)
     printWindow.document.close()
     printWindow.print()
@@ -1071,23 +1071,33 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 ) : whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) ? (
                   <div className="space-y-0">
                     <div className="overflow-x-auto mb-2">
-                      <table className="w-full text-sm border-collapse">
+                      <table className="w-full text-sm border-collapse table-fixed" style={{ minWidth: 680 }}>
+                        <colgroup>
+                          <col style={{ width: 40 }} />
+                          <col style={{ width: "12%" }} />
+                          <col style={{ width: "12%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "22%" }} />
+                          <col style={{ width: "12%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "12%" }} />
+                        </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/50 sticky top-0 z-10">
-                            <th className="text-left py-2 px-2 w-10">
+                            <th className="py-2 px-2 text-center" style={{ width: 40 }}>
                               <Checkbox
                                 checked={whFilteredData.order.length > 0 && whSelectedWarehouses.size >= whFilteredData.order.length}
                                 onCheckedChange={toggleWhSelectAll}
                                 aria-label={t("outWhSelectAll")}
                               />
                             </th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("outWhWarehouseCol")}</th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("outColStore")}</th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("outColCode")}</th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("outColItem")}</th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("spec")}</th>
-                            <th className="text-right py-2 px-2 w-20 font-semibold">{t("outColQty")}</th>
-                            <th className="text-left py-2 px-2 font-semibold">{t("orderColDeliveryDate")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("outWhWarehouseCol")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("outColStore")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("outColCode")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("outColItem")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("spec")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("outColQty")}</th>
+                            <th className="py-2 px-2 text-center font-semibold">{t("orderColDeliveryDate")}</th>
                           </tr>
                         </thead>
                       </table>
@@ -1118,18 +1128,28 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                             </AccordionTrigger>
                             <AccordionContent className="px-4 pb-3">
                               <div className="overflow-x-auto">
-                                <table className="w-full text-sm border-collapse">
+                                <table className="w-full text-sm border-collapse table-fixed" style={{ minWidth: 680 }}>
+                                  <colgroup>
+                                    <col style={{ width: 40 }} />
+                                    <col style={{ width: "12%" }} />
+                                    <col style={{ width: "12%" }} />
+                                    <col style={{ width: "10%" }} />
+                                    <col style={{ width: "22%" }} />
+                                    <col style={{ width: "12%" }} />
+                                    <col style={{ width: "8%" }} />
+                                    <col style={{ width: "12%" }} />
+                                  </colgroup>
                                   <tbody>
                                     {items.map((r, idx) => (
                                       <tr key={`${wn}-${idx}`} className="border-b">
-                                        <td className="w-10 py-2 px-2"></td>
-                                        <td className="py-2 px-2 text-muted-foreground">{whDisplay}</td>
-                                        <td className="py-2 px-2">{r.store}</td>
-                                        <td className="py-2 px-2">{r.code}</td>
-                                        <td className="py-2 px-2">{r.name}</td>
-                                        <td className="py-2 px-2">{r.spec}</td>
-                                        <td className="py-2 px-2 text-right font-medium">{r.qty}</td>
-                                        <td className="py-2 px-2">{r.deliveryDate}</td>
+                                        <td className="py-2 px-2 text-center" style={{ width: 40 }}></td>
+                                        <td className="py-2 px-2 text-center text-muted-foreground">{whDisplay}</td>
+                                        <td className="py-2 px-2 text-center">{r.store}</td>
+                                        <td className="py-2 px-2 text-center">{r.code}</td>
+                                        <td className="py-2 px-2 text-center">{r.name}</td>
+                                        <td className="py-2 px-2 text-center">{r.spec}</td>
+                                        <td className="py-2 px-2 text-center font-medium">{r.qty}</td>
+                                        <td className="py-2 px-2 text-center">{r.deliveryDate}</td>
                                       </tr>
                                     ))}
                                   </tbody>
