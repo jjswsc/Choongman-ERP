@@ -47,6 +47,12 @@ import {
   type ShipmentTableRow,
 } from "@/components/shipment"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -257,9 +263,19 @@ export default function OutboundPage() {
     return merged
   }, [whData?.warehouseOrder, whWarehouseOptions])
 
+  const whStoreSelectOptions = React.useMemo(() => {
+    if (whData?.byWarehouse) {
+      const fromData = [...new Set(
+        Object.values(whData.byWarehouse).flatMap((rows) => rows.map((r) => r.store).filter(Boolean))
+      )].sort()
+      const merged = [...new Set([...fromData, ...outboundTargets])].filter(Boolean).sort()
+      return merged
+    }
+    return outboundTargets
+  }, [whData?.byWarehouse, outboundTargets])
+
   const whFilteredData = React.useMemo(() => {
     if (!whData || !whData.byWarehouse) return { order: [] as string[], byWarehouse: {} as Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> }
-    const storeQ = whStoreFilter.trim().toLowerCase()
     const itemQ = whItemFilter.trim().toLowerCase()
     const unspecifiedRaw = "(미지정)"
     const filteredOrder = whWarehouseFilter
@@ -268,7 +284,7 @@ export default function OutboundPage() {
     const filteredByWh: Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> = {}
     for (const wn of filteredOrder) {
       let rows = whData.byWarehouse[wn] || []
-      if (storeQ) rows = rows.filter((r) => (r.store || "").toLowerCase().includes(storeQ))
+      if (whStoreFilter) rows = rows.filter((r) => (r.store || "").trim() === whStoreFilter)
       if (itemQ) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(itemQ) || (r.code || "").toLowerCase().includes(itemQ))
       if (rows.length > 0) filteredByWh[wn] = rows
     }
@@ -1020,7 +1036,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                         <SelectItem value="__all__">{t("outWhWarehouseAll")}</SelectItem>
                         {whWarehouseSelectOptions.map((wn) => (
                           <SelectItem key={wn} value={wn}>
-                            {wn === "(미지정)" ? t("outWhUnspecified") : wn}
+                            {(wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1028,12 +1044,17 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColStore")}</span>
-                    <Input
-                      placeholder={t("outStorePlaceholder")}
-                      value={whStoreFilter}
-                      onChange={(e) => setWhStoreFilter(e.target.value)}
-                      className="w-[120px] h-9"
-                    />
+                    <Select value={whStoreFilter || "__all__"} onValueChange={(v) => setWhStoreFilter(v === "__all__" ? "" : v)}>
+                      <SelectTrigger className="w-[160px] h-9">
+                        <SelectValue placeholder={t("outStorePlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("outWhWarehouseAll")}</SelectItem>
+                        {whStoreSelectOptions.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColItem")}</span>
@@ -1048,66 +1069,77 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 {whLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">{t("loading")}</div>
                 ) : whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b bg-muted/50 sticky top-0 z-10">
-                          <th className="text-left py-2 px-2 w-10">
-                            <Checkbox
-                              checked={whFilteredData.order.length > 0 && whSelectedWarehouses.size >= whFilteredData.order.length}
-                              onCheckedChange={toggleWhSelectAll}
-                              aria-label={t("outWhSelectAll")}
-                            />
-                          </th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("outWhWarehouseCol")}</th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("outColStore")}</th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("outColCode")}</th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("outColItem")}</th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("spec")}</th>
-                          <th className="text-right py-2 px-2 w-20 font-semibold">{t("outColQty")}</th>
-                          <th className="text-left py-2 px-2 font-semibold">{t("orderColDeliveryDate")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {whFilteredData.order.map((wn) => {
-                          const items = whFilteredData.byWarehouse[wn] || []
-                          if (items.length === 0) return null
-                          const isChecked = whSelectedWarehouses.has(wn)
-                          return (
-                            <React.Fragment key={wn}>
-                              <tr className="border-b bg-primary/5 font-semibold">
-                                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="space-y-0">
+                    <div className="overflow-x-auto mb-2">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b bg-muted/50 sticky top-0 z-10">
+                            <th className="text-left py-2 px-2 w-10">
+                              <Checkbox
+                                checked={whFilteredData.order.length > 0 && whSelectedWarehouses.size >= whFilteredData.order.length}
+                                onCheckedChange={toggleWhSelectAll}
+                                aria-label={t("outWhSelectAll")}
+                              />
+                            </th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("outWhWarehouseCol")}</th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("outColStore")}</th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("outColCode")}</th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("outColItem")}</th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("spec")}</th>
+                            <th className="text-right py-2 px-2 w-20 font-semibold">{t("outColQty")}</th>
+                            <th className="text-left py-2 px-2 font-semibold">{t("orderColDeliveryDate")}</th>
+                          </tr>
+                        </thead>
+                      </table>
+                    </div>
+                    <Accordion type="multiple" className="w-full">
+                      {whFilteredData.order.map((wn) => {
+                        const items = whFilteredData.byWarehouse[wn] || []
+                        if (items.length === 0) return null
+                        const isChecked = whSelectedWarehouses.has(wn)
+                        const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
+                        return (
+                          <AccordionItem key={wn} value={wn} className="border-b border-border/60 last:border-0">
+                            <AccordionTrigger className="px-4 py-3 hover:no-underline [&>svg]:shrink-0">
+                              <div className="flex items-center gap-3 w-full text-left">
+                                <div onClick={(e) => e.stopPropagation()}>
                                   <Checkbox
                                     checked={isChecked}
                                     onCheckedChange={() => toggleWhSelect(wn)}
                                     aria-label={wn}
                                     onClick={(e) => e.stopPropagation()}
                                   />
-                                </td>
-                                <td className="py-2 px-2" colSpan={7}>
-                                  {wn || t("outWhUnspecified")}
-                                  <span className="ml-2 rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
-                                    {items.length}{t("outWhCountSuffix")}
-                                  </span>
-                                </td>
-                              </tr>
-                              {items.map((r, idx) => (
-                                <tr key={`${wn}-${idx}`} className="border-b">
-                                  <td className="py-2 px-2 w-10"></td>
-                                  <td className="py-2 px-2 text-muted-foreground">{wn || t("outWhUnspecified")}</td>
-                                  <td className="py-2 px-2">{r.store}</td>
-                                  <td className="py-2 px-2">{r.code}</td>
-                                  <td className="py-2 px-2">{r.name}</td>
-                                  <td className="py-2 px-2">{r.spec}</td>
-                                  <td className="py-2 px-2 text-right font-medium">{r.qty}</td>
-                                  <td className="py-2 px-2">{r.deliveryDate}</td>
-                                </tr>
-                              ))}
-                            </React.Fragment>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                                </div>
+                                <span className="font-semibold">{whDisplay}</span>
+                                <span className="rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                                  {items.length}{t("outWhCountSuffix")}
+                                </span>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-3">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm border-collapse">
+                                  <tbody>
+                                    {items.map((r, idx) => (
+                                      <tr key={`${wn}-${idx}`} className="border-b">
+                                        <td className="w-10 py-2 px-2"></td>
+                                        <td className="py-2 px-2 text-muted-foreground">{whDisplay}</td>
+                                        <td className="py-2 px-2">{r.store}</td>
+                                        <td className="py-2 px-2">{r.code}</td>
+                                        <td className="py-2 px-2">{r.name}</td>
+                                        <td className="py-2 px-2">{r.spec}</td>
+                                        <td className="py-2 px-2 text-right font-medium">{r.qty}</td>
+                                        <td className="py-2 px-2">{r.deliveryDate}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        )
+                      })}
+                    </Accordion>
                   </div>
                 ) : (
                   <div className="py-12 text-center text-muted-foreground text-sm">{t("outWhNoDataHint")}</div>

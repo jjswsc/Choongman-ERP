@@ -1,3 +1,12 @@
+/**
+ * 주문 승인/반려/보류 API
+ *
+ * [로직 요약]
+ * - decision: Approved | Rejected | Hold
+ * - Approved 시 delivery_date, approved_indices(일부 승인), approved_original_qty_json 저장
+ * - updatedCart: 프론트에서 수정한 수량. checked=true인 행만 승인. cart_json 덮어씀
+ * - manager 권한은 승인 불가 (userRole 검사)
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 

@@ -1,3 +1,12 @@
+/**
+ * 창고별 출고 목록 API
+ *
+ * [로직 요약]
+ * 1. items.outbound_location 으로 품목별 출고지(창고) 매핑
+ * 2. Approved 주문(orders) + 강제출고(stock_logs, log_type=ForceOutbound) 수집
+ * 3. filterBy: order=주문일 기준, delivery=배송일 기준
+ * 4. warehouse_locations.sort_order 순으로 창고 정렬. (미지정)은 items에 outbound_location 없는 품목
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 

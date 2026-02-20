@@ -1,5 +1,8 @@
 /**
  * Supabase REST - 서버 전용 (Next.js API routes)
+ *
+ * SUPABASE_URL, SUPABASE_ANON_KEY 환경 변수 필수.
+ * API 라우트(app/api/*) 내부에서만 import. 클라이언트 번들에 포함되지 않도록.
  */
 function getConfig() {
   const url = (process.env.SUPABASE_URL || '').trim()
