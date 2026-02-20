@@ -18,6 +18,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 주문
   "✅ 주문 완료": "orderSuccess",
+  "거절 사유를 입력해 주세요.": "orderRejectReasonRequired",
   "완료되었습니다.": "receiveDone",
 
   // 패티캐시

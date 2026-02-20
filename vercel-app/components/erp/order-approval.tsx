@@ -22,6 +22,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -60,6 +66,7 @@ interface Order {
   totalAmount: number
   status: OrderStatus
   items: OrderItem[]
+  rejectReason?: string
 }
 
 const statusConfig: Record<OrderStatus, { labelKey: string; bg: string; text: string }> = {
@@ -113,6 +120,7 @@ function mapApiToOrder(
     totalAmount: api.total,
     status: status in statusConfig ? status : "Pending",
     items,
+    rejectReason: api.rejectReason,
   }
 }
 
@@ -129,11 +137,7 @@ export function OrderApproval() {
   const [checkedOrders, setCheckedOrders] = React.useState<Set<string>>(new Set())
   const [allChecked, setAllChecked] = React.useState(false)
   const [storeFilter, setStoreFilter] = React.useState(isManager && userStore ? userStore : "all")
-  const [startDate, setStartDate] = React.useState(() => {
-    const d = new Date()
-    d.setDate(1)
-    return d.toISOString().slice(0, 10)
-  })
+  const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [statusFilter, setStatusFilter] = React.useState("pending")
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -142,7 +146,7 @@ export function OrderApproval() {
   const [editedItemsByOrderId, setEditedItemsByOrderId] = React.useState<Record<string, OrderItem[]>>({})
   const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
   const [rejectReasonByOrderId, setRejectReasonByOrderId] = React.useState<Record<string, string>>({})
-  const [showRejectReasonByOrderId, setShowRejectReasonByOrderId] = React.useState<Record<string, boolean>>({})
+  const [rejectReasonPopupOrder, setRejectReasonPopupOrder] = React.useState<Order | null>(null)
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -257,6 +261,10 @@ export function OrderApproval() {
     const deliveryDate = deliveryDateByOrder[idStr] || ""
     if (decision === "Approved" && !deliveryDate.trim()) {
       alert(t("orderDeliveryDateRequired"))
+      return
+    }
+    if (decision === "Rejected" && !(rejectReasonByOrderId[idStr] || "").trim()) {
+      alert(t("orderRejectReasonRequired") || "거절 사유를 입력해 주세요.")
       return
     }
     const displayItems = getDisplayItems(order)
@@ -504,12 +512,21 @@ export function OrderApproval() {
                     <span className="text-sm font-bold tabular-nums text-primary text-right">
                       {order.totalAmount.toLocaleString()} ฿
                     </span>
-                    <div className="flex justify-center">
+                    <div
+                      className="flex justify-center"
+                      onClick={(e) => {
+                        if (order.status === "Rejected") {
+                          e.stopPropagation()
+                          setRejectReasonPopupOrder(order)
+                        }
+                      }}
+                    >
                       <span
                         className={cn(
                           "inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold",
                           sCfg.bg,
-                          sCfg.text
+                          sCfg.text,
+                          order.status === "Rejected" && "cursor-pointer hover:opacity-80"
                         )}
                       >
                         {t(sCfg.labelKey)}
@@ -712,27 +729,19 @@ export function OrderApproval() {
                             />
                             {!isManager && (
                               <div className="ml-auto flex flex-wrap items-center gap-2">
-                                <span
-                                  className="text-sm font-semibold text-foreground cursor-pointer hover:text-destructive hover:underline select-none"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setShowRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: !prev[order.id] }))
-                                  }}
-                                >
-                                  {t("reasonPh") || "사유"}
-                                </span>
-                                {showRejectReasonByOrderId[order.id] && (
-                                  <Input
-                                    type="text"
-                                    className="h-9 w-56 text-sm"
-                                    placeholder={t("orderRejectReasonPh") || "거절 사유 입력"}
-                                    value={rejectReasonByOrderId[order.id] || ""}
-                                    onChange={(e) => {
-                                      e.stopPropagation()
-                                      setRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
+                                {order.status === "Pending" && (
+                                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                    <span className="text-xs font-semibold text-muted-foreground">{t("reasonPh") || "사유"}</span>
+                                    <Input
+                                      type="text"
+                                      className="h-9 w-48 min-w-0 text-sm"
+                                      placeholder={t("orderRejectReasonPh") || "거절 사유 입력 (필수)"}
+                                      value={rejectReasonByOrderId[order.id] || ""}
+                                      onChange={(e) =>
+                                        setRejectReasonByOrderId((prev) => ({ ...prev, [order.id]: e.target.value }))
+                                      }
+                                    />
+                                  </div>
                                 )}
                                 <Button
                                   variant="outline"
@@ -782,6 +791,15 @@ export function OrderApproval() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!rejectReasonPopupOrder} onOpenChange={(open) => !open && setRejectReasonPopupOrder(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t("reasonPh") || "사유"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{rejectReasonPopupOrder?.rejectReason || "-"}</p>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

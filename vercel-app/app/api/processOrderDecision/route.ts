@@ -49,6 +49,12 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
+    if (decision === 'Rejected' && !rejectReason) {
+      return NextResponse.json(
+        { success: false, message: '거절 사유를 입력해 주세요.' },
+        { headers }
+      )
+    }
 
     const orders = (await supabaseSelectFilter('orders', 'id=eq.' + orderId)) as unknown[]
     if (!orders?.length) {
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = { status: decision }
     if (deliveryDate) patch.delivery_date = deliveryDate
     if (decision === 'Approved') patch.delivery_status = '배송중'
-    if (decision === 'Rejected' && rejectReason) patch.reject_reason = rejectReason
+    if (decision === 'Rejected') patch.reject_reason = rejectReason || ''
 
     if (decision === 'Approved' && updatedCart && updatedCart.length > 0) {
       type CartItem = { code?: string; name?: string; price?: number; qty?: number; spec?: string; checked?: boolean; originalQty?: number }

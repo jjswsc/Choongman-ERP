@@ -277,6 +277,7 @@ export interface AdminOrderItem {
   items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; outboundLocation?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
+  rejectReason?: string
 }
 
 export async function getAdminOrders(params: {
@@ -1102,6 +1103,26 @@ export interface ReceivablePayableItem {
   vendorCode?: string
   balance: number
   items: { id?: number; trans_date?: string; ref_type?: string; amount?: number; memo?: string }[]
+}
+
+export interface ReceivablePayableSummaryItem {
+  storeName?: string
+  vendorCode?: string
+  balance: number
+  count: number
+}
+
+export async function getReceivablePayableSummary(params: {
+  type: 'receivable' | 'payable'
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams({ type: params.type })
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getReceivablePayableSummary?${q}`)
+  const data = await res.json()
+  return data as { type: string; list: ReceivablePayableSummaryItem[] }
 }
 
 export async function getReceivablePayableList(params: {

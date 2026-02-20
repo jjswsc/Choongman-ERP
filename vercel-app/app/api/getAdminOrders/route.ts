@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
       received_indices?: string
       approved_indices?: string
       approved_original_qty_json?: string
+      reject_reason?: string
     }[]
 
     const list = (rowsTyped || []).map((o) => {
@@ -138,6 +139,7 @@ export async function GET(request: NextRequest) {
         items: itemsWithOriginal,
         summary,
         receivedIndices,
+        rejectReason: String(o.reject_reason || '').trim() || undefined,
       }
     })
 
