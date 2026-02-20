@@ -31,6 +31,7 @@ import {
   getMyUsageHistory,
   getInvoiceData,
   getOutboundByWarehouse,
+  getWarehouseLocations,
   type AdminItem,
   type AdminVendor,
   type OutboundHistoryItem,
@@ -45,12 +46,7 @@ import {
   ShipmentTable,
   type ShipmentTableRow,
 } from "@/components/shipment"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+import { Checkbox } from "@/components/ui/checkbox"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -103,6 +99,8 @@ export default function OutboundPage() {
   const [whWarehouseFilter, setWhWarehouseFilter] = React.useState("")
   const [whStoreFilter, setWhStoreFilter] = React.useState("")
   const [whItemFilter, setWhItemFilter] = React.useState("")
+  const [whSelectedWarehouses, setWhSelectedWarehouses] = React.useState<Set<string>>(new Set())
+  const [whWarehouseOptions, setWhWarehouseOptions] = React.useState<string[]>([])
 
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()
@@ -127,8 +125,8 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
-    Promise.all([getAdminItems(), getAdminVendors(), getStockStores()])
-      .then(([itemList, vendorList, storeList]) => {
+    Promise.all([getAdminItems(), getAdminVendors(), getStockStores(), getWarehouseLocations()])
+      .then(([itemList, vendorList, storeList, whLocs]) => {
         setItems(Array.isArray(itemList) ? itemList : [])
         const vendors = Array.isArray(vendorList) ? vendorList : []
         const salesNames = vendors
@@ -139,10 +137,13 @@ export default function OutboundPage() {
         )
         const merged = [...new Set([...salesNames, ...stores])].filter(Boolean).sort()
         setOutboundTargets(merged)
+        const whNames = (whLocs || []).map((l: { name?: string }) => (l.name || "").trim()).filter(Boolean)
+        setWhWarehouseOptions(whNames)
       })
       .catch(() => {
         setItems([])
         setOutboundTargets([])
+        setWhWarehouseOptions([])
       })
       .finally(() => setLoading(false))
   }, [])
@@ -243,18 +244,27 @@ export default function OutboundPage() {
       console.error("getOutboundByWarehouse:", err)
       setWhData(null)
       const msg = err instanceof Error ? err.message : String(err)
-      alert(t("orderNoData") + "\n\n오류: " + msg)
+      alert(t("orderNoData") + "\n\n" + t("msg_error_prefix") + msg)
     } finally {
       setWhLoading(false)
     }
   }, [whStart, whEnd, whFilterBy, t])
 
+  const whWarehouseSelectOptions = React.useMemo(() => {
+    const fromData = whData?.warehouseOrder || []
+    const fromLocs = whWarehouseOptions
+    const merged = [...new Set([...fromData, ...fromLocs])].filter(Boolean).sort()
+    return merged
+  }, [whData?.warehouseOrder, whWarehouseOptions])
+
   const whFilteredData = React.useMemo(() => {
     if (!whData || !whData.byWarehouse) return { order: [] as string[], byWarehouse: {} as Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> }
-    const whQ = whWarehouseFilter.trim().toLowerCase()
     const storeQ = whStoreFilter.trim().toLowerCase()
     const itemQ = whItemFilter.trim().toLowerCase()
-    const filteredOrder = whQ ? whData.warehouseOrder.filter((wn) => (wn || "(미지정)").toLowerCase().includes(whQ)) : whData.warehouseOrder
+    const unspecifiedRaw = "(미지정)"
+    const filteredOrder = whWarehouseFilter
+      ? whData.warehouseOrder.filter((wn) => (wn || unspecifiedRaw) === whWarehouseFilter)
+      : whData.warehouseOrder
     const filteredByWh: Record<string, { store: string; code: string; name: string; spec: string; qty: number; deliveryDate: string; source: "Order" | "Force" }[]> = {}
     for (const wn of filteredOrder) {
       let rows = whData.byWarehouse[wn] || []
@@ -265,33 +275,81 @@ export default function OutboundPage() {
     return { order: Object.keys(filteredByWh).filter((wn) => (filteredByWh[wn] || []).length > 0), byWarehouse: filteredByWh }
   }, [whData, whWarehouseFilter, whStoreFilter, whItemFilter])
 
+  React.useEffect(() => {
+    if (whFilteredData.order.length > 0) {
+      setWhSelectedWarehouses(new Set(whFilteredData.order))
+    } else {
+      setWhSelectedWarehouses(new Set())
+    }
+  }, [whFilteredData.order])
+
+  const toggleWhSelect = (wn: string) => {
+    setWhSelectedWarehouses((prev) => {
+      const next = new Set(prev)
+      if (next.has(wn)) next.delete(wn)
+      else next.add(wn)
+      return next
+    })
+  }
+
+  const toggleWhSelectAll = () => {
+    if (whSelectedWarehouses.size >= whFilteredData.order.length) {
+      setWhSelectedWarehouses(new Set())
+    } else {
+      setWhSelectedWarehouses(new Set(whFilteredData.order))
+    }
+  }
+
+  const whOrderToUse = React.useMemo(() => whFilteredData.order.filter((wn) => whSelectedWarehouses.has(wn)), [whFilteredData.order, whSelectedWarehouses])
+
   const handleWarehousePrint = () => {
-    if (!whData || whFilteredData.order.length === 0) {
-      alert(t("orderNoData") || "조회 결과가 없습니다. 먼저 조회해 주세요.")
+    if (!whData || whOrderToUse.length === 0) {
+      alert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForPrint"))
       return
     }
     const filterLabel = whData.filterBy === "delivery" ? t("outWhFilterDelivery") : t("outWhFilterOrder")
     const title = `${t("outTabByWarehouse")} [${filterLabel}] (${whData.period.start} ~ ${whData.period.end})`
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
-    const rows = whFilteredData.order.flatMap((wn) =>
-      (whFilteredData.byWarehouse[wn] || []).map(
-        (r) =>
-          `<tr><td>${wn}</td><td>${r.store}</td><td>${r.code}</td><td>${r.name}</td><td>${r.spec}</td><td class="text-right">${r.qty}</td><td>${r.deliveryDate}</td></tr>`
-      )
-    )
+    const escape = (s: string) => (s || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    const sections: string[] = []
+    for (const wn of whOrderToUse) {
+      const items = whFilteredData.byWarehouse[wn] || []
+      const byStore = new Map<string, typeof items>()
+      for (const r of items) {
+        const store = r.store || "(미지정)"
+        if (!byStore.has(store)) byStore.set(store, [])
+        byStore.get(store)!.push(r)
+      }
+      const whRows: string[] = []
+      for (const [storeName, storeItems] of Array.from(byStore.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+        whRows.push(`<tr class="store-header"><td colspan="5" style="background:#e8e8e8;font-weight:bold;padding:8px">Store: ${escape(storeName)}</td></tr>`)
+        whRows.push(
+          ...storeItems.map(
+            (r) =>
+              `<tr><td>${escape(r.code)}</td><td>${escape(r.name)}</td><td>${escape(r.spec)}</td><td class="num">${r.qty}</td><td>${escape(r.deliveryDate)}</td></tr>`
+          )
+        )
+      }
+      sections.push(`
+        <div style="margin-bottom:24px;page-break-inside:avoid">
+          <h3 style="margin:0 0 8px 0;font-size:14px;color:#0369a1">Warehouse: ${escape(wn || "(Unspecified)")}</h3>
+          <table><thead><tr><th>Code</th><th>Item</th><th>Spec</th><th class="num">Qty</th><th>Delivery Date</th></tr></thead><tbody>${whRows.join("")}</tbody></table>
+        </div>
+      `)
+    }
     printWindow.document.write(`
-      <html><head><meta charset="utf-8"/><title>${title}</title>
-      <style>body{font-family:sans-serif;padding:16px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:6px 8px;text-align:left} th{background:#0369a1;color:#fff} .text-right{text-align:right}</style>
-      </head><body><h2>${title}</h2><table><thead><tr><th>출고지</th><th>매장</th><th>코드</th><th>품목명</th><th>규격</th><th>수량</th><th>배송일</th></tr></thead><tbody>${rows.join("")}</tbody></table></body></html>`)
+      <html><head><meta charset="utf-8"/><title>${escape(title)}</title>
+      <style>body{font-family:sans-serif;padding:16px;font-size:12px} table{border-collapse:collapse;width:100%;margin-top:0} th,td{border:1px solid #ccc;padding:6px 8px;text-align:left} th{background:#0369a1;color:#fff} .num{text-align:right} .store-header td{border-color:#999}</style>
+      </head><body><h2>${escape(title)}</h2>${sections.join("")}</body></html>`)
     printWindow.document.close()
     printWindow.print()
     printWindow.close()
   }
 
   const handleWarehouseExcel = () => {
-    if (!whData || whFilteredData.order.length === 0) {
-      alert(t("orderNoData") || "조회 결과가 없습니다. 먼저 조회해 주세요.")
+    if (!whData || whOrderToUse.length === 0) {
+      alert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForExcel"))
       return
     }
     const escapeCsv = (s: string) => {
@@ -304,9 +362,9 @@ export default function OutboundPage() {
       [t("outTabByWarehouse")],
       [`${t("outWhFilterBy")}: ${whData.filterBy === "delivery" ? t("outWhFilterDelivery") : t("outWhFilterOrder")}, ${t("outFilterPeriod")}: ${whData.period.start} ~ ${whData.period.end}`],
       [],
-      ["출고지", t("outColStore"), "코드", t("outColItem"), "규격", t("outColQty"), t("orderColDeliveryDate")],
+      [t("outWhWarehouseCol"), t("outColStore"), t("outColCode"), t("outColItem"), t("spec"), t("outColQty"), t("orderColDeliveryDate")],
     ]
-    whFilteredData.order.forEach((wn) => {
+    whOrderToUse.forEach((wn) => {
       ;(whFilteredData.byWarehouse[wn] || []).forEach((r) => {
         rows.push([wn, r.store, r.code, r.name, r.spec, String(r.qty), r.deliveryDate])
       })
@@ -944,93 +1002,115 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   <Button size="sm" onClick={fetchWarehouseOutbound} disabled={whLoading}>
                     {whLoading ? t("loading") : t("btn_query")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleWarehousePrint} disabled={!whData || whFilteredData.order.length === 0}>
-                    🖨️ {t("outPrintInvoice")}
+                  <Button size="sm" variant="outline" onClick={handleWarehousePrint} disabled={!whData || whOrderToUse.length === 0}>
+                    🖨️ {t("outWhPrintPo")}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleWarehouseExcel} disabled={!whData || whFilteredData.order.length === 0}>
+                  <Button size="sm" variant="outline" onClick={handleWarehouseExcel} disabled={!whData || whOrderToUse.length === 0}>
                     📥 {t("outExcelDownload")}
                   </Button>
                 </div>
-                {whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) && (
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">출고지(창고)</span>
-                      <Input
-                        placeholder="창고명"
-                        value={whWarehouseFilter}
-                        onChange={(e) => setWhWarehouseFilter(e.target.value)}
-                        className="w-[120px] h-9"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColStore")}</span>
-                      <Input
-                        placeholder={t("outStorePlaceholder")}
-                        value={whStoreFilter}
-                        onChange={(e) => setWhStoreFilter(e.target.value)}
-                        className="w-[120px] h-9"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColItem")}</span>
-                      <Input
-                        placeholder={t("outItemSearchPh")}
-                        value={whItemFilter}
-                        onChange={(e) => setWhItemFilter(e.target.value)}
-                        className="w-[140px] h-9"
-                      />
-                    </div>
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outWhWarehouseLabel")}</span>
+                    <Select value={whWarehouseFilter || "__all__"} onValueChange={(v) => setWhWarehouseFilter(v === "__all__" ? "" : v)}>
+                      <SelectTrigger className="w-[160px] h-9">
+                        <SelectValue placeholder={t("outWhWarehousePlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">{t("outWhWarehouseAll")}</SelectItem>
+                        {whWarehouseSelectOptions.map((wn) => (
+                          <SelectItem key={wn} value={wn}>
+                            {wn === "(미지정)" ? t("outWhUnspecified") : wn}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColStore")}</span>
+                    <Input
+                      placeholder={t("outStorePlaceholder")}
+                      value={whStoreFilter}
+                      onChange={(e) => setWhStoreFilter(e.target.value)}
+                      className="w-[120px] h-9"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{t("outColItem")}</span>
+                    <Input
+                      placeholder={t("outItemSearchPh")}
+                      value={whItemFilter}
+                      onChange={(e) => setWhItemFilter(e.target.value)}
+                      className="w-[140px] h-9"
+                    />
+                  </div>
+                </div>
                 {whLoading ? (
                   <div className="py-12 text-center text-muted-foreground text-sm">{t("loading")}</div>
                 ) : whData && (whData.warehouseOrder.length > 0 || Object.keys(whData.byWarehouse).length > 0) ? (
-                  <Accordion type="single" collapsible className="w-full">
-                    {whFilteredData.order.map((wn) => {
-                      const items = whFilteredData.byWarehouse[wn] || []
-                      if (items.length === 0) return null
-                      return (
-                        <AccordionItem key={wn} value={wn} className="border-b border-border/60 last:border-0">
-                          <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
-                            <span className="font-bold">{wn || "(미지정)"}</span>
-                            <span className="ml-2 rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
-                              {items.length}건
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-3">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-sm border-collapse">
-                                <thead>
-                                  <tr className="border-b bg-muted/50">
-                                    <th className="text-left py-2 px-2">{t("outColStore")}</th>
-                                    <th className="text-left py-2 px-2">코드</th>
-                                    <th className="text-left py-2 px-2">{t("outColItem")}</th>
-                                    <th className="text-left py-2 px-2">규격</th>
-                                    <th className="text-right py-2 px-2 w-20">{t("outColQty")}</th>
-                                    <th className="text-left py-2 px-2">{t("orderColDeliveryDate")}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {items.map((r, idx) => (
-                                    <tr key={idx} className="border-b">
-                                      <td className="py-2 px-2">{r.store}</td>
-                                      <td className="py-2 px-2">{r.code}</td>
-                                      <td className="py-2 px-2">{r.name}</td>
-                                      <td className="py-2 px-2">{r.spec}</td>
-                                      <td className="py-2 px-2 text-right font-medium">{r.qty}</td>
-                                      <td className="py-2 px-2">{r.deliveryDate}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )
-                    })}
-                  </Accordion>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b bg-muted/50 sticky top-0 z-10">
+                          <th className="text-left py-2 px-2 w-10">
+                            <Checkbox
+                              checked={whFilteredData.order.length > 0 && whSelectedWarehouses.size >= whFilteredData.order.length}
+                              onCheckedChange={toggleWhSelectAll}
+                              aria-label={t("outWhSelectAll")}
+                            />
+                          </th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("outWhWarehouseCol")}</th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("outColStore")}</th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("outColCode")}</th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("outColItem")}</th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("spec")}</th>
+                          <th className="text-right py-2 px-2 w-20 font-semibold">{t("outColQty")}</th>
+                          <th className="text-left py-2 px-2 font-semibold">{t("orderColDeliveryDate")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {whFilteredData.order.map((wn) => {
+                          const items = whFilteredData.byWarehouse[wn] || []
+                          if (items.length === 0) return null
+                          const isChecked = whSelectedWarehouses.has(wn)
+                          return (
+                            <React.Fragment key={wn}>
+                              <tr className="border-b bg-primary/5 font-semibold">
+                                <td className="py-2 px-2" onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    checked={isChecked}
+                                    onCheckedChange={() => toggleWhSelect(wn)}
+                                    aria-label={wn}
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </td>
+                                <td className="py-2 px-2" colSpan={7}>
+                                  {wn || t("outWhUnspecified")}
+                                  <span className="ml-2 rounded bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                                    {items.length}{t("outWhCountSuffix")}
+                                  </span>
+                                </td>
+                              </tr>
+                              {items.map((r, idx) => (
+                                <tr key={`${wn}-${idx}`} className="border-b">
+                                  <td className="py-2 px-2 w-10"></td>
+                                  <td className="py-2 px-2 text-muted-foreground">{wn || t("outWhUnspecified")}</td>
+                                  <td className="py-2 px-2">{r.store}</td>
+                                  <td className="py-2 px-2">{r.code}</td>
+                                  <td className="py-2 px-2">{r.name}</td>
+                                  <td className="py-2 px-2">{r.spec}</td>
+                                  <td className="py-2 px-2 text-right font-medium">{r.qty}</td>
+                                  <td className="py-2 px-2">{r.deliveryDate}</td>
+                                </tr>
+                              ))}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : (
-                  <div className="py-12 text-center text-muted-foreground text-sm">{t("orderNoData")}</div>
+                  <div className="py-12 text-center text-muted-foreground text-sm">{t("outWhNoDataHint")}</div>
                 )}
               </div>
             </TabsContent>
