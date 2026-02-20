@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       purpose?: string
       lat?: string | number
       lng?: string | number
+      clientTimestamp?: number
     }
     const storeNameTrim = String(data.storeName || '').trim()
     const visitType = String(data.type || '').trim()
@@ -99,7 +100,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const now = new Date()
+    // 클라이언트가 보낸 시각 사용 (실제 방문 시점). ±10분 이내만 허용
+    const serverNow = Date.now()
+    const clientTs = typeof data.clientTimestamp === 'number' ? data.clientTimestamp : null
+    const skewOk = clientTs != null && Math.abs(serverNow - clientTs) <= 10 * 60 * 1000
+    const now = skewOk ? new Date(clientTs) : new Date()
     const dateStr = now.toLocaleDateString('en-CA', { timeZone: TZ })
     const timeStr = now.toLocaleTimeString('en-GB', {
       timeZone: TZ,

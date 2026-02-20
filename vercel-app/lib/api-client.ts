@@ -1010,6 +1010,7 @@ export async function submitStoreVisit(params: {
   purpose?: string
   lat?: string | number
   lng?: string | number
+  clientTimestamp?: number
 }) {
   const res = await apiFetch('/api/submitStoreVisit', {
     method: 'POST',

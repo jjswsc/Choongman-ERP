@@ -128,6 +128,8 @@ export function VisitTab() {
       const purposeToSend = purpose === "기타" && purposeEtcReason.trim()
         ? `기타: ${purposeEtcReason.trim()}`
         : (purpose || "")
+      // 사용자 기기 시간 전송 (서버 지역·지연 대신 실제 방문 시각 기록)
+      const clientTimestamp = Date.now()
       const result = await submitStoreVisit({
         userName: auth.user,
         storeName: store,
@@ -135,6 +137,7 @@ export function VisitTab() {
         purpose: purposeToSend,
         lat,
         lng,
+        clientTimestamp,
       })
 
       if (result.success) {
