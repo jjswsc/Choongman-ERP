@@ -148,6 +148,8 @@ export const i18n = {
     statusOvertime: '연장',
     attGpsFailConfirm: 'GPS를 확인할 수 없습니다. 그래도 기록하시겠습니까?',
     attGpsPendingSaved: '위치 확인 대기 중입니다. 관리자 승인 후 반영됩니다.',
+    attLocationTooFar: '위치 부적합! 매장 근처(30m 이내)가 아닙니다. (현재 거리: {m}m)',
+    attStoreGpsNotRegistered: '{store} 매장의 위치(GPS)가 등록되지 않아 출근 기록이 불가합니다. 관리자에게 문의해 주세요.',
     attDuplicateOnce: '오늘 이미 해당 기록이 있습니다.',
     attReasonPrompt: '사유를 입력해 주세요.',
     leaveStats: '📊 휴가 현황 (올해)',
@@ -249,6 +251,8 @@ export const i18n = {
     visitPurposeEtcPlaceholder: '사유 입력 (선택)',
     visitStart: '방문 시작',
     visitEnd: '방문 종료',
+    visitForceStart: '방문 시작',
+    visitForceEnd: '방문 종료',
     visitSupporting: '방문 중',
     todayVisitLog: '오늘 방문 기록',
     visitLogEmpty: '오늘 방문 기록이 없습니다.',
@@ -1746,6 +1750,8 @@ export const i18n = {
     statusOvertime: 'Overtime',
     attGpsFailConfirm: 'GPS unavailable. Record anyway?',
     attGpsPendingSaved: 'Location pending approval.',
+    attLocationTooFar: 'Location unsuitable! Not within 30m of store. (Distance: {m}m)',
+    attStoreGpsNotRegistered: '{store} store GPS not registered. Cannot clock in. Contact admin.',
     attDuplicateOnce: 'Already recorded today.',
     attReasonPrompt: 'Enter reason.',
     leaveStats: '📊 Leave (This Year)',
@@ -1844,6 +1850,8 @@ export const i18n = {
     visitPurposeEtcPlaceholder: 'Enter reason (optional)',
     visitStart: 'Start Visit',
     visitEnd: 'End Visit',
+    visitForceStart: 'Start Visit',
+    visitForceEnd: 'End Visit',
     visitSupporting: 'Visiting',
     todayVisitLog: "Today's Visit Log",
     visitLogEmpty: 'No visits today.',
@@ -3329,6 +3337,8 @@ orderItemQty: 'Qty',
     statusNormal: 'ปกติ', statusLate: 'สาย', statusEarly: 'กลับก่อน', statusOvertime: 'ล่วงเวลา',
     attGpsFailConfirm: 'ไม่สามารถใช้ GPS ได้ บันทึกต่อหรือไม่?',
     attGpsPendingSaved: 'รอการอนุมัติตำแหน่ง',
+    attLocationTooFar: 'ตำแหน่งไม่เหมาะสม! ห่างจากสาขาเกิน 30ม. (ระยะทาง: {m}ม.)',
+    attStoreGpsNotRegistered: 'สาขา {store} ยังไม่มี GPS ไม่สามารถเข้างานได้ กรุณาติดต่อผู้ดูแล',
     attDuplicateOnce: 'บันทึกแล้ววันนี้',
     attReasonPrompt: 'กรุณาระบุเหตุผล',
     leaveStats: '📊 สถานะการลางาน (ปีนี้)',
@@ -3414,7 +3424,7 @@ orderItemQty: 'Qty',
     scheduleStatusNormal: 'ปกติ', scheduleStatusLate: 'สาย', scheduleStatusAbsent: 'ขาด', scheduleStatusHoliday: 'หยุด', scheduleStatusLeave: 'ลางาน',
     visitTitle: 'เยี่ยมสาขา', visitSub: 'บันทึกกิจกรรมสนับสนุนและฝึกอบรม', visitStore: 'สาขาที่เยี่ยม', visitStorePlaceholder: 'เลือกสาขา',
     visitPurpose: 'วัตถุประสงค์', visitPurposeInspect: 'ตรวจสอบ', visitPurposeTraining: 'ฝึกอบรม', visitPurposeUrgent: 'สนับสนุนด่วน', visitPurposeMeeting: 'ประชุม', visitPurposeDelivery: 'จัดส่งสินค้า', visitPurposeEtc: 'อื่นๆ', visitPurposeEtcLabel: 'มูลเหตุอื่นๆ (ไม่บังคับ)', visitPurposeEtcPlaceholder: 'ใส่มูลเหตุ (ไม่บังคับ)',
-    visitStart: 'เริ่มเยี่ยม', visitEnd: 'สิ้นสุดเยี่ยม', visitSupporting: 'กำลังเยี่ยม', todayVisitLog: 'บันทึกวันนี้', visitLogEmpty: 'ไม่มีบันทึก', visitErrSelectStore: 'เลือกสาขา', visitOfficeOnly: 'เฉพาะ HQ',     visitType: 'ประเภท', visitDuration: 'ระยะเวลา',
+    visitStart: 'เริ่มเยี่ยม', visitEnd: 'สิ้นสุดเยี่ยม', visitForceStart: 'เริ่มเยี่ยม', visitForceEnd: 'สิ้นสุดเยี่ยม', visitSupporting: 'กำลังเยี่ยม', todayVisitLog: 'บันทึกวันนี้', visitLogEmpty: 'ไม่มีบันทึก', visitErrSelectStore: 'เลือกสาขา', visitOfficeOnly: 'เฉพาะ HQ',     visitType: 'ประเภท', visitDuration: 'ระยะเวลา',
     visitStoreRequired: 'ต้องมีสาขาและผู้ใช้', visitInvalidType: 'ประเภทการเยี่ยมไม่ถูกต้อง', visitLocationTooFar: 'ตำแหน่งไม่เหมาะสม! ห่างจากสาขาเกิน 100ม. (ระยะทาง: {m}ม.)', visitComplete: 'เยี่ยมเสร็จ!', visitCompleteWithDuration: 'เยี่ยมเสร็จ! ({min} นาที)', visitServerError: 'ข้อผิดพลาดเซิร์ฟเวอร์',
     tabPettyCash: 'บัญชี', pettyCashTitle: 'เงินสดย่อย', pettyTabList: 'รายการ', pettyTabMonthly: 'รายเดือน', pettyNoData: 'ไม่มีข้อมูล', pettyColDate: 'วันที่', pettyColType: 'ประเภท',
     pettyTypeReceive: 'รับ',
@@ -4634,6 +4644,8 @@ orderItemQty: 'จำนวน',
     statusNormal: 'ပုံမှန်', statusLate: 'နောက်ကျ', statusEarly: 'စောထွက်', statusOvertime: ' အချိန်ပို',
     attGpsFailConfirm: 'GPS မရနိုင်ပါ။ ဆက်မှတ်တမ်းတင်မည်လာ။',
     attGpsPendingSaved: 'တည်နေရာ အတည်ပြုခံနေသည်။',
+    attLocationTooFar: 'တည်နေရာမသင့်လျော်! ဆိုင် 30m အကွာအဝေးအတွင်းမဟုတ်ပါ။ (အကွာအဝေး: {m}m)',
+    attStoreGpsNotRegistered: '{store} ဆိုင်တွင် GPS မပါသေးပါ။ ရောက်ရှိမှတ်တမ်း မတင်နိုင်ပါ။ စီမံခန့်ခွဲသူထံ ဆက်သွယ်ပါ။',
     attDuplicateOnce: 'ယနေ့ မှတ်တမ်းတင်ပြီး။',
     attReasonPrompt: 'အကြောင်းပြချက် ထည့်ပါ။',
     leaveStats: '📊 ခွင့် (ဒီနှစ်)',
@@ -4719,7 +4731,7 @@ orderItemQty: 'จำนวน',
     scheduleStatusNormal: 'ပုံမှန်', scheduleStatusLate: 'နောက်ကျ', scheduleStatusAbsent: 'ပျက်ကွက်', scheduleStatusHoliday: 'ကျန်', scheduleStatusLeave: 'ခွင့်ယူ',
     visitTitle: 'ဆိုင်သွားရောက်', visitSub: 'ပံ့ပိုးမှုမှတ်တမ်း', visitStore: 'သွားမည့်ဆိုင်', visitStorePlaceholder: 'ဆိုင်ရွေး',
     visitPurpose: 'ဦးတည်ချက်', visitPurposeInspect: 'ကြည့်ရှု', visitPurposeTraining: 'သင်ကြား', visitPurposeUrgent: 'အရေးပေါ်', visitPurposeMeeting: 'တွေ့ဆုံ', visitPurposeDelivery: 'ကုန်ပစ္စည်းပို့ဆောင်', visitPurposeEtc: 'အခြား', visitPurposeEtcLabel: 'အခြားအကြောင်းပြချက် (ရွေးချယ်သည်)', visitPurposeEtcPlaceholder: 'အကြောင်းပြချက်ထည့်ပါ (ရွေးချယ်သည်)',
-    visitStart: 'စတင်မည်', visitEnd: 'ပြီးမည်', visitSupporting: 'သွားနေသည်', todayVisitLog: 'ယနေ့မှတ်တမ်း', visitLogEmpty: 'မှတ်တမ်းမရှိ', visitErrSelectStore: 'ဆိုင်ရွေးပါ', visitOfficeOnly: 'HQ သက်သက်',     visitType: 'အမျိုးအစား', visitDuration: 'ကြာချိန်',
+    visitStart: 'စတင်မည်', visitEnd: 'ပြီးမည်', visitForceStart: 'စတင်မည်', visitForceEnd: 'ပြီးမည်', visitSupporting: 'သွားနေသည်', todayVisitLog: 'ယနေ့မှတ်တမ်း', visitLogEmpty: 'မှတ်တမ်းမရှိ', visitErrSelectStore: 'ဆိုင်ရွေးပါ', visitOfficeOnly: 'HQ သက်သက်',     visitType: 'အမျိုးအစား', visitDuration: 'ကြာချိန်',
     visitStoreRequired: 'ဆိုင်နှင့်အသုံးပြုသူလိုသည်။', visitInvalidType: 'သွားရောက်မှုအမျိုးအစားမမှန်ပါ။', visitLocationTooFar: 'တည်နေရာမသင့်လျော်! ဆိုင်နားမဟုတ်ပါ။ (အကွာအဝေး: {m}m)', visitComplete: 'သွားပြီး!', visitCompleteWithDuration: 'သွားပြီး! ({min} မိနစ်)', visitServerError: 'ဆာဗာ သိမ်းမှုအမှား',
     tabPettyCash: 'စာရင်းကိုင်', pettyCashTitle: 'ငယ်ငယ်သုံးငွေ', pettyTabList: 'စာရင်း', pettyTabMonthly: 'လစဉ်', pettyNoData: 'ဒေတာမရှိပါ', pettyColDate: 'ရက်စွဲ', pettyColType: 'အမျိုးအစား',
     pettyTypeReceive: 'လက်ခံ',
@@ -5939,6 +5951,8 @@ orderItemQty: 'အရေအတွက်',
     statusNormal: 'ປົກກະຕິ', statusLate: 'ມາຊ້າ', statusEarly: 'ກັບກ່ອນ', statusOvertime: 'ເວລານອກ',
     attGpsFailConfirm: 'GPS ບໍ່ພົບ. ບັນທຶກຕໍ່ບໍ່?',
     attGpsPendingSaved: 'ລໍຖ້າອະນຸມັດຕຳແໜ່ງ',
+    attLocationTooFar: 'ຕຳແໜ່ງບໍ່ເໝາະ! ຫ່າງຈາກສາຂາເກີນ 30ມ. (ມູນທີ່: {m}ມ.)',
+    attStoreGpsNotRegistered: 'ສາຂາ {store} ຍັງບໍ່ມີ GPS ບັນທຶກເຂົ້າວຽກບໍ່ໄດ້ ກະລຸນາຕິດຕໍ່ຜູ້ດູແລ',
     attDuplicateOnce: 'ບັນທຶກແລ້ວມື້ນີ້',
     attReasonPrompt: 'ໃສ່ເຫດຜົນ',
     leaveStats: '📊 ການລາພັກ (ປີນີ້)',
@@ -6024,7 +6038,7 @@ orderItemQty: 'အရေအတွက်',
     scheduleStatusNormal: 'ປົກກະຕິ', scheduleStatusLate: 'ມາຊ້າ', scheduleStatusAbsent: 'ຂາດ', scheduleStatusHoliday: 'ພັກ', scheduleStatusLeave: 'ລາພັກ',
     visitTitle: 'ໄປສາຂາ', visitSub: 'ບັນທຶກການສະໜັບສະໜູນ', visitStore: 'ສາຂາທີ່ໄປ', visitStorePlaceholder: 'ເລືອກສາຂາ',
     visitPurpose: 'ຈຸດປະສົງ', visitPurposeInspect: 'ກວດກາ', visitPurposeTraining: 'ຝຶກອົບຮົມ', visitPurposeUrgent: 'ດ່ວນ', visitPurposeMeeting: 'ປະຊຸມ', visitPurposeDelivery: 'ສົ່ງສິນຄ້າ', visitPurposeEtc: 'ອື່ນໆ', visitPurposeEtcLabel: 'ເຫດຜົນອື່ນໆ (ບໍ່ບັງຄັບ)', visitPurposeEtcPlaceholder: 'ໃສ່ເຫດຜົນ (ບໍ່ບັງຄັບ)',
-    visitStart: 'ເລີ່ມໄປ', visitEnd: 'ສິ້ນສຸດ', visitSupporting: 'ກຳລັງໄປ', todayVisitLog: 'ບັນທຶກມື້ນີ້', visitLogEmpty: 'ບໍ່ມີບັນທຶກ', visitErrSelectStore: 'ເລືອກສາຂາ', visitOfficeOnly: 'ເຈົ້າຫນ້າຮ້ານເທົ່ານັ້ນ',     visitType: 'ປະເພດ', visitDuration: 'ເວລາ',
+    visitStart: 'ເລີ່ມໄປ', visitEnd: 'ສິ້ນສຸດ', visitForceStart: 'ເລີ່ມໄປ', visitForceEnd: 'ສິ້ນສຸດ', visitSupporting: 'ກຳລັງໄປ', todayVisitLog: 'ບັນທຶກມື້ນີ້', visitLogEmpty: 'ບໍ່ມີບັນທຶກ', visitErrSelectStore: 'ເລືອກສາຂາ', visitOfficeOnly: 'ເຈົ້າຫນ້າຮ້ານເທົ່ານັ້ນ',     visitType: 'ປະເພດ', visitDuration: 'ເວລາ',
     visitStoreRequired: 'ຕ້ອງມີສາຂາແລະຜູ້ໃຊ້', visitInvalidType: 'ປະເພດໄປເລີ່ມບໍ່ຖືກຕ້ອງ', visitLocationTooFar: 'ຕຳແໜ່ງບໍ່ເໝາະ! ຫ່າງຈາກສາຂາເກີນ 100ມ. (ມູນທີ່: {m}ມ.)', visitComplete: 'ໄປເລີ່ມແລ້ວ!', visitCompleteWithDuration: 'ໄປເລີ່ມແລ້ວ! ({min} ນາທີ)', visitServerError: 'ຜິດພາດບັນທຶກເຊີບເວີ',
     tabPettyCash: 'ບັນຊີ', pettyCashTitle: 'ເງິນສົດນ້ອຍ', pettyTabList: 'ລາຍການ', pettyTabMonthly: 'ປະຈຳເດືອນ', pettyNoData: 'ບໍ່ມີຂໍ້ມູນ', pettyColDate: 'ວັນທີ', pettyColType: 'ປະເພດ',
     pettyTypeReceive: 'ຮັບ',

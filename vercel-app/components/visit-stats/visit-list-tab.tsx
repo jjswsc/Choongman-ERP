@@ -14,6 +14,7 @@ import {
 import { Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
 import { useAuth } from "@/lib/auth-context"
 import {
   useStoreList,
@@ -181,8 +182,8 @@ export function VisitListTab() {
                     <td className="p-2 text-center">{h.time}</td>
                     <td className="p-2 text-center font-medium">{h.name}</td>
                     <td className="p-2 text-center">{h.store}</td>
-                    <td className="p-2 text-center">{h.type}</td>
-                    <td className="p-2 text-center">{h.purpose || "-"}</td>
+                    <td className="p-2 text-center">{translateVisitType(h.type, t)}</td>
+                    <td className="p-2 text-center">{translateVisitPurpose(h.purpose || "", t) || "-"}</td>
                     <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}${t("att_min_unit")}` : "-"}</td>
                   </tr>
                 ))

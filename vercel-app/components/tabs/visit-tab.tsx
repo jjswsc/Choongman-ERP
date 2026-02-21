@@ -22,6 +22,7 @@ import {
   submitStoreVisit,
   type TodayVisitItem,
 } from "@/lib/api-client"
+import { translateVisitType } from "@/lib/visit-i18n"
 import { MapPin, Building2, Target, LogIn, LogOut } from "lucide-react"
 
 const VISIT_PURPOSES = [
@@ -32,15 +33,6 @@ const VISIT_PURPOSES = [
   { value: "물건배송", labelKey: "visitPurposeDelivery" },
   { value: "기타", labelKey: "visitPurposeEtc" },
 ]
-
-const VISIT_TYPE_TO_KEY: Record<string, string> = {
-  방문시작: "visitStart",
-  방문종료: "visitEnd",
-}
-
-function translateVisitType(type: string, t: (k: string) => string): string {
-  return t(VISIT_TYPE_TO_KEY[type] || "") || type
-}
 
 export function VisitTab() {
   const { auth } = useAuth()

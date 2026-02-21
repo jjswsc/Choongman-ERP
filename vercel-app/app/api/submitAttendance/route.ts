@@ -100,10 +100,12 @@ export async function POST(request: NextRequest) {
       lat?: string | number
       lng?: string | number
     }[]
+    const storeNorm = String(storeName || '').trim().toLowerCase()
     for (const v of vendors || []) {
       const gpsName = String(v.gps_name || '').trim()
       const name = String(v.name || '').trim()
-      if (gpsName === storeName || (gpsName === '' && name === storeName)) {
+      const match = gpsName.toLowerCase() === storeNorm || (gpsName === '' && name.toLowerCase() === storeNorm)
+      if (match) {
         targetLat = Number(v.lat) || 0
         targetLng = Number(v.lng) || 0
         if (targetLat !== 0 || targetLng !== 0) break
@@ -122,7 +124,26 @@ export async function POST(request: NextRequest) {
         Number(dataLat),
         Number(dataLng)
       )
-      if (dist <= 100) locationOk = true
+      if (dist <= 30) locationOk = true
+      // 출근 시 매장 30m 밖이면 기록 거부 (원격 출근 방지)
+      if (logType === '출근' && dist > 30) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `❌ 위치 부적합! 매장 근처(30m 이내)가 아닙니다. (현재 거리: ${Math.round(dist)}m)`,
+          },
+          { headers }
+        )
+      }
+    } else if (logType === '출근' && (targetLat === 0 && targetLng === 0)) {
+      // 매장 GPS 미등록 시 출근 거부 (Ekkamai 등 GPS 없는 매장 원격 출근 방지)
+      return NextResponse.json(
+        {
+          success: false,
+          message: `❌ ${storeName} 매장의 위치(GPS)가 등록되지 않아 출근 기록이 불가합니다. 관리자에게 문의해 주세요.`,
+        },
+        { headers }
+      )
     }
     // GPS 미확인 시에도 승인 대기 없음 (매장 폰/태블릿 활용 정책)
     const needManagerApproval = false

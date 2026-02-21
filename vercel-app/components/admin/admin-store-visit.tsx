@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
 import { useAuth } from "@/lib/auth-context"
 import {
   useStoreList,
@@ -31,16 +32,28 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function StatsBlock({ items, maxMin, minUnit }: { items: StoreVisitStatsItem[]; maxMin: number; minUnit: string }) {
+function StatsBlock({
+  items,
+  maxMin,
+  minUnit,
+  translateLabel,
+}: {
+  items: StoreVisitStatsItem[]
+  maxMin: number
+  minUnit: string
+  translateLabel?: (label: string) => string
+}) {
   if (items.length === 0) return <p className="text-xs text-muted-foreground py-4">-</p>
   const m = Math.max(maxMin, 1)
   return (
     <div className="space-y-1">
       <table className="w-full text-xs">
         <tbody>
-          {items.slice(0, 15).map((it) => (
+          {items.slice(0, 15).map((it) => {
+            const displayLabel = translateLabel ? translateLabel(it.label) : it.label
+            return (
             <tr key={it.label} className="border-b border-border/40">
-              <td className="py-1 pr-2 align-middle w-28 truncate" title={it.label}>{it.label}</td>
+              <td className="py-1 pr-2 align-middle w-28 truncate" title={it.label}>{displayLabel}</td>
               <td className="py-1 w-24 align-middle">
                 <div className="flex gap-1 items-center">
                   <div className="flex-1 min-w-0 h-4 rounded bg-muted overflow-hidden">
@@ -53,7 +66,7 @@ function StatsBlock({ items, maxMin, minUnit }: { items: StoreVisitStatsItem[]; 
                 </div>
               </td>
             </tr>
-          ))}
+          )})}
         </tbody>
       </table>
     </div>
@@ -238,11 +251,11 @@ export function AdminStoreVisit() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">{t("all")}</SelectItem>
-                      <SelectItem value="정기 점검">{t("visitPurposeInspect")}</SelectItem>
-                      <SelectItem value="직원 교육">{t("visitPurposeTraining")}</SelectItem>
-                      <SelectItem value="긴급 지원">{t("visitPurposeUrgent")}</SelectItem>
-                      <SelectItem value="매장 미팅">{t("visitPurposeMeeting")}</SelectItem>
-                      <SelectItem value="물건 배송">{t("visitPurposeDelivery")}</SelectItem>
+                      <SelectItem value="정기점검">{t("visitPurposeInspect")}</SelectItem>
+                      <SelectItem value="직원교육">{t("visitPurposeTraining")}</SelectItem>
+                      <SelectItem value="긴급지원">{t("visitPurposeUrgent")}</SelectItem>
+                      <SelectItem value="매장미팅">{t("visitPurposeMeeting")}</SelectItem>
+                      <SelectItem value="물건배송">{t("visitPurposeDelivery")}</SelectItem>
                       <SelectItem value="기타">{t("visitPurposeEtc")}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -281,8 +294,8 @@ export function AdminStoreVisit() {
                             <td className="p-2 text-center">{h.time}</td>
                             <td className="p-2 text-center font-medium">{h.name}</td>
                             <td className="p-2 text-center">{h.store}</td>
-                            <td className="p-2 text-center">{h.type}</td>
-                            <td className="p-2 text-center">{h.purpose || "-"}</td>
+                            <td className="p-2 text-center">{translateVisitType(h.type, t)}</td>
+                            <td className="p-2 text-center">{translateVisitPurpose(h.purpose || "", t) || "-"}</td>
                             <td className="p-2 text-center font-medium">{h.duration ? `${h.duration}${t("att_min_unit")}` : "-"}</td>
                           </tr>
                         ))
@@ -369,7 +382,7 @@ export function AdminStoreVisit() {
                       {statsShowPurpose && statsData.byPurpose.map((it) => (
                         <tr key={"purpose-" + it.label} className="border-b border-border/40">
                           <td className="p-2">{t("visit_chart_purpose")}</td>
-                          <td className="p-2 font-medium">{it.label}</td>
+                          <td className="p-2 font-medium">{translateVisitPurpose(it.label, t)}</td>
                           <td className="p-2 text-right">{it.minutes}{t("att_min_unit")}</td>
                         </tr>
                       ))}
@@ -403,7 +416,7 @@ export function AdminStoreVisit() {
                   {statsShowPurpose && (
                     <div className="rounded-lg border p-4">
                       <h6 className="font-semibold text-amber-600 dark:text-amber-500 mb-3 text-sm">{t("visit_chart_purpose")}</h6>
-                      <StatsBlock items={statsData.byPurpose} maxMin={maxMinutes} minUnit={t("att_min_unit")} />
+                      <StatsBlock items={statsData.byPurpose} maxMin={maxMinutes} minUnit={t("att_min_unit")} translateLabel={(l) => translateVisitPurpose(l, t)} />
                     </div>
                   )}
                   {!statsShowDept && !statsShowEmployee && !statsShowStore && !statsShowPurpose && (

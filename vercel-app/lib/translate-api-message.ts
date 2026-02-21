@@ -117,9 +117,12 @@ export function translateApiMessage(
   const visitMatch = trimmed.match(/^✅ (방문시작|방문종료) 완료!( \((\d+)분 체류\))?$/)
   if (visitMatch)
     return visitMatch[2] ? t("visitCompleteWithDuration").replace("{min}", visitMatch[3]!) : t("visitComplete")
-  // 방문: 위치 부적합
-  const locMatch = trimmed.match(/^❌ 위치 부적합! 매장 근처\(100m 이내\)가 아닙니다\. \(현재 거리: (\d+)m\)$/)
-  if (locMatch) return t("visitLocationTooFar").replace("{m}", locMatch[1]!)
+  // 방문/출퇴근: 위치 부적합 (30m/100m 등 거리 초과)
+  const locMatch = trimmed.match(/^❌ 위치 부적합! 매장 근처\(\d+m 이내\)가 아닙니다\. \(현재 거리: (\d+)m\)$/)
+  if (locMatch) return t("attLocationTooFar").replace("{m}", locMatch[1]!)
+  // 출근: 매장 GPS 미등록
+  const gpsNotRegMatch = trimmed.match(/^❌ (.+) 매장의 위치\(GPS\)가 등록되지 않아 출근 기록이 불가합니다\. 관리자에게 문의해 주세요\.$/)
+  if (gpsNotRegMatch) return t("attStoreGpsNotRegistered").replace("{store}", gpsNotRegMatch[1]!)
   // 방문: 서버 오류
   if (trimmed.startsWith("❌ 서버 저장 오류:"))
     return t("visitServerError") + ": " + trimmed.slice("❌ 서버 저장 오류:".length)
