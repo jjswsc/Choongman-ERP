@@ -49,10 +49,10 @@ ALTER TABLE public_holidays ADD CONSTRAINT public_holidays_year_date_key UNIQUE 
 ALTER TABLE check_results DROP CONSTRAINT IF EXISTS check_results_date_store_key;
 ALTER TABLE check_results ADD CONSTRAINT check_results_date_store_key UNIQUE (check_date, store_name);
 
--- store_visits: visit_type 포함 (방문시작 1행 + 방문종료 1행 허용)
+-- store_visits: 같은 날 같은 매장 여러 번 방문 허용 (제약 없음)
+-- 기존 제약 제거만 수행. ADD 하지 않음.
 ALTER TABLE store_visits DROP CONSTRAINT IF EXISTS store_visits_date_name_store_key;
 ALTER TABLE store_visits DROP CONSTRAINT IF EXISTS store_visits_date_name_store_type_key;
-ALTER TABLE store_visits ADD CONSTRAINT store_visits_date_name_store_type_key UNIQUE (visit_date, name, store_name, visit_type);
 
 ALTER TABLE evaluation_results DROP CONSTRAINT IF EXISTS evaluation_results_type_date_store_emp_key;
 ALTER TABLE evaluation_results ADD CONSTRAINT evaluation_results_type_date_store_emp_key UNIQUE (eval_type, eval_date, store_name, employee_name);
