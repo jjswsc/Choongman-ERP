@@ -37,7 +37,24 @@ ADD COLUMN IF NOT EXISTS account_subject_id BIGINT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_fixed_expenses_account_subject ON fixed_expenses(account_subject_id);
 
--- 4. 시드 데이터 - 비용 과목
+-- 4. 시드 데이터 - 수익 과목 (입금용)
+INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_order) VALUES
+  ('4110', '배달앱정산(기타)', 'Delivery Other', 'revenue', 'revenue', 50),
+  ('4111', 'Grab', 'Grab', 'revenue', 'revenue', 51),
+  ('4112', 'Line Man', 'Line Man', 'revenue', 'revenue', 52),
+  ('4113', 'Shopee', 'Shopee', 'revenue', 'revenue', 53),
+  ('4114', 'Food Panda', 'Food Panda', 'revenue', 'revenue', 54),
+  ('4115', 'Robinhood', 'Robinhood', 'revenue', 'revenue', 55),
+  ('4120', '카드매출(기타)', 'Card Other', 'revenue', 'revenue', 60),
+  ('4121', 'Visa', 'Visa', 'revenue', 'revenue', 61),
+  ('4122', 'Master', 'Master', 'revenue', 'revenue', 62),
+  ('4123', 'UnionPay', 'UnionPay', 'revenue', 'revenue', 63),
+  ('4124', 'JCB', 'JCB', 'revenue', 'revenue', 64),
+  ('4130', 'QR이체매출', 'QR/Transfer', 'revenue', 'revenue', 70),
+  ('4140', '현금입금', 'Cash Deposit', 'revenue', 'revenue', 80)
+ON CONFLICT (code) DO NOTHING;
+
+-- 5. 시드 데이터 - 비용 과목
 INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_order) VALUES
   ('1110', '현금이체', 'Cash Transfer', 'transfer', NULL, 10),
   ('5310', '급여', 'Salary', 'expense', 'expense', 100),
@@ -49,6 +66,7 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5440', '수도광열비', 'Water/Gas', 'expense', 'fixed', 113),
   ('5450', '접대비', 'Entertainment', 'expense', 'expense', 120),
   ('5460', '교통비', 'Transportation', 'expense', 'expense', 121),
+  ('5461', '차량유지비', 'Vehicles', 'expense', 'expense', 120),
   ('5470', '통신비(전화)', 'Phone', 'expense', 'expense', 122),
   ('5480', '소모품비', 'Supplies', 'expense', 'expense', 130),
   ('5490', '보험료', 'Insurance', 'expense', 'fixed', 131),
@@ -58,7 +76,10 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5524', '홍보비', 'Promotion', 'expense', 'expense', 140),
   ('5525', '광고비', 'Advertising', 'expense', 'expense', 141),
   ('5526', '프로모션비', 'Promo Campaign', 'expense', 'expense', 142),
-  ('5527', 'SNS마케팅', 'SNS Marketing', 'expense', 'expense', 143)
+  ('5527', 'SNS마케팅', 'SNS Marketing', 'expense', 'expense', 143),
+  ('5521', '용역비', 'Service costs', 'expense', 'expense', 144),
+  ('5522', '연구개발비', 'R&D', 'expense', 'expense', 145),
+  ('5523', '수리비', 'Repair fee', 'expense', 'expense', 146)
 ON CONFLICT (code) DO NOTHING;
 
 -- RLS

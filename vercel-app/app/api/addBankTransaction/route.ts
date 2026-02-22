@@ -14,11 +14,13 @@ export async function POST(request: NextRequest) {
     const transType = String(body.transType || body.trans_type || 'withdraw').toLowerCase()
     const amount = Number(body.amount) || 0
     const memo = String(body.memo || '').trim()
+    const note = String(body.note || '').trim()
     const store = String(body.store || '').trim()
     const userName = String(body.userName || body.user_name || '').trim()
     const category = String(body.category || 'expense').toLowerCase()
     const fixedExpenseId = body.fixedExpenseId ?? body.fixed_expense_id
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const salesDate = body.salesDate ?? body.sales_date
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
@@ -34,7 +36,11 @@ export async function POST(request: NextRequest) {
     }
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
-    const validCategory = ['transfer', 'expense', 'fixed'].includes(category) ? category : 'expense'
+    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'correction']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction']
+    const validCategory = transType === 'deposit'
+      ? (depositCategories.includes(category) ? category : depositCategories[0])
+      : (withdrawCategories.includes(category) ? category : 'expense')
 
     const row: Record<string, unknown> = {
       account_id: accountId,
@@ -42,6 +48,7 @@ export async function POST(request: NextRequest) {
       trans_type: transType,
       amount: amt,
       memo: memo || null,
+      note: note || null,
       store: store || null,
       user_name: userName || null,
       category: validCategory,
@@ -53,6 +60,10 @@ export async function POST(request: NextRequest) {
     if (accountSubjectId != null) {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) row.account_subject_id = asid
+    }
+    if (transType === 'deposit' && salesDate) {
+      const sd = String(salesDate).slice(0, 10)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) row.sales_date = sd
     }
     await supabaseInsert('bank_transactions', row)
 

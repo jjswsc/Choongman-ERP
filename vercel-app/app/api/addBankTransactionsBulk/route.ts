@@ -27,14 +27,20 @@ export async function POST(request: NextRequest) {
       const transType = String(item.transType || item.trans_type || 'deposit').toLowerCase()
       const amount = Number(item.amount) || 0
       const memo = String(item.memo || '').trim()
+      const note = String(item.note || '').trim()
       const category = String(item.category || 'expense').toLowerCase()
       const accountSubjectId = item.accountSubjectId ?? item.account_subject_id
+      const salesDate = item.salesDate ?? item.sales_date
 
       if (!transDate || amount <= 0) continue
       if (!['deposit', 'withdraw'].includes(transType)) continue
 
       const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
-      const validCategory = ['transfer', 'expense', 'fixed'].includes(category) ? category : 'expense'
+      const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'correction']
+      const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction']
+      const validCategory = transType === 'deposit'
+        ? (depositCategories.includes(category) ? category : 'revenue_delivery')
+        : (withdrawCategories.includes(category) ? category : 'expense')
 
       const row: Record<string, unknown> = {
         account_id: accountId,
@@ -42,6 +48,7 @@ export async function POST(request: NextRequest) {
         trans_type: transType,
         amount: amt,
         memo: memo || null,
+        note: note || null,
         store: store || null,
         user_name: userName || null,
         category: validCategory,
@@ -49,6 +56,10 @@ export async function POST(request: NextRequest) {
       if (accountSubjectId != null) {
         const asid = Number(accountSubjectId)
         if (!isNaN(asid)) row.account_subject_id = asid
+      }
+      if (transType === 'deposit' && salesDate) {
+        const sd = String(salesDate).slice(0, 10)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) row.sales_date = sd
       }
 
       await supabaseInsert('bank_transactions', row)

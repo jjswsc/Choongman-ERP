@@ -23,8 +23,10 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
   trans_type TEXT NOT NULL DEFAULT 'withdraw',
   amount NUMERIC(12,2) NOT NULL,
   memo TEXT DEFAULT '',
+  note TEXT DEFAULT '',
   store TEXT DEFAULT '',
   user_name TEXT DEFAULT '',
+  category TEXT DEFAULT 'expense',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_bank_transactions_account ON bank_transactions(account_id);

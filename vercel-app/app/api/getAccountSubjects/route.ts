@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
   const forExpense = searchParams.get('forExpense') === 'true'
   const forFixed = searchParams.get('forFixed') === 'true'
   const forTransfer = searchParams.get('forTransfer') === 'true'
+  const forRevenue = searchParams.get('forRevenue') === 'true'
 
   try {
     type Row = { id?: number; code?: string; name?: string; name_en?: string; type?: string; p_and_l_section?: string; sort_order?: number }
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
     }
     if (forTransfer) {
       list = list.filter((x) => x.type === 'transfer')
+    }
+    if (forRevenue) {
+      list = list.filter((x) => x.type === 'revenue')
     }
 
     return NextResponse.json(list, { headers })

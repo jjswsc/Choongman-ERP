@@ -1228,8 +1228,10 @@ export interface BankTransactionItem {
   transType: string
   amount: number
   memo: string
+  note?: string
   category?: string
   accountSubjectId?: number | null
+  salesDate?: string
 }
 
 export interface BankTransactionsSummary {
@@ -1274,11 +1276,13 @@ export async function addBankTransaction(params: {
   transType: 'deposit' | 'withdraw'
   amount: number
   memo?: string
+  note?: string
   store?: string
   userName?: string
-  category?: 'transfer' | 'expense' | 'fixed'
+  category?: string
   fixedExpenseId?: number
   accountSubjectId?: number
+  salesDate?: string
 }) {
   const res = await apiFetch('/api/addBankTransaction', {
     method: 'POST',
@@ -1297,8 +1301,10 @@ export async function addBankTransactionsBulk(params: {
     transType: 'deposit' | 'withdraw'
     amount: number
     memo?: string
-    category?: 'transfer' | 'expense' | 'fixed'
+    note?: string
+    category?: string
     accountSubjectId?: number
+    salesDate?: string
   }>
 }) {
   const res = await apiFetch('/api/addBankTransactionsBulk', {
@@ -1341,12 +1347,14 @@ export async function getAccountSubjects(params?: {
   forExpense?: boolean
   forFixed?: boolean
   forTransfer?: boolean
+  forRevenue?: boolean
 }) {
   const q = new URLSearchParams()
   if (params?.type) q.set('type', params.type)
   if (params?.forExpense) q.set('forExpense', 'true')
   if (params?.forFixed) q.set('forFixed', 'true')
   if (params?.forTransfer) q.set('forTransfer', 'true')
+  if (params?.forRevenue) q.set('forRevenue', 'true')
   const res = await apiFetch(`/api/getAccountSubjects?${q}`)
   return res.json() as Promise<AccountSubjectItem[]>
 }

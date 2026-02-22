@@ -12,6 +12,6 @@ ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'expense';
 ALTER TABLE bank_transactions
 ADD COLUMN IF NOT EXISTS fixed_expense_id BIGINT NULL;
 
-COMMENT ON COLUMN bank_transactions.category IS 'transfer=이체/보충(비용제외), expense=비용, fixed=고정비';
+COMMENT ON COLUMN bank_transactions.category IS 'transfer=이체/보충(비용제외), expense=비용, fixed=고정비, correction=정정(오입력 역거래, 비용제외)';
 
 CREATE INDEX IF NOT EXISTS idx_bank_transactions_category ON bank_transactions(category);

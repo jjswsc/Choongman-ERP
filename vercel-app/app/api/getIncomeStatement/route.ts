@@ -151,7 +151,7 @@ export async function GET(request: NextRequest) {
           )) as { amount?: number; category?: string }[] | null
           for (const r of btRows || []) {
             const cat = String(r.category || 'expense').toLowerCase()
-            if (cat === 'transfer') continue
+            if (cat === 'transfer' || cat === 'correction') continue
             expenses += Math.abs(Number(r.amount) || 0)
           }
         }
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
             )) as { amount?: number; category?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
-              if (cat === 'transfer') continue
+              if (cat === 'transfer' || cat === 'correction') continue
               expenses += Math.abs(Number(r.amount) || 0)
             }
           }
@@ -240,7 +240,7 @@ export async function GET(request: NextRequest) {
             )) as { amount?: number; category?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
-              if (cat === 'transfer') continue
+              if (cat === 'transfer' || cat === 'correction') continue
               expenses += Math.abs(Number(r.amount) || 0)
             }
           }
