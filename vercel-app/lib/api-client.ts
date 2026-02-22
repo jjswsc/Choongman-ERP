@@ -1233,6 +1233,8 @@ export interface BankTransactionItem {
   accountSubjectId?: number | null
   salesDate?: string
   expenseDate?: string
+  vendorCode?: string
+  storeName?: string
 }
 
 export interface BankTransactionsSummary {
@@ -1285,6 +1287,8 @@ export async function addBankTransaction(params: {
   accountSubjectId?: number
   salesDate?: string
   expenseDate?: string
+  vendorCode?: string
+  storeName?: string
 }) {
   const res = await apiFetch('/api/addBankTransaction', {
     method: 'POST',
@@ -1308,6 +1312,8 @@ export async function addBankTransactionsBulk(params: {
     accountSubjectId?: number
     salesDate?: string
     expenseDate?: string
+    vendorCode?: string
+    storeName?: string
   }>
 }) {
   const res = await apiFetch('/api/addBankTransactionsBulk', {
@@ -1315,7 +1321,7 @@ export async function addBankTransactionsBulk(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; inserted?: number; message?: string }>
+  return res.json() as Promise<{ success: boolean; inserted?: number; skipped?: number; message?: string }>
 }
 
 export async function saveBankAccount(params: {

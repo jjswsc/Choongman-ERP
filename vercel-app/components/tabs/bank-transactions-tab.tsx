@@ -27,6 +27,7 @@ import {
   saveBankAccount,
   getFixedExpenses,
   getAccountSubjects,
+  getVendorsForPurchase,
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
@@ -61,7 +62,7 @@ export function BankTransactionsTab() {
   const [loading, setLoading] = React.useState(false)
 
   const [addTransType, setAddTransType] = React.useState<"deposit" | "withdraw">("withdraw")
-  const [addCategory, setAddCategory] = React.useState<"transfer" | "expense" | "fixed" | "correction" | "loan" | "advance" | "unclassified" | "revenue_delivery" | "revenue_card" | "revenue_qr" | "revenue_cash">("revenue_delivery")
+  const [addCategory, setAddCategory] = React.useState<"transfer" | "expense" | "fixed" | "purchase_payment" | "correction" | "loan" | "advance" | "unclassified" | "revenue_delivery" | "revenue_card" | "revenue_qr" | "revenue_cash" | "receivable_receive">("revenue_delivery")
   const [addFixedExpenseId, setAddFixedExpenseId] = React.useState<string>("")
   const [addAccountSubjectId, setAddAccountSubjectId] = React.useState<string>("")
   const [fixedExpenseOptions, setFixedExpenseOptions] = React.useState<{ id: number; name: string; store: string }[]>([])
@@ -72,7 +73,10 @@ export function BankTransactionsTab() {
   const [addAmount, setAddAmount] = React.useState("")
   const [addMemo, setAddMemo] = React.useState("")
   const [addNote, setAddNote] = React.useState("")
+  const [addVendorCode, setAddVendorCode] = React.useState("")
+  const [addStoreNameForReceivable, setAddStoreNameForReceivable] = React.useState("")
   const [addSaving, setAddSaving] = React.useState(false)
+  const [vendorOptions, setVendorOptions] = React.useState<{ code: string; name: string }[]>([])
 
   const [newAccountName, setNewAccountName] = React.useState("")
   const [newAccountBankName, setNewAccountBankName] = React.useState("")
@@ -80,7 +84,7 @@ export function BankTransactionsTab() {
   const [addAccountSaving, setAddAccountSaving] = React.useState(false)
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
-  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string }>>({})
+  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string; vendorCode?: string; storeName?: string }>>({})
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [importSaving, setImportSaving] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -119,6 +123,9 @@ export function BankTransactionsTab() {
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
 
+  React.useEffect(() => {
+    getVendorsForPurchase().then((r) => setVendorOptions(r || []))
+  }, [])
   React.useEffect(() => {
     getFixedExpenses({ userStore: auth?.store, userRole: auth?.role })
       .then((r) => setFixedExpenseOptions((r || []).filter((fe) => fe.id != null).map((fe) => ({ id: fe.id!, name: fe.name, store: fe.store }))))
@@ -186,10 +193,18 @@ export function BankTransactionsTab() {
       alert(t("bankAccount") || "계좌를 선택하세요.")
       return
     }
+    if (addTransType === "withdraw" && addCategory === "purchase_payment" && !addVendorCode) {
+      alert(t("inAlertSelectVendor") || "거래처를 선택하세요.")
+      return
+    }
+    if (addTransType === "deposit" && addCategory === "receivable_receive" && !addStoreNameForReceivable) {
+      alert(t("store") ? `${t("store")}를 선택하세요.` : "매장을 선택하세요.")
+      return
+    }
     const acc = accounts.find((a) => String(a.id) === accountId)
     setAddSaving(true)
     try {
-      const depositCat = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction", "loan", "advance", "unclassified"].includes(addCategory) ? addCategory : undefined
+      const depositCat = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"].includes(addCategory) ? addCategory : undefined
       const salesDateVal = addTransType === "deposit" && addSalesDate ? addSalesDate : addTransType === "deposit" ? (() => { const d = new Date(addDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })() : undefined
       const expenseDateVal = addTransType === "withdraw" && addExpenseDate ? addExpenseDate : undefined
       const res = await addBankTransaction({
@@ -206,6 +221,8 @@ export function BankTransactionsTab() {
         accountSubjectId: addAccountSubjectId ? Number(addAccountSubjectId) : undefined,
         salesDate: salesDateVal,
         expenseDate: expenseDateVal,
+        vendorCode: addCategory === "purchase_payment" ? addVendorCode : undefined,
+        storeName: addCategory === "receivable_receive" ? addStoreNameForReceivable : undefined,
       })
       if (res.success) {
         setAddAmount("")
@@ -215,6 +232,8 @@ export function BankTransactionsTab() {
         setAddExpenseDate("")
         setAddFixedExpenseId("")
         setAddAccountSubjectId("")
+        setAddVendorCode("")
+        setAddStoreNameForReceivable("")
         loadData()
       } else {
         alert(res.message || "등록 실패")
@@ -289,7 +308,7 @@ export function BankTransactionsTab() {
     e.target.value = ""
   }
 
-  const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate" | "expenseDate", value: string) => {
+  const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate" | "expenseDate" | "vendorCode" | "storeName", value: string) => {
     setImportRowEdits((prev) => ({
       ...prev,
       [idx]: { ...prev[idx], [field]: value || undefined },
@@ -303,15 +322,17 @@ export function BankTransactionsTab() {
       const edit = importRowEdits[idx]
       const category = r.transType === "withdraw"
         ? (edit?.category || "expense")
-        : (edit?.category && ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction", "loan", "advance", "unclassified"].includes(edit.category) ? edit.category : "revenue_delivery")
+        : (edit?.category && ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"].includes(edit.category) ? edit.category : "revenue_delivery")
       const accountSubjectId = edit?.accountSubjectId && edit.accountSubjectId !== "__none__" ? Number(edit.accountSubjectId) : undefined
       const note = edit?.note?.trim() || undefined
-      const salesDate = r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(edit?.category || "")
+      const salesDate = r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(edit?.category || "")
         ? (edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })())
         : undefined
       const expenseDate = r.transType === "withdraw" && (edit?.category === "expense" || edit?.category === "fixed")
         ? (edit?.expenseDate || r.transDate)
         : undefined
+      const vendorCode = edit?.category === "purchase_payment" ? (edit?.vendorCode?.trim() || undefined) : undefined
+      const storeName = edit?.category === "receivable_receive" ? (edit?.storeName?.trim() || undefined) : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -322,6 +343,8 @@ export function BankTransactionsTab() {
         accountSubjectId,
         salesDate,
         expenseDate,
+        vendorCode,
+        storeName,
       }
     })
     setImportSaving(true)
@@ -472,19 +495,21 @@ export function BankTransactionsTab() {
                                           ? t("bankCategoryTransfer")
                                           : r.transType === "withdraw" && r.category === "fixed"
                                             ? t("bankCategoryFixed")
-                                            : r.transType === "withdraw"
-                                              ? t("bankCategoryExpense")
-                                              : r.transType === "deposit" && r.category === "revenue_delivery"
+                                            : r.transType === "withdraw" && r.category === "purchase_payment"
+                                          ? (t("bankCategoryPurchasePayment") || "매입 대금")
+                                          : r.transType === "deposit" && r.category === "receivable_receive"
+                                            ? (t("bankCategoryReceivableReceive") || "매출 수령")
+                                            : r.transType === "deposit" && r.category === "revenue_delivery"
                                                 ? (t("bankRevenueDelivery") || "배달앱")
                                                 : r.transType === "deposit" && r.category === "revenue_card"
                                                   ? (t("bankRevenueCard") || "카드")
                                                   : r.transType === "deposit" && r.category === "revenue_qr"
                                                     ? (t("bankRevenueQr") || "QR/이체")
                                                     : r.transType === "deposit" && r.category === "revenue_cash"
-                                                      ? (t("bankRevenueCash") || "현금")
-                                                      : r.transType === "withdraw"
-                                                        ? t("bankCategoryExpense")
-                                                        : "—"}
+                                                    ? (t("bankRevenueCash") || "현금")
+                                                    : r.transType === "withdraw"
+                                                      ? t("bankCategoryExpense")
+                                                      : "—"}
                               </td>
                               <td className="p-2 text-muted-foreground text-xs">
                                 {r.accountSubjectId
@@ -577,6 +602,7 @@ export function BankTransactionsTab() {
                   {balanceMatch ? `✓ ${t("bankBalanceMatch")}` : `✗ ${t("bankBalanceMismatch")}`}
                 </div>
               )}
+              <p className="text-xs text-muted-foreground">{t("bankImportDupHint") || "이미 등록된 거래(날짜·금액·적요 동일)는 자동으로 제외됩니다."}</p>
               <div className="max-h-[240px] overflow-auto border rounded">
                 <table className="w-full text-sm min-w-[840px]">
                   <thead className="bg-muted/50 sticky top-0">
@@ -609,6 +635,7 @@ export function BankTransactionsTab() {
                                 <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                 <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
                                 <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                                <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                                 <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                 <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                 <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -628,6 +655,7 @@ export function BankTransactionsTab() {
                                 <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
                                 <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                 <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                                <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                                 <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                                 <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                                 <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -637,7 +665,37 @@ export function BankTransactionsTab() {
                           )}
                         </td>
                         <td className="p-2">
-                          {r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
+                          {r.transType === "withdraw" && importRowEdits[idx]?.category === "purchase_payment" ? (
+                            <Select
+                              value={importRowEdits[idx]?.vendorCode || "__none__"}
+                              onValueChange={(v) => setImportRowEdit(idx, "vendorCode", v === "__none__" ? "" : v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {vendorOptions.map((v) => (
+                                  <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : r.transType === "deposit" && importRowEdits[idx]?.category === "receivable_receive" ? (
+                            <Select
+                              value={importRowEdits[idx]?.storeName || "__none__"}
+                              onValueChange={(v) => setImportRowEdit(idx, "storeName", v === "__none__" ? "" : v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[120px]">
+                                <SelectValue placeholder={t("store") || "매장"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {(storeList || []).filter((s) => s && s !== "All").map((s) => (
+                                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(importRowEdits[idx]?.category || "") ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -658,7 +716,7 @@ export function BankTransactionsTab() {
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
+                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -679,7 +737,7 @@ export function BankTransactionsTab() {
                           {r.amount >= 0 ? "+" : ""}{fmt(r.amount)}
                         </td>
                         <td className="p-2">
-                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
+                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
@@ -786,13 +844,14 @@ export function BankTransactionsTab() {
                           <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드매출"}</SelectItem>
                           <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                           <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금입금"}</SelectItem>
+                          <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
                           <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                           <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                           <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                           <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                         </SelectContent>
                       </Select>
-                      {!["correction", "loan", "advance", "unclassified"].includes(addCategory) && (
+                      {!["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(addCategory) && (
                         <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[130px] h-9">
                             <SelectValue placeholder={t("accountSubject")} />
@@ -805,7 +864,7 @@ export function BankTransactionsTab() {
                           </SelectContent>
                         </Select>
                       )}
-                      {!["correction", "loan", "advance", "unclassified"].includes(addCategory) && (
+                      {!["correction", "loan", "advance", "unclassified"].includes(addCategory) && addCategory !== "receivable_receive" && (
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-muted-foreground whitespace-nowrap">{t("bankSalesDate") || "매출일"}</span>
                           <Input
@@ -816,18 +875,32 @@ export function BankTransactionsTab() {
                           />
                         </div>
                       )}
+                      {addCategory === "receivable_receive" && (
+                        <Select value={addStoreNameForReceivable || "__none__"} onValueChange={(v) => setAddStoreNameForReceivable(v === "__none__" ? "" : v)}>
+                          <SelectTrigger className="w-[140px] h-9">
+                            <SelectValue placeholder={t("store") || "매장"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            {(storeList || []).filter((s) => s && s !== "All").map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </>
                   )}
                   {addTransType === "withdraw" && (
                     <>
-                      <Select value={addCategory} onValueChange={(v) => setAddCategory(v as "transfer" | "expense" | "fixed" | "correction" | "loan" | "advance" | "unclassified")}>
-                        <SelectTrigger className="w-[110px] h-9">
+                      <Select value={addCategory} onValueChange={(v) => setAddCategory(v as "transfer" | "expense" | "fixed" | "purchase_payment" | "correction" | "loan" | "advance" | "unclassified")}>
+                        <SelectTrigger className="w-[130px] h-9">
                           <SelectValue placeholder={t("bankCategoryLabel")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                           <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
                           <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                          <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
                           <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
                           <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
                           <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
@@ -879,6 +952,19 @@ export function BankTransactionsTab() {
                             className="w-[120px] h-9"
                           />
                         </div>
+                      )}
+                      {addCategory === "purchase_payment" && (
+                        <Select value={addVendorCode || "__none__"} onValueChange={(v) => setAddVendorCode(v === "__none__" ? "" : v)}>
+                          <SelectTrigger className="w-[140px] h-9">
+                            <SelectValue placeholder={t("inVendorPlaceholder") || t("inVendor") || "거래처"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">—</SelectItem>
+                            {vendorOptions.map((v) => (
+                              <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       )}
                     </>
                   )}

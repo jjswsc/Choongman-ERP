@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 
-/** 통장 거래 등록 */
+/** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const salesDate = body.salesDate ?? body.sales_date
     const expenseDate = body.expenseDate ?? body.expense_date
+    const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
+    const storeNameForReceivable = String(body.storeName || body.store_name || '').trim()
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
@@ -37,8 +39,8 @@ export async function POST(request: NextRequest) {
     }
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
-    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'correction', 'loan', 'advance', 'unclassified']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
+    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')
@@ -70,7 +72,34 @@ export async function POST(request: NextRequest) {
       const ed = String(expenseDate).slice(0, 10)
       if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
     }
-    await supabaseInsert('bank_transactions', row)
+    if (validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
+    if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+
+    const inserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
+    const bankId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
+
+    if (bankId && validCategory === 'purchase_payment' && vendorCode) {
+      await supabaseInsert('payable_transactions', {
+        vendor_code: vendorCode,
+        amount: -Math.abs(amount),
+        ref_type: 'Payment',
+        ref_id: null,
+        trans_date: transDate.slice(0, 10),
+        memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
+        bank_transaction_id: bankId,
+      })
+    }
+    if (bankId && validCategory === 'receivable_receive' && storeNameForReceivable) {
+      await supabaseInsert('receivable_transactions', {
+        store_name: storeNameForReceivable,
+        amount: -Math.abs(amount),
+        ref_type: 'Receive',
+        ref_id: null,
+        trans_date: transDate.slice(0, 10),
+        memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+        bank_transaction_id: bankId,
+      })
+    }
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {

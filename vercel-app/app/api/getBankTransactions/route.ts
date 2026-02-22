@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'trans_date.asc,id.asc',
       limit: 2000,
-    }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string }[]
+    }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string }[]
 
     const list = (rows || []).map((r) => ({
       id: r.id,
@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
       accountSubjectId: r.account_subject_id ?? null,
       salesDate: r.sales_date ? String(r.sales_date).slice(0, 10) : undefined,
       expenseDate: r.expense_date ? String(r.expense_date).slice(0, 10) : undefined,
+      vendorCode: r.vendor_code ? String(r.vendor_code).trim() : undefined,
+      storeName: r.store_name ? String(r.store_name).trim() : undefined,
     }))
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)
