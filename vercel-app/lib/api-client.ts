@@ -1235,6 +1235,9 @@ export interface BankTransactionItem {
   expenseDate?: string
   vendorCode?: string
   storeName?: string
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  purchaseOrderId?: number
 }
 
 export interface BankTransactionsSummary {
@@ -1322,6 +1325,20 @@ export async function addBankTransactionsBulk(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; inserted?: number; skipped?: number; message?: string }>
+}
+
+export async function updateBankTransactionInvoice(params: {
+  bankTransactionId: number
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  purchaseOrderId?: number | null
+}) {
+  const res = await apiFetch('/api/updateBankTransactionInvoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function saveBankAccount(params: {
@@ -2731,6 +2748,11 @@ export async function getPurchaseLocations() {
 export async function getVendorsForPurchase() {
   const res = await apiFetch('/api/getVendorsForPurchase')
   return res.json() as Promise<VendorForPurchase[]>
+}
+
+export async function getVendorsForSales() {
+  const res = await apiFetch('/api/getVendorsForSales')
+  return res.json() as Promise<{ name: string }[]>
 }
 
 export async function getItemsByVendor(

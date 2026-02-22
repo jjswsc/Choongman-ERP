@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 /** 발주(PO) 인보이스 수령·원천징수세 수정 */
 export async function POST(request: NextRequest) {
@@ -41,6 +41,20 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('purchase_orders', poId, patch)
+
+    // 연동: 이 발주에 연결된 통장 거래도 인보이스 상태 동기화
+    if (typeof invoiceReceived === 'boolean') {
+      try {
+        await supabaseUpdateByFilter(
+          'bank_transactions',
+          `purchase_order_id=eq.${poId}`,
+          { invoice_received: invoiceReceived }
+        )
+      } catch {
+        /* bank_transactions에 purchase_order_id 컬럼 없을 수 있음 */
+      }
+    }
+
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('updatePurchaseOrderInvoice:', e)
