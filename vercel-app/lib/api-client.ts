@@ -1341,6 +1341,43 @@ export async function updateBankTransactionInvoice(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface BankMemoRule {
+  id?: number
+  keyword: string
+  transType: string
+  category: string
+  accountSubjectId?: number | null
+}
+
+export async function getBankMemoRules() {
+  const res = await apiFetch('/api/getBankMemoRules')
+  return res.json() as Promise<BankMemoRule[]>
+}
+
+export async function saveBankMemoRule(params: {
+  id?: number
+  keyword: string
+  transType: 'deposit' | 'withdraw'
+  category: string
+  accountSubjectId?: number | null
+}) {
+  const res = await apiFetch('/api/saveBankMemoRule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteBankMemoRule(params: { id: number }) {
+  const res = await apiFetch('/api/deleteBankMemoRule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function saveBankAccount(params: {
   id?: number
   name: string

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, FileCheck } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, FileCheck, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -28,11 +28,14 @@ import {
   getVendorsForPurchase,
   getVendorsForSales,
   updateBankTransactionInvoice,
+  getBankMemoRules,
+  saveBankMemoRule,
+  deleteBankMemoRule,
   type AccountSubjectItem,
+  type BankMemoRule,
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
-import { suggestDepositFromMemo } from "@/lib/suggest-deposit-from-memo"
-import { suggestWithdrawFromMemo } from "@/lib/suggest-withdraw-from-memo"
+import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -74,6 +77,12 @@ export function BankTransactionsTab() {
   const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string; vendorCode?: string; storeName?: string }>>({})
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
+  const [memoRules, setMemoRules] = React.useState<BankMemoRule[]>([])
+  const [newRuleKeyword, setNewRuleKeyword] = React.useState("")
+  const [newRuleTransType, setNewRuleTransType] = React.useState<"deposit" | "withdraw">("withdraw")
+  const [newRuleCategory, setNewRuleCategory] = React.useState("")
+  const [newRuleAccountSubjectId, setNewRuleAccountSubjectId] = React.useState<string>("")
+  const [savingMemoRule, setSavingMemoRule] = React.useState(false)
   const [filterTransType, setFilterTransType] = React.useState<string>("")
   const [filterCategory, setFilterCategory] = React.useState<string>("")
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
@@ -121,6 +130,9 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     getVendorsForSales().then((r) => setSalesVendorOptions(r || []))
   }, [])
+  React.useEffect(() => {
+    getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
+  }, [])
 
   const receivableOptions = React.useMemo(() => {
     const stores = (storeList || []).filter((s) => s && s !== "All")
@@ -153,14 +165,14 @@ export function BankTransactionsTab() {
       const next = { ...prev }
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
-          const sug = suggestDepositFromMemo(r.memo, revenueAccountOptions)
+          const sug = suggestDepositWithRules(r.memo, memoRules, revenueAccountOptions)
           if (sug) {
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
             next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined, salesDate: d.toISOString().slice(0, 10) }
           }
         } else if (r.transType === "withdraw" && r.memo) {
-          const sug = suggestWithdrawFromMemo(r.memo, accountSubjectOptions)
+          const sug = suggestWithdrawWithRules(r.memo, memoRules, accountSubjectOptions)
           if (sug) {
             next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined }
           }
@@ -168,7 +180,7 @@ export function BankTransactionsTab() {
       })
       return next
     })
-  }, [importPreview, revenueAccountOptions, accountSubjectOptions])
+  }, [importPreview, revenueAccountOptions, accountSubjectOptions, memoRules])
 
   const fmt = (n: number) => `฿${(n ?? 0).toLocaleString()}`
   const diff = summary && actualBalance.trim() !== ""
@@ -223,6 +235,45 @@ export function BankTransactionsTab() {
   }
 
   const storeOptions = isOffice ? (storeList || []) : [auth?.store || ""].filter(Boolean)
+
+  const handleAddMemoRule = async () => {
+    if (!newRuleKeyword.trim() || !newRuleCategory) {
+      alert(t("bankMemoRuleKeywordRequired") || "키워드와 용도를 입력하세요.")
+      return
+    }
+    setSavingMemoRule(true)
+    try {
+      const res = await saveBankMemoRule({
+        keyword: newRuleKeyword.trim(),
+        transType: newRuleTransType,
+        category: newRuleCategory,
+        accountSubjectId: newRuleAccountSubjectId ? Number(newRuleAccountSubjectId) : null,
+      })
+      if (res.success) {
+        setNewRuleKeyword("")
+        setNewRuleCategory("")
+        setNewRuleAccountSubjectId("")
+        getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
+      } else {
+        alert(res.message || t("processFail"))
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setSavingMemoRule(false)
+    }
+  }
+
+  const handleDeleteMemoRule = async (id: number) => {
+    if (!confirm(t("bankMemoRuleDeleteConfirm") || "이 규칙을 삭제하시겠습니까?")) return
+    try {
+      const res = await deleteBankMemoRule({ id })
+      if (res.success) getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
+      else alert(res.message)
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    }
+  }
 
   const filteredList = React.useMemo(() => {
     return list.filter((r) => {
@@ -869,32 +920,210 @@ export function BankTransactionsTab() {
         <TabsContent value="explanation" className="mt-0">
           <Card>
             <CardContent className="pt-4">
-              <div className="prose prose-sm dark:prose-invert max-w-none space-y-4 text-sm">
-                <h3 className="text-base font-semibold">{t("bankTabExplanation") || "은행 거래 자동 매칭 가이드"}</h3>
-                <p className="text-muted-foreground">회계 직원을 위한 은행 파일 업로드 시 자동 용도·계정과목·매출일 매칭 설명입니다.</p>
+              <div className="prose prose-sm dark:prose-invert max-w-none space-y-5 text-sm">
+                <h3 className="text-lg font-semibold border-b pb-2">{t("bankTabExplanation") || "통장 거래 매뉴얼"}</h3>
+                <p className="text-muted-foreground">은행 CSV 업로드 → 자동 용도·계정과목 매칭 → 미수금/미지급금 연동까지, 통장 거래 처리 전체 흐름을 안내합니다.</p>
 
-                <h4 className="font-medium pt-2">1. 입금 (Deposit)</h4>
-                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                  <li><strong>용도</strong>: 은행 적요 키워드에 따라 배달앱·카드·QR/이체·현금입금으로 자동 분류</li>
-                  <li><strong>계정과목</strong>: Grab, Line Man, Shopee, Food Panda, Robinhood / Visa, Master, UnionPay, JCB 등 세부 과목 자동 매칭</li>
-                  <li><strong>매출일</strong>: 입금일 -1일(T+1)을 기본값으로 적용</li>
-                </ul>
+                <div className="rounded-lg bg-muted/30 p-4 space-y-2">
+                  <h4 className="font-medium">■ 화면 구성</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                    <li><strong>입력</strong>: 계좌 선택, 은행 CSV 업로드, 계좌 추가</li>
+                    <li><strong>조회</strong>: 기간별 거래 조회, 필터 검색, 인보이스 체크</li>
+                    <li><strong>설명</strong>: 이 매뉴얼 및 적요 키워드 규칙 설정</li>
+                  </ul>
+                </div>
 
-                <h4 className="font-medium pt-2">2. 출금 (Withdraw)</h4>
-                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                  <li><strong>용도</strong>: 보충·이체·정산 → 이체, 월세·전기·급여·보험 등 → 고정비, 그 외 → 비용</li>
-                  <li><strong>대여</strong>: 돈 빌려줌/빌려옴 (손익 제외)</li>
-                  <li><strong>전도금</strong>: 선급 지급 (손익 제외)</li>
-                  <li><strong>미분류</strong>: 잘 모르는 금액, 나중에 정리 (손익 제외)</li>
-                  <li><strong>계정과목</strong>: 임차료, 전기료, 급여 등 키워드 매칭</li>
-                  <li><strong>비용인식일</strong>: 미입력 시 지급일 기준</li>
-                </ul>
+                <div>
+                  <h4 className="font-medium pt-2">■ 1. 입력 탭 – CSV 업로드</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li>계좌 선택 → <strong>은행 CSV 업로드</strong> 클릭 → K-DEPOSIT 형식 CSV 선택</li>
+                    <li>미리보기에서 용도·계정과목·매출일·비용인식일 등 확인 후 <strong>저장</strong></li>
+                    <li>이미 등록된 거래(날짜·금액·적요 동일)는 자동 제외</li>
+                    <li>계좌가 없으면 <strong>계좌 추가</strong>로 은행명·계좌명·매장 입력 후 등록</li>
+                  </ul>
+                </div>
 
-                <h4 className="font-medium pt-2">3. 적용 시점</h4>
-                <p className="text-muted-foreground">CSV 업로드 후 미리보기 로드 시 모든 거래에 자동 적용. 잘못된 건은 수동 수정 가능.</p>
+                <div>
+                  <h4 className="font-medium pt-2">■ 2. 조회 탭 – 검색·필터</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li>계좌·기간 선택 후 <strong>조회</strong> → 해당 기간 거래 목록 표시</li>
+                    <li><strong>실제 잔액</strong> 입력 시 시스템 잔액과 차이 표시 (불일치 시 점검)</li>
+                    <li><strong>필터</strong>: 유형(입금/출금), 용도, 계정과목, <strong>인보이스 미수령만</strong>으로 검색</li>
+                    <li><strong>인보이스 체크</strong>: 매입 대금 출금 건에서 📄 아이콘 클릭 → 수령 여부 체크 (발주서와 연동됨)</li>
+                  </ul>
+                </div>
 
-                <h4 className="font-medium pt-2">4. 발생주의 (인식일)</h4>
-                <p className="text-muted-foreground">1월 매출 2월 수령 → 매출일 1월 입력. 1월 구매 2월 지불 → 비용인식일 1월 입력. 손익계산서는 인식일 기준으로 해당 월에 반영됨.</p>
+                <div>
+                  <h4 className="font-medium pt-2">■ 3. 입금 – 자동 매칭</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li><strong>용도</strong>: 적요 키워드로 배달앱·카드·QR/이체·현금·매출 수령 등 자동 분류</li>
+                    <li><strong>계정과목</strong>: Grab, Line Man, Shopee, Visa, Master 등 세부 과목 자동 매칭</li>
+                    <li><strong>매출 수령</strong>: 수령처(매장 또는 판매처) 선택 시 → 미수금 자동 차감</li>
+                    <li><strong>매출일</strong>: 입금일 -1일(T+1) 기본 적용</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium pt-2">■ 4. 출금 – 자동 매칭</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li><strong>용도</strong>: 보충·이체·정산→이체, 월세·전기·급여→고정비, 그 외→비용</li>
+                    <li><strong>매입 대금</strong>: 거래처 선택 시 → 미지급금 자동 차감</li>
+                    <li><strong>대여·전도금·미분류</strong>: 손익 계산 제외 (나중에 정리)</li>
+                    <li><strong>계정과목</strong>: 임차료, 전기료, 급여 등 키워드 자동 매칭</li>
+                    <li><strong>비용인식일</strong>: 미입력 시 지급일 기준</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium pt-2">■ 5. 미수금·미지급금 연동</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li><strong>매출 수령</strong> (입금) + 수령처 선택 → 해당 매장/판매처 미수금 차감</li>
+                    <li><strong>매입 대금</strong> (출금) + 거래처 선택 → 해당 거래처 미지급금 차감</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium pt-2">■ 6. 인보이스 수령 체크</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
+                    <li><strong>통장 거래 > 조회</strong>: 매입 대금 건에서 📄 클릭으로 수령 체크</li>
+                    <li><strong>발주서</strong>와 연결된 경우, 한쪽에서 체크하면 양쪽 동기화</li>
+                    <li>발주서 없는 직접 구매(마트 등)도 통장 조회에서 인보이스 체크 가능</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="font-medium pt-2">■ 7. 발생주의 (인식일)</h4>
+                  <p className="text-muted-foreground mt-1">1월 매출 2월 수령 → 매출일 1월 입력. 1월 구매 2월 지불 → 비용인식일 1월 입력. 손익계산서는 인식일 기준으로 해당 월에 반영.</p>
+                </div>
+
+                <h4 className="font-medium pt-4 border-t mt-6 pt-4">■ 8. 적요 키워드 규칙 설정</h4>
+                <p className="text-muted-foreground">은행 적요에 특정 키워드가 포함되면 용도와 계정과목을 자동 지정합니다. 아래에서 규칙을 추가하면 CSV 업로드 시 기본 매칭보다 우선 적용됩니다.</p>
+                <div className="space-y-3 pt-2">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t("bankMemoRuleKeyword") || "키워드"}</label>
+                      <Input
+                        placeholder="예: ABC마트, 월세"
+                        value={newRuleKeyword}
+                        onChange={(e) => setNewRuleKeyword(e.target.value)}
+                        className="w-[140px] h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t("pettyColType") || "유형"}</label>
+                      <Select value={newRuleTransType} onValueChange={(v) => {
+                        setNewRuleTransType(v as "deposit" | "withdraw")
+                        setNewRuleCategory("")
+                        setNewRuleAccountSubjectId("")
+                      }}>
+                        <SelectTrigger className="w-[90px] h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="deposit">{t("bankDeposit")}</SelectItem>
+                          <SelectItem value="withdraw">{t("bankWithdraw")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t("bankCategoryLabel") || "용도"}</label>
+                      <Select value={newRuleCategory} onValueChange={setNewRuleCategory}>
+                        <SelectTrigger className="w-[130px] h-9">
+                          <SelectValue placeholder="선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {newRuleTransType === "deposit" ? (
+                            <>
+                              <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
+                              <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
+                              <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
+                              <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                              <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                              <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                              <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                              <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                              <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                              <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
+                              <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                              <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                              <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                              <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-1">{t("accountSubject") || "계정과목"}</label>
+                      <Select value={newRuleAccountSubjectId || "__none__"} onValueChange={(v) => setNewRuleAccountSubjectId(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder="선택 (생략 가능)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">— {t("accountSubject") || "계정과목"}</SelectItem>
+                          {(newRuleTransType === "deposit" ? revenueAccountOptions : accountSubjectOptions).map((a) => (
+                            <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button size="sm" onClick={handleAddMemoRule} disabled={savingMemoRule || !newRuleKeyword.trim()}>
+                      {savingMemoRule ? "..." : <Plus className="h-4 w-4 mr-1" />}
+                      {t("btn_add")}
+                    </Button>
+                  </div>
+                  {memoRules.length > 0 && (
+                    <div className="rounded border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="p-2 text-left">{t("bankMemoRuleKeyword") || "키워드"}</th>
+                            <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
+                            <th className="p-2 text-left">{t("bankCategoryLabel") || "용도"}</th>
+                            <th className="p-2 text-left">{t("accountSubject") || "계정과목"}</th>
+                            <th className="p-2 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {memoRules.map((rule) => {
+                            const catLabel = rule.transType === "deposit"
+                              ? (rule.category === "revenue_delivery" ? (t("bankRevenueDelivery") || "배달앱") : rule.category === "revenue_card" ? (t("bankRevenueCard") || "카드") : rule.category === "revenue_qr" ? (t("bankRevenueQr") || "QR/이체") : rule.category === "revenue_cash" ? (t("bankRevenueCash") || "현금") : rule.category === "receivable_receive" ? (t("bankCategoryReceivableReceive") || "매출 수령") : rule.category)
+                              : (rule.category === "transfer" ? t("bankCategoryTransfer") : rule.category === "expense" ? t("bankCategoryExpense") : rule.category === "fixed" ? t("bankCategoryFixed") : rule.category === "purchase_payment" ? (t("bankCategoryPurchasePayment") || "매입 대금") : rule.category)
+                            const sub = (rule.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === rule.accountSubjectId)
+                            return (
+                              <tr key={rule.id} className="border-t">
+                                <td className="p-2 font-mono text-xs">{rule.keyword}</td>
+                                <td className="p-2">{rule.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
+                                <td className="p-2">{catLabel}</td>
+                                <td className="p-2 text-muted-foreground">{sub ? `${sub.code} ${asDisplayName(sub)}` : "—"}</td>
+                                <td className="p-2">
+                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 mt-6">
+                  <h4 className="font-medium text-amber-800 dark:text-amber-200">■ 유의사항</h4>
+                  <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2 text-xs">
+                    <li>통장 거래는 CSV 업로드만 가능합니다. 수동 등록 시 잔액이 맞지 않을 수 있습니다.</li>
+                    <li>저장 전 미리보기에서 용도·계정과목·수령처·거래처를 꼭 확인하세요.</li>
+                    <li>잔액 불일치 시: 기간·누락·중복 입력 여부를 확인하세요.</li>
+                  </ul>
+                </div>
               </div>
             </CardContent>
           </Card>

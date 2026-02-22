@@ -43,8 +43,9 @@ export async function POST(request: NextRequest) {
     await supabaseUpdate('bank_transactions', bankTxId, patch)
 
     // 연동: purchase_order_id가 있으면 발주서 인보이스도 동기화
-    const poId = patch.purchase_order_id !== undefined ? patch.purchase_order_id : existing[0].purchase_order_id
-    if (poId && typeof invoiceReceived === 'boolean') {
+    const poIdRaw = patch.purchase_order_id !== undefined ? patch.purchase_order_id : existing[0].purchase_order_id
+    const poId = typeof poIdRaw === 'number' && !isNaN(poIdRaw) ? poIdRaw : null
+    if (poId != null && typeof invoiceReceived === 'boolean') {
       await supabaseUpdate('purchase_orders', poId, { invoice_received: invoiceReceived })
     }
 
