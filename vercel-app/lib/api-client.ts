@@ -1162,6 +1162,35 @@ export async function getReceivablePayableList(params: {
   return data as { type: string; list: ReceivablePayableItem[] }
 }
 
+// ─── 손익계산서 (1단계) ───
+export interface IncomeStatementData {
+  yearMonth: string
+  startStr: string
+  endStr: string
+  storeFilter: string
+  sales: number
+  purchases: number
+  expenses: number
+  grossProfit: number
+  netProfit: number
+  error?: string
+}
+
+export async function getIncomeStatement(params: {
+  yearMonth?: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getIncomeStatement?${q}`)
+  return res.json() as Promise<IncomeStatementData>
+}
+
 export async function addBalanceTransaction(params: {
   type: 'payable' | 'receivable'
   vendorCode?: string

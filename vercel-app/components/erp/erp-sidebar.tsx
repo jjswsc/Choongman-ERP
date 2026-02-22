@@ -31,6 +31,7 @@ import {
   ChevronDown,
   ChevronRight,
   Tag,
+  TrendingUp,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -110,6 +111,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
       { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
+      { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
     ],
   },
   {
