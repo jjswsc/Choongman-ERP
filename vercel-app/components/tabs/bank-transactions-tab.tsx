@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Plus, Upload, X, List, PenLine, HelpCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -80,6 +81,7 @@ export function BankTransactionsTab() {
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
   const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string }>>({})
+  const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [importSaving, setImportSaving] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -439,7 +441,7 @@ export function BankTransactionsTab() {
                     ) : list.length === 0 ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">{t("pettyNoData") || "데이터 없음"}</p>
                     ) : (
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm min-w-[800px]">
                         <thead className="bg-muted/50 sticky top-0">
                           <tr>
                             <th className="p-2 text-center">{t("date") || "날짜"}</th>
@@ -448,7 +450,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
-                        <th className="p-2 text-center min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
+                        <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                       </tr>
                         </thead>
@@ -502,7 +504,13 @@ export function BankTransactionsTab() {
                                     ? r.expenseDate
                                     : "—"}
                               </td>
-                              <td className="p-2 truncate max-w-[120px] text-muted-foreground text-xs" title={r.memo}>{r.memo || "-"}</td>
+                              <td
+                              className="p-2 min-w-[140px] max-w-[140px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                              onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
+                              title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                            >
+                              {r.memo || "-"}
+                            </td>
                               <td className="p-2 truncate max-w-[160px]" title={r.note}>{r.note || "-"}</td>
                             </tr>
                           ))}
@@ -570,7 +578,7 @@ export function BankTransactionsTab() {
                 </div>
               )}
               <div className="max-h-[240px] overflow-auto border rounded">
-                <table className="w-full text-sm min-w-[900px]">
+                <table className="w-full text-sm min-w-[840px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
                       <th className="p-2 text-center">{t("date")}</th>
@@ -579,7 +587,7 @@ export function BankTransactionsTab() {
                       <th className="p-2 text-center">{t("accountSubject")}</th>
                       <th className="p-2 text-center">{t("pettyColAmount")}</th>
                       <th className="p-2 text-center min-w-[110px]">{t("bankAttributedDate") || "인식일"}</th>
-                      <th className="p-2 text-center min-w-[200px]">{t("bankMemoLabel") || "은행 적요"}</th>
+                      <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                       <th className="p-2 text-center min-w-[150px]">{t("bankNoteLabel") || "상세 내용"}</th>
                     </tr>
                   </thead>
@@ -687,7 +695,13 @@ export function BankTransactionsTab() {
                             />
                           ) : "—"}
                         </td>
-                        <td className="p-2 min-w-[200px] text-muted-foreground text-xs whitespace-nowrap" title={r.memo}>{r.memo || "-"}</td>
+                        <td
+                          className="p-2 min-w-[140px] max-w-[140px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                          onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
+                          title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                        >
+                          {r.memo || "-"}
+                        </td>
                         <td className="p-2">
                           <Input
                             placeholder={t("bankNotePlaceholder") || "상세 내용 입력"}
@@ -971,6 +985,15 @@ export function BankTransactionsTab() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!memoPreviewText} onOpenChange={(open) => !open && setMemoPreviewText(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
+          </DialogHeader>
+          <p className="whitespace-pre-wrap break-words text-sm py-2">{memoPreviewText || ""}</p>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
