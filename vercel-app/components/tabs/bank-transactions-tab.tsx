@@ -47,7 +47,7 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null }[]>([])
+  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
