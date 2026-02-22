@@ -985,7 +985,7 @@ export function BankTransactionsTab() {
                 <div>
                   <h4 className="font-medium pt-2">■ 6. 인보이스 수령 체크</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li><strong>통장 거래 > 조회</strong>: 매입 대금 건에서 📄 클릭으로 수령 체크</li>
+                    <li><strong>{"통장 거래 > 조회"}</strong>: 매입 대금 건에서 📄 클릭으로 수령 체크</li>
                     <li><strong>발주서</strong>와 연결된 경우, 한쪽에서 체크하면 양쪽 동기화</li>
                     <li>발주서 없는 직접 구매(마트 등)도 통장 조회에서 인보이스 체크 가능</li>
                   </ul>
