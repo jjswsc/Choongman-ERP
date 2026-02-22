@@ -28,6 +28,7 @@ import {
   getVendorsForPurchase,
   getVendorsForSales,
   updateBankTransactionInvoice,
+  getPurchaseOrders,
   getBankMemoRules,
   saveBankMemoRule,
   deleteBankMemoRule,
@@ -53,7 +54,7 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; purchaseOrderId?: number }[]>([])
+  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; purchaseOrderId?: number; vendorCode?: string }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
@@ -77,6 +78,9 @@ export function BankTransactionsTab() {
   const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string; vendorCode?: string; storeName?: string }>>({})
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
+  const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
+  const [invoiceLinkPOList, setInvoiceLinkPOList] = React.useState<{ id?: number; po_no?: string; vendor_name?: string; total?: number; created_at?: string }[]>([])
+  const [invoiceLinkSelectedPO, setInvoiceLinkSelectedPO] = React.useState<string>("")
   const [memoRules, setMemoRules] = React.useState<BankMemoRule[]>([])
   const [newRuleKeyword, setNewRuleKeyword] = React.useState("")
   const [newRuleTransType, setNewRuleTransType] = React.useState<"deposit" | "withdraw">("withdraw")
@@ -188,24 +192,61 @@ export function BankTransactionsTab() {
     : null
 
   const handleBankInvoiceToggle = React.useCallback(
-    async (r: (typeof list)[0]) => {
+    (r: (typeof list)[0]) => {
       if (!r.id || r.category !== "purchase_payment") return
-      setUpdatingInvoiceId(r.id)
-      try {
-        const res = await updateBankTransactionInvoice({
+      // 이미 발주서 연동된 건: 바로 토글
+      if (r.purchaseOrderId) {
+        setUpdatingInvoiceId(r.id)
+        updateBankTransactionInvoice({
           bankTransactionId: r.id,
           invoiceReceived: !r.invoiceReceived,
+          purchaseOrderId: r.purchaseOrderId,
         })
-        if (res.success) loadData()
-        else alert(res.message || t("processFail"))
-      } catch (e) {
-        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
-      } finally {
-        setUpdatingInvoiceId(null)
+          .then((res) => {
+            if (res.success) loadData()
+            else alert(res.message || t("processFail"))
+          })
+          .catch((e) => alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e))))
+          .finally(() => setUpdatingInvoiceId(null))
+        return
       }
+      // 미연동: 발주서 연동 선택 모달
+      setInvoiceLinkRow(r)
+      setInvoiceLinkSelectedPO("")
     },
     [loadData, t]
   )
+
+  React.useEffect(() => {
+    if (!invoiceLinkRow?.vendorCode?.trim()) {
+      setInvoiceLinkPOList([])
+      return
+    }
+    getPurchaseOrders({ vendorCode: invoiceLinkRow.vendorCode })
+      .then((rows) => setInvoiceLinkPOList(rows || []))
+      .catch(() => setInvoiceLinkPOList([]))
+  }, [invoiceLinkRow?.vendorCode])
+
+  const handleInvoiceLinkConfirm = React.useCallback(async () => {
+    const r = invoiceLinkRow
+    if (!r?.id) return
+    setUpdatingInvoiceId(r.id)
+    setInvoiceLinkRow(null)
+    const poId = invoiceLinkSelectedPO && invoiceLinkSelectedPO !== "__none__" ? Number(invoiceLinkSelectedPO) : undefined
+    try {
+      const res = await updateBankTransactionInvoice({
+        bankTransactionId: r.id,
+        invoiceReceived: !r.invoiceReceived,
+        purchaseOrderId: poId ?? undefined,
+      })
+      if (res.success) loadData()
+      else alert(res.message || t("processFail"))
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setUpdatingInvoiceId(null)
+    }
+  }, [invoiceLinkRow, invoiceLinkSelectedPO, loadData, t])
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) {
@@ -441,7 +482,7 @@ export function BankTransactionsTab() {
 
               {accounts.length === 0 ? (
                 <div className="border rounded-lg p-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">{t("bankAddAccount")} - 첫 계좌를 등록하세요. 입력 탭에서 계좌를 추가할 수 있습니다.</p>
+                  <p className="text-sm text-muted-foreground">{t("bankAddAccount")} - {t("bankNoAccountHint")}</p>
                 </div>
               ) : (
                 <>
@@ -536,7 +577,7 @@ export function BankTransactionsTab() {
                       </Button>
                     )}
                     <span className="text-sm text-muted-foreground">
-                      {filteredList.length}건
+                      {filteredList.length} {t("receivPayCount")}
                     </span>
                   </div>
 
@@ -563,7 +604,7 @@ export function BankTransactionsTab() {
                         <tbody>
                           {filteredList.map((r, i) => (
                             <tr key={r.id ?? i} className={`border-t ${r.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
-                              <td className="p-2">{r.transDate}</td>
+                              <td className="p-2 text-center">{r.transDate}</td>
                               <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className={`p-2 text-center text-xs ${r.category === "correction" ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}>
                                 {r.category === "correction"
@@ -594,7 +635,7 @@ export function BankTransactionsTab() {
                                                       ? t("bankCategoryExpense")
                                                       : "—"}
                               </td>
-                              <td className="p-2 text-muted-foreground text-xs">
+                              <td className="p-2 text-center text-muted-foreground text-xs">
                                 {r.accountSubjectId
                                   ? (() => {
                                       const sub = accountSubjectOptions.find((a) => a.id === r.accountSubjectId) || revenueAccountOptions.find((a) => a.id === r.accountSubjectId)
@@ -605,7 +646,7 @@ export function BankTransactionsTab() {
                               <td className={`p-2 text-right whitespace-nowrap ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                                 {(r.amount ?? 0).toLocaleString()}
                               </td>
-                              <td className="p-2 text-muted-foreground text-xs">
+                              <td className="p-2 text-center text-muted-foreground text-xs">
                                 {r.transType === "deposit" && r.salesDate
                                   ? r.salesDate
                                   : r.transType === "withdraw" && r.expenseDate
@@ -716,7 +757,7 @@ export function BankTransactionsTab() {
                 )}
               </div>
               {accounts.length === 0 && (
-                <p className="text-sm text-muted-foreground mb-4">{t("bankAddAccount")} - 첫 계좌를 등록하세요.</p>
+                <p className="text-sm text-muted-foreground mb-4">{t("bankAddAccount")} - {t("bankNoAccountHintShort")}</p>
               )}
 
               {importPreview && (
@@ -730,7 +771,7 @@ export function BankTransactionsTab() {
               <div className="flex flex-wrap gap-4 text-sm">
                 <span>{importPreview.periodStart} ~ {importPreview.periodEnd}</span>
                 <span>{t("bankStatementBalance")}: {fmt(importPreview.endingBalance)}</span>
-                <span>{importPreview.rows.length}건</span>
+                <span>{importPreview.rows.length} {t("receivPayCount")}</span>
               </div>
               {summary && importPreview.periodEnd === endStr && (
                 <div className={`text-sm font-medium ${balanceMatch ? "text-green-600" : "text-destructive"}`}>
@@ -739,7 +780,7 @@ export function BankTransactionsTab() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">{t("bankImportDupHint") || "이미 등록된 거래(날짜·금액·적요 동일)는 자동으로 제외됩니다."}</p>
-              <div className="max-h-[240px] overflow-auto border rounded">
+              <div className="max-h-[520px] overflow-auto border rounded">
                 <table className="w-full text-sm min-w-[840px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
@@ -922,89 +963,89 @@ export function BankTransactionsTab() {
           <Card>
             <CardContent className="pt-4">
               <div className="prose prose-sm dark:prose-invert max-w-none space-y-5 text-sm">
-                <h3 className="text-lg font-semibold border-b pb-2">{t("bankTabExplanation") || "통장 거래 매뉴얼"}</h3>
-                <p className="text-muted-foreground">은행 CSV 업로드 → 자동 용도·계정과목 매칭 → 미수금/미지급금 연동까지, 통장 거래 처리 전체 흐름을 안내합니다.</p>
+                <h3 className="text-lg font-semibold border-b pb-2">{t("bankManualTitle")}</h3>
+                <p className="text-muted-foreground">{t("bankManualDesc")}</p>
 
                 <div className="rounded-lg bg-muted/30 p-4 space-y-2">
-                  <h4 className="font-medium">■ 화면 구성</h4>
+                  <h4 className="font-medium">■ {t("bankManualScreenLayout")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                    <li><strong>입력</strong>: 계좌 선택, 은행 CSV 업로드, 계좌 추가</li>
-                    <li><strong>조회</strong>: 기간별 거래 조회, 필터 검색, 인보이스 체크</li>
-                    <li><strong>설명</strong>: 이 매뉴얼 및 적요 키워드 규칙 설정</li>
+                    <li>{t("bankManualScreenInput")}</li>
+                    <li>{t("bankManualScreenQuery")}</li>
+                    <li>{t("bankManualScreenExplanation")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 1. 입력 탭 – CSV 업로드</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS1Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li>계좌 선택 → <strong>은행 CSV 업로드</strong> 클릭 → K-DEPOSIT 형식 CSV 선택</li>
-                    <li>미리보기에서 용도·계정과목·매출일·비용인식일 등 확인 후 <strong>저장</strong></li>
-                    <li>이미 등록된 거래(날짜·금액·적요 동일)는 자동 제외</li>
-                    <li>계좌가 없으면 <strong>계좌 추가</strong>로 은행명·계좌명·매장 입력 후 등록</li>
+                    <li>{t("bankManualS1_1")}</li>
+                    <li>{t("bankManualS1_2")}</li>
+                    <li>{t("bankManualS1_3")}</li>
+                    <li>{t("bankManualS1_4")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 2. 조회 탭 – 검색·필터</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS2Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li>계좌·기간 선택 후 <strong>조회</strong> → 해당 기간 거래 목록 표시</li>
-                    <li><strong>실제 잔액</strong> 입력 시 시스템 잔액과 차이 표시 (불일치 시 점검)</li>
-                    <li><strong>필터</strong>: 유형(입금/출금), 용도, 계정과목, <strong>인보이스 미수령만</strong>으로 검색</li>
-                    <li><strong>인보이스 체크</strong>: 매입 대금 출금 건에서 📄 아이콘 클릭 → 수령 여부 체크 (발주서와 연동됨)</li>
+                    <li>{t("bankManualS2_1")}</li>
+                    <li>{t("bankManualS2_2")}</li>
+                    <li>{t("bankManualS2_3")}</li>
+                    <li>{t("bankManualS2_4")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 3. 입금 – 자동 매칭</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS3Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li><strong>용도</strong>: 적요 키워드로 배달앱·카드·QR/이체·현금·매출 수령 등 자동 분류</li>
-                    <li><strong>계정과목</strong>: Grab, Line Man, Shopee, Visa, Master 등 세부 과목 자동 매칭</li>
-                    <li><strong>매출 수령</strong>: 수령처(매장 또는 판매처) 선택 시 → 미수금 자동 차감</li>
-                    <li><strong>매출일</strong>: 입금일 -1일(T+1) 기본 적용</li>
+                    <li>{t("bankManualS3_1")}</li>
+                    <li>{t("bankManualS3_2")}</li>
+                    <li>{t("bankManualS3_3")}</li>
+                    <li>{t("bankManualS3_4")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 4. 출금 – 자동 매칭</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS4Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li><strong>용도</strong>: 보충·이체·정산→이체, 월세·전기·급여→고정비, 그 외→비용</li>
-                    <li><strong>매입 대금</strong>: 거래처 선택 시 → 미지급금 자동 차감</li>
-                    <li><strong>대여·전도금·미분류</strong>: 손익 계산 제외 (나중에 정리)</li>
-                    <li><strong>계정과목</strong>: 임차료, 전기료, 급여 등 키워드 자동 매칭</li>
-                    <li><strong>비용인식일</strong>: 미입력 시 지급일 기준</li>
+                    <li>{t("bankManualS4_1")}</li>
+                    <li>{t("bankManualS4_2")}</li>
+                    <li>{t("bankManualS4_3")}</li>
+                    <li>{t("bankManualS4_4")}</li>
+                    <li>{t("bankManualS4_5")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 5. 미수금·미지급금 연동</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS5Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li><strong>매출 수령</strong> (입금) + 수령처 선택 → 해당 매장/판매처 미수금 차감</li>
-                    <li><strong>매입 대금</strong> (출금) + 거래처 선택 → 해당 거래처 미지급금 차감</li>
+                    <li>{t("bankManualS5_1")}</li>
+                    <li>{t("bankManualS5_2")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 6. 인보이스 수령 체크</h4>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS6Title")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2">
-                    <li><strong>{"통장 거래 > 조회"}</strong>: 매입 대금 건에서 📄 클릭으로 수령 체크</li>
-                    <li><strong>발주서</strong>와 연결된 경우, 한쪽에서 체크하면 양쪽 동기화</li>
-                    <li>발주서 없는 직접 구매(마트 등)도 통장 조회에서 인보이스 체크 가능</li>
+                    <li>{t("bankManualS6_1")}</li>
+                    <li>{t("bankManualS6_2")}</li>
+                    <li>{t("bankManualS6_3")}</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h4 className="font-medium pt-2">■ 7. 발생주의 (인식일)</h4>
-                  <p className="text-muted-foreground mt-1">1월 매출 2월 수령 → 매출일 1월 입력. 1월 구매 2월 지불 → 비용인식일 1월 입력. 손익계산서는 인식일 기준으로 해당 월에 반영.</p>
+                  <h4 className="font-medium pt-2">■ {t("bankManualS7Title")}</h4>
+                  <p className="text-muted-foreground mt-1">{t("bankManualS7_1")}</p>
                 </div>
 
-                <h4 className="font-medium pt-4 border-t mt-6 pt-4">■ 8. 적요 키워드 규칙 설정</h4>
-                <p className="text-muted-foreground">은행 적요에 특정 키워드가 포함되면 용도와 계정과목을 자동 지정합니다. 아래에서 규칙을 추가하면 CSV 업로드 시 기본 매칭보다 우선 적용됩니다.</p>
+                <h4 className="font-medium pt-4 border-t mt-6 pt-4">■ {t("bankManualS8Title")}</h4>
+                <p className="text-muted-foreground">{t("bankManualS8_1")}</p>
                 <div className="space-y-3 pt-2">
                   <div className="flex flex-wrap items-end gap-2">
                     <div>
                       <label className="text-xs text-muted-foreground block mb-1">{t("bankMemoRuleKeyword") || "키워드"}</label>
                       <Input
-                        placeholder="예: ABC마트, 월세"
+                        placeholder={t("bankMemoRuleKeywordPh")}
                         value={newRuleKeyword}
                         onChange={(e) => setNewRuleKeyword(e.target.value)}
                         className="w-[140px] h-9"
@@ -1030,7 +1071,7 @@ export function BankTransactionsTab() {
                       <label className="text-xs text-muted-foreground block mb-1">{t("bankCategoryLabel") || "용도"}</label>
                       <Select value={newRuleCategory} onValueChange={setNewRuleCategory}>
                         <SelectTrigger className="w-[130px] h-9">
-                          <SelectValue placeholder="선택" />
+                          <SelectValue placeholder={t("optional")} />
                         </SelectTrigger>
                         <SelectContent>
                           {newRuleTransType === "deposit" ? (
@@ -1064,7 +1105,7 @@ export function BankTransactionsTab() {
                       <label className="text-xs text-muted-foreground block mb-1">{t("accountSubject") || "계정과목"}</label>
                       <Select value={newRuleAccountSubjectId || "__none__"} onValueChange={(v) => setNewRuleAccountSubjectId(v === "__none__" ? "" : v)}>
                         <SelectTrigger className="w-[160px] h-9">
-                          <SelectValue placeholder="선택 (생략 가능)" />
+                          <SelectValue placeholder={t("placeholderOptional")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">— {t("accountSubject") || "계정과목"}</SelectItem>
@@ -1118,11 +1159,11 @@ export function BankTransactionsTab() {
                 </div>
 
                 <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 mt-6">
-                  <h4 className="font-medium text-amber-800 dark:text-amber-200">■ 유의사항</h4>
+                  <h4 className="font-medium text-amber-800 dark:text-amber-200">■ {t("bankManualNotesTitle")}</h4>
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground mt-2 text-xs">
-                    <li>통장 거래는 CSV 업로드만 가능합니다. 수동 등록 시 잔액이 맞지 않을 수 있습니다.</li>
-                    <li>저장 전 미리보기에서 용도·계정과목·수령처·거래처를 꼭 확인하세요.</li>
-                    <li>잔액 불일치 시: 기간·누락·중복 입력 여부를 확인하세요.</li>
+                    <li>{t("bankManualNotes_1")}</li>
+                    <li>{t("bankManualNotes_2")}</li>
+                    <li>{t("bankManualNotes_3")}</li>
                   </ul>
                 </div>
               </div>
@@ -1137,6 +1178,46 @@ export function BankTransactionsTab() {
             <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
           </DialogHeader>
           <p className="whitespace-pre-wrap break-words text-sm py-2">{memoPreviewText || ""}</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!invoiceLinkRow} onOpenChange={(open) => !open && setInvoiceLinkRow(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("bankInvoiceCheckTitle") || "인보이스 수령 체크"}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {invoiceLinkRow?.vendorCode
+              ? (t("bankInvoiceLinkPrompt") || "이 건을 발주서와 연동하시겠습니까? 연동 시 발주서 인보이스 상태와 동기화됩니다.")
+              : (t("bankInvoiceCheckOnly") || "인보이스 수령 체크만 합니다. (발주서 연동 없음)")}
+          </p>
+          {invoiceLinkRow?.vendorCode && invoiceLinkPOList.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground block">{t("bankLinkPO") || "발주서 연동"}</label>
+              <Select value={invoiceLinkSelectedPO} onValueChange={setInvoiceLinkSelectedPO}>
+                <SelectTrigger>
+                  <SelectValue placeholder={t("bankLinkPOSelect") || "선택 (연동 없으면 체크만)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— {t("bankInvoiceCheckOnly") || "연동 없이 체크만"}</SelectItem>
+                  {invoiceLinkPOList.map((po) => (
+                    <SelectItem key={po.id} value={String(po.id)}>
+                      {po.po_no || `#${po.id}`} {po.vendor_name || ""} ฿{(po.total ?? 0).toLocaleString()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {invoiceLinkRow?.vendorCode && invoiceLinkPOList.length === 0 && (
+            <p className="text-xs text-muted-foreground">{t("bankNoPOForVendor") || "해당 거래처 발주서가 없습니다. 연동 없이 체크만 합니다."}</p>
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setInvoiceLinkRow(null)}>{t("cancel")}</Button>
+            <Button size="sm" onClick={handleInvoiceLinkConfirm} disabled={updatingInvoiceId !== null}>
+              {updatingInvoiceId !== null ? "..." : t("msg_done")}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

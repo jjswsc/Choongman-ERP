@@ -2850,8 +2850,11 @@ export interface PurchaseOrderRow {
   invoice_no?: string
 }
 
-export async function getPurchaseOrders() {
-  const res = await apiFetch('/api/getPurchaseOrders')
+export async function getPurchaseOrders(params?: { vendorCode?: string }) {
+  const q = new URLSearchParams()
+  if (params?.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
+  const url = q.toString() ? `/api/getPurchaseOrders?${q}` : '/api/getPurchaseOrders'
+  const res = await apiFetch(url)
   const data = await res.json()
   return Array.isArray(data) ? data : []
 }

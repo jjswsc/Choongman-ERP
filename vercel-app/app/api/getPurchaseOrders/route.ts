@@ -1,13 +1,17 @@
 import { NextRequest } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 본사 발주 내역 조회 */
+/** 본사 발주 내역 조회 (vendorCode로 필터 가능) */
 export async function GET(request: NextRequest) {
   try {
-    const rows = (await supabaseSelect('purchase_orders', {
-      order: 'created_at.desc',
-      limit: 500,
-    })) as {
+    const { searchParams } = new URL(request.url)
+    const vendorCode = String(searchParams.get('vendorCode') || '').trim()
+    const filter = vendorCode ? `vendor_code=eq.${encodeURIComponent(vendorCode)}` : undefined
+    const rows = (await supabaseSelectFilter(
+      'purchase_orders',
+      filter || 'id=gt.0',
+      { order: 'created_at.desc', limit: 500 }
+    )) as {
       id?: number
       po_no?: string
       vendor_code?: string
