@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     const id = body.id ? Number(body.id) : null
     const name = String(body.name || '').trim()
     const store = String(body.store || '').trim()
+    const bankName = String(body.bankName ?? body.bank_name ?? '').trim()
     const openingBalance = Number(body.openingBalance ?? body.opening_balance ?? 0)
     const openingBalanceDate = body.openingBalanceDate || body.opening_balance_date
       ? String(body.openingBalanceDate || body.opening_balance_date).slice(0, 10)
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
       await supabaseUpdate('bank_accounts', id, {
         name,
         store: store || null,
+        bank_name: bankName || null,
         opening_balance: openingBalance,
         opening_balance_date: openingBalanceDate,
       })
@@ -34,6 +36,7 @@ export async function POST(request: NextRequest) {
     const inserted = (await supabaseInsert('bank_accounts', {
       name,
       store: store || null,
+      bank_name: bankName || null,
       opening_balance: openingBalance,
       opening_balance_date: openingBalanceDate,
     })) as { id?: number }[]

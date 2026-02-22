@@ -214,12 +214,12 @@ export function FixedExpensesTab() {
                   </SelectContent>
                 </Select>
               )}
-              <Select value={addAccountSubjectId} onValueChange={setAddAccountSubjectId}>
+              <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder={t("accountSubject") || "계정과목"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">—</SelectItem>
+                  <SelectItem value="__none__">—</SelectItem>
                   {accountSubjectOptions
                     .filter((a) => a.type === "expense" && (a.pAndLSection === "fixed" || !a.pAndLSection))
                     .map((a) => (

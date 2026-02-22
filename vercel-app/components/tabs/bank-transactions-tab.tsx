@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, Upload, X } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -21,11 +21,13 @@ import {
   getBankAccounts,
   getBankTransactions,
   addBankTransaction,
+  addBankTransactionsBulk,
   saveBankAccount,
   getFixedExpenses,
   getAccountSubjects,
   type AccountSubjectItem,
 } from "@/lib/api-client"
+import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -38,7 +40,7 @@ export function BankTransactionsTab() {
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
-  const [accounts, setAccounts] = React.useState<{ id: number; name: string; store: string }[]>([])
+  const [accounts, setAccounts] = React.useState<{ id: number; name: string; store: string; bankName?: string }[]>([])
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
@@ -65,8 +67,14 @@ export function BankTransactionsTab() {
   const [addSaving, setAddSaving] = React.useState(false)
 
   const [newAccountName, setNewAccountName] = React.useState("")
+  const [newAccountBankName, setNewAccountBankName] = React.useState("")
   const [newAccountStore, setNewAccountStore] = React.useState("")
   const [addAccountSaving, setAddAccountSaving] = React.useState(false)
+
+  const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
+  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: "transfer" | "expense" | "fixed"; accountSubjectId?: string }>>({})
+  const [importSaving, setImportSaving] = React.useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     getBankAccounts({
@@ -181,9 +189,11 @@ export function BankTransactionsTab() {
       const res = await saveBankAccount({
         name: newAccountName.trim(),
         store: store || undefined,
+        bankName: newAccountBankName.trim() || undefined,
       })
       if (res.success) {
         setNewAccountName("")
+        setNewAccountBankName("")
         getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
       } else {
         alert(res.message || "등록 실패")
@@ -197,6 +207,88 @@ export function BankTransactionsTab() {
 
   const storeOptions = isOffice ? (storeList || []) : [auth?.store || ""].filter(Boolean)
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = (reader.result as string) || ""
+        const parsed = parseKDepositCsv(text)
+        if (parsed.rows.length === 0) {
+          alert("파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요.")
+          return
+        }
+        setImportPreview(parsed)
+        setImportRowEdits({})
+        if (parsed.periodStart && parsed.periodEnd) {
+          setStartStr(parsed.periodStart)
+          setEndStr(parsed.periodEnd)
+        }
+      } catch (err) {
+        alert("파일 파싱 실패: " + String(err))
+      }
+    }
+    reader.readAsText(file, "UTF-8")
+    e.target.value = ""
+  }
+
+  const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId", value: string) => {
+    setImportRowEdits((prev) => ({
+      ...prev,
+      [idx]: { ...prev[idx], [field]: value || undefined },
+    }))
+  }
+
+  const handleImportSave = async () => {
+    if (!importPreview || !accountId) return
+    const acc = accounts.find((a) => String(a.id) === accountId)
+    const items = importPreview.rows.map((r, idx) => {
+      const edit = importRowEdits[idx]
+      const category = (r.transType === "withdraw" && edit?.category) || "expense"
+      const accountSubjectId = edit?.accountSubjectId && edit.accountSubjectId !== "__none__" ? Number(edit.accountSubjectId) : undefined
+      return {
+        transDate: r.transDate,
+        transType: r.transType,
+        amount: r.amount,
+        memo: r.memo.slice(0, 500),
+        category: r.transType === "withdraw" ? category : undefined,
+        accountSubjectId,
+      }
+    })
+    setImportSaving(true)
+    try {
+      const res = await addBankTransactionsBulk({
+        accountId: Number(accountId),
+        store: acc?.store,
+        userName: auth?.user,
+        items,
+      })
+      if (res.success) {
+        setImportPreview(null)
+        setImportRowEdits({})
+        if (importPreview.periodStart && importPreview.periodEnd) {
+          setStartStr(importPreview.periodStart)
+          setEndStr(importPreview.periodEnd)
+        }
+        loadData()
+        alert(res.message || "저장되었습니다.")
+      } else {
+        alert(res.message || "저장 실패")
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setImportSaving(false)
+    }
+  }
+
+  const balanceMatch =
+    importPreview &&
+    summary &&
+    importPreview.periodEnd === endStr &&
+    Math.abs(importPreview.endingBalance - summary.calculatedBalance) < 0.02
+
   return (
     <div className="space-y-4">
       <Card>
@@ -209,7 +301,7 @@ export function BankTransactionsTab() {
               <SelectContent>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={String(a.id)}>
-                    {a.name} {a.store ? `(${a.store})` : ""}
+                    {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -220,12 +312,126 @@ export function BankTransactionsTab() {
               <Search className="h-4 w-4 mr-1" />
               {t("btn_query")}
             </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.txt"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!accountId}
+            >
+              <Upload className="h-4 w-4 mr-1" />
+              {t("bankUploadCsv")}
+            </Button>
           </div>
+
+          {importPreview && (
+            <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 p-4 mb-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <p className="font-medium text-amber-800 dark:text-amber-200">{t("bankImportPreview")}</p>
+                <Button size="sm" variant="ghost" onClick={() => setImportPreview(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span>{importPreview.periodStart} ~ {importPreview.periodEnd}</span>
+                <span>{t("bankStatementBalance")}: {fmt(importPreview.endingBalance)}</span>
+                <span>{importPreview.rows.length}건</span>
+              </div>
+              {summary && importPreview.periodEnd === endStr && (
+                <div className={`text-sm font-medium ${balanceMatch ? "text-green-600" : "text-destructive"}`}>
+                  {t("bankStatementBalance")}: {fmt(importPreview.endingBalance)} | {t("bankErpBalance")}: {fmt(summary.calculatedBalance)}{" "}
+                  {balanceMatch ? `✓ ${t("bankBalanceMatch")}` : `✗ ${t("bankBalanceMismatch")}`}
+                </div>
+              )}
+              <div className="max-h-[240px] overflow-auto border rounded">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="p-2 text-left">{t("date")}</th>
+                      <th className="p-2 text-center">{t("pettyColType")}</th>
+                      <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
+                      <th className="p-2 text-left">{t("accountSubject")}</th>
+                      <th className="p-2 text-right">{t("pettyColAmount")}</th>
+                      <th className="p-2 text-left min-w-[120px]">{t("pettyColMemo")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.rows.map((r, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="p-2">{r.transDate}</td>
+                        <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
+                        <td className="p-2">
+                          {r.transType === "withdraw" ? (
+                            <Select
+                              value={importRowEdits[idx]?.category || "expense"}
+                              onValueChange={(v) => setImportRowEdit(idx, "category", v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                                <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : "—"}
+                        </td>
+                        <td className="p-2">
+                          {r.transType === "withdraw" ? (
+                            <Select
+                              value={importRowEdits[idx]?.accountSubjectId || "__none__"}
+                              onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                <SelectValue placeholder="—" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {((cat) =>
+                                  cat === "transfer"
+                                    ? accountSubjectOptions.filter((a) => a.type === "transfer")
+                                    : cat === "fixed"
+                                      ? accountSubjectOptions.filter((a) => a.pAndLSection === "fixed")
+                                      : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "fixed")
+                                )(importRowEdits[idx]?.category || "expense").map((a) => (
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : "—"}
+                        </td>
+                        <td className={`p-2 text-right ${r.amount >= 0 ? "text-green-600" : "text-destructive"}`}>
+                          {r.amount >= 0 ? "+" : ""}{fmt(r.amount)}
+                        </td>
+                        <td className="p-2 truncate max-w-[180px]" title={r.memo}>{r.memo || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button size="sm" onClick={handleImportSave} disabled={importSaving || !accountId}>
+                {importSaving ? "..." : t("bankImportSave")}
+              </Button>
+            </div>
+          )}
 
           {accounts.length === 0 ? (
             <div className="border rounded-lg p-4 space-y-3">
               <p className="text-sm text-muted-foreground">{t("bankAddAccount")} - 첫 계좌를 등록하세요.</p>
               <div className="flex flex-wrap gap-2">
+                <Input
+                  placeholder={t("bankName") || "은행명"}
+                  value={newAccountBankName}
+                  onChange={(e) => setNewAccountBankName(e.target.value)}
+                  className="max-w-[140px]"
+                />
                 <Input
                   placeholder={t("bankAccount")}
                   value={newAccountName}
@@ -233,13 +439,13 @@ export function BankTransactionsTab() {
                   className="max-w-[200px]"
                 />
                 {isOffice && (
-                  <Select value={newAccountStore} onValueChange={setNewAccountStore}>
+                  <Select value={newAccountStore || "본사"} onValueChange={setNewAccountStore}>
                     <SelectTrigger className="w-[120px]">
                       <SelectValue placeholder={t("store") || "매장"} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                      {(storeOptions || []).map((s) => (
+                      {(storeOptions || []).filter((s) => s !== "All").map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
@@ -358,12 +564,12 @@ export function BankTransactionsTab() {
                         </SelectContent>
                       </Select>
                       {addCategory === "fixed" && fixedExpenseOptions.length > 0 && (
-                        <Select value={addFixedExpenseId} onValueChange={setAddFixedExpenseId}>
+                        <Select value={addFixedExpenseId || "__none__"} onValueChange={(v) => setAddFixedExpenseId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[140px] h-9">
                             <SelectValue placeholder={t("fixedExpName")} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">—</SelectItem>
+                            <SelectItem value="__none__">—</SelectItem>
                             {fixedExpenseOptions.map((fe) => (
                               <SelectItem key={fe.id} value={String(fe.id)}>
                                 {fe.name} {fe.store ? `(${fe.store})` : ""}
@@ -373,12 +579,12 @@ export function BankTransactionsTab() {
                         </Select>
                       )}
                       {(addCategory === "expense" || addCategory === "fixed" || addCategory === "transfer") && (
-                        <Select value={addAccountSubjectId} onValueChange={setAddAccountSubjectId}>
+                        <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[130px] h-9">
                             <SelectValue placeholder={t("accountSubject") || "계정과목"} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">—</SelectItem>
+                            <SelectItem value="__none__">—</SelectItem>
                             {(addCategory === "transfer"
                               ? accountSubjectOptions.filter((a) => a.type === "transfer")
                               : addCategory === "fixed"
@@ -418,18 +624,24 @@ export function BankTransactionsTab() {
                   <p className="text-sm font-medium mb-2">{t("bankAddAccount")}</p>
                   <div className="flex flex-wrap gap-2">
                     <Input
+                      placeholder={t("bankName") || "은행명"}
+                      value={newAccountBankName}
+                      onChange={(e) => setNewAccountBankName(e.target.value)}
+                      className="max-w-[130px]"
+                    />
+                    <Input
                       placeholder={t("bankAccount")}
                       value={newAccountName}
                       onChange={(e) => setNewAccountName(e.target.value)}
                       className="max-w-[180px]"
                     />
-                    <Select value={newAccountStore} onValueChange={setNewAccountStore}>
+                    <Select value={newAccountStore || "본사"} onValueChange={setNewAccountStore}>
                       <SelectTrigger className="w-[120px]">
                         <SelectValue placeholder={t("store") || "매장"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                        {(storeOptions || []).map((s) => (
+                        {(storeOptions || []).filter((s) => s !== "All").map((s) => (
                           <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
                       </SelectContent>

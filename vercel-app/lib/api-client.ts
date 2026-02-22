@@ -1217,6 +1217,7 @@ export interface BankAccount {
   id: number
   name: string
   store: string
+  bankName?: string
   openingBalance: number
   openingBalanceDate: string | null
 }
@@ -1287,10 +1288,32 @@ export async function addBankTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function addBankTransactionsBulk(params: {
+  accountId: number
+  store?: string
+  userName?: string
+  items: Array<{
+    transDate: string
+    transType: 'deposit' | 'withdraw'
+    amount: number
+    memo?: string
+    category?: 'transfer' | 'expense' | 'fixed'
+    accountSubjectId?: number
+  }>
+}) {
+  const res = await apiFetch('/api/addBankTransactionsBulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; inserted?: number; message?: string }>
+}
+
 export async function saveBankAccount(params: {
   id?: number
   name: string
   store?: string
+  bankName?: string
   openingBalance?: number
   openingBalanceDate?: string | null
 }) {

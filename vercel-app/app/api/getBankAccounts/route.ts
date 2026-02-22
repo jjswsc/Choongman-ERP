@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const effectiveStore = !isOffice && userStore ? userStore : storeFilter
 
   try {
-    let rows: { id?: number; name?: string; store?: string; opening_balance?: number; opening_balance_date?: string; sort_order?: number }[] = []
+    let rows: { id?: number; name?: string; store?: string; bank_name?: string; opening_balance?: number; opening_balance_date?: string; sort_order?: number }[] = []
     if (effectiveStore && effectiveStore !== 'All') {
       rows = (await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(effectiveStore)}`, {
         order: 'sort_order.asc,id.asc',
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       id: r.id,
       name: String(r.name || '').trim(),
       store: String(r.store || '').trim(),
+      bankName: String(r.bank_name || '').trim(),
       openingBalance: Number(r.opening_balance) ?? 0,
       openingBalanceDate: r.opening_balance_date ? String(r.opening_balance_date).slice(0, 10) : null,
     }))
