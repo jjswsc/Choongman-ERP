@@ -39,6 +39,7 @@ export function BankTransactionsTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const asDisplayName = (a: AccountSubjectItem) => (lang === 'ko' ? a.name : (a.nameEn || a.name))
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
@@ -467,7 +468,7 @@ export function BankTransactionsTab() {
                                 {r.accountSubjectId
                                   ? (() => {
                                       const sub = accountSubjectOptions.find((a) => a.id === r.accountSubjectId) || revenueAccountOptions.find((a) => a.id === r.accountSubjectId)
-                                      return sub ? `${sub.code} ${sub.name}` : "-"
+                                      return sub ? `${sub.code} ${asDisplayName(sub)}` : "-"
                                     })()
                                   : "—"}
                               </td>
@@ -613,7 +614,7 @@ export function BankTransactionsTab() {
                                       ? accountSubjectOptions.filter((a) => a.pAndLSection === "fixed")
                                       : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "fixed")
                                 )(importRowEdits[idx]?.category || "expense").map((a) => (
-                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -628,7 +629,7 @@ export function BankTransactionsTab() {
                               <SelectContent>
                                 <SelectItem value="__none__">—</SelectItem>
                                 {revenueAccountOptions.map((a) => (
-                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -743,7 +744,7 @@ export function BankTransactionsTab() {
                           <SelectContent>
                             <SelectItem value="__none__">—</SelectItem>
                             {revenueAccountOptions.map((a) => (
-                              <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                              <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -803,7 +804,7 @@ export function BankTransactionsTab() {
                                 : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "fixed")
                             ).map((a) => (
                               <SelectItem key={a.id} value={String(a.id)}>
-                                {a.code} {a.name}
+                                {a.code} {asDisplayName(a)}
                               </SelectItem>
                             ))}
                           </SelectContent>

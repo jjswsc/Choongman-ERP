@@ -28,7 +28,9 @@ import {
 
 export function FixedExpensesTab() {
   const { auth } = useAuth()
-  const t = useT(useLang().lang)
+  const { lang } = useLang()
+  const t = useT(lang)
+  const asDisplayName = (a: AccountSubjectItem) => (lang === 'ko' ? a.name : (a.nameEn || a.name))
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
@@ -224,7 +226,7 @@ export function FixedExpensesTab() {
                     .filter((a) => a.type === "expense" && (a.pAndLSection === "fixed" || !a.pAndLSection))
                     .map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>
-                        {a.code} {a.name}
+                        {a.code} {asDisplayName(a)}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -284,7 +286,7 @@ export function FixedExpensesTab() {
                         {r.accountSubjectId
                           ? (() => {
                               const sub = accountSubjectOptions.find((a) => a.id === r.accountSubjectId)
-                              return sub ? `${sub.code} ${sub.name}` : "-"
+                              return sub ? `${sub.code} ${asDisplayName(sub)}` : "-"
                             })()
                           : "—"}
                       </td>
