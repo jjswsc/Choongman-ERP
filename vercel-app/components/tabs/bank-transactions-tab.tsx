@@ -553,7 +553,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-center">{t("bankCategoryLabel") || "용도"}</th>
                             <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-center min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
+                        <th className="p-2 text-center min-w-[110px]">{t("bankAttributedDate") || "인식일"}</th>
                         <th className="p-2 text-center min-w-[42px]" title={t("poInvoiceReceived") || "인보이스"}>{t("poInvoiceReceived") || "인보이스"}</th>
                         <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
@@ -561,10 +561,10 @@ export function BankTransactionsTab() {
                         </thead>
                         <tbody>
                           {filteredList.map((r, i) => (
-                            <tr key={r.id ?? i} className={`border-t ${r.category === "correction" ? "bg-red-50 dark:bg-red-950/20" : ""}`}>
+                            <tr key={r.id ?? i} className={`border-t ${r.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
                               <td className="p-2">{r.transDate}</td>
                               <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
-                              <td className={`p-2 text-center text-xs ${r.category === "correction" ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}>
+                              <td className={`p-2 text-center text-xs ${r.category === "correction" ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}>
                                 {r.category === "correction"
                                   ? t("bankCategoryCorrection")
                                   : r.category === "loan"
@@ -601,8 +601,8 @@ export function BankTransactionsTab() {
                                     })()
                                   : "—"}
                               </td>
-                              <td className={`p-2 text-right ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
-                                {r.amount >= 0 ? "+" : ""}{fmt(r.amount)}
+                              <td className={`p-2 text-right whitespace-nowrap ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
+                                {(r.amount ?? 0).toLocaleString()}
                               </td>
                               <td className="p-2 text-muted-foreground text-xs">
                                 {r.transType === "deposit" && r.salesDate
@@ -754,7 +754,7 @@ export function BankTransactionsTab() {
                   </thead>
                   <tbody>
                     {importPreview.rows.map((r, idx) => (
-                      <tr key={idx} className={`border-t ${importRowEdits[idx]?.category === "correction" ? "bg-red-50 dark:bg-red-950/20" : ""}`}>
+                      <tr key={idx} className={`border-t ${importRowEdits[idx]?.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
                         <td className="p-2">{r.transDate}</td>
                         <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                         <td className="p-2">
