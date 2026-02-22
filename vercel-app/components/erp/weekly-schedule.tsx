@@ -171,6 +171,24 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     persons.push({ name: p.name, store: p.store, area: p.area, workDays, breakDays })
   }
 
+  // 전체 매장 선택 시 매장별로 그룹화
+  const storeFilterIsAll = storeFilterFinal === t("scheduleStoreAll") || storeFilterFinal === "All" || storeFilterFinal === "전체" || !storeFilterFinal
+  const personsByStore: { store: string; persons: PersonData[] }[] = []
+  if (storeFilterIsAll && persons.length > 0) {
+    const byStore: Record<string, PersonData[]> = {}
+    for (const p of persons) {
+      const st = p.store || ""
+      if (!byStore[st]) byStore[st] = []
+      byStore[st].push(p)
+    }
+    const storesSorted = Object.keys(byStore).filter(Boolean).sort()
+    for (const st of storesSorted) {
+      personsByStore.push({ store: st, persons: byStore[st] })
+    }
+  } else {
+    personsByStore.push({ store: storeFilterFinal, persons })
+  }
+
   const goPrevWeek = () => {
     const d = new Date(date + "T12:00:00")
     d.setDate(d.getDate() - 7)
@@ -385,9 +403,16 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 ))}
               </div>
 
-              {/* 이름+부서 | 시간표 - 근무시간/쉬는시간 각각 한 줄 */}
-              <div className="flex flex-col gap-2 print-schedule-gap">
-                {persons.map((p) => {
+              {/* 이름+부서 | 시간표 - 근무시간/쉬는시간 각각 한 줄 (매장별 그룹) */}
+              <div className="flex flex-col gap-4 print-schedule-gap">
+                {personsByStore.map(({ store: storeName, persons: storePersons }) => (
+                  <div key={storeName} className="space-y-2">
+                    {storeFilterIsAll && storeName && (
+                      <div className="text-sm font-bold text-card-foreground px-2 py-1.5 rounded-lg bg-muted/50 border print:bg-transparent print:border-0">
+                        {storeName}
+                      </div>
+                    )}
+                    {storePersons.map((p) => {
                   const key = `${p.store}|${p.name}`
                   const isCollapsed = collapsedRows.has(key)
                   return (
@@ -447,7 +472,9 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                       </button>
                     </div>
                   )
-                })}
+                    })}
+                  </div>
+                ))}
               </div>
             </div>
             </div>
