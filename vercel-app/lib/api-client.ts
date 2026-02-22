@@ -958,7 +958,7 @@ export async function saveSchedule(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  return res.json() as Promise<{ success: boolean; message?: string; duplicateNames?: string }>
 }
 
 export interface MyAttendanceSummary {

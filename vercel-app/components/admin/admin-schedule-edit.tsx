@@ -395,7 +395,11 @@ export function AdminScheduleEdit({
     saveSchedule({ store, monday, rows })
       .then((r) => {
         if (r.success) alert(translateApiMessage(r.message, t) || t("att_saved"))
-        else alert(translateApiMessage(r.message, t) || t("att_save_failed"))
+        else if (r.message === "schedule_dup_area" && r.duplicateNames) {
+          alert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
+        } else {
+          alert(translateApiMessage(r.message, t) || t("att_save_failed"))
+        }
       })
       .catch((e) => alert(t("att_save_failed") + ": " + (e?.message || e)))
       .finally(() => setSaving(false))

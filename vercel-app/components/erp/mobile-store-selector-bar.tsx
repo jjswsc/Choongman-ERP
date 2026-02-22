@@ -48,7 +48,7 @@ export function MobileStoreSelectorBar() {
   if (storeOptions.length === 0) return null
 
   return (
-    <div className="sticky top-0 z-40 flex items-center gap-2 border-b bg-muted/50 px-4 py-2.5 md:hidden">
+    <div className="sticky top-0 z-40 flex items-center gap-2 border-b bg-muted/50 px-4 py-2.5">
       <Store className="h-4 w-4 shrink-0 text-muted-foreground" />
       <Select
         value={viewStore ?? storeOptions[0]}

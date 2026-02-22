@@ -45,6 +45,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // (schedule_date, store_name, name) 유니크: 한 직원은 같은 날 주방 또는 서비스 한 곳만 배정 가능
+    const seen = new Map<string, string>()
+    const duplicates: { name: string; date: string }[] = []
+    for (const s of rows) {
+      const dateStr = String(s.date || '').trim().slice(0, 10)
+      if (!dateStr) continue
+      const name = String(s.name || '').trim()
+      if (!name) continue
+      const key = `${dateStr}|${store}|${name}`
+      const area = String(s.remark || s.memo || '').trim() || ''
+      if (seen.has(key)) {
+        const firstArea = seen.get(key) || ''
+        if (!duplicates.some((d) => d.name === name && d.date === dateStr)) {
+          duplicates.push({ name, date: dateStr })
+        }
+      } else {
+        seen.set(key, area)
+      }
+    }
+    if (duplicates.length > 0) {
+      const namesList = [...new Set(duplicates.map((d) => d.name))].join(', ')
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'schedule_dup_area',
+          duplicateNames: namesList,
+          duplicateCount: duplicates.length,
+        },
+        { headers }
+      )
+    }
+
     const toInsert: Record<string, unknown>[] = []
     for (const s of rows) {
       const dateStr = String(s.date || '').trim().slice(0, 10)
