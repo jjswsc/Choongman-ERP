@@ -111,6 +111,8 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
       { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
+      { titleKey: "adminBankTransactions", icon: Banknote, href: "/admin/bank-transactions" },
+      { titleKey: "adminFixedExpenses", icon: Wallet, href: "/admin/fixed-expenses" },
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
     ],
   },

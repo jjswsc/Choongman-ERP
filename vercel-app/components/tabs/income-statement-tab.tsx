@@ -89,6 +89,9 @@ export function IncomeStatementTab() {
       : []
 
   const formatBath = (n: number) => `฿${(n ?? 0).toLocaleString()}`
+  const baseSales = (data?.sales ?? 0) || 1
+  const formatPct = (n: number) =>
+    baseSales > 0 ? `${((n / baseSales) * 100).toFixed(1)}%` : "—"
   const storeLabel =
     storeFilter === "All"
       ? t("all") || "전체"
@@ -148,55 +151,88 @@ export function IncomeStatementTab() {
                 {data.yearMonth} · {storeLabel}
               </div>
               <table className="w-full max-w-md text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="py-2 text-left font-medium"></th>
+                    <th className="py-2 text-right font-medium pr-2">금액</th>
+                    <th className="py-2 text-right font-medium w-14">{t("pL_pctOfSales")}</th>
+                  </tr>
+                </thead>
                 <tbody>
                   <tr className="border-b">
                     <td className="py-2 font-medium">{t("pL_sales")}</td>
-                    <td className="py-2 text-right font-mono">{formatBath(data.sales)}</td>
+                    <td className="py-2 text-right font-mono pr-2">{formatBath(data.sales)}</td>
+                    <td className="py-2 text-right text-muted-foreground">100.0%</td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
-                    <td className="py-2 text-right font-mono text-muted-foreground">
+                    <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                       {formatBath(data.beginningInventory ?? 0)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {formatPct(data.beginningInventory ?? 0)}
                     </td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 text-muted-foreground pl-4">+ {t("pL_purchases")}</td>
-                    <td className="py-2 text-right font-mono text-muted-foreground">
+                    <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                       {formatBath(data.purchases)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {formatPct(data.purchases)}
                     </td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 text-muted-foreground pl-4">- {t("pL_endingInv")}</td>
-                    <td className="py-2 text-right font-mono text-muted-foreground">
+                    <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                       {formatBath(data.endingInventory ?? 0)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {formatPct(-(data.endingInventory ?? 0))}
                     </td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 text-muted-foreground">= {t("pL_cogs")}</td>
-                    <td className="py-2 text-right font-mono text-muted-foreground">
+                    <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                       {formatBath(data.cogs ?? 0)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {formatPct(data.cogs ?? 0)}
                     </td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 font-medium text-primary">{t("pL_grossProfit")}</td>
-                    <td className="py-2 text-right font-mono font-medium text-primary">
+                    <td className="py-2 text-right font-mono font-medium text-primary pr-2">
                       {formatBath(data.grossProfit)}
+                    </td>
+                    <td className="py-2 text-right text-primary font-medium">
+                      {formatPct(data.grossProfit)}
                     </td>
                   </tr>
                   <tr className="border-b">
                     <td className="py-2 text-muted-foreground">- {t("pL_expenses")}</td>
-                    <td className="py-2 text-right font-mono text-muted-foreground">
+                    <td className="py-2 text-right font-mono text-muted-foreground pr-2">
                       {formatBath(data.expenses)}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">
+                      {formatPct(data.expenses)}
                     </td>
                   </tr>
                   <tr>
                     <td className="py-3 font-bold">{t("pL_netProfit")}</td>
                     <td
-                      className={`py-3 text-right font-mono font-bold ${
+                      className={`py-3 text-right font-mono font-bold pr-2 ${
                         data.netProfit >= 0 ? "text-primary" : "text-destructive"
                       }`}
                     >
                       {formatBath(data.netProfit)}
+                    </td>
+                    <td
+                      className={`py-3 text-right font-bold ${
+                        data.netProfit >= 0 ? "text-primary" : "text-destructive"
+                      }`}
+                    >
+                      {formatPct(data.netProfit)}
                     </td>
                   </tr>
                 </tbody>

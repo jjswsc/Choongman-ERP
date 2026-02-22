@@ -1212,6 +1212,170 @@ export async function addBalanceTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 통장 거래 ───
+export interface BankAccount {
+  id: number
+  name: string
+  store: string
+  openingBalance: number
+  openingBalanceDate: string | null
+}
+
+export interface BankTransactionItem {
+  id?: number
+  transDate: string
+  transType: string
+  amount: number
+  memo: string
+  category?: string
+  accountSubjectId?: number | null
+}
+
+export interface BankTransactionsSummary {
+  openingBalance: number
+  beginningBalance: number
+  periodDeposits: number
+  periodWithdrawals: number
+  calculatedBalance: number
+  actualBalance?: number | null
+  difference?: number | null
+}
+
+export async function getBankAccounts(params?: { store?: string; userStore?: string; userRole?: string }) {
+  const q = new URLSearchParams()
+  if (params?.store) q.set('store', params.store)
+  if (params?.userStore) q.set('userStore', params.userStore)
+  if (params?.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getBankAccounts?${q}`)
+  return res.json() as Promise<BankAccount[]>
+}
+
+export async function getBankTransactions(params: {
+  accountId: string | number
+  startStr: string
+  endStr: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  const res = await apiFetch(`/api/getBankTransactions?${q}`)
+  return res.json() as Promise<{
+    list: BankTransactionItem[]
+    summary: BankTransactionsSummary | null
+  }>
+}
+
+export async function addBankTransaction(params: {
+  accountId: number
+  transDate: string
+  transType: 'deposit' | 'withdraw'
+  amount: number
+  memo?: string
+  store?: string
+  userName?: string
+  category?: 'transfer' | 'expense' | 'fixed'
+  fixedExpenseId?: number
+  accountSubjectId?: number
+}) {
+  const res = await apiFetch('/api/addBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function saveBankAccount(params: {
+  id?: number
+  name: string
+  store?: string
+  openingBalance?: number
+  openingBalanceDate?: string | null
+}) {
+  const res = await apiFetch('/api/saveBankAccount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+// ─── 계정과목 ───
+export interface AccountSubjectItem {
+  id?: number
+  code: string
+  name: string
+  nameEn?: string | null
+  type: string
+  pAndLSection?: string | null
+  sortOrder: number
+}
+
+export async function getAccountSubjects(params?: {
+  type?: string
+  forExpense?: boolean
+  forFixed?: boolean
+  forTransfer?: boolean
+}) {
+  const q = new URLSearchParams()
+  if (params?.type) q.set('type', params.type)
+  if (params?.forExpense) q.set('forExpense', 'true')
+  if (params?.forFixed) q.set('forFixed', 'true')
+  if (params?.forTransfer) q.set('forTransfer', 'true')
+  const res = await apiFetch(`/api/getAccountSubjects?${q}`)
+  return res.json() as Promise<AccountSubjectItem[]>
+}
+
+// ─── 고정비 ───
+export interface FixedExpenseItem {
+  id?: number
+  name: string
+  monthlyAmount: number
+  store: string
+  startYearMonth?: string | null
+  endYearMonth?: string | null
+  memo?: string | null
+  accountSubjectId?: number | null
+}
+
+export async function getFixedExpenses(params?: { store?: string; userStore?: string; userRole?: string }) {
+  const q = new URLSearchParams()
+  if (params?.store) q.set('store', params.store)
+  if (params?.userStore) q.set('userStore', params.userStore)
+  if (params?.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getFixedExpenses?${q}`)
+  return res.json() as Promise<FixedExpenseItem[]>
+}
+
+export async function saveFixedExpense(params: {
+  id?: number
+  name: string
+  monthlyAmount: number
+  store?: string
+  startYearMonth?: string | null
+  endYearMonth?: string | null
+  memo?: string | null
+  accountSubjectId?: number | null
+}) {
+  const res = await apiFetch('/api/saveFixedExpense', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteFixedExpense(params: { id: number }) {
+  const res = await apiFetch('/api/deleteFixedExpense', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 품목/거래처 관리 (Admin) ───
 export interface AdminItem {
   code: string

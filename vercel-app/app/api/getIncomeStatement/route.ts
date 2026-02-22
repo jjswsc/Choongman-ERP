@@ -136,6 +136,29 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // 3b. 비용: 통장 출금 (본사 계좌) - category=expense,fixed만 (이체/보충 제외)
+      try {
+        const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 200 })) as { id?: number; store?: string }[] | null
+        const hqAccountIds = (bankAccRows || [])
+          .filter((a) => isOfficeStore(String(a.store || '')) || String(a.store || '').startsWith('Office-'))
+          .map((a) => a.id)
+          .filter((id): id is number => id != null)
+        if (hqAccountIds.length > 0) {
+          const idList = hqAccountIds.join(',')
+          const btRows = (await supabaseSelectFilter('bank_transactions',
+            `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
+            { select: 'amount,category', limit: 5000 }
+          )) as { amount?: number; category?: string }[] | null
+          for (const r of btRows || []) {
+            const cat = String(r.category || 'expense').toLowerCase()
+            if (cat === 'transfer') continue
+            expenses += Math.abs(Number(r.amount) || 0)
+          }
+        }
+      } catch (_) {
+        /* bank_transactions 테이블 없을 수 있음 */
+      }
+
       // 4. 재고: 본사(location=본사)
       beginningInventory = await getInventoryValue('본사', startStr, true, itemCostMap)
       endingInventory = await getInventoryValue('본사', endStr, false, itemCostMap)
@@ -179,6 +202,51 @@ export async function GET(request: NextRequest) {
       for (const r of pettyRows || []) {
         if ((r.trans_type || '').toLowerCase() !== 'expense') continue
         expenses += Number(r.amount) || 0
+      }
+
+      // 3b. 비용: 통장 출금 (해당 매장 계좌) - category=expense,fixed만 (이체/보충 제외)
+      if (storeFilter && storeFilter !== 'All') {
+        try {
+          const bankAccRows = (await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(storeFilter)}`, { select: 'id', limit: 200 })) as { id?: number }[] | null
+          const accountIds = (bankAccRows || []).map((a) => a.id).filter((id): id is number => id != null)
+          if (accountIds.length > 0) {
+            const idList = accountIds.join(',')
+            const btRows = (await supabaseSelectFilter('bank_transactions',
+              `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
+              { select: 'amount,category', limit: 5000 }
+            )) as { amount?: number; category?: string }[] | null
+            for (const r of btRows || []) {
+              const cat = String(r.category || 'expense').toLowerCase()
+              if (cat === 'transfer') continue
+              expenses += Math.abs(Number(r.amount) || 0)
+            }
+          }
+        } catch (_) {
+          /* bank_transactions 테이블 없을 수 있음 */
+        }
+      } else {
+        // 전체 매장: 본사 제외한 모든 계좌의 출금
+        try {
+          const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 200 })) as { id?: number; store?: string }[] | null
+          const storeAccountIds = (bankAccRows || [])
+            .filter((a) => !isOfficeStore(String(a.store || '')) && !String(a.store || '').startsWith('Office-'))
+            .map((a) => a.id)
+            .filter((id): id is number => id != null)
+          if (storeAccountIds.length > 0) {
+            const idList = storeAccountIds.join(',')
+            const btRows = (await supabaseSelectFilter('bank_transactions',
+              `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
+              { select: 'amount,category', limit: 5000 }
+            )) as { amount?: number; category?: string }[] | null
+            for (const r of btRows || []) {
+              const cat = String(r.category || 'expense').toLowerCase()
+              if (cat === 'transfer') continue
+              expenses += Math.abs(Number(r.amount) || 0)
+            }
+          }
+        } catch (_) {
+          /* bank_transactions 테이블 없을 수 있음 */
+        }
       }
 
       // 4. 재고: 매장 (location=매장명 또는 전체 매장)
