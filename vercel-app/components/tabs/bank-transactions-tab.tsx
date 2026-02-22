@@ -475,7 +475,8 @@ export function BankTransactionsTab() {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <div className="flex flex-wrap items-center gap-2 mb-3 p-3 rounded-lg bg-muted/20 border">
+                    <span className="text-sm font-medium text-muted-foreground mr-1">{t("bankFilterLabel") || "필터"}:</span>
                     <Select value={filterTransType || "__all__"} onValueChange={(v) => setFilterTransType(v === "__all__" ? "" : v)}>
                       <SelectTrigger className="w-[110px] h-9">
                         <SelectValue placeholder={t("pettyColType") || "유형"} />
