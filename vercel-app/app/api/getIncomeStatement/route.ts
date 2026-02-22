@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
           )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
           for (const r of btRows || []) {
             const cat = String(r.category || 'expense').toLowerCase()
-            if (cat === 'transfer' || cat === 'correction') continue
+            if (['transfer', 'correction', 'loan', 'advance', 'unclassified'].includes(cat)) continue
             const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
             const transDate = String(r.trans_date || '').slice(0, 10)
             const inRange = (d: string) => d >= startStr && d <= endStr
@@ -234,7 +234,7 @@ export async function GET(request: NextRequest) {
             )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
-              if (cat === 'transfer' || cat === 'correction') continue
+              if (['transfer', 'correction', 'loan', 'advance', 'unclassified'].includes(cat)) continue
               const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
               const transDate = String(r.trans_date || '').slice(0, 10)
               const inRange = (d: string) => d >= startStr && d <= endStr
@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
             )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
-              if (cat === 'transfer' || cat === 'correction') continue
+              if (['transfer', 'correction', 'loan', 'advance', 'unclassified'].includes(cat)) continue
               const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
               const transDate = String(r.trans_date || '').slice(0, 10)
               const inRange = (d: string) => d >= startStr && d <= endStr

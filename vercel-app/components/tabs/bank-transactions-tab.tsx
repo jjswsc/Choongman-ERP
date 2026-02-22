@@ -60,7 +60,7 @@ export function BankTransactionsTab() {
   const [loading, setLoading] = React.useState(false)
 
   const [addTransType, setAddTransType] = React.useState<"deposit" | "withdraw">("withdraw")
-  const [addCategory, setAddCategory] = React.useState<"transfer" | "expense" | "fixed" | "correction" | "revenue_delivery" | "revenue_card" | "revenue_qr" | "revenue_cash">("revenue_delivery")
+  const [addCategory, setAddCategory] = React.useState<"transfer" | "expense" | "fixed" | "correction" | "loan" | "advance" | "unclassified" | "revenue_delivery" | "revenue_card" | "revenue_qr" | "revenue_cash">("revenue_delivery")
   const [addFixedExpenseId, setAddFixedExpenseId] = React.useState<string>("")
   const [addAccountSubjectId, setAddAccountSubjectId] = React.useState<string>("")
   const [fixedExpenseOptions, setFixedExpenseOptions] = React.useState<{ id: number; name: string; store: string }[]>([])
@@ -187,7 +187,7 @@ export function BankTransactionsTab() {
     const acc = accounts.find((a) => String(a.id) === accountId)
     setAddSaving(true)
     try {
-      const depositCat = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction"].includes(addCategory) ? addCategory : undefined
+      const depositCat = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction", "loan", "advance", "unclassified"].includes(addCategory) ? addCategory : undefined
       const salesDateVal = addTransType === "deposit" && addSalesDate ? addSalesDate : addTransType === "deposit" ? (() => { const d = new Date(addDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })() : undefined
       const expenseDateVal = addTransType === "withdraw" && addExpenseDate ? addExpenseDate : undefined
       const res = await addBankTransaction({
@@ -301,10 +301,10 @@ export function BankTransactionsTab() {
       const edit = importRowEdits[idx]
       const category = r.transType === "withdraw"
         ? (edit?.category || "expense")
-        : (edit?.category && ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction"].includes(edit.category) ? edit.category : "revenue_delivery")
+        : (edit?.category && ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction", "loan", "advance", "unclassified"].includes(edit.category) ? edit.category : "revenue_delivery")
       const accountSubjectId = edit?.accountSubjectId && edit.accountSubjectId !== "__none__" ? Number(edit.accountSubjectId) : undefined
       const note = edit?.note?.trim() || undefined
-      const salesDate = r.transType === "deposit" && edit?.category !== "correction"
+      const salesDate = r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(edit?.category || "")
         ? (edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })())
         : undefined
       const expenseDate = r.transType === "withdraw" && (edit?.category === "expense" || edit?.category === "fixed")
@@ -442,14 +442,14 @@ export function BankTransactionsTab() {
                       <table className="w-full text-sm">
                         <thead className="bg-muted/50 sticky top-0">
                           <tr>
-                            <th className="p-2 text-left">{t("date") || "날짜"}</th>
+                            <th className="p-2 text-center">{t("date") || "날짜"}</th>
                             <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
                             <th className="p-2 text-center">{t("bankCategoryLabel") || "용도"}</th>
-                            <th className="p-2 text-left">{t("accountSubject") || "계정과목"}</th>
-                            <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-left min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
-                        <th className="p-2 text-left min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
-                        <th className="p-2 text-left min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
+                            <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
+                            <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
+                        <th className="p-2 text-center min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
+                        <th className="p-2 text-center min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
+                        <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                       </tr>
                         </thead>
                         <tbody>
@@ -460,23 +460,29 @@ export function BankTransactionsTab() {
                               <td className={`p-2 text-center text-xs ${r.category === "correction" ? "text-red-600 dark:text-red-400 font-medium" : "text-muted-foreground"}`}>
                                 {r.category === "correction"
                                   ? t("bankCategoryCorrection")
-                                  : r.transType === "withdraw" && r.category === "transfer"
-                                    ? t("bankCategoryTransfer")
-                                    : r.transType === "withdraw" && r.category === "fixed"
-                                      ? t("bankCategoryFixed")
-                                      : r.transType === "withdraw"
-                                        ? t("bankCategoryExpense")
-                                        : r.transType === "deposit" && r.category === "revenue_delivery"
-                                          ? (t("bankRevenueDelivery") || "배달앱")
-                                          : r.transType === "deposit" && r.category === "revenue_card"
-                                            ? (t("bankRevenueCard") || "카드")
-                                            : r.transType === "deposit" && r.category === "revenue_qr"
-                                              ? (t("bankRevenueQr") || "QR/이체")
-                                              : r.transType === "deposit" && r.category === "revenue_cash"
-                                                ? (t("bankRevenueCash") || "현금")
-                                                : r.transType === "withdraw"
-                                                  ? t("bankCategoryExpense")
-                                                  : "—"}
+                                  : r.category === "loan"
+                                    ? t("bankCategoryLoan")
+                                    : r.category === "advance"
+                                      ? t("bankCategoryAdvance")
+                                      : r.category === "unclassified"
+                                        ? t("bankCategoryUnclassified")
+                                        : r.transType === "withdraw" && r.category === "transfer"
+                                          ? t("bankCategoryTransfer")
+                                          : r.transType === "withdraw" && r.category === "fixed"
+                                            ? t("bankCategoryFixed")
+                                            : r.transType === "withdraw"
+                                              ? t("bankCategoryExpense")
+                                              : r.transType === "deposit" && r.category === "revenue_delivery"
+                                                ? (t("bankRevenueDelivery") || "배달앱")
+                                                : r.transType === "deposit" && r.category === "revenue_card"
+                                                  ? (t("bankRevenueCard") || "카드")
+                                                  : r.transType === "deposit" && r.category === "revenue_qr"
+                                                    ? (t("bankRevenueQr") || "QR/이체")
+                                                    : r.transType === "deposit" && r.category === "revenue_cash"
+                                                      ? (t("bankRevenueCash") || "현금")
+                                                      : r.transType === "withdraw"
+                                                        ? t("bankCategoryExpense")
+                                                        : "—"}
                               </td>
                               <td className="p-2 text-muted-foreground text-xs">
                                 {r.accountSubjectId
@@ -564,17 +570,17 @@ export function BankTransactionsTab() {
                 </div>
               )}
               <div className="max-h-[240px] overflow-auto border rounded">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      <th className="p-2 text-left">{t("date")}</th>
+                      <th className="p-2 text-center">{t("date")}</th>
                       <th className="p-2 text-center">{t("pettyColType")}</th>
                       <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
-                      <th className="p-2 text-left">{t("accountSubject")}</th>
-                      <th className="p-2 text-right">{t("pettyColAmount")}</th>
-                      <th className="p-2 text-left min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
-                      <th className="p-2 text-left min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
-                      <th className="p-2 text-left min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
+                      <th className="p-2 text-center">{t("accountSubject")}</th>
+                      <th className="p-2 text-center">{t("pettyColAmount")}</th>
+                      <th className="p-2 text-center min-w-[110px]">{t("bankAttributedDate") || "인식일"}</th>
+                      <th className="p-2 text-center min-w-[200px]">{t("bankMemoLabel") || "은행 적요"}</th>
+                      <th className="p-2 text-center min-w-[150px]">{t("bankNoteLabel") || "상세 내용"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -595,6 +601,9 @@ export function BankTransactionsTab() {
                                 <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                                 <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
                                 <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                                <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                 <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                               </SelectContent>
                             </Select>
@@ -611,13 +620,16 @@ export function BankTransactionsTab() {
                                 <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
                                 <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                                 <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                                <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                                 <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                               </SelectContent>
                             </Select>
                           )}
                         </td>
                         <td className="p-2">
-                          {r.transType === "withdraw" && importRowEdits[idx]?.category !== "correction" ? (
+                          {r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -638,7 +650,7 @@ export function BankTransactionsTab() {
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : r.transType === "deposit" && importRowEdits[idx]?.category !== "correction" ? (
+                          ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
                             <Select
                               value={importRowEdits[idx]?.accountSubjectId || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
@@ -659,29 +671,29 @@ export function BankTransactionsTab() {
                           {r.amount >= 0 ? "+" : ""}{fmt(r.amount)}
                         </td>
                         <td className="p-2">
-                          {r.transType === "deposit" && importRowEdits[idx]?.category !== "correction" ? (
+                          {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified"].includes(importRowEdits[idx]?.category || "") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
                               onChange={(e) => setImportRowEdit(idx, "salesDate", e.target.value)}
-                              className="h-8 text-xs w-[100px]"
+                              className="h-8 text-xs min-w-[110px] w-[110px]"
                             />
                           ) : r.transType === "withdraw" && (importRowEdits[idx]?.category === "expense" || importRowEdits[idx]?.category === "fixed") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.expenseDate ?? r.transDate}
                               onChange={(e) => setImportRowEdit(idx, "expenseDate", e.target.value)}
-                              className="h-8 text-xs w-[100px]"
+                              className="h-8 text-xs min-w-[110px] w-[110px]"
                             />
                           ) : "—"}
                         </td>
-                        <td className="p-2 truncate max-w-[140px] text-muted-foreground text-xs" title={r.memo}>{r.memo || "-"}</td>
+                        <td className="p-2 min-w-[200px] text-muted-foreground text-xs whitespace-nowrap" title={r.memo}>{r.memo || "-"}</td>
                         <td className="p-2">
                           <Input
                             placeholder={t("bankNotePlaceholder") || "상세 내용 입력"}
                             value={importRowEdits[idx]?.note ?? ""}
                             onChange={(e) => setImportRowEdit(idx, "note", e.target.value)}
-                            className="h-8 text-xs min-w-[120px]"
+                            className="h-8 text-xs min-w-[150px]"
                           />
                         </td>
                       </tr>
@@ -760,10 +772,13 @@ export function BankTransactionsTab() {
                           <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드매출"}</SelectItem>
                           <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
                           <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금입금"}</SelectItem>
+                          <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                          <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                          <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                           <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                         </SelectContent>
                       </Select>
-                      {addCategory !== "correction" && (
+                      {!["correction", "loan", "advance", "unclassified"].includes(addCategory) && (
                         <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[130px] h-9">
                             <SelectValue placeholder={t("accountSubject")} />
@@ -776,7 +791,7 @@ export function BankTransactionsTab() {
                           </SelectContent>
                         </Select>
                       )}
-                      {addCategory !== "correction" && (
+                      {!["correction", "loan", "advance", "unclassified"].includes(addCategory) && (
                         <div className="flex items-center gap-1">
                           <span className="text-xs text-muted-foreground whitespace-nowrap">{t("bankSalesDate") || "매출일"}</span>
                           <Input
@@ -791,7 +806,7 @@ export function BankTransactionsTab() {
                   )}
                   {addTransType === "withdraw" && (
                     <>
-                      <Select value={addCategory} onValueChange={(v) => setAddCategory(v as "transfer" | "expense" | "fixed" | "correction")}>
+                      <Select value={addCategory} onValueChange={(v) => setAddCategory(v as "transfer" | "expense" | "fixed" | "correction" | "loan" | "advance" | "unclassified")}>
                         <SelectTrigger className="w-[110px] h-9">
                           <SelectValue placeholder={t("bankCategoryLabel")} />
                         </SelectTrigger>
@@ -799,6 +814,9 @@ export function BankTransactionsTab() {
                           <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
                           <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
                           <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                          <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                          <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                          <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
                           <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
                         </SelectContent>
                       </Select>
@@ -817,7 +835,7 @@ export function BankTransactionsTab() {
                           </SelectContent>
                         </Select>
                       )}
-                      {(addCategory === "expense" || addCategory === "fixed" || addCategory === "transfer") && (
+                      {(addCategory === "expense" || addCategory === "fixed" || addCategory === "transfer") && !["loan", "advance", "unclassified", "correction"].includes(addCategory) && (
                         <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[130px] h-9">
                             <SelectValue placeholder={t("accountSubject") || "계정과목"} />
@@ -936,8 +954,11 @@ export function BankTransactionsTab() {
                 <h4 className="font-medium pt-2">2. 출금 (Withdraw)</h4>
                 <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
                   <li><strong>용도</strong>: 보충·이체·정산 → 이체, 월세·전기·급여·보험 등 → 고정비, 그 외 → 비용</li>
-                  <li><strong>계정과목</strong>: 임차료, 전기료, 수도광열비, 급여, 접대비, 교통비, 세금공과금 등 키워드 매칭</li>
-                  <li><strong>비용인식일</strong>: 미입력 시 지급일 기준 (1월 구매 2월 지불 시 비용인식일 따로 입력)</li>
+                  <li><strong>대여</strong>: 돈 빌려줌/빌려옴 (손익 제외)</li>
+                  <li><strong>전도금</strong>: 선급 지급 (손익 제외)</li>
+                  <li><strong>미분류</strong>: 잘 모르는 금액, 나중에 정리 (손익 제외)</li>
+                  <li><strong>계정과목</strong>: 임차료, 전기료, 급여 등 키워드 매칭</li>
+                  <li><strong>비용인식일</strong>: 미입력 시 지급일 기준</li>
                 </ul>
 
                 <h4 className="font-medium pt-2">3. 적용 시점</h4>

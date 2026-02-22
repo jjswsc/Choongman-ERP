@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
-    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'correction']
-    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction']
+    const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'correction', 'loan', 'advance', 'unclassified']
+    const withdrawCategories = ['transfer', 'expense', 'fixed', 'correction', 'loan', 'advance', 'unclassified']
     const validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')

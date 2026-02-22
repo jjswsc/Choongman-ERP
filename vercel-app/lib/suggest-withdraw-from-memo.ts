@@ -3,7 +3,7 @@
  * 이체, 고정비, 비용 등
  */
 
-export type WithdrawCategory = 'transfer' | 'expense' | 'fixed' | 'correction'
+export type WithdrawCategory = 'transfer' | 'expense' | 'fixed' | 'correction' | 'loan' | 'advance' | 'unclassified'
 
 /** 출금 시 적요 기반 용도·계정과목 추천 */
 export function suggestWithdrawFromMemo(
@@ -18,6 +18,16 @@ export function suggestWithdrawFromMemo(
   // 이체/보충
   if (/\b(보충|이체|정산|replenish|transfer|패티캐시|petty)\b/i.test(m)) {
     return { category: 'transfer', accountSubjectId: byCode['1110'] }
+  }
+
+  // 대여 (돈 빌려줌/빌려옴)
+  if (/\b(대여|빌려|차용|loan|borrow|ยืม)\b/i.test(m)) {
+    return { category: 'loan' }
+  }
+
+  // 전도금 (선급)
+  if (/\b(전도|선급|선지급|advance|prepay|ล่วงหน้า)\b/i.test(m)) {
+    return { category: 'advance' }
   }
 
   // 고정비 - 코드 우선 매칭
