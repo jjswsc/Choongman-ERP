@@ -790,7 +790,7 @@ export function BankTransactionsTab() {
                           </SelectContent>
                         </Select>
                       )}
-                      {(addCategory === "expense" || addCategory === "fixed" || addCategory === "transfer") && !(addCategory === "correction") && (
+                      {(addCategory === "expense" || addCategory === "fixed" || addCategory === "transfer") && (
                         <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="w-[130px] h-9">
                             <SelectValue placeholder={t("accountSubject") || "계정과목"} />
