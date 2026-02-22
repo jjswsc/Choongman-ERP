@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, Upload, X, List, PenLine } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -30,6 +30,7 @@ import {
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { suggestDepositFromMemo } from "@/lib/suggest-deposit-from-memo"
+import { suggestWithdrawFromMemo } from "@/lib/suggest-withdraw-from-memo"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -47,7 +48,7 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string }[]>([])
+  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
@@ -66,6 +67,7 @@ export function BankTransactionsTab() {
   const [accountSubjectOptions, setAccountSubjectOptions] = React.useState<AccountSubjectItem[]>([])
   const [addDate, setAddDate] = React.useState(todayStr)
   const [addSalesDate, setAddSalesDate] = React.useState("")
+  const [addExpenseDate, setAddExpenseDate] = React.useState("")
   const [addAmount, setAddAmount] = React.useState("")
   const [addMemo, setAddMemo] = React.useState("")
   const [addNote, setAddNote] = React.useState("")
@@ -77,7 +79,7 @@ export function BankTransactionsTab() {
   const [addAccountSaving, setAddAccountSaving] = React.useState(false)
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
-  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string }>>({})
+  const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string }>>({})
   const [importSaving, setImportSaving] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -116,10 +118,6 @@ export function BankTransactionsTab() {
   }, [accountId, startStr, endStr])
 
   React.useEffect(() => {
-    if (accountId) loadData()
-  }, [accountId, loadData])
-
-  React.useEffect(() => {
     getFixedExpenses({ userStore: auth?.store, userRole: auth?.role })
       .then((r) => setFixedExpenseOptions((r || []).filter((fe) => fe.id != null).map((fe) => ({ id: fe.id!, name: fe.name, store: fe.store }))))
       .catch(() => setFixedExpenseOptions([]))
@@ -149,22 +147,27 @@ export function BankTransactionsTab() {
   }, [revenueAccountOptions])
 
   React.useEffect(() => {
-    if (!importPreview || revenueAccountOptions.length === 0) return
+    if (!importPreview || revenueAccountOptions.length === 0 || accountSubjectOptions.length === 0) return
     setImportRowEdits((prev) => {
       const next = { ...prev }
       importPreview.rows.forEach((r, idx) => {
         if (r.transType === "deposit" && r.memo) {
           const sug = suggestDepositFromMemo(r.memo, revenueAccountOptions)
-          if (sug && !prev[idx]?.accountSubjectId) {
+          if (sug) {
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
             next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined, salesDate: d.toISOString().slice(0, 10) }
+          }
+        } else if (r.transType === "withdraw" && r.memo) {
+          const sug = suggestWithdrawFromMemo(r.memo, accountSubjectOptions)
+          if (sug) {
+            next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined }
           }
         }
       })
       return next
     })
-  }, [importPreview, revenueAccountOptions])
+  }, [importPreview, revenueAccountOptions, accountSubjectOptions])
 
   const fmt = (n: number) => `฿${(n ?? 0).toLocaleString()}`
   const diff = summary && actualBalance.trim() !== ""
@@ -186,6 +189,7 @@ export function BankTransactionsTab() {
     try {
       const depositCat = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "correction"].includes(addCategory) ? addCategory : undefined
       const salesDateVal = addTransType === "deposit" && addSalesDate ? addSalesDate : addTransType === "deposit" ? (() => { const d = new Date(addDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })() : undefined
+      const expenseDateVal = addTransType === "withdraw" && addExpenseDate ? addExpenseDate : undefined
       const res = await addBankTransaction({
         accountId: Number(accountId),
         transDate: addDate,
@@ -199,12 +203,14 @@ export function BankTransactionsTab() {
         fixedExpenseId: addCategory === "fixed" && addFixedExpenseId ? Number(addFixedExpenseId) : undefined,
         accountSubjectId: addAccountSubjectId ? Number(addAccountSubjectId) : undefined,
         salesDate: salesDateVal,
+        expenseDate: expenseDateVal,
       })
       if (res.success) {
         setAddAmount("")
         setAddMemo("")
         setAddNote("")
         setAddSalesDate("")
+        setAddExpenseDate("")
         setAddFixedExpenseId("")
         setAddAccountSubjectId("")
         loadData()
@@ -260,7 +266,7 @@ export function BankTransactionsTab() {
           return
         }
         setImportPreview(parsed)
-        const initialEdits: Record<number, { category?: string; accountSubjectId?: string; salesDate?: string }> = {}
+        const initialEdits: Record<number, { category?: string; accountSubjectId?: string; salesDate?: string; expenseDate?: string }> = {}
         parsed.rows.forEach((r, idx) => {
           if (r.transType === "deposit") {
             const d = new Date(r.transDate)
@@ -281,7 +287,7 @@ export function BankTransactionsTab() {
     e.target.value = ""
   }
 
-  const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate", value: string) => {
+  const setImportRowEdit = (idx: number, field: "category" | "accountSubjectId" | "note" | "salesDate" | "expenseDate", value: string) => {
     setImportRowEdits((prev) => ({
       ...prev,
       [idx]: { ...prev[idx], [field]: value || undefined },
@@ -301,6 +307,9 @@ export function BankTransactionsTab() {
       const salesDate = r.transType === "deposit" && edit?.category !== "correction"
         ? (edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })())
         : undefined
+      const expenseDate = r.transType === "withdraw" && (edit?.category === "expense" || edit?.category === "fixed")
+        ? (edit?.expenseDate || r.transDate)
+        : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -310,6 +319,7 @@ export function BankTransactionsTab() {
         category: category ?? undefined,
         accountSubjectId,
         salesDate,
+        expenseDate,
       }
     })
     setImportSaving(true)
@@ -347,15 +357,19 @@ export function BankTransactionsTab() {
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue="query" className="w-full">
+      <Tabs defaultValue="input" className="w-full">
         <TabsList className="mb-3">
+          <TabsTrigger value="input">
+            <PenLine className="h-4 w-4 mr-2" />
+            {t("bankTabInput") || "입력"}
+          </TabsTrigger>
           <TabsTrigger value="query">
             <List className="h-4 w-4 mr-2" />
             {t("bankTabQuery") || "조회"}
           </TabsTrigger>
-          <TabsTrigger value="input">
-            <PenLine className="h-4 w-4 mr-2" />
-            {t("bankTabInput") || "입력"}
+          <TabsTrigger value="explanation">
+            <HelpCircle className="h-4 w-4 mr-2" />
+            {t("bankTabExplanation") || "설명"}
           </TabsTrigger>
         </TabsList>
 
@@ -433,7 +447,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-center">{t("bankCategoryLabel") || "용도"}</th>
                             <th className="p-2 text-left">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-right">{t("pettyColAmount") || "금액"}</th>
-                        <th className="p-2 text-left min-w-[90px]">{t("bankSalesDate") || "매출일"}</th>
+                        <th className="p-2 text-left min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
                         <th className="p-2 text-left min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-left min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                       </tr>
@@ -475,7 +489,13 @@ export function BankTransactionsTab() {
                               <td className={`p-2 text-right ${r.amount >= 0 ? "text-green-600" : "text-destructive"}`}>
                                 {r.amount >= 0 ? "+" : ""}{fmt(r.amount)}
                               </td>
-                              <td className="p-2 text-muted-foreground text-xs">{r.transType === "deposit" && r.salesDate ? r.salesDate : "—"}</td>
+                              <td className="p-2 text-muted-foreground text-xs">
+                                {r.transType === "deposit" && r.salesDate
+                                  ? r.salesDate
+                                  : r.transType === "withdraw" && r.expenseDate
+                                    ? r.expenseDate
+                                    : "—"}
+                              </td>
                               <td className="p-2 truncate max-w-[120px] text-muted-foreground text-xs" title={r.memo}>{r.memo || "-"}</td>
                               <td className="p-2 truncate max-w-[160px]" title={r.note}>{r.note || "-"}</td>
                             </tr>
@@ -552,7 +572,7 @@ export function BankTransactionsTab() {
                       <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
                       <th className="p-2 text-left">{t("accountSubject")}</th>
                       <th className="p-2 text-right">{t("pettyColAmount")}</th>
-                      <th className="p-2 text-left min-w-[90px]">{t("bankSalesDate") || "매출일"}</th>
+                      <th className="p-2 text-left min-w-[90px]">{t("bankAttributedDate") || "인식일"}</th>
                       <th className="p-2 text-left min-w-[100px]">{t("bankMemoLabel") || "은행 적요"}</th>
                       <th className="p-2 text-left min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                     </tr>
@@ -644,6 +664,13 @@ export function BankTransactionsTab() {
                               type="date"
                               value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
                               onChange={(e) => setImportRowEdit(idx, "salesDate", e.target.value)}
+                              className="h-8 text-xs w-[100px]"
+                            />
+                          ) : r.transType === "withdraw" && (importRowEdits[idx]?.category === "expense" || importRowEdits[idx]?.category === "fixed") ? (
+                            <Input
+                              type="date"
+                              value={importRowEdits[idx]?.expenseDate ?? r.transDate}
+                              onChange={(e) => setImportRowEdit(idx, "expenseDate", e.target.value)}
                               className="h-8 text-xs w-[100px]"
                             />
                           ) : "—"}
@@ -810,6 +837,17 @@ export function BankTransactionsTab() {
                           </SelectContent>
                         </Select>
                       )}
+                      {(addCategory === "expense" || addCategory === "fixed") && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{t("bankExpenseDate") || "비용인식일"}</span>
+                          <Input
+                            type="date"
+                            value={addExpenseDate || addDate}
+                            onChange={(e) => setAddExpenseDate(e.target.value)}
+                            className="w-[120px] h-9"
+                          />
+                        </div>
+                      )}
                     </>
                   )}
                   <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="w-[130px] h-9" />
@@ -877,6 +915,37 @@ export function BankTransactionsTab() {
               )}
             </>
           )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="explanation" className="mt-0">
+          <Card>
+            <CardContent className="pt-4">
+              <div className="prose prose-sm dark:prose-invert max-w-none space-y-4 text-sm">
+                <h3 className="text-base font-semibold">{t("bankTabExplanation") || "은행 거래 자동 매칭 가이드"}</h3>
+                <p className="text-muted-foreground">회계 직원을 위한 은행 파일 업로드 시 자동 용도·계정과목·매출일 매칭 설명입니다.</p>
+
+                <h4 className="font-medium pt-2">1. 입금 (Deposit)</h4>
+                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                  <li><strong>용도</strong>: 은행 적요 키워드에 따라 배달앱·카드·QR/이체·현금입금으로 자동 분류</li>
+                  <li><strong>계정과목</strong>: Grab, Line Man, Shopee, Food Panda, Robinhood / Visa, Master, UnionPay, JCB 등 세부 과목 자동 매칭</li>
+                  <li><strong>매출일</strong>: 입금일 -1일(T+1)을 기본값으로 적용</li>
+                </ul>
+
+                <h4 className="font-medium pt-2">2. 출금 (Withdraw)</h4>
+                <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                  <li><strong>용도</strong>: 보충·이체·정산 → 이체, 월세·전기·급여·보험 등 → 고정비, 그 외 → 비용</li>
+                  <li><strong>계정과목</strong>: 임차료, 전기료, 수도광열비, 급여, 접대비, 교통비, 세금공과금 등 키워드 매칭</li>
+                  <li><strong>비용인식일</strong>: 미입력 시 지급일 기준 (1월 구매 2월 지불 시 비용인식일 따로 입력)</li>
+                </ul>
+
+                <h4 className="font-medium pt-2">3. 적용 시점</h4>
+                <p className="text-muted-foreground">CSV 업로드 후 미리보기 로드 시 모든 거래에 자동 적용. 잘못된 건은 수동 수정 가능.</p>
+
+                <h4 className="font-medium pt-2">4. 발생주의 (인식일)</h4>
+                <p className="text-muted-foreground">1월 매출 2월 수령 → 매출일 1월 입력. 1월 구매 2월 지불 → 비용인식일 1월 입력. 손익계산서는 인식일 기준으로 해당 월에 반영됨.</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

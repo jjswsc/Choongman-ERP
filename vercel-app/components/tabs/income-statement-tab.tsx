@@ -69,10 +69,6 @@ export function IncomeStatementTab() {
       .finally(() => setLoading(false))
   }, [yearMonth, storeFilter, auth?.store, auth?.role])
 
-  React.useEffect(() => {
-    loadData()
-  }, [loadData])
-
   const yearMonthOptions = Array.from({ length: 24 }, (_, i) => {
     const d = new Date()
     d.setMonth(d.getMonth() - i)
@@ -240,7 +236,7 @@ export function IncomeStatementTab() {
             </div>
           ) : (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {t("msg_select_date") || "날짜를 선택해 주세요."}
+              {t("msg_click_query") || "조회 버튼을 눌러 주세요."}
             </p>
           )}
         </CardContent>

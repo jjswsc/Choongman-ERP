@@ -189,7 +189,7 @@ function getEvaluationItems(type, activeOnly) {
   try {
     var filter = "eval_type=eq." + encodeURIComponent(type || "kitchen");
     if (activeOnly) filter += "&use_flag=eq.true";
-    var rows = supabaseSelectFilter("evaluation_items", filter, { order: "item_id.asc" });
+    var rows = supabaseSelectFilter("evaluation_items", filter, { order: "sort_order.asc,item_id.asc" });
     for (var i = 0; i < (rows || []).length; i++) {
       var r = rows[i];
       list.push({
@@ -210,10 +210,12 @@ function updateEvaluationItems(type, updates) {
   for (var u = 0; u < updates.length; u++) {
     var up = updates[u];
     try {
-      supabaseUpdateByFilter("evaluation_items", "eval_type=eq." + encodeURIComponent(type) + "&item_id=eq." + encodeURIComponent(String(up.id)), {
+      var updateData = {
         name: String(up.name != null ? up.name : "").trim(),
         use_flag: (up.use === true || up.use === 1 || up.use === "1" || String(up.use).toLowerCase() === "y")
-      });
+      };
+      if (up.sort_order != null) updateData.sort_order = Number(up.sort_order) || 0;
+      supabaseUpdateByFilter("evaluation_items", "eval_type=eq." + encodeURIComponent(type) + "&item_id=eq." + encodeURIComponent(String(up.id)), updateData);
     } catch (e) {
       Logger.log("updateEvaluationItems: " + e.message);
     }

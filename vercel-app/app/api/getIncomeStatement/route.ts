@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // 3b. 비용: 통장 출금 (본사 계좌) - category=expense,fixed만 (이체/보충 제외)
+      // 3b. 비용: 통장 출금 (본사 계좌) - expense_date 우선(발생주의), 없으면 trans_date
       try {
         const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 200 })) as { id?: number; store?: string }[] | null
         const hqAccountIds = (bankAccRows || [])
@@ -145,14 +145,25 @@ export async function GET(request: NextRequest) {
           .filter((id): id is number => id != null)
         if (hqAccountIds.length > 0) {
           const idList = hqAccountIds.join(',')
+          const prevMonth = new Date(startStr)
+          prevMonth.setMonth(prevMonth.getMonth() - 1)
+          const nextMonth = new Date(endStr)
+          nextMonth.setMonth(nextMonth.getMonth() + 1)
+          const wideStart = prevMonth.toISOString().slice(0, 10)
+          const wideEnd = nextMonth.toISOString().slice(0, 10)
           const btRows = (await supabaseSelectFilter('bank_transactions',
-            `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-            { select: 'amount,category', limit: 5000 }
-          )) as { amount?: number; category?: string }[] | null
+            `account_id=in.(${idList})&trans_date=gte.${wideStart}&trans_date=lte.${wideEnd}&trans_type=eq.withdraw`,
+            { select: 'amount,category,trans_date,expense_date', limit: 5000 }
+          )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
           for (const r of btRows || []) {
             const cat = String(r.category || 'expense').toLowerCase()
             if (cat === 'transfer' || cat === 'correction') continue
-            expenses += Math.abs(Number(r.amount) || 0)
+            const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
+            const transDate = String(r.trans_date || '').slice(0, 10)
+            const inRange = (d: string) => d >= startStr && d <= endStr
+            if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
+              expenses += Math.abs(Number(r.amount) || 0)
+            }
           }
         }
       } catch (_) {
@@ -204,28 +215,39 @@ export async function GET(request: NextRequest) {
         expenses += Number(r.amount) || 0
       }
 
-      // 3b. 비용: 통장 출금 (해당 매장 계좌) - category=expense,fixed만 (이체/보충 제외)
+      // 3b. 비용: 통장 출금 (해당 매장 계좌) - expense_date 우선(발생주의), 없으면 trans_date
       if (storeFilter && storeFilter !== 'All') {
         try {
           const bankAccRows = (await supabaseSelectFilter('bank_accounts', `store=ilike.${encodeURIComponent(storeFilter)}`, { select: 'id', limit: 200 })) as { id?: number }[] | null
           const accountIds = (bankAccRows || []).map((a) => a.id).filter((id): id is number => id != null)
           if (accountIds.length > 0) {
             const idList = accountIds.join(',')
+            const prevMonth = new Date(startStr)
+            prevMonth.setMonth(prevMonth.getMonth() - 1)
+            const nextMonth = new Date(endStr)
+            nextMonth.setMonth(nextMonth.getMonth() + 1)
+            const wideStart = prevMonth.toISOString().slice(0, 10)
+            const wideEnd = nextMonth.toISOString().slice(0, 10)
             const btRows = (await supabaseSelectFilter('bank_transactions',
-              `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-              { select: 'amount,category', limit: 5000 }
-            )) as { amount?: number; category?: string }[] | null
+              `account_id=in.(${idList})&trans_date=gte.${wideStart}&trans_date=lte.${wideEnd}&trans_type=eq.withdraw`,
+              { select: 'amount,category,trans_date,expense_date', limit: 5000 }
+            )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
               if (cat === 'transfer' || cat === 'correction') continue
-              expenses += Math.abs(Number(r.amount) || 0)
+              const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
+              const transDate = String(r.trans_date || '').slice(0, 10)
+              const inRange = (d: string) => d >= startStr && d <= endStr
+              if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
+                expenses += Math.abs(Number(r.amount) || 0)
+              }
             }
           }
         } catch (_) {
           /* bank_transactions 테이블 없을 수 있음 */
         }
       } else {
-        // 전체 매장: 본사 제외한 모든 계좌의 출금
+        // 전체 매장: 본사 제외한 모든 계좌의 출금 - expense_date 우선
         try {
           const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id,store', limit: 200 })) as { id?: number; store?: string }[] | null
           const storeAccountIds = (bankAccRows || [])
@@ -234,14 +256,25 @@ export async function GET(request: NextRequest) {
             .filter((id): id is number => id != null)
           if (storeAccountIds.length > 0) {
             const idList = storeAccountIds.join(',')
+            const prevMonth = new Date(startStr)
+            prevMonth.setMonth(prevMonth.getMonth() - 1)
+            const nextMonth = new Date(endStr)
+            nextMonth.setMonth(nextMonth.getMonth() + 1)
+            const wideStart = prevMonth.toISOString().slice(0, 10)
+            const wideEnd = nextMonth.toISOString().slice(0, 10)
             const btRows = (await supabaseSelectFilter('bank_transactions',
-              `account_id=in.(${idList})&trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.withdraw`,
-              { select: 'amount,category', limit: 5000 }
-            )) as { amount?: number; category?: string }[] | null
+              `account_id=in.(${idList})&trans_date=gte.${wideStart}&trans_date=lte.${wideEnd}&trans_type=eq.withdraw`,
+              { select: 'amount,category,trans_date,expense_date', limit: 5000 }
+            )) as { amount?: number; category?: string; trans_date?: string; expense_date?: string }[] | null
             for (const r of btRows || []) {
               const cat = String(r.category || 'expense').toLowerCase()
               if (cat === 'transfer' || cat === 'correction') continue
-              expenses += Math.abs(Number(r.amount) || 0)
+              const expDate = r.expense_date ? String(r.expense_date).slice(0, 10) : null
+              const transDate = String(r.trans_date || '').slice(0, 10)
+              const inRange = (d: string) => d >= startStr && d <= endStr
+              if ((expDate && inRange(expDate)) || (!expDate && inRange(transDate))) {
+                expenses += Math.abs(Number(r.amount) || 0)
+              }
             }
           }
         } catch (_) {

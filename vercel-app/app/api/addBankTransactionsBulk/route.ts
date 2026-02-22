@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       const category = String(item.category || 'expense').toLowerCase()
       const accountSubjectId = item.accountSubjectId ?? item.account_subject_id
       const salesDate = item.salesDate ?? item.sales_date
+      const expenseDate = item.expenseDate ?? item.expense_date
 
       if (!transDate || amount <= 0) continue
       if (!['deposit', 'withdraw'].includes(transType)) continue
@@ -60,6 +61,10 @@ export async function POST(request: NextRequest) {
       if (transType === 'deposit' && salesDate) {
         const sd = String(salesDate).slice(0, 10)
         if (/^\d{4}-\d{2}-\d{2}$/.test(sd)) row.sales_date = sd
+      }
+      if (transType === 'withdraw' && expenseDate) {
+        const ed = String(expenseDate).slice(0, 10)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
       }
 
       await supabaseInsert('bank_transactions', row)

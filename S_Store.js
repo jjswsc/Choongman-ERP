@@ -10,9 +10,10 @@
 function getChecklistItems(activeOnly) {
   var list = [];
   try {
+    var orderOpt = "sort_order.asc,item_id.asc";
     var rows = activeOnly
-      ? supabaseSelectFilter("checklist_items", "use_flag=eq.true", { order: "item_id.asc" })
-      : supabaseSelect("checklist_items", { order: "item_id.asc" });
+      ? supabaseSelectFilter("checklist_items", "use_flag=eq.true", { order: orderOpt })
+      : supabaseSelect("checklist_items", { order: orderOpt });
     if (!rows) return [];
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i];
@@ -117,10 +118,12 @@ function updateChecklistItems(updates) {
   for (var u = 0; u < updates.length; u++) {
     var up = updates[u];
     try {
-      supabaseUpdateByFilter("checklist_items", "item_id=eq." + encodeURIComponent(String(up.id)), {
+      var updateData = {
         name: String(up.name != null ? up.name : "").trim(),
         use_flag: (up.use === true || up.use === 1 || up.use === "1" || String(up.use).toLowerCase() === "y")
-      });
+      };
+      if (up.sort_order != null) updateData.sort_order = Number(up.sort_order) || 0;
+      supabaseUpdateByFilter("checklist_items", "item_id=eq." + encodeURIComponent(String(up.id)), updateData);
     } catch (e) {
       Logger.log("updateChecklistItems: " + e.message);
     }

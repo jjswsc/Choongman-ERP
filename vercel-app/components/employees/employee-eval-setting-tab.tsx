@@ -62,11 +62,29 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
 
   const handleLoad = () => loadItems()
 
+  const moveItemUp = (idx: number) => {
+    if (idx <= 0) return
+    setItems((prev) => {
+      const arr = [...prev]
+      ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+      return arr
+    })
+  }
+  const moveItemDown = (idx: number) => {
+    if (idx >= items.length - 1) return
+    setItems((prev) => {
+      const arr = [...prev]
+      ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+      return arr
+    })
+  }
+
   const handleSave = async () => {
-    const updates = items.map((item) => ({
+    const updates = items.map((item, idx) => ({
       id: item.id,
       name: item.name,
       use: item.use ?? true,
+      sort_order: idx + 1,
     }))
     if (updates.length === 0) {
       alert(t("eval_save_items_ok") || t("eval_no_items_to_save"))
@@ -162,6 +180,9 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
           <thead className="bg-muted/50">
             <tr>
               <th className="p-2 text-left font-medium w-14">{t("store_no")}</th>
+              {!readOnly && (
+                <th className="p-2 text-center font-medium w-[70px]">{t("eval_order")}</th>
+              )}
               <th className="p-2 text-left font-medium min-w-[100px]">
                 {t("eval_cat_main")}
               </th>
@@ -171,23 +192,21 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
               <th className="p-2 text-left font-medium">{t("eval_item")}</th>
               <th className="p-2 text-center font-medium w-14">{t("eval_use")}</th>
               {!readOnly && (
-                <th className="p-2 text-center font-medium w-16">
-                  {t("eval_delete")}
-                </th>
+                <th className="p-2 text-center font-medium w-16">{t("eval_delete")}</th>
               )}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={readOnly ? 5 : 6} className="p-6 text-center text-muted-foreground">
+                <td colSpan={readOnly ? 5 : 7} className="p-6 text-center text-muted-foreground">
                   {t("loading")}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td
-                  colSpan={readOnly ? 5 : 6}
+                  colSpan={readOnly ? 5 : 7}
                   className="p-6 text-center text-muted-foreground"
                 >
                   {t("eval_setting_no_items")}
@@ -197,6 +216,30 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
               items.map((item, idx) => (
                 <tr key={String(item.id)} className="border-t border-border">
                   <td className="p-2">{item.id}</td>
+                  {!readOnly && (
+                    <td className="p-2 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => moveItemUp(idx)}
+                          disabled={idx === 0}
+                        >
+                          {t("eval_order_up") || "▲"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 w-6 p-0"
+                          onClick={() => moveItemDown(idx)}
+                          disabled={idx === items.length - 1}
+                        >
+                          {t("eval_order_down") || "▼"}
+                        </Button>
+                      </div>
+                    </td>
+                  )}
                   <td className="p-2">
                     <Input
                       value={item.main}

@@ -9,10 +9,12 @@ export async function POST(request: NextRequest) {
     for (const u of updates) {
       const itemId = String(u?.id ?? '').trim()
       if (!itemId) continue
-      await supabaseUpdateByFilter('checklist_items', `item_id=eq.${encodeURIComponent(itemId)}`, {
+      const updateData: { name: string; use_flag: boolean; sort_order?: number } = {
         name: String(u?.name ?? '').trim(),
         use_flag: u?.use === true || u?.use === 1 || u?.use === '1' || String(u?.use).toLowerCase() === 'y',
-      })
+      }
+      if (u?.sort_order != null) updateData.sort_order = Number(u.sort_order) || 0
+      await supabaseUpdateByFilter('checklist_items', `item_id=eq.${encodeURIComponent(itemId)}`, updateData)
     }
     return NextResponse.json({ success: true, msg: '저장됨' })
   } catch (e) {

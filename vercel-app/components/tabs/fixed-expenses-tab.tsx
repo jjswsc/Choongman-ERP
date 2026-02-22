@@ -65,10 +65,6 @@ export function FixedExpensesTab() {
   }, [storeFilter, auth?.store, auth?.role])
 
   React.useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  React.useEffect(() => {
     getAccountSubjects()
       .then((r) => setAccountSubjectOptions(r || []))
       .catch(() => setAccountSubjectOptions([]))

@@ -294,10 +294,32 @@ export function AdminStoreCheck() {
     }
   }
 
+  const moveSettingItemUp = (idx: number) => {
+    if (idx <= 0) return
+    setSettingItems((prev) => {
+      const arr = [...prev]
+      ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
+      return arr
+    })
+  }
+  const moveSettingItemDown = (idx: number) => {
+    if (idx >= settingItems.length - 1) return
+    setSettingItems((prev) => {
+      const arr = [...prev]
+      ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
+      return arr
+    })
+  }
+
   const handleSaveSettings = async () => {
     setSettingSaving(true)
     try {
-      const updates = settingItems.map((it) => ({ id: it.id, name: it.name, use: it.use }))
+      const updates = settingItems.map((it, idx) => ({
+        id: it.id,
+        name: it.name,
+        use: it.use,
+        sort_order: idx + 1,
+      }))
       await updateChecklistItems(updates)
       alert(t("store_check_saved"))
       loadSettingItems()
@@ -736,6 +758,7 @@ export function AdminStoreCheck() {
                       <thead className="sticky top-0 bg-muted">
                         <tr>
                           <th className="p-2 text-center w-12 font-medium">{t("store_no")}</th>
+                          <th className="p-2 text-center w-[70px] font-medium">{t("eval_order")}</th>
                           <th className="p-2 text-left font-medium">{t("store_cat_main")}</th>
                           <th className="p-2 text-left font-medium">{t("store_cat_sub")}</th>
                           <th className="p-2 text-left font-medium">{t("store_check_item")}</th>
@@ -747,6 +770,28 @@ export function AdminStoreCheck() {
                         {settingItems.map((it, idx) => (
                           <tr key={it.id} className="border-b border-border/60">
                             <td className="p-2 text-center">{it.id}</td>
+                            <td className="p-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => moveSettingItemUp(idx)}
+                                  disabled={idx === 0}
+                                >
+                                  {t("eval_order_up") || "▲"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={() => moveSettingItemDown(idx)}
+                                  disabled={idx === settingItems.length - 1}
+                                >
+                                  {t("eval_order_down") || "▼"}
+                                </Button>
+                              </div>
+                            </td>
                             <td className="p-2">{tr(it.main)}</td>
                             <td className="p-2">{tr(it.sub)}</td>
                             <td className="p-2">

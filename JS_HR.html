@@ -562,13 +562,17 @@ function loadEvaluationSettings(type) {
     var tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = "";
-    if (!items || items.length === 0) { tbody.innerHTML = "<tr><td colspan='6' class='text-center text-muted'>등록된 항목이 없습니다. 시트가 없으면 저장 시 자동 생성됩니다.</td></tr>"; return; }
-    items.forEach(function(item) {
+    if (!items || items.length === 0) { tbody.innerHTML = "<tr><td colspan='7' class='text-center text-muted'>등록된 항목이 없습니다. 시트가 없으면 저장 시 자동 생성됩니다.</td></tr>"; return; }
+    var orderUp = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_order_up) ? I18N[currentLang].eval_order_up : "▲";
+    var orderDown = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_order_down) ? I18N[currentLang].eval_order_down : "▼";
+    items.forEach(function(item, idx) {
       var checked = item.use ? "checked" : "";
       var mainVal = (item.main || "").replace(/"/g, "&quot;");
       var subVal = (item.sub || "").replace(/"/g, "&quot;");
       var nameVal = (item.name || "").replace(/"/g, "&quot;");
-      tbody.innerHTML += "<tr><td>" + item.id + "</td><td><input class=\"form-control form-control-sm\" value=\"" + mainVal + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + subVal + "\" readonly></td><td><input class=\"form-control form-control-sm eval-set-name\" value=\"" + nameVal + "\"></td><td><input type=\"checkbox\" class=\"form-check-input eval-set-use\" data-id=\"" + item.id + "\" " + checked + "></td><td><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteEvalItem('" + type + "', '" + item.id + "')\">삭제</button></td></tr>";
+      var upDisabled = idx === 0 ? " disabled" : "";
+      var downDisabled = idx === items.length - 1 ? " disabled" : "";
+      tbody.innerHTML += "<tr><td>" + item.id + "</td><td class=\"text-nowrap\"><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1\" onclick=\"moveEvalRowUp('" + type + "', this)\"" + upDisabled + ">" + orderUp + "</button><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1 ms-1\" onclick=\"moveEvalRowDown('" + type + "', this)\"" + downDisabled + ">" + orderDown + "</button></td><td><input class=\"form-control form-control-sm\" value=\"" + mainVal + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + subVal + "\" readonly></td><td><input class=\"form-control form-control-sm eval-set-name\" value=\"" + nameVal + "\"></td><td><input type=\"checkbox\" class=\"form-check-input eval-set-use\" data-id=\"" + item.id + "\" " + checked + "></td><td><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteEvalItem('" + type + "', '" + item.id + "')\">삭제</button></td></tr>";
     });
   }).getEvaluationItems(type, false);
 }
@@ -577,10 +581,10 @@ function saveEvaluationSettings(type) {
   var tbody = document.getElementById(tbodyId);
   if (!tbody) return;
   var updates = [];
-  tbody.querySelectorAll("tr").forEach(function(tr) {
+  tbody.querySelectorAll("tr").forEach(function(tr, idx) {
     var useEl = tr.querySelector(".eval-set-use");
     var nameEl = tr.querySelector(".eval-set-name");
-    if (useEl && nameEl) updates.push({ id: useEl.getAttribute("data-id"), name: nameEl.value, use: useEl.checked });
+    if (useEl && nameEl) updates.push({ id: useEl.getAttribute("data-id"), name: nameEl.value, use: useEl.checked, sort_order: idx + 1 });
   });
   if (!updates.length) { alert("저장할 항목이 없습니다."); return; }
   google.script.run.withSuccessHandler(function(res) { alert("항목이 저장되었습니다."); loadEvaluationSettings(type); }).updateEvaluationItems(type, updates);
@@ -608,6 +612,34 @@ function addEvalItemRow(type) {
   }).withFailureHandler(function() { if (typeof load === "function") load(0); alert(addErr); }).addEvaluationItem(type, mainCat, subCat, itemName);
 }
 
+function moveEvalRowUp(type, btn) {
+  var tr = btn.closest("tr");
+  if (!tr || !tr.previousElementSibling) return;
+  var tbody = tr.parentNode;
+  tbody.insertBefore(tr, tr.previousElementSibling);
+  updateEvalRowButtons(type);
+}
+function moveEvalRowDown(type, btn) {
+  var tr = btn.closest("tr");
+  if (!tr || !tr.nextElementSibling) return;
+  var tbody = tr.parentNode;
+  tbody.insertBefore(tr.nextElementSibling, tr);
+  updateEvalRowButtons(type);
+}
+function updateEvalRowButtons(type) {
+  var tbodyId = type === "service" ? "eval-setting-list-body-service" : "eval-setting-list-body";
+  var tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  var rows = tbody.querySelectorAll("tr");
+  var orderUp = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_order_up) ? I18N[currentLang].eval_order_up : "▲";
+  var orderDown = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_order_down) ? I18N[currentLang].eval_order_down : "▼";
+  rows.forEach(function(row, idx) {
+    var btns = row.querySelectorAll("button[onclick^=\"moveEvalRowUp\"]");
+    if (btns.length) btns[0].disabled = (idx === 0);
+    btns = row.querySelectorAll("button[onclick^=\"moveEvalRowDown\"]");
+    if (btns.length) btns[0].disabled = (idx === rows.length - 1);
+  });
+}
 function deleteEvalItem(type, id) {
   var confirmMsg = (typeof I18N !== "undefined" && currentLang && I18N[currentLang] && I18N[currentLang].eval_delete_confirm) ? I18N[currentLang].eval_delete_confirm : "이 평가 항목을 삭제하시겠습니까?";
   if (!confirm(confirmMsg)) return;

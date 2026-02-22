@@ -30,10 +30,9 @@ export async function POST(req: Request) {
         String(up.use).toLowerCase() === 'y'
 
       const filter = `eval_type=eq.${encodeURIComponent(typeVal)}&item_id=eq.${encodeURIComponent(id)}`
-      await supabaseUpdateByFilter('evaluation_items', filter, {
-        name,
-        use_flag: use,
-      })
+      const updateData: { name: string; use_flag: boolean; sort_order?: number } = { name, use_flag: use }
+      if (up.sort_order != null) updateData.sort_order = Number(up.sort_order) || 0
+      await supabaseUpdateByFilter('evaluation_items', filter, updateData)
     }
 
     return NextResponse.json('SUCCESS', { headers })
