@@ -304,14 +304,14 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
         </div>
       </div>
 
-      {/* Filters - 매장, 날짜, 구역, 검색 */}
+      {/* Filters - 매장, 날짜, 구역, 검색 (한 줄) */}
       <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
         {storeOptions.length > 0 ? (
           <Select
             value={storeFilterFinal || storeOptions[0] || ""}
             onValueChange={handleStoreChange}
           >
-            <SelectTrigger className="h-9 min-w-[120px] rounded-lg text-xs">
+            <SelectTrigger className="h-9 w-28 rounded-lg text-xs shrink-0">
               <SelectValue placeholder={t("scheduleStorePlaceholder")} />
             </SelectTrigger>
             <SelectContent>
@@ -321,7 +321,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             </SelectContent>
           </Select>
         ) : null}
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 flex-1 min-w-[120px] rounded-lg text-xs" />
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 w-36 rounded-lg text-xs shrink-0" />
         <Select value={areaFilter} onValueChange={setAreaFilter}>
           <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
             <SelectValue />
