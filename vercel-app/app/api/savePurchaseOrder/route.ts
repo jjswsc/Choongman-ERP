@@ -14,6 +14,8 @@ export async function POST(request: NextRequest) {
     const locationCode = String(body.locationCode || '').trim()
     const cart = Array.isArray(body.cart) ? body.cart : []
     const userName = String(body.userName || '').trim()
+    const withholdingTaxAmount = Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0
+    const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
 
     if (!vendorCode || !vendorName || cart.length === 0) {
       return NextResponse.json(
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
     }
     const vat = Math.round(subtotal * 0.07)
     const total = subtotal + vat
+    const netAmount = Math.max(0, total - withholdingTaxAmount)
 
     const poNo =
       'PO-' +
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
       '-' +
       String(Date.now()).slice(-4)
 
-    const row = {
+    const row: Record<string, unknown> = {
       po_no: poNo,
       vendor_code: vendorCode,
       vendor_name: vendorName,
@@ -50,6 +53,10 @@ export async function POST(request: NextRequest) {
       total,
       user_name: userName,
       status: 'Draft',
+    }
+    if (withholdingTaxAmount > 0) {
+      row.withholding_tax_amount = withholdingTaxAmount
+      if (withholdingTaxRate != null) row.withholding_tax_rate = Number(withholdingTaxRate) || null
     }
 
     const inserted = (await supabaseInsert('purchase_orders', row)) as { id?: number }[]

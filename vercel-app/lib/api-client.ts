@@ -2759,6 +2759,8 @@ export async function savePurchaseOrder(params: {
   locationCode: string
   cart: { code: string; name: string; price: number; cost?: number; qty: number }[]
   userName: string
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number
 }) {
   const res = await apiFetch('/api/savePurchaseOrder', {
     method: 'POST',
@@ -2783,12 +2785,31 @@ export interface PurchaseOrderRow {
   user_name?: string
   status?: string
   created_at?: string
+  withholding_tax_amount?: number
+  withholding_tax_rate?: number
+  invoice_received?: boolean
+  invoice_no?: string
 }
 
 export async function getPurchaseOrders() {
   const res = await apiFetch('/api/getPurchaseOrders')
   const data = await res.json()
   return Array.isArray(data) ? data : []
+}
+
+export async function updatePurchaseOrderInvoice(params: {
+  poId: number
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  withholdingTaxAmount?: number
+  withholdingTaxRate?: number
+}) {
+  const res = await apiFetch('/api/updatePurchaseOrderInvoice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function processPurchaseOrderApproval(params: { poId: number }) {

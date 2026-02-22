@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Accordion,
   AccordionContent,
@@ -81,6 +82,7 @@ export function AdminPurchaseOrder() {
     const v = Math.round(sub * 0.07)
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
+  const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
 
   React.useEffect(() => {
     Promise.all([getPurchaseLocations(), getVendorsForPurchase()]).then(([loc, ven]) => {
@@ -213,10 +215,12 @@ export function AdminPurchaseOrder() {
         locationCode: locationSelect.location_code,
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store })),
         userName: auth.user,
+        withholdingTaxAmount: Number(withholdingTaxAmount?.replace(/,/g, "")) || 0,
       })
       if (res.success) {
         alert(t("purchaseOrderSuccess") + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
+        setWithholdingTaxAmount("")
       } else {
         alert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
@@ -473,6 +477,24 @@ export function AdminPurchaseOrder() {
                   <span>{t("total")}</span>
                   <span>{total}</span>
                 </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t("poWithholdingTax") || "원천징수세"}</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    placeholder="0"
+                    value={withholdingTaxAmount}
+                    onChange={(e) => setWithholdingTaxAmount(e.target.value)}
+                    className="h-8 w-24 text-right text-sm"
+                  />
+                </div>
+                {Number(withholdingTaxAmount || 0) > 0 && (
+                  <div className="flex justify-between text-xs font-medium text-muted-foreground">
+                    <span>{t("poNetAmount") || "실지급액"}</span>
+                    <span>{total - (Number(withholdingTaxAmount?.replace(/,/g, "")) || 0)}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
     const accountId = Number(body.accountId || body.account_id)
     const store = String(body.store || '').trim()
     const userName = String(body.userName || body.user_name || '').trim()
-    const items = Array.isArray(body.items) ? body.items : []
+    type BulkItem = { transDate?: string; trans_date?: string; transType?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; accountSubjectId?: number; account_subject_id?: number; salesDate?: string; sales_date?: string; expenseDate?: string; expense_date?: string; vendorCode?: string; vendor_code?: string; storeName?: string; store_name?: string }
+    const items = (Array.isArray(body.items) ? body.items : []) as BulkItem[]
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
