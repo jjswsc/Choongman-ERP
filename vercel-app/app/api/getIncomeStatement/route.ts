@@ -7,9 +7,44 @@ function isOfficeStore(s: string): boolean {
   return OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
 }
 
+/** 재고 금액 = sum(qty * cost) per item at cutoff date. locationFilter=본사|매장명|null(전체). excludeHq=true면 본사 제외(매장전체) */
+async function getInventoryValue(
+  locationFilter: string | null,
+  cutoffDate: string,
+  isBefore: boolean,
+  itemCostMap: Record<string, number>,
+  excludeHq = false
+): Promise<number> {
+  const op = isBefore ? 'lt' : 'lte'
+  const dayEnd = cutoffDate + (isBefore ? 'T00:00:00.000Z' : 'T23:59:59.999Z')
+  let filter = `log_date=${op}.${dayEnd}`
+  if (locationFilter) filter += `&location=ilike.${encodeURIComponent(locationFilter)}`
+
+  const rows = (await supabaseSelectFilter('stock_logs', filter, {
+    select: 'location,item_code,qty',
+    limit: 10000,
+  })) as { location?: string; item_code?: string; qty?: number }[] | null
+
+  const byItem: Record<string, number> = {}
+  for (const r of rows || []) {
+    if (excludeHq && isOfficeStore(String(r.location || ''))) continue
+    const code = String(r.item_code || '').trim()
+    if (!code) continue
+    byItem[code] = (byItem[code] || 0) + Number(r.qty || 0)
+  }
+
+  let total = 0
+  for (const [code, qty] of Object.entries(byItem)) {
+    const cost = itemCostMap[code] ?? 0
+    total += qty * cost
+  }
+  return total
+}
+
 /** 1단계: 손익계산서 집계 (매출 - 매입 - 비용)
- * [매장] 매출: pos_orders | 매입: orders(Approved) | 비용: petty_cash
- * [본사] 매출: orders(출고완료=배송완료/일부배송완료) | 매입: purchase_orders | 비용: Office petty
+ * 매출원가(COGS) = 기초재고 + 당기매입 - 기말재고
+ * [매장] 매출: pos_orders | 매입: orders | 비용: petty_cash | 재고: stock_logs(location=매장)
+ * [본사] 매출: orders(출고완료) | 매입: purchase_orders | 비용: Office petty | 재고: stock_logs(location=본사)
  */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -48,9 +83,19 @@ export async function GET(request: NextRequest) {
   const isHQ = isOfficeStore(storeFilter)
 
   try {
+    // 품목 원가 맵 (재고 평가용)
+    const itemRows = (await supabaseSelect('items', { limit: 5000, select: 'code,cost' })) as { code?: string; cost?: number }[] | null
+    const itemCostMap: Record<string, number> = {}
+    for (const r of itemRows || []) {
+      const code = String(r.code || '').trim()
+      if (code) itemCostMap[code] = Number(r.cost) || 0
+    }
+
     let sales = 0
     let purchases = 0
     let expenses = 0
+    let beginningInventory = 0
+    let endingInventory = 0
 
     if (isHQ) {
       // ─── 본사: 출고 완료 기준 매출, purchase_orders 매입, Office 비용 ───
@@ -90,6 +135,10 @@ export async function GET(request: NextRequest) {
           expenses += Number(r.amount) || 0
         }
       }
+
+      // 4. 재고: 본사(location=본사)
+      beginningInventory = await getInventoryValue('본사', startStr, true, itemCostMap)
+      endingInventory = await getInventoryValue('본사', endStr, false, itemCostMap)
     } else {
       // ─── 매장: POS 매출, orders 매입, petty 비용 ───
       // 1. 매출: pos_orders
@@ -131,9 +180,19 @@ export async function GET(request: NextRequest) {
         if ((r.trans_type || '').toLowerCase() !== 'expense') continue
         expenses += Number(r.amount) || 0
       }
+
+      // 4. 재고: 매장 (location=매장명 또는 전체 매장)
+      if (storeFilter && storeFilter !== 'All') {
+        beginningInventory = await getInventoryValue(storeFilter, startStr, true, itemCostMap)
+        endingInventory = await getInventoryValue(storeFilter, endStr, false, itemCostMap)
+      } else {
+        beginningInventory = await getInventoryValue(null, startStr, true, itemCostMap, true)
+        endingInventory = await getInventoryValue(null, endStr, false, itemCostMap, true)
+      }
     }
 
-    const grossProfit = sales - purchases
+    const cogs = beginningInventory + purchases - endingInventory
+    const grossProfit = sales - cogs
     const netProfit = grossProfit - expenses
 
     return NextResponse.json(
@@ -144,6 +203,9 @@ export async function GET(request: NextRequest) {
         storeFilter: storeFilter || 'All',
         sales,
         purchases,
+        beginningInventory,
+        endingInventory,
+        cogs,
         expenses,
         grossProfit,
         netProfit,
@@ -160,6 +222,9 @@ export async function GET(request: NextRequest) {
         storeFilter: storeFilter || 'All',
         sales: 0,
         purchases: 0,
+        beginningInventory: 0,
+        endingInventory: 0,
+        cogs: 0,
         expenses: 0,
         grossProfit: 0,
         netProfit: 0,

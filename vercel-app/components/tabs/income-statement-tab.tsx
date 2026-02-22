@@ -38,6 +38,9 @@ export function IncomeStatementTab() {
   const [data, setData] = React.useState<{
     sales: number
     purchases: number
+    beginningInventory?: number
+    endingInventory?: number
+    cogs?: number
     expenses: number
     grossProfit: number
     netProfit: number
@@ -151,9 +154,27 @@ export function IncomeStatementTab() {
                     <td className="py-2 text-right font-mono">{formatBath(data.sales)}</td>
                   </tr>
                   <tr className="border-b">
-                    <td className="py-2 text-muted-foreground">- {t("pL_purchases")}</td>
+                    <td className="py-2 text-muted-foreground pl-4">+ {t("pL_beginningInv")}</td>
+                    <td className="py-2 text-right font-mono text-muted-foreground">
+                      {formatBath(data.beginningInventory ?? 0)}
+                    </td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 text-muted-foreground pl-4">+ {t("pL_purchases")}</td>
                     <td className="py-2 text-right font-mono text-muted-foreground">
                       {formatBath(data.purchases)}
+                    </td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 text-muted-foreground pl-4">- {t("pL_endingInv")}</td>
+                    <td className="py-2 text-right font-mono text-muted-foreground">
+                      {formatBath(data.endingInventory ?? 0)}
+                    </td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="py-2 text-muted-foreground">= {t("pL_cogs")}</td>
+                    <td className="py-2 text-right font-mono text-muted-foreground">
+                      {formatBath(data.cogs ?? 0)}
                     </td>
                   </tr>
                   <tr className="border-b">

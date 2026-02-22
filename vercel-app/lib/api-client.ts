@@ -1170,6 +1170,9 @@ export interface IncomeStatementData {
   storeFilter: string
   sales: number
   purchases: number
+  beginningInventory?: number
+  endingInventory?: number
+  cogs?: number
   expenses: number
   grossProfit: number
   netProfit: number
