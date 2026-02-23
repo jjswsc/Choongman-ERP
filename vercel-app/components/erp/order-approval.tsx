@@ -150,6 +150,8 @@ export function OrderApproval() {
   const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
   const [rejectReasonByOrderId, setRejectReasonByOrderId] = React.useState<Record<string, string>>({})
   const [rejectReasonPopupOrder, setRejectReasonPopupOrder] = React.useState<Order | null>(null)
+  /** 수량 변경 직후 승인 시 React state 미반영을 방지하기 위해 ref에 동기 저장 */
+  const editedItemsRef = React.useRef<Record<string, OrderItem[]>>({})
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -192,6 +194,7 @@ export function OrderApproval() {
       setCheckedOrders(new Set(mapped.map((o) => o.id)))
       setAllChecked(mapped.length > 0)
       setEditedItemsByOrderId({})
+      editedItemsRef.current = {}
       setDeliveryDatesByOutboundByOrder((prev) => {
         const next = { ...prev }
         for (const o of mapped) {
@@ -268,13 +271,20 @@ export function OrderApproval() {
           ? { ...it, ...updates, qty: newQty ?? it.qty, total: it.unitPrice * (newQty ?? it.qty) }
           : it
       )
+      editedItemsRef.current = { ...editedItemsRef.current, [orderId]: next }
       return { ...prev, [orderId]: next }
     })
   }
 
   const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
     const idStr = String(orderId)
-    const displayItems = getDisplayItems(order)
+    const baseForSubmit = editedItemsRef.current[idStr] ?? getDisplayItems(order)
+    const displayItems = !detailSortByCode ? baseForSubmit : [...baseForSubmit].sort((a, b) => {
+      const ca = (a.code || "").toLowerCase()
+      const cb = (b.code || "").toLowerCase()
+      const cmp = ca.localeCompare(cb)
+      return detailSortByCode === "asc" ? cmp : -cmp
+    })
     const approvedItems = decision === "Approved" ? displayItems.filter((it) => it.checked && it.qty > 0) : []
     const outboundLocsInApproved = [...new Set(approvedItems.map((it) => it.outboundLocation || "(미지정)"))]
     const datesByOutbound = deliveryDatesByOutboundByOrder[idStr] || {}
@@ -331,6 +341,7 @@ export function OrderApproval() {
         )
       })
       if (decision === "Approved") {
+        delete editedItemsRef.current[idStr]
         setEditedItemsByOrderId((prev) => {
           const next = { ...prev }
           delete next[idStr]
