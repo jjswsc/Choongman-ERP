@@ -58,10 +58,10 @@ export function signEtaxXml(xmlString: string, options: EtaxSignOptions): string
       'http://www.w3.org/2001/10/xml-exc-c14n#',
     ],
   })
-  const options: { prefix?: string; location?: { reference: string; action: string } } = {
+  const signOpts: { prefix?: string; location?: { reference: string; action: string } } = {
     prefix: 'ds',
     location: { reference: "//*[local-name()='CrossIndustryInvoice']", action: 'append' },
   }
-  sig.computeSignature(xmlString, options)
+  sig.computeSignature(xmlString, signOpts)
   return sig.getSignedXml()
 }

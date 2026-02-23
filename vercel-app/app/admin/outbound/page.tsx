@@ -662,9 +662,12 @@ export default function OutboundPage() {
     <div style="font-size:11px; margin-top:4px;">${grandWords}</div>
   </div></div>
   <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${inv.inv_remarks}:</strong> ${bankInfo}</div>
-  <div style="margin-top:20px; display:flex; justify-content:space-between; font-size:11px;">
+  <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end; font-size:11px;">
     <div><strong>${clientName}</strong><br>${inv.inv_received_by} ________________  ${inv.inv_date} ________________</div>
-    <div><strong>${companyName.split(" ")[0]}</strong><br>${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+      <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:64px;height:64px;object-fit:contain;opacity:0.9;" onerror="this.style.display='none'" />
+      <div><strong>${companyName.split(" ")[0]}</strong><br>${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</div>
+    </div>
   </div>
 </div>`
   }

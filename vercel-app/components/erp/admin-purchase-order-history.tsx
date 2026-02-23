@@ -230,7 +230,10 @@ th{background:#f5f5f5}
 <tr class="tot"><td colspan="4" class="num">${t("total")}</td><td class="num"></td><td class="num">${po.total ?? 0}</td></tr>
 </tfoot>
 </table>
-<p style="margin-top:24px;font-size:12px;color:#666">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
+<div style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
+  <p style="font-size:12px;color:#666;margin:0">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
+  <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:56px;height:56px;object-fit:contain;opacity:0.9;" onerror="this.style.display='none'" />
+</div>
 </body>
 </html>
 `
