@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { parseOr400, submitAttendanceSchema } from '@/lib/api-validate'
-import { isOfficeStore, OFFICE_STORES } from '@/lib/permissions'
-
 const TZ = 'Asia/Bangkok'
 
 function todayStr() {
@@ -104,62 +102,36 @@ export async function POST(request: NextRequest) {
       lng?: string | number
     }[]
     const storeNorm = String(storeName || '').trim().toLowerCase()
+    // gps_name/직원 store/매장명이 정확히 같을 때만 매칭
     for (const v of vendors || []) {
       const gpsName = String(v.gps_name || '').trim()
       const name = String(v.name || '').trim()
       const gpsLower = gpsName.toLowerCase()
       const nameLower = name.toLowerCase()
-      // gps_name 앞의 "CM " 제거 후 비교 (예: "CM Future Park" ↔ "Future Park")
-      const gpsWithoutCM = gpsLower.replace(/^cm\s+/, '')
-      const nameWithoutCM = nameLower.replace(/^cm\s+/, '')
-      const exactMatch = gpsLower === storeNorm || gpsWithoutCM === storeNorm ||
-        (gpsName === '' && (nameLower === storeNorm || nameWithoutCM === storeNorm))
-      const prefixMatch = storeNorm.length >= 3 && (
-        gpsLower.startsWith(storeNorm) || storeNorm.startsWith(gpsLower) ||
-        gpsWithoutCM.startsWith(storeNorm) || storeNorm.startsWith(gpsWithoutCM) ||
-        (gpsName === '' && (nameLower.startsWith(storeNorm) || storeNorm.startsWith(nameLower) ||
-          nameWithoutCM.startsWith(storeNorm) || storeNorm.startsWith(nameWithoutCM)))
-      )
-      const includesMatch = storeNorm.length >= 3 && (
-        gpsLower.includes(storeNorm) || storeNorm.includes(gpsWithoutCM) ||
-        gpsWithoutCM.includes(storeNorm) || storeNorm.includes(gpsLower) ||
-        (gpsName === '' && (nameLower.includes(storeNorm) || storeNorm.includes(nameWithoutCM)))
-      )
-      const match = exactMatch || prefixMatch || includesMatch
-      if (match) {
-        targetLat = Number(v.lat) || 0
-        targetLng = Number(v.lng) || 0
-        if (targetLat !== 0 || targetLng !== 0) break
-      }
-    }
-    // Office/본사: storeName이 Office/본사/오피스/본점일 때, 매칭 실패 시 1) name/gps_name이 본사 계열인 vendor 2) type='본사'인 vendor 3) id=548(본사) fallback
-    if ((targetLat === 0 && targetLng === 0) && isOfficeStore(storeName || '')) {
-      const officeNorm = OFFICE_STORES.map((s) => s.trim().toLowerCase())
-      for (const v of vendors || []) {
-        const gpsName = String(v.gps_name || '').trim().toLowerCase()
-        const name = String(v.name || '').trim().toLowerCase()
-        const vType = String(v.type || '').trim().toLowerCase()
-        const vNameInOffice = officeNorm.includes(gpsName) || officeNorm.includes(name)
-        const vType본사 = vType === '본사'
-        const vId548 = v.id === 548
-        if (vNameInOffice || vType본사 || vId548) {
-          const lat = Number(v.lat) || 0
-          const lng = Number(v.lng) || 0
-          if (lat !== 0 || lng !== 0) {
-            targetLat = lat
-            targetLng = lng
-            break
-          }
+      const exactMatch = gpsLower === storeNorm ||
+        (gpsName === '' && nameLower === storeNorm)
+      if (exactMatch) {
+        const lat = Number(v.lat) || 0
+        const lng = Number(v.lng) || 0
+        if (lat !== 0 || lng !== 0) {
+          targetLat = lat
+          targetLng = lng
+          break
         }
       }
     }
-    if (
-      (targetLat !== 0 || targetLng !== 0) &&
-      dataLat !== 'Unknown' &&
-      dataLat !== '' &&
-      dataLng !== '' &&
-      dataLng !== 'Unknown'
-    ) {
+    const userGpsInvalid = dataLat === 'Unknown' || dataLat === '' || dataLng === '' || dataLng === 'Unknown'
+    if (targetLat !== 0 || targetLng !== 0) {
+      // 매장에 GPS 등록된 경우: 사용자 GPS 필수 (원격 출근/퇴근 방지)
+      if (userGpsInvalid) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `❌ 위치 확인 실패! GPS를 켜고 매장 근처에서 다시 시도해 주세요. (현재 위치를 확인할 수 없습니다)`,
+          },
+          { headers }
+        )
+      }
       const dist = calcDistance(
         targetLat,
         targetLng,
@@ -167,8 +139,8 @@ export async function POST(request: NextRequest) {
         Number(dataLng)
       )
       if (dist <= 30) locationOk = true
-      // 출근 시 매장 30m 밖이면 기록 거부 (원격 출근 방지)
-      if (logType === '출근' && dist > 30) {
+      // 매장 30m 밖이면 기록 거부 (출근/퇴근/휴식 공통)
+      if (dist > 30) {
         return NextResponse.json(
           {
             success: false,
@@ -177,20 +149,15 @@ export async function POST(request: NextRequest) {
           { headers }
         )
       }
-    } else if (logType === '출근' && (targetLat === 0 && targetLng === 0)) {
-      // Office/본사: GPS 미등록해도 출근 허용 (본사·오피스 직원은 재택/외근 등으로 위치 가변)
-      if (isOfficeStore(storeName || '')) {
-        locationOk = true
-      } else {
-        // 매장 GPS 미등록 시 출근 거부 (Ekkamai 등 GPS 없는 매장 원격 출근 방지)
-        return NextResponse.json(
-          {
-            success: false,
-            message: `❌ ${storeName} 매장의 위치(GPS)가 등록되지 않아 출근 기록이 불가합니다. 관리자에게 문의해 주세요.`,
-          },
-          { headers }
-        )
-      }
+    } else if (targetLat === 0 && targetLng === 0) {
+      // 본사·매장 공통: GPS 미등록 시 기록 거부
+      return NextResponse.json(
+        {
+          success: false,
+          message: `❌ ${storeName}의 위치(GPS)가 등록되지 않아 출퇴근 기록이 불가합니다. 관리자에게 문의해 주세요.`,
+        },
+        { headers }
+      )
     }
     // GPS 미확인 시에도 승인 대기 없음 (매장 폰/태블릿 활용 정책)
     const needManagerApproval = false

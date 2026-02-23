@@ -61,6 +61,7 @@ export function PettyCashTab() {
   const [listScope, setListScope] = useState<"store" | "office">("store")
   const [listStore, setListStore] = useState("All")
   const [listDepartment, setListDepartment] = useState("All")
+  const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = useState(false)
   const [listStart, setListStart] = useState(todayStr)
   const [listEnd, setListEnd] = useState(todayStr)
   const [listData, setListData] = useState<PettyCashItem[]>([])
@@ -167,6 +168,12 @@ export function PettyCashTab() {
   }, [listData, monthlyData, lang])
 
   const getMemo = (memo: string) => (memo && memoTransMap[memo]) || memo || "-"
+  const filteredListData = filterAccountSubjectEmpty
+    ? listData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
+    : listData
+  const filteredMonthlyData = filterAccountSubjectEmpty
+    ? monthlyData.filter((r) => (r.accountSubjectId ?? r.account_subject_id) == null || (r.accountSubjectId ?? r.account_subject_id) === 0)
+    : monthlyData
   const formatStoreLabel = (store: string) =>
     store.startsWith("Office-") ? `${t("pettyScopeOffice") || "본사"} (${store.slice(7)})` : store
 
@@ -419,7 +426,7 @@ export function PettyCashTab() {
       const a = accountSubjectOptions.find((x) => x.id === id)
       return a ? `${a.code} ${asDisplayName(a)}` : ""
     }
-    for (const r of monthlyData) {
+    for (const r of filteredMonthlyData) {
       rows.push([
         r.trans_date,
         r.store,
@@ -511,14 +518,18 @@ ${rows.map((row, ri) => {
                 )}
                 <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
                 <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
+                <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                  <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                  <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                </label>
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadList} disabled={listLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {listLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
                 </Button>
               </div>
               <div className="rounded-lg border border-border/60 max-h-[240px] overflow-x-auto overflow-y-auto">
-                {listData.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
+                {filteredListData.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">{listData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
                   <table className={cn("w-full text-xs table-fixed", canSearchAll ? "min-w-[420px]" : "min-w-[360px]")}>
                     <colgroup>
@@ -542,7 +553,7 @@ ${rows.map((row, ri) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {listData.map((r) => (
+                      {filteredListData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2 text-center">{r.trans_date}</td>
                           {canSearchAll && <td className="p-2 text-center truncate text-xs">{formatStoreLabel(r.store)}</td>}
@@ -734,18 +745,22 @@ ${rows.map((row, ri) => {
                     ))}
                   </SelectContent>
                 </Select>
+                <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                  <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                  <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                </label>
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadMonthly} disabled={monthlyLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {monthlyLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
                 </Button>
-                <Button size="sm" variant="outline" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={downloadMonthlyExcel} disabled={monthlyData.length === 0} title={t("pettyExcelHint") || ""}>
+                <Button size="sm" variant="outline" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={downloadMonthlyExcel} disabled={filteredMonthlyData.length === 0} title={t("pettyExcelHint") || ""}>
                   <Download className="mr-1 h-3.5 w-3.5" />
                   {t("excelBtn") || "Excel"}
                 </Button>
               </div>
               <div className="rounded-lg border border-border/60 max-h-[320px] overflow-x-auto overflow-y-auto">
-                {monthlyData.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
+                {filteredMonthlyData.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
                   <table className="w-full text-xs table-fixed min-w-[580px]">
                     <colgroup>
@@ -775,7 +790,7 @@ ${rows.map((row, ri) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {monthlyData.map((r) => (
+                      {filteredMonthlyData.map((r) => (
                         <tr key={r.id} className="border-t border-border/40">
                           <td className="p-2 text-center">{r.trans_date}</td>
                           <td className="p-2 text-center truncate">{formatStoreLabel(r.store)}</td>

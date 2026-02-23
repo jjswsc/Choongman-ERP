@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -41,6 +41,8 @@ import {
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
+import { FixedExpensesTab } from "@/components/tabs/fixed-expenses-tab"
+import { useSearchParams } from "next/navigation"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -96,6 +98,7 @@ export function BankTransactionsTab() {
   const [filterTransType, setFilterTransType] = React.useState<string>("")
   const [filterCategory, setFilterCategory] = React.useState<string>("")
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
+  const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
   const [importSaving, setImportSaving] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -104,7 +107,12 @@ export function BankTransactionsTab() {
   const [accountSubjectForm, setAccountSubjectForm] = React.useState<{ id?: number; code: string; name: string; nameEn: string; type: string; pAndLSection: string; sortOrder: number }>({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })
   const [accountSubjectSaving, setAccountSubjectSaving] = React.useState(false)
   const [accountSubjectDeletingId, setAccountSubjectDeletingId] = React.useState<number | null>(null)
-  const [activeBankTab, setActiveBankTab] = React.useState("input")
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get("tab")
+  const [activeBankTab, setActiveBankTab] = React.useState(tabParam === "fixed-expenses" ? "fixed-expenses" : "input")
+  React.useEffect(() => {
+    if (tabParam === "fixed-expenses") setActiveBankTab("fixed-expenses")
+  }, [tabParam])
 
   React.useEffect(() => {
     getBankAccounts({
@@ -466,13 +474,16 @@ export function BankTransactionsTab() {
         const subId = r.accountSubjectId ?? 0
         if (String(subId) !== filterAccountSubjectId) return false
       }
+      if (filterAccountSubjectEmpty) {
+        if (r.accountSubjectId != null && r.accountSubjectId !== 0) return false
+      }
       if (filterInvoiceNotReceived) {
         if (r.transType !== "withdraw" || r.category !== "purchase_payment") return false
         if (r.invoiceReceived) return false
       }
       return true
     })
-  }, [list, filterTransType, filterCategory, filterAccountSubjectId, filterInvoiceNotReceived])
+  }, [list, filterTransType, filterCategory, filterAccountSubjectId, filterAccountSubjectEmpty, filterInvoiceNotReceived])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -609,6 +620,10 @@ export function BankTransactionsTab() {
             <BookOpen className="h-4 w-4 mr-2" />
             {t("bankTabAccountSubjects") || "계정과목"}
           </TabsTrigger>
+          <TabsTrigger value="fixed-expenses">
+            <Receipt className="h-4 w-4 mr-2" />
+            {t("bankTabFixedExpenses") || "고정비"}
+          </TabsTrigger>
           <TabsTrigger value="explanation">
             <HelpCircle className="h-4 w-4 mr-2" />
             {t("bankTabExplanation") || "설명"}
@@ -724,14 +739,23 @@ export function BankTransactionsTab() {
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
+                        checked={filterAccountSubjectEmpty}
+                        onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="text-sm whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
                         checked={filterInvoiceNotReceived}
                         onChange={(e) => setFilterInvoiceNotReceived(e.target.checked)}
                         className="rounded"
                       />
                       <span className="text-sm whitespace-nowrap">{t("poInvoiceNotReceived") || "인보이스 미수령만"}</span>
                     </label>
-                    {(filterTransType || filterCategory || filterAccountSubjectId || filterInvoiceNotReceived) && (
-                      <Button size="sm" variant="ghost" onClick={() => { setFilterTransType(""); setFilterCategory(""); setFilterAccountSubjectId(""); setFilterInvoiceNotReceived(false) }}>
+                    {(filterTransType || filterCategory || filterAccountSubjectId || filterAccountSubjectEmpty || filterInvoiceNotReceived) && (
+                      <Button size="sm" variant="ghost" onClick={() => { setFilterTransType(""); setFilterCategory(""); setFilterAccountSubjectId(""); setFilterAccountSubjectEmpty(false); setFilterInvoiceNotReceived(false) }}>
                         {t("btn_reset") || "초기화"}
                       </Button>
                     )}
@@ -1279,6 +1303,10 @@ export function BankTransactionsTab() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="fixed-expenses" className="mt-0">
+          <FixedExpensesTab />
+        </TabsContent>
+
         <TabsContent value="explanation" className="mt-0">
           <Card>
             <CardContent className="pt-4">
@@ -1292,6 +1320,7 @@ export function BankTransactionsTab() {
                     <li>{t("bankManualScreenInput")}</li>
                     <li>{t("bankManualScreenQuery")}</li>
                     <li>{t("bankManualScreenAccountSubjects")}</li>
+                    <li>{t("bankManualScreenFixedExpenses")}</li>
                     <li>{t("bankManualScreenExplanation")}</li>
                   </ul>
                 </div>
