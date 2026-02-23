@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null }[] = []
+    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null; invoice_no?: string | null; invoice_received?: boolean }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
       const rowDate = row.log_date ? new Date(row.log_date) : null
@@ -79,6 +79,25 @@ export async function GET(request: NextRequest) {
         inbound_batch_id: row.inbound_batch_id ?? undefined,
       })
       if (list.length >= 300) break
+    }
+
+    const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
+    const batchMap: Record<number, { invoice_no?: string | null; invoice_received?: boolean }> = {}
+    if (batchIds.length > 0) {
+      const batchFilter = `id=in.(${batchIds.join(',')})`
+      const batches = (await supabaseSelectFilter('inbound_batches', batchFilter, {
+        select: 'id,invoice_no,invoice_received',
+      })) as { id?: number; invoice_no?: string | null; invoice_received?: boolean }[]
+      for (const b of batches || []) {
+        if (b.id) batchMap[b.id] = { invoice_no: b.invoice_no, invoice_received: Boolean(b.invoice_received) }
+      }
+    }
+    for (const item of list) {
+      const batch = item.inbound_batch_id ? batchMap[item.inbound_batch_id] : null
+      if (batch) {
+        item.invoice_no = batch.invoice_no
+        item.invoice_received = batch.invoice_received
+      }
     }
 
     return NextResponse.json(list, { headers })

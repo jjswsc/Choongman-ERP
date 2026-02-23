@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPurchaseOrders, processPurchaseOrderApproval, updatePurchaseOrderInvoice, type PurchaseOrderRow } from "@/lib/api-client"
+import { getPurchaseOrders, processPurchaseOrderApproval, type PurchaseOrderRow } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
-import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, FileCheck, ArrowDownToLine } from "lucide-react"
+import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine } from "lucide-react"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -16,7 +16,6 @@ export function AdminPurchaseOrderHistory() {
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
-  const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
 
   const load = React.useCallback(() => {
     setLoading(true)
@@ -26,26 +25,6 @@ export function AdminPurchaseOrderHistory() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleInvoiceReceivedToggle = React.useCallback(
-    async (po: PurchaseOrderRow) => {
-      const id = po.id
-      if (!id) return
-      setUpdatingInvoiceId(id)
-      try {
-        const res = await updatePurchaseOrderInvoice({
-          poId: id,
-          invoiceReceived: !po.invoice_received,
-        })
-        if (res.success) load()
-        else alert(translateApiMessage(res.message || "", t) || res.message)
-      } catch (e) {
-        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
-      } finally {
-        setUpdatingInvoiceId(null)
-      }
-    },
-    [load, t]
-  )
   const handleApprove = React.useCallback(
     async (po: PurchaseOrderRow) => {
       const id = po.id
@@ -278,7 +257,6 @@ th{background:#f5f5f5}
                   <th className="px-3 py-2 text-left font-medium">{t("status")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("total")}</th>
                   <th className="px-3 py-2 text-right font-medium">{t("poNetAmount") || "실지급액"}</th>
-                  <th className="px-3 py-2 text-center font-medium">{t("poInvoiceReceived") || "인보이스"}</th>
                   <th className="px-3 py-2 text-left font-medium">{t("poPreparedBy")}</th>
                   <th className="w-28 px-1 py-2" />
                 </tr>
@@ -308,18 +286,6 @@ th{background:#f5f5f5}
                         {(po.total ?? 0) - (po.withholding_tax_amount ?? 0) > 0
                           ? ((po.total ?? 0) - (po.withholding_tax_amount ?? 0)).toLocaleString()
                           : po.total != null ? po.total.toLocaleString() : "-"}
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={`h-8 w-8 ${po.invoice_received ? "text-success" : "text-muted-foreground"}`}
-                          onClick={() => handleInvoiceReceivedToggle(po)}
-                          disabled={updatingInvoiceId === po.id}
-                          title={po.invoice_received ? t("poInvoiceReceived") + " ✓" : t("poInvoiceReceived") + " (클릭하여 수령 체크)"}
-                        >
-                          <FileCheck className="h-4 w-4" />
-                        </Button>
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">

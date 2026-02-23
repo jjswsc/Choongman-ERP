@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronRight, PenLine, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, PenLine, Trash2, Printer, FileSpreadsheet, FileCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -11,6 +11,8 @@ export interface InboundTableRow {
   date: string
   vendor: string
   inboundBatchId?: number
+  invoiceNo?: string
+  invoiceReceived?: boolean
   items: { name: string; spec: string; qty: number; amount: number }[]
   itemsSummary: string
   totalQty: number
@@ -25,6 +27,10 @@ interface InboundTableProps {
   storeRows?: { date: string; vendor: string; item: string; qty: number; amount: number }[]
   onEdit?: (row: InboundTableRow) => void
   onDelete?: (row: InboundTableRow) => void
+  onInvoiceReceivedToggle?: (row: InboundTableRow) => void
+  onPrint?: (row: InboundTableRow) => void
+  onExcel?: (row: InboundTableRow) => void
+  updatingInvoiceId?: number | null
 }
 
 export function InboundTable({
@@ -34,6 +40,10 @@ export function InboundTable({
   storeRows = [],
   onEdit,
   onDelete,
+  onInvoiceReceivedToggle,
+  onPrint,
+  onExcel,
+  updatingInvoiceId = null,
 }: InboundTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -87,7 +97,7 @@ export function InboundTable({
     )
   }
 
-  const colCount = onEdit || onDelete ? 6 : 5
+  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 7 : 5
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -99,7 +109,8 @@ export function InboundTable({
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
-            {(onEdit || onDelete) && <th className="px-2 py-2.5 text-center font-semibold w-20">{t("actions") || "작업"}</th>}
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("poInvoiceNo") || "인보이스"}</th>
+            {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && <th className="px-2 py-2.5 text-center font-semibold w-28">{t("actions") || "작업"}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -122,6 +133,10 @@ export function InboundTable({
                 onToggleExpand={() => toggleExpand(idx)}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onInvoiceReceivedToggle={onInvoiceReceivedToggle}
+                onPrint={onPrint}
+                onExcel={onExcel}
+                updatingInvoiceId={updatingInvoiceId}
                 t={t}
               />
             ))
@@ -140,6 +155,10 @@ function TableRow({
   onToggleExpand,
   onEdit,
   onDelete,
+  onInvoiceReceivedToggle,
+  onPrint,
+  onExcel,
+  updatingInvoiceId,
   t,
 }: {
   row: InboundTableRow
@@ -149,11 +168,18 @@ function TableRow({
   onToggleExpand: () => void
   onEdit?: (row: InboundTableRow) => void
   onDelete?: (row: InboundTableRow) => void
+  onInvoiceReceivedToggle?: (row: InboundTableRow) => void
+  onPrint?: (row: InboundTableRow) => void
+  onExcel?: (row: InboundTableRow) => void
+  updatingInvoiceId?: number | null
   t: (k: string) => string
 }) {
   const hasDetails = row.items.length > 1
   const canEdit = row.inboundBatchId != null && onEdit
   const canDelete = row.inboundBatchId != null && onDelete
+  const canInvoiceToggle = row.inboundBatchId != null && onInvoiceReceivedToggle
+  const canPrint = row.inboundBatchId != null && onPrint
+  const canExcel = row.inboundBatchId != null && onExcel
 
   return (
     <>
@@ -185,9 +211,27 @@ function TableRow({
         <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
           {row.totalAmt.toLocaleString()}
         </td>
-        {(canEdit || canDelete) && (
+        <td className="px-2 py-2.5 text-center text-muted-foreground text-xs">
+          {row.invoiceNo ? (
+            <span className="text-card-foreground" title={row.invoiceNo}>{row.invoiceNo}</span>
+          ) : (
+            "—"
+          )}
+        </td>
+        {(canEdit || canDelete || canInvoiceToggle || canPrint || canExcel) && (
           <td className="px-2 py-2.5">
-            <div className="flex items-center justify-center gap-0.5">
+            <div className="flex items-center justify-center gap-0.5 flex-wrap">
+              {canInvoiceToggle && (
+                <button
+                  type="button"
+                  onClick={() => onInvoiceReceivedToggle(row)}
+                  disabled={updatingInvoiceId === row.inboundBatchId}
+                  className={`rounded p-1.5 transition-colors ${row.invoiceReceived ? "text-green-600" : "text-muted-foreground hover:text-foreground"}`}
+                  title={row.invoiceReceived ? t("poInvoiceReceived") + " ✓" : t("poInvoiceReceived")}
+                >
+                  <FileCheck className="h-3.5 w-3.5" />
+                </button>
+              )}
               {canEdit && (
                 <button
                   type="button"
@@ -196,6 +240,26 @@ function TableRow({
                   title={t("edit") || "수정"}
                 >
                   <PenLine className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {canPrint && (
+                <button
+                  type="button"
+                  onClick={() => onPrint(row)}
+                  className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title={t("purchaseOrderPrint") || t("printBtn") || "인쇄"}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {canExcel && (
+                <button
+                  type="button"
+                  onClick={() => onExcel(row)}
+                  className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title={t("purchaseOrderExcel") || "엑셀"}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
                 </button>
               )}
               {canDelete && (

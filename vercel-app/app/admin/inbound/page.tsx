@@ -76,6 +76,7 @@ export default function InboundPage() {
 
   const [inDate, setInDate] = React.useState("")
   const [inVendor, setInVendor] = React.useState("")
+  const [inInvoiceNo, setInInvoiceNo] = React.useState("")
   const [inQty, setInQty] = React.useState("")
   const [cart, setCart] = React.useState<InboundCartItem[]>([])
   const [pickerOpen, setPickerOpen] = React.useState(false)
@@ -230,10 +231,12 @@ export default function InboundPage() {
       const res = await registerInboundBatch(list, storeName, {
         vendorCode,
         purchaseOrderId: fromPoId ?? undefined,
+        invoiceNo: inInvoiceNo.trim() || undefined,
       })
       if (res.success) {
         alert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
         setCart([])
+        setInInvoiceNo("")
       } else {
         alert(translateApiMessage(res.message, t) || t("inSaveFailed"))
       }
@@ -282,12 +285,12 @@ export default function InboundPage() {
   }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
   const groupedHistory = React.useMemo(() => {
-    const g: Record<string, { date: string; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null }> = {}
+    const g: Record<string, { date: string; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
     for (const i of historyList) {
       const batchId = i.inbound_batch_id
       const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
-        g[k] = { date: i.date, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId }
+        g[k] = { date: i.date, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
@@ -313,6 +316,8 @@ export default function InboundPage() {
         date: g.date,
         vendor: g.vendor,
         inboundBatchId: g.inbound_batch_id ?? undefined,
+        invoiceNo: g.invoice_no ?? undefined,
+        invoiceReceived: g.invoice_received,
         items: g.items.map((it) => ({
           name: it.name || "",
           spec: it.spec || "",
@@ -340,6 +345,7 @@ export default function InboundPage() {
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "guide">("new")
   const [editingRow, setEditingRow] = React.useState<InboundTableRow | null>(null)
+  const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
 
   const handleEditRow = React.useCallback((row: InboundTableRow) => {
     setEditingRow(row)
@@ -367,6 +373,81 @@ export default function InboundPage() {
   const handleEditSaved = React.useCallback(() => {
     fetchHistory()
   }, [fetchHistory])
+
+  const handleInvoiceReceivedToggle = React.useCallback(
+    async (row: InboundTableRow) => {
+      if (!row.inboundBatchId) return
+      setUpdatingInvoiceId(row.inboundBatchId)
+      try {
+        const res = await updateInboundBatch({
+          batchId: row.inboundBatchId,
+          invoiceReceived: !row.invoiceReceived,
+        })
+        if (res.success) fetchHistory()
+        else alert(translateApiMessage(res.message, t) || res.message)
+      } catch (e) {
+        alert(t("processFail") || "처리 실패")
+      } finally {
+        setUpdatingInvoiceId(null)
+      }
+    },
+    [fetchHistory, t]
+  )
+
+  const printInbound = React.useCallback(
+    (row: InboundTableRow) => {
+      const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
+      const dateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
+      const tbodyHtml = row.items
+        .map(
+          (it, i) =>
+            `<tr><td>${i + 1}</td><td>${(it.name || "-").replace(/</g, "&lt;")}</td><td>${(it.spec || "-").replace(/</g, "&lt;")}</td><td class="num">${it.qty}</td><td class="num">${it.amount.toLocaleString()}</td></tr>`
+        )
+        .join("")
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("adminInbound")} - ${row.date}</title>
+<style>body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
+<h1>${t("adminInbound")}</h1><p><strong>${t("stockColDate")}:</strong> ${dateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
+${row.invoiceNo ? `<p><strong>${t("poInvoiceNo") || "인보이스"}:</strong> ${(row.invoiceNo || "").replace(/</g, "&lt;")}</p>` : ""}
+<hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${t("inColAmount")}</th></tr></thead>
+<tbody>${tbodyHtml}</tbody><tfoot><tr class="tot"><td colspan="3" class="num">${t("total")}</td><td class="num">${row.totalQty.toLocaleString()}</td><td class="num">${row.totalAmt.toLocaleString()}</td></tr></tfoot></table></body></html>`
+      const w = window.open("", "_blank")
+      if (w) {
+        w.document.write(html)
+        w.document.close()
+        w.focus()
+        setTimeout(() => { w.print(); w.close() }, 300)
+      }
+    },
+    [lang, t]
+  )
+
+  const exportInboundExcel = React.useCallback(
+    (row: InboundTableRow) => {
+      const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      const headers = ["No", t("outColItem"), t("spec"), t("outColQty"), t("inColAmount")]
+      const dataRows = row.items.map((it, i) => [i + 1, it.name || "-", it.spec || "-", it.qty, it.amount])
+      const allRows = [
+        [t("adminInbound"), `${row.date} ${row.vendor}`],
+        row.invoiceNo ? [t("poInvoiceNo") || "인보이스", row.invoiceNo] : [],
+        [],
+        headers,
+        ...dataRows.map((r) => r.map((v) => String(v))),
+        [],
+        [t("total"), "", "", row.totalQty, row.totalAmt],
+      ].filter((r) => r.length > 0)
+      const colCount = 5
+      const pad = (r: (string | number)[], n: number) => [...r].concat(Array(Math.max(0, n - r.length)).fill("")).slice(0, n).map((v) => escapeXml(String(v)))
+      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head><body><table>${allRows.map((row, ri) => `<tr${ri === 3 || ri >= allRows.length - 1 ? ' class="head"' : ""}>${pad(row as (string|number)[], colCount).map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></body></html>`
+      const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Inbound_${row.date}_${(row.vendor || "").replace(/[/\\?*:"|]/g, "_").slice(0, 20)}.xls`
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    [t]
+  )
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
 
@@ -419,6 +500,15 @@ export default function InboundPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("poInvoiceNo") || "인보이스 번호"}</label>
+                        <Input
+                          value={inInvoiceNo}
+                          onChange={(e) => setInInvoiceNo(e.target.value)}
+                          className="mt-1 h-9"
+                          placeholder="INV-001"
+                        />
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("inItem")}</label>
@@ -563,6 +653,10 @@ export default function InboundPage() {
                 storeRows={!isOffice ? storeRows : undefined}
                 onEdit={handleEditRow}
                 onDelete={handleDeleteRow}
+                onInvoiceReceivedToggle={handleInvoiceReceivedToggle}
+                onPrint={printInbound}
+                onExcel={exportInboundExcel}
+                updatingInvoiceId={updatingInvoiceId}
               />
             </div>
             <InboundEditDialog

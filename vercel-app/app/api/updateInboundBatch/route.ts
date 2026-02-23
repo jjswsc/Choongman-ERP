@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
     if (body.vendorCode !== undefined) patch.vendor_code = String(body.vendorCode || '').trim() || null
     if (body.invoiceNo !== undefined) patch.invoice_no = String(body.invoiceNo || '').trim() || null
     if (body.invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(body.invoicePhotoUrl || '').trim() || null
+    if (typeof body.invoiceReceived === 'boolean') patch.invoice_received = body.invoiceReceived
     if (body.purchaseOrderId !== undefined) {
       const v = body.purchaseOrderId
       patch.purchase_order_id = v && !isNaN(Number(v)) ? Number(v) : null

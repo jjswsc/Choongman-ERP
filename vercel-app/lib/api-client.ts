@@ -2250,6 +2250,8 @@ export interface InboundHistoryItem {
   name: string
   spec: string
   qty: number
+  invoice_no?: string | null
+  invoice_received?: boolean
   amount: number
   inbound_batch_id?: number | null
 }
@@ -2277,6 +2279,7 @@ export async function updateInboundBatch(params: {
   vendorName?: string
   vendorCode?: string
   invoiceNo?: string
+  invoiceReceived?: boolean
   purchaseOrderId?: number | null
 }) {
   const res = await apiFetch('/api/updateInboundBatch', {
@@ -2307,7 +2310,7 @@ export async function registerInboundBatch(
     cost?: number | string
   }[],
   storeName?: string,
-  options?: { vendorCode?: string; purchaseOrderId?: number }
+  options?: { vendorCode?: string; purchaseOrderId?: number; invoiceNo?: string }
 ) {
   const res = await apiFetch('/api/registerInboundBatch', {
     method: 'POST',
@@ -2317,6 +2320,7 @@ export async function registerInboundBatch(
       storeName: storeName || undefined,
       vendorCode: options?.vendorCode || undefined,
       purchaseOrderId: options?.purchaseOrderId || undefined,
+      invoiceNo: options?.invoiceNo || undefined,
     }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
