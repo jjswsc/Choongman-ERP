@@ -25,6 +25,8 @@ export interface OrderItem {
   outboundLocation?: string
 }
 
+export type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
+
 export interface Order {
   id: string
   orderId: number
@@ -34,7 +36,7 @@ export interface Order {
   userName?: string
   summary: string
   totalAmount: number
-  status: string
+  status: OrderStatus
   items: OrderItem[]
   rejectReason?: string
 }
@@ -52,7 +54,7 @@ interface OrderApprovalDetailPanelProps {
   onUpdateOrderItem: (orderId: string, itemRef: { code: string; name: string }, updates: Partial<Pick<OrderItem, "checked" | "qty">>) => void
   onSetDeliveryDatesByOutbound: React.Dispatch<React.SetStateAction<Record<string, Record<string, string>>>>
   onSetRejectReason: React.Dispatch<React.SetStateAction<Record<string, string>>>
-  onHandleDecision: (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => void
+  onHandleDecision: (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => void | Promise<void>
 }
 
 export function OrderApprovalDetailPanel({
