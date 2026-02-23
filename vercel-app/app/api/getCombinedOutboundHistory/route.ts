@@ -20,6 +20,8 @@ export interface OutboundHistoryItem {
   totalOrderItems?: number
   /** 원본 주문 수량 (수령 시 조정된 경우 표시용) */
   originalOrderQty?: number
+  /** 품목별 출고지(창고) - items.outbound_location */
+  outboundLocation?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -36,11 +38,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price' })) as { code?: string; spec?: string; price?: number }[]
-    const itemMap: Record<string, { spec: string; price: number }> = {}
+    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price,outbound_location' })) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
+    const itemMap: Record<string, { spec: string; price: number; outboundLocation: string }> = {}
     for (const it of items || []) {
       const c = String(it.code || '').trim()
-      itemMap[c] = { spec: String(it.spec || '').trim() || '-', price: Number(it.price) || 0 }
+      itemMap[c] = {
+        spec: String(it.spec || '').trim() || '-',
+        price: Number(it.price) || 0,
+        outboundLocation: String(it.outbound_location || '').trim() || '(미지정)',
+      }
     }
 
     const allLogs = (await supabaseSelect('stock_logs', { order: 'log_date.desc', limit: 500 })) as {
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
       if (!filterOk) continue
 
       const code = String(row.item_code || '').trim()
-      const info = itemMap[code] || { spec: '-', price: 0 }
+      const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
       const orderRowId = typeCode === 'Outbound' && row.order_id ? String(row.order_id) : ''
       const deliveryStatus =
         row.delivery_status && String(row.delivery_status).trim()
@@ -93,6 +99,12 @@ export async function GET(request: NextRequest) {
           ? rowDate.toISOString().slice(0, 16).replace('T', ' ')
           : ''
 
+      const deliveryDateForItem =
+        typeCode === 'Force' && row.delivery_status && String(row.delivery_status).match(/^\d{4}-\d{2}-\d{2}/)
+          ? String(row.delivery_status).substring(0, 10)
+          : typeCode === 'Force'
+            ? deliveryDateStr || undefined
+            : undefined
       list.push({
         date: dateStr,
         target,
@@ -104,7 +116,8 @@ export async function GET(request: NextRequest) {
         amount: info.price * Math.abs(Number(row.qty) || 0),
         orderRowId: orderRowId || undefined,
         deliveryStatus: deliveryStatus || undefined,
-        deliveryDate: deliveryDateStr || undefined,
+        deliveryDate: deliveryDateForItem || undefined,
+        outboundLocation: info.outboundLocation,
       })
       if (list.length >= 500) break
     }

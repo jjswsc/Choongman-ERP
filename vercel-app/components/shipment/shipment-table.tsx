@@ -24,7 +24,7 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
-  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number }[]
+  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; outboundLocation?: string; deliveryDate?: string }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -313,6 +313,8 @@ function TableRow({
                     </th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outWhWarehouseCol") || "출고지"}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("orderColDeliveryDate") || "배송일자"}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColQty")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("inColAmount")}</th>
                   </tr>
@@ -323,6 +325,8 @@ function TableRow({
                       <td className="px-4 py-2 text-center text-muted-foreground font-mono text-[11px]">{d.code || "-"}</td>
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
+                      <td className="px-4 py-2 text-center text-muted-foreground">{d.outboundLocation || "-"}</td>
+                      <td className="px-4 py-2 text-center text-muted-foreground whitespace-nowrap">{d.deliveryDate || "-"}</td>
                       <td className="px-4 py-2 text-center font-medium tabular-nums">
                         {d.originalOrderQty != null && d.originalOrderQty !== d.qty ? (
                           <>

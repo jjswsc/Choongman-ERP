@@ -2209,6 +2209,7 @@ export async function getInboundForStore(params: {
 
 // ─── 출고 관리 (Outbound) ───
 export interface OutboundHistoryItem {
+  outboundLocation?: string
   date: string
   target: string
   type: 'Force' | 'Outbound'

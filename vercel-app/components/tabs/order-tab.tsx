@@ -775,6 +775,11 @@ export function OrderTab() {
                                 <div key={loc} className="space-y-1.5">
                                   <div className="text-xs font-semibold text-primary/90 border-b border-border/60 pb-1">
                                     {t("outWhWarehouseCol") || "출고지"}: {loc}
+                                    {o.deliveryDate && (
+                                      <span className="ml-1.5 text-muted-foreground font-normal">
+                                        · {t("deliveryDate")} {o.deliveryDate}
+                                      </span>
+                                    )}
                                   </div>
                                   {locItems.map((it) => {
                                     const idx = it.index ?? items.indexOf(it)
