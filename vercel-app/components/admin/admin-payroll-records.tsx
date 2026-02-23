@@ -17,7 +17,7 @@ import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole } from "@/lib/permissions"
 import { apiFetch, useStoreList, sendNotice } from "@/lib/api-client"
-import { Megaphone } from "lucide-react"
+import { Megaphone, FileSpreadsheet } from "lucide-react"
 
 function toMonthStr(d?: Date): string {
   const x = d || new Date()
@@ -54,6 +54,14 @@ function sumAllowance(r: RecordRow): number {
 
 function sumDeduct(r: RecordRow): number {
   return (r.late_ded || 0) + (r.sso || 0) + (r.tax || 0) + (r.other_ded || 0)
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
 }
 
 export function AdminPayrollRecords() {
@@ -140,6 +148,67 @@ export function AdminPayrollRecords() {
     const [, mm] = m.split("-")
     const months = ["", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"]
     return `${m.slice(0, 4)}년 ${months[parseInt(mm, 10) || 0] || mm}월`
+  }
+
+  const handleExcelDownload = () => {
+    const cols = [
+      t("pay_month") || "월",
+      t("pay_col_store") || "매장",
+      t("pay_col_name") || "이름",
+      t("pay_col_base") || "기본급",
+      t("pay_allowance_sum") || "수당계",
+      t("pay_ot_sum") || "OT계",
+      t("pay_deduct_sum") || "공제계",
+      t("pay_net") || "실수령액",
+      t("wl_status") || "상태",
+    ]
+    const rows: string[][] = [cols]
+    for (const r of filteredList) {
+      const allowSum = sumAllowance(r)
+      const deductSum = sumDeduct(r)
+      const statusLabel = r.status === "확정" ? t("pay_status_confirmed") : r.status === "지급대기" ? t("pay_status_pending") : (r.status ?? t("pay_status_pending"))
+      rows.push([
+        monthStr,
+        r.store,
+        r.name,
+        String(r.salary),
+        String(allowSum),
+        String(r.ot_amt || 0),
+        String(deductSum),
+        String(r.net_pay || 0),
+        statusLabel,
+      ])
+    }
+    const pxPerChar = 8
+    const minW = 60
+    const colWidths = cols.map((_, c) => {
+      let maxLen = (cols[c] || "").length
+      for (const row of rows) {
+        const cell = row[c]
+        const len = String(cell ?? "").length
+        if (len > maxLen) maxLen = len
+      }
+      return Math.max(minW, Math.min(maxLen * pxPerChar + 16, 200))
+    })
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse}</style></head>
+<body>
+<table>
+<colgroup>${colWidths.map((w) => `<col width="${w}"/>`).join("")}</colgroup>
+${rows.map((row, ri) => {
+  const isHead = ri === 0
+  return `<tr${isHead ? ' class="head"' : ""}>${row.map((c) => `<td>${escapeXml(String(c ?? ""))}</td>`).join("")}</tr>`
+}).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `payroll_${monthStr}_${storeFilter === "All" ? "all" : storeFilter}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const handleSendNotice = async () => {
@@ -229,16 +298,27 @@ export function AdminPayrollRecords() {
             {loading ? t("loading") : t("btn_query_go")}
           </Button>
           {hasResult && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9"
-              onClick={handleSendNotice}
-              disabled={sendingNotice || selected.size === 0}
-            >
-              <Megaphone className="mr-1.5 h-3.5 w-3.5" />
-              {sendingNotice ? t("loading") : t("pay_send_notice")}
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={handleExcelDownload}
+              >
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                {t("excelBtn")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9"
+                onClick={handleSendNotice}
+                disabled={sendingNotice || selected.size === 0}
+              >
+                <Megaphone className="mr-1.5 h-3.5 w-3.5" />
+                {sendingNotice ? t("loading") : t("pay_send_notice")}
+              </Button>
+            </>
           )}
         </div>
 
