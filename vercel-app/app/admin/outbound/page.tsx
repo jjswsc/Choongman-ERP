@@ -326,48 +326,80 @@ export default function OutboundPage() {
     }
     const filterLabel = whData.filterBy === "delivery" ? t("outWhFilterDelivery") : t("outWhFilterOrder")
     const title = `${t("outTabByWarehouse")} [${filterLabel}] (${whData.period.start} ~ ${whData.period.end})`
+    const colCode = t("outColCode")
+    const colItem = t("outColItem")
+    const colSpec = t("spec")
+    const colQty = t("outColQty")
+    const colDeliveryDate = t("orderColDeliveryDate")
+    const colStore = t("outColStore")
+    const whLabel = t("outWhWarehouseCol")
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
     const escape = (s: string) => (s || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     const sections: string[] = []
+    const tableStyle = "width:100%; border-collapse:collapse; margin:12px 0; font-size:12px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border-radius:4px; overflow:hidden;"
+    const thStyle = "background:linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color:#fff; padding:10px 12px; text-align:center; border:1px solid #1e3a8a; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;"
+    const tdStyle = (idx: number) => `padding:10px 12px; border:1px solid #e2e8f0; ${idx % 2 === 0 ? "background:#f8fafc;" : "background:#fff;"}`
+
     for (const wn of whOrderToUse) {
       const items = whFilteredData.byWarehouse[wn] || []
       const byDateThenStore = new Map<string, Map<string, typeof items>>()
       for (const r of items) {
-        const date = r.deliveryDate || "(미지정)"
-        const store = r.store || "(미지정)"
+        const date = r.deliveryDate || t("outWhUnspecified")
+        const store = r.store || t("outWhUnspecified")
         if (!byDateThenStore.has(date)) byDateThenStore.set(date, new Map())
         const storeMap = byDateThenStore.get(date)!
         if (!storeMap.has(store)) storeMap.set(store, [])
         storeMap.get(store)!.push(r)
       }
+      let rowIdx = 0
       const whRows: string[] = []
       for (const date of Array.from(byDateThenStore.keys()).sort()) {
         const storeMap = byDateThenStore.get(date)!
         for (const [storeName, storeItems] of Array.from(storeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-          whRows.push(`<tr class="date-store-header"><td colspan="5" style="background:#e8e8e8;font-weight:bold;padding:8px">${escape(date)} · Store: ${escape(storeName)}</td></tr>`)
+          whRows.push(`<tr><td colspan="5" style="background:linear-gradient(180deg,#f1f5f9 0%,#e2e8f0 100%); font-weight:600; padding:10px 14px; border:1px solid #cbd5e1; color:#334155; font-size:12px;">${escape(date)} · ${colStore}: ${escape(storeName)}</td></tr>`)
           whRows.push(
-            ...storeItems.map(
-              (r) =>
-                `<tr><td>${escape(r.code)}</td><td>${escape(r.name)}</td><td>${escape(r.spec)}</td><td class="num">${r.qty}</td><td>${escape(r.deliveryDate)}</td></tr>`
-            )
+            ...storeItems.map((r) => {
+              const style = tdStyle(rowIdx++)
+              return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${escape(r.deliveryDate)}</td></tr>`
+            })
           )
         }
       }
+      const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
       sections.push(`
-        <div style="margin-bottom:24px;page-break-inside:avoid">
-          <h3 style="margin:0 0 8px 0;font-size:14px;color:#0369a1">Warehouse: ${escape(wn || "(Unspecified)")}</h3>
-          <table><thead><tr><th>Code</th><th>Item</th><th>Spec</th><th class="num">Qty</th><th>Delivery Date</th></tr></thead><tbody>${whRows.join("")}</tbody></table>
+        <div class="wh-print-section" style="margin-bottom:32px; page-break-inside:avoid;">
+          <div style="margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #1e40af;">
+            <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:#1e40af;">${whLabel}: ${escape(whDisplay)}</h3>
+            <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">${items.length} ${t("outWhCountSuffix")}</p>
+          </div>
+          <table style="${tableStyle}">
+            <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle}">${colDeliveryDate}</th></tr></thead>
+            <tbody>${whRows.join("")}</tbody>
+          </table>
         </div>
       `)
     }
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html><head><meta charset="utf-8"/><title>${escape(title)}</title>
-      <style>body{font-family:sans-serif;padding:16px;font-size:11px} h2,h3{font-size:1.05em} table{border-collapse:collapse;width:100%;margin-top:0;font-size:11px} th,td{border:1px solid #ccc;padding:5px 6px;text-align:center} th{background:#0369a1;color:#fff} .num{text-align:center} .store-header td{border-color:#999;text-align:left}</style>
-      </head><body><h2>${escape(title)}</h2>${sections.join("")}</body></html>`)
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:'Noto Sans KR','Noto Sans Thai',Arial,sans-serif; padding:24px; font-size:12px; color:#0f172a; line-height:1.5; max-width:210mm; margin:0 auto;}
+        h2{margin:0 0 24px 0; font-size:1.35rem; font-weight:700; color:#0f172a; border-bottom:3px solid #1e40af; padding-bottom:12px;}
+        .wh-print-section{margin-bottom:28px;}
+        @media print{body{padding:12px;} h2{margin-bottom:16px;} .wh-print-section{margin-bottom:20px;}}
+      </style>
+      </head><body>
+        <h2>${escape(title)}</h2>
+        ${sections.join("")}
+      </body></html>`)
     printWindow.document.close()
-    printWindow.print()
-    printWindow.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 300)
   }
 
   const handleWarehouseExcel = () => {
@@ -632,10 +664,11 @@ export default function OutboundPage() {
       const amt = Math.round(Math.abs(it.amount || 0))
       const qty = Math.abs(it.qty || 0)
       const price = qty ? amt / qty : 0
-      return `<tr><td class="text-center">${idx + 1}</td><td>${(it.name || "-")}${it.spec ? ` ${it.spec}` : ""}</td><td class="text-center">${qty}</td><td class="text-end">${price.toLocaleString()}</td><td class="text-end">0</td><td class="text-end">${amt.toLocaleString()}</td></tr>`
+      const rowBg = idx % 2 === 0 ? "background:#f8fafc;" : "background:#fff;"
+      return `<tr style="${rowBg}"><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:500;">${idx + 1}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;">${(it.name || "-")}${it.spec ? ` ${it.spec}` : ""}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:center;">${qty}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;">${price.toLocaleString()}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;">0</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:600;">${amt.toLocaleString()}</td></tr>`
     }).join("")
-    const tableStyle = "width:100%; border-collapse: collapse; border: 1px solid #e2e8f0; margin: 8px 0;"
-    const thStyle = "background: #0369a1; color: #fff; padding: 6px 8px; text-align: center; border: 1px solid #0369a1;"
+    const tableStyle = "width:100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;"
+    const thStyle = "background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color: #fff; padding: 12px 14px; text-align: center; border: 1px solid #1e3a8a; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;"
     const pageBreak = isFirstPage ? "" : " page-break-before: always;"
     return `<div class="delivery-note-invoice" style="max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;${pageBreak} font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;">
   <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
@@ -662,19 +695,21 @@ export default function OutboundPage() {
       </div>
     </div>
   </div>
-  <table class="table table-bordered" style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${inv.inv_description}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${inv.inv_amount}</th></tr></thead><tbody>${rows}</tbody></table>
-  <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px;">
-    <div>${inv.inv_total}: ${totalBaht.toLocaleString()} THB</div>
-    <div>${inv.inv_vat7}: ${vat7.toLocaleString()} THB</div>
-    <div style="font-weight:700;">${inv.inv_grand_total}: ${grandTotal.toLocaleString()} THB</div>
-    <div style="font-size:11px; margin-top:4px;">${grandWords}</div>
+  <table style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${inv.inv_description}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${inv.inv_amount}</th></tr></thead><tbody>${rows}</tbody></table>
+  <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px; padding: 12px 0;">
+    <div style="margin-bottom:4px;">${inv.inv_total}: ${totalBaht.toLocaleString()} THB</div>
+    <div style="margin-bottom:4px;">${inv.inv_vat7}: ${vat7.toLocaleString()} THB</div>
+    <div style="font-weight:700; font-size:13px; border-top:1px solid #e2e8f0; padding-top:8px; margin-top:8px;">${inv.inv_grand_total}: ${grandTotal.toLocaleString()} THB</div>
+    <div style="font-size:11px; margin-top:4px; color:#64748b;">${grandWords}</div>
   </div></div>
   <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${inv.inv_remarks}:</strong> ${bankInfo}</div>
-  <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:flex-end; font-size:11px;">
+  <div style="margin-top:24px; display:flex; justify-content:space-between; align-items:flex-end; font-size:11px; position:relative;">
     <div><strong>${clientName}</strong><br>${inv.inv_received_by} ________________  ${inv.inv_date} ________________</div>
-    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-      <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:64px;height:64px;object-fit:contain;opacity:0.9;" onerror="this.style.display='none'" />
-      <div><strong>${companyName.split(" ")[0]}</strong><br>${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</div>
+    <div style="position:relative; display:flex; flex-direction:column; align-items:flex-end; min-width:200px;">
+      <div style="position:relative; min-height:88px; text-align:right;">
+        <img src="/company-stamp.png" alt="S&amp;J GLOBAL" class="invoice-stamp" style="position:absolute; right:8px; bottom:12px; width:72px; height:72px; object-fit:contain; opacity:0.9; z-index:2;" onerror="this.style.display='none'" />
+        <div style="position:relative; z-index:1;"><strong>${companyName.split(" ")[0]}</strong><br>${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</div>
+      </div>
     </div>
   </div>
 </div>`
@@ -855,8 +890,10 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           margin: 0 !important; width: 210mm !important; min-width: 210mm !important;
           max-width: 210mm !important; padding: 0 10mm !important; box-sizing: border-box !important;
           overflow: visible !important; line-height: 1.85 !important; z-index: 999999 !important;
-          background: #fff !important; visibility: visible !important; filter: grayscale(100%) !important;
+          background: #fff !important; visibility: visible !important;
+          -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
         }
+        body.invoice-printing .invoice-stamp { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         body.invoice-printing html, body.invoice-printing body { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
         body.invoice-printing .delivery-note-invoice {
           width: 100% !important; max-width: 210mm !important; box-sizing: border-box !important;
