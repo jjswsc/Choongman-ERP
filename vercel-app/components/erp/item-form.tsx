@@ -13,6 +13,7 @@ import {
   DollarSign,
   RotateCcw,
   ChevronDown,
+  AlignLeft,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,6 +40,7 @@ export interface ItemFormData {
   imageUrl: string
   taxType: "taxable" | "exempt" | "zero"
   spec: string
+  description: string
   price: string
   cost: string
 }
@@ -266,6 +268,19 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             className="h-10 text-sm"
             value={formData.spec}
             onChange={(e) => update("spec", e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />
+            {t("itemsDescription") || "설명"}
+          </label>
+          <Input
+            placeholder={t("itemsDescriptionPh") || "신입 직원용 품목 설명"}
+            className="h-10 text-sm"
+            value={formData.description}
+            onChange={(e) => update("description", e.target.value)}
           />
         </div>
 

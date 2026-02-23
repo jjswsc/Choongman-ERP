@@ -10,6 +10,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
@@ -19,7 +25,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processUsage, getMyUsageHistory, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
-import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
+import { Minus, Plus, ShoppingCart, Trash2, Package, Info } from "lucide-react"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -87,6 +93,7 @@ export function UsageTab() {
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
+  const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
   const [fractionRow, setFractionRow] = useState<0 | 1>(0)
   const [fractionStep, setFractionStep] = useState(0.25)
   const [smallFractionMultiplier, setSmallFractionMultiplier] = useState(1)
@@ -204,6 +211,18 @@ export function UsageTab() {
           </div>
         </div>
       )}
+
+      {descriptionModal && (
+        <Dialog open={!!descriptionModal} onOpenChange={(open) => !open && setDescriptionModal(null)}>
+          <DialogContent className="max-w-sm sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{descriptionModal.name}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{descriptionModal.description}</p>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <Tabs defaultValue="input" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="input" className="text-sm font-medium">{t('useInput')}</TabsTrigger>
@@ -275,6 +294,19 @@ export function UsageTab() {
                                     <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${isLow ? "bg-destructive" : "bg-[#16a34a]"}`}>
                                       {isLow ? t("stockLow") + ":" + formatStock(st) : t("stock") + ":" + formatStock(st)}
                                     </span>
+                                    {item.description && (
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setDescriptionModal({ name: item.name, description: item.description! })
+                                        }}
+                                        title={t("itemsDescription") || "설명"}
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>

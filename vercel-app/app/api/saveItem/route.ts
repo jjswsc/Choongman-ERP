@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
       cost?: number
       taxType?: string
       imageUrl?: string
+      description?: string
       editingCode?: string
     }
 
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       price: Number(body.price) || 0,
       cost: Number(body.cost) || 0,
       image: String(body.imageUrl || '').trim(),
+      description: String(body.description || '').trim() || null,
       tax,
     }
 

@@ -22,6 +22,7 @@ const emptyForm: ItemFormData = {
   imageUrl: "",
   taxType: "taxable",
   spec: "",
+  description: "",
   price: "",
   cost: "",
 }
@@ -82,6 +83,7 @@ export default function ItemsPage() {
           imageUrl: p.imageUrl,
           taxType: p.taxType,
           spec: p.spec,
+          description: p.description ?? "",
           price: String(p.price),
           cost: String(p.cost),
         })
@@ -109,6 +111,7 @@ export default function ItemsPage() {
       vendor: formData.vendor.trim(),
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
+      description: formData.description.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
       taxType: formData.taxType,
@@ -126,6 +129,7 @@ export default function ItemsPage() {
       vendor: formData.vendor.trim(),
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
+      description: formData.description.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
       taxType: formData.taxType,
@@ -157,6 +161,7 @@ export default function ItemsPage() {
       imageUrl: product.imageUrl,
       taxType: product.taxType,
       spec: product.spec,
+      description: product.description ?? "",
       price: String(product.price),
       cost: String(product.cost),
     })

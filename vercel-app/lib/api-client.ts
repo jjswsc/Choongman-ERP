@@ -93,6 +93,7 @@ export interface AppItem {
   taxType: string
   safeQty: number
   image?: string
+  description?: string
 }
 
 export async function getAppData(storeName: string, asOfDate?: string) {
@@ -1512,6 +1513,7 @@ export interface AdminItem {
   taxType: 'taxable' | 'exempt' | 'zero'
   imageUrl: string
   hasImage: boolean
+  description?: string
 }
 
 export interface AdminVendor {
@@ -1590,6 +1592,7 @@ export async function saveItem(params: {
   cost?: number
   taxType?: string
   imageUrl?: string
+  description?: string
   editingCode?: string
 }) {
   const res = await apiFetch('/api/saveItem', {

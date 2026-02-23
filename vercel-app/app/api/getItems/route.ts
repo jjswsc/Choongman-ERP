@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax,outbound_location' })) as {
+    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax,outbound_location,description' })) as {
       id?: number
       code?: string
       category?: string
@@ -19,6 +19,7 @@ export async function GET() {
       vendor?: string
       tax?: string
       outbound_location?: string
+      description?: string
     }[] | null
 
     const list = (rows || [])
@@ -38,6 +39,7 @@ export async function GET() {
           taxType,
           imageUrl: String(row.image || ''),
           hasImage: !!(row.image && String(row.image).trim()),
+          description: row.description ? String(row.description).trim() : '',
         }
       })
 

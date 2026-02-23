@@ -27,7 +27,7 @@ import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
-import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList } from "lucide-react"
+import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -103,6 +103,7 @@ export function OrderTab() {
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
+  const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
   const [receiveModal, setReceiveModal] = useState<{ orderId: number; order: OrderHistoryItem } | null>(null)
   const [receivePhotoFile, setReceivePhotoFile] = useState<File | null>(null)
   const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
@@ -412,6 +413,17 @@ export function OrderTab() {
         </div>
       )}
 
+      {descriptionModal && (
+        <Dialog open={!!descriptionModal} onOpenChange={(open) => !open && setDescriptionModal(null)}>
+          <DialogContent className="max-w-sm sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{descriptionModal.name}</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{descriptionModal.description}</p>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {receiveModal && typeof document !== "undefined" && createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
@@ -559,6 +571,19 @@ export function OrderTab() {
                                     <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${isLow ? "bg-destructive" : "bg-[#16a34a]"}`}>
                                       {isLow ? t("stockLow") + ":" + qty : t("stock") + ":" + qty}
                                     </span>
+                                    {item.description && (
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setDescriptionModal({ name: item.name, description: item.description! })
+                                        }}
+                                        title={t("itemsDescription") || "설명"}
+                                      >
+                                        <Info className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                                 <span className="shrink-0 text-xs font-semibold text-destructive">{item.price}</span>

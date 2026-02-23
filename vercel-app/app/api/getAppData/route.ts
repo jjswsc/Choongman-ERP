@@ -11,10 +11,11 @@ export interface AppItem {
   taxType: string
   safeQty: number
   image: string
+  description?: string
 }
 
 async function getItems(storeName: string): Promise<AppItem[]> {
-  const rows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,category,name,spec,price,cost,tax,image' })) as {
+  const rows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,category,name,spec,price,cost,tax,image,description' })) as {
     code?: string
     category?: string
     name?: string
@@ -23,6 +24,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
     cost?: number
     tax?: string
     image?: string
+    description?: string
   }[] | null
   const safeMap: Record<string, number> = {}
   if (storeName) {
@@ -51,6 +53,7 @@ async function getItems(storeName: string): Promise<AppItem[]> {
       taxType,
       safeQty: safeMap[row.code] || 0,
       image: String(row.image || ''),
+      description: row.description ? String(row.description).trim() : undefined,
     })
   }
   return list
