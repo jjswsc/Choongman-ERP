@@ -91,11 +91,19 @@ export async function GET(request: NextRequest) {
     const orderRows = (await supabaseSelectFilter('orders', orderFilter, {
       order: 'order_date.desc',
       limit: 300,
-    })) as { store_name?: string; delivery_date?: string; cart_json?: string }[]
+    }    )) as { store_name?: string; delivery_date?: string; delivery_dates_by_outbound?: string; cart_json?: string }[]
 
     for (const o of orderRows || []) {
       const store = String(o.store_name || '').trim()
-      const deliveryDate = (o.delivery_date || '').trim().substring(0, 10)
+      const legacyDate = (o.delivery_date || '').trim().substring(0, 10)
+      let datesByOutbound: Record<string, string> = {}
+      try {
+        const raw = (o as { delivery_dates_by_outbound?: string }).delivery_dates_by_outbound
+        if (raw && typeof raw === 'string') {
+          const parsed = JSON.parse(raw) as Record<string, string>
+          if (parsed && typeof parsed === 'object') datesByOutbound = parsed
+        }
+      } catch {}
       let cart: { code?: string; name?: string; spec?: string; qty?: number }[] = []
       try {
         if (o.cart_json) cart = JSON.parse(o.cart_json)
@@ -108,6 +116,7 @@ export async function GET(request: NextRequest) {
         const qty = Number(p.qty) || 0
         if (!code || qty <= 0) continue
         const wh = info?.outbound_location || '(미지정)'
+        const deliveryDate = (datesByOutbound[wh] || legacyDate).trim().substring(0, 10)
         addRow(wh, store, code, name, spec, qty, deliveryDate, 'Order')
       }
     }

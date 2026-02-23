@@ -6,6 +6,8 @@ export interface OrderHistoryItem {
   orderRowId: number
   date: string
   deliveryDate: string
+  /** 출고지별 배송일 */
+  deliveryDatesByOutbound?: Record<string, string>
   summary: string
   total: number
   status: string
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest) {
       id: number
       order_date?: string
       delivery_date?: string
+      delivery_dates_by_outbound?: string
       cart_json?: string
       total?: number
       status?: string
@@ -116,11 +119,20 @@ export async function GET(request: NextRequest) {
           ? (cart[0].name || '') + (cart.length > 1 ? ` 외 ${cart.length - 1}건` : '')
           : 'Items'
       const orderDate = o.order_date ? new Date(o.order_date) : new Date()
+      let deliveryDatesByOutbound: Record<string, string> | undefined
+      try {
+        const raw = o.delivery_dates_by_outbound
+        if (raw && typeof raw === 'string') {
+          const parsed = JSON.parse(raw) as Record<string, string>
+          if (parsed && typeof parsed === 'object') deliveryDatesByOutbound = parsed
+        }
+      } catch {}
       return {
         id: o.id,
         orderRowId: o.id,
         date: orderDate.toISOString().slice(0, 10),
         deliveryDate: String(o.delivery_date || '').trim(),
+        deliveryDatesByOutbound,
         summary,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',

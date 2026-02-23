@@ -143,6 +143,7 @@ export async function GET(request: NextRequest) {
         delivery_status?: string
         image_url?: string
         delivery_date?: string
+        delivery_dates_by_outbound?: Record<string, string>
         order_date?: string
         received_indices?: number[]
         received_qty_json?: Record<string, number>
@@ -155,6 +156,7 @@ export async function GET(request: NextRequest) {
           delivery_status?: string
           image_url?: string
           delivery_date?: string
+          delivery_dates_by_outbound?: string
           order_date?: string
           received_indices?: string | number[]
           received_qty_json?: string
@@ -183,10 +185,19 @@ export async function GET(request: NextRequest) {
           try {
             if (o.cart_json) cart = JSON.parse(o.cart_json) || []
           } catch {}
+          let deliveryDatesByOutbound: Record<string, string> | undefined
+          try {
+            const raw = (o as { delivery_dates_by_outbound?: string }).delivery_dates_by_outbound
+            if (raw && typeof raw === 'string') {
+              const parsed = JSON.parse(raw) as Record<string, string>
+              if (parsed && typeof parsed === 'object') deliveryDatesByOutbound = parsed
+            }
+          } catch {}
           orderMap[String(oid)] = {
             delivery_status: o.delivery_status,
             image_url: o.image_url,
             delivery_date: o.delivery_date,
+            delivery_dates_by_outbound: deliveryDatesByOutbound,
             order_date: o.order_date,
             received_indices: recIdx,
             received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
@@ -207,7 +218,10 @@ export async function GET(request: NextRequest) {
         if (o.image_url && (o.image_url.indexOf('http') === 0 || o.image_url.indexOf('data:image') === 0)) {
           r.receiveImageUrl = o.image_url
         }
-        if (o.delivery_date) r.deliveryDate = o.delivery_date.slice(0, 16)
+        const outboundLoc = r.outboundLocation || '(미지정)'
+        const perOutbound = o.delivery_dates_by_outbound?.[outboundLoc]
+        if (perOutbound) r.deliveryDate = perOutbound.slice(0, 16)
+        else if (o.delivery_date) r.deliveryDate = o.delivery_date.slice(0, 16)
         if (o.received_indices && o.received_indices.length > 0) {
           r.receivedIndices = o.received_indices
           r.totalOrderItems = (o.cart && o.cart.length) ? o.cart.length : o.received_indices.length

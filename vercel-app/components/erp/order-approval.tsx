@@ -53,6 +53,7 @@ interface OrderItem {
   total: number
   checked: boolean
   code?: string
+  outboundLocation?: string
 }
 
 interface Order {
@@ -67,6 +68,7 @@ interface Order {
   status: OrderStatus
   items: OrderItem[]
   rejectReason?: string
+  deliveryDatesByOutbound?: Record<string, string>
 }
 
 const statusConfig: Record<OrderStatus, { labelKey: string; bg: string; text: string }> = {
@@ -93,6 +95,7 @@ function mapApiToOrder(
     const qty = Number(it.qty) || 0
     const origQty = typeof it.originalQty === 'number' ? it.originalQty : qty
     const code = it.code || ""
+    const outboundLocation = String(it.outboundLocation || "").trim() || "(미지정)"
     return {
       name: it.name || "-",
       spec: it.spec || "",
@@ -106,6 +109,7 @@ function mapApiToOrder(
       total: price * qty,
       checked: true,
       code,
+      outboundLocation,
     }
   })
   const status = (api.status || "Pending") as OrderStatus
@@ -121,6 +125,7 @@ function mapApiToOrder(
     status: status in statusConfig ? status : "Pending",
     items,
     rejectReason: api.rejectReason,
+    deliveryDatesByOutbound: api.deliveryDatesByOutbound,
   }
 }
 
@@ -141,7 +146,8 @@ export function OrderApproval() {
   const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [statusFilter, setStatusFilter] = React.useState("pending")
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [deliveryDateByOrder, setDeliveryDateByOrder] = React.useState<Record<string, string>>({})
+  /** 출고지별 배송일: orderId -> { outboundLocation -> date } */
+  const [deliveryDatesByOutboundByOrder, setDeliveryDatesByOutboundByOrder] = React.useState<Record<string, Record<string, string>>>({})
   const [submittingId, setSubmittingId] = React.useState<string | null>(null)
   const [editedItemsByOrderId, setEditedItemsByOrderId] = React.useState<Record<string, OrderItem[]>>({})
   const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
@@ -189,10 +195,16 @@ export function OrderApproval() {
       setCheckedOrders(new Set(mapped.map((o) => o.id)))
       setAllChecked(mapped.length > 0)
       setEditedItemsByOrderId({})
-      setDeliveryDateByOrder((prev) => {
+      setDeliveryDatesByOutboundByOrder((prev) => {
         const next = { ...prev }
         for (const o of mapped) {
-          if (o.deliveryDate && o.deliveryDate !== "-") next[o.id] = o.deliveryDate
+          if (o.deliveryDatesByOutbound && Object.keys(o.deliveryDatesByOutbound).length > 0) {
+            next[o.id] = o.deliveryDatesByOutbound
+          } else if (o.deliveryDate && o.deliveryDate !== "-") {
+            const outboundSet = new Set(o.items.map((it) => it.outboundLocation || "(미지정)"))
+            next[o.id] = {}
+            for (const loc of outboundSet) next[o.id][loc] = o.deliveryDate
+          }
         }
         return next
       })
@@ -265,19 +277,23 @@ export function OrderApproval() {
 
   const handleDecision = async (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => {
     const idStr = String(orderId)
-    const deliveryDate = deliveryDateByOrder[idStr] || ""
-    if (decision === "Approved" && !deliveryDate.trim()) {
-      alert(t("orderDeliveryDateRequired"))
+    const displayItems = getDisplayItems(order)
+    const approvedItems = decision === "Approved" ? displayItems.filter((it) => it.checked && it.qty > 0) : []
+    const outboundLocsInApproved = [...new Set(approvedItems.map((it) => it.outboundLocation || "(미지정)"))]
+    const datesByOutbound = deliveryDatesByOutboundByOrder[idStr] || {}
+    const missingOutbound = outboundLocsInApproved.filter((loc) => !(datesByOutbound[loc] || "").trim())
+    if (decision === "Approved" && missingOutbound.length > 0) {
+      alert(
+        t("orderDeliveryDateRequired") +
+          (missingOutbound.length > 0 ? ` (${t("outWhWarehouseCol")}: ${missingOutbound.join(", ")})` : "")
+      )
       return
     }
     if (decision === "Rejected" && !(rejectReasonByOrderId[idStr] || "").trim()) {
       alert(t("orderRejectReasonRequired") || "거절 사유를 입력해 주세요.")
       return
     }
-    const displayItems = getDisplayItems(order)
-    const selectedItems = decision === "Approved"
-      ? displayItems.filter((it) => it.checked && it.qty > 0)
-      : []
+    const selectedItems = approvedItems
     if (decision === "Approved" && selectedItems.length === 0) {
       alert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
       return
@@ -296,7 +312,7 @@ export function OrderApproval() {
       const res = await processOrderDecision({
         orderId,
         decision,
-        deliveryDate: deliveryDate || undefined,
+        deliveryDatesByOutbound: decision === "Approved" && Object.keys(datesByOutbound).length > 0 ? datesByOutbound : undefined,
         rejectReason: decision === "Rejected" ? (rejectReasonByOrderId[idStr] || "").trim() : undefined,
         userRole: auth?.role,
         updatedCart: decision === "Approved" ? updatedCart : undefined,
@@ -422,55 +438,6 @@ export function OrderApproval() {
           </Button>
         </div>
       </div>
-
-      {/* 배송지별 배송일 일괄 설정 */}
-      {!isManager && (() => {
-        const pendingByStore = filteredOrders
-          .filter((o) => o.status === "Pending")
-          .reduce((acc, o) => {
-            const s = o.store || "(미지정)"
-            if (!acc.has(s)) acc.set(s, [])
-            acc.get(s)!.push(o)
-            return acc
-          }, new Map<string, typeof filteredOrders>())
-        const stores = Array.from(pendingByStore.keys()).sort()
-        if (stores.length === 0) return null
-        return (
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground">
-              <Truck className="h-3.5 w-3.5 text-primary" />
-              {t("orderBatchDeliveryByStore")}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {stores.map((store) => {
-                const orders = pendingByStore.get(store)!
-                const dates = orders.map((o) => deliveryDateByOrder[o.id] || "").filter(Boolean)
-                const displayValue = dates.length > 0 && dates.every((d) => d === dates[0]) ? dates[0] : ""
-                return (
-                  <div key={store} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-                    <span className="text-xs font-medium shrink-0">{store}</span>
-                    <Input
-                      type="date"
-                      className="h-8 w-36 text-xs"
-                      placeholder={t("orderDeliveryDatePh")}
-                      value={displayValue}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setDeliveryDateByOrder((prev) => {
-                          const next = { ...prev }
-                          for (const o of orders) next[o.id] = v
-                          return next
-                        })
-                      }}
-                    />
-                    <span className="text-[10px] text-muted-foreground">({orders.length}건)</span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* Order table */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -766,23 +733,47 @@ export function OrderApproval() {
                             </div>
                           )})()}
 
-                          <div className="flex items-center gap-3 pb-4">
-                            <div className="flex items-center gap-2">
+                          <div className="space-y-3 pb-4">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                               <Truck className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="text-xs font-semibold text-foreground">
-                                {t("orderDeliveryDate")}
-                              </span>
+                              {t("orderDeliveryDateByOutbound") || "출고지별 배송일"}
                             </div>
-                            <Input
-                              type="date"
-                              className="h-8 w-40 text-xs"
-                              placeholder={t("orderDeliveryDatePh")}
-                              value={deliveryDateByOrder[order.id] || ""}
-                              onChange={(e) =>
-                                setDeliveryDateByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))
-                              }
-                              readOnly={isManager}
-                            />
+                            <div className="flex flex-wrap gap-3">
+                              {(() => {
+                                const displayItems = getDisplayItems(order)
+                                const byOutbound = new Map<string, typeof displayItems>()
+                                for (const it of displayItems) {
+                                  const loc = it.outboundLocation || "(미지정)"
+                                  if (!byOutbound.has(loc)) byOutbound.set(loc, [])
+                                  byOutbound.get(loc)!.push(it)
+                                }
+                                const outbounds = Array.from(byOutbound.keys()).sort()
+                                return outbounds.map((loc) => {
+                                  const dates = deliveryDatesByOutboundByOrder[order.id] || {}
+                                  const value = dates[loc] || ""
+                                  return (
+                                    <div key={loc} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                                      <span className="text-xs font-medium shrink-0">{(t("outWhWarehouseCol") || "출고지")}: {loc}</span>
+                                      <Input
+                                        type="date"
+                                        className="h-8 w-36 text-xs"
+                                        placeholder={t("orderDeliveryDatePh")}
+                                        value={value}
+                                        onChange={(e) => {
+                                          const v = e.target.value
+                                          setDeliveryDatesByOutboundByOrder((prev) => ({
+                                            ...prev,
+                                            [order.id]: { ...(prev[order.id] || {}), [loc]: v },
+                                          }))
+                                        }}
+                                        readOnly={isManager}
+                                      />
+                                    </div>
+                                  )
+                                })
+                              })()}
+                            </div>
+                          </div>
                             {!isManager && (
                               <div className="ml-auto flex flex-wrap items-center gap-2">
                                 {order.status === "Pending" && (

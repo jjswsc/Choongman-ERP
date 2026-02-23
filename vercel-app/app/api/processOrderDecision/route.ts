@@ -25,7 +25,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const orderId = Number(body.orderId ?? body.row ?? body.orderRowId)
     const decision = String(body.decision ?? '').trim()
-    const deliveryDate = body.deliveryDate ? String(body.deliveryDate).trim() : ''
+    let deliveryDate = body.deliveryDate ? String(body.deliveryDate).trim() : ''
+    const deliveryDatesByOutbound = body.deliveryDatesByOutbound && typeof body.deliveryDatesByOutbound === 'object'
+      ? body.deliveryDatesByOutbound as Record<string, string>
+      : null
+    if (deliveryDatesByOutbound && Object.keys(deliveryDatesByOutbound).length > 0) {
+      const firstDate = Object.values(deliveryDatesByOutbound).find((v) => v && String(v).trim())
+      if (firstDate) deliveryDate = String(firstDate).trim()
+    }
     const rejectReason = body.rejectReason != null ? String(body.rejectReason).trim() : ''
     const userRole = String(body.userRole ?? '').toLowerCase()
     const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
@@ -63,6 +70,9 @@ export async function POST(request: NextRequest) {
 
     const patch: Record<string, unknown> = { status: decision }
     if (deliveryDate) patch.delivery_date = deliveryDate
+    if (deliveryDatesByOutbound && Object.keys(deliveryDatesByOutbound).length > 0) {
+      patch.delivery_dates_by_outbound = JSON.stringify(deliveryDatesByOutbound)
+    }
     if (decision === 'Approved') patch.delivery_status = '배송중'
     if (decision === 'Rejected') patch.reject_reason = rejectReason || ''
 

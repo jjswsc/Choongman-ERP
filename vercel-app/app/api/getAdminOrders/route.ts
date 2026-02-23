@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
       status?: string
       delivery_status?: string
       delivery_date?: string
+      delivery_dates_by_outbound?: string
       received_indices?: string
       approved_indices?: string
       approved_original_qty_json?: string
@@ -125,6 +126,18 @@ export async function GET(request: NextRequest) {
       const userNick = (storeKey && userName)
         ? (nameToNick[storeKey + '|' + userName] ?? nameToNickByUser[userName] ?? userName)
         : userName || undefined
+      let deliveryDatesByOutbound: Record<string, string> | undefined
+      try {
+        const raw = (o as { delivery_dates_by_outbound?: string }).delivery_dates_by_outbound
+        if (raw && typeof raw === 'string') {
+          const parsed = JSON.parse(raw) as Record<string, string>
+          if (parsed && typeof parsed === 'object') deliveryDatesByOutbound = parsed
+        }
+      } catch {}
+      const legacyDeliveryDate = String(o.delivery_date || '').trim()
+      const firstFromOutbound = deliveryDatesByOutbound && Object.keys(deliveryDatesByOutbound).length > 0
+        ? Object.values(deliveryDatesByOutbound)[0]
+        : ''
       return {
         row: o.id,
         orderId: o.id,
@@ -135,7 +148,8 @@ export async function GET(request: NextRequest) {
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
         deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),
-        deliveryDate: String(o.delivery_date || '').trim(),
+        deliveryDate: legacyDeliveryDate || firstFromOutbound,
+        deliveryDatesByOutbound,
         items: itemsWithOriginal,
         summary,
         receivedIndices,

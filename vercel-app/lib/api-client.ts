@@ -191,6 +191,7 @@ export interface OrderHistoryItem {
   id: number
   date: string
   deliveryDate: string
+  deliveryDatesByOutbound?: Record<string, string>
   summary: string
   total: number
   status: string
@@ -275,6 +276,8 @@ export interface AdminOrderItem {
   status: string
   deliveryStatus: string
   deliveryDate: string
+  /** 출고지별 배송일 {"본사":"2025-02-25","JIDUBANG":"2025-02-26"} */
+  deliveryDatesByOutbound?: Record<string, string>
   items: { code?: string; name?: string; spec?: string; category?: string; vendor?: string; outboundLocation?: string; qty?: number; price?: number; originalQty?: number }[]
   summary: string
   receivedIndices?: number[]
@@ -351,6 +354,8 @@ export async function processOrderDecision(params: {
   orderId: number
   decision: 'Approved' | 'Rejected' | 'Hold'
   deliveryDate?: string
+  /** 출고지별 배송일 - 우선 사용 */
+  deliveryDatesByOutbound?: Record<string, string>
   rejectReason?: string
   userRole?: string
   updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
