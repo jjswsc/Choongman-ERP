@@ -2220,18 +2220,22 @@ export interface InboundHistoryItem {
   amount: number
 }
 
-export async function registerInboundBatch(list: {
-  date?: string
-  vendor: string
-  code: string
-  name?: string
-  spec?: string
-  qty: number | string
-}[]) {
+export async function registerInboundBatch(
+  list: {
+    date?: string
+    vendor: string
+    code: string
+    name?: string
+    spec?: string
+    qty: number | string
+    cost?: number | string
+  }[],
+  storeName?: string
+) {
   const res = await apiFetch('/api/registerInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(list),
+    body: JSON.stringify({ list, storeName: storeName || undefined }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
@@ -2240,11 +2244,13 @@ export async function getInboundHistory(params: {
   startStr: string
   endStr: string
   vendorFilter?: string
+  storeFilter?: string
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
     endStr: params.endStr,
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
+    ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
   const res = await apiFetch(`/api/getInboundHistory?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
@@ -2254,8 +2260,14 @@ export async function getInboundForStore(params: {
   storeName: string
   startStr: string
   endStr: string
+  vendorFilter?: string
 }) {
-  const q = new URLSearchParams(params)
+  const q = new URLSearchParams({
+    storeName: params.storeName,
+    startStr: params.startStr,
+    endStr: params.endStr,
+    ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
+  })
   const res = await apiFetch(`/api/getInboundForStore?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }

@@ -22,6 +22,7 @@ import {
   registerInboundBatch,
   getInboundHistory,
   getInboundForStore,
+  useStoreList,
   type AdminItem,
   type AdminVendor,
   type InboundHistoryItem,
@@ -42,6 +43,7 @@ interface InboundCartItem {
   name: string
   spec: string
   qty: string
+  cost: string
 }
 
 export default function InboundPage() {
@@ -65,7 +67,10 @@ export default function InboundPage() {
   const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histVendor, setHistVendor] = React.useState("")
+  const [histStore, setHistStore] = React.useState("")
   const [histMonth, setHistMonth] = React.useState("")
+
+  const { stores: storeList } = useStoreList()
 
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()
@@ -132,6 +137,7 @@ export default function InboundPage() {
         name: selectedItem.name,
         spec: selectedItem.spec || "",
         qty: inQty,
+        cost: String(selectedItem.cost ?? 0),
       },
     ])
     setSelectedItem(null)
@@ -140,6 +146,12 @@ export default function InboundPage() {
 
   const handleRemoveFromCart = (idx: number) => {
     setCart((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleUpdateCartCost = (idx: number, costStr: string) => {
+    setCart((prev) =>
+      prev.map((c, i) => (i === idx ? { ...c, cost: costStr } : c))
+    )
   }
 
   const handleSave = async () => {
@@ -158,8 +170,10 @@ export default function InboundPage() {
         name: c.name,
         spec: c.spec,
         qty: c.qty,
+        cost: c.cost ? parseFloat(String(c.cost).replace(/,/g, "")) : undefined,
       }))
-      const res = await registerInboundBatch(list)
+      const storeName = !isOffice && auth?.store ? auth.store.trim() : undefined
+      const res = await registerInboundBatch(list, storeName)
       if (res.success) {
         alert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
         setCart([])
@@ -191,6 +205,7 @@ export default function InboundPage() {
           startStr: s,
           endStr: e,
           vendorFilter: histVendor || undefined,
+          storeFilter: histStore || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
       } else {
@@ -198,6 +213,7 @@ export default function InboundPage() {
           storeName: auth?.store || "",
           startStr: s,
           endStr: e,
+          vendorFilter: histVendor || undefined,
         })
         setHistoryList(Array.isArray(list) ? list : [])
       }
@@ -206,7 +222,7 @@ export default function InboundPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [histStart, histEnd, histMonth, histVendor, isOffice, auth?.store])
+  }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
   const groupedHistory = React.useMemo(() => {
     const g: Record<string, { date: string; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[] }> = {}
@@ -261,11 +277,7 @@ export default function InboundPage() {
     [historyList]
   )
 
-  const [tabValue, setTabValue] = React.useState<"new" | "hist">(isOffice ? "new" : "hist")
-
-  React.useEffect(() => {
-    setTabValue(isOffice ? "new" : "hist")
-  }, [isOffice])
+  const [tabValue, setTabValue] = React.useState<"new" | "hist">("new")
 
   const periodTotalFormatted = `${periodTotal.toLocaleString()}${lang === "th" ? " THB" : ""}`
 
@@ -278,17 +290,16 @@ export default function InboundPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminInbound")}</h1>
-            <p className="text-xs text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStore")}</p>
+            <p className="text-xs text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStoreDirect")}</p>
           </div>
         </div>
         <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist")} className="space-y-4">
-          <TabsList className={`grid w-full max-w-md mb-4 ${isOffice ? "grid-cols-2" : "grid-cols-1"}`}>
-            {isOffice && <TabsTrigger value="new" className="text-sm font-medium">{t("inTabNew")}</TabsTrigger>}
+          <TabsList className="grid w-full max-w-md mb-4 grid-cols-2">
+            <TabsTrigger value="new" className="text-sm font-medium">{t("inTabNew")}</TabsTrigger>
             <TabsTrigger value="hist" className="text-sm font-medium">{t("inTabHist")}</TabsTrigger>
           </TabsList>
 
-          {isOffice && (
-            <TabsContent value="new">
+          <TabsContent value="new">
               <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="md:col-span-2 space-y-4">
                   <div className="rounded-xl border bg-card p-5">
@@ -363,33 +374,54 @@ export default function InboundPage() {
                           <tr className="border-b">
                             <th className="text-left py-2 px-2">{t("inColItem")}</th>
                             <th className="text-right py-2 px-2 w-20">{t("inColQty")}</th>
+                            <th className="text-right py-2 px-2 w-24">{t("inColCost")}</th>
+                            <th className="text-right py-2 px-2 w-20">{t("inColAmount")}</th>
                             <th className="w-12"></th>
                           </tr>
                         </thead>
                         <tbody>
                           {cart.length === 0 ? (
                             <tr>
-                              <td colSpan={3} className="py-8 text-center text-muted-foreground text-sm">
+                              <td colSpan={5} className="py-8 text-center text-muted-foreground text-sm">
                                 {t("inEmptyList")}
                               </td>
                             </tr>
                           ) : (
-                            cart.map((c, idx) => (
-                              <tr key={idx} className="border-b">
-                                <td className="py-2 px-2">{c.name} {c.spec ? `(${c.spec})` : ""}</td>
-                                <td className="py-2 px-2 text-right font-medium">{c.qty}</td>
-                                <td className="py-2 px-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 text-destructive hover:text-destructive"
-                                    onClick={() => handleRemoveFromCart(idx)}
-                                  >
-                                    {t("delete")}
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))
+                            cart.map((c, idx) => {
+                              const qtyNum = parseFloat(String(c.qty).replace(/,/g, "")) || 0
+                              const costNum = parseFloat(String(c.cost).replace(/,/g, "")) || 0
+                              const amount = qtyNum * costNum
+                              return (
+                                <tr key={idx} className="border-b">
+                                  <td className="py-2 px-2">{c.name} {c.spec ? `(${c.spec})` : ""}</td>
+                                  <td className="py-2 px-2 text-right font-medium">{c.qty}</td>
+                                  <td className="py-2 px-2">
+                                    <Input
+                                      type="number"
+                                      value={c.cost}
+                                      onChange={(e) => handleUpdateCartCost(idx, e.target.value)}
+                                      className="h-8 w-full min-w-[80px] text-right text-sm"
+                                      min={0}
+                                      step="0.01"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-medium">
+                                    {amount.toLocaleString()}
+                                    {lang === "th" ? " THB" : ""}
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-destructive hover:text-destructive"
+                                      onClick={() => handleRemoveFromCart(idx)}
+                                    >
+                                      {t("delete")}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              )
+                            })
                           )}
                         </tbody>
                       </table>
@@ -405,12 +437,14 @@ export default function InboundPage() {
                 </div>
               </div>
             </TabsContent>
-          )}
 
           <TabsContent value="hist">
             <InboundFilterBar
               totalAmount={periodTotalFormatted}
               isOffice={isOffice}
+              histStore={histStore}
+              stores={storeList}
+              onHistStoreChange={setHistStore}
               histStart={histStart}
               histEnd={histEnd}
               histMonth={histMonth}

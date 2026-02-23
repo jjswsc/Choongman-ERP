@@ -6,8 +6,11 @@ import { useT } from "@/lib/i18n"
 
 interface InboundFilterBarProps {
   totalAmount: string
-  /** 본사 권한 시 매입처 필터 표시 */
   isOffice?: boolean
+  /** 본사일 때 매장 필터 (전체/입고등록/매장명) */
+  histStore?: string
+  stores?: string[]
+  onHistStoreChange?: (v: string) => void
   histStart: string
   histEnd: string
   histMonth: string
@@ -24,6 +27,9 @@ interface InboundFilterBarProps {
 export function InboundFilterBar({
   totalAmount,
   isOffice = true,
+  histStore = "",
+  stores = [],
+  onHistStoreChange,
   histStart,
   histEnd,
   histMonth,
@@ -82,20 +88,31 @@ export function InboundFilterBar({
           <CalendarIcon className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         </div>
 
-        {isOffice && (
+        {isOffice && stores.length > 0 && onHistStoreChange && (
           <select
-            value={histVendor || "__all__"}
-            onChange={(e) => onHistVendorChange(e.target.value === "__all__" ? "" : e.target.value)}
+            value={histStore || "__all__"}
+            onChange={(e) => onHistStoreChange(e.target.value === "__all__" ? "" : e.target.value)}
             className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
           >
-            <option value="__all__">{t("inVendorAll")}</option>
-            {vendors.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
+            <option value="__all__">{t("store_all_stores")}</option>
+            <option value="입고등록">{t("inLocationHQ")}</option>
+            {stores.filter((s) => s && s !== "All").map((s) => (
+              <option key={s} value={s}>{s}</option>
             ))}
           </select>
         )}
+        <select
+          value={histVendor || "__all__"}
+          onChange={(e) => onHistVendorChange(e.target.value === "__all__" ? "" : e.target.value)}
+          className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+        >
+          <option value="__all__">{t("inVendorAll")}</option>
+          {vendors.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
 
         {/* Search Button */}
         <button

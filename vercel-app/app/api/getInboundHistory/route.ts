@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     let startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
     let endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
     const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || '').trim()
+    const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
 
     if (!startStr || !endStr) {
       const now = new Date()
@@ -31,16 +32,21 @@ export async function GET(request: NextRequest) {
       if (code) itemMap[code] = { spec: row.spec || '-', cost: Number(row.cost) || 0 }
     }
 
+    let locationFilter = 'log_type=eq.Inbound'
+    if (storeFilter && storeFilter !== 'All' && storeFilter !== '전체 매장') {
+      locationFilter += `&location=eq.${encodeURIComponent(storeFilter)}`
+    }
     const logs = (await supabaseSelectFilter(
       'stock_logs',
-      'log_type=eq.Inbound',
-      { order: 'log_date.desc', limit: 400 }
+      locationFilter,
+      { order: 'log_date.desc', limit: 400, select: 'log_date,vendor_target,item_code,item_name,qty,unit_cost' }
     )) as {
       log_date?: string
       vendor_target?: string
       item_code?: string
       item_name?: string
       qty?: number
+      unit_cost?: number | null
     }[] | null
 
     const startD = new Date(startStr)
@@ -61,13 +67,14 @@ export async function GET(request: NextRequest) {
       const code = String(row.item_code || '').trim()
       const info = itemMap[code] || { spec: '-', cost: 0 }
       const qty = Number(row.qty) || 0
+      const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
       list.push({
         date: rowDate.toISOString().slice(0, 10),
         vendor: rowVendor,
         name: row.item_name || '-',
         spec: info.spec,
         qty,
-        amount: info.cost * qty,
+        amount: unitCost * qty,
       })
       if (list.length >= 300) break
     }

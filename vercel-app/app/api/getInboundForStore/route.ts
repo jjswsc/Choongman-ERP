@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 매장 전용 - 본사에서 해당 매장으로 보낸 입고 수령 내역 */
+/** 매장 전용 - 해당 매장의 입고 내역 (본사 수령 + 직접 구매 거래처) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
     let startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
     let endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+    const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || '').trim()
 
     if (!storeName) {
       return NextResponse.json([], { headers })
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
     const logs = (await supabaseSelectFilter(
       'stock_logs',
       `location=ilike.${encodeURIComponent(storeName)}`,
-      { order: 'log_date.desc', limit: 400 }
+      { order: 'log_date.desc', limit: 400, select: 'log_date,log_type,vendor_target,item_code,item_name,qty,unit_cost' }
     )) as {
       log_date?: string
       log_type?: string
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
       item_code?: string
       item_name?: string
       qty?: number
+      unit_cost?: number | null
     }[] | null
 
     const startD = new Date(startStr)
@@ -57,23 +59,29 @@ export async function GET(request: NextRequest) {
     for (const row of logs || []) {
       const type = String(row.log_type || '')
       const note = String(row.vendor_target || '').trim()
-      const isFromHq = (type === 'ForcePush' && note === 'HQ') || (type === 'Inbound' && note === 'From HQ')
-      if (!isFromHq) continue
+      const isInbound = type === 'Inbound'
+      const isForcePushFromHq = type === 'ForcePush' && note === 'HQ'
+      if (!isInbound && !isForcePushFromHq) continue
 
       const rowDate = row.log_date ? new Date(row.log_date) : null
       if (!rowDate || isNaN(rowDate.getTime())) continue
       if (rowDate < startD || rowDate > endD) continue
 
+      const rowVendor = isForcePushFromHq || note === 'From HQ' ? 'From HQ' : note || '-'
+      if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' && rowVendor !== vendorFilter) continue
+
       const code = String(row.item_code || '').trim()
       const info = itemMap[code] || { spec: '-', cost: 0 }
       const qty = Number(row.qty) || 0
+      const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
+      const vendor = rowVendor
       list.push({
         date: rowDate.toISOString().slice(0, 10),
-        vendor: 'From HQ',
+        vendor,
         name: row.item_name || '-',
         spec: info.spec,
         qty,
-        amount: info.cost * qty,
+        amount: unitCost * qty,
       })
       if (list.length >= 300) break
     }

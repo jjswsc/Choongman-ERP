@@ -8,6 +8,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
+    const storeName = (typeof body === 'object' && body?.storeName) ? String(body.storeName).trim() : null
     const list = Array.isArray(body) ? body : (body?.list || []) as {
       date?: string
       vendor?: string
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
       name?: string
       spec?: string
       qty?: number | string
+      cost?: number | string
     }[]
 
     if (!list.length) {
@@ -24,11 +26,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const location = storeName || '입고등록'
     const rows = list.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
+      const costVal = item.cost != null && item.cost !== '' ? parseFloat(String(item.cost).replace(/,/g, '')) : null
       const dateObj = item.date ? new Date(item.date) : new Date()
-      return {
-        location: '입고등록',
+      const row: Record<string, unknown> = {
+        location,
         item_code: String(item.code || '').trim(),
         item_name: String(item.name || '').trim(),
         spec: String(item.spec || '').trim() || '-',
@@ -37,6 +41,10 @@ export async function POST(request: NextRequest) {
         vendor_target: String(item.vendor || '').trim(),
         log_type: 'Inbound',
       }
+      if (costVal != null && !isNaN(costVal) && costVal >= 0) {
+        row.unit_cost = costVal
+      }
+      return row
     })
 
     const validRows = rows.filter((r) => r.item_code)
