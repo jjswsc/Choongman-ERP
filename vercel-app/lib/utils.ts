@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** 직원 닉네임/역할 표시 시 "Part-Time"을 "P/T"로 줄여서 표시 */
+export function displayLabelShort(val: string | null | undefined): string {
+  const s = String(val ?? '').trim()
+  if (s === 'Part-Time') return 'P/T'
+  return s
+}
+
 /** 모바일 사진 업로드 전 압축 (base64 크기 제한 회피). HEIC/일부 포맷 실패 시 FileReader fallback */
 export function compressImageForUpload(file: File, maxWidth = 1024, quality = 0.65): Promise<string> {
   const tryCompress = (): Promise<string> =>

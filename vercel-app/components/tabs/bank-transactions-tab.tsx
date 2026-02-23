@@ -19,7 +19,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
 import {
   getBankAccounts,
   getBankTransactions,
@@ -426,6 +426,25 @@ export function BankTransactionsTab() {
   }
 
   const storeOptions = isOffice ? (storeList || []) : [auth?.store || ""].filter(Boolean)
+  const storeOptionsDeduped = React.useMemo(() => {
+    const officeSet = new Set(OFFICE_STORES.map((s) => s.trim().toLowerCase()))
+    const seen = new Set<string>()
+    const result: string[] = []
+    const add = (s: string) => {
+      const key = s.trim().toLowerCase()
+      if (officeSet.has(key)) {
+        if (!seen.has("본사")) { seen.add("본사"); result.push("본사") }
+      } else if (s && !seen.has(s)) {
+        seen.add(s)
+        result.push(s)
+      }
+    }
+    for (const s of storeOptions || []) {
+      if (s === "All") continue
+      add(s)
+    }
+    return result.length ? result : ["본사"]
+  }, [storeOptions])
 
   const handleAddMemoRule = async () => {
     if (!newRuleKeyword.trim() || !newRuleCategory) {
@@ -950,9 +969,10 @@ export function BankTransactionsTab() {
                           <SelectValue placeholder={t("store") || "매장"} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="본사">{t("pettyScopeOffice") || "본사"}</SelectItem>
-                          {(storeOptions || []).filter((s) => s !== "All").map((s) => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          {storeOptionsDeduped.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {OFFICE_STORES.map((o) => o.trim().toLowerCase()).includes(s.trim().toLowerCase()) ? (t("pettyScopeOffice") || "본사") : s}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

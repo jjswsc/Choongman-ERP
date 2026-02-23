@@ -17,6 +17,8 @@ export async function GET(request: NextRequest) {
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
   let yearMonth = String(searchParams.get('yearMonth') || searchParams.get('yearMonth') || '').trim()
+  const startParam = String(searchParams.get('startStr') || searchParams.get('startDate') || '').trim()
+  const endParam = String(searchParams.get('endStr') || searchParams.get('endDate') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
@@ -29,16 +31,23 @@ export async function GET(request: NextRequest) {
     effectiveStore = departmentFilter ? 'Office-' + departmentFilter : 'Office'
   } else if (storeFilter) effectiveStore = storeFilter
 
-  if (yearMonth.length < 7) {
-    const n = new Date()
-    yearMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0')
+  let startStr: string
+  let endStr: string
+  if (startParam.length >= 10 && endParam.length >= 10) {
+    startStr = startParam.slice(0, 10)
+    endStr = endParam.slice(0, 10)
+  } else {
+    if (yearMonth.length < 7) {
+      const n = new Date()
+      yearMonth = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0')
+    }
+    const parts = yearMonth.split('-')
+    const year = parseInt(parts[0], 10) || new Date().getFullYear()
+    const month = parseInt(parts[1], 10) || 1
+    startStr = String(year) + '-' + String(month).padStart(2, '0') + '-01'
+    const lastDay = new Date(year, month, 0).getDate()
+    endStr = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
   }
-  const parts = yearMonth.split('-')
-  const year = parseInt(parts[0], 10) || new Date().getFullYear()
-  const month = parseInt(parts[1], 10) || 1
-  const startStr = String(year) + '-' + String(month).padStart(2, '0') + '-01'
-  const lastDay = new Date(year, month, 0).getDate()
-  const endStr = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
 
   try {
     let rows: { id?: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []

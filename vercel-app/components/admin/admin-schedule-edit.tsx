@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
-import { cn } from "@/lib/utils"
+import { cn, displayLabelShort } from "@/lib/utils"
 
 function getMondayOfWeek(dateStr?: string): string {
   const d = dateStr ? new Date(dateStr + "T12:00:00") : new Date()
@@ -309,7 +309,96 @@ export function AdminScheduleEdit({
     }
     const nextMonday = addDays(monday, 7)
     if (!confirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
-    setMonday(nextMonday)
+
+    const nextDayStrs = Array.from({ length: 7 }, (_, i) => addDays(nextMonday, i))
+    const map: Record<string, { work: string[]; break: string[] }> = {}
+    for (const [key, names] of Object.entries(slotData)) {
+      if (!names.length) continue
+      const [dayStr, area, time] = key.split("-")
+      const day = parseInt(dayStr, 10)
+      if (day < 0 || day > 6) continue
+      const datePart = nextDayStrs[day]
+      for (const n of names) {
+        if (n.startsWith("LEAVE_")) continue
+        const realName = n.startsWith("BRK_") ? n.replace("BRK_", "") : n
+        const recKey = `${datePart}_${realName}_${area}`
+        if (!map[recKey]) map[recKey] = { work: [], break: [] }
+        if (n.startsWith("BRK_")) map[recKey].break.push(time)
+        else map[recKey].work.push(time)
+      }
+    }
+
+    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
+    for (const [k, v] of Object.entries(map)) {
+      const parts = k.split("_")
+      const date = parts[0]
+      const area = parts[parts.length - 1]
+      const name = parts.slice(1, -1).join("_")
+      const dayIdx = nextDayStrs.indexOf(date)
+      if (dayIdx < 0) continue
+      const all = [...v.work, ...v.break].sort()
+      if (all.length === 0) continue
+      const pIn = all[0]
+      const last = all[all.length - 1]
+      const [lh, lm] = last.split(":").map(Number)
+      let lm2 = lm + 30
+      let lh2 = lh
+      if (lm2 >= 60) {
+        lm2 -= 60
+        lh2++
+      }
+      const isOvernight = lh2 >= 24
+      let storeDate: string
+      let pOut: string
+      let plan_in_prev_day = false
+      if (isOvernight) {
+        const nextDayIdx = dayIdx >= 0 && dayIdx < 6 ? dayIdx + 1 : 0
+        storeDate = dayIdx >= 0 && dayIdx < 6 ? nextDayStrs[nextDayIdx] : addDays(nextMonday, 7)
+        const outH = lh2 - 24
+        const outM = lm2
+        pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
+        plan_in_prev_day = true
+      } else {
+        storeDate = date
+        pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
+      }
+      let pBS = ""
+      let pBE = ""
+      if (v.break.length > 0) {
+        const bSorted = v.break.sort()
+        pBS = bSorted[0]
+        const bLast = bSorted[bSorted.length - 1]
+        const [bh, bm] = bLast.split(":").map(Number)
+        let bm2 = bm + 30
+        let bh2 = bh
+        if (bm2 >= 60) {
+          bm2 -= 60
+          bh2++
+        }
+        pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
+      }
+      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${area}]`, plan_in_prev_day })
+    }
+
+    if (rows.length === 0) {
+      alert(t("att_no_data_to_save") || "복사할 스케줄 데이터가 없습니다.")
+      return
+    }
+
+    setSaving(true)
+    saveSchedule({ store, monday: nextMonday, rows })
+      .then((r) => {
+        if (r.success) {
+          alert(translateApiMessage(r.message, t) || (t("att_saved") || "저장되었습니다."))
+          setMonday(nextMonday)
+        } else if (r.message === "schedule_dup_area" && r.duplicateNames) {
+          alert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
+        } else {
+          alert(translateApiMessage(r.message, t) || (t("att_save_failed") || "저장에 실패했습니다."))
+        }
+      })
+      .catch((e) => alert((t("att_save_failed") || "저장 실패") + ": " + (e?.message || e)))
+      .finally(() => setSaving(false))
   }
 
   const doSave = () => {
@@ -690,7 +779,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                       }
                       return Array.from(byName.entries()).map(([name, items]) => (
                         <div key={name} className="rounded border p-2">
-                          <span className="font-semibold">{staffList.find((x) => x.name === name)?.nick || name}</span>
+                          <span className="font-semibold">{displayLabelShort(staffList.find((x) => x.name === name)?.nick) || name}</span>
                           <span className="text-muted-foreground ml-1">: </span>
                           <span>{items.map((i) => {
                             const typeLabel = LEAVE_TYPE_KEYS[i.type] ? t(LEAVE_TYPE_KEYS[i.type]) : i.type
@@ -718,7 +807,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                 )}
               >
                 <span className="font-medium">{s.name}</span>
-                <span className="text-muted-foreground ml-1">({s.nick})</span>
+                <span className="text-muted-foreground ml-1">({displayLabelShort(s.nick)})</span>
               </button>
             ))}
           </div>
@@ -879,7 +968,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                           size="sm"
                           variant="ghost"
                           className="h-6 w-6 p-0 rounded hover:bg-destructive/20"
-                          title={selectedStaff ? t("att_reset_staff_on_day").replace("{name}", selectedStaff.nick) : t("att_reset_day")}
+                          title={selectedStaff ? t("att_reset_staff_on_day").replace("{name}", displayLabelShort(selectedStaff.nick)) : t("att_reset_day")}
                           onClick={(e) => {
                             e.stopPropagation()
                             resetStaffOnDay(i)
@@ -953,8 +1042,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                                     const displayName = n.startsWith("BRK_")
                                       ? "R"
                                       : isLeave
-                                        ? (staffList.find((s) => s.name === leaveName)?.nick || leaveName)
-                                        : staffList.find((s) => s.name === n)?.nick || n
+                                        ? (displayLabelShort(staffList.find((s) => s.name === leaveName)?.nick) || leaveName)
+                                        : displayLabelShort(staffList.find((s) => s.name === n)?.nick) || n
                                     return (
                                       <span
                                         key={n}

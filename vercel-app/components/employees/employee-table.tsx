@@ -2,6 +2,7 @@
 
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { displayLabelShort } from "@/lib/utils"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
 function roleBadgeStyle(role: string): string {
@@ -91,12 +92,12 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-center font-bold text-card-foreground">{e.name}</td>
-                  <td className="px-3 py-2.5 text-center text-card-foreground">{e.nick || "-"}</td>
+                  <td className="px-3 py-2.5 text-center text-card-foreground">{displayLabelShort(e.nick) || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{e.nation || "-"}</td>
                   <td className="px-3 py-2.5 text-center text-card-foreground">{age}{age !== "-" ? ageSuffix : ""}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold ${roleBadgeStyle(e.role)}`}>
-                      {e.role}
+                      {displayLabelShort(e.role)}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-right font-medium tabular-nums text-card-foreground">

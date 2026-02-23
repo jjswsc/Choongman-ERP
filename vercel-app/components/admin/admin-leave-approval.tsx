@@ -19,6 +19,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { useStoreList, getLeavePendingList, processLeaveApproval } from "@/lib/api-client"
+import { displayLabelShort } from "@/lib/utils"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -170,7 +171,7 @@ export function AdminLeaveApproval() {
                 {leaveList.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{item.store}</td>
-                    <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${item.nick})` : ""}</td>
+                    <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.requestDate}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.date}</td>
                     <td className="p-2 text-center">{translateLeaveType(item.type)}</td>

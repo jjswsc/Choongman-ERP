@@ -28,6 +28,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
+import { displayLabelShort } from "@/lib/utils"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -246,7 +247,7 @@ export function AdminTab() {
                     <div className="min-w-0 flex-1 shrink">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-medium text-foreground">{item.name}</span>
-                        {item.nick && <span className="text-[10px] text-muted-foreground">({item.nick})</span>}
+                        {item.nick && <span className="text-[10px] text-muted-foreground">({displayLabelShort(item.nick)})</span>}
                         <span className={`text-[10px] px-1 py-0.5 rounded shrink-0 ${isIn ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}`}>
                           {isIn ? t("att_col_in") : t("att_col_out")}
                         </span>
@@ -300,7 +301,7 @@ export function AdminTab() {
                   <div className="min-w-0 flex-1 shrink">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-xs font-medium text-foreground">{row.name}</span>
-                      {row.nick && <span className="text-[10px] text-muted-foreground">({row.nick})</span>}
+                      {row.nick && <span className="text-[10px] text-muted-foreground">({displayLabelShort(row.nick)})</span>}
                       <span className="text-[10px] px-1 py-0.5 rounded shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
                         {t("att_tab_no_record")}
                       </span>

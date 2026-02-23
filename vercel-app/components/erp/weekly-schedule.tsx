@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
-import { cn } from "@/lib/utils"
+import { cn, displayLabelShort } from "@/lib/utils"
 
 function getMondayOfWeek(d?: Date): string {
   const date = d ? new Date(d) : new Date()
@@ -426,7 +426,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                         {/* 이름 + 부서 + 접기 버튼 */}
                         <div className="flex flex-col items-start justify-center shrink-0 min-w-[72px]">
                           <div className="flex items-center gap-1">
-                            <span className="text-[13px] font-bold text-card-foreground leading-tight print-schedule-person-name">{p.name}</span>
+                            <span className="text-[13px] font-bold text-card-foreground leading-tight print-schedule-person-name">{displayLabelShort(p.name)}</span>
                             {!isCollapsed && (
                               <span className="inline-flex shrink-0" title={t("scheduleCollapseAll") || "접기"}>
                                 <ChevronUp

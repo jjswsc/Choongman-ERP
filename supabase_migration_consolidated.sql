@@ -6,6 +6,18 @@
 -- ※ 23505 (duplicate key) 오류 시: supabase_items_dedup_first.sql 먼저 실행 후 재시도
 -- ※ 별도 실행: scripts/items_outbound_location_updates.sql, scripts/import_pos_menus_grab.sql
 -- ============================================================
+--
+-- [목차]
+--   1. 중복 데이터 제거 (DELETE)
+--   2. 유니크 제약 (ALTER UNIQUE)
+--   3. 기존 테이블 컬럼 추가 (ALTER ADD COLUMN)
+--   4. 신규 테이블 (CREATE TABLE) - 창고/발주/패티캐시/POS/미수미지급/은행/회계/e-Tax
+--   5. 추가 컬럼 (POS·은행·기타)
+--   6. 시드/기본 데이터 (INSERT)
+--   7. 데이터 수정 (UPDATE)
+--   8. 인덱스 (CREATE INDEX)
+--
+-- ============================================================
 
 -- ========== 1. 중복 데이터 제거 ==========
 
@@ -73,6 +85,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS original_order_qty_json TEXT DEFAULT
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS approved_indices TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS approved_original_qty_json TEXT DEFAULT NULL;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS reject_reason TEXT DEFAULT '';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_dates_by_outbound TEXT DEFAULT NULL;
 
 -- employees
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS annual_leave_days NUMERIC(5,2) DEFAULT 15;
@@ -99,6 +112,7 @@ UPDATE checklist_items SET sort_order = item_id WHERE sort_order IS NULL OR sort
 
 -- ========== 4. 신규 테이블 ==========
 
+-- 4.1 창고/발주
 -- warehouse_locations
 CREATE TABLE IF NOT EXISTS warehouse_locations (
   id BIGSERIAL PRIMARY KEY,
@@ -109,7 +123,6 @@ CREATE TABLE IF NOT EXISTS warehouse_locations (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_warehouse_locations_sort ON warehouse_locations(sort_order);
-
 -- purchase_orders
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id BIGSERIAL PRIMARY KEY,
@@ -134,6 +147,7 @@ ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS withholding_tax_rate NUMERI
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS invoice_received BOOLEAN DEFAULT FALSE;
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS invoice_no TEXT DEFAULT NULL;
 
+-- 4.2 패티캐시
 -- petty_cash_transactions
 CREATE TABLE IF NOT EXISTS petty_cash_transactions (
   id BIGSERIAL PRIMARY KEY,
@@ -152,7 +166,11 @@ ALTER TABLE petty_cash_transactions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for anon" ON petty_cash_transactions;
 CREATE POLICY "Allow all for anon" ON petty_cash_transactions FOR ALL USING (true) WITH CHECK (true);
 ALTER TABLE petty_cash_transactions ADD COLUMN IF NOT EXISTS receipt_url TEXT DEFAULT NULL;
+ALTER TABLE petty_cash_transactions ADD COLUMN IF NOT EXISTS account_subject_id BIGINT DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_petty_cash_account_subject ON petty_cash_transactions(account_subject_id);
+COMMENT ON COLUMN petty_cash_transactions.account_subject_id IS '계정과목 ID - account_subjects 참조, 회계 연동용';
 
+-- 4.3 POS (메뉴/주문/프로모션/쿠폰)
 -- pos
 CREATE TABLE IF NOT EXISTS pos_menus (
   id BIGSERIAL PRIMARY KEY,
@@ -266,6 +284,35 @@ CREATE TABLE IF NOT EXISTS pos_coupons (
 CREATE INDEX IF NOT EXISTS idx_pos_coupons_code ON pos_coupons(code);
 CREATE INDEX IF NOT EXISTS idx_pos_coupons_active ON pos_coupons(is_active);
 
+-- pos_settlements (POS 일별 결산)
+CREATE TABLE IF NOT EXISTS pos_settlements (
+  id BIGSERIAL PRIMARY KEY,
+  store_code TEXT NOT NULL DEFAULT '',
+  settle_date DATE NOT NULL,
+  cash_actual NUMERIC(12,2) DEFAULT NULL,
+  card_amt NUMERIC(12,2) DEFAULT 0,
+  qr_amt NUMERIC(12,2) DEFAULT 0,
+  delivery_app_amt NUMERIC(12,2) DEFAULT 0,
+  other_amt NUMERIC(12,2) DEFAULT 0,
+  memo TEXT DEFAULT '',
+  closed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(store_code, settle_date)
+);
+CREATE INDEX IF NOT EXISTS idx_pos_settlements_store ON pos_settlements(store_code);
+CREATE INDEX IF NOT EXISTS idx_pos_settlements_date ON pos_settlements(settle_date);
+ALTER TABLE pos_settlements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for anon" ON pos_settlements;
+CREATE POLICY "Allow all for anon" ON pos_settlements FOR ALL USING (true) WITH CHECK (true);
+
+-- pos_stock_deductions (POS 주문 재고 차감 추적)
+CREATE TABLE IF NOT EXISTS pos_stock_deductions (
+  order_id BIGINT NOT NULL PRIMARY KEY,
+  deducted_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4.4 미수금/미지급금
 -- receivable / payable
 CREATE TABLE IF NOT EXISTS payable_transactions (
   id BIGSERIAL PRIMARY KEY,
@@ -297,6 +344,7 @@ CREATE INDEX IF NOT EXISTS idx_receivable_ref ON receivable_transactions(ref_typ
 CREATE INDEX IF NOT EXISTS idx_receivable_date ON receivable_transactions(trans_date);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_receivable_order_unique ON receivable_transactions(ref_type, ref_id) WHERE ref_type = 'Order' AND ref_id IS NOT NULL;
 
+-- 4.5 은행/회계 (통장·거래·고정비·계정과목·적요규칙)
 -- bank
 CREATE TABLE IF NOT EXISTS bank_accounts (
   id BIGSERIAL PRIMARY KEY,
@@ -370,6 +418,7 @@ CREATE TABLE IF NOT EXISTS fixed_expenses (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_fixed_expenses_store ON fixed_expenses(store);
+CREATE INDEX IF NOT EXISTS idx_fixed_expenses_account_subject ON fixed_expenses(account_subject_id) WHERE account_subject_id IS NOT NULL;
 ALTER TABLE fixed_expenses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all for fixed_expenses" ON fixed_expenses;
 CREATE POLICY "Allow all for fixed_expenses" ON fixed_expenses FOR ALL USING (true) WITH CHECK (true);
@@ -422,7 +471,39 @@ ALTER TABLE receivable_transactions ADD COLUMN IF NOT EXISTS bank_transaction_id
 CREATE INDEX IF NOT EXISTS idx_payable_bank ON payable_transactions(bank_transaction_id) WHERE bank_transaction_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_receivable_bank ON receivable_transactions(bank_transaction_id) WHERE bank_transaction_id IS NOT NULL;
 
--- ========== 5. POS/기타 컬럼 추가 ==========
+-- 4.6 e-Tax (태국 국세청 인보이스 제출 이력)
+CREATE TABLE IF NOT EXISTS e_tax_submissions (
+  id BIGSERIAL PRIMARY KEY,
+  ref_type TEXT NOT NULL DEFAULT 'outbound',
+  ref_key TEXT NOT NULL,
+  invoice_no TEXT,
+  invoice_date DATE,
+  target_name TEXT,
+  total_amount NUMERIC(12,2),
+  vat_amount NUMERIC(12,2),
+  grand_total NUMERIC(12,2),
+  xml_content TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  submitted_at TIMESTAMPTZ,
+  response_json JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+COMMENT ON TABLE e_tax_submissions IS 'e-Tax 인보이스 제출 이력 (태국 국세청)';
+COMMENT ON COLUMN e_tax_submissions.ref_type IS 'outbound, purchase_order 등';
+COMMENT ON COLUMN e_tax_submissions.ref_key IS '고유 식별키 (예: date_target_type_orderRowId)';
+COMMENT ON COLUMN e_tax_submissions.status IS 'pending, submitted, accepted, rejected';
+COMMENT ON COLUMN e_tax_submissions.response_json IS 'e-Tax 포털/API 응답';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_etax_ref ON e_tax_submissions(ref_type, ref_key);
+CREATE INDEX IF NOT EXISTS idx_etax_status ON e_tax_submissions(status);
+CREATE INDEX IF NOT EXISTS idx_etax_invoice_no ON e_tax_submissions(invoice_no) WHERE invoice_no IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_etax_invoice_date ON e_tax_submissions(invoice_date);
+ALTER TABLE e_tax_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for e_tax_submissions" ON e_tax_submissions;
+CREATE POLICY "Allow all for e_tax_submissions" ON e_tax_submissions FOR ALL USING (true) WITH CHECK (true);
+
+-- ========== 5. 추가 컬럼 (POS·은행·주문 등) ==========
 
 ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS invoice_photo_url TEXT DEFAULT NULL;
 
@@ -444,6 +525,7 @@ ALTER TABLE pos_orders ADD COLUMN IF NOT EXISTS payment_other NUMERIC(12,2) DEFA
 
 -- ========== 6. 시드/기본 데이터 ==========
 
+-- 6.1 창고 기본 데이터
 INSERT INTO warehouse_locations (name, address, location_code, sort_order)
 SELECT 'Jidubang', 'JIDUBANG(ASIA) 262 3 Bangkok-Chon Buri New Line Rd, Prawet, Bangkok 10250', 'Jidubang', 1
 WHERE NOT EXISTS (SELECT 1 FROM warehouse_locations WHERE location_code = 'Jidubang');
@@ -451,6 +533,7 @@ INSERT INTO warehouse_locations (name, address, location_code, sort_order)
 SELECT 'S&J', 'S&J Global', 'S&J', 2
 WHERE NOT EXISTS (SELECT 1 FROM warehouse_locations WHERE location_code = 'S&J');
 
+-- 6.2 계정과목 기본 데이터
 INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_order) VALUES
   ('1110', '현금이체', 'Cash Transfer', 'transfer', NULL, 10),
   ('4110', '배달앱정산', 'Delivery App', 'revenue', 'revenue', 50),
@@ -477,6 +560,7 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5460', '교통비', 'Transportation', 'expense', 'expense', 121),
   ('5461', '차량유지비', 'Vehicles', 'expense', 'expense', 122),
   ('5470', '통신비(전화)', 'Phone', 'expense', 'expense', 123),
+  ('5210', '식품 원재료', 'Food Raw Materials', 'expense', 'cost', 95),
   ('5480', '소모품비', 'Supplies', 'expense', 'expense', 130),
   ('5490', '보험료', 'Insurance', 'expense', 'fixed', 131),
   ('5500', '감가상각비', 'Depreciation', 'expense', 'fixed', 132),
@@ -491,31 +575,6 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5527', 'SNS마케팅', 'SNS Marketing', 'expense', 'expense', 143),
   ('5530', '대손상각비', 'Bad Debt Expense', 'expense', 'expense', 147)
 ON CONFLICT (code) DO NOTHING;
-
--- e_tax_submissions (e-Tax 인보이스 제출 이력)
-CREATE TABLE IF NOT EXISTS e_tax_submissions (
-  id BIGSERIAL PRIMARY KEY,
-  ref_type TEXT NOT NULL DEFAULT 'outbound',
-  ref_key TEXT NOT NULL,
-  invoice_no TEXT,
-  invoice_date DATE,
-  target_name TEXT,
-  total_amount NUMERIC(12,2),
-  vat_amount NUMERIC(12,2),
-  grand_total NUMERIC(12,2),
-  xml_content TEXT,
-  status TEXT NOT NULL DEFAULT 'pending',
-  submitted_at TIMESTAMPTZ,
-  response_json JSONB,
-  error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_etax_ref ON e_tax_submissions(ref_type, ref_key);
-CREATE INDEX IF NOT EXISTS idx_etax_status ON e_tax_submissions(status);
-ALTER TABLE e_tax_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow all for e_tax_submissions" ON e_tax_submissions;
-CREATE POLICY "Allow all for e_tax_submissions" ON e_tax_submissions FOR ALL USING (true) WITH CHECK (true);
 
 -- ========== 7. 데이터 수정 ==========
 

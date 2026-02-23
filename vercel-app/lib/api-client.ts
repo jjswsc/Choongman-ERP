@@ -1068,9 +1068,11 @@ export async function getPettyCashList(params: {
   return res.json() as Promise<PettyCashItem[]>
 }
 
-/** 해당 월 거래 전체 + 실시간 잔액 */
+/** 해당 월 또는 기간 거래 전체 + 실시간 잔액 */
 export async function getPettyCashMonthDetail(params: {
   yearMonth: string
+  startStr?: string
+  endStr?: string
   scopeFilter?: string
   storeFilter?: string
   departmentFilter?: string
@@ -1078,6 +1080,10 @@ export async function getPettyCashMonthDetail(params: {
   userRole?: string
 }) {
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
+  if (params.startStr && params.endStr) {
+    q.set('startStr', params.startStr)
+    q.set('endStr', params.endStr)
+  }
   if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)

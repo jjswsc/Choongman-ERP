@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Camera, Download, Pencil } from "lucide-react"
+import { Search, Plus, Camera, Download, Pencil, Save } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -92,6 +92,13 @@ export function PettyCashTab() {
   const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
   const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
   const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
+  const [pendingAccountSubjectByRowId, setPendingAccountSubjectByRowId] = useState<Record<number, string>>({})
+  const [monthlySearchMode, setMonthlySearchMode] = useState<"month" | "period">("month")
+  const [monthlyPeriodStart, setMonthlyPeriodStart] = useState(() => {
+    const n = new Date()
+    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-01"
+  })
+  const [monthlyPeriodEnd, setMonthlyPeriodEnd] = useState(todayStr)
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
   const [editModalItem, setEditModalItem] = useState<PettyCashItem | null>(null)
@@ -199,13 +206,18 @@ export function PettyCashTab() {
     setMonthlyLoading(true)
     getPettyCashMonthDetail({
       yearMonth: monthlyYm,
+      startStr: monthlySearchMode === "period" ? monthlyPeriodStart : undefined,
+      endStr: monthlySearchMode === "period" ? monthlyPeriodEnd : undefined,
       scopeFilter: canSearchAll ? monthlyScope : undefined,
       storeFilter: monthlyScope === "store" && monthlyStore !== "All" ? monthlyStore : undefined,
       departmentFilter: monthlyScope === "office" && monthlyDepartment !== "All" ? monthlyDepartment : undefined,
       userStore: auth.store,
       userRole: auth.role,
     })
-      .then(setMonthlyData)
+      .then((data) => {
+        setMonthlyData(data)
+        setPendingAccountSubjectByRowId({})
+      })
       .catch(() => setMonthlyData([]))
       .finally(() => setMonthlyLoading(false))
   }
@@ -313,6 +325,11 @@ export function PettyCashTab() {
     const asId = newAccountSubjectId === "" || newAccountSubjectId === "__none__" ? null : Number(newAccountSubjectId)
     if (asId !== null && isNaN(asId)) return
     setInlineSavingId(r.id)
+    setPendingAccountSubjectByRowId((prev) => {
+      const next = { ...prev }
+      delete next[r.id]
+      return next
+    })
     try {
       const res = await updatePettyCashTransaction({
         id: r.id,
@@ -735,16 +752,33 @@ ${rows.map((row, ri) => {
                     </SelectContent>
                   </Select>
                 )}
-                <Select value={monthlyYm} onValueChange={setMonthlyYm}>
-                  <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[100px]">
-                    <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
+                <Select value={monthlySearchMode} onValueChange={(v) => setMonthlySearchMode(v as "month" | "period")}>
+                  <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[70px]">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {monthlyYmOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
+                    <SelectItem value="month">{t("pettySearchByMonth") || "월별"}</SelectItem>
+                    <SelectItem value="period">{t("pettySearchByPeriod") || "기간별"}</SelectItem>
                   </SelectContent>
                 </Select>
+                {monthlySearchMode === "month" ? (
+                  <Select value={monthlyYm} onValueChange={setMonthlyYm}>
+                    <SelectTrigger className="h-9 min-w-0 flex-1 shrink text-xs sm:min-w-[100px]">
+                      <SelectValue placeholder={t("pettyYearMonth") || "연월"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthlyYmOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Input type="date" value={monthlyPeriodStart} onChange={(e) => setMonthlyPeriodStart(e.target.value)} className="date-input-compact h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
+                    <span className="text-xs text-muted-foreground shrink-0">~</span>
+                    <Input type="date" value={monthlyPeriodEnd} onChange={(e) => setMonthlyPeriodEnd(e.target.value)} className="date-input-compact h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
+                  </>
+                )}
                 <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
                   <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
                   <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
@@ -801,21 +835,42 @@ ${rows.map((row, ri) => {
                           </td>
                           <td className="p-2 text-center font-medium">{fmt(r.balance_after ?? 0)}</td>
                           <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={(r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__"}
-                              onValueChange={(v) => handleInlineAccountSubjectChange(r, v)}
-                              disabled={inlineSavingId === r.id}
-                            >
-                              <SelectTrigger className="h-8 min-w-0 text-[10px] border-dashed">
-                                <SelectValue placeholder={inlineSavingId === r.id ? (t("loading") || "...") : (t("accountSubject") || "계정과목")} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">—</SelectItem>
-                                {accountSubjectOptions.map((a) => (
-                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <div className="flex items-center gap-1">
+                              <Select
+                                value={pendingAccountSubjectByRowId[r.id] ?? ((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__")}
+                                onValueChange={(v) => {
+                                  const current = (r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__"
+                                  setPendingAccountSubjectByRowId((prev) => {
+                                    if (v === current) { const n = { ...prev }; delete n[r.id]; return n }
+                                    return { ...prev, [r.id]: v }
+                                  })
+                                }}
+                                disabled={inlineSavingId === r.id}
+                              >
+                                <SelectTrigger className="h-8 min-w-0 flex-1 text-[10px] border-dashed">
+                                  <SelectValue placeholder={inlineSavingId === r.id ? (t("loading") || "...") : (t("accountSubject") || "계정과목")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">—</SelectItem>
+                                  {accountSubjectOptions.map((a) => (
+                                    <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {pendingAccountSubjectByRowId[r.id] !== undefined && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0 text-primary hover:bg-primary/10"
+                                  onClick={() => handleInlineAccountSubjectChange(r, pendingAccountSubjectByRowId[r.id])}
+                                  disabled={inlineSavingId === r.id}
+                                  title={t("btnSave") || "저장"}
+                                >
+                                  <Save className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                           <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
                           <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
