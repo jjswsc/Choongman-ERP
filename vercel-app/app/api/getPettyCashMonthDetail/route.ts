@@ -92,7 +92,6 @@ export async function GET(request: NextRequest) {
         receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
         user_name: String(r.user_name || '').trim(),
         account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
-        accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
       })
     }
 

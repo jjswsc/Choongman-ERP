@@ -38,11 +38,14 @@ function toImageUrl(url: string): string {
 export interface ItemTableProps {
   products: Product[]
   categories: string[]
+  outboundOptions: string[]
   hasSearched: boolean
   searchTerm: string
   setSearchTerm: (v: string) => void
   categoryFilter: string
   setCategoryFilter: (v: string) => void
+  outboundFilter: string
+  setOutboundFilter: (v: string) => void
   onSearch: () => void
   onEdit: (product: Product) => void
   onDelete: (product: Product) => void
@@ -51,11 +54,14 @@ export interface ItemTableProps {
 export function ItemTable({
   products,
   categories,
+  outboundOptions,
   hasSearched,
   searchTerm,
   setSearchTerm,
   categoryFilter,
   setCategoryFilter,
+  outboundFilter,
+  setOutboundFilter,
   onSearch,
   onEdit,
   onDelete,
@@ -79,7 +85,7 @@ export function ItemTable({
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
+      <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-6 py-3">
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
           <SelectTrigger className="h-9 w-40 text-xs">
             <SelectValue />
@@ -93,7 +99,20 @@ export function ItemTable({
             ))}
           </SelectContent>
         </Select>
-        <div className="relative flex-1">
+        <Select value={outboundFilter} onValueChange={setOutboundFilter}>
+          <SelectTrigger className="h-9 w-36 text-xs">
+            <SelectValue placeholder={t("outWhWarehouseCol") || "출고지"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("outWhWarehouseAll") || "전체"}</SelectItem>
+            {outboundOptions.map((loc) => (
+              <SelectItem key={loc} value={loc}>
+                {loc}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 min-w-[120px]">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
             value={searchTerm}

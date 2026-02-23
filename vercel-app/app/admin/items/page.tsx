@@ -38,6 +38,7 @@ export default function ItemsPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
+  const [outboundFilter, setOutboundFilter] = React.useState("all")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
 
@@ -192,15 +193,23 @@ export default function ItemsPage() {
     return products.filter((p) => {
       const matchTerm = !searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase())
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter
-      return matchTerm && matchCategory
+      const pLoc = (p.outboundLocation || "").trim() || "(미지정)"
+      const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
+      return matchTerm && matchCategory && matchOutbound
     })
-  }, [products, hasSearched, searchTerm, categoryFilter])
+  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter])
 
   const categories = React.useMemo(() => {
     const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))
     const fromDb = new Set(allCategories)
     return Array.from(new Set([...fromDb, ...fromProducts])).sort()
   }, [products, allCategories])
+
+  const outboundOptions = React.useMemo(() => {
+    const fromProducts = new Set(products.map((p) => (p.outboundLocation || "").trim() || "(미지정)"))
+    const fromLocs = new Set(outboundLocations.map((l) => l.location_code))
+    return Array.from(new Set([...fromLocs, ...fromProducts])).sort()
+  }, [products, outboundLocations])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -251,11 +260,14 @@ export default function ItemsPage() {
           <ItemTable
             products={filteredProducts}
             categories={categories}
+            outboundOptions={outboundOptions}
             hasSearched={hasSearched}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             categoryFilter={categoryFilter}
             setCategoryFilter={setCategoryFilter}
+            outboundFilter={outboundFilter}
+            setOutboundFilter={setOutboundFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}
