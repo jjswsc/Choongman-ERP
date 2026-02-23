@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+
+/** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
+export async function POST(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Content-Type', 'application/json')
+
+  try {
+    const body = await request.json()
+    const id = Number(body.id)
+    const transDate = String(body.transDate || body.trans_date || '').slice(0, 10)
+    const transType = String(body.transType || body.trans_type || 'expense').toLowerCase()
+    const amount = Number(body.amount) || 0
+    const memo = String(body.memo || '').trim()
+    const receiptUrl = body.receiptUrl !== undefined
+      ? (body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : null)
+      : undefined
+    const userStore = String(body.userStore || body.user_store || '').trim()
+    const userRole = String(body.userRole || body.user_role || '').toLowerCase()
+
+    if (!id || id <= 0) {
+      return NextResponse.json({ success: false, message: '거래 ID가 필요합니다.' }, { status: 400, headers })
+    }
+    if (!transDate) {
+      return NextResponse.json({ success: false, message: '날짜를 선택하세요.' }, { status: 400, headers })
+    }
+    if (amount === 0) {
+      return NextResponse.json({ success: false, message: '금액을 입력하세요.' }, { status: 400, headers })
+    }
+
+    const rows = (await supabaseSelectFilter(
+      'petty_cash_transactions',
+      `id=eq.${id}`,
+      { limit: 1 }
+    )) as { id: number; store?: string }[]
+
+    const row = rows?.[0]
+    if (!row) {
+      return NextResponse.json({ success: false, message: '해당 거래를 찾을 수 없습니다.' }, { status: 404, headers })
+    }
+
+    const store = String(row.store || '').trim()
+    const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
+    if (!isOffice && userStore && store !== userStore) {
+      return NextResponse.json({ success: false, message: '해당 매장만 수정할 수 있습니다.' }, { status: 403, headers })
+    }
+
+    let amt = amount
+    if (transType === 'expense') amt = -Math.abs(amt)
+
+    const patch: Record<string, unknown> = {
+      trans_date: transDate,
+      trans_type: transType,
+      amount: amt,
+      memo,
+    }
+    if (receiptUrl !== undefined) patch.receipt_url = receiptUrl || null
+
+    await supabaseUpdate('petty_cash_transactions', id, patch)
+
+    return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+  } catch (e) {
+    console.error('updatePettyCashTransaction:', e)
+    return NextResponse.json(
+      { success: false, message: '오류: ' + (e instanceof Error ? e.message : String(e)) },
+      { status: 500, headers }
+    )
+  }
+}

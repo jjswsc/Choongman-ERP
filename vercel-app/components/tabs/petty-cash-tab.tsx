@@ -12,7 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, Camera, Download } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Plus, Camera, Download, Pencil } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -24,6 +31,7 @@ import {
   getPettyCashList,
   getPettyCashMonthDetail,
   addPettyCashTransaction,
+  updatePettyCashTransaction,
   translateTexts,
   type PettyCashItem,
 } from "@/lib/api-client"
@@ -78,6 +86,16 @@ export function PettyCashTab() {
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
+
+  const [editModalItem, setEditModalItem] = useState<PettyCashItem | null>(null)
+  const [editDate, setEditDate] = useState(todayStr)
+  const [editType, setEditType] = useState("expense")
+  const [editAmount, setEditAmount] = useState("")
+  const [editMemo, setEditMemo] = useState("")
+  const [editReceiptFile, setEditReceiptFile] = useState<File | null>(null)
+  const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   useEffect(() => {
@@ -245,6 +263,74 @@ export function PettyCashTab() {
       alert(t("pettySaved"))
     } else {
       alert(translateApiMessage(res.message, t) || t("pettyAddFail"))
+    }
+  }
+
+  const openEditModal = (r: PettyCashItem) => {
+    setEditModalItem(r)
+    setEditDate(r.trans_date)
+    setEditType(r.trans_type)
+    setEditAmount(String(Math.abs(r.amount)))
+    setEditMemo(r.memo || "")
+    setEditReceiptFile(null)
+    setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+  }
+
+  const closeEditModal = () => {
+    setEditModalItem(null)
+    setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+  }
+
+  const handleEditReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && file.type.startsWith("image/")) {
+      setEditReceiptFile(file)
+      const url = URL.createObjectURL(file)
+      setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return url })
+    } else {
+      setEditReceiptFile(null)
+      setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+    }
+    e.target.value = ""
+  }
+
+  const handleEditSave = async () => {
+    if (!editModalItem || !auth?.store || !auth?.user) return
+    const amt = parseInt(editAmount, 10) || 0
+    if (amt <= 0) {
+      alert(t("pettyAlertAmount"))
+      return
+    }
+    setEditSaving(true)
+    let receiptUrl: string | null | undefined = undefined
+    if (editReceiptFile) {
+      try {
+        receiptUrl = await compressImageForUpload(editReceiptFile)
+      } catch (err) {
+        console.error("compressImage:", err)
+        alert(t("pettySaveFail"))
+        setEditSaving(false)
+        return
+      }
+    }
+    const res = await updatePettyCashTransaction({
+      id: editModalItem.id,
+      transDate: editDate,
+      transType: editType,
+      amount: amt,
+      memo: editMemo,
+      receiptUrl: receiptUrl,
+      userStore: auth.store,
+      userRole: auth.role,
+    })
+    setEditSaving(false)
+    if (res.success) {
+      loadMonthly()
+      loadList()
+      closeEditModal()
+      alert(t("msg_updated") || "수정되었습니다.")
+    } else {
+      alert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
     }
   }
 
@@ -590,7 +676,7 @@ ${rows.map((row, ri) => {
                 {monthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[440px]">
+                  <table className="w-full text-xs table-fixed min-w-[480px]">
                     <colgroup>
                       <col style={{ width: "92px" }} />
                       <col style={{ width: "88px" }} />
@@ -600,6 +686,7 @@ ${rows.map((row, ri) => {
                       <col />
                       <col style={{ width: "100px" }} />
                       <col style={{ width: "36px" }} />
+                      <col style={{ width: "40px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
@@ -611,6 +698,7 @@ ${rows.map((row, ri) => {
                         <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
                         <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
+                        <th className="p-2 text-center">{t("emp_edit") || "수정"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -640,6 +728,18 @@ ${rows.map((row, ri) => {
                               "-"
                             )}
                           </td>
+                          <td className="p-2 text-center">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-primary hover:bg-primary/10"
+                              onClick={() => openEditModal(r)}
+                              title={t("emp_edit") || "수정"}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -648,6 +748,84 @@ ${rows.map((row, ri) => {
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* 수정 모달 - 월별 현황 조회 후 수정 */}
+          <Dialog open={!!editModalItem} onOpenChange={(open) => !open && closeEditModal()}>
+            <DialogContent className="max-w-sm sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{t("emp_edit") || "수정"}</DialogTitle>
+              </DialogHeader>
+              {editModalItem && (
+                <div className="flex flex-col gap-3 py-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("pettyColDate") || "날짜"}</label>
+                    <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="h-9 mt-1 text-xs" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("pettyColType") || "유형"}</label>
+                    <Select value={editType} onValueChange={setEditType}>
+                      <SelectTrigger className="h-9 mt-1 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="receive">{t("pettyTypeReceive")}</SelectItem>
+                        <SelectItem value="expense">{t("pettyTypeExpense")}</SelectItem>
+                        <SelectItem value="replenish">{t("pettyTypeReplenish")}</SelectItem>
+                        <SelectItem value="settle">{t("pettyTypeSettle")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("pettyColAmount") || "금액"}</label>
+                    <Input type="number" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} className="h-9 mt-1 text-xs" min={1} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("pettyColMemo") || "내용"}</label>
+                    <Input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className="h-9 mt-1 text-xs" placeholder={t("pettyMemoPh") || "내용"} />
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-2 text-xs font-medium">
+                      <Camera className="h-3.5 w-3.5" />
+                      {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
+                    </label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        ref={editReceiptFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleEditReceiptChange}
+                        className="sr-only"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editReceiptFileInputRef.current?.click()}
+                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                      >
+                        {editReceiptFile ? editReceiptFile.name : t("chooseFile")}
+                      </button>
+                      {editModalItem.receipt_url && !editReceiptFile && (
+                        <span className="text-xs text-muted-foreground">{t("pettyColReceipt") || "영수증"} ✓</span>
+                      )}
+                      {editReceiptPreview && (
+                        <div className="relative shrink-0">
+                          <img src={editReceiptPreview} alt="" className="h-10 w-10 object-cover rounded border" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={closeEditModal}>
+                  {t("cancel")}
+                </Button>
+                <Button size="sm" onClick={handleEditSave} disabled={editSaving}>
+                  {editSaving ? (t("loading") || "저장중...") : (t("btnSave") || "저장")}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 

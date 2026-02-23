@@ -1111,6 +1111,34 @@ export async function addPettyCashTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
+export async function updatePettyCashTransaction(params: {
+  id: number
+  transDate: string
+  transType: string
+  amount: number
+  memo?: string
+  receiptUrl?: string | null
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updatePettyCashTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: params.id,
+      transDate: params.transDate,
+      transType: params.transType,
+      amount: params.amount,
+      memo: params.memo ?? '',
+      receiptUrl: params.receiptUrl,
+      userStore: params.userStore,
+      userRole: params.userRole,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 미수금/미지급금 관리 ───
 export interface ReceivablePayableItem {
   storeName?: string
