@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
         inbound_batch_id: Number(l.inboundBatchId ?? 0),
         amount: Number(l.amount ?? 0) || 0,
       }))
-      .filter((l) => l.inbound_batch_id > 0 && l.amount > 0)
+      .filter((l: { inbound_batch_id: number; amount: number }) => l.inbound_batch_id > 0 && l.amount > 0)
 
     await supabaseDeleteByFilter('bank_transaction_inbound_links', `bank_transaction_id=eq.${bankTxId}`)
 
