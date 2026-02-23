@@ -774,9 +774,9 @@ export function OrderApproval() {
                               })()}
                             </div>
                           </div>
-                            {!isManager && (
+                            {!isManager ? (
                               <div className="ml-auto flex flex-wrap items-center gap-2">
-                                {order.status === "Pending" && (
+                                {order.status === "Pending" ? (
                                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                     <span className="text-xs font-semibold text-muted-foreground">{t("reasonPh") || "사유"}</span>
                                     <Input
@@ -789,7 +789,7 @@ export function OrderApproval() {
                                       }
                                     />
                                   </div>
-                                )}
+                                ) : null}
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -820,7 +820,7 @@ export function OrderApproval() {
                                   {t("orderBtnApprove")}
                                 </Button>
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
