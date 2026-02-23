@@ -69,13 +69,11 @@ export async function POST(request: NextRequest) {
       for (const v of vendors || []) {
         const gpsName = String(v.gps_name || '').trim()
         const name = String(v.name || '').trim()
-        const gpsWithoutCM = gpsName.replace(/^CM\s+/i, '')
-        const nameWithoutCM = name.replace(/^CM\s+/i, '')
-        const gpsNorm = gpsWithoutCM.toLowerCase()
-        const match = gpsName === storeNameTrim || gpsWithoutCM === storeNameTrim ||
-          gpsNorm === storeNorm || gpsNorm.includes(storeNorm) || storeNorm.includes(gpsNorm) ||
-          (gpsName === '' && (name === storeNameTrim || nameWithoutCM === storeNameTrim))
-        if (match) {
+        const gpsLower = gpsName.toLowerCase()
+        const nameLower = name.toLowerCase()
+        const exactMatch = gpsLower === storeNorm ||
+          (gpsName === '' && nameLower === storeNorm)
+        if (exactMatch) {
           targetLat = Number(v.lat) || 0
           targetLng = Number(v.lng) || 0
           if (targetLat !== 0 || targetLng !== 0) break
