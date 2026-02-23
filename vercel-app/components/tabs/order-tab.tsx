@@ -761,53 +761,71 @@ export function OrderTab() {
                       </AccordionTrigger>
                       <AccordionContent className="pb-3 pt-0">
                         <div className="rounded-lg bg-muted/30 p-3">
-                          <div className="space-y-1.5 text-sm">
-                            {(o.items || []).map((it, idx) => {
-                              const showCheck = canReceive(o)
-                              const checked = (inspectedItems[o.id] ?? new Set<number>()).has(idx)
-                              const isReceived = o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
-                                ? (o.receivedIndices ?? []).includes(idx)
-                                : o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료"
-                              return (
-                                <div key={idx} className="flex items-center gap-2 border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
-                                  {showCheck && (
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => toggleInspected(o.id, idx)}
-                                      className="h-4 w-4 shrink-0 rounded border-border accent-primary"
-                                      aria-label={it.name ?? ""}
-                                    />
-                                  )}
-                                  {!showCheck && isReceived && (
-                                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
-                                  )}
-                                  <span className={`flex-1 min-w-0 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
-                                  {showCheck && checked ? (
-                                    <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                                      <span className="text-muted-foreground text-xs">{t("orderReceivedQty") || "받은 수량"}:</span>
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        className="h-7 w-14 text-center text-xs tabular-nums py-0"
-                                        value={getReceivedQty(o.id, idx, it.qty ?? 0)}
-                                        onChange={(e) => {
-                                          const v = parseInt(e.target.value, 10)
-                                          setReceivedQty(o.id, idx, isNaN(v) || v < 0 ? 0 : v)
-                                        }}
-                                      />
-                                    </div>
-                                  ) : (
-                                    <span className="text-muted-foreground shrink-0">
-                                      × {it.originalQty != null && it.receivedQty != null && it.originalQty !== it.receivedQty
-                                        ? `${it.originalQty} → ${it.receivedQty}`
-                                        : (it.receivedQty ?? it.qty ?? "-")}
-                                    </span>
-                                  )}
-                                  {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
+                          <div className="space-y-3 text-sm">
+                            {(() => {
+                              const items = o.items || []
+                              const byLocation = new Map<string, typeof items>()
+                              for (const it of items) {
+                                const loc = it.outboundLocation || "(미지정)"
+                                if (!byLocation.has(loc)) byLocation.set(loc, [])
+                                byLocation.get(loc)!.push(it)
+                              }
+                              const groups = Array.from(byLocation.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+                              return groups.map(([loc, locItems]) => (
+                                <div key={loc} className="space-y-1.5">
+                                  <div className="text-xs font-semibold text-primary/90 border-b border-border/60 pb-1">
+                                    {t("outWhWarehouseCol") || "출고지"}: {loc}
+                                  </div>
+                                  {locItems.map((it) => {
+                                    const idx = it.index ?? items.indexOf(it)
+                                    const showCheck = canReceive(o)
+                                    const checked = (inspectedItems[o.id] ?? new Set<number>()).has(idx)
+                                    const isReceived = o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료"
+                                      ? (o.receivedIndices ?? []).includes(idx)
+                                      : o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료"
+                                    return (
+                                      <div key={idx} className="flex items-center gap-2 border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
+                                        {showCheck && (
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => toggleInspected(o.id, idx)}
+                                            className="h-4 w-4 shrink-0 rounded border-border accent-primary"
+                                            aria-label={it.name ?? ""}
+                                          />
+                                        )}
+                                        {!showCheck && isReceived && (
+                                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
+                                        )}
+                                        <span className={`flex-1 min-w-0 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
+                                        {showCheck && checked ? (
+                                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-muted-foreground text-xs">{t("orderReceivedQty") || "받은 수량"}:</span>
+                                            <Input
+                                              type="number"
+                                              min={0}
+                                              className="h-7 w-14 text-center text-xs tabular-nums py-0"
+                                              value={getReceivedQty(o.id, idx, it.qty ?? 0)}
+                                              onChange={(e) => {
+                                                const v = parseInt(e.target.value, 10)
+                                                setReceivedQty(o.id, idx, isNaN(v) || v < 0 ? 0 : v)
+                                              }}
+                                            />
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground shrink-0">
+                                            × {it.originalQty != null && it.receivedQty != null && it.originalQty !== it.receivedQty
+                                              ? `${it.originalQty} → ${it.receivedQty}`
+                                              : (it.receivedQty ?? it.qty ?? "-")}
+                                          </span>
+                                        )}
+                                        {isReceived && <Badge variant="secondary" className="text-[10px] shrink-0">{t("itemReceived")}</Badge>}
+                                      </div>
+                                    )
+                                  })}
                                 </div>
-                              )
-                            })}
+                              ))
+                            })()}
                           </div>
                         </div>
                         {canReceive(o) && (

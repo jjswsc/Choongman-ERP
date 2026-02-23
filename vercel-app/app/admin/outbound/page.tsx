@@ -332,21 +332,27 @@ export default function OutboundPage() {
     const sections: string[] = []
     for (const wn of whOrderToUse) {
       const items = whFilteredData.byWarehouse[wn] || []
-      const byStore = new Map<string, typeof items>()
+      const byDateThenStore = new Map<string, Map<string, typeof items>>()
       for (const r of items) {
+        const date = r.deliveryDate || "(미지정)"
         const store = r.store || "(미지정)"
-        if (!byStore.has(store)) byStore.set(store, [])
-        byStore.get(store)!.push(r)
+        if (!byDateThenStore.has(date)) byDateThenStore.set(date, new Map())
+        const storeMap = byDateThenStore.get(date)!
+        if (!storeMap.has(store)) storeMap.set(store, [])
+        storeMap.get(store)!.push(r)
       }
       const whRows: string[] = []
-      for (const [storeName, storeItems] of Array.from(byStore.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-        whRows.push(`<tr class="store-header"><td colspan="5" style="background:#e8e8e8;font-weight:bold;padding:8px">Store: ${escape(storeName)}</td></tr>`)
-        whRows.push(
-          ...storeItems.map(
-            (r) =>
-              `<tr><td>${escape(r.code)}</td><td>${escape(r.name)}</td><td>${escape(r.spec)}</td><td class="num">${r.qty}</td><td>${escape(r.deliveryDate)}</td></tr>`
+      for (const date of Array.from(byDateThenStore.keys()).sort()) {
+        const storeMap = byDateThenStore.get(date)!
+        for (const [storeName, storeItems] of Array.from(storeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+          whRows.push(`<tr class="date-store-header"><td colspan="5" style="background:#e8e8e8;font-weight:bold;padding:8px">${escape(date)} · Store: ${escape(storeName)}</td></tr>`)
+          whRows.push(
+            ...storeItems.map(
+              (r) =>
+                `<tr><td>${escape(r.code)}</td><td>${escape(r.name)}</td><td>${escape(r.spec)}</td><td class="num">${r.qty}</td><td>${escape(r.deliveryDate)}</td></tr>`
+            )
           )
-        )
+        }
       }
       sections.push(`
         <div style="margin-bottom:24px;page-break-inside:avoid">

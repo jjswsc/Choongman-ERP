@@ -161,6 +161,15 @@ export async function GET(request: NextRequest) {
       addRow(wh, store, code, info.name || name, info.spec, qty, deliveryDate, 'Force')
     }
 
+    // 정렬: 배송일 → 매장 순
+    for (const wh of Object.keys(byWarehouse)) {
+      byWarehouse[wh].sort((a, b) => {
+        const cmpDate = (a.deliveryDate || '').localeCompare(b.deliveryDate || '')
+        if (cmpDate !== 0) return cmpDate
+        return (a.store || '').localeCompare(b.store || '')
+      })
+    }
+
     // warehouse order from warehouse_locations
     const warehouseOrder: string[] = []
     try {

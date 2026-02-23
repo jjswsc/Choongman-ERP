@@ -189,6 +189,13 @@ export function OrderApproval() {
       setCheckedOrders(new Set(mapped.map((o) => o.id)))
       setAllChecked(mapped.length > 0)
       setEditedItemsByOrderId({})
+      setDeliveryDateByOrder((prev) => {
+        const next = { ...prev }
+        for (const o of mapped) {
+          if (o.deliveryDate && o.deliveryDate !== "-") next[o.id] = o.deliveryDate
+        }
+        return next
+      })
     } catch {
       setOrders([])
     } finally {
@@ -415,6 +422,55 @@ export function OrderApproval() {
           </Button>
         </div>
       </div>
+
+      {/* 배송지별 배송일 일괄 설정 */}
+      {!isManager && (() => {
+        const pendingByStore = filteredOrders
+          .filter((o) => o.status === "Pending")
+          .reduce((acc, o) => {
+            const s = o.store || "(미지정)"
+            if (!acc.has(s)) acc.set(s, [])
+            acc.get(s)!.push(o)
+            return acc
+          }, new Map<string, typeof filteredOrders>())
+        const stores = Array.from(pendingByStore.keys()).sort()
+        if (stores.length === 0) return null
+        return (
+          <div className="rounded-xl border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground">
+              <Truck className="h-3.5 w-3.5 text-primary" />
+              {t("orderBatchDeliveryByStore")}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {stores.map((store) => {
+                const orders = pendingByStore.get(store)!
+                const dates = orders.map((o) => deliveryDateByOrder[o.id] || "").filter(Boolean)
+                const displayValue = dates.length > 0 && dates.every((d) => d === dates[0]) ? dates[0] : ""
+                return (
+                  <div key={store} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                    <span className="text-xs font-medium shrink-0">{store}</span>
+                    <Input
+                      type="date"
+                      className="h-8 w-36 text-xs"
+                      placeholder={t("orderDeliveryDatePh")}
+                      value={displayValue}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setDeliveryDateByOrder((prev) => {
+                          const next = { ...prev }
+                          for (const o of orders) next[o.id] = v
+                          return next
+                        })
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground">({orders.length}건)</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Order table */}
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">

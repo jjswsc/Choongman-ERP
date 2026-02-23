@@ -195,7 +195,7 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus?: string
-  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number; code?: string; outboundLocation?: string; index?: number }[]
   receivedIndices?: number[]
   userName?: string
   userNick?: string

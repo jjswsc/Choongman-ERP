@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 export interface OrderHistoryItem {
   id: number
@@ -10,7 +10,7 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus: string
-  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number; code?: string; outboundLocation?: string; index?: number }[]
   receivedIndices?: number[]
   userName?: string
   userNick?: string
@@ -53,6 +53,18 @@ export async function GET(request: NextRequest) {
       reject_reason?: string
     }[]
 
+    const itemMap: Record<string, string> = {}
+    try {
+      const itemRows = (await supabaseSelect('items', {
+        select: 'code,outbound_location',
+        limit: 5000,
+      })) as { code?: string; outbound_location?: string }[]
+      for (const it of itemRows || []) {
+        const c = String(it.code || '').trim()
+        if (c) itemMap[c] = String(it.outbound_location || '').trim() || '(미지정)'
+      }
+    } catch {}
+
     const nameToNick: Record<string, string> = {}
     if (store) {
       try {
@@ -65,7 +77,7 @@ export async function GET(request: NextRequest) {
       } catch {}
     }
     const list: OrderHistoryItem[] = (rows || []).map((o) => {
-      let cart: { name?: string; qty?: number; price?: number }[] = []
+      let cart: { code?: string; name?: string; qty?: number; price?: number }[] = []
       try {
         cart = JSON.parse(o.cart_json || '[]')
       } catch {}
@@ -87,11 +99,16 @@ export async function GET(request: NextRequest) {
         const recQty = receivedQtyMap[String(idx)] ?? receivedQtyMap[idx]
         const isReceived = receivedIndices.includes(idx) || isFullReceived
         const effectiveQty = isReceived && typeof recQty === 'number' ? recQty : Number(it.qty || 0)
+        const code = String(it.code || '').trim()
+        const outboundLocation = code ? (itemMap[code] || '(미지정)') : '(미지정)'
         return {
           ...it,
+          code,
+          index: idx,
           qty: Number(it.qty || 0),
           receivedQty: isReceived ? effectiveQty : undefined,
           originalQty: isReceived && origFromMap != null ? origFromMap : undefined,
+          outboundLocation,
         }
       })
       const summary =
