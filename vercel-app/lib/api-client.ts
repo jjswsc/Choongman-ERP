@@ -1449,6 +1449,7 @@ export async function getAccountSubjects(params?: {
   type?: string
   forExpense?: boolean
   forFixed?: boolean
+  forCost?: boolean
   forTransfer?: boolean
   forRevenue?: boolean
 }) {
@@ -1456,6 +1457,7 @@ export async function getAccountSubjects(params?: {
   if (params?.type) q.set('type', params.type)
   if (params?.forExpense) q.set('forExpense', 'true')
   if (params?.forFixed) q.set('forFixed', 'true')
+  if (params?.forCost) q.set('forCost', 'true')
   if (params?.forTransfer) q.set('forTransfer', 'true')
   if (params?.forRevenue) q.set('forRevenue', 'true')
   const res = await apiFetch(`/api/getAccountSubjects?${q}`)

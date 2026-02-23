@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   const typeFilter = String(searchParams.get('type') || '').trim()
   const forExpense = searchParams.get('forExpense') === 'true'
   const forFixed = searchParams.get('forFixed') === 'true'
+  const forCost = searchParams.get('forCost') === 'true'
   const forTransfer = searchParams.get('forTransfer') === 'true'
   const forRevenue = searchParams.get('forRevenue') === 'true'
 
@@ -43,6 +44,9 @@ export async function GET(request: NextRequest) {
     }
     if (forFixed) {
       list = list.filter((x) => x.type === 'expense' && x.pAndLSection === 'fixed')
+    }
+    if (forCost) {
+      list = list.filter((x) => x.type === 'expense' && x.pAndLSection === 'cost')
     }
     if (forTransfer) {
       list = list.filter((x) => x.type === 'transfer')

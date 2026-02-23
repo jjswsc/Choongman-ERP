@@ -54,6 +54,7 @@ export function PettyCashTab() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const asDisplayName = (a: AccountSubjectItem) => (lang === "ko" ? a.name : (a.nameEn || a.name))
 
   const [stores, setStores] = useState<string[]>([])
   const [officeDepartments, setOfficeDepartments] = useState<string[]>([])
@@ -137,8 +138,9 @@ export function PettyCashTab() {
     Promise.all([
       getAccountSubjects({ forExpense: true }),
       getAccountSubjects({ forFixed: true }),
-    ]).then(([expense, fixed]) => {
-      setAccountSubjectOptions([...(fixed || []), ...(expense || [])])
+      getAccountSubjects({ forCost: true }),
+    ]).then(([expense, fixed, cost]) => {
+      setAccountSubjectOptions([...(cost || []), ...(fixed || []), ...(expense || [])])
     }).catch(() => setAccountSubjectOptions([]))
   }, [])
 
@@ -415,7 +417,7 @@ export function PettyCashTab() {
     const getAccountSubjectName = (id: number | null | undefined) => {
       if (id == null) return ""
       const a = accountSubjectOptions.find((x) => x.id === id)
-      return a ? `${a.code} ${a.name}` : ""
+      return a ? `${a.code} ${asDisplayName(a)}` : ""
     }
     for (const r of monthlyData) {
       rows.push([
@@ -632,7 +634,7 @@ ${rows.map((row, ri) => {
                       <SelectContent>
                         <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
                         {accountSubjectOptions.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -795,7 +797,7 @@ ${rows.map((row, ri) => {
                               <SelectContent>
                                 <SelectItem value="__none__">—</SelectItem>
                                 {accountSubjectOptions.map((a) => (
-                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -880,7 +882,7 @@ ${rows.map((row, ri) => {
                       <SelectContent>
                         <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
                         {accountSubjectOptions.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
