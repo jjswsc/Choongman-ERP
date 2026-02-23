@@ -1,0 +1,4 @@
+-- vendors id 548 (본사, name: S&J Global..ltd, type: 본사) GPS 적용
+-- Office/본사/오피스/본점 출근·매장방문 시 id 548 또는 type='본사'인 vendor의 lat/lng 사용
+--
+-- Supabase Table Editor → vendors → id=548 → lat, lng에 위도·경도 입력 후 저장

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const bankTxId = Number(body.bankTransactionId ?? body.id ?? body.bankTxId)
     const invoiceReceived = body.invoiceReceived ?? body.invoice_received
     const invoiceNo = body.invoiceNo ?? body.invoice_no
+    const invoicePhotoUrl = body.invoicePhotoUrl ?? body.invoice_photo_url ?? body.invoice_photo
     const purchaseOrderId = body.purchaseOrderId ?? body.purchase_order_id
 
     if (!bankTxId || isNaN(bankTxId)) {
@@ -31,6 +32,7 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = {}
     if (typeof invoiceReceived === 'boolean') patch.invoice_received = invoiceReceived
     if (invoiceNo !== undefined) patch.invoice_no = String(invoiceNo || '').trim() || null
+    if (invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(invoicePhotoUrl || '').trim() || null
     if (purchaseOrderId !== undefined) {
       const poId = purchaseOrderId ? Number(purchaseOrderId) : null
       patch.purchase_order_id = poId && !isNaN(poId) ? poId : null

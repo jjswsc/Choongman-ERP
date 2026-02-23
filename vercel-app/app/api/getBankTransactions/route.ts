@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'trans_date.asc,id.asc',
       limit: 2000,
-    }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; purchase_order_id?: number }[]
+    }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
 
     const list = (rows || []).map((r) => ({
       id: r.id,
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest) {
       storeName: r.store_name ? String(r.store_name).trim() : undefined,
       invoiceReceived: Boolean(r.invoice_received),
       invoiceNo: r.invoice_no ? String(r.invoice_no).trim() : undefined,
+      invoicePhotoUrl: r.invoice_photo_url ? String(r.invoice_photo_url).trim() : undefined,
       purchaseOrderId: r.purchase_order_id ?? undefined,
     }))
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
 import { parseOr400, submitAttendanceSchema } from '@/lib/api-validate'
+import { isOfficeStore, OFFICE_STORES } from '@/lib/permissions'
 
 const TZ = 'Asia/Bangkok'
 
@@ -95,8 +96,10 @@ export async function POST(request: NextRequest) {
       targetLng = 0,
       locationOk = false
     const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
+      id?: number
       gps_name?: string
       name?: string
+      type?: string
       lat?: string | number
       lng?: string | number
     }[]
@@ -109,6 +112,27 @@ export async function POST(request: NextRequest) {
         targetLat = Number(v.lat) || 0
         targetLng = Number(v.lng) || 0
         if (targetLat !== 0 || targetLng !== 0) break
+      }
+    }
+    // Office/본사: storeName이 Office/본사/오피스/본점일 때, 매칭 실패 시 1) name/gps_name이 본사 계열인 vendor 2) type='본사'인 vendor 3) id=548(본사) fallback
+    if ((targetLat === 0 && targetLng === 0) && isOfficeStore(storeName || '')) {
+      const officeNorm = OFFICE_STORES.map((s) => s.trim().toLowerCase())
+      for (const v of vendors || []) {
+        const gpsName = String(v.gps_name || '').trim().toLowerCase()
+        const name = String(v.name || '').trim().toLowerCase()
+        const vType = String(v.type || '').trim().toLowerCase()
+        const vNameInOffice = officeNorm.includes(gpsName) || officeNorm.includes(name)
+        const vType본사 = vType === '본사'
+        const vId548 = v.id === 548
+        if (vNameInOffice || vType본사 || vId548) {
+          const lat = Number(v.lat) || 0
+          const lng = Number(v.lng) || 0
+          if (lat !== 0 || lng !== 0) {
+            targetLat = lat
+            targetLng = lng
+            break
+          }
+        }
       }
     }
     if (
@@ -136,14 +160,19 @@ export async function POST(request: NextRequest) {
         )
       }
     } else if (logType === '출근' && (targetLat === 0 && targetLng === 0)) {
-      // 매장 GPS 미등록 시 출근 거부 (Ekkamai 등 GPS 없는 매장 원격 출근 방지)
-      return NextResponse.json(
-        {
-          success: false,
-          message: `❌ ${storeName} 매장의 위치(GPS)가 등록되지 않아 출근 기록이 불가합니다. 관리자에게 문의해 주세요.`,
-        },
-        { headers }
-      )
+      // Office/본사: GPS 미등록해도 출근 허용 (본사·오피스 직원은 재택/외근 등으로 위치 가변)
+      if (isOfficeStore(storeName || '')) {
+        locationOk = true
+      } else {
+        // 매장 GPS 미등록 시 출근 거부 (Ekkamai 등 GPS 없는 매장 원격 출근 방지)
+        return NextResponse.json(
+          {
+            success: false,
+            message: `❌ ${storeName} 매장의 위치(GPS)가 등록되지 않아 출근 기록이 불가합니다. 관리자에게 문의해 주세요.`,
+          },
+          { headers }
+        )
+      }
     }
     // GPS 미확인 시에도 승인 대기 없음 (매장 폰/태블릿 활용 정책)
     const needManagerApproval = false

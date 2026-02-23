@@ -1331,6 +1331,7 @@ export async function updateBankTransactionInvoice(params: {
   bankTransactionId: number
   invoiceReceived?: boolean
   invoiceNo?: string
+  invoicePhotoUrl?: string
   purchaseOrderId?: number | null
 }) {
   const res = await apiFetch('/api/updateBankTransactionInvoice', {

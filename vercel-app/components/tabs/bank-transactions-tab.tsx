@@ -11,9 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, FileCheck, Trash2 } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -36,6 +37,7 @@ import {
   type BankMemoRule,
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
+import { compressImageForUpload } from "@/lib/utils"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 
 function todayStr() {
@@ -54,7 +56,7 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; purchaseOrderId?: number; vendorCode?: string }[]>([])
+  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; invoicePhotoUrl?: string; purchaseOrderId?: number; vendorCode?: string }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
@@ -81,6 +83,8 @@ export function BankTransactionsTab() {
   const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
   const [invoiceLinkPOList, setInvoiceLinkPOList] = React.useState<{ id?: number; po_no?: string; vendor_name?: string; total?: number; created_at?: string }[]>([])
   const [invoiceLinkSelectedPO, setInvoiceLinkSelectedPO] = React.useState<string>("")
+  const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
+  const [invoicePhotoPreviewUrl, setInvoicePhotoPreviewUrl] = React.useState<string | null>(null)
   const [memoRules, setMemoRules] = React.useState<BankMemoRule[]>([])
   const [newRuleKeyword, setNewRuleKeyword] = React.useState("")
   const [newRuleTransType, setNewRuleTransType] = React.useState<"deposit" | "withdraw">("withdraw")
@@ -191,15 +195,31 @@ export function BankTransactionsTab() {
     ? (Number(actualBalance.replace(/,/g, "")) || 0) - summary.calculatedBalance
     : null
 
-  const handleBankInvoiceToggle = React.useCallback(
-    (r: (typeof list)[0]) => {
+  const handleBankInvoiceChange = React.useCallback(
+    (r: (typeof list)[0], newChecked: boolean) => {
       if (!r.id || r.category !== "purchase_payment") return
-      // 이미 발주서 연동된 건: 바로 토글
+      // 체크 해제: 바로 업데이트
+      if (!newChecked) {
+        setUpdatingInvoiceId(r.id)
+        updateBankTransactionInvoice({
+          bankTransactionId: r.id,
+          invoiceReceived: false,
+          purchaseOrderId: r.purchaseOrderId,
+        })
+          .then((res) => {
+            if (res.success) loadData()
+            else alert(res.message || t("processFail"))
+          })
+          .catch((e) => alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e))))
+          .finally(() => setUpdatingInvoiceId(null))
+        return
+      }
+      // 체크: 이미 발주서 연동된 건은 바로 업데이트
       if (r.purchaseOrderId) {
         setUpdatingInvoiceId(r.id)
         updateBankTransactionInvoice({
           bankTransactionId: r.id,
-          invoiceReceived: !r.invoiceReceived,
+          invoiceReceived: true,
           purchaseOrderId: r.purchaseOrderId,
         })
           .then((res) => {
@@ -247,6 +267,30 @@ export function BankTransactionsTab() {
       setUpdatingInvoiceId(null)
     }
   }, [invoiceLinkRow, invoiceLinkSelectedPO, loadData, t])
+
+  const invoicePhotoInputRef = React.useRef<HTMLInputElement>(null)
+  const invoicePhotoTargetRowRef = React.useRef<(typeof list)[0] | null>(null)
+  const handleInvoicePhotoUpload = React.useCallback(
+    async (r: (typeof list)[0], file: File) => {
+      if (!r.id || r.category !== "purchase_payment") return
+      setInvoicePhotoUploadingId(r.id)
+      try {
+        const dataUrl = await compressImageForUpload(file, 1024, 0.7)
+        const res = await updateBankTransactionInvoice({
+          bankTransactionId: r.id,
+          invoicePhotoUrl: dataUrl,
+        })
+        if (res.success) loadData()
+        else alert(res.message || t("msg_upload_fail"))
+      } catch (e) {
+        alert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setInvoicePhotoUploadingId(null)
+        if (invoicePhotoInputRef.current) invoicePhotoInputRef.current.value = ""
+      }
+    },
+    [loadData, t]
+  )
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) {
@@ -440,6 +484,19 @@ export function BankTransactionsTab() {
 
   return (
     <div className="space-y-4">
+      <input
+        ref={invoicePhotoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          const target = invoicePhotoTargetRowRef.current
+          if (file && target) handleInvoicePhotoUpload(target, file)
+          invoicePhotoTargetRowRef.current = null
+          e.target.value = ""
+        }}
+      />
       <Tabs defaultValue="input" className="w-full">
         <TabsList className="mb-3">
           <TabsTrigger value="input">
@@ -596,7 +653,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center min-w-[110px]">{t("bankAttributedDate") || "인식일"}</th>
-                        <th className="p-2 text-center min-w-[42px]" title={t("poInvoiceReceived") || "인보이스"}>{t("poInvoiceReceived") || "인보이스"}</th>
+                        <th className="p-2 text-center min-w-[80px]" title={t("poInvoice") || "인보이스"}>{t("poInvoice") || "인보이스"}</th>
                         <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                       </tr>
@@ -655,15 +712,40 @@ export function BankTransactionsTab() {
                               </td>
                               <td className="p-2 text-center">
                                 {r.transType === "withdraw" && r.category === "purchase_payment" ? (
-                                  <button
-                                    type="button"
-                                    className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted ${r.invoiceReceived ? "text-green-600" : "text-muted-foreground"}`}
-                                    onClick={() => handleBankInvoiceToggle(r)}
-                                    disabled={updatingInvoiceId === r.id}
-                                    title={r.invoiceReceived ? (t("poInvoiceReceived") || "인보이스") + " ✓" : (t("poInvoiceReceived") || "인보이스") + " (클릭하여 수령 체크)"}
-                                  >
-                                    <FileCheck className="h-5 w-5" />
-                                  </button>
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <Checkbox
+                                      checked={!!r.invoiceReceived}
+                                      onCheckedChange={(checked) => {
+                                        if (checked === "indeterminate") return
+                                        handleBankInvoiceChange(r, checked === true)
+                                      }}
+                                      disabled={updatingInvoiceId === r.id}
+                                      title={t("poInvoiceReceived") || "인보이스"}
+                                      className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600 shrink-0"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (r.invoicePhotoUrl) {
+                                          setInvoicePhotoPreviewUrl(r.invoicePhotoUrl!)
+                                        } else {
+                                          invoicePhotoTargetRowRef.current = r
+                                          invoicePhotoInputRef.current?.click()
+                                        }
+                                      }}
+                                      disabled={invoicePhotoUploadingId === r.id}
+                                      className={`inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 overflow-hidden ${r.invoicePhotoUrl ? "text-green-600" : "text-muted-foreground"}`}
+                                      title={r.invoicePhotoUrl ? (t("poInvoice") || "인보이스") + " (클릭하여 보기)" : t("bankInvoicePhotoUpload") || "인보이스 사진 업로드"}
+                                    >
+                                      {r.invoicePhotoUrl ? (
+                                        <img src={r.invoicePhotoUrl} alt="" className="h-6 w-6 object-cover rounded" />
+                                      ) : invoicePhotoUploadingId === r.id ? (
+                                        <span className="text-xs">...</span>
+                                      ) : (
+                                        <Camera className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </div>
                                 ) : "—"}
                               </td>
                               <td
@@ -1178,6 +1260,15 @@ export function BankTransactionsTab() {
             <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
           </DialogHeader>
           <p className="whitespace-pre-wrap break-words text-sm py-2">{memoPreviewText || ""}</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!invoicePhotoPreviewUrl} onOpenChange={(open) => !open && setInvoicePhotoPreviewUrl(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t("poInvoice") || "인보이스"}</DialogTitle>
+          </DialogHeader>
+          <img src={invoicePhotoPreviewUrl || ""} alt="" className="max-h-[70vh] w-full object-contain rounded" />
         </DialogContent>
       </Dialog>
 
