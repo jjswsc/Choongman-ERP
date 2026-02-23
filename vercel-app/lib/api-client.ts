@@ -1037,6 +1037,8 @@ export interface PettyCashItem {
   memo: string
   receipt_url?: string
   user_name: string
+  account_subject_id?: number | null
+  accountSubjectId?: number | null
 }
 
 export async function getPettyCashOptions(): Promise<{ stores: string[]; officeDepartments: string[] }> {
@@ -1105,6 +1107,7 @@ export async function addPettyCashTransaction(params: {
   amount: number
   memo?: string
   receiptUrl?: string
+  accountSubjectId?: number | null
   userName?: string
   userStore?: string
   userRole?: string
@@ -1125,6 +1128,7 @@ export async function updatePettyCashTransaction(params: {
   amount: number
   memo?: string
   receiptUrl?: string | null
+  accountSubjectId?: number | null
   userStore?: string
   userRole?: string
 }) {
@@ -1138,6 +1142,7 @@ export async function updatePettyCashTransaction(params: {
       amount: params.amount,
       memo: params.memo ?? '',
       receiptUrl: params.receiptUrl,
+      accountSubjectId: params.accountSubjectId,
       userStore: params.userStore,
       userRole: params.userRole,
     }),

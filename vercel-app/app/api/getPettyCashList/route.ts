@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   } else if (storeFilter) effectiveStore = storeFilter
 
   try {
-    let rows: { id: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; balance_after?: number; memo?: string; receipt_url?: string; user_name?: string }[] = []
+    let rows: { id: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; balance_after?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
         rows = (await supabaseSelectFilter(
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     const startD = startStr ? new Date(startStr + 'T00:00:00') : null
     const endD = endStr ? new Date(endStr + 'T23:59:59') : null
 
-    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number | null; memo: string; receipt_url?: string; user_name: string }[] = []
+    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number | null; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null; accountSubjectId?: number | null }[] = []
     for (const r of rows || []) {
       const dt = toDateStr(r.trans_date)
       if (!dt) continue
@@ -71,6 +71,8 @@ export async function GET(request: NextRequest) {
         memo: String(r.memo || '').trim(),
         receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
         user_name: String(r.user_name || '').trim(),
+        account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
+        accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
       })
     }
 

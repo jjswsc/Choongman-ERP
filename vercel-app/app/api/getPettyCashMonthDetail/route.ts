@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   const endStr = String(year) + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0')
 
   try {
-    let rows: { id?: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; receipt_url?: string; user_name?: string }[] = []
+    let rows: { id?: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
         rows = (await supabaseSelectFilter(
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     const startD = new Date(startStr + 'T00:00:00')
     const endD = new Date(endStr + 'T23:59:59')
     const storePrevBal: Record<string, number> = {}
-    const inMonth: { id: number; store: string; trans_date: string; trans_type: string; amount: number; memo: string; receipt_url?: string; user_name: string }[] = []
+    const inMonth: { id: number; store: string; trans_date: string; trans_type: string; amount: number; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null }[] = []
 
     for (const r of rows || []) {
       const dt = toDateStr(r.trans_date)
@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
         memo: String(r.memo || '').trim(),
         receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
         user_name: String(r.user_name || '').trim(),
+        account_subject_id: r.account_subject_id != null ? Number(r.account_subject_id) : null,
+        accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
       })
     }
 
@@ -100,7 +102,7 @@ export async function GET(request: NextRequest) {
     })
 
     const storeBal: Record<string, number> = { ...storePrevBal }
-    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number; memo: string; receipt_url?: string; user_name: string }[] = []
+    const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null; accountSubjectId?: number | null }[] = []
     for (const it of inMonth) {
       if (!storeBal[it.store]) storeBal[it.store] = 0
       storeBal[it.store] += it.amount
@@ -114,6 +116,8 @@ export async function GET(request: NextRequest) {
         memo: it.memo,
         receipt_url: it.receipt_url,
         user_name: it.user_name,
+        account_subject_id: it.account_subject_id ?? null,
+        accountSubjectId: it.account_subject_id ?? null,
       })
     }
 

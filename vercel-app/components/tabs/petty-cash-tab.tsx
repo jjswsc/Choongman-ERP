@@ -33,7 +33,9 @@ import {
   addPettyCashTransaction,
   updatePettyCashTransaction,
   translateTexts,
+  getAccountSubjects,
   type PettyCashItem,
+  type AccountSubjectItem,
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 
@@ -80,11 +82,14 @@ export function PettyCashTab() {
   const [addType, setAddType] = useState("expense")
   const [addAmount, setAddAmount] = useState("")
   const [addMemo, setAddMemo] = useState("")
+  const [addAccountSubjectId, setAddAccountSubjectId] = useState("")
   const [addReceiptFile, setAddReceiptFile] = useState<File | null>(null)
   const [addReceiptPreview, setAddReceiptPreview] = useState<string | null>(null)
   const [addSaving, setAddSaving] = useState(false)
   const [receiptModalUrl, setReceiptModalUrl] = useState<string | null>(null)
   const [memoTransMap, setMemoTransMap] = useState<Record<string, string>>({})
+  const [accountSubjectOptions, setAccountSubjectOptions] = useState<AccountSubjectItem[]>([])
+  const [inlineSavingId, setInlineSavingId] = useState<number | null>(null)
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
 
   const [editModalItem, setEditModalItem] = useState<PettyCashItem | null>(null)
@@ -92,6 +97,7 @@ export function PettyCashTab() {
   const [editType, setEditType] = useState("expense")
   const [editAmount, setEditAmount] = useState("")
   const [editMemo, setEditMemo] = useState("")
+  const [editAccountSubjectId, setEditAccountSubjectId] = useState("")
   const [editReceiptFile, setEditReceiptFile] = useState<File | null>(null)
   const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
@@ -126,6 +132,15 @@ export function PettyCashTab() {
       }
     })
   }, [auth?.store, auth?.role, canSearchAll])
+
+  useEffect(() => {
+    Promise.all([
+      getAccountSubjects({ forExpense: true }),
+      getAccountSubjects({ forFixed: true }),
+    ]).then(([expense, fixed]) => {
+      setAccountSubjectOptions([...(fixed || []), ...(expense || [])])
+    }).catch(() => setAccountSubjectOptions([]))
+  }, [])
 
   // 내용(memo) 로그인 언어로 번역
   useEffect(() => {
@@ -246,6 +261,7 @@ export function PettyCashTab() {
       amount: amt,
       memo: addMemo,
       receiptUrl,
+      accountSubjectId: addAccountSubjectId ? Number(addAccountSubjectId) : null,
       userName: auth.user,
       userStore: auth.store,
       userRole: auth.role,
@@ -254,6 +270,7 @@ export function PettyCashTab() {
     if (res.success) {
       setAddAmount("")
       setAddMemo("")
+      setAddAccountSubjectId("")
       setAddReceiptFile(null)
       setAddReceiptPreview((prev) => {
         if (prev) URL.revokeObjectURL(prev)
@@ -272,6 +289,7 @@ export function PettyCashTab() {
     setEditType(r.trans_type)
     setEditAmount(String(Math.abs(r.amount)))
     setEditMemo(r.memo || "")
+    setEditAccountSubjectId((r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "")
     setEditReceiptFile(null)
     setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
   }
@@ -279,6 +297,35 @@ export function PettyCashTab() {
   const closeEditModal = () => {
     setEditModalItem(null)
     setEditReceiptPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+  }
+
+  const handleInlineAccountSubjectChange = async (r: PettyCashItem, newAccountSubjectId: string | number | null) => {
+    if (!auth?.store) return
+    const asId = newAccountSubjectId === "" || newAccountSubjectId === "__none__" ? null : Number(newAccountSubjectId)
+    if (asId !== null && isNaN(asId)) return
+    setInlineSavingId(r.id)
+    try {
+      const res = await updatePettyCashTransaction({
+        id: r.id,
+        transDate: r.trans_date,
+        transType: r.trans_type,
+        amount: Math.abs(r.amount),
+        memo: r.memo ?? "",
+        accountSubjectId: asId,
+        userStore: auth.store,
+        userRole: auth.role,
+      })
+      if (res.success) {
+        loadMonthly()
+        loadList()
+      } else {
+        alert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
+      }
+    } catch {
+      alert(t("msg_modify_fail") || "수정 실패")
+    } finally {
+      setInlineSavingId(null)
+    }
   }
 
   const handleEditReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,6 +367,7 @@ export function PettyCashTab() {
       amount: amt,
       memo: editMemo,
       receiptUrl: receiptUrl,
+      accountSubjectId: editAccountSubjectId ? Number(editAccountSubjectId) : null,
       userStore: auth.store,
       userRole: auth.role,
     })
@@ -350,6 +398,7 @@ export function PettyCashTab() {
       t("pettyColType") || "유형",
       t("pettyColAmount") || "금액",
       t("pettyColBalance") || "잔액",
+      t("accountSubject") || "계정과목",
       t("pettyColMemo") || "내용",
       t("pettyColUser") || "등록자",
     ]
@@ -357,12 +406,17 @@ export function PettyCashTab() {
       ? (monthlyDepartment === "All" ? `${t("pettyScopeOffice") || "본사"} ${t("all") || "전체"}` : `${t("pettyScopeOffice") || "본사"} (${monthlyDepartment})`)
       : (monthlyStore === "All" ? t("all") || "전체" : monthlyStore)
     const rows: string[][] = [
-      [t("pettyTabMonthly") || "월별 현황", "", "", "", "", "", ""],
-      [t("pettyYearMonth") || "기간", monthlyYm, "", "", "", "", ""],
-      [t("store") || "매장", storeLabel, "", "", "", "", ""],
+      [t("pettyTabMonthly") || "월별 현황", "", "", "", "", "", "", ""],
+      [t("pettyYearMonth") || "기간", monthlyYm, "", "", "", "", "", ""],
+      [t("store") || "매장", storeLabel, "", "", "", "", "", ""],
       [],
       cols,
     ]
+    const getAccountSubjectName = (id: number | null | undefined) => {
+      if (id == null) return ""
+      const a = accountSubjectOptions.find((x) => x.id === id)
+      return a ? `${a.code} ${a.name}` : ""
+    }
     for (const r of monthlyData) {
       rows.push([
         r.trans_date,
@@ -370,6 +424,7 @@ export function PettyCashTab() {
         t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type,
         String(r.amount),
         String(r.balance_after ?? 0),
+        getAccountSubjectName(r.accountSubjectId ?? r.account_subject_id ?? null),
         r.memo || "",
         r.user_name || "",
       ])
@@ -568,6 +623,20 @@ ${rows.map((row, ri) => {
                   </Select>
                   <Input type="number" placeholder={t("pettyAmountPh") || "금액"} value={addAmount} onChange={(e) => setAddAmount(e.target.value)} className="h-9 text-xs" min={0} />
                   <Input type="text" placeholder={t("pettyMemoPh") || "내용"} value={addMemo} onChange={(e) => setAddMemo(e.target.value)} className="h-9 text-xs" />
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("accountSubject") || "계정과목"} <span className="text-muted-foreground">({t("optional")})</span></label>
+                    <Select value={addAccountSubjectId || "__none__"} onValueChange={(v) => setAddAccountSubjectId(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9 mt-1 text-xs">
+                        <SelectValue placeholder={t("accountSubject") || "계정과목"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
+                        {accountSubjectOptions.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1">
                     <label className="flex items-center gap-2 text-xs font-medium">
                       <Camera className="h-3.5 w-3.5" />
@@ -676,13 +745,14 @@ ${rows.map((row, ri) => {
                 {monthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{t("pettyNoData") || "데이터가 없습니다"}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[480px]">
+                  <table className="w-full text-xs table-fixed min-w-[580px]">
                     <colgroup>
                       <col style={{ width: "92px" }} />
                       <col style={{ width: "88px" }} />
                       <col style={{ width: "42px" }} />
                       <col style={{ width: "64px" }} />
                       <col style={{ width: "72px" }} />
+                      <col style={{ width: "100px" }} />
                       <col />
                       <col style={{ width: "100px" }} />
                       <col style={{ width: "36px" }} />
@@ -695,6 +765,7 @@ ${rows.map((row, ri) => {
                         <th className="p-2 text-center">{t("pettyColType") || "유형"}</th>
                         <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center font-medium">{t("pettyColBalance") || "잔액"}</th>
+                        <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
                         <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
                         <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
@@ -712,6 +783,23 @@ ${rows.map((row, ri) => {
                             {fmt(Math.abs(r.amount))}
                           </td>
                           <td className="p-2 text-center font-medium">{fmt(r.balance_after ?? 0)}</td>
+                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                            <Select
+                              value={(r.accountSubjectId ?? r.account_subject_id) ? String(r.accountSubjectId ?? r.account_subject_id) : "__none__"}
+                              onValueChange={(v) => handleInlineAccountSubjectChange(r, v)}
+                              disabled={inlineSavingId === r.id}
+                            >
+                              <SelectTrigger className="h-8 min-w-0 text-[10px] border-dashed">
+                                <SelectValue placeholder={inlineSavingId === r.id ? (t("loading") || "...") : (t("accountSubject") || "계정과목")} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {accountSubjectOptions.map((a) => (
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
                           <td className="p-2 text-center truncate" title={getMemo(r.memo || "")}>{getMemo(r.memo || "")}</td>
                           <td className="p-2 text-center text-xs text-muted-foreground truncate" title={r.user_name || "-"}>{r.user_name || "-"}</td>
                           <td className="p-2 text-center w-9">
@@ -782,6 +870,20 @@ ${rows.map((row, ri) => {
                   <div>
                     <label className="text-xs text-muted-foreground">{t("pettyColMemo") || "내용"}</label>
                     <Input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} className="h-9 mt-1 text-xs" placeholder={t("pettyMemoPh") || "내용"} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("accountSubject") || "계정과목"} <span className="text-muted-foreground">({t("optional")})</span></label>
+                    <Select value={editAccountSubjectId || "__none__"} onValueChange={(v) => setEditAccountSubjectId(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9 mt-1 text-xs">
+                        <SelectValue placeholder={t("accountSubject") || "계정과목"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— {t("optional") || "선택안함"}</SelectItem>
+                        {accountSubjectOptions.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="flex items-center gap-2 text-xs font-medium">

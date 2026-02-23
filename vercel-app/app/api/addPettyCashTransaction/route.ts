@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     const amount = Number(body.amount) || 0
     const memo = String(body.memo || '').trim()
     const receiptUrl = body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : ''
+    const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const userName = String(body.userName || body.user_name || '').trim()
     const userStore = String(body.userStore || body.user_store || '').trim()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
@@ -45,6 +46,10 @@ export async function POST(request: NextRequest) {
       user_name: userName,
     }
     if (receiptUrl) row.receipt_url = receiptUrl
+    if (accountSubjectId != null) {
+      const asid = Number(accountSubjectId)
+      if (!isNaN(asid)) row.account_subject_id = asid
+    }
     await supabaseInsert('petty_cash_transactions', row)
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })

@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const receiptUrl = body.receiptUrl !== undefined
       ? (body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : null)
       : undefined
+    const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const userStore = String(body.userStore || body.user_store || '').trim()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
 
@@ -57,6 +58,9 @@ export async function POST(request: NextRequest) {
       memo,
     }
     if (receiptUrl !== undefined) patch.receipt_url = receiptUrl || null
+    if (accountSubjectId !== undefined) {
+      patch.account_subject_id = accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
+    }
 
     await supabaseUpdate('petty_cash_transactions', id, patch)
 
