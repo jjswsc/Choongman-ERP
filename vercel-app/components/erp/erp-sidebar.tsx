@@ -113,6 +113,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
       { titleKey: "adminBankTransactions", icon: Banknote, href: "/admin/bank-transactions" },
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
+      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
     ],
   },
   {

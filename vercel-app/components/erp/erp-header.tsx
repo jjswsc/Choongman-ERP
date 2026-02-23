@@ -42,6 +42,7 @@ const PATH_KEYS: Record<string, string> = {
   "/admin/leave": "adminLeave",
   "/admin/petty-cash": "adminPettyCash",
   "/admin/income-statement": "adminIncomeStatement",
+  "/admin/sales-management": "adminSalesManagement",
   "/admin/bank-transactions": "adminBankTransactions",
   "/admin/store-check": "adminStoreCheck",
   "/admin/store-visit": "adminStoreVisit",

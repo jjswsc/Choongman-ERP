@@ -1257,6 +1257,99 @@ export async function addBalanceTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 매출 관리 (POS 엑셀 업로드) ───
+export interface PosSalesImport {
+  id: string
+  file_name?: string
+  year_month?: string
+  row_count?: number
+  total_sales?: number
+  created_at?: string
+}
+
+export async function getPosSalesImports(params?: { yearMonth?: string }) {
+  const q = new URLSearchParams()
+  if (params?.yearMonth) q.set('yearMonth', params.yearMonth)
+  const res = await apiFetch(`/api/posSalesImports?${q}`)
+  return res.json() as Promise<PosSalesImport[]>
+}
+
+export async function deletePosSalesImport(id: string) {
+  const res = await apiFetch(`/api/posSalesImports?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function importPosSalesExcel(file: File) {
+  const form = new FormData()
+  form.set('file', file)
+  const res = await apiFetch('/api/importPosSalesExcel', {
+    method: 'POST',
+    body: form,
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    importId?: string
+    yearMonth?: string
+    rowCount?: number
+    totalSales?: number
+  }>
+}
+
+export async function getPosSalesFilterOptions(importId: string) {
+  const res = await apiFetch(`/api/posSalesFilterOptions?importId=${encodeURIComponent(importId)}`)
+  return res.json() as Promise<{ posOptions: string[] }>
+}
+
+export async function getPosSalesByPeriod(params: {
+  importId: string
+  groupBy: 'month' | 'week' | 'day' | 'dow'
+  pos?: string
+}) {
+  const q = new URLSearchParams({
+    importId: params.importId,
+    groupBy: params.groupBy,
+  })
+  if (params.pos) q.set('pos', params.pos)
+  const res = await apiFetch(`/api/posSalesByPeriod?${q}`)
+  return res.json() as Promise<{ label: string; key: string; sales: number }[]>
+}
+
+export async function getPosSalesByDeliveryApp(params: { importId: string; pos?: string }) {
+  const q = new URLSearchParams({ importId: params.importId })
+  if (params.pos) q.set('pos', params.pos)
+  const res = await apiFetch(`/api/posSalesByDeliveryApp?${q}`)
+  return res.json() as Promise<{ items: { label: string; sales: number; pct: number }[]; total: number }>
+}
+
+export async function getPosSalesByChannel(params: { importId: string; pos?: string }) {
+  const q = new URLSearchParams({ importId: params.importId })
+  if (params.pos) q.set('pos', params.pos)
+  const res = await apiFetch(`/api/posSalesByChannel?${q}`)
+  return res.json() as Promise<{ label: string; sales: number }[]>
+}
+
+export async function getPosSalesByMenu(params: {
+  importId: string
+  pos?: string
+  search?: string
+}) {
+  const q = new URLSearchParams({ importId: params.importId })
+  if (params.pos) q.set('pos', params.pos)
+  if (params.search) q.set('search', params.search)
+  const res = await apiFetch(`/api/posSalesByMenu?${q}`)
+  return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
+}
+
+export async function getPosSalesByPayment(params: { importId: string; pos?: string }) {
+  const q = new URLSearchParams({ importId: params.importId })
+  if (params.pos) q.set('pos', params.pos)
+  const res = await apiFetch(`/api/posSalesByPayment?${q}`)
+  return res.json() as Promise<{ label: string; sales: number }[]>
+}
+
 // ─── 통장 거래 ───
 export interface BankAccount {
   id: number
