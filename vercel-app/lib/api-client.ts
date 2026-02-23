@@ -1440,6 +1440,15 @@ export async function saveBankAccount(params: {
   return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
 }
 
+export async function deleteBankAccount(params: { id: number }) {
+  const res = await apiFetch('/api/deleteBankAccount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 계정과목 ───
 export interface AccountSubjectItem {
   id?: number

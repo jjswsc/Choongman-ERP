@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -25,6 +25,7 @@ import {
   getBankTransactions,
   addBankTransactionsBulk,
   saveBankAccount,
+  deleteBankAccount,
   getAccountSubjects,
   saveAccountSubject,
   deleteAccountSubject,
@@ -79,6 +80,11 @@ export function BankTransactionsTab() {
   const [newAccountBankName, setNewAccountBankName] = React.useState("")
   const [newAccountStore, setNewAccountStore] = React.useState("")
   const [addAccountSaving, setAddAccountSaving] = React.useState(false)
+  const [accountManageOpen, setAccountManageOpen] = React.useState(false)
+  const [editingAccountId, setEditingAccountId] = React.useState<number | null>(null)
+  const [editAccountForm, setEditAccountForm] = React.useState<{ name: string; bankName: string; store: string }>({ name: "", bankName: "", store: "" })
+  const [accountManageSaving, setAccountManageSaving] = React.useState(false)
+  const [accountDeletingId, setAccountDeletingId] = React.useState<number | null>(null)
 
   const [importPreview, setImportPreview] = React.useState<KDepositParsedResult | null>(null)
   const [importRowEdits, setImportRowEdits] = React.useState<Record<number, { category?: string; accountSubjectId?: string; note?: string; salesDate?: string; expenseDate?: string; vendorCode?: string; storeName?: string }>>({})
@@ -422,6 +428,52 @@ export function BankTransactionsTab() {
       alert(String(e))
     } finally {
       setAddAccountSaving(false)
+    }
+  }
+
+  const handleSaveAccountEdit = async () => {
+    if (!editingAccountId || !editAccountForm.name.trim()) return
+    setAccountManageSaving(true)
+    try {
+      const store = isOffice ? (editAccountForm.store.trim() || undefined) : (auth?.store || undefined)
+      const res = await saveBankAccount({
+        id: editingAccountId,
+        name: editAccountForm.name.trim(),
+        bankName: editAccountForm.bankName.trim() || undefined,
+        store,
+      })
+      if (res.success) {
+        setEditingAccountId(null)
+        getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
+      } else {
+        alert(res.message || t("processFail"))
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setAccountManageSaving(false)
+    }
+  }
+
+  const handleDeleteAccount = async (id: number) => {
+    if (!confirm(t("bankAccountDeleteConfirm") || "이 계좌와 관련된 모든 거래 내역이 삭제됩니다. 삭제하시겠습니까?")) return
+    setAccountDeletingId(id)
+    try {
+      const res = await deleteBankAccount({ id })
+      if (res.success) {
+        const fresh = await getBankAccounts({ userStore: auth?.store, userRole: auth?.role }) || []
+        setAccounts(fresh)
+        if (String(accountId) === String(id) && fresh.length > 0) setAccountId(String(fresh[0].id))
+        else if (String(accountId) === String(id)) setAccountId("")
+        setEditingAccountId(null)
+        setAccountManageOpen(false)
+      } else {
+        alert(res.message || t("processFail"))
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setAccountDeletingId(null)
     }
   }
 
@@ -919,6 +971,14 @@ export function BankTransactionsTab() {
               <div className="flex flex-wrap items-center gap-2 mb-4">
                 {accounts.length > 0 && (
                   <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setAccountManageOpen(true); setEditingAccountId(null); }}
+                    >
+                      <Settings2 className="h-4 w-4 mr-1" />
+                      {t("bankAccountManage")}
+                    </Button>
                     <Select value={accountId} onValueChange={setAccountId}>
                       <SelectTrigger className="w-[160px] h-9">
                         <SelectValue placeholder={t("bankAccount")} />
@@ -1541,6 +1601,105 @@ export function BankTransactionsTab() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={accountManageOpen} onOpenChange={(open) => { setAccountManageOpen(open); if (!open) { setEditingAccountId(null); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("bankAccountManage")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-auto">
+            {accounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">{t("bankNoAccountHintShort")}</p>
+            ) : (
+              accounts.map((a) => (
+                <div key={a.id} className="rounded-lg border p-3 space-y-2">
+                  {editingAccountId === a.id ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankName") || "은행명"}</label>
+                          <Input
+                            value={editAccountForm.bankName}
+                            onChange={(e) => setEditAccountForm((p) => ({ ...p, bankName: e.target.value }))}
+                            className="h-8 text-sm"
+                            placeholder={t("bankName")}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-0.5">{t("bankAccount")}</label>
+                          <Input
+                            value={editAccountForm.name}
+                            onChange={(e) => setEditAccountForm((p) => ({ ...p, name: e.target.value }))}
+                            className="h-8 text-sm"
+                            placeholder={t("bankAccount")}
+                          />
+                        </div>
+                      </div>
+                      {isOffice && (
+                        <div>
+                          <label className="text-xs text-muted-foreground block mb-0.5">{t("store")}</label>
+                          <Select value={editAccountForm.store || "본사"} onValueChange={(v) => setEditAccountForm((p) => ({ ...p, store: v }))}>
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {storeOptionsDeduped.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {OFFICE_STORES.map((o) => o.trim().toLowerCase()).includes(s.trim().toLowerCase()) ? (t("pettyScopeOffice") || "본사") : s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" variant="outline" onClick={() => { setEditingAccountId(null); }} disabled={accountManageSaving}>
+                          {t("cancel")}
+                        </Button>
+                        <Button size="sm" onClick={handleSaveAccountEdit} disabled={accountManageSaving || !editAccountForm.name.trim()}>
+                          {accountManageSaving ? "..." : t("btn_save")}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {a.bankName ? `[${a.bankName}] ` : ""}{a.name} {a.store ? `(${a.store})` : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => {
+                              setEditingAccountId(a.id)
+                              setEditAccountForm({ name: a.name, bankName: a.bankName || "", store: a.store || "본사" })
+                            }}
+                          >
+                            <PenLine className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteAccount(a.id)}
+                            disabled={accountDeletingId !== null}
+                          >
+                            {accountDeletingId === a.id ? "..." : <Trash2 className="h-3.5 w-3.5" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!memoPreviewText} onOpenChange={(open) => !open && setMemoPreviewText(null)}>
         <DialogContent className="max-w-lg">
