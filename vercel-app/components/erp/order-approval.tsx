@@ -488,7 +488,7 @@ export function OrderApproval() {
                   key={order.id}
                   className={cn(
                     "transition-colors",
-                    isExpanded ? "bg-primary/[0.02]" : "hover:bg-muted/20"
+                    isExpanded ? "bg-primary/5" : "hover:bg-muted/20"
                   )}
                 >
                   <div
