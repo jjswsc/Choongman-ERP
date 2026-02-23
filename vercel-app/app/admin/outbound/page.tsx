@@ -363,7 +363,7 @@ export default function OutboundPage() {
           whRows.push(
             ...storeItems.map((r) => {
               const style = tdStyle(rowIdx++)
-              return `<tr><td style="${style}text-align:center;">${checkBoxHtml}</td><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${escape(r.deliveryDate)}</td></tr>`
+              return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
             })
           )
         }
@@ -376,7 +376,7 @@ export default function OutboundPage() {
             <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">${items.length} ${t("outWhCountSuffix")}</p>
           </div>
           <table style="${tableStyle}">
-            <thead><tr><th style="${thStyle} width:40px;">${colCheck}</th><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle}">${colDeliveryDate}</th></tr></thead>
+            <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle} width:40px;">${colCheck}</th><th style="${thStyle} min-width:90px; white-space:nowrap;">${colDeliveryDate}</th></tr></thead>
             <tbody>${whRows.join("")}</tbody>
           </table>
         </div>
@@ -656,7 +656,8 @@ export default function OutboundPage() {
     const vat7 = Math.round(totalBaht * 0.07)
     const grandTotal = totalBaht + vat7
     const grandWords = `( ${grandTotal.toLocaleString()} ${inv.inv_baht_only} )`
-    const companyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
+    const rawCompanyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
+    const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
     const address = company?.address || "-"
     const taxId = company?.taxId || ""
     const phone = company?.phone || ""
@@ -710,13 +711,17 @@ export default function OutboundPage() {
     <div style="font-size:11px; margin-top:4px; color:#64748b;">${grandWords}</div>
   </div></div>
   <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${inv.inv_remarks}:</strong> ${bankInfo}</div>
-  <div style="margin-top:28px; display:grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 24px; font-size: 11px;">
-    <div style="min-height: 120px; display: flex; flex-direction: column; justify-content: flex-end;">
-      <strong>${clientName}</strong><br><span style="margin-top: 8px; display: block;">${inv.inv_received_by} ________________  ${inv.inv_date} ________________</span>
+  <div style="margin-top:28px; display:grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 32px; font-size: 11px; min-height: 130px;">
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="font-weight: 700;">${clientName}</div>
+      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px;">${inv.inv_received_by}</div>
+      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px;">${inv.inv_date}</div>
     </div>
-    <div style="min-height: 120px; display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-end; position: relative;">
-      <img src="${typeof window !== "undefined" && window.location?.origin ? window.location.origin + "/company-stamp.png" : "/company-stamp.png"}" alt="S&amp;J GLOBAL" class="invoice-stamp" style="position: absolute; right: 0; bottom: 0; width: 108px; height: 108px; object-fit: contain; opacity: 0.95; z-index: 2;" />
-      <div style="position: relative; z-index: 1; text-align: right;"><strong>${companyName.split(" ")[0]}</strong><br><span style="margin-top: 8px; display: block;">${inv.inv_approved_by} ________________  ${inv.inv_date} ________________</span></div>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
+      <div style="font-weight: 700;">${companyName.split(/[\s]+/)[0] || "S&amp;J"}</div>
+      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px; text-align: right;">${inv.inv_approved_by}</div>
+      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px; text-align: right;">${inv.inv_date}</div>
+      <img src="${typeof window !== "undefined" && window.location?.origin ? window.location.origin + "/company-stamp.png" : "/company-stamp.png"}" alt="S&amp;J GLOBAL" class="invoice-stamp" style="width: 108px; height: 108px; object-fit: contain; opacity: 0.95; margin-top: 8px;" />
     </div>
   </div>
 </div>`
@@ -885,6 +890,22 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       area.innerHTML = html
       area.style.cssText = "position:absolute; left:-9999px; top:0; width:210mm; visibility:hidden;"
       document.body.appendChild(area)
+      const imgs = area.querySelectorAll("img.invoice-stamp, img[alt*='S&J']")
+      await Promise.all(
+        Array.from(imgs).map(
+          (img) =>
+            new Promise<void>((r) => {
+              if ((img as HTMLImageElement).complete) {
+                r()
+                return
+              }
+              ;(img as HTMLImageElement).onload = () => r()
+              ;(img as HTMLImageElement).onerror = () => r()
+              setTimeout(() => r(), 1500)
+            })
+        )
+      )
+      await new Promise((r) => setTimeout(r, 200))
       const style = document.createElement("style")
       style.id = "invoice-print-style"
       style.textContent = `@page { margin: 12mm; size: A4; }
