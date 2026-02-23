@@ -180,6 +180,7 @@ ${allRows.map((row, ri) => {
 <html>
 <head><meta charset="utf-8"><title>${t("poTitle")} - ${poNo}</title>
 <style>
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}
 h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}
 table{width:100%;border-collapse:collapse;margin:16px 0}
@@ -187,6 +188,14 @@ th,td{border:1px solid #ddd;padding:8px;text-align:left}
 th{background:#f5f5f5}
 .num{text-align:right}
 .tot{font-weight:bold}
+@media print{
+  @page{margin:12mm;size:A4}
+  body{margin:0 auto;padding:16px;max-width:800px}
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  table,th,td{border:1px solid #ddd!important}
+  th{background:#f5f5f5!important}
+  .store-header td{background:#e8e8e8!important}
+}
 </style>
 </head>
 <body>
@@ -212,7 +221,7 @@ th{background:#f5f5f5}
 </table>
 <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
   <p style="font-size:12px;color:#666;margin:0">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
-  <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:56px;height:56px;object-fit:contain;opacity:0.9;" onerror="this.style.display='none'" />
+  <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:108px;height:108px;object-fit:contain;opacity:0.95;" onerror="this.style.display='none'" />
 </div>
 </body>
 </html>
