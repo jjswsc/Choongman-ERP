@@ -1462,6 +1462,32 @@ export async function getAccountSubjects(params?: {
   return res.json() as Promise<AccountSubjectItem[]>
 }
 
+export async function saveAccountSubject(params: {
+  id?: number
+  code: string
+  name: string
+  nameEn?: string | null
+  type: string
+  pAndLSection?: string | null
+  sortOrder?: number
+}) {
+  const res = await apiFetch('/api/saveAccountSubject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteAccountSubject(params: { id: number }) {
+  const res = await apiFetch('/api/deleteAccountSubject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 고정비 ───
 export interface FixedExpenseItem {
   id?: number

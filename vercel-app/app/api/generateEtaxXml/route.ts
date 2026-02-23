@@ -73,7 +73,9 @@ async function getInvoiceData(): Promise<{
       taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
       phone: String(r.phone || '').trim() || '-',
     }
-    for (const k of [companyName, gpsName].filter(Boolean)) {
+    const keysToAdd = [companyName, gpsName].filter(Boolean)
+    if (gpsName && gpsName.match(/^CM\s+/i)) keysToAdd.push(gpsName.replace(/^CM\s+/i, ''))
+    for (const k of keysToAdd) {
       if (k) {
         clients[k] = entry
         clients[k.toLowerCase()] = entry
@@ -85,7 +87,11 @@ async function getInvoiceData(): Promise<{
 
 function findClient(clients: Record<string, InvoiceDataClient>, target: string): InvoiceDataClient {
   const t = String(target || '').trim()
-  return clients[t] || clients[t.toLowerCase()] || {
+  const tLower = t.toLowerCase()
+  const withoutCM = t.replace(/^CM\s+/i, '')
+  const withCM = t.match(/^CM\s+/i) ? t : 'CM ' + t
+  return clients[t] || clients[tLower] || clients[withoutCM] || clients[withoutCM.toLowerCase()] ||
+    clients[withCM] || clients[withCM.toLowerCase()] || {
     companyName: t || '-',
     address: '-',
     taxId: '-',

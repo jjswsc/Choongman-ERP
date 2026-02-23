@@ -65,10 +65,17 @@ export async function POST(request: NextRequest) {
       }[]
       let targetLat = 0,
         targetLng = 0
+      const storeNorm = storeNameTrim.toLowerCase()
       for (const v of vendors || []) {
         const gpsName = String(v.gps_name || '').trim()
         const name = String(v.name || '').trim()
-        if (gpsName === storeNameTrim || (gpsName === '' && name === storeNameTrim)) {
+        const gpsWithoutCM = gpsName.replace(/^CM\s+/i, '')
+        const nameWithoutCM = name.replace(/^CM\s+/i, '')
+        const gpsNorm = gpsWithoutCM.toLowerCase()
+        const match = gpsName === storeNameTrim || gpsWithoutCM === storeNameTrim ||
+          gpsNorm === storeNorm || gpsNorm.includes(storeNorm) || storeNorm.includes(gpsNorm) ||
+          (gpsName === '' && (name === storeNameTrim || nameWithoutCM === storeNameTrim))
+        if (match) {
           targetLat = Number(v.lat) || 0
           targetLng = Number(v.lng) || 0
           if (targetLat !== 0 || targetLng !== 0) break

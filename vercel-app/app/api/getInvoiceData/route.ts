@@ -76,6 +76,7 @@ export async function GET() {
         phone: String(r.phone || '').trim() || '-',
       }
       const keysToAdd = [companyName, gpsName].filter(Boolean)
+      if (gpsName && gpsName.match(/^CM\s+/i)) keysToAdd.push(gpsName.replace(/^CM\s+/i, ''))
       const seen = new Set<string>()
       for (const k of keysToAdd) {
         if (!k || seen.has(k)) continue

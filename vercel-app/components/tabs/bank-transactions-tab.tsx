@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -26,6 +26,8 @@ import {
   addBankTransactionsBulk,
   saveBankAccount,
   getAccountSubjects,
+  saveAccountSubject,
+  deleteAccountSubject,
   getVendorsForPurchase,
   getVendorsForSales,
   updateBankTransactionInvoice,
@@ -98,6 +100,12 @@ export function BankTransactionsTab() {
   const [importSaving, setImportSaving] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
+  const [accountSubjectsAll, setAccountSubjectsAll] = React.useState<AccountSubjectItem[]>([])
+  const [accountSubjectForm, setAccountSubjectForm] = React.useState<{ id?: number; code: string; name: string; nameEn: string; type: string; pAndLSection: string; sortOrder: number }>({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })
+  const [accountSubjectSaving, setAccountSubjectSaving] = React.useState(false)
+  const [accountSubjectDeletingId, setAccountSubjectDeletingId] = React.useState<number | null>(null)
+  const [activeBankTab, setActiveBankTab] = React.useState("input")
+
   React.useEffect(() => {
     getBankAccounts({
       userStore: auth?.store,
@@ -141,6 +149,96 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
   }, [])
+
+  const loadAccountSubjectsAll = React.useCallback(() => {
+    getAccountSubjects().then(setAccountSubjectsAll).catch(() => setAccountSubjectsAll([]))
+  }, [])
+
+  const handleSaveAccountSubject = async () => {
+    if (!accountSubjectForm.code.trim() || !accountSubjectForm.name.trim()) {
+      alert(t("accountSubjectCode") && t("accountSubjectName") ? "코드와 과목명을 입력하세요." : "Code and name required.")
+      return
+    }
+    setAccountSubjectSaving(true)
+    try {
+      const res = await saveAccountSubject({
+        id: accountSubjectForm.id,
+        code: accountSubjectForm.code.trim().toUpperCase(),
+        name: accountSubjectForm.name.trim(),
+        nameEn: accountSubjectForm.nameEn.trim() || null,
+        type: accountSubjectForm.type,
+        pAndLSection: accountSubjectForm.pAndLSection || null,
+        sortOrder: accountSubjectForm.sortOrder ?? 0,
+      })
+      if (res.success) {
+        setAccountSubjectForm({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })
+        loadAccountSubjectsAll()
+        const fetchOpts = async () => {
+          const [expense, fixed, transfer, revenue] = await Promise.all([
+            getAccountSubjects({ forExpense: true }),
+            getAccountSubjects({ forFixed: true }),
+            getAccountSubjects({ forTransfer: true }),
+            getAccountSubjects({ forRevenue: true }),
+          ])
+          setAccountSubjectOptions([...transfer, ...fixed, ...expense])
+          setRevenueAccountOptions(revenue || [])
+        }
+        fetchOpts().catch(() => {})
+        alert(res.message || "저장되었습니다.")
+      } else {
+        alert(res.message || t("processFail"))
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setAccountSubjectSaving(false)
+    }
+  }
+
+  const handleDeleteAccountSubject = async (id: number) => {
+    if (!confirm(t("accountSubjectDeleteConfirm") || "이 계정과목을 삭제하시겠습니까?")) return
+    setAccountSubjectDeletingId(id)
+    try {
+      const res = await deleteAccountSubject({ id })
+      if (res.success) {
+        loadAccountSubjectsAll()
+        const fetchOpts = async () => {
+          const [expense, fixed, transfer, revenue] = await Promise.all([
+            getAccountSubjects({ forExpense: true }),
+            getAccountSubjects({ forFixed: true }),
+            getAccountSubjects({ forTransfer: true }),
+            getAccountSubjects({ forRevenue: true }),
+          ])
+          setAccountSubjectOptions([...transfer, ...fixed, ...expense])
+          setRevenueAccountOptions(revenue || [])
+        }
+        fetchOpts().catch(() => {})
+        alert(res.message || "삭제되었습니다.")
+      } else {
+        alert(res.message || t("accountSubjectDeleteInUse") || "사용 중이라 삭제할 수 없습니다.")
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setAccountSubjectDeletingId(null)
+    }
+  }
+
+  const typeLabel = (type: string) => {
+    if (type === "expense") return t("accountSubjectTypeExpense") || "비용"
+    if (type === "revenue") return t("accountSubjectTypeRevenue") || "수익"
+    if (type === "asset") return t("accountSubjectTypeAsset") || "자산"
+    if (type === "transfer") return t("accountSubjectTypeTransfer") || "이체"
+    return type
+  }
+  const plLabel = (s: string | null | undefined) => {
+    if (!s) return "—"
+    if (s === "cost") return t("accountSubjectPLCost") || "매출원가"
+    if (s === "expense") return t("accountSubjectPLExpense") || "판관비"
+    if (s === "fixed") return t("accountSubjectPLFixed") || "고정비"
+    if (s === "revenue") return t("accountSubjectPLRevenue") || "수익"
+    return s
+  }
 
   const receivableOptions = React.useMemo(() => {
     const stores = (storeList || []).filter((s) => s && s !== "All")
@@ -497,7 +595,7 @@ export function BankTransactionsTab() {
           e.target.value = ""
         }}
       />
-      <Tabs defaultValue="input" className="w-full">
+      <Tabs value={activeBankTab} onValueChange={(v) => { setActiveBankTab(v); if (v === "account-subjects") loadAccountSubjectsAll() }} className="w-full">
         <TabsList className="mb-3">
           <TabsTrigger value="input">
             <PenLine className="h-4 w-4 mr-2" />
@@ -506,6 +604,10 @@ export function BankTransactionsTab() {
           <TabsTrigger value="query">
             <List className="h-4 w-4 mr-2" />
             {t("bankTabQuery") || "조회"}
+          </TabsTrigger>
+          <TabsTrigger value="account-subjects">
+            <BookOpen className="h-4 w-4 mr-2" />
+            {t("bankTabAccountSubjects") || "계정과목"}
           </TabsTrigger>
           <TabsTrigger value="explanation">
             <HelpCircle className="h-4 w-4 mr-2" />
@@ -1041,6 +1143,142 @@ export function BankTransactionsTab() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="account-subjects" className="mt-0">
+          <Card>
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground mb-4">{t("bankAccountSubjectsDesc")}</p>
+              <div className="flex flex-wrap items-end gap-2 mb-4 p-3 rounded-lg border bg-muted/20">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectCode")}</label>
+                  <Input
+                    placeholder="5310"
+                    value={accountSubjectForm.code}
+                    onChange={(e) => setAccountSubjectForm((f) => ({ ...f, code: e.target.value }))}
+                    className="w-[80px] h-9 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectName")}</label>
+                  <Input
+                    placeholder={t("accountSubjectName")}
+                    value={accountSubjectForm.name}
+                    onChange={(e) => setAccountSubjectForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-[140px] h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectNameEn")}</label>
+                  <Input
+                    placeholder={t("optional")}
+                    value={accountSubjectForm.nameEn}
+                    onChange={(e) => setAccountSubjectForm((f) => ({ ...f, nameEn: e.target.value }))}
+                    className="w-[120px] h-9"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectType")}</label>
+                  <Select value={accountSubjectForm.type} onValueChange={(v) => setAccountSubjectForm((f) => ({ ...f, type: v }))}>
+                    <SelectTrigger className="w-[100px] h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="expense">{t("accountSubjectTypeExpense")}</SelectItem>
+                      <SelectItem value="revenue">{t("accountSubjectTypeRevenue")}</SelectItem>
+                      <SelectItem value="asset">{t("accountSubjectTypeAsset")}</SelectItem>
+                      <SelectItem value="transfer">{t("accountSubjectTypeTransfer")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectPLSection")}</label>
+                  <Select value={accountSubjectForm.pAndLSection || "__none__"} onValueChange={(v) => setAccountSubjectForm((f) => ({ ...f, pAndLSection: v === "__none__" ? "" : v }))}>
+                    <SelectTrigger className="w-[110px] h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">—</SelectItem>
+                      <SelectItem value="cost">{t("accountSubjectPLCost")}</SelectItem>
+                      <SelectItem value="expense">{t("accountSubjectPLExpense")}</SelectItem>
+                      <SelectItem value="fixed">{t("accountSubjectPLFixed")}</SelectItem>
+                      <SelectItem value="revenue">{t("accountSubjectPLRevenue")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("accountSubjectSortOrder")}</label>
+                  <Input
+                    type="number"
+                    value={accountSubjectForm.sortOrder}
+                    onChange={(e) => setAccountSubjectForm((f) => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
+                    className="w-[70px] h-9"
+                  />
+                </div>
+                <Button size="sm" onClick={handleSaveAccountSubject} disabled={accountSubjectSaving || !accountSubjectForm.code.trim() || !accountSubjectForm.name.trim()}>
+                  {accountSubjectSaving ? "..." : <Plus className="h-4 w-4 mr-1" />}
+                  {accountSubjectForm.id ? (t("btn_save") || "저장") : t("btn_add")}
+                </Button>
+                {accountSubjectForm.id && (
+                  <Button size="sm" variant="ghost" onClick={() => setAccountSubjectForm({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })}>
+                    {t("cancel")}
+                  </Button>
+                )}
+              </div>
+              <div className="rounded-lg border max-h-[360px] overflow-auto">
+                {accountSubjectsAll.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">{t("pettyNoData") || "데이터 없음"}</p>
+                ) : (
+                <table className="w-full text-sm min-w-[700px]">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="p-2 text-left">{t("accountSubjectCode")}</th>
+                      <th className="p-2 text-left">{t("accountSubjectName")}</th>
+                      <th className="p-2 text-left">{t("accountSubjectNameEn")}</th>
+                      <th className="p-2 text-left">{t("accountSubjectType")}</th>
+                      <th className="p-2 text-left">{t("accountSubjectPLSection")}</th>
+                      <th className="p-2 text-left">{t("accountSubjectSortOrder")}</th>
+                      <th className="p-2 w-20"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountSubjectsAll.map((a) => (
+                      <tr key={a.id} className="border-t">
+                        <td className="p-2 font-mono">{a.code}</td>
+                        <td className="p-2">{a.name}</td>
+                        <td className="p-2 text-muted-foreground">{a.nameEn || "—"}</td>
+                        <td className="p-2 text-muted-foreground">{typeLabel(a.type)}</td>
+                        <td className="p-2 text-muted-foreground">{plLabel(a.pAndLSection)}</td>
+                        <td className="p-2 text-muted-foreground">{a.sortOrder ?? 0}</td>
+                        <td className="p-2">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => setAccountSubjectForm({ id: a.id, code: a.code, name: a.name, nameEn: a.nameEn || "", type: a.type || "expense", pAndLSection: a.pAndLSection ?? "", sortOrder: a.sortOrder ?? 0 })}
+                            >
+                              <PenLine className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => a.id && handleDeleteAccountSubject(a.id)}
+                              disabled={accountSubjectDeletingId === a.id}
+                            >
+                              {accountSubjectDeletingId === a.id ? <span className="text-xs">...</span> : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="explanation" className="mt-0">
           <Card>
             <CardContent className="pt-4">
@@ -1053,6 +1291,7 @@ export function BankTransactionsTab() {
                   <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
                     <li>{t("bankManualScreenInput")}</li>
                     <li>{t("bankManualScreenQuery")}</li>
+                    <li>{t("bankManualScreenAccountSubjects")}</li>
                     <li>{t("bankManualScreenExplanation")}</li>
                   </ul>
                 </div>

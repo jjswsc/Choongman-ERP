@@ -109,12 +109,23 @@ export async function POST(request: NextRequest) {
       const name = String(v.name || '').trim()
       const gpsLower = gpsName.toLowerCase()
       const nameLower = name.toLowerCase()
-      const exactMatch = gpsLower === storeNorm || (gpsName === '' && nameLower === storeNorm)
+      // gps_name 앞의 "CM " 제거 후 비교 (예: "CM Future Park" ↔ "Future Park")
+      const gpsWithoutCM = gpsLower.replace(/^cm\s+/, '')
+      const nameWithoutCM = nameLower.replace(/^cm\s+/, '')
+      const exactMatch = gpsLower === storeNorm || gpsWithoutCM === storeNorm ||
+        (gpsName === '' && (nameLower === storeNorm || nameWithoutCM === storeNorm))
       const prefixMatch = storeNorm.length >= 3 && (
         gpsLower.startsWith(storeNorm) || storeNorm.startsWith(gpsLower) ||
-        (gpsName === '' && (nameLower.startsWith(storeNorm) || storeNorm.startsWith(nameLower)))
+        gpsWithoutCM.startsWith(storeNorm) || storeNorm.startsWith(gpsWithoutCM) ||
+        (gpsName === '' && (nameLower.startsWith(storeNorm) || storeNorm.startsWith(nameLower) ||
+          nameWithoutCM.startsWith(storeNorm) || storeNorm.startsWith(nameWithoutCM)))
       )
-      const match = exactMatch || prefixMatch
+      const includesMatch = storeNorm.length >= 3 && (
+        gpsLower.includes(storeNorm) || storeNorm.includes(gpsWithoutCM) ||
+        gpsWithoutCM.includes(storeNorm) || storeNorm.includes(gpsLower) ||
+        (gpsName === '' && (nameLower.includes(storeNorm) || storeNorm.includes(nameWithoutCM)))
+      )
+      const match = exactMatch || prefixMatch || includesMatch
       if (match) {
         targetLat = Number(v.lat) || 0
         targetLng = Number(v.lng) || 0

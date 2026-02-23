@@ -7,8 +7,20 @@ async function getStoreCompanyName(store: string): Promise<string> {
   if (!storeTrim) return ''
   try {
     let rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    if (!rows?.length && !storeTrim.match(/^CM\s+/i)) {
+      rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent('CM ' + storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    }
+    if (!rows?.length && storeTrim.match(/^CM\s+/i)) {
+      rows = (await supabaseSelectFilter('vendors', `gps_name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`, { limit: 1 })) as { name?: string }[]
+    }
     if (rows?.length && rows[0]?.name) return String(rows[0].name).trim()
     rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    if (!rows?.length && !storeTrim.match(/^CM\s+/i)) {
+      rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent('CM ' + storeTrim)}`, { limit: 1 })) as { name?: string }[]
+    }
+    if (!rows?.length && storeTrim.match(/^CM\s+/i)) {
+      rows = (await supabaseSelectFilter('vendors', `name=eq.${encodeURIComponent(storeTrim.replace(/^CM\s+/i, ''))}`, { limit: 1 })) as { name?: string }[]
+    }
     if (rows?.length && rows[0]?.name) return String(rows[0].name).trim()
     rows = (await supabaseSelectFilter('vendors', 'type=eq.본사', { limit: 1 })) as { name?: string }[]
     if (!rows?.length) rows = (await supabaseSelectFilter('vendors', 'type=eq.Head Office', { limit: 1 })) as { name?: string }[]
