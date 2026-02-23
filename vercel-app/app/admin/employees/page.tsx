@@ -98,7 +98,8 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     salAmt: e.salAmt ?? 0,
     pw: e.pw || "",
     role: e.role || "Staff",
-    annualLeaveDays: e.annualLeaveDays ?? 15,
+    idNumber: e.idNumber || "",
+    address: e.address || "",
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",
     positionAllowance: e.positionAllowance ?? 0,
@@ -279,7 +280,7 @@ export default function EmployeesPage() {
   const isOffice = isOfficeRole(userRole)
 
   const handleNew = () => {
-    const base = { ...emptyForm, annualLeaveDays: 15 }
+    const base = { ...emptyForm }
     if (isManager && userStore) base.store = userStore
     setForm(base)
   }

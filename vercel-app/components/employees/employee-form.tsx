@@ -35,7 +35,8 @@ export interface EmployeeFormData {
   salAmt: number
   pw: string
   role: string
-  annualLeaveDays: number
+  idNumber: string
+  address: string
   bankName: string
   accountNumber: string
   positionAllowance: number
@@ -60,7 +61,8 @@ const emptyForm: EmployeeFormData = {
   salAmt: 0,
   pw: "",
   role: "Staff",
-  annualLeaveDays: 15,
+  idNumber: "",
+  address: "",
   bankName: "",
   accountNumber: "",
   positionAllowance: 0,
@@ -274,12 +276,10 @@ export function EmployeeForm({
           </Select>
         </div>
         <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_annual_leave_days")}</label>
+          <label className="text-xs font-semibold block mb-1">{t("emp_id_number")}</label>
           <Input
-            type="number"
-            min={0}
-            value={form.annualLeaveDays}
-            onChange={(e) => update("annualLeaveDays", e.target.value ? Number(e.target.value) : 15)}
+            value={form.idNumber}
+            onChange={(e) => update("idNumber", e.target.value)}
             className="h-8 text-xs"
           />
         </div>
@@ -310,6 +310,14 @@ export function EmployeeForm({
           <Input
             value={form.accountNumber}
             onChange={(e) => update("accountNumber", e.target.value)}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-semibold block mb-1">{t("emp_address")}</label>
+          <Input
+            value={form.address}
+            onChange={(e) => update("address", e.target.value)}
             className="h-8 text-xs"
           />
         </div>

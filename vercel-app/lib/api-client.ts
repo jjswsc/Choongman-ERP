@@ -2406,7 +2406,8 @@ export interface AdminEmployeeItem {
   pw: string
   role: string
   email: string
-  annualLeaveDays: number
+  idNumber: string
+  address: string
   bankName: string
   accountNumber: string
   positionAllowance: number
