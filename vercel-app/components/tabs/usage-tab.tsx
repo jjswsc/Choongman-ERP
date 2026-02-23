@@ -288,7 +288,7 @@ export function UsageTab() {
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-xs text-muted-foreground font-mono">{item.code}</span>
+                                    <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">{item.code}</span>
                                     <span className="font-semibold">{item.name}</span>
                                     <span className="text-xs text-muted-foreground">({item.spec || "-"})</span>
                                     <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${isLow ? "bg-destructive" : "bg-[#16a34a]"}`}>
@@ -405,7 +405,7 @@ export function UsageTab() {
                   {cart.map((item) => (
                     <div key={item.code} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground font-mono">{item.code}</span>
+                        <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">{item.code}</span>
                         <span className="text-sm font-medium text-foreground">{item.name}</span>
                         <Badge variant="outline" className="text-xs">{formatUsageQty(item.qty)}</Badge>
                       </div>
