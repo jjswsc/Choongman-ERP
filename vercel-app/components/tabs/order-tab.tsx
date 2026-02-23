@@ -553,6 +553,7 @@ export function OrderTab() {
                                   className="min-w-0 flex-1"
                                 >
                                   <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="text-xs text-muted-foreground font-mono">{item.code}</span>
                                     <span className="font-semibold">{item.name}</span>
                                     <span className="text-xs text-muted-foreground">({item.spec || "-"})</span>
                                     <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${isLow ? "bg-destructive" : "bg-[#16a34a]"}`}>
@@ -613,7 +614,10 @@ export function OrderTab() {
                       <tbody>
                         {cart.map((c) => (
                           <tr key={c.code} className="border-b border-border/60 last:border-0">
-                            <td className="px-3 py-2 font-medium">{c.name}</td>
+                            <td className="px-3 py-2 font-medium">
+                              <span className="text-xs text-muted-foreground font-mono mr-1">{c.code}</span>
+                              {c.name}
+                            </td>
                             <td className="px-3 py-2 text-right">{c.price}</td>
                             <td className="px-3 py-2 text-right">{c.qty}</td>
                             <td className="px-3 py-2 text-right font-semibold text-primary">{c.price * c.qty}</td>
