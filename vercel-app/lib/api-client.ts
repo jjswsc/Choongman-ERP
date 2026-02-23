@@ -2261,6 +2261,33 @@ export async function getCombinedOutboundHistory(params: {
   return res.json() as Promise<OutboundHistoryItem[]>
 }
 
+/** e-Tax 인보이스 XML 생성 */
+export interface EtaxGroupInput {
+  date: string
+  target: string
+  type: string
+  orderRowId?: string
+  invoiceNo?: string
+  items: { name: string; code?: string; spec?: string; qty: number; amount: number }[]
+  totalAmt: number
+}
+
+export async function generateEtaxXmlApi(groups: EtaxGroupInput[], sign = false) {
+  const res = await apiFetch('/api/generateEtaxXml', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups, sign }),
+  })
+  return res.json() as Promise<{
+    success?: boolean
+    error?: string
+    count?: number
+    results?: { refKey: string; invoiceNo: string }[]
+    xml?: string | null
+    xmls?: { refKey: string; invoiceNo: string; xml: string }[]
+  }>
+}
+
 export interface WarehouseOutboundRow {
   store: string
   code: string

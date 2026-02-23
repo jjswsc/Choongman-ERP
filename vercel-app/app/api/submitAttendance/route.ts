@@ -107,7 +107,14 @@ export async function POST(request: NextRequest) {
     for (const v of vendors || []) {
       const gpsName = String(v.gps_name || '').trim()
       const name = String(v.name || '').trim()
-      const match = gpsName.toLowerCase() === storeNorm || (gpsName === '' && name.toLowerCase() === storeNorm)
+      const gpsLower = gpsName.toLowerCase()
+      const nameLower = name.toLowerCase()
+      const exactMatch = gpsLower === storeNorm || (gpsName === '' && nameLower === storeNorm)
+      const prefixMatch = storeNorm.length >= 3 && (
+        gpsLower.startsWith(storeNorm) || storeNorm.startsWith(gpsLower) ||
+        (gpsName === '' && (nameLower.startsWith(storeNorm) || storeNorm.startsWith(nameLower)))
+      )
+      const match = exactMatch || prefixMatch
       if (match) {
         targetLat = Number(v.lat) || 0
         targetLng = Number(v.lng) || 0

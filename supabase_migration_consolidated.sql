@@ -492,6 +492,31 @@ INSERT INTO account_subjects (code, name, name_en, type, p_and_l_section, sort_o
   ('5530', '대손상각비', 'Bad Debt Expense', 'expense', 'expense', 147)
 ON CONFLICT (code) DO NOTHING;
 
+-- e_tax_submissions (e-Tax 인보이스 제출 이력)
+CREATE TABLE IF NOT EXISTS e_tax_submissions (
+  id BIGSERIAL PRIMARY KEY,
+  ref_type TEXT NOT NULL DEFAULT 'outbound',
+  ref_key TEXT NOT NULL,
+  invoice_no TEXT,
+  invoice_date DATE,
+  target_name TEXT,
+  total_amount NUMERIC(12,2),
+  vat_amount NUMERIC(12,2),
+  grand_total NUMERIC(12,2),
+  xml_content TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  submitted_at TIMESTAMPTZ,
+  response_json JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_etax_ref ON e_tax_submissions(ref_type, ref_key);
+CREATE INDEX IF NOT EXISTS idx_etax_status ON e_tax_submissions(status);
+ALTER TABLE e_tax_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all for e_tax_submissions" ON e_tax_submissions;
+CREATE POLICY "Allow all for e_tax_submissions" ON e_tax_submissions FOR ALL USING (true) WITH CHECK (true);
+
 -- ========== 7. 데이터 수정 ==========
 
 UPDATE orders SET delivery_status = '일부배송완료' WHERE delivery_status = '일부 배송 완료';

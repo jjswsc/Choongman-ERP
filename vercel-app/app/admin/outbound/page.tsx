@@ -32,6 +32,7 @@ import {
   getInvoiceData,
   getOutboundByWarehouse,
   getWarehouseLocations,
+  generateEtaxXmlApi,
   type AdminItem,
   type AdminVendor,
   type OutboundHistoryItem,
@@ -668,6 +669,61 @@ export default function OutboundPage() {
 </div>`
   }
 
+  const handleEtaxXmlDownload = async () => {
+    const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
+    if (checked.length === 0) {
+      alert(t("outSelectForPrint"))
+      return
+    }
+    try {
+      const groups = checked.map((g) => ({
+        date: g.date,
+        target: g.target,
+        type: g.type || "Force",
+        orderRowId: g.items[0]?.orderRowId,
+        invoiceNo: g.invoiceNo,
+        items: g.items.map((it) => ({
+          name: it.name || "-",
+          code: it.code,
+          spec: it.spec,
+          qty: it.qty ?? 0,
+          amount: it.amount ?? 0,
+        })),
+        totalAmt: g.totalAmt ?? 0,
+      }))
+      const res = await generateEtaxXmlApi(groups, true)
+      if (!res.success || res.error) {
+        alert(res.error || t("invLoadFailed"))
+        return
+      }
+      if (res.xmls && res.xmls.length > 0) {
+        if (res.xmls.length === 1) {
+          const blob = new Blob([res.xmls[0].xml], { type: "application/xml;charset=utf-8" })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = `etax_${res.xmls[0].invoiceNo}.xml`
+          a.click()
+          URL.revokeObjectURL(url)
+        } else {
+          for (let i = 0; i < res.xmls.length; i++) {
+            const x = res.xmls[i]
+            const blob = new Blob([x.xml], { type: "application/xml;charset=utf-8" })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = `etax_${x.invoiceNo || i + 1}.xml`
+            a.click()
+            URL.revokeObjectURL(url)
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e)
+      alert(t("invLoadFailed"))
+    }
+  }
+
   const handleExcelDownload = () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
@@ -1196,6 +1252,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               onSearch={fetchHistory}
               onPrintInvoice={isOffice ? handlePrintInvoice : undefined}
               onExcelDownload={isOffice ? handleExcelDownload : undefined}
+              onEtaxXmlDownload={isOffice ? handleEtaxXmlDownload : undefined}
               selectedCount={selectedForPrint.size}
             />
             <div className="overflow-x-auto max-h-[500px]">

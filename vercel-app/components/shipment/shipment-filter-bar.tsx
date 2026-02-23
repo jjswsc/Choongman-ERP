@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Printer, Download, CalendarIcon } from "lucide-react"
+import { Search, Printer, Download, FileXml, CalendarIcon } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -34,7 +34,8 @@ interface ShipmentFilterBarProps {
   onSearch: () => void
   onPrintInvoice?: () => void
   onExcelDownload?: () => void
-  /** 선택된 행 수 (0이면 인쇄/엑셀 버튼 비활성화) */
+  onEtaxXmlDownload?: () => void
+  /** 선택된 행 수 (0이면 인쇄/엑셀/e-Tax 버튼 비활성화) */
   selectedCount?: number
 }
 
@@ -62,6 +63,7 @@ export function ShipmentFilterBar({
   onSearch,
   onPrintInvoice,
   onExcelDownload,
+  onEtaxXmlDownload,
   selectedCount = 0,
 }: ShipmentFilterBarProps) {
   const { lang } = useLang()
@@ -204,6 +206,20 @@ export function ShipmentFilterBar({
           >
             <Download className="h-3.5 w-3.5" />
             {t("outExcelDownload")}
+            {selectedCount > 0 && ` (${selectedCount})`}
+          </button>
+        )}
+
+        {isOffice && onEtaxXmlDownload && (
+          <button
+            type="button"
+            onClick={onEtaxXmlDownload}
+            disabled={selectedCount === 0}
+            className="h-8 flex items-center gap-1.5 rounded bg-[#0ea5e9] px-3 text-xs font-medium text-white hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={t("outEtaxXmlHint")}
+          >
+            <FileXml className="h-3.5 w-3.5" />
+            {t("outEtaxXml")}
             {selectedCount > 0 && ` (${selectedCount})`}
           </button>
         )}
