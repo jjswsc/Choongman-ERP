@@ -24,7 +24,7 @@ import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAppData, processUsage, getMyUsageHistory, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
+import { getAppData, processUsage, getMyUsageHistory, translateTexts, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
 import { Minus, Plus, ShoppingCart, Trash2, Package, Info } from "lucide-react"
 
 function hasValidImage(url: string | undefined): boolean {
@@ -94,10 +94,26 @@ export function UsageTab() {
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
+  const [descriptionTranslated, setDescriptionTranslated] = useState<string | null>(null)
   const [fractionRow, setFractionRow] = useState<0 | 1>(0)
   const [fractionStep, setFractionStep] = useState(0.25)
   const [smallFractionMultiplier, setSmallFractionMultiplier] = useState(1)
   const [selectedSmallFraction, setSelectedSmallFraction] = useState(0.02)
+
+  useEffect(() => {
+    if (!descriptionModal?.description?.trim()) {
+      setDescriptionTranslated(null)
+      return
+    }
+    let cancelled = false
+    setDescriptionTranslated(null)
+    translateTexts([descriptionModal.description.trim()], lang).then(([translated]) => {
+      if (!cancelled) setDescriptionTranslated(translated ?? descriptionModal.description)
+    }).catch(() => {
+      if (!cancelled) setDescriptionTranslated(descriptionModal.description)
+    })
+    return () => { cancelled = true }
+  }, [descriptionModal?.description, descriptionModal?.name, lang])
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -213,12 +229,14 @@ export function UsageTab() {
       )}
 
       {descriptionModal && (
-        <Dialog open={!!descriptionModal} onOpenChange={(open) => !open && setDescriptionModal(null)}>
+        <Dialog open={!!descriptionModal} onOpenChange={(open) => { if (!open) { setDescriptionModal(null); setDescriptionTranslated(null) } }}>
           <DialogContent className="max-w-sm sm:max-w-md">
             <DialogHeader>
               <DialogTitle>{descriptionModal.name}</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{descriptionModal.description}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {descriptionTranslated ?? descriptionModal.description}
+            </p>
           </DialogContent>
         </Dialog>
       )}
@@ -297,7 +315,7 @@ export function UsageTab() {
                                     {item.description && (
                                       <button
                                         type="button"
-                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-primary hover:bg-primary/20"
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           setDescriptionModal({ name: item.name, description: item.description! })

@@ -25,7 +25,7 @@ import { isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
+import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, translateTexts, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
 
@@ -104,6 +104,7 @@ export function OrderTab() {
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
+  const [descriptionTranslated, setDescriptionTranslated] = useState<string | null>(null)
   const [receiveModal, setReceiveModal] = useState<{ orderId: number; order: OrderHistoryItem } | null>(null)
   const [receivePhotoFile, setReceivePhotoFile] = useState<File | null>(null)
   const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
@@ -115,6 +116,21 @@ export function OrderTab() {
   useEffect(() => {
     receivedQtysRef.current = receivedQtys
   }, [receivedQtys])
+
+  useEffect(() => {
+    if (!descriptionModal?.description?.trim()) {
+      setDescriptionTranslated(null)
+      return
+    }
+    let cancelled = false
+    setDescriptionTranslated(null)
+    translateTexts([descriptionModal.description.trim()], lang).then(([translated]) => {
+      if (!cancelled) setDescriptionTranslated(translated ?? descriptionModal.description)
+    }).catch(() => {
+      if (!cancelled) setDescriptionTranslated(descriptionModal.description)
+    })
+    return () => { cancelled = true }
+  }, [descriptionModal?.description, descriptionModal?.name, lang])
 
   const categories = useMemo(() => {
     const cats = new Map<string, AppItem[]>()
@@ -414,12 +430,14 @@ export function OrderTab() {
       )}
 
       {descriptionModal && (
-        <Dialog open={!!descriptionModal} onOpenChange={(open) => !open && setDescriptionModal(null)}>
+        <Dialog open={!!descriptionModal} onOpenChange={(open) => { if (!open) { setDescriptionModal(null); setDescriptionTranslated(null) } }}>
           <DialogContent className="max-w-sm sm:max-w-md">
             <DialogHeader>
               <DialogTitle>{descriptionModal.name}</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{descriptionModal.description}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+              {descriptionTranslated ?? descriptionModal.description}
+            </p>
           </DialogContent>
         </Dialog>
       )}
@@ -574,7 +592,7 @@ export function OrderTab() {
                                     {item.description && (
                                       <button
                                         type="button"
-                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-primary hover:bg-primary/20"
                                         onClick={(e) => {
                                           e.stopPropagation()
                                           setDescriptionModal({ name: item.name, description: item.description! })
