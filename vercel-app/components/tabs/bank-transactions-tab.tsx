@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2 } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2, Link2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -39,6 +39,7 @@ import {
   type AccountSubjectItem,
   type BankMemoRule,
 } from "@/lib/api-client"
+import { BankInboundLinkDialog } from "@/components/tabs/bank-inbound-link-dialog"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
@@ -91,6 +92,7 @@ export function BankTransactionsTab() {
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
   const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
+  const [inboundLinkRow, setInboundLinkRow] = React.useState<(typeof list)[0] | null>(null)
   const [invoiceLinkPOList, setInvoiceLinkPOList] = React.useState<{ id?: number; po_no?: string; vendor_name?: string; total?: number; created_at?: string }[]>([])
   const [invoiceLinkSelectedPO, setInvoiceLinkSelectedPO] = React.useState<string>("")
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
@@ -850,7 +852,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-center">{t("accountSubject") || "계정과목"}</th>
                             <th className="p-2 text-center">{t("pettyColAmount") || "금액"}</th>
                         <th className="p-2 text-center min-w-[110px]">{t("bankAttributedDate") || "인식일"}</th>
-                        <th className="p-2 text-center min-w-[80px]" title={t("poInvoice") || "인보이스"}>{t("poInvoice") || "인보이스"}</th>
+                        <th className="p-2 text-center min-w-[120px]" title={t("poInvoice") || "인보이스"}>{t("poInvoice") || "인보이스"}</th>
                         <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
                       </tr>
@@ -909,7 +911,15 @@ export function BankTransactionsTab() {
                               </td>
                               <td className="p-2 text-center">
                                 {r.transType === "withdraw" && r.category === "purchase_payment" ? (
-                                  <div className="flex items-center justify-center gap-1.5">
+                                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => setInboundLinkRow(r)}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+                                      title="입고 연동"
+                                    >
+                                      <Link2 className="h-4 w-4" />
+                                    </button>
                                     <Checkbox
                                       checked={!!r.invoiceReceived}
                                       onCheckedChange={(checked) => {
@@ -1758,6 +1768,13 @@ export function BankTransactionsTab() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BankInboundLinkDialog
+        row={inboundLinkRow}
+        vendorOptions={vendorOptions}
+        onClose={() => setInboundLinkRow(null)}
+        onSaved={loadData}
+      />
     </div>
   )
 }

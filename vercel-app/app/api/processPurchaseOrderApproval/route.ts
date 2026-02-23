@@ -1,11 +1,10 @@
 /**
  * 본사 발주(PO) 승인 API
  * - status: Draft → Approved
- * - payable_transactions에 매입채무 생성
+ * - (입고 기준) payable은 입고 시점에 생성하므로 여기서는 생성하지 않음
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
-import { upsertPayableFromPO } from '@/lib/receivable-payable'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -28,8 +27,6 @@ export async function POST(request: NextRequest) {
     const rows = (await supabaseSelectFilter('purchase_orders', 'id=eq.' + poId, { limit: 1 })) as {
       id?: number
       status?: string
-      vendor_code?: string
-      total?: number
       created_at?: string
     }[]
     if (!rows?.length) {
@@ -41,15 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '이미 승인된 발주입니다.' }, { headers })
     }
 
-    const transDate = (po.created_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
     await supabaseUpdate('purchase_orders', poId, { status: 'Approved' })
-    await upsertPayableFromPO({
-      poId,
-      vendorCode: String(po.vendor_code || '').trim(),
-      total: Number(po.total ?? 0),
-      transDate,
-    })
-
     return NextResponse.json({ success: true, message: '승인되었습니다.' }, { headers })
   } catch (e) {
     console.error('processPurchaseOrderApproval:', e)

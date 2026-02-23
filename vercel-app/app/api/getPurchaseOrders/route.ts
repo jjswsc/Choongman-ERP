@@ -6,10 +6,13 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const vendorCode = String(searchParams.get('vendorCode') || '').trim()
-    const filter = vendorCode ? `vendor_code=eq.${encodeURIComponent(vendorCode)}` : undefined
+    const poId = Number(searchParams.get('poId') || searchParams.get('id') || 0)
+    let filter = vendorCode ? `vendor_code=eq.${encodeURIComponent(vendorCode)}` : undefined
+    if (poId && !isNaN(poId)) filter = `id=eq.${poId}`
+    else if (!filter) filter = 'id=gt.0'
     const rows = (await supabaseSelectFilter(
       'purchase_orders',
-      filter || 'id=gt.0',
+      filter,
       { order: 'created_at.desc', limit: 500 }
     )) as {
       id?: number

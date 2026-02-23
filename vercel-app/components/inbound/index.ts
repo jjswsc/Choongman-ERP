@@ -1,3 +1,5 @@
 export { InboundHeader } from "./inbound-header"
 export { InboundFilterBar } from "./inbound-filter-bar"
 export { InboundTable, type InboundTableRow } from "./inbound-table"
+export { InboundEditDialog } from "./inbound-edit-dialog"
+export { InboundGuideContent } from "./inbound-guide"

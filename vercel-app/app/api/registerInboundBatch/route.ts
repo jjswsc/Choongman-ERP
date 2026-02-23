@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsertMany } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseInsertMany } from '@/lib/supabase-server'
 
-/** 입고 등록 저장 - stock_logs (location=입고등록, log_type=Inbound) */
+/** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const storeName = (typeof body === 'object' && body?.storeName) ? String(body.storeName).trim() : null
+    const vendorCode = (typeof body === 'object' && body?.vendorCode) ? String(body.vendorCode).trim() || null : null
+    const purchaseOrderId = (typeof body === 'object' && body?.purchaseOrderId) ? Number(body.purchaseOrderId) : null
     const list = Array.isArray(body) ? body : (body?.list || []) as {
       date?: string
       vendor?: string
@@ -27,9 +29,15 @@ export async function POST(request: NextRequest) {
     }
 
     const location = storeName || '입고등록'
+    const vendorName = String(list[0]?.vendor || '').trim()
+    const batchDate = list[0]?.date ? new Date(list[0].date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+
+    let totalAmount = 0
     const rows = list.map((item) => {
       const qty = parseFloat(String(item.qty || 0).replace(/,/g, '')) || 0
       const costVal = item.cost != null && item.cost !== '' ? parseFloat(String(item.cost).replace(/,/g, '')) : null
+      const cost = costVal != null && !isNaN(costVal) && costVal >= 0 ? costVal : 0
+      totalAmount += qty * cost
       const dateObj = item.date ? new Date(item.date) : new Date()
       const row: Record<string, unknown> = {
         location,
@@ -55,7 +63,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await supabaseInsertMany('stock_logs', validRows)
+    // 1. inbound_batches 생성
+    const batchRow = {
+      location,
+      vendor_name: vendorName || '-',
+      vendor_code: vendorCode,
+      batch_date: batchDate,
+      total_amount: totalAmount,
+      purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
+    }
+    const batchInserted = (await supabaseInsert('inbound_batches', batchRow)) as { id?: number }[]
+    const batchId = Array.isArray(batchInserted) && batchInserted[0]?.id ? batchInserted[0].id : null
+
+    // 2. stock_logs에 inbound_batch_id 포함
+    const rowsWithBatch = validRows.map((r) => ({ ...r, inbound_batch_id: batchId }))
+    await supabaseInsertMany('stock_logs', rowsWithBatch)
+
+    // 3. 미지급금 생성 (입고 건별, From HQ 제외)
+    if (batchId && totalAmount > 0 && vendorName && vendorName !== 'From HQ') {
+      const payVendorCode = vendorCode || vendorName
+      await supabaseInsert('payable_transactions', {
+        vendor_code: payVendorCode,
+        amount: totalAmount,
+        ref_type: 'Inbound',
+        ref_id: batchId,
+        trans_date: batchDate,
+        memo: `입고 ${batchDate} ${vendorName}`,
+      })
+    }
     return NextResponse.json(
       { success: true, message: `✅ ${validRows.length}건 입고 완료!` },
       { headers }

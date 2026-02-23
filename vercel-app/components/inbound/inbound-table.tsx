@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, PenLine, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -10,6 +10,7 @@ export interface InboundTableRow {
   id: string
   date: string
   vendor: string
+  inboundBatchId?: number
   items: { name: string; spec: string; qty: number; amount: number }[]
   itemsSummary: string
   totalQty: number
@@ -22,6 +23,8 @@ interface InboundTableProps {
   loading?: boolean
   /** 비본사용: 단순 { date, vendor, item, qty, amount } */
   storeRows?: { date: string; vendor: string; item: string; qty: number; amount: number }[]
+  onEdit?: (row: InboundTableRow) => void
+  onDelete?: (row: InboundTableRow) => void
 }
 
 export function InboundTable({
@@ -29,6 +32,8 @@ export function InboundTable({
   rows,
   loading = false,
   storeRows = [],
+  onEdit,
+  onDelete,
 }: InboundTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -82,7 +87,7 @@ export function InboundTable({
     )
   }
 
-  const colCount = 5
+  const colCount = onEdit || onDelete ? 6 : 5
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -94,6 +99,7 @@ export function InboundTable({
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
+            {(onEdit || onDelete) && <th className="px-2 py-2.5 text-center font-semibold w-20">{t("actions") || "작업"}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -111,8 +117,11 @@ export function InboundTable({
                 key={row.id}
                 row={row}
                 idx={idx}
+                colCount={colCount}
                 isExpanded={expandedRows.has(idx)}
                 onToggleExpand={() => toggleExpand(idx)}
+                onEdit={onEdit}
+                onDelete={onDelete}
                 t={t}
               />
             ))
@@ -126,17 +135,25 @@ export function InboundTable({
 function TableRow({
   row,
   idx,
+  colCount,
   isExpanded,
   onToggleExpand,
+  onEdit,
+  onDelete,
   t,
 }: {
   row: InboundTableRow
   idx: number
+  colCount: number
   isExpanded: boolean
   onToggleExpand: () => void
+  onEdit?: (row: InboundTableRow) => void
+  onDelete?: (row: InboundTableRow) => void
   t: (k: string) => string
 }) {
   const hasDetails = row.items.length > 1
+  const canEdit = row.inboundBatchId != null && onEdit
+  const canDelete = row.inboundBatchId != null && onDelete
 
   return (
     <>
@@ -168,10 +185,36 @@ function TableRow({
         <td className="px-3 py-2.5 text-right font-bold text-primary tabular-nums">
           {row.totalAmt.toLocaleString()}
         </td>
+        {(canEdit || canDelete) && (
+          <td className="px-2 py-2.5">
+            <div className="flex items-center justify-center gap-0.5">
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(row)}
+                  className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title={t("edit") || "수정"}
+                >
+                  <PenLine className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(row)}
+                  className="rounded p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  title={t("delete") || "삭제"}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </td>
+        )}
       </tr>
       {isExpanded && hasDetails && (
         <tr>
-          <td colSpan={5} className="px-0 py-0">
+          <td colSpan={colCount} className="px-0 py-0">
             <div className="mx-6 my-2 overflow-hidden rounded border border-border bg-muted/30">
               <table className="w-full text-xs">
                 <thead>

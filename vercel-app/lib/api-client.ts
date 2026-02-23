@@ -1387,6 +1387,39 @@ export async function updateBankTransactionInvoice(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export interface InboundBatchForLink {
+  id: number
+  batchDate: string
+  vendorName: string
+  totalAmount: number
+  location?: string
+}
+
+export async function getInboundBatchesForLink(params: { vendorCode?: string; vendorName?: string }) {
+  const q = new URLSearchParams()
+  if (params.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
+  if (params.vendorName?.trim()) q.set('vendorName', params.vendorName.trim())
+  const res = await apiFetch(`/api/getInboundBatchesForLink?${q}`)
+  return res.json() as Promise<InboundBatchForLink[]>
+}
+
+export async function getBankTransactionInboundLinks(bankTransactionId: number) {
+  const res = await apiFetch(`/api/getBankTransactionInboundLinks?bankTransactionId=${bankTransactionId}`)
+  return res.json() as Promise<{ id?: number; inboundBatchId?: number; amount: number }[]>
+}
+
+export async function saveBankTransactionInboundLinks(params: {
+  bankTransactionId: number
+  links: { inboundBatchId: number; amount: number }[]
+}) {
+  const res = await apiFetch('/api/saveBankTransactionInboundLinks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface BankMemoRule {
   id?: number
   keyword: string
@@ -2218,6 +2251,49 @@ export interface InboundHistoryItem {
   spec: string
   qty: number
   amount: number
+  inbound_batch_id?: number | null
+}
+
+export interface InboundBatchDetail {
+  id: number
+  location: string
+  vendorName: string
+  vendorCode?: string | null
+  batchDate: string
+  totalAmount: number
+  purchaseOrderId?: number | null
+  invoiceNo?: string | null
+  invoicePhotoUrl?: string | null
+  items: { code: string; name: string; spec: string; qty: number; unitCost: number; amount: number }[]
+}
+
+export async function getInboundBatch(batchId: number) {
+  const res = await apiFetch(`/api/getInboundBatch?batchId=${batchId}`)
+  return res.json() as Promise<InboundBatchDetail>
+}
+
+export async function updateInboundBatch(params: {
+  batchId: number
+  vendorName?: string
+  vendorCode?: string
+  invoiceNo?: string
+  purchaseOrderId?: number | null
+}) {
+  const res = await apiFetch('/api/updateInboundBatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteInboundBatch(batchId: number) {
+  const res = await apiFetch('/api/deleteInboundBatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ batchId }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
 export async function registerInboundBatch(
@@ -2230,12 +2306,18 @@ export async function registerInboundBatch(
     qty: number | string
     cost?: number | string
   }[],
-  storeName?: string
+  storeName?: string,
+  options?: { vendorCode?: string; purchaseOrderId?: number }
 ) {
   const res = await apiFetch('/api/registerInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ list, storeName: storeName || undefined }),
+    body: JSON.stringify({
+      list,
+      storeName: storeName || undefined,
+      vendorCode: options?.vendorCode || undefined,
+      purchaseOrderId: options?.purchaseOrderId || undefined,
+    }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
@@ -2976,9 +3058,10 @@ export interface PurchaseOrderRow {
   invoice_no?: string
 }
 
-export async function getPurchaseOrders(params?: { vendorCode?: string }) {
+export async function getPurchaseOrders(params?: { vendorCode?: string; poId?: number }) {
   const q = new URLSearchParams()
   if (params?.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
+  if (params?.poId && !isNaN(params.poId)) q.set('poId', String(params.poId))
   const url = q.toString() ? `/api/getPurchaseOrders?${q}` : '/api/getPurchaseOrders'
   const res = await apiFetch(url)
   const data = await res.json()

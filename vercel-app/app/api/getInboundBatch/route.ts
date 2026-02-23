@@ -1,0 +1,82 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+
+/** 입고 배치 상세 조회 (수정 다이얼로그용) */
+export async function GET(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+
+  try {
+    const { searchParams } = new URL(request.url)
+    const batchId = Number(searchParams.get('batchId') || searchParams.get('id') || 0)
+    if (!batchId || isNaN(batchId)) {
+      return NextResponse.json({ error: 'batchId required' }, { status: 400, headers })
+    }
+
+    const batchRows = (await supabaseSelectFilter('inbound_batches', `id=eq.${batchId}`, { limit: 1 })) as {
+      id?: number
+      location?: string
+      vendor_name?: string
+      vendor_code?: string
+      batch_date?: string
+      total_amount?: number
+      purchase_order_id?: number | null
+      invoice_no?: string | null
+      invoice_photo_url?: string | null
+    }[]
+    const batch = batchRows?.[0]
+    if (!batch) {
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404, headers })
+    }
+
+    const itemRows = (await supabaseSelect('items', { limit: 5000, select: 'code,spec,cost' })) as {
+      code?: string
+      spec?: string
+      cost?: number
+    }[] | null
+    const itemMap: Record<string, { spec: string; cost: number }> = {}
+    for (const r of itemRows || []) {
+      const code = String(r.code || '').trim()
+      if (code) itemMap[code] = { spec: r.spec || '-', cost: Number(r.cost) || 0 }
+    }
+
+    const logRows = (await supabaseSelectFilter('stock_logs', `inbound_batch_id=eq.${batchId}`, {
+      select: 'item_code,item_name,spec,qty,unit_cost',
+      limit: 500,
+    })) as { item_code?: string; item_name?: string; spec?: string; qty?: number; unit_cost?: number | null }[] | null
+
+    const items = (logRows || []).map((r) => {
+      const code = String(r.item_code || '').trim()
+      const info = itemMap[code] || { spec: '-', cost: 0 }
+      const qty = Number(r.qty) || 0
+      const unitCost = r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : info.cost
+      return {
+        code,
+        name: r.item_name || '-',
+        spec: r.spec || info.spec,
+        qty,
+        unitCost,
+        amount: qty * unitCost,
+      }
+    })
+
+    return NextResponse.json(
+      {
+        id: batch.id,
+        location: batch.location,
+        vendorName: batch.vendor_name,
+        vendorCode: batch.vendor_code,
+        batchDate: batch.batch_date?.slice(0, 10),
+        totalAmount: batch.total_amount,
+        purchaseOrderId: batch.purchase_order_id,
+        invoiceNo: batch.invoice_no,
+        invoicePhotoUrl: batch.invoice_photo_url,
+        items,
+      },
+      { headers }
+    )
+  } catch (e) {
+    console.error('getInboundBatch:', e)
+    return NextResponse.json({ error: String(e) }, { status: 500, headers })
+  }
+}

@@ -7,6 +7,37 @@ function isOfficeStore(s: string): boolean {
   return OFFICE_STORES.some((o) => x === o || x.toLowerCase().includes('office'))
 }
 
+/** 당기 직접 구매 매입액 = stock_logs Inbound (From HQ 제외) 합계. unit_cost 있으면 사용, 없으면 items.cost */
+async function getDirectInboundPurchases(
+  locationFilter: string | null,
+  startStr: string,
+  endStr: string,
+  itemCostMap: Record<string, number>,
+  excludeHqLocations = false
+): Promise<number> {
+  const dayStart = startStr + 'T00:00:00.000Z'
+  const dayEnd = endStr + 'T23:59:59.999Z'
+  let filter = `log_type=eq.Inbound&log_date=gte.${dayStart}&log_date=lte.${dayEnd}`
+  if (locationFilter) filter += `&location=ilike.${encodeURIComponent(locationFilter)}`
+
+  const rows = (await supabaseSelectFilter('stock_logs', filter, {
+    select: 'item_code,qty,unit_cost,vendor_target,location',
+    limit: 10000,
+  })) as { item_code?: string; qty?: number; unit_cost?: number | null; vendor_target?: string; location?: string }[] | null
+
+  let total = 0
+  for (const r of rows || []) {
+    if (String(r.vendor_target || '').trim() === 'From HQ') continue
+    if (excludeHqLocations && (r.location === '입고등록' || isOfficeStore(String(r.location || '')))) continue
+    const code = String(r.item_code || '').trim()
+    if (!code) continue
+    const qty = Number(r.qty) || 0
+    const unitCost = r.unit_cost != null && !isNaN(Number(r.unit_cost)) ? Number(r.unit_cost) : (itemCostMap[code] ?? 0)
+    total += qty * unitCost
+  }
+  return total
+}
+
 /** 재고 금액 = sum(qty * cost) per item at cutoff date. locationFilter=본사|매장명|null(전체). excludeHq=true면 본사 제외(매장전체) */
 async function getInventoryValue(
   locationFilter: string | null,
@@ -111,17 +142,8 @@ export async function GET(request: NextRequest) {
         sales += Number(o.total) || 0
       }
 
-      // 2. 매입: purchase_orders (본사→공급업체)
-      const poFilter = `created_at=gte.${dayStart}&created_at=lt.${nextDayStr}`
-      const poRows = (await supabaseSelectFilter('purchase_orders', poFilter, {
-        select: 'total,status',
-        limit: 5000,
-      })) as { total?: number; status?: string }[] | null
-      const poApproved = ['Approved', 'approved', '완료']
-      for (const r of poRows || []) {
-        if (!poApproved.includes(r.status || '')) continue
-        purchases += Number(r.total) || 0
-      }
+      // 2. 매입: 입고만 (입고 기준 - 발주서는 참조용, 당기매입에 미포함)
+      purchases += await getDirectInboundPurchases('입고등록', startStr, endStr, itemCostMap, false)
 
       // 3. 비용: Office petty (store = Office, 본사, Office-xxx 등)
       const pettyAll = (await supabaseSelectFilter('petty_cash_transactions',
@@ -189,7 +211,7 @@ export async function GET(request: NextRequest) {
         sales += Number(o.total) || 0
       }
 
-      // 2. 매입: orders (Approved 발주 - 매장이 본사에 낸 돈)
+      // 2. 매입: orders (본사 주문 - 매장이 본사에 낸 돈) + 입고 직접 구매
       const orderFilter =
         `order_date=gte.${encodeURIComponent(startStr)}&order_date=lte.${encodeURIComponent(endStr)}&status=eq.Approved` +
         (storeFilter && storeFilter !== 'All' ? `&store_name=eq.${encodeURIComponent(storeFilter)}` : '')
@@ -199,6 +221,13 @@ export async function GET(request: NextRequest) {
       })) as { total?: number }[] | null
       for (const o of orders || []) {
         purchases += Number(o.total) || 0
+      }
+
+      // 2b. 매입: 입고 직접 구매 (매장→거래처, From HQ 제외)
+      if (storeFilter && storeFilter !== 'All') {
+        purchases += await getDirectInboundPurchases(storeFilter, startStr, endStr, itemCostMap, false)
+      } else {
+        purchases += await getDirectInboundPurchases(null, startStr, endStr, itemCostMap, true)
       }
 
       // 3. 비용: petty_cash (해당 매장)

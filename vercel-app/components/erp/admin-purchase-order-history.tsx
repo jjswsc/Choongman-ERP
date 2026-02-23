@@ -7,7 +7,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPurchaseOrders, processPurchaseOrderApproval, updatePurchaseOrderInvoice, type PurchaseOrderRow } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, FileCheck } from "lucide-react"
+import Link from "next/link"
+import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, FileCheck, ArrowDownToLine } from "lucide-react"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -323,6 +324,18 @@ th{background:#f5f5f5}
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
+                          {po.status === "Approved" && (
+                            <Link href={`/admin/inbound?fromPo=${po.id}`}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-primary hover:bg-primary/10"
+                                title={t("adminInboundReg") || "입고 등록"}
+                              >
+                                <ArrowDownToLine className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
                           {po.status !== "Approved" && (
                             <Button
                               variant="ghost"

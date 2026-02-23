@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const logs = (await supabaseSelectFilter(
       'stock_logs',
       locationFilter,
-      { order: 'log_date.desc', limit: 400, select: 'log_date,vendor_target,item_code,item_name,qty,unit_cost' }
+      { order: 'log_date.desc', limit: 400, select: 'log_date,vendor_target,item_code,item_name,qty,unit_cost,inbound_batch_id' }
     )) as {
       log_date?: string
       vendor_target?: string
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       item_name?: string
       qty?: number
       unit_cost?: number | null
+      inbound_batch_id?: number | null
     }[] | null
 
     const startD = new Date(startStr)
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number }[] = []
+    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
       const rowDate = row.log_date ? new Date(row.log_date) : null
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
         spec: info.spec,
         qty,
         amount: unitCost * qty,
+        inbound_batch_id: row.inbound_batch_id ?? undefined,
       })
       if (list.length >= 300) break
     }
