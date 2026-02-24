@@ -475,18 +475,19 @@ export function SalesManagementTab() {
                   업로드를 선택해 주세요.
                 </p>
               ) : (
-                <div className="h-[300px] mb-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={channelData} layout="vertical" margin={{ left: 80 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                      <YAxis dataKey="label" type="category" width={80} tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={(v: number) => [formatBath(v), "매출"]} />
-                      <Bar dataKey="sales" fill="#22c55e" name="매출" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <table className="w-full text-sm">
+                <>
+                  <div className="h-[300px] mb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={channelData} layout="vertical" margin={{ left: 80 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <YAxis dataKey="label" type="category" width={80} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), "매출"]} />
+                        <Bar dataKey="sales" fill="#22c55e" name="매출" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
                       <th className="py-2 text-left">채널</th>
@@ -504,6 +505,7 @@ export function SalesManagementTab() {
                     ))}
                   </tbody>
                 </table>
+                </>
               )}
             </TabsContent>
 
