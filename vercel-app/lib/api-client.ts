@@ -2348,6 +2348,7 @@ export interface InboundHistoryItem {
   invoice_received?: boolean
   amount: number
   inbound_batch_id?: number | null
+  po_created_at?: string | null
 }
 
 export interface InboundBatchDetail {

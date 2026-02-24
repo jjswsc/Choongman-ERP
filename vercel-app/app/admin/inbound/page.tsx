@@ -289,12 +289,12 @@ export default function InboundPage() {
   }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
   const groupedHistory = React.useMemo(() => {
-    const g: Record<string, { date: string; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
+    const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
     for (const i of historyList) {
       const batchId = i.inbound_batch_id
       const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
-        g[k] = { date: i.date, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
+        g[k] = { date: i.date, po_created_at: i.po_created_at, vendor: i.vendor, totalQty: 0, totalAmt: 0, items: [], inbound_batch_id: batchId, po_no: i.po_no, invoice_no: i.invoice_no, invoice_received: i.invoice_received }
       }
       g[k].items.push(i)
       g[k].totalQty += i.qty
@@ -318,6 +318,7 @@ export default function InboundPage() {
       return {
         id: `g-${i}-${g.date}-${g.vendor}`,
         date: g.date,
+        poDate: g.po_created_at ?? undefined,
         vendor: g.vendor,
         inboundBatchId: g.inbound_batch_id ?? undefined,
         poNo: g.po_no ?? undefined,
@@ -402,7 +403,8 @@ export default function InboundPage() {
   const printInbound = React.useCallback(
     (row: InboundTableRow) => {
       const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
-      const dateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
+      const inboundDateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
+      const poDateStr = row.poDate ? new Date(row.poDate).toLocaleDateString(locale) : ""
       const tbodyHtml = row.items
         .map(
           (it, i) =>
@@ -411,7 +413,7 @@ export default function InboundPage() {
         .join("")
       const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t("adminInbound")} - ${row.date}</title>
 <style>body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.num{text-align:right}.tot{font-weight:bold}</style></head><body>
-<h1>${t("adminInbound")}</h1><p><strong>${t("stockColDate")}:</strong> ${dateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
+<h1>${t("adminInbound")}</h1>${row.poDate ? `<p><strong>${t("inPoDate")}:</strong> ${poDateStr}</p>` : ""}<p><strong>${t("inInboundDate")}:</strong> ${inboundDateStr}</p><p><strong>${t("inVendor")}:</strong> ${(row.vendor || "-").replace(/</g, "&lt;")}</p>
 ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || "").replace(/</g, "&lt;")}</p>` : ""}${row.invoiceNo ? `<p><strong>${t("inInvoiceNo") || "인보이스"}:</strong> ${(row.invoiceNo || "").replace(/</g, "&lt;")}</p>` : ""}
 <hr/><table><thead><tr><th>No</th><th>${t("outColItem")}</th><th>${t("spec")}</th><th class="num">${t("outColQty")}</th><th class="num">${t("inColAmount")}</th></tr></thead>
 <tbody>${tbodyHtml}</tbody><tfoot><tr class="tot"><td colspan="3" class="num">${t("total")}</td><td class="num">${row.totalQty.toLocaleString()}</td><td class="num">${row.totalAmt.toLocaleString()}</td></tr></tfoot></table></body></html>`
@@ -433,8 +435,10 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
       const dataRows = row.items.map((it, i) => [i + 1, it.name || "-", it.spec || "-", it.qty, it.amount])
       const allRows = [
         [t("adminInbound"), `${row.date} ${row.vendor}`],
-        ...(row.poNo ? [[t("inPoNo") || "PO 번호", row.poNo]] : []),
-        ...(row.invoiceNo ? [[t("inInvoiceNo") || "인보이스", row.invoiceNo]] : []),
+        ...(row.poDate ? [[t("inPoDate"), row.poDate]] : []),
+        [t("inInboundDate"), row.date],
+        ...(row.poNo ? [[t("inPoNo"), row.poNo]] : []),
+        ...(row.invoiceNo ? [[t("inInvoiceNo"), row.invoiceNo]] : []),
         [],
         headers,
         ...dataRows.map((r) => r.map((v) => String(v))),

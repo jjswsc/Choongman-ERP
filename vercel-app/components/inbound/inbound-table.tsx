@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n"
 export interface InboundTableRow {
   id: string
   date: string
+  poDate?: string | null
   vendor: string
   inboundBatchId?: number
   poNo?: string
@@ -98,14 +99,15 @@ export function InboundTable({
     )
   }
 
-  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 7 : 5
+  const colCount = onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel ? 8 : 6
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-[#1E293B] text-white">
-            <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("stockColDate")}</th>
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">{t("inPoDate")}</th>
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap">{t("inInboundDate")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inVendor")}</th>
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
@@ -185,7 +187,8 @@ function TableRow({
   return (
     <>
       <tr className={cn("transition-colors hover:bg-primary/5")}>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap">{row.date}</td>
+        <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap text-muted-foreground">{row.poDate ?? "—"}</td>
+        <td className="px-2 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.date}</td>
         <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.vendor}</td>
         <td className="px-3 py-2.5 text-card-foreground">
           <div className="flex items-center gap-1.5">

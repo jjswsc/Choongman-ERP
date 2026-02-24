@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }[] = []
+    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
       const rowDate = row.log_date ? new Date(row.log_date) : null
@@ -82,14 +82,28 @@ export async function GET(request: NextRequest) {
     }
 
     const batchIds = [...new Set(list.map((r) => r.inbound_batch_id).filter((id): id is number => typeof id === 'number' && id > 0))]
-    const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
+    const batchMap: Record<number, { po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }> = {}
     if (batchIds.length > 0) {
       const batchFilter = `id=in.(${batchIds.join(',')})`
       const batches = (await supabaseSelectFilter('inbound_batches', batchFilter, {
-        select: 'id,po_no,invoice_no,invoice_received',
-      })) as { id?: number; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }[]
+        select: 'id,po_no,invoice_no,invoice_received,purchase_order_id',
+      })) as { id?: number; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; purchase_order_id?: number | null }[]
+      const poIds = [...new Set((batches || []).map((b) => b.purchase_order_id).filter((id): id is number => typeof id === 'number' && id > 0))]
+      const poCreatedMap: Record<number, string> = {}
+      if (poIds.length > 0) {
+        const poFilter = `id=in.(${poIds.join(',')})`
+        const pos = (await supabaseSelectFilter('purchase_orders', poFilter, {
+          select: 'id,created_at',
+        })) as { id?: number; created_at?: string }[]
+        for (const p of pos || []) {
+          if (p.id && p.created_at) poCreatedMap[p.id] = p.created_at.slice(0, 10)
+        }
+      }
       for (const b of batches || []) {
-        if (b.id) batchMap[b.id] = { po_no: b.po_no, invoice_no: b.invoice_no, invoice_received: Boolean(b.invoice_received) }
+        if (b.id) {
+          const poDate = b.purchase_order_id ? (poCreatedMap[b.purchase_order_id] ?? null) : null
+          batchMap[b.id] = { po_no: b.po_no, invoice_no: b.invoice_no, invoice_received: Boolean(b.invoice_received), po_created_at: poDate }
+        }
       }
     }
     for (const item of list) {
@@ -98,6 +112,7 @@ export async function GET(request: NextRequest) {
         item.po_no = batch.po_no
         item.invoice_no = batch.invoice_no
         item.invoice_received = batch.invoice_received
+        item.po_created_at = batch.po_created_at
       }
     }
 
