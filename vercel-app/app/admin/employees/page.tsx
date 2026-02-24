@@ -189,7 +189,7 @@ export default function EmployeesPage() {
   )
 
   React.useEffect(() => {
-    loadEmployeeList({ updateDisplay: false })
+    loadEmployeeList({ updateDisplay: true }, () => setHasSearched(true))
   }, [loadEmployeeList])
 
   const jobOptions = React.useMemo(() => {
@@ -229,10 +229,8 @@ export default function EmployeesPage() {
   }, [employeeCache, storeFilter, jobFilter, gradeFilter, statusFilter, searchText])
 
   const handleSearch = () => {
-    if (fullListRef.current.length > 0 && employeeCache.length === 0) {
-      setEmployeeCache(fullListRef.current)
-    }
     setHasSearched(true)
+    loadEmployeeList({ updateDisplay: true })
   }
 
   const handleEdit = (idx: number) => {
