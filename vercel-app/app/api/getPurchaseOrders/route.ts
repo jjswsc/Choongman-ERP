@@ -1,15 +1,25 @@
 import { NextRequest } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 본사 발주 내역 조회 (vendorCode로 필터 가능) */
+/** 본사 발주 내역 조회 (기간, 거래처 필터 지원) */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const vendorCode = String(searchParams.get('vendorCode') || '').trim()
     const poId = Number(searchParams.get('poId') || searchParams.get('id') || 0)
-    let filter = vendorCode ? `vendor_code=eq.${encodeURIComponent(vendorCode)}` : undefined
-    if (poId && !isNaN(poId)) filter = `id=eq.${poId}`
-    else if (!filter) filter = 'id=gt.0'
+    const startDate = String(searchParams.get('startDate') || '').trim()
+    const endDate = String(searchParams.get('endDate') || '').trim()
+
+    const parts: string[] = []
+    if (poId && !isNaN(poId)) {
+      parts.push(`id=eq.${poId}`)
+    } else {
+      parts.push('id=gt.0')
+      if (vendorCode) parts.push(`vendor_code=eq.${encodeURIComponent(vendorCode)}`)
+      if (startDate) parts.push(`created_at=gte.${startDate}T00:00:00.000Z`)
+      if (endDate) parts.push(`created_at=lte.${endDate}T23:59:59.999Z`)
+    }
+    const filter = parts.join('&')
     const rows = (await supabaseSelectFilter(
       'purchase_orders',
       filter,

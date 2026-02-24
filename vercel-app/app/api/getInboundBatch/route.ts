@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
       batch_date?: string
       total_amount?: number
       purchase_order_id?: number | null
+      po_no?: string | null
       invoice_no?: string | null
       invoice_photo_url?: string | null
     }[]
@@ -69,8 +70,9 @@ export async function GET(request: NextRequest) {
         batchDate: batch.batch_date?.slice(0, 10),
         totalAmount: batch.total_amount,
         purchaseOrderId: batch.purchase_order_id,
-        invoiceNo: batch.invoice_no,
-        invoicePhotoUrl: batch.invoice_photo_url,
+        poNo: batch.po_no ?? undefined,
+        invoiceNo: batch.invoice_no ?? undefined,
+        invoicePhotoUrl: batch.invoice_photo_url ?? undefined,
         items,
       },
       { headers }

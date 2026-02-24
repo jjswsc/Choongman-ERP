@@ -27,8 +27,19 @@ export async function GET(req: Request) {
     const userStore = String(searchParams.get('userStore') || '').trim()
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
-    const empSelect = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
-    const rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelect })) as Record<string, unknown>[] | null
+    const empSelectFull = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const empSelectFallback = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    let rows: Record<string, unknown>[] | null = null
+    try {
+      rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFull })) as Record<string, unknown>[] | null
+    } catch (colErr) {
+      const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
+      if (/column.*(id_number|address).*does not exist/i.test(errMsg) || /does not exist/i.test(errMsg)) {
+        rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFallback })) as Record<string, unknown>[] | null
+      } else {
+        throw colErr
+      }
+    }
     const role = userRole
     const list: Record<string, unknown>[] = []
 

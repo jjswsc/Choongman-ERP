@@ -102,21 +102,44 @@ export async function POST(request: NextRequest) {
       lng?: string | number
     }[]
     const storeNorm = String(storeName || '').trim().toLowerCase()
-    // gps_name/직원 store/매장명이 정확히 같을 때만 매칭
+    // 매칭 후보: 직원 store + CM 접두사 변형 (CM Office ↔ Office 등)
+    const storeCandidates = [storeNorm]
+    if (storeNorm.startsWith('cm ')) {
+      storeCandidates.push(storeNorm.replace(/^cm\s+/, '').trim())
+    } else if (storeNorm) {
+      storeCandidates.push('cm ' + storeNorm)
+    }
+    const isOfficeStore = storeNorm.includes('office') || storeNorm.includes('오피스') || storeNorm.includes('본사') || storeNorm.includes('본점')
+    // gps_name/name이 후보 중 하나와 일치할 때 매칭
     for (const v of vendors || []) {
       const gpsName = String(v.gps_name || '').trim()
       const name = String(v.name || '').trim()
       const gpsLower = gpsName.toLowerCase()
       const nameLower = name.toLowerCase()
-      const exactMatch = gpsLower === storeNorm ||
-        (gpsName === '' && nameLower === storeNorm)
-      if (exactMatch) {
+      const matched =
+        storeCandidates.some((c) => gpsLower === c) ||
+        (gpsName === '' && storeCandidates.some((c) => nameLower === c))
+      if (matched) {
         const lat = Number(v.lat) || 0
         const lng = Number(v.lng) || 0
         if (lat !== 0 || lng !== 0) {
           targetLat = lat
           targetLng = lng
           break
+        }
+      }
+    }
+    // 오피스 매장인데 위에서 매칭 안 됐으면, 본사(type=본사/Head Office) 좌표 사용
+    if (targetLat === 0 && targetLng === 0 && isOfficeStore) {
+      const headOffice = (vendors || []).find(
+        (v) => String(v.type || '').toLowerCase().includes('본사') || String(v.type || '').toLowerCase().includes('head office')
+      )
+      if (headOffice) {
+        const lat = Number(headOffice.lat) || 0
+        const lng = Number(headOffice.lng) || 0
+        if (lat !== 0 || lng !== 0) {
+          targetLat = lat
+          targetLng = lng
         }
       }
     }

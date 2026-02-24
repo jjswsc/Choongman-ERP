@@ -2343,6 +2343,7 @@ export interface InboundHistoryItem {
   name: string
   spec: string
   qty: number
+  po_no?: string | null
   invoice_no?: string | null
   invoice_received?: boolean
   amount: number
@@ -2357,6 +2358,7 @@ export interface InboundBatchDetail {
   batchDate: string
   totalAmount: number
   purchaseOrderId?: number | null
+  poNo?: string | null
   invoiceNo?: string | null
   invoicePhotoUrl?: string | null
   items: { code: string; name: string; spec: string; qty: number; unitCost: number; amount: number }[]
@@ -2371,6 +2373,7 @@ export async function updateInboundBatch(params: {
   batchId: number
   vendorName?: string
   vendorCode?: string
+  poNo?: string
   invoiceNo?: string
   invoiceReceived?: boolean
   purchaseOrderId?: number | null
@@ -2403,7 +2406,7 @@ export async function registerInboundBatch(
     cost?: number | string
   }[],
   storeName?: string,
-  options?: { vendorCode?: string; purchaseOrderId?: number; invoiceNo?: string }
+  options?: { vendorCode?: string; purchaseOrderId?: number; poNo?: string; invoiceNo?: string }
 ) {
   const res = await apiFetch('/api/registerInboundBatch', {
     method: 'POST',
@@ -2413,6 +2416,7 @@ export async function registerInboundBatch(
       storeName: storeName || undefined,
       vendorCode: options?.vendorCode || undefined,
       purchaseOrderId: options?.purchaseOrderId || undefined,
+      poNo: options?.poNo || undefined,
       invoiceNo: options?.invoiceNo || undefined,
     }),
   })
@@ -3156,10 +3160,17 @@ export interface PurchaseOrderRow {
   invoice_no?: string
 }
 
-export async function getPurchaseOrders(params?: { vendorCode?: string; poId?: number }) {
+export async function getPurchaseOrders(params?: {
+  vendorCode?: string
+  poId?: number
+  startDate?: string
+  endDate?: string
+}) {
   const q = new URLSearchParams()
   if (params?.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
   if (params?.poId && !isNaN(params.poId)) q.set('poId', String(params.poId))
+  if (params?.startDate?.trim()) q.set('startDate', params.startDate.trim())
+  if (params?.endDate?.trim()) q.set('endDate', params.endDate.trim())
   const url = q.toString() ? `/api/getPurchaseOrders?${q}` : '/api/getPurchaseOrders'
   const res = await apiFetch(url)
   const data = await res.json()

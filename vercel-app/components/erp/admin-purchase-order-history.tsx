@@ -3,12 +3,20 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPurchaseOrders, processPurchaseOrderApproval, type PurchaseOrderRow } from "@/lib/api-client"
+import { getPurchaseOrders, getVendorsForPurchase, processPurchaseOrderApproval, type PurchaseOrderRow } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
-import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine } from "lucide-react"
+import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search } from "lucide-react"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -16,14 +24,32 @@ export function AdminPurchaseOrderHistory() {
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
+  const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
+  const [startDate, setStartDate] = React.useState(() => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1)
+    return d.toISOString().slice(0, 10)
+  })
+  const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [vendorFilter, setVendorFilter] = React.useState<string>("All")
+
+  React.useEffect(() => {
+    getVendorsForPurchase()
+      .then((rows) => setVendors((rows || []).map((v) => ({ code: v.code, name: v.name }))))
+      .catch(() => setVendors([]))
+  }, [])
 
   const load = React.useCallback(() => {
     setLoading(true)
-    getPurchaseOrders()
+    getPurchaseOrders({
+      startDate,
+      endDate,
+      vendorCode: vendorFilter === "All" ? undefined : vendorFilter,
+    })
       .then((rows) => setList(Array.isArray(rows) ? rows : []))
       .catch(() => setList([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [startDate, endDate, vendorFilter])
 
   const handleApprove = React.useCallback(
     async (po: PurchaseOrderRow) => {
@@ -221,7 +247,7 @@ th{background:#f5f5f5}
 </table>
 <div style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
   <p style="font-size:12px;color:#666;margin:0">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
-  <img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:108px;height:108px;object-fit:contain;opacity:0.95;" onerror="this.style.display='none'" />
+  ${po.status === "Approved" ? '<img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:108px;height:108px;object-fit:contain;opacity:0.95;" onerror="this.style.display=\'none\'" />' : ""}
 </div>
 </body>
 </html>
@@ -250,6 +276,38 @@ th{background:#f5f5f5}
         </Button>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="h-9 w-[140px]"
+          />
+          <span className="text-muted-foreground">~</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="h-9 w-[140px]"
+          />
+          <Select value={vendorFilter} onValueChange={setVendorFilter}>
+            <SelectTrigger className="h-9 w-[180px]">
+              <SelectValue placeholder={t("poVendor") || "거래처"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">{t("orderFilterVendorAll") || "전체 거래처"}</SelectItem>
+              {vendors.map((v) => (
+                <SelectItem key={v.code} value={v.code}>
+                  {v.name || v.code}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={load} disabled={loading}>
+            <Search className="mr-1.5 h-4 w-4" />
+            {t("orderBtnSearch") || "조회"}
+          </Button>
+        </div>
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
         ) : list.length === 0 ? (

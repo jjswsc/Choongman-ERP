@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
     const storeName = (typeof body === 'object' && body?.storeName) ? String(body.storeName).trim() : null
     const vendorCode = (typeof body === 'object' && body?.vendorCode) ? String(body.vendorCode).trim() || null : null
     const purchaseOrderId = (typeof body === 'object' && body?.purchaseOrderId) ? Number(body.purchaseOrderId) : null
+    const poNo = (typeof body === 'object' && body?.poNo) ? String(body.poNo).trim() || null : null
     const invoiceNo = (typeof body === 'object' && body?.invoiceNo) ? String(body.invoiceNo).trim() || null : null
     const list = Array.isArray(body) ? body : (body?.list || []) as {
       date?: string
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
       total_amount: totalAmount,
       purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
     }
+    if (poNo) batchRow.po_no = poNo
     if (invoiceNo) batchRow.invoice_no = invoiceNo
     const batchInserted = (await supabaseInsert('inbound_batches', batchRow)) as { id?: number }[]
     const batchId = Array.isArray(batchInserted) && batchInserted[0]?.id ? batchInserted[0].id : null

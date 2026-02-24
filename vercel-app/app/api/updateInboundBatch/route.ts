@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = {}
     if (body.vendorName !== undefined) patch.vendor_name = String(body.vendorName || '').trim() || null
     if (body.vendorCode !== undefined) patch.vendor_code = String(body.vendorCode || '').trim() || null
+    if (body.poNo !== undefined) patch.po_no = String(body.poNo || '').trim() || null
     if (body.invoiceNo !== undefined) patch.invoice_no = String(body.invoiceNo || '').trim() || null
     if (body.invoicePhotoUrl !== undefined) patch.invoice_photo_url = String(body.invoicePhotoUrl || '').trim() || null
     if (typeof body.invoiceReceived === 'boolean') patch.invoice_received = body.invoiceReceived

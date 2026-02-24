@@ -19,8 +19,8 @@ interface InboundEditDialogProps {
   onOpenChange: (open: boolean) => void
   row: InboundTableRow | null
   onSaved: () => void
-  onFetchBatch: (batchId: number) => Promise<{ vendorName: string; vendorCode?: string; invoiceNo?: string } | null>
-  onSave: (params: { batchId: number; vendorName?: string; vendorCode?: string; invoiceNo?: string }) => Promise<boolean>
+  onFetchBatch: (batchId: number) => Promise<{ vendorName: string; vendorCode?: string; poNo?: string; invoiceNo?: string } | null>
+  onSave: (params: { batchId: number; vendorName?: string; vendorCode?: string; poNo?: string; invoiceNo?: string }) => Promise<boolean>
 }
 
 export function InboundEditDialog({
@@ -36,6 +36,7 @@ export function InboundEditDialog({
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [vendorName, setVendorName] = React.useState("")
+  const [poNo, setPoNo] = React.useState("")
   const [invoiceNo, setInvoiceNo] = React.useState("")
 
   React.useEffect(() => {
@@ -45,6 +46,7 @@ export function InboundEditDialog({
         .then((b) => {
           if (b) {
             setVendorName(b.vendorName || "")
+            setPoNo(b.poNo || "")
             setInvoiceNo(b.invoiceNo || "")
           }
         })
@@ -59,6 +61,7 @@ export function InboundEditDialog({
       const ok = await onSave({
         batchId: row.inboundBatchId,
         vendorName: vendorName.trim() || undefined,
+        poNo: poNo.trim() || undefined,
         invoiceNo: invoiceNo.trim() || undefined,
       })
       if (ok) {
@@ -95,7 +98,16 @@ export function InboundEditDialog({
               />
             </div>
             <div>
-              <label className="text-xs font-semibold">{t("poInvoiceNo") || "인보이스 번호"}</label>
+              <label className="text-xs font-semibold">{t("inPoNo") || "PO 번호"}</label>
+              <Input
+                value={poNo}
+                onChange={(e) => setPoNo(e.target.value)}
+                className="mt-1 h-9"
+                placeholder="PO-2024-001"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold">{t("inInvoiceNo") || "인보이스 번호"}</label>
               <Input
                 value={invoiceNo}
                 onChange={(e) => setInvoiceNo(e.target.value)}

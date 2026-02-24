@@ -11,6 +11,7 @@ export interface InboundTableRow {
   date: string
   vendor: string
   inboundBatchId?: number
+  poNo?: string
   invoiceNo?: string
   invoiceReceived?: boolean
   items: { name: string; spec: string; qty: number; amount: number }[]
