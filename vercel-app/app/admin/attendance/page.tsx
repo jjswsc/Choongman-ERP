@@ -91,7 +91,7 @@ export default function AdminAttendancePage() {
     return ["director", "officer", "ceo", "hr"].includes(r)
   }, [auth?.role])
 
-  const { stores: storeList, users: usersMap } = useStoreList()
+  const { stores: storeList, users: usersMap, staffByStore } = useStoreList()
   React.useEffect(() => {
     const st = storeList
     setStores(isOffice ? ["All", ...st] : [auth?.store || ""].filter(Boolean))
@@ -507,6 +507,7 @@ export default function AdminAttendancePage() {
                 stores={stores.filter((s) => s !== "All")}
                 storeFilter={scheduleStore}
                 onStoreChange={setScheduleStore}
+                staffByStore={staffByStore}
               />
             </div>
           </TabsContent>

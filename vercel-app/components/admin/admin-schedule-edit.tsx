@@ -71,10 +71,12 @@ export function AdminScheduleEdit({
   stores,
   storeFilter,
   onStoreChange,
+  staffByStore,
 }: {
   stores: string[]
   storeFilter: string
   onStoreChange: (v: string) => void
+  staffByStore?: Record<string, { name: string; nick: string }[]>
 }) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -109,15 +111,27 @@ export function AdminScheduleEdit({
     if (!store || !auth) return
     getAdminEmployeeList({ userStore: auth.store || "", userRole: auth.role || "" }).then((r) => {
       const list = (r.list || []).filter((e) => String(e.store || "").trim() === store)
-      setStaffList(
-        list.map((e) => ({
-          name: String(e.name || "").trim(),
-          nick: String(e.nick || e.name || "").trim(),
-          dept: String(e.job || "").trim(),
-        }))
-      )
+      if (list.length > 0) {
+        setStaffList(
+          list.map((e) => ({
+            name: String(e.name || "").trim(),
+            nick: String(e.nick || e.name || "").trim(),
+            dept: String(e.job || "").trim(),
+          }))
+        )
+      } else if (staffByStore?.[store]?.length) {
+        setStaffList(
+          staffByStore[store].map((e) => ({
+            name: String(e.name || "").trim(),
+            nick: String(e.nick || e.name || "").trim(),
+            dept: "",
+          }))
+        )
+      } else {
+        setStaffList([])
+      }
     })
-  }, [store, auth?.store, auth?.role])
+  }, [store, auth?.store, auth?.role, staffByStore])
 
   // 매장·주 선택 시 자동으로 저장된 시간표 불러오기 (휴가 정보 포함)
   React.useEffect(() => {

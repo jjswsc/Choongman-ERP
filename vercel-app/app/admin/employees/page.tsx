@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, isOfficeRole } from "@/lib/permissions"
+import { isManagerRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -285,12 +285,16 @@ export default function EmployeesPage() {
     if (isManager && userStore) base.store = userStore
     setForm(base)
   }
-  const storesForForm = isManager && userStore ? [userStore] : stores
   const storesForFilter = React.useMemo(() => {
-    if (stores.length > 0) return stores
-    if (isManager && userStore) return [userStore]
-    return storeListFromApi || []
+    let list: string[] = stores.length > 0 ? stores : (storeListFromApi || [])
+    if (isManager && userStore && list.length === 0) list = [userStore]
+    return [...list].sort((a, b) => {
+      if (isOfficeStore(a) && !isOfficeStore(b)) return -1
+      if (!isOfficeStore(a) && isOfficeStore(b)) return 1
+      return a.localeCompare(b)
+    })
   }, [stores, isManager, userStore, storeListFromApi])
+  const storesForForm = isManager && userStore ? [userStore] : storesForFilter
 
   if (loading && employeeCache.length === 0) {
     return (
@@ -393,7 +397,7 @@ export default function EmployeesPage() {
             </TabsContent>
           )}
           <TabsContent value="eval-list">
-            <EmployeeEvalListTab stores={stores} />
+            <EmployeeEvalListTab stores={storesForFilter} />
           </TabsContent>
           {isOffice && (
             <>

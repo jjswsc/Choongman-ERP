@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
-/** 매장·직원 목록 경량 조회 (store,name만) - getLoginData보다 가벼움 */
+/** 매장·직원 목록 경량 조회 (store,name,nick) */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -11,20 +11,24 @@ export async function GET() {
   try {
     const empList = await supabaseSelect('employees', {
       order: 'id.asc',
-      select: 'store,name',
-    }) as { store?: string; name?: string }[] | null
+      select: 'store,name,nick',
+    }) as { store?: string; name?: string; nick?: string }[] | null
 
     const userMap: Record<string, string[]> = {}
+    const staffByStore: Record<string, { name: string; nick: string }[]> = {}
     for (const r of empList || []) {
       const store = String(r.store || '').trim()
       const name = String(r.name || '').trim()
+      const nick = String(r.nick || r.name || '').trim() || name
       if (store && name) {
         if (!userMap[store]) userMap[store] = []
         userMap[store].push(name)
+        if (!staffByStore[store]) staffByStore[store] = []
+        staffByStore[store].push({ name, nick })
       }
     }
     const stores = Object.keys(userMap).filter(Boolean).sort()
-    return NextResponse.json({ stores, users: userMap }, { headers })
+    return NextResponse.json({ stores, users: userMap, staffByStore }, { headers })
   } catch (e) {
     console.error('getStoreList:', e)
     return NextResponse.json({ stores: [], users: {} }, { headers })
