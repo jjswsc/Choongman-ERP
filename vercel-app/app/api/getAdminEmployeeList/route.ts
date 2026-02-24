@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES } from '@/lib/permissions'
 
+/** userStore와 empStore 매칭 - "CM " 접두사 차이 허용 (Ekkamai ↔ CM Ekkamai) */
+function storeMatches(userStore: string, empStore: string): boolean {
+  if (!userStore || !empStore) return false
+  if (userStore === empStore) return true
+  const cmPrefixed = empStore.startsWith('CM ') ? empStore.slice(3) : 'CM ' + empStore
+  return userStore === cmPrefixed || empStore === cmPrefixed
+}
+
 function toDateStr(val: unknown): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
@@ -33,9 +41,11 @@ export async function GET(req: Request) {
       } else if (role.includes('officer')) {
         if (!isOfficeStore(empStore)) include = true
       } else if (role.includes('manager')) {
-        if (empStore === userStore) include = true
+        if (storeMatches(userStore, empStore)) include = true
+      } else if (role.includes('franchisee')) {
+        if (storeMatches(userStore, empStore)) include = true
       } else {
-        if (empStore === userStore) include = true
+        if (storeMatches(userStore, empStore)) include = true
       }
       if (!include) continue
       list.push({
