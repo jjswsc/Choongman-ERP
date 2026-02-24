@@ -3,6 +3,8 @@
 import * as React from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { compressImageForUpload } from "@/lib/utils"
+import { Image, Upload, Download } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -36,6 +38,7 @@ export interface EmployeeFormData {
   pw: string
   role: string
   idNumber: string
+  idCardPhoto: string
   address: string
   bankName: string
   accountNumber: string
@@ -62,6 +65,7 @@ const emptyForm: EmployeeFormData = {
   pw: "",
   role: "Staff",
   idNumber: "",
+  idCardPhoto: "",
   address: "",
   bankName: "",
   accountNumber: "",
@@ -78,6 +82,8 @@ interface EmployeeFormProps {
   onSave: () => void
   onNew: () => void
   saving?: boolean
+  /** 매장 매니저일 때 true — 권한(role) 수정 불가 */
+  roleDisabled?: boolean
 }
 
 export function EmployeeForm({
@@ -87,9 +93,11 @@ export function EmployeeForm({
   onSave,
   onNew,
   saving = false,
+  roleDisabled = false,
 }: EmployeeFormProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const idCardInputRef = React.useRef<HTMLInputElement>(null)
   const update = (k: keyof EmployeeFormData, v: string | number) => {
     onChange({ ...form, [k]: v })
   }
@@ -264,7 +272,7 @@ export function EmployeeForm({
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_label_role")}</label>
-          <Select value={form.role} onValueChange={(v) => update("role", v)}>
+          <Select value={form.role} onValueChange={(v) => update("role", v)} disabled={roleDisabled}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -275,13 +283,109 @@ export function EmployeeForm({
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_id_number")}</label>
-          <Input
-            value={form.idNumber}
-            onChange={(e) => update("idNumber", e.target.value)}
-            className="h-8 text-xs"
-          />
+        <div className="col-span-2">
+          <label className="text-xs font-semibold block mb-1">{t("emp_id_card")}</label>
+          <div className="flex gap-3 items-start">
+            <div className="flex-shrink-0 w-28 rounded border border-input bg-muted overflow-hidden">
+              {form.idCardPhoto ? (
+                <div className="relative group">
+                  <img
+                    src={form.idCardPhoto}
+                    alt="ID Card"
+                    className="w-full h-24 object-contain bg-muted cursor-pointer"
+                    onClick={() => window.open(form.idCardPhoto, "_blank")}
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() => window.open(form.idCardPhoto, "_blank")}
+                    >
+                      <Image className="h-3 w-3 mr-1" />
+                      {t("emp_id_card_view")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 px-2 text-[10px]"
+                      onClick={() => {
+                        if (form.idCardPhoto.startsWith("data:")) {
+                          fetch(form.idCardPhoto)
+                            .then((r) => r.blob())
+                            .then((blob) => {
+                              const url = URL.createObjectURL(blob)
+                              const a = document.createElement("a")
+                              a.href = url
+                              a.download = `id_card_${(form.name || "photo").replace(/[/\\?*:"|]/g, "_")}.png`
+                              a.click()
+                              URL.revokeObjectURL(url)
+                            })
+                        } else {
+                          window.open(form.idCardPhoto, "_blank")
+                        }
+                      }}
+                    >
+                      <Download className="h-3 w-3 mr-1" />
+                      {t("emp_id_card_download")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full h-24 flex items-center justify-center text-muted-foreground text-[10px]">
+                  —
+                </div>
+              )}
+            </div>
+            <div className="flex-1 space-y-1.5 min-w-0">
+              <input
+                ref={idCardInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ""
+                  if (!file) return
+                  try {
+                    const dataUrl = await compressImageForUpload(file, 1024, 0.7)
+                    update("idCardPhoto", dataUrl)
+                  } catch {
+                    alert(t("msg_upload_fail"))
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => idCardInputRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                {t("emp_id_card_upload")}
+              </Button>
+              {form.idCardPhoto && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px] text-destructive hover:text-destructive"
+                  onClick={() => update("idCardPhoto", "")}
+                >
+                  {t("delete")}
+                </Button>
+              )}
+              <Input
+                value={form.idNumber}
+                onChange={(e) => update("idNumber", e.target.value)}
+                className="h-8 text-xs mt-1"
+                placeholder={t("emp_id_number")}
+              />
+            </div>
+          </div>
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_grade")}</label>

@@ -16,7 +16,12 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getAdjustmentHistory, getStockStores, type AdjustmentHistoryItem } from "@/lib/api-client"
 
-export function StockAdjustmentHistory() {
+interface StockAdjustmentHistoryProps {
+  isManager?: boolean
+  userStore?: string
+}
+
+export function StockAdjustmentHistory({ isManager = false, userStore = "" }: StockAdjustmentHistoryProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [stores, setStores] = React.useState<string[]>([])
@@ -26,19 +31,31 @@ export function StockAdjustmentHistory() {
   const [endStr, setEndStr] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [storeFilter, setStoreFilter] = React.useState("")
 
+  const storesForFilter = React.useMemo(() => {
+    if (isManager && userStore) return [userStore]
+    return stores
+  }, [isManager, userStore, stores])
+
   React.useEffect(() => {
     getStockStores().then((s) => setStores(s || []))
   }, [])
 
+  React.useEffect(() => {
+    if (isManager && userStore) {
+      setStoreFilter(userStore)
+    }
+  }, [isManager, userStore])
+
   const handleSearch = async () => {
     const start = startStr || new Date().toISOString().slice(0, 10)
     const end = endStr || start
+    const effectiveStore = isManager && userStore ? userStore : (storeFilter || undefined)
     setLoading(true)
     try {
       const data = await getAdjustmentHistory({
         startStr: start,
         endStr: end,
-        storeFilter: storeFilter || undefined,
+        storeFilter: effectiveStore,
       })
       setList(Array.isArray(data) ? data : [])
     } catch {
@@ -75,13 +92,13 @@ export function StockAdjustmentHistory() {
         </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-semibold whitespace-nowrap">{t("stockHistStore")}</label>
-          <Select value={storeFilter || "all"} onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)}>
+          <Select value={storeFilter || "all"} onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)} disabled={isManager && !!userStore}>
             <SelectTrigger className="h-9 w-36 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("stockHistStoreAll")}</SelectItem>
-              {stores.map((s) => (
+              {storesForFilter.map((s) => (
                 <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>

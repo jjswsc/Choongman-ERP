@@ -14,7 +14,12 @@ type HolidayRow = {
   name: string
 }
 
-export function AdminPayrollHolidays() {
+interface AdminPayrollHolidaysProps {
+  /** 매장 매니저일 때 true — 조회만 가능, 추가/수정/삭제 불가 */
+  readOnly?: boolean
+}
+
+export function AdminPayrollHolidays({ readOnly = false }: AdminPayrollHolidaysProps) {
   const { lang } = useLang()
   const t = useT(lang)
 
@@ -192,33 +197,35 @@ export function AdminPayrollHolidays() {
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 mb-4 p-3 rounded-lg bg-muted/40">
-          <div className="min-w-[140px]">
-            <label className="text-xs font-semibold block mb-1">{t("holiday_date")}</label>
-            <Input
-              type="date"
-              value={addDate}
-              onChange={(e) => setAddDate(e.target.value)}
-              className="h-9 text-xs"
-            />
+        {!readOnly && (
+          <div className="flex flex-wrap items-end gap-3 mb-4 p-3 rounded-lg bg-muted/40">
+            <div className="min-w-[140px]">
+              <label className="text-xs font-semibold block mb-1">{t("holiday_date")}</label>
+              <Input
+                type="date"
+                value={addDate}
+                onChange={(e) => setAddDate(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <label className="text-xs font-semibold block mb-1">{t("holiday_name")}</label>
+              <Input
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                placeholder={t("holiday_name")}
+                className="h-9 text-xs"
+              />
+            </div>
+            <Button
+              className="h-9 font-medium"
+              onClick={handleAdd}
+              disabled={saving}
+            >
+              {t("holiday_add")}
+            </Button>
           </div>
-          <div className="flex-1 min-w-[140px]">
-            <label className="text-xs font-semibold block mb-1">{t("holiday_name")}</label>
-            <Input
-              value={addName}
-              onChange={(e) => setAddName(e.target.value)}
-              placeholder={t("holiday_name")}
-              className="h-9 text-xs"
-            />
-          </div>
-          <Button
-            className="h-9 font-medium"
-            onClick={handleAdd}
-            disabled={saving}
-          >
-            {t("holiday_add")}
-          </Button>
-        </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
@@ -234,12 +241,12 @@ export function AdminPayrollHolidays() {
                   <th className="p-2 text-center font-medium w-10">{t("pay_holiday_th_no")}</th>
                   <th className="p-2 text-left font-medium">{t("pay_holiday_th_date")}</th>
                   <th className="p-2 text-left font-medium">{t("pay_holiday_th_name")}</th>
-                  <th className="p-2 text-center font-medium w-[120px]">{t("pay_holiday_th_manage")}</th>
+                  {!readOnly && <th className="p-2 text-center font-medium w-[120px]">{t("pay_holiday_th_manage")}</th>}
                 </tr>
               </thead>
               <tbody>
                 {list.map((r, idx) =>
-                  editId === r.id ? (
+                  !readOnly && editId === r.id ? (
                     <tr key={r.id} className="border-b border-border/60 bg-muted/20">
                       <td className="p-2 text-center">{idx + 1}</td>
                       <td className="p-2">
@@ -273,22 +280,24 @@ export function AdminPayrollHolidays() {
                       <td className="p-2 text-center">{idx + 1}</td>
                       <td className="p-2">{r.date}</td>
                       <td className="p-2">{r.name}</td>
-                      <td className="p-2">
-                        <div className="flex flex-row gap-1">
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(r)} disabled={saving}>
-                            {t("emp_edit")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => handleDelete(r.id)}
-                            disabled={saving}
-                          >
-                            {t("holiday_delete")}
-                          </Button>
-                        </div>
-                      </td>
+                      {!readOnly && (
+                        <td className="p-2">
+                          <div className="flex flex-row gap-1">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(r)} disabled={saving}>
+                              {t("emp_edit")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs text-destructive border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => handleDelete(r.id)}
+                              disabled={saving}
+                            >
+                              {t("holiday_delete")}
+                            </Button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 )}

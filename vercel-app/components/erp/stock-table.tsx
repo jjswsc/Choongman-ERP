@@ -29,6 +29,7 @@ export interface StockTableProps {
   loading: boolean
   storeFilter: string
   setStoreFilter: (v: string) => void
+  storeSelectDisabled?: boolean
   stockDateFilter?: string
   setStockDateFilter?: (v: string) => void
   searchTerm: string
@@ -45,6 +46,7 @@ export function StockTable({
   loading,
   storeFilter,
   setStoreFilter,
+  storeSelectDisabled = false,
   stockDateFilter = "",
   setStockDateFilter,
   searchTerm,
@@ -167,7 +169,7 @@ ${filteredList.map((r) => {
             <Package className="h-3.5 w-3.5 text-primary" />
             {t("stockFilterStore")}
           </label>
-          <Select value={storeFilter || "all"} onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)}>
+          <Select value={storeFilter || "all"} onValueChange={(v) => setStoreFilter(v === "all" ? "" : v)} disabled={storeSelectDisabled}>
             <SelectTrigger className="h-9 w-36 text-xs">
               <SelectValue />
             </SelectTrigger>

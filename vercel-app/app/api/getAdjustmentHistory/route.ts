@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
-/** 재고 조정 내역 조회 - stock_logs log_type=Adjustment */
+/** 재고 조정 내역 조회 - stock_logs log_type=Adjustment. 매니저는 자기 매장만 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const auth = await getVerifiedAuth(request)
+  const userRole = (auth?.role || '').toLowerCase()
+  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+  const userStore = (auth?.store || '').trim()
 
   try {
     const { searchParams } = new URL(request.url)
     const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
     const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
-    const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+    let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
+    if (isManager && userStore) storeFilter = userStore
 
     const startD = startStr ? new Date(startStr) : new Date()
     const endD = endStr ? new Date(endStr) : new Date()

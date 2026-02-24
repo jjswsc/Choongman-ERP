@@ -56,6 +56,7 @@ export async function POST(req: Request) {
       email: String(d.email || '').trim(),
       annual_leave_days: null,
       id_number: d.idNumber != null ? String(d.idNumber).trim() : '',
+      id_card_photo: d.idCardPhoto != null && String(d.idCardPhoto).trim() ? String(d.idCardPhoto).trim() : null,
       address: d.address != null ? String(d.address).trim() : '',
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',

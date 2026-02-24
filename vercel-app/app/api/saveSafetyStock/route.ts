@@ -1,14 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
-/** 적정재고 저장 - store_settings 테이블 */
+/** 적정재고 저장 - store_settings 테이블. 매니저는 자기 매장만 가능 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) return authResult.errorResponse
+    const auth = authResult.auth!
+
     const body = await request.json() as { store?: string; code?: string; qty?: number }
     const store = String(body.store || '').trim()
+    const userRole = (auth.role || '').toLowerCase()
+    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+    const userStore = (auth.store || '').trim()
+
+    if (isManager && userStore && store) {
+      const storeNorm = store.toLowerCase()
+      const userNorm = userStore.toLowerCase()
+      const matches = storeNorm === userNorm || userNorm.includes(storeNorm) || storeNorm.includes(userNorm)
+      if (!matches) {
+        return NextResponse.json(
+          { success: false, message: '자기 매장만 적정재고를 수정할 수 있습니다.' },
+          { headers }
+        )
+      }
+    }
     const code = String(body.code || '').trim()
     const qty = Number(body.qty) || 0
 

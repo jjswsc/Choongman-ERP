@@ -10,7 +10,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole } from "@/lib/permissions"
 import {
   useStoreList,
   getAppData,
@@ -52,10 +52,21 @@ export default function StockPage() {
   const [adjustItem, setAdjustItem] = React.useState<StockStatusItem | null>(null)
   const [adjustOpen, setAdjustOpen] = React.useState(false)
 
+  const isManager = React.useMemo(() => isManagerOrFranchiseeRole(auth?.role || ""), [auth?.role])
+  const userStore = (auth?.store || "").trim()
+
   const canAdjust = React.useMemo(() => {
     const role = (auth?.role || "").toLowerCase()
-    return OFFICE_ROLES.some((r) => role.includes(r))
-  }, [auth?.role])
+    const isOffice = OFFICE_ROLES.some((r) => role.includes(r))
+    return isOffice || (isManager && !!userStore)
+  }, [auth?.role, isManager, userStore])
+
+  const storesForFilter = React.useMemo(() => {
+    if (isManager && userStore) return [userStore]
+    return stores
+  }, [isManager, userStore, stores])
+
+  const storeSelectDisabled = isManager && !!userStore
 
   const fetchStock = React.useCallback(async () => {
     const store = storeFilter.trim()
@@ -91,12 +102,16 @@ export default function StockPage() {
   }, [])
 
   React.useEffect(() => {
-    const isManager = isManagerRole(auth?.role || "")
-    const userStore = (auth?.store || "").trim()
     if (isManager && userStore) {
       setStoreFilter(userStore)
     }
-  }, [auth?.role, auth?.store])
+  }, [isManager, userStore])
+
+  React.useEffect(() => {
+    if (isManager && userStore && storeFilter === userStore) {
+      fetchStock()
+    }
+  }, [isManager, userStore, storeFilter, fetchStock])
 
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
@@ -161,10 +176,11 @@ export default function StockPage() {
           <TabsContent value="list">
             <StockTable
               list={list}
-              stores={stores}
+              stores={storesForFilter}
               loading={loading}
               storeFilter={storeFilter}
               setStoreFilter={setStoreFilter}
+              storeSelectDisabled={storeSelectDisabled}
               stockDateFilter={stockDateFilter}
               setStockDateFilter={setStockDateFilter}
               searchTerm={searchTerm}
@@ -176,7 +192,7 @@ export default function StockPage() {
             />
           </TabsContent>
           <TabsContent value="history">
-            <StockAdjustmentHistory />
+            <StockAdjustmentHistory isManager={isManager} userStore={userStore} />
           </TabsContent>
         </Tabs>
       </div>

@@ -27,14 +27,14 @@ export async function GET(req: Request) {
     const userStore = String(searchParams.get('userStore') || '').trim()
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
-    const empSelectFull = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
-    const empSelectFallback = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const empSelectFull = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
+    const empSelectFallback = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     let rows: Record<string, unknown>[] | null = null
     try {
       rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFull })) as Record<string, unknown>[] | null
     } catch (colErr) {
       const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
-      if (/column.*(id_number|address).*does not exist/i.test(errMsg) || /does not exist/i.test(errMsg)) {
+      if (/column.*(id_number|id_card_photo|address).*does not exist/i.test(errMsg) || /does not exist/i.test(errMsg)) {
         rows = (await supabaseSelect('employees', { order: 'id.asc', select: empSelectFallback })) as Record<string, unknown>[] | null
       } else {
         throw colErr
@@ -76,6 +76,7 @@ export async function GET(req: Request) {
         role: r.role || 'Staff',
         email: r.email || '',
         idNumber: r.id_number != null ? String(r.id_number).trim() : '',
+        idCardPhoto: r.id_card_photo != null && String(r.id_card_photo).trim() ? String(r.id_card_photo).trim() : '',
         address: r.address != null ? String(r.address).trim() : '',
         bankName: r.bank_name != null ? String(r.bank_name).trim() : '',
         accountNumber: r.account_number != null ? String(r.account_number).trim() : '',

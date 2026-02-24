@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
-/** 재고 조정 - 오피스 직원만 */
+/** 재고 조정 - 오피스 직원 또는 매니저(자기 매장만) */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const authResult = await requireAuth(request, 'manager')
+    if (authResult.errorResponse) return authResult.errorResponse
+    const auth = authResult.auth!
+
     const body = await request.json() as {
       store?: string
       itemCode?: string
@@ -17,13 +22,29 @@ export async function POST(request: NextRequest) {
       userRole?: string
     }
 
-    const userRole = String(body.userRole || '').toLowerCase()
+    const userRole = String(auth.role || body.userRole || '').toLowerCase()
+    const userStore = (auth.store || '').trim()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) {
+    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+
+    if (!isOffice && !isManager) {
       return NextResponse.json(
-        { success: false, message: '재고 조정 권한이 없습니다. 오피스 직원만 가능합니다.' },
+        { success: false, message: '재고 조정 권한이 없습니다.' },
         { headers }
       )
+    }
+
+    if (isManager && userStore) {
+      const store = String(body.store || '').trim()
+      const storeNorm = store.toLowerCase()
+      const userNorm = userStore.toLowerCase()
+      const matches = storeNorm === userNorm || userNorm.includes(storeNorm) || storeNorm.includes(userNorm)
+      if (!matches) {
+        return NextResponse.json(
+          { success: false, message: '자기 매장만 재고 조정할 수 있습니다.' },
+          { headers }
+        )
+      }
     }
 
     const store = String(body.store || '').trim()

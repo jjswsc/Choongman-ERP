@@ -100,6 +100,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     pw: e.pw || "",
     role: e.role || "Staff",
     idNumber: e.idNumber || "",
+    idCardPhoto: e.idCardPhoto || "",
     address: e.address || "",
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",
@@ -346,6 +347,7 @@ export default function EmployeesPage() {
                   onSave={handleSave}
                   onNew={handleNew}
                   saving={saving}
+                  roleDisabled={isManager}
                 />
               </div>
               <div className="lg:col-span-8 space-y-3">

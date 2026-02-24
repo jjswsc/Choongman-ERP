@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getVerifiedAuth } from '@/lib/verify-auth'
 
 export interface AppItem {
   code: string
@@ -98,6 +99,19 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const asOfDate = String(searchParams.get('asOfDate') || searchParams.get('date') || '').trim()
+
+  const auth = await getVerifiedAuth(request)
+  const userRole = (auth?.role || '').toLowerCase()
+  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+  const userStore = (auth?.store || '').trim()
+  if (isManager && userStore && storeName) {
+    const storeNorm = storeName.toLowerCase().trim()
+    const userNorm = userStore.toLowerCase().trim()
+    const matches = storeNorm === userNorm || userNorm.includes(storeNorm) || storeNorm.includes(userNorm)
+    if (!matches) {
+      return NextResponse.json({ items: [], stock: {} }, { headers })
+    }
+  }
 
   try {
     const [items, stock] = await Promise.all([

@@ -104,6 +104,10 @@ export function AdminComplaints() {
   const isHQ = auth?.role === "director" || auth?.role === "officer"
 
   const { stores: storeList } = useStoreList()
+  // 조회 탭: 매니저는 전 매장 조회 가능 (입력 탭은 stores 사용, 자기 매장만)
+  const listStoresForFilter = isManager
+    ? ["All", ...(storeList || []).filter((k) => k && String(k).trim()).sort()]
+    : stores
   useEffect(() => {
     if (!auth?.store) return
     const keys = storeList.filter((k) => k && String(k).trim()).sort()
@@ -111,7 +115,7 @@ export function AdminComplaints() {
     if (isManager) {
       list = [auth.store]
       setForm((f) => ({ ...f, store: auth.store, writer: writerName }))
-      setListStore(auth.store)
+      // 조회 탭에서는 전 매장 조회 가능 → listStore는 "All" 유지
     } else {
       list = isHQ ? ["All", ...keys] : keys
       if (keys.length && !form.store) setForm((f) => ({ ...f, store: keys[0], writer: writerName }))
@@ -466,7 +470,7 @@ export function AdminComplaints() {
                       <SelectValue placeholder={t("store")} />
                     </SelectTrigger>
                     <SelectContent>
-                      {stores.filter((s) => s).map((st) => (
+                      {listStoresForFilter.filter((s) => s).map((st) => (
                         <SelectItem key={st} value={st}>{st === "All" ? t("all") : st}</SelectItem>
                       ))}
                     </SelectContent>

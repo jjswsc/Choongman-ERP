@@ -24,7 +24,7 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole, isManagerRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { getVendorsForPurchase } from "@/lib/api-client"
 import {
@@ -47,6 +47,7 @@ export function ReceivablePayableTab() {
   const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
+  const isManagerOnly = isManagerRole(auth?.role || "") // 매장 매니저: 수령 입력 불가
   const managerStore = (auth?.store || "").trim()
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
@@ -652,57 +653,59 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         </TabsContent>
       </Tabs>
 
-      <Card>
-        <CardContent className="pt-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            {tab === "receivable" ? (t("addReceive") || "수령 입력") : (t("addPayment") || "지급 입력")}
-          </h3>
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">
-                {tab === "receivable" ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")}
-              </label>
-              <Select value={addEntity} onValueChange={setAddEntity}>
-                <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue placeholder={tab === "receivable" ? "매장 선택" : "거래처 선택"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {tab === "receivable"
-                    ? receivableStores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)
-                    : vendors.map((v) => <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>)}
-                </SelectContent>
-              </Select>
+      {!(tab === "receivable" && isManagerOnly) && (
+        <Card>
+          <CardContent className="pt-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              {tab === "receivable" ? (t("addReceive") || "수령 입력") : (t("addPayment") || "지급 입력")}
+            </h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">
+                  {tab === "receivable" ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")}
+                </label>
+                <Select value={addEntity} onValueChange={setAddEntity}>
+                  <SelectTrigger className="w-[180px] h-9">
+                    <SelectValue placeholder={tab === "receivable" ? "매장 선택" : "거래처 선택"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tab === "receivable"
+                      ? receivableStores.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)
+                      : vendors.map((v) => <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">{t("amount") || "금액"}</label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={addAmount}
+                  onChange={(e) => setAddAmount(e.target.value)}
+                  className="w-[120px] h-9"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">{t("date") || "날짜"}</label>
+                <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="w-[140px] h-9" />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">{t("memo") || "메모"}</label>
+                <Input
+                  placeholder={tab === "receivable" ? "수령 메모" : "지급 메모"}
+                  value={addMemo}
+                  onChange={(e) => setAddMemo(e.target.value)}
+                  className="w-[160px] h-9"
+                />
+              </div>
+              <Button onClick={handleAdd} disabled={addSaving}>
+                {addSaving ? t("loading") : t("btnSave") || "등록"}
+              </Button>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("amount") || "금액"}</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={addAmount}
-                onChange={(e) => setAddAmount(e.target.value)}
-                className="w-[120px] h-9"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("date") || "날짜"}</label>
-              <Input type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} className="w-[140px] h-9" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("memo") || "메모"}</label>
-              <Input
-                placeholder={tab === "receivable" ? "수령 메모" : "지급 메모"}
-                value={addMemo}
-                onChange={(e) => setAddMemo(e.target.value)}
-                className="w-[160px] h-9"
-              />
-            </div>
-            <Button onClick={handleAdd} disabled={addSaving}>
-              {addSaving ? t("loading") : t("btnSave") || "등록"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

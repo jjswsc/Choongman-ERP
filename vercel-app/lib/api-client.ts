@@ -2612,6 +2612,7 @@ export interface AdminEmployeeItem {
   role: string
   email: string
   idNumber: string
+  idCardPhoto: string
   address: string
   bankName: string
   accountNumber: string

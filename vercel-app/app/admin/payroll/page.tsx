@@ -57,7 +57,7 @@ export default function Page() {
             <AdminPayrollRecords />
           </TabsContent>
           <TabsContent value="holidays">
-            <AdminPayrollHolidays />
+            <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />
           </TabsContent>
         </Tabs>
       </div>
