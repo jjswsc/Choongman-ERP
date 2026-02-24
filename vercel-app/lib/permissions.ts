@@ -13,10 +13,16 @@
 /** employees.store가 본사/Office인지 (→ Officer 권한 적용) */
 export function isOfficeStore(store: string): boolean {
   const x = String(store || "").trim()
-  return x === "본사" || x === "Office" || x === "오피스" || x === "본점" || x.toLowerCase() === "office"
+  return (
+    x === "본사" ||
+    x === "Office" ||
+    x === "오피스" ||
+    x === "본점" ||
+    x.toLowerCase().includes("office")
+  )
 }
 
-export const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
+export const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "CM Office"]
 
 const DIRECTOR_ROLES = ["director", "ceo", "hr"]
 const OFFICE_ROLES = ["director", "ceo", "hr", "officer"]

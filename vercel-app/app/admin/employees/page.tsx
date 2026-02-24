@@ -13,6 +13,7 @@ import {
   getEmployeeLatestGrades,
   saveAdminEmployee,
   deleteAdminEmployee,
+  useStoreList,
   type AdminEmployeeItem,
 } from "@/lib/api-client"
 import {
@@ -112,6 +113,7 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
 export default function EmployeesPage() {
   const t = useT(useLang().lang)
   const { auth } = useAuth()
+  const { stores: storeListFromApi } = useStoreList()
   const userStore = (auth?.store || "").trim()
   const userRole = (auth?.role || "").trim()
 
@@ -196,7 +198,8 @@ export default function EmployeesPage() {
       const j = String(e.job || "").trim()
       if (j) set.add(j)
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+    const arr = Array.from(set).sort((a, b) => a.localeCompare(b))
+    return arr.length > 0 ? arr : [...JOB_OPTIONS, "기타"]
   }, [allEmployees])
 
   const filteredRows = React.useMemo(() => {
@@ -285,6 +288,11 @@ export default function EmployeesPage() {
     setForm(base)
   }
   const storesForForm = isManager && userStore ? [userStore] : stores
+  const storesForFilter = React.useMemo(() => {
+    if (stores.length > 0) return stores
+    if (isManager && userStore) return [userStore]
+    return storeListFromApi || []
+  }, [stores, isManager, userStore, storeListFromApi])
 
   if (loading && employeeCache.length === 0) {
     return (
@@ -341,7 +349,7 @@ export default function EmployeesPage() {
                 )}
                 <div className="rounded-lg border border-border bg-card p-3">
                   <EmployeeFilterBar
-                    stores={storesForForm}
+                    stores={storesForFilter}
                     storeFilter={storeFilter}
                     onStoreFilterChange={setStoreFilter}
                     jobOptions={jobOptions}

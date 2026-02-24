@@ -143,7 +143,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  const isOfficeStore = (s: string) => /^(본사|office|오피스|본점)$/i.test(String(s || "").trim())
+  const isOfficeStore = (s: string) => {
+    const x = String(s || "").trim()
+    return x === "본사" || x === "오피스" || x === "본점" || x.toLowerCase().includes("office")
+  }
   const stores = Object.keys(loginData).sort((a, b) => {
     if (isOfficeStore(a) && !isOfficeStore(b)) return -1
     if (!isOfficeStore(a) && isOfficeStore(b)) return 1
