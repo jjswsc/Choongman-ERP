@@ -296,14 +296,6 @@ export default function EmployeesPage() {
   }, [stores, isManager, userStore, storeListFromApi])
   const storesForForm = isManager && userStore ? [userStore] : storesForFilter
 
-  if (loading && employeeCache.length === 0) {
-    return (
-      <div className="flex-1 overflow-auto flex items-center justify-center min-h-[200px]">
-        <span className="text-muted-foreground">{t("loading")}</span>
-      </div>
-    )
-  }
-
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-4">
