@@ -110,8 +110,8 @@ export function InboundTable({
             <th className="px-3 py-2.5 text-center font-semibold">{t("outColItem")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("outColQty")}</th>
             <th className="px-3 py-2.5 text-center font-semibold whitespace-nowrap">{t("inColAmount")}</th>
-            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("poInvoiceNo") || "인보이스"}</th>
-            {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && <th className="px-2 py-2.5 text-center font-semibold w-28">{t("actions") || "작업"}</th>}
+            <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("poInvoiceNo")}</th>
+            {(onEdit || onDelete || onInvoiceReceivedToggle || onPrint || onExcel) && <th className="px-2 py-2.5 text-center font-semibold min-w-[10rem] whitespace-nowrap">{t("actions")}</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -220,8 +220,8 @@ function TableRow({
           )}
         </td>
         {(canEdit || canDelete || canInvoiceToggle || canPrint || canExcel) && (
-          <td className="px-2 py-2.5">
-            <div className="flex items-center justify-center gap-0.5 flex-wrap">
+          <td className="px-2 py-2.5 min-w-[10rem]">
+            <div className="flex items-center justify-center gap-1 flex-nowrap">
               {canInvoiceToggle && (
                 <button
                   type="button"
@@ -238,7 +238,7 @@ function TableRow({
                   type="button"
                   onClick={() => onEdit(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("edit") || "수정"}
+                  title={t("edit")}
                 >
                   <PenLine className="h-3.5 w-3.5" />
                 </button>
@@ -248,7 +248,7 @@ function TableRow({
                   type="button"
                   onClick={() => onPrint(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("purchaseOrderPrint") || t("printBtn") || "인쇄"}
+                  title={t("purchaseOrderPrint")}
                 >
                   <Printer className="h-3.5 w-3.5" />
                 </button>
@@ -258,7 +258,7 @@ function TableRow({
                   type="button"
                   onClick={() => onExcel(row)}
                   className="rounded p-1.5 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("purchaseOrderExcel") || "엑셀"}
+                  title={t("purchaseOrderExcel")}
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5" />
                 </button>
@@ -268,7 +268,7 @@ function TableRow({
                   type="button"
                   onClick={() => onDelete(row)}
                   className="rounded p-1.5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                  title={t("delete") || "삭제"}
+                  title={t("delete")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
