@@ -418,7 +418,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
   const formatTime = (iso: string) => {
     if (!iso) return "-"
     const d = new Date(iso)
-    return isNaN(d.getTime()) ? "-" : d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    return isNaN(d.getTime()) ? "-" : d.toLocaleTimeString("ko-KR", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
   }
 
   return (

@@ -72,13 +72,24 @@ function getAllDaysInMonth(yearMonth: string): { date: string; day: number }[] {
   return days
 }
 
+const TZ = "Asia/Bangkok"
+
 function toTimeStr(iso: string): string {
   try {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return ""
-    const h = d.getHours()
-    const m = d.getMinutes()
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
+    return d.toLocaleTimeString("ko-KR", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false })
+  } catch {
+    return ""
+  }
+}
+
+/** ISO UTC → 방콕 기준 YYYY-MM-DD */
+function toDateStrBangkok(iso: string): string {
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return ""
+    return d.toLocaleDateString("en-CA", { timeZone: TZ })
   } catch {
     return ""
   }
@@ -109,7 +120,7 @@ function deriveSummaryFromLogs(logs: AttendanceLogItem[], yearMonth: string): My
   const { start, end } = getMonthRange(yearMonth)
   const byKey: Record<string, { lateMin: number; otMin: number; hasOut: boolean }> = {}
   for (const r of logs || []) {
-    const dateStr = (r.timestamp || "").slice(0, 10)
+    const dateStr = toDateStrBangkok(r.timestamp || "")
     if (!dateStr || dateStr < start || dateStr > end) continue
     if (!byKey[dateStr]) byKey[dateStr] = { lateMin: 0, otMin: 0, hasOut: false }
     const rec = byKey[dateStr]
@@ -164,7 +175,7 @@ function buildDailyRecords(
 
   for (const log of logs) {
     const ts = log.timestamp
-    const dateStr = ts.slice(0, 10)
+    const dateStr = toDateStrBangkok(ts)
     const type = log.type
     if (!byDate[dateStr]) {
       byDate[dateStr] = { clockIn: null, clockOut: null, lateMin: 0, otMin: 0 }

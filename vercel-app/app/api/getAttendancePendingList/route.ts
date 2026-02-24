@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-function toDateStr(val: string | Date | null | undefined): string {
+const TZ = 'Asia/Bangkok'
+
+/** log_at(UTC ISO) → 방콕 기준 날짜 YYYY-MM-DD (필터용) */
+function toDateStrBangkok(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 19).replace('T', ' ')
   const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 19).replace('T', ' ')
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
+}
+
+/** log_at(UTC ISO) → 방콕 기준 표시 "YYYY-MM-DD HH:mm:ss" */
+function toDisplayStr(val: string | Date | null | undefined): string {
+  if (!val) return ''
+  const d = new Date(val)
+  if (isNaN(d.getTime())) return ''
+  const datePart = d.toLocaleDateString('en-CA', { timeZone: TZ })
+  const timePart = d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+  return `${datePart} ${timePart}`
 }
 
 export async function GET(request: NextRequest) {
@@ -46,7 +58,7 @@ export async function GET(request: NextRequest) {
     const list: { id: number; log_at: string; store_name: string; name: string; nick?: string; log_type: string; status?: string; approved?: string; late_min?: number; ot_min?: number }[] = []
 
     for (const r of rows || []) {
-      const rowDate = toDateStr(r.log_at).slice(0, 10)
+      const rowDate = toDateStrBangkok(r.log_at)
       if (startStr && rowDate < startStr) continue
       if (endStr && rowDate > endStr) continue
 
@@ -54,7 +66,7 @@ export async function GET(request: NextRequest) {
       const rowName = String(r.name || '').trim()
       list.push({
         id: r.id,
-        log_at: toDateStr(r.log_at),
+        log_at: toDisplayStr(r.log_at),
         store_name: rowStore,
         name: rowName,
         nick: nickMap[rowStore + '|' + rowName] || '',

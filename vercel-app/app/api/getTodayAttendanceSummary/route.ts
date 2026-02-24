@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+const TZ = 'Asia/Bangkok'
+
+/** log_at(UTC ISO) → 방콕 기준 날짜 YYYY-MM-DD */
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
 export async function GET(request: NextRequest) {
@@ -82,8 +84,8 @@ export async function GET(request: NextRequest) {
       .map((r) => ({
         store: r.store,
         name: r.name,
-        inTimeStr: r.inTime ? new Date(r.inTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '',
-        outTimeStr: r.outTime ? new Date(r.outTime).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '미기록',
+        inTimeStr: r.inTime ? new Date(r.inTime).toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '',
+        outTimeStr: r.outTime ? new Date(r.outTime).toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '미기록',
         lateMin: r.lateMin,
         status: r.outTime ? r.status : '퇴근미기록',
         onlyIn: !r.outTime,

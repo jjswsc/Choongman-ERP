@@ -3,17 +3,18 @@ import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 
 const TZ = 'Asia/Bangkok'
 
+/** log_at(UTC ISO) → 방콕 기준 날짜 YYYY-MM-DD */
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
+/** log_at(UTC ISO) → 방콕 기준 시간 HH:mm */
 function toTimeStr(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function parsePlanToMinutes(plan: string | null | undefined): number {

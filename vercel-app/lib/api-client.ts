@@ -2626,6 +2626,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
   return {
     list: (data.list || []) as AdminEmployeeItem[],
     stores: (data.stores || []) as string[],
+    _debug: data._debug as Record<string, unknown> | undefined,
   }
 }
 

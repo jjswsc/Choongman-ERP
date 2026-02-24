@@ -130,18 +130,30 @@ export default function EmployeesPage() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
+  const [loadError, setLoadError] = React.useState<string | null>(null)
 
   const loadEmployeeList = React.useCallback(
     async (opts?: { updateDisplay?: boolean }, callback?: () => void) => {
       setLoading(true)
+      setLoadError(null)
       try {
         const [listRes, gradesRes] = await Promise.all([
           getAdminEmployeeList({ userStore, userRole }),
           getEmployeeLatestGrades(),
         ])
-        const list = listRes.list || []
-        const storeList = listRes.stores || []
+        const list = (listRes as { list?: EmployeeTableRow[]; stores?: string[]; _debug?: Record<string, unknown> }).list || []
+        const storeList = (listRes as { stores?: string[] }).stores || []
+        const debug = (listRes as { _debug?: Record<string, unknown> })._debug
         setStores(storeList)
+
+        if (list.length === 0 && debug) {
+          setLoadError(
+            `[진단] userStore="${debug.userStore ?? ""}" userRole="${debug.userRole ?? ""}" role="${debug.role ?? ""}" ` +
+              `DB행수=${debug.totalRowsFromDb ?? 0}` +
+              (debug.sampleStores ? ` 샘플매장=${JSON.stringify(debug.sampleStores)}` : "") +
+              (debug.hint ? ` ${debug.hint}` : "")
+          )
+        }
 
         const normName = (n: string) =>
           String(n || "")
@@ -176,11 +188,13 @@ export default function EmployeesPage() {
           setEmployeeCache([])
         }
         callback?.()
-      } catch {
+      } catch (e) {
         fullListRef.current = []
         setAllEmployees([])
         setEmployeeCache([])
         setStores([])
+        const msg = e instanceof Error ? e.message : String(e)
+        setLoadError(`조회 실패: ${msg}`)
       } finally {
         setLoading(false)
       }
@@ -359,6 +373,11 @@ export default function EmployeesPage() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">{t("emp_search_hint")}</p>
+                {loadError && (
+                  <div className="rounded-lg border border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                    {loadError}
+                  </div>
+                )}
                 <div className="overflow-x-auto max-h-[600px]">
                   {!hasSearched ? (
                     <div className="py-16 text-center text-sm text-muted-foreground">

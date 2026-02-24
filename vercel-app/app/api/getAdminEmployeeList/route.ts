@@ -88,7 +88,23 @@ export async function GET(req: Request) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }
 
-    return NextResponse.json({ list, stores: allStores }, { headers })
+    const body: { list: Record<string, unknown>[]; stores: string[]; _debug?: Record<string, unknown> } = {
+      list,
+      stores: allStores,
+    }
+    if (list.length === 0 && rows && rows.length > 0) {
+      body._debug = {
+        userStore,
+        userRole,
+        role,
+        totalRowsFromDb: rows.length,
+        sampleStores: [...new Set((rows as { store?: string }[]).map((r) => String(r.store || "").trim()).filter(Boolean))].slice(0, 5),
+      }
+    } else if (list.length === 0 && (!rows || rows.length === 0)) {
+      body._debug = { userStore, userRole, role, totalRowsFromDb: 0, hint: "employees 테이블이 비어 있거나 조회 실패" }
+    }
+
+    return NextResponse.json(body, { headers })
   } catch (e) {
     console.error('getAdminEmployeeList:', e)
     return NextResponse.json({ list: [], stores: [] }, { status: 500, headers })
