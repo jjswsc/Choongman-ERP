@@ -22,6 +22,8 @@ export interface OutboundHistoryItem {
   originalOrderQty?: number
   /** 품목별 출고지(창고) - items.outbound_location */
   outboundLocation?: string
+  /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
+  isUnreceived?: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -140,6 +142,7 @@ export async function GET(request: NextRequest) {
 
     if (orderRowIds.length > 0) {
       const orderMap: Record<string, {
+        store_name?: string
         delivery_status?: string
         image_url?: string
         delivery_date?: string
@@ -148,7 +151,7 @@ export async function GET(request: NextRequest) {
         received_indices?: number[]
         received_qty_json?: Record<string, number>
         original_order_qty_json?: Record<string, number>
-        cart?: { code?: string; name?: string; qty?: number }[]
+        cart?: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
       }> = {}
 
       for (const oid of orderRowIds) {
@@ -194,6 +197,7 @@ export async function GET(request: NextRequest) {
             }
           } catch {}
           orderMap[String(oid)] = {
+            store_name: (o as { store_name?: string }).store_name,
             delivery_status: o.delivery_status,
             image_url: o.image_url,
             delivery_date: o.delivery_date,
@@ -265,6 +269,51 @@ export async function GET(request: NextRequest) {
         }
         filteredList.push(r)
       }
+
+      // 부분 배송 주문: 미수령 품목도 출고 목록에 추가 (어떤 품목이 누락되었는지 확인 가능하도록)
+      const sampleByOrder: Record<string, OutboundHistoryItem> = {}
+      for (const r of filteredList) {
+        if (r.orderRowId && !sampleByOrder[r.orderRowId]) sampleByOrder[r.orderRowId] = r
+      }
+      for (const oid of orderRowIds) {
+        const o = orderMap[oid]
+        if (!o?.received_indices?.length || !o.cart?.length) continue
+        const recIdxSet = new Set(o.received_indices)
+        const target = String(o.store_name || '').trim()
+        if (!target) continue
+        const sample = sampleByOrder[oid]
+        const baseDate = sample?.date || (o.order_date?.slice(0, 10) ?? '')
+        const baseInvoiceNo = sample?.invoiceNo ?? ''
+        for (let ci = 0; ci < o.cart.length; ci++) {
+          if (recIdxSet.has(ci)) continue
+          const c = o.cart[ci]
+          if (!c || !c.name) continue
+          const code = String(c.code || '').trim()
+          const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
+          const qty = Number(c.qty || 0)
+          const amount = info.price * qty
+          filteredList.push({
+            date: baseDate,
+            target,
+            type: 'Outbound',
+            name: String(c.name || '').trim(),
+            code,
+            spec: String(c.spec || info.spec || '').trim() || '-',
+            qty,
+            amount,
+            orderRowId: oid,
+            deliveryStatus: '미수령',
+            deliveryDate: o.delivery_date?.slice(0, 16),
+            orderDate: o.order_date?.slice(0, 10),
+            invoiceNo: baseInvoiceNo,
+            receiveImageUrl: o.image_url,
+            outboundLocation: info.outboundLocation,
+            originalOrderQty: qty,
+            isUnreceived: true,
+          })
+        }
+      }
+
       return NextResponse.json(filteredList, { headers })
     }
 

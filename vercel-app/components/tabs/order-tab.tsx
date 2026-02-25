@@ -802,6 +802,11 @@ export function OrderTab() {
                                         {!showCheck && isReceived && (
                                           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#16a34a] text-[10px] text-white" title={t("itemReceived")}>✓</span>
                                         )}
+                                        {!showCheck && !isReceived && (o.deliveryStatus === "일부배송완료" || o.deliveryStatus === "일부 배송 완료") && (
+                                          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 shrink-0" title={t("outItemUnreceived") || "미수령"}>
+                                            {t("outItemUnreceived") || "미수령"}
+                                          </span>
+                                        )}
                                         <span className={`flex-1 min-w-0 ${isReceived ? "text-muted-foreground" : ""}`}>{it.name ?? "-"}</span>
                                         {showCheck && checked ? (
                                           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>

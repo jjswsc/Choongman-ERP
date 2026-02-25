@@ -578,6 +578,7 @@ export default function OutboundPage() {
           originalOrderQty: it.originalOrderQty,
           outboundLocation: it.outboundLocation || "(미지정)",
           deliveryDate: it.deliveryDate ? it.deliveryDate.slice(0, 10) : undefined,
+          isUnreceived: it.isUnreceived,
         })),
         itemsSummary,
         totalQty: g.totalQty,

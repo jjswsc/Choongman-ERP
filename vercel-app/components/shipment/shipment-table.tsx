@@ -16,6 +16,9 @@ const statusStyles: Record<StatusBadgeKey, string> = {
   outTypeForce: "bg-[#F59E0B] text-white",
 }
 
+/** 미수령 품목 배지 스타일 */
+const unrecvBadgeStyle = "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+
 export interface ShipmentTableRow {
   id: string
   orderDate: string
@@ -24,7 +27,7 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
-  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; outboundLocation?: string; deliveryDate?: string }[]
+  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; outboundLocation?: string; deliveryDate?: string; isUnreceived?: boolean }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -312,6 +315,7 @@ function TableRow({
                       {codeSort === "desc" && " ↓"}
                     </th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outColItem")}</th>
+                    <th className="px-4 py-2 text-center font-semibold text-card-foreground w-20">{t("outColStatus") || "상태"}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("spec")}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("outWhWarehouseCol") || "출고지"}</th>
                     <th className="px-4 py-2 text-center font-semibold text-card-foreground">{t("orderColDeliveryDate") || "배송일자"}</th>
@@ -321,9 +325,18 @@ function TableRow({
                 </thead>
                 <tbody className="divide-y divide-border">
                   {sortedItems.map((d, i) => (
-                    <tr key={i} className="hover:bg-primary/5 transition-colors">
+                    <tr key={i} className={cn("hover:bg-primary/5 transition-colors", d.isUnreceived && "bg-red-50 dark:bg-red-950/20")}>
                       <td className="px-4 py-2 text-center text-muted-foreground font-mono text-[11px]">{d.code || "-"}</td>
                       <td className="px-4 py-2 text-center text-card-foreground">{d.name}</td>
+                      <td className="px-4 py-2 text-center">
+                        {d.isUnreceived ? (
+                          <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold", unrecvBadgeStyle)}>
+                            {t("outItemUnreceived") || "미수령"}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-[11px]">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.spec}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.outboundLocation || "-"}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground whitespace-nowrap">{d.deliveryDate || "-"}</td>

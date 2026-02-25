@@ -2476,6 +2476,8 @@ export interface OutboundHistoryItem {
   receivedIndices?: number[]
   originalOrderQty?: number
   totalOrderItems?: number
+  /** 미수령 품목 여부 (부분 배송 시 누락 품목) */
+  isUnreceived?: boolean
 }
 
 export async function forceOutboundBatch(list: {
