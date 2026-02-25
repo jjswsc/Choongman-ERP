@@ -13,9 +13,10 @@ export interface AppItem {
   safeQty: number
   image: string
   description?: string
+  purchaseSource?: 'hq' | 'store'
 }
 
-const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description'
+const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description,purchase_source'
 
 async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   const isOrderScope = String(scope || '').toLowerCase().trim() === 'order'
@@ -29,6 +30,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
     tax?: string
     image?: string
     description?: string
+    purchase_source?: string
   }[] | null
 
   if (isOrderScope) {
@@ -58,6 +60,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
     const row = rows![i]
     if (!row?.code) continue
     const taxType = row.tax === '면세' ? '면세' : '과세'
+    const ps = String(row.purchase_source || '').trim()
     list.push({
       code: String(row.code),
       category: String(row.category || ''),
@@ -69,6 +72,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
       safeQty: safeMap[row.code] || 0,
       image: String(row.image || ''),
       description: row.description ? String(row.description).trim() : undefined,
+      purchaseSource: ps === 'store' ? 'store' : 'hq',
     })
   }
   return list

@@ -35,6 +35,8 @@ export interface StockTableProps {
   categoryFilter?: string
   setCategoryFilter?: (v: string) => void
   categoryOptions?: string[]
+  purchaseSourceFilter?: "" | "hq" | "store"
+  setPurchaseSourceFilter?: (v: "" | "hq" | "store") => void
   searchTerm: string
   setSearchTerm: (v: string) => void
   onSearch: () => void
@@ -55,6 +57,8 @@ export function StockTable({
   categoryFilter = "",
   setCategoryFilter,
   categoryOptions = [],
+  purchaseSourceFilter = "",
+  setPurchaseSourceFilter,
   searchTerm,
   setSearchTerm,
   onSearch,
@@ -74,6 +78,9 @@ export function StockTable({
     if (categoryFilter && categoryFilter !== "__all__") {
       result = result.filter((r) => (r.category || "").trim() === categoryFilter)
     }
+    if (purchaseSourceFilter === "hq" || purchaseSourceFilter === "store") {
+      result = result.filter((r) => (r.purchaseSource ?? "hq") === purchaseSourceFilter)
+    }
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase()
       result = result.filter(
@@ -83,7 +90,7 @@ export function StockTable({
       )
     }
     return result
-  }, [list, searchTerm, categoryFilter])
+  }, [list, searchTerm, categoryFilter, purchaseSourceFilter])
 
   const totalAmount = React.useMemo(() => {
     return filteredList.reduce((sum, r) => {
@@ -188,6 +195,21 @@ ${filteredList.map((r) => {
                 {categoryOptions.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {setPurchaseSourceFilter && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold whitespace-nowrap">{t("itemsPurchaseSource") || "구분"}</label>
+            <Select value={purchaseSourceFilter || "__all__"} onValueChange={(v) => setPurchaseSourceFilter(v === "__all__" ? "" : (v as "hq" | "store"))}>
+              <SelectTrigger className="h-9 w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t("stockFilterStoreAll") || "전체"}</SelectItem>
+                <SelectItem value="hq">{t("itemsPurchaseSourceHq") || "본사"}</SelectItem>
+                <SelectItem value="store">{t("itemsPurchaseSourceStore") || "매장"}</SelectItem>
               </SelectContent>
             </Select>
           </div>

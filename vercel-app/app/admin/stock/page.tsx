@@ -49,6 +49,7 @@ export default function StockPage() {
   const [storeFilter, setStoreFilter] = React.useState("")
   const [stockDateFilter, setStockDateFilter] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("")
+  const [purchaseSourceFilter, setPurchaseSourceFilter] = React.useState<"" | "hq" | "store">("")
   const [searchTerm, setSearchTerm] = React.useState("")
   const [adjustItem, setAdjustItem] = React.useState<StockStatusItem | null>(null)
   const [adjustOpen, setAdjustOpen] = React.useState(false)
@@ -99,6 +100,7 @@ export default function StockPage() {
         price: i.price ?? 0,
         cost: i.cost ?? i.price ?? 0,
         category: i.category,
+        purchaseSource: i.purchaseSource ?? 'hq',
       }))
       setList(mapped)
     } catch {
@@ -197,6 +199,8 @@ export default function StockPage() {
               categoryFilter={categoryFilter}
               setCategoryFilter={setCategoryFilter}
               categoryOptions={categoryOptions}
+              purchaseSourceFilter={purchaseSourceFilter}
+              setPurchaseSourceFilter={setPurchaseSourceFilter}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onSearch={fetchStock}

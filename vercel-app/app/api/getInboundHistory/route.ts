@@ -21,15 +21,23 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost' })) as {
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost,purchase_source' })) as {
       code?: string
       spec?: string
       cost?: number
+      purchase_source?: string
     }[] | null
-    const itemMap: Record<string, { spec: string; cost: number }> = {}
+    const itemMap: Record<string, { spec: string; cost: number; purchaseSource: 'hq' | 'store' }> = {}
     for (const row of itemRows || []) {
       const code = String(row.code || '').trim()
-      if (code) itemMap[code] = { spec: row.spec || '-', cost: Number(row.cost) || 0 }
+      if (code) {
+        const ps = String(row.purchase_source || '').trim()
+        itemMap[code] = {
+          spec: row.spec || '-',
+          cost: Number(row.cost) || 0,
+          purchaseSource: ps === 'store' ? 'store' : 'hq',
+        }
+      }
     }
 
     let locationFilter = 'log_type=eq.Inbound'
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }[] = []
+    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; code?: string; purchaseSource?: 'hq' | 'store'; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean; po_created_at?: string | null }[] = []
     for (const row of logs || []) {
       if (String(row.vendor_target || '').trim() === 'From HQ') continue
       const rowDate = row.log_date ? new Date(row.log_date) : null
@@ -66,7 +74,7 @@ export async function GET(request: NextRequest) {
       if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' && rowVendor !== vendorFilter) continue
 
       const code = String(row.item_code || '').trim()
-      const info = itemMap[code] || { spec: '-', cost: 0 }
+      const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const }
       const qty = Number(row.qty) || 0
       const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
       list.push({
@@ -76,6 +84,8 @@ export async function GET(request: NextRequest) {
         spec: info.spec,
         qty,
         amount: unitCost * qty,
+        code: code || undefined,
+        purchaseSource: info.purchaseSource,
         inbound_batch_id: row.inbound_batch_id ?? undefined,
       })
       if (list.length >= 300) break

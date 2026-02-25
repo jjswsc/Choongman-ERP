@@ -25,15 +25,23 @@ export async function GET(request: NextRequest) {
       endStr = last.toISOString().slice(0, 10)
     }
 
-    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost' })) as {
+    const itemRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,spec,cost,purchase_source' })) as {
       code?: string
       spec?: string
       cost?: number
+      purchase_source?: string
     }[] | null
-    const itemMap: Record<string, { spec: string; cost: number }> = {}
+    const itemMap: Record<string, { spec: string; cost: number; purchaseSource: 'hq' | 'store' }> = {}
     for (const row of itemRows || []) {
       const code = String(row.code || '').trim()
-      if (code) itemMap[code] = { spec: row.spec || '-', cost: Number(row.cost) || 0 }
+      if (code) {
+        const ps = String(row.purchase_source || '').trim()
+        itemMap[code] = {
+          spec: row.spec || '-',
+          cost: Number(row.cost) || 0,
+          purchaseSource: ps === 'store' ? 'store' : 'hq',
+        }
+      }
     }
 
     const logs = (await supabaseSelectFilter(
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
     startD.setHours(0, 0, 0, 0)
     endD.setHours(23, 59, 59, 999)
 
-    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number }[] = []
+    const list: { date: string; vendor: string; name: string; spec: string; qty: number; amount: number; purchaseSource?: 'hq' | 'store' }[] = []
     for (const row of logs || []) {
       const type = String(row.log_type || '')
       const note = String(row.vendor_target || '').trim()
@@ -71,7 +79,7 @@ export async function GET(request: NextRequest) {
       if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매입처' && rowVendor !== vendorFilter) continue
 
       const code = String(row.item_code || '').trim()
-      const info = itemMap[code] || { spec: '-', cost: 0 }
+      const info = itemMap[code] || { spec: '-', cost: 0, purchaseSource: 'hq' as const }
       const qty = Number(row.qty) || 0
       const unitCost = row.unit_cost != null && !isNaN(Number(row.unit_cost)) ? Number(row.unit_cost) : info.cost
       const vendor = rowVendor
@@ -82,6 +90,7 @@ export async function GET(request: NextRequest) {
         spec: info.spec,
         qty,
         amount: unitCost * qty,
+        purchaseSource: info.purchaseSource,
       })
       if (list.length >= 300) break
     }

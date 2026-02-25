@@ -94,6 +94,7 @@ export interface AppItem {
   safeQty: number
   image?: string
   description?: string
+  purchaseSource?: 'hq' | 'store'
 }
 
 export async function getAppData(
@@ -122,6 +123,7 @@ export interface StockStatusItem {
   price?: number
   cost?: number
   category?: string
+  purchaseSource?: 'hq' | 'store'
 }
 
 export interface AdjustmentHistoryItem {
@@ -2423,6 +2425,8 @@ export interface InboundHistoryItem {
   amount: number
   inbound_batch_id?: number | null
   po_created_at?: string | null
+  code?: string
+  purchaseSource?: 'hq' | 'store'
 }
 
 export interface InboundBatchDetail {

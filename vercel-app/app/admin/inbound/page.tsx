@@ -88,6 +88,7 @@ export default function InboundPage() {
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histVendor, setHistVendor] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
+  const [histPurchaseSource, setHistPurchaseSource] = React.useState<"" | "hq" | "store">("")
   const [histMonth, setHistMonth] = React.useState("")
   const [fromPoId, setFromPoId] = React.useState<number | null>(null)
 
@@ -288,9 +289,14 @@ export default function InboundPage() {
     }
   }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
+  const filteredHistoryList = React.useMemo(() => {
+    if (!histPurchaseSource || histPurchaseSource === "") return historyList
+    return historyList.filter((i) => (i.purchaseSource ?? "hq") === histPurchaseSource)
+  }, [historyList, histPurchaseSource])
+
   const groupedHistory = React.useMemo(() => {
     const g: Record<string, { date: string; po_created_at?: string | null; vendor: string; totalQty: number; totalAmt: number; items: InboundHistoryItem[]; inbound_batch_id?: number | null; po_no?: string | null; invoice_no?: string | null; invoice_received?: boolean }> = {}
-    for (const i of historyList) {
+    for (const i of filteredHistoryList) {
       const batchId = i.inbound_batch_id
       const k = batchId ? `b${batchId}` : `${i.date}_${i.vendor}`
       if (!g[k]) {
@@ -301,11 +307,11 @@ export default function InboundPage() {
       g[k].totalAmt += i.amount || 0
     }
     return Object.values(g)
-  }, [historyList])
+  }, [filteredHistoryList])
 
   const periodTotal = React.useMemo(() => {
-    return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
-  }, [historyList])
+    return filteredHistoryList.reduce((sum, i) => sum + (i.amount || 0), 0)
+  }, [filteredHistoryList])
 
   const inboundTableRows = React.useMemo((): InboundTableRow[] => {
     if (!isOffice) return []
@@ -339,14 +345,14 @@ export default function InboundPage() {
 
   const storeRows = React.useMemo(
     () =>
-      historyList.map((i) => ({
+      filteredHistoryList.map((i) => ({
         date: i.date,
         vendor: i.vendor,
         item: `${i.name || ""}${i.spec ? ` (${i.spec})` : ""}`.trim() || "-",
         qty: i.qty,
         amount: i.amount || 0,
       })),
-    [historyList]
+    [filteredHistoryList]
   )
 
   const [tabValue, setTabValue] = React.useState<"new" | "hist" | "guide">("new")
@@ -663,6 +669,8 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
               histVendor={histVendor}
               vendors={purchaseVendors.map((v) => v.name)}
               onHistVendorChange={setHistVendor}
+              histPurchaseSource={histPurchaseSource}
+              onHistPurchaseSourceChange={setHistPurchaseSource}
               onSearch={fetchHistory}
             />
             <div className="overflow-x-auto max-h-[500px]">

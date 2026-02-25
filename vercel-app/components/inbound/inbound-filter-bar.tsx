@@ -21,6 +21,9 @@ interface InboundFilterBarProps {
   histVendor: string
   vendors: string[]
   onHistVendorChange: (v: string) => void
+  /** 본사/매장 구분 필터 */
+  histPurchaseSource?: "" | "hq" | "store"
+  onHistPurchaseSourceChange?: (v: "" | "hq" | "store") => void
   onSearch: () => void
 }
 
@@ -40,6 +43,8 @@ export function InboundFilterBar({
   histVendor,
   vendors,
   onHistVendorChange,
+  histPurchaseSource = "",
+  onHistPurchaseSourceChange,
   onSearch,
 }: InboundFilterBarProps) {
   const { lang } = useLang()
@@ -99,6 +104,17 @@ export function InboundFilterBar({
             {stores.filter((s) => s && s !== "All").map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
+          </select>
+        )}
+        {onHistPurchaseSourceChange && (
+          <select
+            value={histPurchaseSource || "__all__"}
+            onChange={(e) => onHistPurchaseSourceChange(e.target.value === "__all__" ? "" : (e.target.value as "hq" | "store"))}
+            className="h-8 rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+          >
+            <option value="__all__">{t("stockFilterStoreAll") || "전체"}</option>
+            <option value="hq">{t("itemsPurchaseSourceHq") || "본사"}</option>
+            <option value="store">{t("itemsPurchaseSourceStore") || "매장"}</option>
           </select>
         )}
         <select

@@ -10,6 +10,7 @@ function taxTypeToDb(taxType: string): string {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  let code = ''
 
   try {
     const body = (await request.json()) as {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
       purchaseSource?: 'hq' | 'store'
     }
 
-    const code = String(body.code || '').trim()
+    code = String(body.code || '').trim()
     const name = String(body.name || '').trim()
     const editingCode = body.editingCode ? String(body.editingCode).trim() : null
     if (!code || !name) {
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
       errMsg.includes('23505') ||
       /duplicate key|unique constraint|items_code/i.test(errMsg)
     const message = isDuplicateCode
-      ? `품목 코드 "${code}"가 이미 사용 중입니다. 다른 코드를 입력해 주세요.`
+      ? `품목 코드 "${code || '(입력값)'}"가 이미 사용 중입니다. 다른 코드를 입력해 주세요.`
       : errMsg || '저장 실패'
     return NextResponse.json({ success: false, message }, { headers })
   }
