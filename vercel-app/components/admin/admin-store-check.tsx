@@ -316,6 +316,8 @@ export function AdminStoreCheck() {
     try {
       const updates = settingItems.map((it, idx) => ({
         id: it.id,
+        main: it.main ?? "",
+        sub: it.sub ?? "",
         name: it.name,
         use: it.use,
         sort_order: idx + 1,
@@ -365,9 +367,19 @@ export function AdminStoreCheck() {
 
   const tr = (s: string) => (s && transMap[s]) || s || ""
 
-  const updateSettingItem = (idx: number, field: "name" | "use", value: string | boolean) => {
+  const updateSettingItem = (idx: number, field: "main" | "sub" | "name" | "use", value: string | boolean) => {
     setSettingItems((prev) =>
-      prev.map((it, i) => (i === idx ? (field === "name" ? { ...it, name: String(value) } : { ...it, use: !!value }) : it))
+      prev.map((it, i) =>
+        i === idx
+          ? field === "name"
+            ? { ...it, name: String(value) }
+            : field === "main"
+              ? { ...it, main: String(value) }
+              : field === "sub"
+                ? { ...it, sub: String(value) }
+                : { ...it, use: !!value }
+          : it
+      )
     )
   }
 
@@ -792,8 +804,20 @@ export function AdminStoreCheck() {
                                 </Button>
                               </div>
                             </td>
-                            <td className="p-2">{tr(it.main)}</td>
-                            <td className="p-2">{tr(it.sub)}</td>
+                            <td className="p-2">
+                              <Input
+                                className="h-7 text-xs"
+                                value={it.main ?? ""}
+                                onChange={(e) => updateSettingItem(idx, "main", e.target.value)}
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                className="h-7 text-xs"
+                                value={it.sub ?? ""}
+                                onChange={(e) => updateSettingItem(idx, "sub", e.target.value)}
+                              />
+                            </td>
                             <td className="p-2">
                               <Input
                                 className="h-7 text-xs"

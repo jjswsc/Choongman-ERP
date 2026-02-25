@@ -119,6 +119,8 @@ function updateChecklistItems(updates) {
     var up = updates[u];
     try {
       var updateData = {
+        main_cat: String(up.main != null ? up.main : "").trim(),
+        sub_cat: String(up.sub != null ? up.sub : "").trim(),
         name: String(up.name != null ? up.name : "").trim(),
         use_flag: (up.use === true || up.use === 1 || up.use === "1" || String(up.use).toLowerCase() === "y")
       };

@@ -11,9 +11,24 @@ const menuItems = [
   { href: "/admin", label: "대시보드" },
   { href: "/admin/notices", label: "공지사항 관리" },
   { href: "/admin/work-log", label: "업무일지" },
-  { header: "POS" },
+  // 1. 매출 관리
+  { header: "매출 관리" },
+  { href: "/admin/sales-management", label: "매출 관리" },
+  // 2. 매장 관리
+  { header: "매장 관리" },
+  { href: "/admin/store-check", label: "매장 점검" },
+  { href: "/admin/store-visit", label: "매장 방문 현황" },
+  { href: "/admin/complaints", label: "컴플레인 일지" },
+  // 3. POS 관리
+  { header: "POS 관리" },
   { href: "/admin/pos-menus", label: "메뉴 관리" },
   { href: "/admin/pos-promos", label: "프로모션 관리" },
+  // 4. 인사 관리
+  { header: "인사 관리" },
+  { href: "/admin/employees", label: "직원 관리" },
+  { href: "/admin/attendance", label: "근태/스케줄 관리" },
+  { href: "/admin/leave", label: "휴가 관리" },
+  // 5. 물류 관리
   { header: "물류 관리" },
   { href: "/admin/items", label: "품목 관리" },
   { href: "/admin/vendors", label: "거래처 관리" },
@@ -21,18 +36,12 @@ const menuItems = [
   { href: "/admin/stock", label: "재고 현황" },
   { href: "/admin/inbound", label: "입고 관리" },
   { href: "/admin/outbound", label: "출고 관리" },
-  { header: "인사 관리" },
-  { href: "/admin/employees", label: "직원 관리" },
-  { href: "/admin/attendance", label: "근태/스케줄 관리" },
-  { href: "/admin/leave", label: "휴가 관리" },
+  // 6. 회계 관리
   { header: "회계 관리" },
   { href: "/admin/payroll", label: "급여 관리" },
   { href: "/admin/receivable-payable", label: "미수금 관리" },
   { href: "/admin/petty-cash", label: "패티 캐쉬" },
-  { header: "매장 관리" },
-  { href: "/admin/store-check", label: "매장 점검" },
-  { href: "/admin/store-visit", label: "매장 방문 현황" },
-  { href: "/admin/complaints", label: "컴플레인 일지" },
+  //
   { header: "설정" },
   { href: "/admin/settings", label: "설정" },
 ]

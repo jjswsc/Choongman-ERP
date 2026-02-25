@@ -1815,6 +1815,9 @@ export interface PosMenuOption {
   priceModifier: number
   priceModifierDelivery?: number | null
   sortOrder: number
+  optionType?: 'substitution' | 'additive'
+  itemCode?: string | null
+  quantity?: number
 }
 
 export async function getPosMenus() {
@@ -1841,6 +1844,9 @@ export async function savePosMenuOption(params: {
   priceModifier?: number
   priceModifierDelivery?: number | null
   sortOrder?: number
+  optionType?: 'substitution' | 'additive'
+  itemCode?: string | null
+  quantity?: number
 }) {
   const res = await apiFetch('/api/savePosMenuOption', {
     method: 'POST',
@@ -2741,7 +2747,7 @@ export async function getEvaluationHistory(params: {
 /** 평가 항목 일괄 수정 */
 export async function updateEvaluationItems(params: {
   type: 'kitchen' | 'service'
-  updates: { id: string | number; name?: string; use?: boolean; sort_order?: number }[]
+  updates: { id: string | number; main?: string; sub?: string; name?: string; use?: boolean; sort_order?: number }[]
 }) {
   const res = await apiFetch('/api/updateEvaluationItems', {
     method: 'POST',
@@ -2891,7 +2897,7 @@ export async function deleteCheckHistory(id: string) {
   return true
 }
 
-export async function updateChecklistItems(updates: { id: string | number; name?: string; use?: boolean; sort_order?: number }[]) {
+export async function updateChecklistItems(updates: { id: string | number; main?: string; sub?: string; name?: string; use?: boolean; sort_order?: number }[]) {
   const res = await apiFetch('/api/updateChecklistItems', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

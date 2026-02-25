@@ -377,7 +377,7 @@ function loadChecklistSettings() {
             var nameEsc = (item.name || "").replace(/"/g, "&quot;");
             var upDisabled = idx === 0 ? " disabled" : "";
             var downDisabled = idx === items.length - 1 ? " disabled" : "";
-            tbody.innerHTML += "<tr><td>" + item.id + "</td><td class=\"text-nowrap\"><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1\" onclick=\"moveChecklistRowUp(this)\"" + upDisabled + ">" + orderUp + "</button><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1 ms-1\" onclick=\"moveChecklistRowDown(this)\"" + downDisabled + ">" + orderDown + "</button></td><td><input class=\"form-control form-control-sm\" value=\"" + mainEsc + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + subEsc + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + nameEsc + "\"></td><td><input type=\"checkbox\" class=\"form-check-input chk-use\" data-id=\"" + item.id + "\" " + checked + "></td></tr>";
+            tbody.innerHTML += "<tr><td>" + item.id + "</td><td class=\"text-nowrap\"><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1\" onclick=\"moveChecklistRowUp(this)\"" + upDisabled + ">" + orderUp + "</button><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1 ms-1\" onclick=\"moveChecklistRowDown(this)\"" + downDisabled + ">" + orderDown + "</button></td><td><input class=\"form-control form-control-sm chk-set-main\" value=\"" + mainEsc + "\"></td><td><input class=\"form-control form-control-sm chk-set-sub\" value=\"" + subEsc + "\"></td><td><input class=\"form-control form-control-sm chk-set-name\" value=\"" + nameEsc + "\"></td><td><input type=\"checkbox\" class=\"form-check-input chk-use\" data-id=\"" + item.id + "\" " + checked + "></td></tr>";
         });
     }).getChecklistItems(false);
 }
@@ -411,10 +411,11 @@ function saveChecklistSettings() {
     var updates = [];
     document.querySelectorAll("#setting-list-body tr").forEach(function(tr, idx) {
         var useEl = tr.querySelector(".chk-use");
+        var mainEl = tr.querySelector(".chk-set-main");
+        var subEl = tr.querySelector(".chk-set-sub");
+        var nameEl = tr.querySelector(".chk-set-name");
         if (!useEl) return;
-        var inputs = tr.querySelectorAll("input:not([type=\"checkbox\"])");
-        var nameVal = inputs.length >= 3 ? inputs[2].value : "";
-        updates.push({ id: useEl.getAttribute("data-id"), name: nameVal, use: useEl.checked, sort_order: idx + 1 });
+        updates.push({ id: useEl.getAttribute("data-id"), main: mainEl ? mainEl.value : "", sub: subEl ? subEl.value : "", name: nameEl ? nameEl.value : "", use: useEl.checked, sort_order: idx + 1 });
     });
     if (updates.length === 0) { alert("저장할 항목이 없습니다."); return; }
     google.script.run.withSuccessHandler(function(res) { alert("저장됨"); loadChecklistSettings(); }).updateChecklistItems(updates);

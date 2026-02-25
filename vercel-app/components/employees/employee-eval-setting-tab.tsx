@@ -82,6 +82,8 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
   const handleSave = async () => {
     const updates = items.map((item, idx) => ({
       id: item.id,
+      main: item.main ?? "",
+      sub: item.sub ?? "",
       name: item.name,
       use: item.use ?? true,
       sort_order: idx + 1,
@@ -160,6 +162,18 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
   const setItemUse = (idx: number, use: boolean) => {
     setItems((prev) =>
       prev.map((it, i) => (i === idx ? { ...it, use } : it))
+    )
+  }
+
+  const setItemMain = (idx: number, main: string) => {
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, main } : it))
+    )
+  }
+
+  const setItemSub = (idx: number, sub: string) => {
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, sub } : it))
     )
   }
 
@@ -243,15 +257,17 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
                   <td className="p-2">
                     <Input
                       value={item.main}
-                      readOnly
-                      className="h-8 text-sm bg-muted/30"
+                      onChange={(e) => setItemMain(idx, e.target.value)}
+                      readOnly={readOnly}
+                      className={`h-8 text-sm ${readOnly ? "bg-muted/30" : ""}`}
                     />
                   </td>
                   <td className="p-2">
                     <Input
                       value={item.sub}
-                      readOnly
-                      className="h-8 text-sm bg-muted/30"
+                      onChange={(e) => setItemSub(idx, e.target.value)}
+                      readOnly={readOnly}
+                      className={`h-8 text-sm ${readOnly ? "bg-muted/30" : ""}`}
                     />
                   </td>
                   <td className="p-2">

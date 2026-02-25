@@ -32,6 +32,7 @@ import {
   type PosMenuOption,
   type PosMenuIngredient,
 } from "@/lib/api-client"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 const emptyForm = {
@@ -63,12 +64,18 @@ export default function PosMenusPage() {
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
+  const [newOptionType, setNewOptionType] = React.useState<"substitution" | "additive">("substitution")
+  const [newOptionItemCode, setNewOptionItemCode] = React.useState("")
+  const [newOptionQuantity, setNewOptionQuantity] = React.useState("1")
+  const [selectedIngredientOptionId, setSelectedIngredientOptionId] = React.useState<string>("")
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
   const [newIngredientQty, setNewIngredientQty] = React.useState("1")
   const [newIngredientLossRate, setNewIngredientLossRate] = React.useState("0")
   const [menuCost, setMenuCost] = React.useState<{ cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
+  const [baseMenuCost, setBaseMenuCost] = React.useState<number | null>(null)
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ ingredients: PosMenuIngredient[]; cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
+  const [activeTab, setActiveTab] = React.useState<"info" | "cost">("info")
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -83,34 +90,33 @@ export default function PosMenusPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const effectiveOptionIdForIngredients = selectedIngredientOptionId === "" || selectedIngredientOptionId === "null" ? undefined : selectedIngredientOptionId
+
   React.useEffect(() => {
     if (!editingId) {
       setMenuOptions([])
       setMenuIngredients([])
       setMenuCost(null)
+      setBaseMenuCost(null)
+      setSelectedIngredientOptionId("")
       return
     }
-    Promise.all([
-      getPosMenuOptions({ menuId: editingId }),
-      getPosMenuIngredients({ menuId: editingId }),
-      getMenuCost({ menuId: editingId }),
-    ])
-      .then(([opts, ings, costRes]) => {
-        setMenuOptions(opts || [])
-        setMenuIngredients(ings || [])
-        setMenuCost({ cost: costRes.cost, breakdown: costRes.breakdown })
-      })
-      .catch(() => {
-        setMenuOptions([])
-        setMenuIngredients([])
-        setMenuCost(null)
-      })
+    getPosMenuOptions({ menuId: editingId }).then((opts) => setMenuOptions(opts || []))
   }, [editingId])
 
   React.useEffect(() => {
-    if (editingId && menuIngredients.length >= 0) {
-      getMenuCost({ menuId: editingId }).then((r) => setMenuCost({ cost: r.cost, breakdown: r.breakdown }))
-    }
+    if (!editingId) return
+    getPosMenuIngredients({ menuId: editingId, optionId: effectiveOptionIdForIngredients ?? "null" }).then(setMenuIngredients)
+  }, [editingId, effectiveOptionIdForIngredients])
+
+  React.useEffect(() => {
+    if (!editingId) return
+    getMenuCost({ menuId: editingId, optionId: effectiveOptionIdForIngredients }).then((r) => setMenuCost({ cost: r.cost, breakdown: r.breakdown }))
+  }, [editingId, menuIngredients, effectiveOptionIdForIngredients])
+
+  React.useEffect(() => {
+    if (!editingId) return
+    getMenuCost({ menuId: editingId }).then((r) => setBaseMenuCost(r.cost))
   }, [editingId, menuIngredients])
 
   const handleExpandMenu = React.useCallback(async (menuId: string) => {
@@ -140,6 +146,7 @@ export default function PosMenusPage() {
   const handleNewRegister = () => {
     setFormData(emptyForm)
     setEditingId(null)
+    setActiveTab("info")
   }
 
   const handleReset = () => {
@@ -227,25 +234,37 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
     })
     setEditingId(menu.id)
+    setActiveTab("info")
     setNewOptionName("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
+    setSelectedIngredientOptionId("")
   }
 
   const handleAddOption = async () => {
     if (!editingId || !newOptionName.trim()) return
+    if (newOptionType === "additive" && !newOptionItemCode.trim()) {
+      alert(t("posOptionAdditiveItemRequired") || "추가형 옵션은 품목을 선택해야 합니다.")
+      return
+    }
     const res = await savePosMenuOption({
       menuId: Number(editingId),
       name: newOptionName.trim(),
       priceModifier: Number(newOptionModifier) || 0,
       priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
       sortOrder: menuOptions.length,
+      optionType: newOptionType,
+      itemCode: newOptionType === "additive" ? newOptionItemCode.trim() : null,
+      quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
     })
     if (res.success) {
       getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
       setNewOptionName("")
       setNewOptionModifier("0")
       setNewOptionModifierDelivery("")
+      setNewOptionType("substitution")
+      setNewOptionItemCode("")
+      setNewOptionQuantity("1")
     } else {
       alert(res.message)
     }
@@ -258,9 +277,10 @@ export default function PosMenusPage() {
       itemCode: newIngredientCode.trim(),
       quantity: Number(newIngredientQty) || 1,
       lossRate: Number(newIngredientLossRate) || 0,
+      optionId: effectiveOptionIdForIngredients ? Number(effectiveOptionIdForIngredients) : null,
     })
     if (res.success) {
-      getPosMenuIngredients({ menuId: editingId }).then(setMenuIngredients)
+      getPosMenuIngredients({ menuId: editingId, optionId: effectiveOptionIdForIngredients ?? "null" }).then(setMenuIngredients)
       setNewIngredientCode("")
       setNewIngredientQty("1")
       setNewIngredientLossRate("0")
@@ -382,218 +402,249 @@ export default function PosMenusPage() {
               </Button>
             </div>
             <div className="flex flex-col gap-4 p-6">
-              <div>
-                <label className="text-xs font-semibold">{t("posMenuCode")}</label>
-                <Input
-                  placeholder="M001"
-                  className="mt-1 h-10"
-                  value={formData.code}
-                  onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
-                  disabled={!!editingId}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold">{t("posMenuName")}</label>
-                <Input
-                  placeholder={t("itemsNamePh")}
-                  className="mt-1 h-10"
-                  value={formData.name}
-                  onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
-                <Select
-                  value={formData.category || "_"}
-                  onValueChange={(v) => setFormData((p) => ({ ...p, category: v === "_" ? "" : v }))}
-                >
-                  <SelectTrigger className="mt-1 h-10">
-                    <SelectValue placeholder={t("itemsCategoryPh")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_">-</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  className="mt-1 h-10 text-right"
-                  value={formData.price}
-                  onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                <Input
-                  type="number"
-                  placeholder="비워두면 홀과 동일"
-                  className="mt-1 h-10 text-right"
-                  value={formData.priceDelivery}
-                  onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))}
-                />
-              </div>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={formData.vatIncluded}
-                    onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))}
-                  />
-                  {t("posMenuVatIncluded")}
-                </label>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))}
-                  />
-                  {t("posMenuActive")}
-                </label>
-              </div>
-              {editingId && (
-                <div className="rounded border border-dashed p-3">
-                  <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
-                  <ul className="mb-2 space-y-1">
-                    {menuOptions.map((o) => (
-                      <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                        <span>
-                          {o.name}
-                          {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
-                            ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)`
-                            : ""}
+              {editingId ? (
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "info" | "cost")} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="info">{t("posMenuInfoTab") || "메뉴 정보"}</TabsTrigger>
+                    <TabsTrigger value="cost">{t("posMenuCostAnalysisTab") || "원가 분석"}</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="info" className="mt-4 space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold">{t("posMenuCode")}</label>
+                      <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} disabled />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("posMenuName")}</label>
+                      <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
+                      <Select value={formData.category || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, category: v === "_" ? "" : v }))}>
+                        <SelectTrigger className="mt-1 h-10">
+                          <SelectValue placeholder={t("itemsCategoryPh")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="_">-</SelectItem>
+                          {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
+                      <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
+                      <Input type="number" placeholder="비워두면 홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} />
+                        {t("posMenuVatIncluded")}
+                      </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
+                        {t("posMenuActive")}
+                      </label>
+                    </div>
+                    <div className="rounded border border-dashed p-3">
+                      <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
+                      <ul className="mb-2 space-y-1">
+                        {menuOptions.map((o) => (
+                          <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
+                            <span>
+                              <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{o.name}</span>
+                              {o.optionType === "additive" && o.itemCode && (
+                                <span className="ml-1 text-muted-foreground">+{o.itemCode}×{o.quantity ?? 1}</span>
+                              )}
+                              {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
+                                ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)` : ""}
+                            </span>
+                            <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteOption(o)}><Trash2 className="h-3 w-3" /></Button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <Input placeholder={t("posOptionNamePh") || "옵션명"} className="h-8 text-xs flex-1" value={newOptionName} onChange={(e) => setNewOptionName(e.target.value)} />
+                          <Button size="sm" className="h-8 px-2 shrink-0" onClick={handleAddOption}><Plus className="h-3.5 w-3.5" /></Button>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <span className="text-[10px] text-muted-foreground shrink-0">{t("posOptionType") || "타입"}</span>
+                          <Select value={newOptionType} onValueChange={(v) => setNewOptionType(v as "substitution" | "additive")}>
+                            <SelectTrigger className="h-8 w-28 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="substitution">{t("posOptionTypeSubstitution") || "대체형"}</SelectItem>
+                              <SelectItem value="additive">{t("posOptionTypeAdditive") || "추가형"}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {newOptionType === "additive" && (
+                          <div className="flex gap-2 items-center flex-wrap">
+                            <Select value={newOptionItemCode} onValueChange={setNewOptionItemCode}>
+                              <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
+                                <SelectValue placeholder={t("posOptionAdditiveItem") || "추가 품목"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {items.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
+                          </div>
+                        )}
+                        <div className="flex gap-2 text-xs">
+                          <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
+                          <Input type="number" placeholder="+0" className="h-8 w-20 text-right text-xs" value={newOptionModifier} onChange={(e) => setNewOptionModifier(e.target.value)} />
+                          <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
+                          <Input type="number" placeholder="홀과 동일" className="h-8 w-20 text-right text-xs" value={newOptionModifierDelivery} onChange={(e) => setNewOptionModifierDelivery(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                    {baseMenuCost != null && (Number(formData.price) || 0) > 0 && (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                        <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
+                        <span className="ml-2 text-lg font-bold text-amber-600">
+                          {((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%
                         </span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-5 px-1 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteOption(o)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder={t("posOptionNamePh") || "옵션명"}
-                        className="h-8 text-xs flex-1"
-                        value={newOptionName}
-                        onChange={(e) => setNewOptionName(e.target.value)}
-                      />
-                      <Button size="sm" className="h-8 px-2 shrink-0" onClick={handleAddOption}>
-                        <Plus className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <div className="flex gap-2 text-xs">
-                      <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
-                      <Input
-                        type="number"
-                        placeholder="+0"
-                        className="h-8 w-20 text-right text-xs"
-                        value={newOptionModifier}
-                        onChange={(e) => setNewOptionModifier(e.target.value)}
-                      />
-                      <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
-                      <Input
-                        type="number"
-                        placeholder="홀과 동일"
-                        className="h-8 w-20 text-right text-xs"
-                        value={newOptionModifierDelivery}
-                        onChange={(e) => setNewOptionModifierDelivery(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-              {editingId && (
-                <div className="rounded border border-dashed border-amber-500/50 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-semibold">{t("posMenuIngredients") || "재료 (BOM)"}</h4>
-                    {menuCost != null && (
-                      <span className="text-xs font-bold text-amber-600">
-                        {t("posMenuCost") || "원가"}: {menuCost.cost.toFixed(1)} ฿
-                      </span>
+                      </div>
                     )}
+                    <div className="flex gap-3 pt-2">
+                      <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
+                      <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="cost" className="mt-4 space-y-4">
+                    {menuOptions.some((o) => o.optionType === "substitution") && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground shrink-0">{t("posIngredientScope") || "재료 범위"}</span>
+                        <Select value={selectedIngredientOptionId || "base"} onValueChange={(v) => setSelectedIngredientOptionId(v === "base" ? "" : v)}>
+                          <SelectTrigger className="h-8 w-40 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="base">{t("posIngredientScopeBase") || "기본 (옵션 없음)"}</SelectItem>
+                            {menuOptions.filter((o) => o.optionType === "substitution").map((o) => (
+                              <SelectItem key={o.id} value={o.id}>{t("posIngredientScopeOption") || "옵션"}: {o.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="rounded border border-dashed border-amber-500/50 p-3">
+                      <h4 className="mb-2 text-xs font-semibold">
+                        {selectedIngredientOptionId ? `${t("posIngredientScopeOption") || "옵션"}: ${menuOptions.find((o) => o.id === selectedIngredientOptionId)?.name ?? ""}` : t("posMenuIngredients") || "재료 (BOM)"}
+                      </h4>
+                      <ul className="mb-2 max-h-48 overflow-y-auto space-y-1">
+                        {menuIngredients.map((ing) => (
+                          <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
+                            <span>{ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}</span>
+                            <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteIngredient(ing)}><Trash2 className="h-3 w-3" /></Button>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex flex-wrap gap-2">
+                        <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
+                          <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
+                            <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {items.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newIngredientQty} onChange={(e) => setNewIngredientQty(e.target.value)} />
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground shrink-0">{t("posIngredientLoss") || "로스"}</span>
+                          <Input type="number" min={0} max={100} step={0.5} placeholder="0" className="h-8 w-14 text-right text-xs" value={newIngredientLossRate} onChange={(e) => setNewIngredientLossRate(e.target.value)} />
+                          <span className="text-[10px] text-muted-foreground">%</span>
+                        </div>
+                        <Button size="sm" className="h-8 px-2" onClick={handleAddIngredient}><Plus className="h-3.5 w-3.5" /></Button>
+                      </div>
+                      <p className="mt-1 text-[10px] text-muted-foreground">{t("posIngredientHint") || "판매 시 해당 재료가 자동 차감됩니다."}</p>
+                    </div>
+                    {menuCost != null && menuCost.breakdown.length > 0 && (
+                      <div className="rounded border bg-muted/30 overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b bg-muted/50">
+                              <th className="px-3 py-2 text-left font-semibold">{t("posMenuIngredients") || "재료"}</th>
+                              <th className="px-3 py-2 text-right font-semibold">수량</th>
+                              <th className="px-3 py-2 text-right font-semibold">{t("posIngredientLoss") || "로스"}</th>
+                              <th className="px-3 py-2 text-right font-semibold">{t("posMenuCost") || "원가"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {menuCost.breakdown.map((b) => (
+                              <tr key={b.itemCode} className="border-b last:border-b-0">
+                                <td className="px-3 py-2">{b.itemName}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{b.quantity}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{(b.lossRate ?? 0) > 0 ? `${b.lossRate}%` : "-"}</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)} ฿</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="flex justify-between items-center border-t bg-muted/30 px-3 py-2">
+                          <span className="text-xs font-semibold">{t("posMenuCost") || "총 원가"}</span>
+                          <span className="font-bold tabular-nums">{menuCost.cost.toFixed(1)} ฿</span>
+                        </div>
+                        {(Number(formData.price) || 0) > 0 && (
+                          <div className="flex justify-between items-center border-t px-3 py-2">
+                            <span className="text-xs font-semibold">{t("posMenuCostRatio") || "원가율"}</span>
+                            <span className="font-bold text-amber-600 tabular-nums">{((menuCost.cost / (Number(formData.price) || 1)) * 100).toFixed(1)}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuCode")}</label>
+                    <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} />
                   </div>
-                  <ul className="mb-2 space-y-1">
-                    {menuIngredients.map((ing) => (
-                      <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
-                        <span>{ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}</span>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-5 px-1 text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteIngredient(ing)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="flex flex-wrap gap-2">
-                    <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
-                      <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
-                        <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuName")}</label>
+                    <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
+                    <Select value={formData.category || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, category: v === "_" ? "" : v }))}>
+                      <SelectTrigger className="mt-1 h-10">
+                        <SelectValue placeholder={t("itemsCategoryPh")} />
                       </SelectTrigger>
                       <SelectContent>
-                        {items.map((it) => (
-                          <SelectItem key={it.code} value={it.code}>
-                            {it.code} — {it.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="_">-</SelectItem>
+                        {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Input
-                      type="number"
-                      min={0.001}
-                      step={0.1}
-                      placeholder="1"
-                      className="h-8 w-16 text-right text-xs"
-                      value={newIngredientQty}
-                      onChange={(e) => setNewIngredientQty(e.target.value)}
-                    />
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-muted-foreground shrink-0">{t("posIngredientLoss") || "로스"}</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.5}
-                        placeholder="0"
-                        className="h-8 w-14 text-right text-xs"
-                        value={newIngredientLossRate}
-                        onChange={(e) => setNewIngredientLossRate(e.target.value)}
-                      />
-                      <span className="text-[10px] text-muted-foreground">%</span>
-                    </div>
-                    <Button size="sm" className="h-8 px-2" onClick={handleAddIngredient}>
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    {t("posIngredientHint") || "판매 시 해당 재료가 자동 차감됩니다."}
-                  </p>
-                </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
+                    <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
+                    <Input type="number" placeholder="비워두면 홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} />
+                      {t("posMenuVatIncluded")}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
+                      {t("posMenuActive")}
+                    </label>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
+                    <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
+                  </div>
+                </>
               )}
-              <div className="flex gap-3 pt-2">
-                <Button className="flex-1" onClick={handleSave}>
-                  <Save className="mr-2 h-4 w-4" />
-                  {t("itemsBtnSave")}
-                </Button>
-                <Button variant="outline" onClick={handleReset}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  {t("itemsBtnReset")}
-                </Button>
-              </div>
             </div>
           </div>
 

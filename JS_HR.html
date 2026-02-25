@@ -572,7 +572,7 @@ function loadEvaluationSettings(type) {
       var nameVal = (item.name || "").replace(/"/g, "&quot;");
       var upDisabled = idx === 0 ? " disabled" : "";
       var downDisabled = idx === items.length - 1 ? " disabled" : "";
-      tbody.innerHTML += "<tr><td>" + item.id + "</td><td class=\"text-nowrap\"><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1\" onclick=\"moveEvalRowUp('" + type + "', this)\"" + upDisabled + ">" + orderUp + "</button><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1 ms-1\" onclick=\"moveEvalRowDown('" + type + "', this)\"" + downDisabled + ">" + orderDown + "</button></td><td><input class=\"form-control form-control-sm\" value=\"" + mainVal + "\" readonly></td><td><input class=\"form-control form-control-sm\" value=\"" + subVal + "\" readonly></td><td><input class=\"form-control form-control-sm eval-set-name\" value=\"" + nameVal + "\"></td><td><input type=\"checkbox\" class=\"form-check-input eval-set-use\" data-id=\"" + item.id + "\" " + checked + "></td><td><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteEvalItem('" + type + "', '" + item.id + "')\">삭제</button></td></tr>";
+      tbody.innerHTML += "<tr><td>" + item.id + "</td><td class=\"text-nowrap\"><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1\" onclick=\"moveEvalRowUp('" + type + "', this)\"" + upDisabled + ">" + orderUp + "</button><button type=\"button\" class=\"btn btn-sm btn-outline-secondary py-0 px-1 ms-1\" onclick=\"moveEvalRowDown('" + type + "', this)\"" + downDisabled + ">" + orderDown + "</button></td><td><input class=\"form-control form-control-sm eval-set-main\" value=\"" + mainVal + "\"></td><td><input class=\"form-control form-control-sm eval-set-sub\" value=\"" + subVal + "\"></td><td><input class=\"form-control form-control-sm eval-set-name\" value=\"" + nameVal + "\"></td><td><input type=\"checkbox\" class=\"form-check-input eval-set-use\" data-id=\"" + item.id + "\" " + checked + "></td><td><button type=\"button\" class=\"btn btn-sm btn-outline-danger\" onclick=\"deleteEvalItem('" + type + "', '" + item.id + "')\">삭제</button></td></tr>";
     });
   }).getEvaluationItems(type, false);
 }
@@ -584,7 +584,9 @@ function saveEvaluationSettings(type) {
   tbody.querySelectorAll("tr").forEach(function(tr, idx) {
     var useEl = tr.querySelector(".eval-set-use");
     var nameEl = tr.querySelector(".eval-set-name");
-    if (useEl && nameEl) updates.push({ id: useEl.getAttribute("data-id"), name: nameEl.value, use: useEl.checked, sort_order: idx + 1 });
+    var mainEl = tr.querySelector(".eval-set-main");
+    var subEl = tr.querySelector(".eval-set-sub");
+    if (useEl && nameEl) updates.push({ id: useEl.getAttribute("data-id"), main: mainEl ? mainEl.value : "", sub: subEl ? subEl.value : "", name: nameEl.value, use: useEl.checked, sort_order: idx + 1 });
   });
   if (!updates.length) { alert("저장할 항목이 없습니다."); return; }
   google.script.run.withSuccessHandler(function(res) { alert("항목이 저장되었습니다."); loadEvaluationSettings(type); }).updateEvaluationItems(type, updates);

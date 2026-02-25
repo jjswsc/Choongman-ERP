@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdateByFilter } from '@/lib/supabase-server'
 
-/** 점검 항목 설정 업데이트 (HQ only - name, use_flag) */
+/** 점검 항목 설정 업데이트 (HQ only - main_cat, sub_cat, name, use_flag) */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -9,7 +9,9 @@ export async function POST(request: NextRequest) {
     for (const u of updates) {
       const itemId = String(u?.id ?? '').trim()
       if (!itemId) continue
-      const updateData: { name: string; use_flag: boolean; sort_order?: number } = {
+      const updateData: { main_cat: string; sub_cat: string; name: string; use_flag: boolean; sort_order?: number } = {
+        main_cat: String(u?.main ?? '').trim(),
+        sub_cat: String(u?.sub ?? '').trim(),
         name: String(u?.name ?? '').trim(),
         use_flag: u?.use === true || u?.use === 1 || u?.use === '1' || String(u?.use).toLowerCase() === 'y',
       }

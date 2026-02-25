@@ -22,6 +22,8 @@ export async function POST(req: Request) {
     for (const up of updates) {
       const id = up.id != null ? String(up.id) : ''
       if (!id) continue
+      const mainCat = String(up.main ?? '').trim()
+      const subCat = String(up.sub ?? '').trim()
       const name = String(up.name ?? '').trim()
       const use =
         up.use === true ||
@@ -30,7 +32,7 @@ export async function POST(req: Request) {
         String(up.use).toLowerCase() === 'y'
 
       const filter = `eval_type=eq.${encodeURIComponent(typeVal)}&item_id=eq.${encodeURIComponent(id)}`
-      const updateData: { name: string; use_flag: boolean; sort_order?: number } = { name, use_flag: use }
+      const updateData: { main_cat: string; sub_cat: string; name: string; use_flag: boolean; sort_order?: number } = { main_cat: mainCat, sub_cat: subCat, name, use_flag: use }
       if (up.sort_order != null) updateData.sort_order = Number(up.sort_order) || 0
       await supabaseUpdateByFilter('evaluation_items', filter, updateData)
     }
