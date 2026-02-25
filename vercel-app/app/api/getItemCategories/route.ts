@@ -13,10 +13,10 @@ export async function GET() {
         limit: 10000,
       })) as { category?: string }[] | null
 
-    const set = new Set<string>(['매장 전용'])
+    const set = new Set<string>(['Store Only'])
     for (const r of rows || []) {
       const c = String(r.category || '').trim()
-      if (c) set.add(c)
+      if (c) set.add(c === '매장 전용' ? 'Store Only' : c)
     }
     const categories = Array.from(set).sort()
 

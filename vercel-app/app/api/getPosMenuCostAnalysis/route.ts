@@ -91,6 +91,7 @@ export async function GET() {
       const priceDelivery = menu.price_delivery != null ? Number(menu.price_delivery) : null
       const opts = optsByMenu[mid] || []
       const subOpts = opts.filter((o) => (o.option_type || 'substitution') === 'substitution')
+      const addOpts = opts.filter((o) => (o.option_type || '') === 'additive')
 
       const computeCost = (optionId: string | null): { costHall: number; costDelivery: number; breakdown: BreakdownRow[] } => {
         const oid = optionId === '' || optionId === 'null' ? null : optionId
@@ -125,13 +126,6 @@ export async function GET() {
 
         for (const ing of ings) {
           addRow(ing)
-        }
-
-        if (oid && subOpts.length > 0) {
-          const opt = subOpts.find((o) => String(o.id) === oid)
-          if (opt?.option_type === 'additive' && opt.item_code) {
-            addRow({ item_code: opt.item_code, quantity: opt.quantity, loss_rate: 0, ingredient_type: 'food' }, true)
-          }
         }
 
         return {
@@ -170,6 +164,43 @@ export async function GET() {
           costHall: computed.costHall,
           costDelivery: computed.costDelivery,
           breakdown: computed.breakdown,
+        })
+      }
+
+      for (const opt of addOpts) {
+        const baseCost = base.costHall
+        const basePkg = base.costDelivery - base.costHall
+        let addFood = 0
+        const addBreakdown: BreakdownRow[] = [...base.breakdown]
+        if (opt.item_code) {
+          const info = itemMap[String(opt.item_code).trim()]
+          const qty = Number(opt.quantity) ?? 1
+          const costTotal = (info?.cost ?? 0) * qty
+          addFood = costTotal
+          addBreakdown.push({
+            itemCode: String(opt.item_code ?? ''),
+            itemName: info?.name ?? String(opt.item_code ?? ''),
+            unit: info?.unit ?? '',
+            costPerUnit: info?.cost ?? 0,
+            quantity: qty,
+            lossRate: 0,
+            costTotal: Math.round(costTotal * 10) / 10,
+            source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
+            ingredientType: 'food',
+          })
+        }
+        result.push({
+          menuId: String(menu.id ?? ''),
+          menuCode: String(menu.code ?? ''),
+          menuName: String(menu.name ?? ''),
+          category: String(menu.category ?? ''),
+          priceHall,
+          priceDelivery,
+          optionId: String(opt.id ?? ''),
+          optionName: String(opt.name ?? ''),
+          costHall: Math.round((baseCost + addFood) * 10) / 10,
+          costDelivery: Math.round((baseCost + addFood + basePkg) * 10) / 10,
+          breakdown: addBreakdown,
         })
       }
     }

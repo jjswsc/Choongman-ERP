@@ -51,14 +51,23 @@ export async function GET(request: NextRequest) {
     }[] | null)
 
     const list = (rows || [])
-      .filter((row) => row?.code)
+      .filter((row) => {
+        if (!row) return false
+        const c = String(row.code || '').trim()
+        if (c) return true
+        return row.purchase_source === 'store' && row.id != null
+      })
       .map((row) => {
         const tax = String(row.tax || '').trim()
         const taxType = tax === '면세' ? 'exempt' : tax === '영세율' ? 'zero' : 'taxable'
+        const cat = String(row.category || '').trim()
+        const category = cat === '매장 전용' ? 'Store Only' : cat
+        const rawCode = String(row.code || '').trim()
+        const code = rawCode || (row.id != null ? `_local_${row.id}` : '')
         return {
-          code: String(row.code),
+          code,
           name: String(row.name || ''),
-          category: String(row.category || ''),
+          category,
           vendor: String(row.vendor || ''),
           outboundLocation: String(row.outbound_location || ''),
           spec: String(row.spec || ''),

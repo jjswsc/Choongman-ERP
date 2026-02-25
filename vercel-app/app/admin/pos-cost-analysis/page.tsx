@@ -1,7 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Calculator, ChevronDown, ChevronRight, Download, Search } from "lucide-react"
+import { Calculator, ChevronDown, ChevronRight, Download, Search, X } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { List } from "lucide-react"
+import { CostCalculatorTab } from "@/components/cost-analysis/cost-calculator-tab"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
@@ -39,6 +42,8 @@ export default function PosCostAnalysisPage() {
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [miseRate, setMiseRate] = React.useState(MISE_RATE_DEFAULT)
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = React.useState("list")
+  const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
 
   React.useEffect(() => {
     getPosMenuCostAnalysis()
@@ -136,6 +141,19 @@ export default function PosCostAnalysisPage() {
           </div>
         </div>
 
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="bg-muted/50 border border-border">
+            <TabsTrigger value="list" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+              <List className="h-4 w-4" />
+              {t("posCostTabList") || "목록"}
+            </TabsTrigger>
+            <TabsTrigger value="calculator" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+              <Calculator className="h-4 w-4" />
+              {t("posCostCalculator") || "원가 계산기"}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="list" className="space-y-4">
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
@@ -143,6 +161,27 @@ export default function PosCostAnalysisPage() {
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("posCostSearchPh") || "코드·메뉴명·옵션 검색"}
+              className="h-9 pl-9 pr-9 text-sm border-border"
+              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            />
+            {searchTerm && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchTerm("")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="h-9 w-40 text-xs">
               <SelectValue />
@@ -154,13 +193,6 @@ export default function PosCostAnalysisPage() {
               ))}
             </SelectContent>
           </Select>
-          <Input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={t("itemsSearchPh") || "검색"}
-            className="h-9 w-56 text-xs"
-            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-          />
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">{t("posCostMise") || "미세(%)"}</span>
             <Input
@@ -218,11 +250,15 @@ export default function PosCostAnalysisPage() {
                     <React.Fragment key={key}>
                       <tr
                         className={cn(
-                          "border-b transition-colors",
+                          "border-b transition-colors cursor-pointer",
                           expanded ? "bg-amber-500/5" : "hover:bg-muted/20"
                         )}
+                        onClick={() => {
+                          setSelectedForCalculator(r)
+                          setActiveTab("calculator")
+                        }}
                       >
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
                           {hasBreakdown ? (
                             <Button
                               size="sm"
@@ -323,6 +359,17 @@ export default function PosCostAnalysisPage() {
             </div>
           )}
         </div>
+          </TabsContent>
+
+          <TabsContent value="calculator" className="space-y-4">
+            <div className="dark rounded-lg">
+              <CostCalculatorTab
+                initialLoadFromRow={selectedForCalculator}
+                onClearLoad={() => setSelectedForCalculator(null)}
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

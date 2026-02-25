@@ -159,6 +159,7 @@ export function ErpSidebar() {
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
+    adminSectionSales: false,
     adminSectionPos: false,
     adminSectionLogistics: true,
     adminSectionHr: true,
