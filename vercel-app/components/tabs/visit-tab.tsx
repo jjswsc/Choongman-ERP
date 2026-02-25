@@ -159,9 +159,10 @@ export function VisitTab() {
   }
 
   const isOffice =
-    auth.store.toLowerCase() === "office" ||
+    auth.store?.toLowerCase() === "office" ||
     auth.store === "본사" ||
-    auth.store === "Office"
+    auth.store === "Office" ||
+    auth.store === "CM Office"
 
   if (!isOffice) {
     return (

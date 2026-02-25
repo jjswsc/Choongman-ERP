@@ -342,12 +342,25 @@ export function AdminScheduleEdit({
       }
     }
 
-    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
+    // (date, name) 별로 병합 (doSave와 동일 로직)
+    const mergedByDateName: Record<string, { work: string[]; break: string[]; areas: string[] }> = {}
     for (const [k, v] of Object.entries(map)) {
       const parts = k.split("_")
       const date = parts[0]
       const area = parts[parts.length - 1]
       const name = parts.slice(1, -1).join("_")
+      const mergeKey = `${date}|${name}`
+      if (!mergedByDateName[mergeKey]) mergedByDateName[mergeKey] = { work: [], break: [], areas: [] }
+      mergedByDateName[mergeKey].work.push(...v.work)
+      mergedByDateName[mergeKey].break.push(...v.break)
+      if (!mergedByDateName[mergeKey].areas.includes(area)) mergedByDateName[mergeKey].areas.push(area)
+    }
+
+    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
+    for (const [mergeKey, v] of Object.entries(mergedByDateName)) {
+      const idx = mergeKey.indexOf("|")
+      const date = mergeKey.slice(0, idx)
+      const name = mergeKey.slice(idx + 1)
       const dayIdx = nextDayStrs.indexOf(date)
       if (dayIdx < 0) continue
       const all = [...v.work, ...v.break].sort()
@@ -362,18 +375,14 @@ export function AdminScheduleEdit({
         lh2++
       }
       const isOvernight = lh2 >= 24
-      let storeDate: string
+      const storeDate = date
       let pOut: string
-      let plan_in_prev_day = false
+      const plan_in_prev_day = isOvernight
       if (isOvernight) {
-        const nextDayIdx = dayIdx >= 0 && dayIdx < 6 ? dayIdx + 1 : 0
-        storeDate = dayIdx >= 0 && dayIdx < 6 ? nextDayStrs[nextDayIdx] : addDays(nextMonday, 7)
         const outH = lh2 - 24
         const outM = lm2
         pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
-        plan_in_prev_day = true
       } else {
-        storeDate = date
         pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
       }
       let pBS = ""
@@ -391,7 +400,7 @@ export function AdminScheduleEdit({
         }
         pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
       }
-      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${area}]`, plan_in_prev_day })
+      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${v.areas.join(", ")}]`, plan_in_prev_day })
     }
 
     if (rows.length === 0) {
@@ -438,12 +447,25 @@ export function AdminScheduleEdit({
       }
     }
 
-    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
+    // (date, name) 별로 병합: 동일 직원이 같은 날 여러 영역(Service/Kitchen) 근무 시 UNIQUE constraint 위반 방지
+    const mergedByDateName: Record<string, { work: string[]; break: string[]; areas: string[] }> = {}
     for (const [k, v] of Object.entries(map)) {
       const parts = k.split("_")
       const date = parts[0]
       const area = parts[parts.length - 1]
       const name = parts.slice(1, -1).join("_")
+      const mergeKey = `${date}|${name}`
+      if (!mergedByDateName[mergeKey]) mergedByDateName[mergeKey] = { work: [], break: [], areas: [] }
+      mergedByDateName[mergeKey].work.push(...v.work)
+      mergedByDateName[mergeKey].break.push(...v.break)
+      if (!mergedByDateName[mergeKey].areas.includes(area)) mergedByDateName[mergeKey].areas.push(area)
+    }
+
+    const rows: { date: string; name: string; pIn: string; pOut: string; pBS: string; pBE: string; remark: string; plan_in_prev_day?: boolean }[] = []
+    for (const [mergeKey, v] of Object.entries(mergedByDateName)) {
+      const idx = mergeKey.indexOf("|")
+      const date = mergeKey.slice(0, idx)
+      const name = mergeKey.slice(idx + 1)
       const dayIdx = dayStrs.indexOf(date)
       if (dayIdx < 0) continue
       const all = [...v.work, ...v.break].sort()
@@ -458,18 +480,15 @@ export function AdminScheduleEdit({
         lh2++
       }
       const isOvernight = lh2 >= 24
-      let storeDate: string
+      // schedule_date는 항상 근무 시작일(plan_in 기준). 자정 넘김은 plan_in_prev_day로 표현
+      const storeDate = date
       let pOut: string
-      let plan_in_prev_day = false
+      const plan_in_prev_day = isOvernight
       if (isOvernight) {
-        const nextDayIdx = dayIdx >= 0 && dayIdx < 6 ? dayIdx + 1 : 0
-        storeDate = dayIdx >= 0 && dayIdx < 6 ? dayStrs[nextDayIdx] : addDays(monday, 7)
         const outH = lh2 - 24
         const outM = lm2
         pOut = `${String(outH).padStart(2, "0")}:${String(outM).padStart(2, "0")}`
-        plan_in_prev_day = true
       } else {
-        storeDate = date
         pOut = `${String(lh2).padStart(2, "0")}:${String(lm2).padStart(2, "0")}`
       }
       let pBS = ""
@@ -487,7 +506,7 @@ export function AdminScheduleEdit({
         }
         pBE = `${String(bh2).padStart(2, "0")}:${String(bm2).padStart(2, "0")}`
       }
-      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${area}]`, plan_in_prev_day })
+      rows.push({ date: storeDate, name, pIn, pOut, pBS, pBE, remark: `[${v.areas.join(", ")}]`, plan_in_prev_day })
     }
 
     if (rows.length === 0) {
