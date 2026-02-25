@@ -46,8 +46,6 @@ export interface ItemTableProps {
   setCategoryFilter: (v: string) => void
   outboundFilter: string
   setOutboundFilter: (v: string) => void
-  purchaseSourceFilter: "all" | "hq" | "store"
-  setPurchaseSourceFilter: (v: "all" | "hq" | "store") => void
   onSearch: () => void
   onEdit: (product: Product) => void
   onDelete: (product: Product) => void
@@ -64,8 +62,6 @@ export function ItemTable({
   setCategoryFilter,
   outboundFilter,
   setOutboundFilter,
-  purchaseSourceFilter,
-  setPurchaseSourceFilter,
   onSearch,
   onEdit,
   onDelete,
@@ -116,16 +112,6 @@ export function ItemTable({
             ))}
           </SelectContent>
         </Select>
-        <Select value={purchaseSourceFilter} onValueChange={(v) => setPurchaseSourceFilter(v as "all" | "hq" | "store")}>
-          <SelectTrigger className="h-9 w-32 text-xs">
-            <SelectValue placeholder={t("itemsPurchaseSource") || "구분"} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("itemsCategoryAll") || "전체"}</SelectItem>
-            <SelectItem value="hq">{t("itemsPurchaseSourceHq") || "본사"}</SelectItem>
-            <SelectItem value="store">{t("itemsPurchaseSourceStore") || "매장"}</SelectItem>
-          </SelectContent>
-        </Select>
         <div className="relative flex-1 min-w-[120px]">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -148,11 +134,9 @@ export function ItemTable({
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColCode")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center">{t("itemsPurchaseSource") || "구분"}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("itemsUnit") || "단위"}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColPrice")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
@@ -160,13 +144,13 @@ export function ItemTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsSearchHint")}
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsNoResults")}
                 </td>
               </tr>
@@ -182,14 +166,6 @@ export function ItemTable({
                   <td className="px-5 py-3">
                     <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
                       {product.code}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-center">
-                    <span className={cn(
-                      "text-[10px] font-medium",
-                      (product.purchaseSource ?? "hq") === "store" ? "text-amber-600" : "text-blue-600"
-                    )}>
-                      {(product.purchaseSource ?? "hq") === "store" ? (t("itemsPurchaseSourceStore") || "매장") : (t("itemsPurchaseSourceHq") || "본사")}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-center">
@@ -216,9 +192,6 @@ export function ItemTable({
                   <td className="px-5 py-3">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
-                  <td className="px-5 py-3 text-center">
-                    <span className="text-[11px] text-muted-foreground">{product.unit || "-"}</span>
-                  </td>
                   <td className="px-5 py-3 text-right">
                     <span className="text-sm font-bold tabular-nums text-foreground">
                       {product.price > 0 ? `${product.price.toLocaleString()} ฿` : "-"}
@@ -228,21 +201,21 @@ export function ItemTable({
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                        size="icon"
+                        className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(product)}
+                        title={t("itemsBtnEdit") || "수정"}
                       >
-                        <Pencil className="mr-1 h-2.5 w-2.5" />
-                        {t("itemsBtnEdit")}
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        size="icon"
+                        className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(product)}
+                        title={t("itemsBtnDelete") || "삭제"}
                       >
-                        <Trash2 className="mr-1 h-2.5 w-2.5" />
-                        {t("itemsBtnDelete")}
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>

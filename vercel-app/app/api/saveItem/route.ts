@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const tax = taxTypeToDb(body.taxType || 'taxable')
     const purchaseSource = (body.purchaseSource || 'hq') === 'store' ? 'store' : 'hq'
     const categoryRaw = String(body.category || '').trim()
-    const category = purchaseSource === 'store' && !categoryRaw ? '매장 품목' : categoryRaw
+    const category = purchaseSource === 'store' && !categoryRaw ? '매장 전용' : categoryRaw
     const row = {
       code,
       name,

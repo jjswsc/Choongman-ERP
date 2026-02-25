@@ -170,21 +170,21 @@ export function VendorTable({
                     <div className="flex items-center justify-center gap-1">
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] font-semibold text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                        size="icon"
+                        className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                         onClick={() => onEdit(vendor)}
+                        title={t("vendorBtnEdit") || t("itemsBtnEdit") || "수정"}
                       >
-                        <Pencil className="mr-1 h-2.5 w-2.5" />
-                        {t("vendorBtnEdit")}
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px] font-semibold text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        size="icon"
+                        className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => onDelete(vendor)}
+                        title={t("vendorBtnDelete") || t("itemsBtnDelete") || "삭제"}
                       >
-                        <Trash2 className="mr-1 h-2.5 w-2.5" />
-                        {t("vendorBtnDelete")}
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </td>

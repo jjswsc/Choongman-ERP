@@ -120,7 +120,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               const next = v as "hq" | "store"
               update("purchaseSource", next)
               if (next === "store" && !formData.category.trim()) {
-                update("category", "매장 품목")
+                update("category", "매장 전용")
               }
             }}
           >

@@ -13,7 +13,7 @@ export async function GET() {
         limit: 10000,
       })) as { category?: string }[] | null
 
-    const set = new Set<string>()
+    const set = new Set<string>(['매장 전용'])
     for (const r of rows || []) {
       const c = String(r.category || '').trim()
       if (c) set.add(c)

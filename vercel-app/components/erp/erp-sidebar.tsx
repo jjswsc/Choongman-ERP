@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Tag,
   TrendingUp,
+  Calculator,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -70,9 +71,24 @@ const mainItems: MenuItem[] = [
   { titleKey: "adminDashboard", icon: LayoutDashboard, href: "/admin" },
   { titleKey: "adminNotices", icon: Megaphone, href: "/admin/notices" },
   { titleKey: "adminWorkLog", icon: ClipboardList, href: "/admin/work-log" },
+  { titleKey: "posCostAnalysis", icon: Calculator, href: "/admin/pos-cost-analysis" },
 ]
 
 const menuSections: MenuSection[] = [
+  {
+    titleKey: "adminSectionSales",
+    items: [
+      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
+    ],
+  },
+  {
+    titleKey: "adminSectionStore",
+    items: [
+      { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
+      { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
+      { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
+    ],
+  },
   {
     titleKey: "adminSectionPos",
     items: [
@@ -83,6 +99,14 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
       { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/pos-coupons" },
+    ],
+  },
+  {
+    titleKey: "adminSectionHr",
+    items: [
+      { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
+      { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
+      { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
     ],
   },
   {
@@ -98,14 +122,6 @@ const menuSections: MenuSection[] = [
     ],
   },
   {
-    titleKey: "adminSectionHr",
-    items: [
-      { titleKey: "adminEmployees", icon: Users, href: "/admin/employees" },
-      { titleKey: "adminAttendance", icon: CalendarClock, href: "/admin/attendance" },
-      { titleKey: "adminLeave", icon: Palmtree, href: "/admin/leave", badge: 0, badgeVariant: "warning" },
-    ],
-  },
-  {
     titleKey: "adminSectionAccounting",
     items: [
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
@@ -113,15 +129,6 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
       { titleKey: "adminBankTransactions", icon: Banknote, href: "/admin/bank-transactions" },
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
-      { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
-    ],
-  },
-  {
-    titleKey: "adminSectionStore",
-    items: [
-      { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
-      { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
-      { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
     ],
   },
 ]
@@ -136,6 +143,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-settlement": canAccessPosSettlement,
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
+  "/admin/pos-cost-analysis": canAccessPosMenus,
   "/admin/pos-printers": canAccessPosPrinters,
   "/admin/pos-coupons": canAccessPosCoupons,
 }

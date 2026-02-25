@@ -41,7 +41,6 @@ export default function ItemsPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [outboundFilter, setOutboundFilter] = React.useState("all")
-  const [purchaseSourceFilter, setPurchaseSourceFilter] = React.useState<"all" | "hq" | "store">("all")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
 
@@ -206,10 +205,9 @@ export default function ItemsPage() {
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter
       const pLoc = (p.outboundLocation || "").trim() || "(미지정)"
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
-      const matchSource = purchaseSourceFilter === "all" || (p.purchaseSource ?? "hq") === purchaseSourceFilter
-      return matchTerm && matchCategory && matchOutbound && matchSource
+      return matchTerm && matchCategory && matchOutbound
     })
-  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter, purchaseSourceFilter])
+  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter])
 
   const categories = React.useMemo(() => {
     const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))
@@ -280,8 +278,6 @@ export default function ItemsPage() {
             setCategoryFilter={setCategoryFilter}
             outboundFilter={outboundFilter}
             setOutboundFilter={setOutboundFilter}
-            purchaseSourceFilter={purchaseSourceFilter}
-            setPurchaseSourceFilter={setPurchaseSourceFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}
