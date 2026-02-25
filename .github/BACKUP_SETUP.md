@@ -4,16 +4,16 @@
 
 ## 1. SUPABASE_DB_URL 시크릿 등록
 
-**중요: pg_dump 백업은 반드시 Direct 연결을 사용해야 합니다. Pooler(6543)로는 백업이 실패합니다.**
+**중요: GitHub Actions는 IPv6를 지원하지 않습니다.** Direct 연결(db.xxx.supabase.co) 사용 시 "Network is unreachable" 에러가 발생하므로, **Pooler(Supavisor)** 연결을 사용해야 합니다.
 
-1. **Supabase 대시보드** → 프로젝트 선택 → **Settings** → **Database**
-2. **Connection string** 섹션에서 **URI** 복사
-   - **Direct connection** (권장): `postgresql://postgres:[YOUR-PASSWORD]@db.[project-ref].supabase.co:5432/postgres`
-   - Connect 버튼 → **Direct connection** 탭에서 확인
-   - `[YOUR-PASSWORD]`를 실제 DB 비밀번호로 교체
-   - ❌ 사용 금지: `pooler.supabase.com:6543` (Pooler) — 백업 실패 원인
-3. **GitHub** → 저장소 → **Settings** → **Secrets and variables** → **Actions**
-4. **New repository secret** → 이름: `SUPABASE_DB_URL`, 값: Direct URI 붙여넣기
+1. **Supabase 대시보드** → **Connect** 버튼 클릭 → **Connection String** 탭
+2. 다음 설정으로 변경:
+   - **Source**: Primary Database
+   - **Method**: **Session** (또는 Transaction) — Direct가 아님
+   - Pooler URI 형식: `postgresql://postgres.[project-ref]:[PASSWORD]@aws-0-[region].pooler.supabase.com:5432/postgres` (Session) 또는 `...6543...` (Transaction)
+3. `[YOUR-PASSWORD]`를 실제 DB 비밀번호로 교체 후 전체 URI 복사
+4. **GitHub** → 저장소 → **Settings** → **Secrets and variables** → **Actions**
+5. **New repository secret** → 이름: `SUPABASE_DB_URL`, 값: Pooler URI 붙여넣기 (또는 기존 시크릿 Update)
 
 ## 2. 스케줄 확인
 
@@ -39,6 +39,6 @@ Actions 탭 → **Supabase DB Backup** → **Run workflow** → **Run workflow**
 
 | 증상 | 원인 | 해결 |
 |------|------|------|
-| 연결 실패 / timeout | Pooler(6543) 사용 | Direct URI(`db.xxx.supabase.co:5432`)로 교체 |
+| Network is unreachable | Direct 연결 사용 (GitHub Actions는 IPv6 미지원) | **Pooler** URI(`pooler.supabase.com:5432` 또는 `:6543`)로 교체 |
 | SUPABASE_DB_URL secret is not set | 시크릿 미등록 | GitHub Settings → Secrets에 추가 |
-| 권한 오류 | IPv4 제한 등 | Supabase Database Settings → Connection → Restrict connections 확인 |
+| password authentication failed | 비밀번호 오류 | Supabase Database Settings에서 비밀번호 재설정 후 시크릿 업데이트 |

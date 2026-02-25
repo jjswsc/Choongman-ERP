@@ -31,6 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getVendorsForPurchase } from "@/lib/api-client"
+const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', '개', '팩', 'oz', 'lb', '박스']
+
 export interface ItemFormData {
   code: string
   category: string
@@ -40,6 +42,7 @@ export interface ItemFormData {
   imageUrl: string
   taxType: "taxable" | "exempt" | "zero"
   spec: string
+  unit: string
   description: string
   price: string
   cost: string
@@ -269,6 +272,22 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             value={formData.spec}
             onChange={(e) => update("spec", e.target.value)}
           />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-foreground">{t("itemsUnit") || "표준 단위"}</label>
+          <Select value={formData.unit || "_"} onValueChange={(v) => update("unit", v === "_" ? "" : v)}>
+            <SelectTrigger className="h-10 text-sm">
+              <SelectValue placeholder={t("itemsUnitPh") || "선택 (예: kg, g, 개)"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_">—</SelectItem>
+              {UNIT_OPTIONS.filter(Boolean).map((u) => (
+                <SelectItem key={u} value={u}>{u}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">{t("itemsUnitHint") || "재료 사용량(quantity)의 단위. 메뉴 원가 계산에 사용됩니다."}</p>
         </div>
 
         <div className="flex flex-col gap-2">

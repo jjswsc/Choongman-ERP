@@ -1687,6 +1687,7 @@ export interface AdminItem {
   vendor: string
   outboundLocation?: string
   spec: string
+  unit?: string
   price: number
   cost: number
   taxType: 'taxable' | 'exempt' | 'zero'
@@ -1767,6 +1768,7 @@ export async function saveItem(params: {
   vendor?: string
   outboundLocation?: string
   spec?: string
+  unit?: string
   price?: number
   cost?: number
   taxType?: string
@@ -1853,11 +1855,14 @@ export interface PosMenuIngredient {
   menuId: string
   itemCode: string
   quantity: number
+  lossRate?: number
+  optionId?: string | null
 }
 
-export async function getPosMenuIngredients(params: { menuId: string }) {
+export async function getPosMenuIngredients(params: { menuId: string; optionId?: string }) {
   const q = new URLSearchParams()
   q.set('menuId', params.menuId)
+  if (params.optionId !== undefined) q.set('optionId', params.optionId)
   const res = await apiFetch('/api/getPosMenuIngredients?' + q.toString())
   return res.json() as Promise<PosMenuIngredient[]>
 }
@@ -1867,6 +1872,8 @@ export async function savePosMenuIngredient(params: {
   menuId: number
   itemCode: string
   quantity?: number
+  lossRate?: number
+  optionId?: number | null
 }) {
   const res = await apiFetch('/api/savePosMenuIngredient', {
     method: 'POST',
@@ -1874,6 +1881,23 @@ export async function savePosMenuIngredient(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface MenuCostBreakdown {
+  itemCode: string
+  itemName: string
+  quantity: number
+  lossRate: number
+  costPerUnit: number
+  costTotal: number
+}
+
+export async function getMenuCost(params: { menuId: string; optionId?: string }) {
+  const q = new URLSearchParams()
+  q.set('menuId', params.menuId)
+  if (params.optionId !== undefined) q.set('optionId', params.optionId)
+  const res = await apiFetch('/api/getMenuCost?' + q.toString())
+  return res.json() as Promise<{ cost: number; breakdown: MenuCostBreakdown[] }>
 }
 
 export async function deletePosMenuIngredient(params: { id: string }) {

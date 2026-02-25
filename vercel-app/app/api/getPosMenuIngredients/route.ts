@@ -13,17 +13,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'pos_menu_ingredients',
-      `menu_id=eq.${encodeURIComponent(menuId)}`,
-      { order: 'id.asc', limit: 200 }
-    )) as { id?: number; menu_id?: number; item_code?: string; quantity?: number }[] | null
+    const optionId = searchParams.get('optionId')?.trim()
+    let filter = `menu_id=eq.${encodeURIComponent(menuId)}`
+
+    let rows: { id?: number; menu_id?: number; item_code?: string; quantity?: number; loss_rate?: number; option_id?: number | null }[] | null
+    try {
+      if (!optionId || optionId === 'null') {
+        filter += '&option_id=is.null'
+      } else {
+        filter += `&option_id=eq.${encodeURIComponent(optionId)}`
+      }
+      rows = (await supabaseSelectFilter('pos_menu_ingredients', filter, { order: 'id.asc', limit: 200 })) as typeof rows
+    } catch {
+      rows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${encodeURIComponent(menuId)}`, { order: 'id.asc', limit: 200 })) as typeof rows
+    }
 
     const list = (rows || []).map((r) => ({
       id: String(r.id ?? ''),
       menuId: String(r.menu_id ?? ''),
       itemCode: String(r.item_code ?? ''),
       quantity: Number(r.quantity) ?? 1,
+      lossRate: Number(r.loss_rate) ?? 0,
+      optionId: r.option_id != null ? String(r.option_id) : null,
     }))
 
     return NextResponse.json(list, { headers })

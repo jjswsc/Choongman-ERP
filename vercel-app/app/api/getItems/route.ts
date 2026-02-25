@@ -7,12 +7,13 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,price,cost,image,vendor,tax,outbound_location,description' })) as {
+    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,unit,price,cost,image,vendor,tax,outbound_location,description' })) as {
       id?: number
       code?: string
       category?: string
       name?: string
       spec?: string
+      unit?: string
       price?: number
       cost?: number
       image?: string
@@ -34,6 +35,7 @@ export async function GET() {
           vendor: String(row.vendor || ''),
           outboundLocation: String(row.outbound_location || ''),
           spec: String(row.spec || ''),
+          unit: String(row.unit || ''),
           price: Number(row.price) || 0,
           cost: Number(row.cost) || 0,
           taxType,

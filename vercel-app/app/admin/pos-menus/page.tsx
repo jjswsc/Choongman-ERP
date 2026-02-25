@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Search, Plus } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Search, Plus, ChevronDown, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -19,6 +19,7 @@ import {
   getPosMenuCategories,
   getPosMenuOptions,
   getPosMenuIngredients,
+  getMenuCost,
   getAdminItems,
   savePosMenu,
   savePosMenuOption,
@@ -64,6 +65,10 @@ export default function PosMenusPage() {
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
   const [newIngredientQty, setNewIngredientQty] = React.useState("1")
+  const [newIngredientLossRate, setNewIngredientLossRate] = React.useState("0")
+  const [menuCost, setMenuCost] = React.useState<{ cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
+  const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
+  const [expandedMenuData, setExpandedMenuData] = React.useState<{ ingredients: PosMenuIngredient[]; cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -82,21 +87,49 @@ export default function PosMenusPage() {
     if (!editingId) {
       setMenuOptions([])
       setMenuIngredients([])
+      setMenuCost(null)
       return
     }
     Promise.all([
       getPosMenuOptions({ menuId: editingId }),
       getPosMenuIngredients({ menuId: editingId }),
+      getMenuCost({ menuId: editingId }),
     ])
-      .then(([opts, ings]) => {
+      .then(([opts, ings, costRes]) => {
         setMenuOptions(opts || [])
         setMenuIngredients(ings || [])
+        setMenuCost({ cost: costRes.cost, breakdown: costRes.breakdown })
       })
       .catch(() => {
         setMenuOptions([])
         setMenuIngredients([])
+        setMenuCost(null)
       })
   }, [editingId])
+
+  React.useEffect(() => {
+    if (editingId && menuIngredients.length >= 0) {
+      getMenuCost({ menuId: editingId }).then((r) => setMenuCost({ cost: r.cost, breakdown: r.breakdown }))
+    }
+  }, [editingId, menuIngredients])
+
+  const handleExpandMenu = React.useCallback(async (menuId: string) => {
+    if (expandedMenuId === menuId) {
+      setExpandedMenuId(null)
+      setExpandedMenuData(null)
+      return
+    }
+    setExpandedMenuId(menuId)
+    try {
+      const [ings, costRes] = await Promise.all([
+        getPosMenuIngredients({ menuId }),
+        getMenuCost({ menuId }),
+      ])
+      setExpandedMenuData({ ingredients: ings || [], cost: costRes.cost, breakdown: costRes.breakdown })
+    } catch {
+      setExpandedMenuData(null)
+    }
+  }, [expandedMenuId])
 
   React.useEffect(() => {
     getAdminItems()
@@ -224,11 +257,13 @@ export default function PosMenusPage() {
       menuId: Number(editingId),
       itemCode: newIngredientCode.trim(),
       quantity: Number(newIngredientQty) || 1,
+      lossRate: Number(newIngredientLossRate) || 0,
     })
     if (res.success) {
       getPosMenuIngredients({ menuId: editingId }).then(setMenuIngredients)
       setNewIngredientCode("")
       setNewIngredientQty("1")
+      setNewIngredientLossRate("0")
     } else {
       alert(res.message)
     }
@@ -481,11 +516,18 @@ export default function PosMenusPage() {
               )}
               {editingId && (
                 <div className="rounded border border-dashed border-amber-500/50 p-3">
-                  <h4 className="mb-2 text-xs font-semibold">{t("posMenuIngredients") || "재료 (BOM)"}</h4>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-xs font-semibold">{t("posMenuIngredients") || "재료 (BOM)"}</h4>
+                    {menuCost != null && (
+                      <span className="text-xs font-bold text-amber-600">
+                        {t("posMenuCost") || "원가"}: {menuCost.cost.toFixed(1)} ฿
+                      </span>
+                    )}
+                  </div>
                   <ul className="mb-2 space-y-1">
                     {menuIngredients.map((ing) => (
                       <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
-                        <span>{ing.itemCode} × {ing.quantity}</span>
+                        <span>{ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}</span>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -497,9 +539,9 @@ export default function PosMenusPage() {
                       </li>
                     ))}
                   </ul>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
-                      <SelectTrigger className="h-8 flex-1 text-xs">
+                      <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
                         <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
                       </SelectTrigger>
                       <SelectContent>
@@ -519,6 +561,20 @@ export default function PosMenusPage() {
                       value={newIngredientQty}
                       onChange={(e) => setNewIngredientQty(e.target.value)}
                     />
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground shrink-0">{t("posIngredientLoss") || "로스"}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        placeholder="0"
+                        className="h-8 w-14 text-right text-xs"
+                        value={newIngredientLossRate}
+                        onChange={(e) => setNewIngredientLossRate(e.target.value)}
+                      />
+                      <span className="text-[10px] text-muted-foreground">%</span>
+                    </div>
                     <Button size="sm" className="h-8 px-2" onClick={handleAddIngredient}>
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
@@ -576,6 +632,7 @@ export default function PosMenusPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
+                    <th className="px-2 py-3 text-[11px] font-bold text-center w-8"></th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("itemsColCode")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[140px]">{t("posMenuName")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
@@ -588,27 +645,35 @@ export default function PosMenusPage() {
                 <tbody>
                   {!hasSearched ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsSearchHint")}
                       </td>
                     </tr>
                   ) : filteredMenus.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsNoResults")}
                       </td>
                     </tr>
                   ) : (
                     filteredMenus.map((m, idx) => {
                       const isSoldOutToday = m.soldOutDate === todayStr
+                      const isExpanded = expandedMenuId === m.id
+                      const expanded = isExpanded ? expandedMenuData : null
                       return (
+                      <React.Fragment key={m.id}>
                       <tr
-                        key={m.id}
                         className={cn(
-                          "border-b last:border-b-0 hover:bg-muted/20",
+                          "border-b hover:bg-muted/20 cursor-pointer",
                           idx % 2 === 1 && "bg-muted/5"
                         )}
+                        onClick={() => handleExpandMenu(m.id)}
                       >
+                        <td className="px-2 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleExpandMenu(m.id)}>
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          </Button>
+                        </td>
                         <td className="px-5 py-3 text-center">
                           <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                             {m.code}
@@ -638,7 +703,7 @@ export default function PosMenusPage() {
                             {soldOutTogglingId === m.id ? "..." : isSoldOutToday ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
                           </Button>
                         </td>
-                        <td className="px-5 py-3">
+                        <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-center gap-1">
                             <Button
                               size="sm"
@@ -661,6 +726,29 @@ export default function PosMenusPage() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && expanded && (
+                        <tr className="bg-amber-500/5 border-b">
+                          <td colSpan={8} className="px-6 py-4">
+                            <div className="rounded border border-amber-500/30 bg-amber-500/5 p-4">
+                              <h5 className="text-xs font-semibold mb-2">{t("posMenuIngredients") || "재료"} ({expanded.ingredients.length}개)</h5>
+                              <ul className="space-y-1 mb-3 max-h-32 overflow-y-auto">
+                                {expanded.breakdown.length > 0 ? expanded.breakdown.map((b) => (
+                                  <li key={b.itemCode} className="flex justify-between text-xs">
+                                    <span>{b.itemName} × {b.quantity}{(b.lossRate ?? 0) > 0 ? ` (로스 ${b.lossRate}%)` : ""}</span>
+                                    <span className="tabular-nums text-amber-600">{b.costTotal.toFixed(1)} ฿</span>
+                                  </li>
+                                )) : expanded.ingredients.map((ing) => (
+                                  <li key={ing.id} className="text-xs">{ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}</li>
+                                ))}
+                              </ul>
+                              <div className="flex justify-end border-t pt-2">
+                                <span className="text-xs font-bold text-amber-600">{t("posMenuCost") || "원가"}: {expanded.cost.toFixed(1)} ฿</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     )})
                   )}
                 </tbody>

@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
       vendor?: string
       outboundLocation?: string
       spec?: string
+      unit?: string
       price?: number
       cost?: number
       taxType?: string
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       vendor: String(body.vendor || '').trim(),
       outbound_location: String(body.outboundLocation || '').trim(),
       spec: String(body.spec || '').trim(),
+      unit: String(body.unit || '').trim(),
       price: Number(body.price) || 0,
       cost: Number(body.cost) || 0,
       image: String(body.imageUrl || '').trim(),

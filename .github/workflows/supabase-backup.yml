@@ -36,11 +36,8 @@ jobs:
             echo "::error::SUPABASE_DB_URL secret is not set. Add it in GitHub Settings → Secrets."
             exit 1
           fi
-          # Direct connection (db.xxx.supabase.co:5432) 필수. Pooler(6543)는 pg_dump에 적합하지 않음.
-          if echo "$DB_URL" | grep -q "pooler.supabase.com:6543"; then
-            echo "::error::SUPABASE_DB_URL must use DIRECT connection (db.xxx.supabase.co:5432), not Pooler (6543). See BACKUP_SETUP.md"
-            exit 1
-          fi
+          # GitHub Actions는 IPv6 미지원 → Direct(db.xxx.supabase.co) 연결 시 "Network is unreachable" 발생
+          # Pooler(Supavisor) 연결 사용 필수: pooler.supabase.com:5432 또는 :6543
           TIMESTAMP=$(date +%Y%m%d-%H%M)
           supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP-roles.sql" --role-only
           supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP-schema.sql"

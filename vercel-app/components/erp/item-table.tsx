@@ -137,6 +137,7 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-14 text-center">{t("itemsUnit") || "단위"}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColPrice")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
@@ -144,13 +145,13 @@ export function ItemTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsSearchHint")}
                 </td>
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("itemsNoResults")}
                 </td>
               </tr>
@@ -191,6 +192,9 @@ export function ItemTable({
                   </td>
                   <td className="px-5 py-3">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
+                  </td>
+                  <td className="px-5 py-3 text-center">
+                    <span className="text-[11px] text-muted-foreground">{product.unit || "-"}</span>
                   </td>
                   <td className="px-5 py-3 text-right">
                     <span className="text-sm font-bold tabular-nums text-foreground">

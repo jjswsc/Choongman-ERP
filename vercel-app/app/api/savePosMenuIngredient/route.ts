@@ -12,21 +12,26 @@ export async function POST(req: NextRequest) {
     const menuId = Number(body?.menuId)
     const itemCode = String(body?.itemCode ?? '').trim()
     const quantity = Math.max(0.001, Number(body?.quantity) ?? 1)
+    const lossRate = Math.max(0, Math.min(100, Number(body?.lossRate) ?? 0))
+    const optionId = body?.optionId != null ? Number(body.optionId) : null
 
     if (!menuId || !itemCode) {
       return NextResponse.json({ success: false, message: 'menuId and itemCode required' }, { headers })
     }
 
+    const ingredientRow = {
+      item_code: itemCode,
+      quantity,
+      loss_rate: lossRate,
+      ...(optionId != null && { option_id: optionId }),
+    }
+
     if (id) {
-      await supabaseUpdateByFilter('pos_menu_ingredients', `id=eq.${id}`, {
-        item_code: itemCode,
-        quantity,
-      })
+      await supabaseUpdateByFilter('pos_menu_ingredients', `id=eq.${id}`, ingredientRow)
     } else {
       await supabaseInsert('pos_menu_ingredients', {
         menu_id: menuId,
-        item_code: itemCode,
-        quantity,
+        ...ingredientRow,
       })
     }
 
