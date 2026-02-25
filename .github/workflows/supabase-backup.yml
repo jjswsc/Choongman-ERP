@@ -28,7 +28,7 @@ jobs:
       - name: Create backup directory
         run: mkdir -p backups
 
-      - name: Dump database
+      - name: Dump database (roles, schema, data)
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
@@ -36,13 +36,20 @@ jobs:
             echo "::error::SUPABASE_DB_URL secret is not set. Add it in GitHub Settings → Secrets."
             exit 1
           fi
+          # Direct connection (db.xxx.supabase.co:5432) 필수. Pooler(6543)는 pg_dump에 적합하지 않음.
+          if echo "$DB_URL" | grep -q "pooler.supabase.com:6543"; then
+            echo "::error::SUPABASE_DB_URL must use DIRECT connection (db.xxx.supabase.co:5432), not Pooler (6543). See BACKUP_SETUP.md"
+            exit 1
+          fi
           TIMESTAMP=$(date +%Y%m%d-%H%M)
-          supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP.sql"
-          echo "Backup created: backup-$TIMESTAMP.sql"
+          supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP-roles.sql" --role-only
+          supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP-schema.sql"
+          supabase db dump --db-url "$DB_URL" -f "backups/backup-$TIMESTAMP-data.sql" --data-only --use-copy
+          echo "Backup created: roles, schema, data"
 
       - name: Compress backup
         run: |
-          cd backups && gzip -9 *.sql && ls -la
+          cd backups && gzip -9 backup-*.sql && ls -la
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
