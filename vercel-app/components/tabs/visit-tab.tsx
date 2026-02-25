@@ -49,13 +49,18 @@ export function VisitTab() {
 
   const { stores: storeListRaw } = useStoreList()
   useEffect(() => {
-    const all = storeListRaw
+    const all = storeListRaw || []
     const exclude = ["Office", "본사", "office"]
-    const stores = all.filter(
+    let stores = all.filter(
       (s) => !exclude.includes(s) && s.toLowerCase() !== "office"
     )
+    // 본사(CM Office 등) 로그인 시 CM Office를 방문 대상 목록에 포함 (API에 없을 수 있음)
+    const isOffice = auth?.store === "CM Office" || auth?.store === "Office" || auth?.store === "본사" || auth?.store?.toLowerCase() === "office"
+    if (isOffice && !stores.includes("CM Office")) {
+      stores = ["CM Office", ...stores].filter(Boolean)
+    }
     setStoreList(stores.length > 0 ? stores : all)
-  }, [storeListRaw])
+  }, [storeListRaw, auth?.store])
 
   useEffect(() => {
     if (storeList.length > 0 && !selectedStore && !activeVisit) {
