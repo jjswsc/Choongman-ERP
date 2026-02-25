@@ -139,8 +139,16 @@ export function EmployeeEvalTab({
         return
       }
       const bySection: Record<string, EvalItem[]> = {}
+      const MAIN_TO_KR: Record<string, string> = {
+        "Menu skill": "메뉴숙련",
+        "Cooking Accuracy & Cost Control": "원가정확도",
+        "Hygiene": "위생",
+        "Attitude": "태도",
+        "Service": "서비스",
+      }
       for (const it of items) {
-        const sec = it.main || ""
+        let sec = (it.main || "").trim()
+        sec = MAIN_TO_KR[sec] || sec
         if (!bySection[sec]) bySection[sec] = []
         bySection[sec].push(it)
       }
@@ -151,18 +159,25 @@ export function EmployeeEvalTab({
       const secs: EvalSection[] = order
         .filter((o) => bySection[o]?.length)
         .map((o) => ({ main: o, items: bySection[o] }))
+      for (const k of Object.keys(bySection)) {
+        if (!order.includes(k) && bySection[k]?.length) {
+          secs.push({ main: k, items: bySection[k] })
+        }
+      }
       setSections(secs)
       const initScores: Record<string, string> = {}
       const initRemarks: Record<string, string> = {}
       const initSolo: Record<string, boolean> = {}
       const initPeak: Record<string, boolean> = {}
       const initTrain: Record<string, boolean> = {}
+      const isMenuSection = (m: string) =>
+        m === "메뉴숙련" || m === "Menu skill"
       for (const s of secs) {
         for (const it of s.items) {
           const key = String(it.id)
           initScores[key] = "5"
           initRemarks[key] = ""
-          if (it.main === "메뉴숙련") {
+          if (isMenuSection(it.main) || isMenuSection(s.main)) {
             initSolo[key] = false
             initPeak[key] = false
             initTrain[key] = false
@@ -307,25 +322,21 @@ export function EmployeeEvalTab({
       hygieneN = 0,
       attitudeN = 0,
       serviceN = 0
+    const toCategory = (m: string) =>
+      m === "메뉴숙련" || m === "Menu skill" ? "menu" :
+      m === "원가정확도" || m === "Cooking Accuracy & Cost Control" ? "cost" :
+      m === "위생" || m === "Hygiene" ? "hygiene" :
+      m === "태도" || m === "Attitude" ? "attitude" :
+      m === "서비스" || m === "Service" ? "service" : null
     for (const s of sections) {
+      const cat = toCategory(s.main)
       for (const it of s.items) {
         const v = Number(scores[String(it.id)] || 5)
-        if (s.main === "메뉴숙련") {
-          menuAvg += v
-          menuN++
-        } else if (s.main === "원가정확도") {
-          costAvg += v
-          costN++
-        } else if (s.main === "위생") {
-          hygieneAvg += v
-          hygieneN++
-        } else if (s.main === "태도") {
-          attitudeAvg += v
-          attitudeN++
-        } else if (s.main === "서비스") {
-          serviceAvg += v
-          serviceN++
-        }
+        if (cat === "menu") { menuAvg += v; menuN++ }
+        else if (cat === "cost") { costAvg += v; costN++ }
+        else if (cat === "hygiene") { hygieneAvg += v; hygieneN++ }
+        else if (cat === "attitude") { attitudeAvg += v; attitudeN++ }
+        else if (cat === "service") { serviceAvg += v; serviceN++ }
       }
     }
     if (menuN) menuAvg /= menuN
@@ -363,11 +374,11 @@ export function EmployeeEvalTab({
     setSaving(true)
     try {
       const sectionKey: Record<string, string> = {
-        메뉴숙련: "menu",
-        원가정확도: "cost",
-        위생: "hygiene",
-        태도: "attitude",
-        서비스: "menu",
+        메뉴숙련: "menu", "Menu skill": "menu",
+        원가정확도: "cost", "Cooking Accuracy & Cost Control": "cost",
+        위생: "hygiene", Hygiene: "hygiene",
+        태도: "attitude", Attitude: "attitude",
+        서비스: "menu", Service: "menu",
       }
       const payloadSections: Record<string, unknown[]> = {
         menu: [],
@@ -388,7 +399,7 @@ export function EmployeeEvalTab({
             score: scores[k] || "5",
             notes: remarks[k] || "",
           }
-          if (it.main === "메뉴숙련") {
+          if (it.main === "메뉴숙련" || it.main === "Menu skill") {
             rec.soloOK = soloOK[k] || false
             rec.peakOK = peakOK[k] || false
             rec.canTrain = canTrain[k] || false

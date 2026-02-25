@@ -31,7 +31,7 @@ function formatTime(v: string | null | undefined): string {
   return s.length >= 5 && s.charAt(2) === ':' ? s.substring(0, 5) : s
 }
 
-/** 월요일 날짜로 해당 주 일요일까지 구간 계산 */
+/** 월요일 날짜로 해당 주 일요일까지 구간 계산 (타임존 영향 없이 로컬 날짜만 사용) */
 function getWeekRange(mondayStr: string): { start: string; end: string } {
   const m = mondayStr.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
   if (!m) return { start: '', end: '' }
@@ -40,9 +40,13 @@ function getWeekRange(mondayStr: string): { start: string; end: string } {
   const d = parseInt(m[3], 10)
   const startDate = new Date(y, mo - 1, d)
   const endDate = new Date(startDate.getTime() + 6 * 24 * 60 * 60 * 1000)
-  const start = startDate.toISOString().slice(0, 10)
-  const end = endDate.toISOString().slice(0, 10)
-  return { start, end }
+  const fmt = (date: Date) => {
+    const yy = date.getFullYear()
+    const mm = String(date.getMonth() + 1).padStart(2, '0')
+    const dd = String(date.getDate()).padStart(2, '0')
+    return `${yy}-${mm}-${dd}`
+  }
+  return { start: fmt(startDate), end: fmt(endDate) }
 }
 
 export async function GET(request: NextRequest) {

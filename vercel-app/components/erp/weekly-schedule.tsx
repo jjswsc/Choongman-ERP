@@ -11,13 +11,20 @@ import { useT } from "@/lib/i18n"
 import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
 import { cn, displayLabelShort } from "@/lib/utils"
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, "0")
+  const da = String(d.getDate()).padStart(2, "0")
+  return `${y}-${mo}-${da}`
+}
+
 function getMondayOfWeek(d?: Date): string {
   const date = d ? new Date(d) : new Date()
   const day = date.getDay()
   const diff = date.getDate() - day + (day === 0 ? -6 : 1)
   const mon = new Date(date)
   mon.setDate(diff)
-  return mon.toISOString().slice(0, 10)
+  return toLocalDateStr(mon)
 }
 
 function scheduleTimeOnly(v: string | null | undefined): string {
@@ -119,7 +126,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   for (let i = 0; i < 7; i++) {
     const d = new Date(monDate.getTime())
     d.setDate(monDate.getDate() + i)
-    dayStrs.push(d.toISOString().slice(0, 10))
+    dayStrs.push(toLocalDateStr(d))
   }
   const daysFull = dayStrs.map((s) => {
     const [y, m, d] = s.split("-")
@@ -135,15 +142,8 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     if (!byPerson[key]) {
       byPerson[key] = { name: r.nick || r.name || "", store: r.store || "", area: r.area || "Service", byDate: {} }
     }
+    // schedule_date는 근무 시작일. plan_in_prev_day 시 퇴근만 다음날이므로 당일(r.date)에만 표시
     byPerson[key].byDate[r.date] = r
-    if (r.plan_in_prev_day && r.date) {
-      const prevDate = (() => {
-        const d = new Date(r.date + "T12:00:00")
-        d.setDate(d.getDate() - 1)
-        return d.toISOString().slice(0, 10)
-      })()
-      if (dayStrs.includes(prevDate)) byPerson[key].byDate[prevDate] = r
-    }
   }
   const personKeys = Object.keys(byPerson).sort()
   const dailyCount = [0, 0, 0, 0, 0, 0, 0]
@@ -192,12 +192,12 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const goPrevWeek = () => {
     const d = new Date(date + "T12:00:00")
     d.setDate(d.getDate() - 7)
-    setDate(d.toISOString().slice(0, 10))
+    setDate(toLocalDateStr(d))
   }
   const goNextWeek = () => {
     const d = new Date(date + "T12:00:00")
     d.setDate(d.getDate() + 7)
-    setDate(d.toISOString().slice(0, 10))
+    setDate(toLocalDateStr(d))
   }
 
   const toggleRow = (key: string) => {

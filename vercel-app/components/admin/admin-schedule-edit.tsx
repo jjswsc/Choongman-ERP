@@ -25,18 +25,26 @@ import {
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
 import { cn, displayLabelShort } from "@/lib/utils"
 
+/** toISOString 시 타임존에 따라 날짜가 밀릴 수 있으므로 로컬 날짜만 사용 */
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, "0")
+  const da = String(d.getDate()).padStart(2, "0")
+  return `${y}-${mo}-${da}`
+}
+
 function getMondayOfWeek(dateStr?: string): string {
   const d = dateStr ? new Date(dateStr + "T12:00:00") : new Date()
   const day = d.getDay()
   const diff = day === 0 ? -6 : -(day - 1)
   d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
+  return toLocalDateStr(d)
 }
 
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T12:00:00")
   d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
+  return toLocalDateStr(d)
 }
 
 function get30MinIntervals(start: string, end: string): string[] {
@@ -176,7 +184,8 @@ export function AdminScheduleEdit({
         for (const row of data || []) {
           const dateStr = row.date?.slice(0, 10)
           const dayIdx = dayStrsLocal.indexOf(dateStr)
-          const displayDayIdx = row.plan_in_prev_day && dayIdx > 0 ? dayIdx - 1 : dayIdx
+          // schedule_date는 항상 근무 시작일. plan_in_prev_day는 퇴근만 다음날이라는 의미이므로 표시는 시작일(dayIdx)에
+          const displayDayIdx = dayIdx
           if (displayDayIdx < 0) continue
           const area = row.area || "Service"
           const isLeave = !!(row as { leaveType?: string }).leaveType
