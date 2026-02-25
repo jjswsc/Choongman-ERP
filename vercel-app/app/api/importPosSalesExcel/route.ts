@@ -1,10 +1,12 @@
 /**
  * POS 매출 상세 엑셀 업로드 → pos_sales_imports + pos_sales_details
  * FormData (file) 필수. 결제 금액 기준 매출 산출.
+ * 수정(업로드)은 오피스 직원만 가능.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { supabaseInsert, supabaseInsertMany } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 const COLS = {
   salesDatetime: 0,
@@ -47,6 +49,12 @@ function parseDate(val: unknown): string | null {
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const authResult = await requireAuth(request, 'office')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
 
   try {
     const ct = request.headers.get('content-type') || ''

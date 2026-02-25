@@ -4,6 +4,8 @@ import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import {
   Select,
   SelectContent,
@@ -65,6 +67,8 @@ function formatBath(n: number) {
 export function SalesManagementTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
+  const canEdit = isOfficeRole(auth?.role || "")
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const [imports, setImports] = React.useState<PosSalesImport[]>([])
@@ -259,7 +263,8 @@ export function SalesManagementTab() {
             <Button
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+              disabled={uploading || !canEdit}
+              title={!canEdit ? "업로드는 오피스 직원만 가능합니다" : undefined}
             >
               <Upload className="h-4 w-4 mr-1" />
               {uploading ? "업로드 중..." : "엑셀 업로드"}
@@ -341,7 +346,8 @@ export function SalesManagementTab() {
                       variant="ghost"
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDelete(i.id)}
-                      disabled={deletingId === i.id}
+                      disabled={deletingId === i.id || !canEdit}
+                      title={!canEdit ? "삭제는 오피스 직원만 가능합니다" : undefined}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

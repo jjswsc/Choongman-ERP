@@ -4,6 +4,8 @@ import * as React from "react"
 import { Calculator, ChevronDown, ChevronRight, Download, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import {
   Select,
   SelectContent,
@@ -29,6 +31,8 @@ function toCsvRow(cells: (string | number)[]): string {
 export default function PosCostAnalysisPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
+  const canEdit = isOfficeRole(auth?.role || "")
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -123,6 +127,11 @@ export default function PosCostAnalysisPage() {
             </h1>
             <p className="text-xs text-muted-foreground">
               {t("posCostAnalysisSub") || "메뉴별 원가·마진·재료 내역. 품목 코드=본사, 없음=매장 구매. 음식/포장재 구분."}
+              {!canEdit && (
+                <span className="block mt-0.5">
+                  {t("posCostEditOfficeOnly") || "원가 데이터 수정은 오피스 직원만 가능합니다."}
+                </span>
+              )}
             </p>
           </div>
         </div>

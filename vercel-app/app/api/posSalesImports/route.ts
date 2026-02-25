@@ -1,5 +1,6 @@
 /**
  * pos_sales_imports 목록 조회 (GET) / 삭제 (DELETE)
+ * 삭제는 오피스 직원만 가능.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -7,6 +8,7 @@ import {
   supabaseSelectFilter,
   supabaseDeleteByFilter,
 } from '@/lib/supabase-server'
+import { requireAuth } from '@/lib/verify-auth'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -41,6 +43,12 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+
+  const authResult = await requireAuth(request, 'office')
+  if (authResult.errorResponse) {
+    authResult.errorResponse.headers.set('Access-Control-Allow-Origin', '*')
+    return authResult.errorResponse
+  }
 
   try {
     const { searchParams } = new URL(request.url)
