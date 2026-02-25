@@ -302,9 +302,20 @@
     if(!s || !loginData) return;
     var txt = (I18N[currentLang] || I18N.ko).m_select_store || "Select Store...";
     s.innerHTML = "<option value=''>" + txt + "</option>";
-    var officeKey = loginData["Office"] ? "Office" : (loginData["본사"] ? "본사" : null);
-    if (officeKey) s.add(new Option("Office (본사)", officeKey)); 
+    var officeKey = loginData["Office"] ? "Office" : (loginData["본사"] ? "본사" : (loginData["CM Office"] ? "CM Office" : null));
+    var isVisitSelect = (id === "visit-store-select");
+    var loggedStore = (typeof loggedInStore !== "undefined" && loggedInStore) ? String(loggedInStore).trim() : "";
+    var isOfficeUser = !!loggedStore && (loggedStore === "CM Office" || loggedStore === "Office" || loggedStore === "본사" || loggedStore.toLowerCase().indexOf("office") !== -1);
+    if (officeKey) s.add(new Option(officeKey === "CM Office" ? "CM Office" : "Office (본사)", officeKey));
     for (var k in loginData) { if (k !== officeKey) s.add(new Option(k, k)); }
+    if (isVisitSelect && isOfficeUser && !loginData["CM Office"]) {
+      var opt = new Option("CM Office", "CM Office");
+      try { s.insertBefore(opt, s.options[1]); } catch(e) { s.add(opt); }
+    }
+    if (isVisitSelect && isOfficeUser) {
+      if (s.querySelector('option[value="CM Office"]')) s.value = "CM Office";
+      else if (s.options.length > 1) s.selectedIndex = 1;
+    }
   }
 
   // [중요] 매장 선택 시 해당 매장 직원 명단 채우기

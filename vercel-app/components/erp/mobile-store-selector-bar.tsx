@@ -32,10 +32,15 @@ export function MobileStoreSelectorBar() {
     auth &&
     (isOfficeRole(auth.role || "") || isOfficeStore(auth.store || ""))
 
-  const storeOptions = React.useMemo(
-    () => filterNonOfficeStores(stores),
-    [stores]
-  )
+  const storeOptions = React.useMemo(() => {
+    const branches = filterNonOfficeStores(stores)
+    const loggedStore = (auth?.store || "").trim()
+    const isOfficeStoreLogged = loggedStore && (loggedStore === "CM Office" || loggedStore === "Office" || loggedStore === "본사" || loggedStore.toLowerCase().includes("office"))
+    if (isOfficeStoreLogged && loggedStore && !branches.includes(loggedStore)) {
+      return [loggedStore, ...branches]
+    }
+    return branches
+  }, [stores, auth?.store])
 
   // 목록 있으면 선택 없을 때 첫 매장을 기본값으로
   React.useEffect(() => {
