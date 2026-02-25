@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 async function getLoginDataHandler() {
-  const empList = await supabaseSelect('employees', { order: 'id.asc', select: 'store,name' })
+  const empList = (await supabaseSelectFilter(
+    'employees',
+    'store=eq.' + encodeURIComponent('CM Office'),
+    { order: 'id.asc', select: 'store,name' }
+  )) as { store?: string; name?: string }[] | null
   const userMap: Record<string, string[]> = {}
   for (let i = 0; i < (empList || []).length; i++) {
     const store = String((empList as { store?: string }[])[i].store || '').trim()

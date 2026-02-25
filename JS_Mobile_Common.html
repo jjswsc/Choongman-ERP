@@ -370,7 +370,7 @@ function tryLogin() {
       if (document.getElementById("hr-username")) document.getElementById("hr-username").innerText = loggedInUser;
       var visitTab = document.getElementById("tab-store-visit");
       if (visitTab) {
-        if (loggedInStore === "Office" || loggedInStore === "본사") visitTab.classList.remove("hidden");
+        if (loggedInStore === "Office" || loggedInStore === "본사" || loggedInStore === "CM Office") visitTab.classList.remove("hidden");
         else visitTab.classList.add("hidden");
       }
       var role = (loggedInRole || "").toLowerCase();

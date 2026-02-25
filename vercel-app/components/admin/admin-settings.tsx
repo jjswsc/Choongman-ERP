@@ -336,15 +336,16 @@ export function AdminSettings() {
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminInbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminOutbound")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_outbound_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminForce")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployees")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_employees_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminEmployeeEval")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_eval_list_only")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminAttendance")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminLeave")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminPayroll")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminPayroll")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_payroll_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminPettyCash")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminReceivablePayable")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_receivable_note")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreCheck")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreVisit")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
-                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminComplaints")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminComplaints")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_complaints_note")}</td></tr>
                         <tr><td className="p-2.5 text-center">{t("adminSettings")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                       </tbody>
                     </table>
