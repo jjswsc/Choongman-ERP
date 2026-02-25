@@ -46,6 +46,7 @@ export interface ItemFormData {
   description: string
   price: string
   cost: string
+  purchaseSource: "hq" | "store"
 }
 
 export interface ItemFormProps {
@@ -97,6 +98,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
       </div>
 
       <div className="flex flex-col gap-5 p-6">
+        <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
             <Tag className="h-3.5 w-3.5 text-primary" />
@@ -109,6 +111,28 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             onChange={(e) => update("code", e.target.value)}
             disabled={isEditing}
           />
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className="text-xs font-semibold text-foreground">{t("itemsPurchaseSource") || "구분"}</label>
+          <Select
+            value={formData.purchaseSource ?? "hq"}
+            onValueChange={(v) => {
+              const next = v as "hq" | "store"
+              update("purchaseSource", next)
+              if (next === "store" && !formData.category.trim()) {
+                update("category", "매장 품목")
+              }
+            }}
+          >
+            <SelectTrigger className="h-10">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hq">{t("itemsPurchaseSourceHq") || "본사 전용"}</SelectItem>
+              <SelectItem value="store">{t("itemsPurchaseSourceStore") || "매장 전용"}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

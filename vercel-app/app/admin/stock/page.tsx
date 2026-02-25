@@ -48,6 +48,7 @@ export default function StockPage() {
   const [loading, setLoading] = React.useState(false)
   const [storeFilter, setStoreFilter] = React.useState("")
   const [stockDateFilter, setStockDateFilter] = React.useState("")
+  const [categoryFilter, setCategoryFilter] = React.useState("")
   const [searchTerm, setSearchTerm] = React.useState("")
   const [adjustItem, setAdjustItem] = React.useState<StockStatusItem | null>(null)
   const [adjustOpen, setAdjustOpen] = React.useState(false)
@@ -67,6 +68,15 @@ export default function StockPage() {
   }, [isManager, userStore, stores])
 
   const storeSelectDisabled = isManager && !!userStore
+
+  const categoryOptions = React.useMemo(() => {
+    const cats = new Set<string>()
+    for (const r of list) {
+      const c = (r.category || "").trim()
+      if (c) cats.add(c)
+    }
+    return Array.from(cats).sort()
+  }, [list])
 
   const fetchStock = React.useCallback(async () => {
     const store = storeFilter.trim()
@@ -88,6 +98,7 @@ export default function StockPage() {
         store,
         price: i.price ?? 0,
         cost: i.cost ?? i.price ?? 0,
+        category: i.category,
       }))
       setList(mapped)
     } catch {
@@ -183,6 +194,9 @@ export default function StockPage() {
               storeSelectDisabled={storeSelectDisabled}
               stockDateFilter={stockDateFilter}
               setStockDateFilter={setStockDateFilter}
+              categoryFilter={categoryFilter}
+              setCategoryFilter={setCategoryFilter}
+              categoryOptions={categoryOptions}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               onSearch={fetchStock}

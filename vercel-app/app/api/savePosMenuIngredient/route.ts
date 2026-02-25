@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     const quantity = Math.max(0.001, Number(body?.quantity) ?? 1)
     const lossRate = Math.max(0, Math.min(100, Number(body?.lossRate) ?? 0))
     const optionId = body?.optionId != null ? Number(body.optionId) : null
+    const ingredientType = (body?.ingredientType ?? 'food') === 'packaging' ? 'packaging' : 'food'
 
     if (!menuId || !itemCode) {
       return NextResponse.json({ success: false, message: 'menuId and itemCode required' }, { headers })
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
       item_code: itemCode,
       quantity,
       loss_rate: lossRate,
+      ingredient_type: ingredientType,
       ...(optionId != null && { option_id: optionId }),
     }
 

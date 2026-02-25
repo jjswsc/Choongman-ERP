@@ -96,9 +96,16 @@ export interface AppItem {
   description?: string
 }
 
-export async function getAppData(storeName: string, asOfDate?: string) {
+export async function getAppData(
+  storeName: string,
+  asOfDateOrOptions?: string | { asOfDate?: string; scope?: 'order' | 'stock' }
+) {
+  const opts = typeof asOfDateOrOptions === 'string'
+    ? { asOfDate: asOfDateOrOptions }
+    : (asOfDateOrOptions || {})
   const params = new URLSearchParams({ storeName })
-  if (asOfDate && asOfDate.trim()) params.set('asOfDate', asOfDate.trim())
+  if (opts.asOfDate?.trim()) params.set('asOfDate', opts.asOfDate.trim())
+  if (opts.scope === 'order') params.set('scope', 'order')
   const res = await apiFetch(`/api/getAppData?${params}`)
   const data = await res.json()
   return { items: (data.items || []) as AppItem[], stock: data.stock || {} }
@@ -114,6 +121,7 @@ export interface StockStatusItem {
   store: string
   price?: number
   cost?: number
+  category?: string
 }
 
 export interface AdjustmentHistoryItem {
@@ -1694,6 +1702,7 @@ export interface AdminItem {
   imageUrl: string
   hasImage: boolean
   description?: string
+  purchaseSource?: 'hq' | 'store'
 }
 
 export interface AdminVendor {
@@ -1709,8 +1718,11 @@ export interface AdminVendor {
   memo: string
 }
 
-export async function getAdminItems() {
-  const res = await apiFetch('/api/getItems')
+export async function getAdminItems(options?: { scope?: 'outbound' | 'order' }) {
+  const params = new URLSearchParams()
+  if (options?.scope) params.set('scope', options.scope)
+  const q = params.toString()
+  const res = await apiFetch(`/api/getItems${q ? '?' + q : ''}`)
   return res.json() as Promise<AdminItem[]>
 }
 
@@ -1775,6 +1787,7 @@ export async function saveItem(params: {
   imageUrl?: string
   description?: string
   editingCode?: string
+  purchaseSource?: 'hq' | 'store'
 }) {
   const res = await apiFetch('/api/saveItem', {
     method: 'POST',
@@ -1860,6 +1873,7 @@ export interface PosMenuIngredient {
   id: string
   menuId: string
   itemCode: string
+  ingredientType?: 'food' | 'packaging'
   quantity: number
   lossRate?: number
   optionId?: string | null
@@ -1880,6 +1894,7 @@ export async function savePosMenuIngredient(params: {
   quantity?: number
   lossRate?: number
   optionId?: number | null
+  ingredientType?: 'food' | 'packaging'
 }) {
   const res = await apiFetch('/api/savePosMenuIngredient', {
     method: 'POST',
@@ -1904,6 +1919,35 @@ export async function getMenuCost(params: { menuId: string; optionId?: string })
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
   const res = await apiFetch('/api/getMenuCost?' + q.toString())
   return res.json() as Promise<{ cost: number; breakdown: MenuCostBreakdown[] }>
+}
+
+export interface PosMenuCostAnalysisRow {
+  menuId: string
+  menuCode: string
+  menuName: string
+  category: string
+  priceHall: number
+  priceDelivery: number | null
+  optionId: string | null
+  optionName: string | null
+  costHall: number
+  costDelivery: number
+  breakdown: {
+    itemCode: string
+    itemName: string
+    unit: string
+    costPerUnit: number
+    quantity: number
+    lossRate: number
+    costTotal: number
+    source: 'hq' | 'store'
+    ingredientType: 'food' | 'packaging'
+  }[]
+}
+
+export async function getPosMenuCostAnalysis() {
+  const res = await apiFetch('/api/getPosMenuCostAnalysis')
+  return res.json() as Promise<PosMenuCostAnalysisRow[]>
 }
 
 export async function deletePosMenuIngredient(params: { id: string }) {

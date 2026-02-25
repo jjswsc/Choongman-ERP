@@ -145,7 +145,7 @@ export function OrderTab() {
   useEffect(() => {
     if (!effectiveStore) return
     setLoading(true)
-    getAppData(effectiveStore)
+    getAppData(effectiveStore, { scope: 'order' })
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})
@@ -360,7 +360,7 @@ export function OrderTab() {
           receiveFileRef.current && (receiveFileRef.current.value = "")
           loadHistory()
           if (effectiveStore) {
-            getAppData(effectiveStore).then((r) => setStock(r.stock || {}))
+            getAppData(effectiveStore, { scope: 'order' }).then((r) => setStock(r.stock || {}))
           }
           setReceivePhotoPreview((p) => { if (p) URL.revokeObjectURL(p); return null })
           setReceiveModal(null)

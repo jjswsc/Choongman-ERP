@@ -15,8 +15,11 @@ export interface AppItem {
   description?: string
 }
 
-async function getItems(storeName: string): Promise<AppItem[]> {
-  const rows = (await supabaseSelect('items', { order: 'id.asc', select: 'code,category,name,spec,price,cost,tax,image,description' })) as {
+const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description'
+
+async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
+  const isOrderScope = String(scope || '').toLowerCase().trim() === 'order'
+  let rows: {
     code?: string
     category?: string
     name?: string
@@ -27,6 +30,17 @@ async function getItems(storeName: string): Promise<AppItem[]> {
     image?: string
     description?: string
   }[] | null
+
+  if (isOrderScope) {
+    rows = (await supabaseSelectFilter(
+      'items',
+      `or=(purchase_source.eq.hq,purchase_source.is.null)`,
+      { order: 'id.asc', select: ITEMS_SELECT }
+    )) as typeof rows
+  } else {
+    rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT })) as typeof rows
+  }
+
   const safeMap: Record<string, number> = {}
   if (storeName) {
     const storeNorm = String(storeName).toLowerCase().trim()
@@ -99,6 +113,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const storeName = String(searchParams.get('storeName') || searchParams.get('store') || '').trim()
   const asOfDate = String(searchParams.get('asOfDate') || searchParams.get('date') || '').trim()
+  const scope = String(searchParams.get('scope') || '').trim()
 
   const auth = await getVerifiedAuth(request)
   const userRole = (auth?.role || '').toLowerCase()
@@ -115,7 +130,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const [items, stock] = await Promise.all([
-      getItems(storeName),
+      getItems(storeName, scope || undefined),
       getStoreStock(storeName, asOfDate || undefined),
     ])
     return NextResponse.json({ items, stock }, { headers })

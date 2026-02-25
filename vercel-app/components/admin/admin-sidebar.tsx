@@ -22,6 +22,7 @@ const menuItems = [
   // 3. POS 관리
   { header: "POS 관리" },
   { href: "/admin/pos-menus", label: "메뉴 관리" },
+  { href: "/admin/pos-cost-analysis", label: "원가 분석" },
   { href: "/admin/pos-promos", label: "프로모션 관리" },
   // 4. 인사 관리
   { header: "인사 관리" },

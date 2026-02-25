@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       filter += '&option_id=is.null'
     }
 
-    let ingRows: { item_code?: string; quantity?: number; loss_rate?: number }[] | null
+    let ingRows: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
     try {
       ingRows = (await supabaseSelectFilter('pos_menu_ingredients', filter, { order: 'id.asc', limit: 200 })) as typeof ingRows
     } catch {
@@ -63,13 +63,18 @@ export async function GET(request: NextRequest) {
     }
 
     const ingredients = ingRows || []
+    let foodCost = 0
+    let packageCost = 0
 
     for (const ing of ingredients) {
       const code = String(ing.item_code ?? '').trim()
       const qty = Number(ing.quantity) ?? 1
       const lossRate = Number(ing.loss_rate) ?? 0
+      const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
       const costPerUnit = itemMap[code]?.cost ?? 0
       const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+      if (itype === 'packaging') packageCost += costTotal
+      else foodCost += costTotal
       totalCost += costTotal
       breakdown.push({
         itemCode: code,
@@ -84,6 +89,7 @@ export async function GET(request: NextRequest) {
     if (optionType === 'additive' && optionItemCode && optionId && optionId !== 'null') {
       const costPerUnit = itemMap[optionItemCode]?.cost ?? 0
       const costTotal = costPerUnit * optionQty
+      foodCost += costTotal
       totalCost += costTotal
       breakdown.push({
         itemCode: optionItemCode,
@@ -96,8 +102,10 @@ export async function GET(request: NextRequest) {
     }
 
     const cost = Math.round(totalCost * 10) / 10
+    const costHall = Math.round(foodCost * 10) / 10
+    const costDelivery = Math.round((foodCost + packageCost) * 10) / 10
 
-    return NextResponse.json({ cost, breakdown }, { headers })
+    return NextResponse.json({ cost, costHall, costDelivery, breakdown }, { headers })
   } catch (e) {
     console.error('getMenuCost:', e)
     return NextResponse.json({ cost: 0, breakdown: [] }, { headers })

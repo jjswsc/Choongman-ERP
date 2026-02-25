@@ -124,7 +124,7 @@ export function AdminOrderCreate() {
       return
     }
     setLoading(true)
-    getAppData(storeSelect)
+    getAppData(storeSelect, { scope: 'order' })
       .then((r) => {
         setItems(r.items)
         setStock(r.stock || {})

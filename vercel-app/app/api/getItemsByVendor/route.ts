@@ -26,11 +26,12 @@ export async function GET(request: NextRequest) {
       outbound_location?: string
     }[] | null = []
 
+    const hqFilter = `or=(purchase_source.eq.hq,purchase_source.is.null)`
     if (vendorCode) {
       const enc = encodeURIComponent(vendorCode)
       rows = (await supabaseSelectFilter(
         'items',
-        `vendor=ilike.${enc}`,
+        `vendor=ilike.${enc}&${hqFilter}`,
         { order: 'code.asc', limit: 1000 }
       )) as typeof rows
     }
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
       const encName = encodeURIComponent(vendorName)
       rows = (await supabaseSelectFilter(
         'items',
-        `vendor=ilike.${encName}`,
+        `vendor=ilike.${encName}&${hqFilter}`,
         { order: 'code.asc', limit: 1000 }
       )) as typeof rows
     }

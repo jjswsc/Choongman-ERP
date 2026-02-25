@@ -32,7 +32,6 @@ import {
   type PosMenuOption,
   type PosMenuIngredient,
 } from "@/lib/api-client"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 const emptyForm = {
@@ -60,7 +59,7 @@ export default function PosMenusPage() {
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
   const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
   const [menuIngredients, setMenuIngredients] = React.useState<PosMenuIngredient[]>([])
-  const [items, setItems] = React.useState<{ code: string; name: string }[]>([])
+  const [items, setItems] = React.useState<{ code: string; name: string; category: string }[]>([])
   const [newOptionName, setNewOptionName] = React.useState("")
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
@@ -71,11 +70,11 @@ export default function PosMenusPage() {
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
   const [newIngredientQty, setNewIngredientQty] = React.useState("1")
   const [newIngredientLossRate, setNewIngredientLossRate] = React.useState("0")
+  const [newIngredientType, setNewIngredientType] = React.useState<"food" | "packaging">("food")
   const [menuCost, setMenuCost] = React.useState<{ cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
   const [baseMenuCost, setBaseMenuCost] = React.useState<number | null>(null)
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ ingredients: PosMenuIngredient[]; cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
-  const [activeTab, setActiveTab] = React.useState<"info" | "cost">("info")
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -111,12 +110,12 @@ export default function PosMenusPage() {
 
   React.useEffect(() => {
     if (!editingId) return
-    getMenuCost({ menuId: editingId, optionId: effectiveOptionIdForIngredients }).then((r) => setMenuCost({ cost: r.cost, breakdown: r.breakdown }))
+    getMenuCost({ menuId: editingId, optionId: effectiveOptionIdForIngredients }).then((r) => setMenuCost({ cost: (r as { costHall?: number }).costHall ?? r.cost, breakdown: r.breakdown }))
   }, [editingId, menuIngredients, effectiveOptionIdForIngredients])
 
   React.useEffect(() => {
     if (!editingId) return
-    getMenuCost({ menuId: editingId }).then((r) => setBaseMenuCost(r.cost))
+    getMenuCost({ menuId: editingId }).then((r) => setBaseMenuCost((r as { costHall?: number }).costHall ?? r.cost))
   }, [editingId, menuIngredients])
 
   const handleExpandMenu = React.useCallback(async (menuId: string) => {
@@ -137,16 +136,22 @@ export default function PosMenusPage() {
     }
   }, [expandedMenuId])
 
+  const ADDITIVE_OPTION_CATEGORY = "POS추가옵션"
+
   React.useEffect(() => {
     getAdminItems()
-      .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name }))))
+      .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name, category: x.category || "" }))))
       .catch(() => setItems([]))
   }, [])
+
+  const additiveOptionItems = React.useMemo(
+    () => items.filter((it) => (it.category || "").trim() === ADDITIVE_OPTION_CATEGORY),
+    [items]
+  )
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
     setEditingId(null)
-    setActiveTab("info")
   }
 
   const handleReset = () => {
@@ -234,7 +239,6 @@ export default function PosMenusPage() {
       isActive: menu.isActive,
     })
     setEditingId(menu.id)
-    setActiveTab("info")
     setNewOptionName("")
     setNewOptionModifier("0")
     setNewOptionModifierDelivery("")
@@ -278,12 +282,14 @@ export default function PosMenusPage() {
       quantity: Number(newIngredientQty) || 1,
       lossRate: Number(newIngredientLossRate) || 0,
       optionId: effectiveOptionIdForIngredients ? Number(effectiveOptionIdForIngredients) : null,
+      ingredientType: newIngredientType,
     })
     if (res.success) {
       getPosMenuIngredients({ menuId: editingId, optionId: effectiveOptionIdForIngredients ?? "null" }).then(setMenuIngredients)
       setNewIngredientCode("")
       setNewIngredientQty("1")
       setNewIngredientLossRate("0")
+      setNewIngredientType("food")
     } else {
       alert(res.message)
     }
@@ -403,12 +409,7 @@ export default function PosMenusPage() {
             </div>
             <div className="flex flex-col gap-4 p-6">
               {editingId ? (
-                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "info" | "cost")} className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="info">{t("posMenuInfoTab") || "메뉴 정보"}</TabsTrigger>
-                    <TabsTrigger value="cost">{t("posMenuCostAnalysisTab") || "원가 분석"}</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="info" className="mt-4 space-y-4">
+                <div className="space-y-4">
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCode")}</label>
                       <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} disabled />
@@ -482,16 +483,19 @@ export default function PosMenusPage() {
                           </Select>
                         </div>
                         {newOptionType === "additive" && (
-                          <div className="flex gap-2 items-center flex-wrap">
-                            <Select value={newOptionItemCode} onValueChange={setNewOptionItemCode}>
-                              <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
-                                <SelectValue placeholder={t("posOptionAdditiveItem") || "추가 품목"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {items.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-2 items-center flex-wrap">
+                              <Select value={newOptionItemCode} onValueChange={setNewOptionItemCode}>
+                                <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
+                                  <SelectValue placeholder={t("posOptionAdditiveItem") || "추가 품목"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {additiveOptionItems.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">{t("posAdditiveOptionCategoryHint") || "품목 관리에서 카테고리를 'POS추가옵션'으로 설정한 품목만 선택할 수 있습니다."}</p>
                           </div>
                         )}
                         <div className="flex gap-2 text-xs">
@@ -502,20 +506,6 @@ export default function PosMenusPage() {
                         </div>
                       </div>
                     </div>
-                    {baseMenuCost != null && (Number(formData.price) || 0) > 0 && (
-                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                        <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
-                        <span className="ml-2 text-lg font-bold text-amber-600">
-                          {((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex gap-3 pt-2">
-                      <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
-                      <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="cost" className="mt-4 space-y-4">
                     {menuOptions.some((o) => o.optionType === "substitution") && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground shrink-0">{t("posIngredientScope") || "재료 범위"}</span>
@@ -539,12 +529,24 @@ export default function PosMenusPage() {
                       <ul className="mb-2 max-h-48 overflow-y-auto space-y-1">
                         {menuIngredients.map((ing) => (
                           <li key={ing.id} className="flex items-center justify-between rounded bg-amber-500/10 px-2 py-1 text-xs">
-                            <span>{ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}</span>
+                            <span>
+                              {ing.itemCode} × {ing.quantity}{(ing.lossRate ?? 0) > 0 ? ` (로스 ${ing.lossRate}%)` : ""}
+                              {ing.ingredientType === "packaging" && <span className="ml-1 text-amber-600">[포장]</span>}
+                            </span>
                             <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteIngredient(ing)}><Trash2 className="h-3 w-3" /></Button>
                           </li>
                         ))}
                       </ul>
                       <div className="flex flex-wrap gap-2">
+                        <Select value={newIngredientType} onValueChange={(v) => setNewIngredientType(v as "food" | "packaging")}>
+                          <SelectTrigger className="h-8 w-24 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="food">{t("posCostTypeFood") || "음식"}</SelectItem>
+                            <SelectItem value="packaging">{t("posCostTypePackaging") || "포장"}</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Select value={newIngredientCode} onValueChange={setNewIngredientCode}>
                           <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
                             <SelectValue placeholder={t("posIngredientPh") || "재료 선택"} />
@@ -597,8 +599,19 @@ export default function PosMenusPage() {
                         )}
                       </div>
                     )}
-                  </TabsContent>
-                </Tabs>
+                    {baseMenuCost != null && (Number(formData.price) || 0) > 0 && (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                        <span className="text-xs text-muted-foreground">{t("posMenuCostRatio") || "최종 원가율"}</span>
+                        <span className="ml-2 text-lg font-bold text-amber-600">
+                          {((baseMenuCost / (Number(formData.price) || 1)) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex gap-3 pt-2">
+                      <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
+                      <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
+                    </div>
+                  </div>
               ) : (
                 <>
                   <div>
@@ -651,7 +664,7 @@ export default function PosMenusPage() {
           {/* Table */}
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center gap-3 border-b px-6 py-4">
-              <h3 className="text-sm font-bold">{t("itemsList")}</h3>
+              <h3 className="text-sm font-bold">{t("posMenuList") || "메뉴 목록"}</h3>
             </div>
             <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>

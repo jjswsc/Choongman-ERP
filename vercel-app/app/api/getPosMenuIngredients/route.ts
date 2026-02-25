@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const optionId = searchParams.get('optionId')?.trim()
     let filter = `menu_id=eq.${encodeURIComponent(menuId)}`
 
-    let rows: { id?: number; menu_id?: number; item_code?: string; quantity?: number; loss_rate?: number; option_id?: number | null }[] | null
+    let rows: { id?: number; menu_id?: number; item_code?: string; quantity?: number; loss_rate?: number; option_id?: number | null; ingredient_type?: string }[] | null
     try {
       if (!optionId || optionId === 'null') {
         filter += '&option_id=is.null'
@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       quantity: Number(r.quantity) ?? 1,
       lossRate: Number(r.loss_rate) ?? 0,
       optionId: r.option_id != null ? String(r.option_id) : null,
+      ingredientType: (r.ingredient_type ?? 'food') as 'food' | 'packaging',
     }))
 
     return NextResponse.json(list, { headers })

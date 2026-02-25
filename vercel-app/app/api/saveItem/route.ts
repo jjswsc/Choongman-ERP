@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
       imageUrl?: string
       description?: string
       editingCode?: string
+      purchaseSource?: 'hq' | 'store'
     }
 
     const code = String(body.code || '').trim()
@@ -36,10 +37,13 @@ export async function POST(request: NextRequest) {
     }
 
     const tax = taxTypeToDb(body.taxType || 'taxable')
+    const purchaseSource = (body.purchaseSource || 'hq') === 'store' ? 'store' : 'hq'
+    const categoryRaw = String(body.category || '').trim()
+    const category = purchaseSource === 'store' && !categoryRaw ? '매장 품목' : categoryRaw
     const row = {
       code,
       name,
-      category: String(body.category || '').trim(),
+      category,
       vendor: String(body.vendor || '').trim(),
       outbound_location: String(body.outboundLocation || '').trim(),
       spec: String(body.spec || '').trim(),
@@ -49,6 +53,7 @@ export async function POST(request: NextRequest) {
       image: String(body.imageUrl || '').trim(),
       description: String(body.description || '').trim() || null,
       tax,
+      purchase_source: purchaseSource,
     }
 
     const filterCode = editingCode || code
@@ -66,9 +71,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveItem:', e)
-    return NextResponse.json(
-      { success: false, message: e instanceof Error ? e.message : '저장 실패' },
-      { headers }
-    )
+    const errMsg = e instanceof Error ? e.message : String(e)
+    const isDuplicateCode =
+      errMsg.includes('23505') ||
+      /duplicate key|unique constraint|items_code/i.test(errMsg)
+    const message = isDuplicateCode
+      ? `품목 코드 "${code}"가 이미 사용 중입니다. 다른 코드를 입력해 주세요.`
+      : errMsg || '저장 실패'
+    return NextResponse.json({ success: false, message }, { headers })
   }
 }

@@ -32,6 +32,9 @@ export interface StockTableProps {
   storeSelectDisabled?: boolean
   stockDateFilter?: string
   setStockDateFilter?: (v: string) => void
+  categoryFilter?: string
+  setCategoryFilter?: (v: string) => void
+  categoryOptions?: string[]
   searchTerm: string
   setSearchTerm: (v: string) => void
   onSearch: () => void
@@ -49,6 +52,9 @@ export function StockTable({
   storeSelectDisabled = false,
   stockDateFilter = "",
   setStockDateFilter,
+  categoryFilter = "",
+  setCategoryFilter,
+  categoryOptions = [],
   searchTerm,
   setSearchTerm,
   onSearch,
@@ -64,14 +70,20 @@ export function StockTable({
   const tableRef = React.useRef<HTMLTableElement>(null)
 
   const filteredList = React.useMemo(() => {
-    if (!searchTerm.trim()) return list
-    const q = searchTerm.toLowerCase()
-    return list.filter(
-      (r) =>
-        r.code.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q)
-    )
-  }, [list, searchTerm])
+    let result = list
+    if (categoryFilter && categoryFilter !== "__all__") {
+      result = result.filter((r) => (r.category || "").trim() === categoryFilter)
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase()
+      result = result.filter(
+        (r) =>
+          r.code.toLowerCase().includes(q) ||
+          r.name.toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [list, searchTerm, categoryFilter])
 
   const totalAmount = React.useMemo(() => {
     return filteredList.reduce((sum, r) => {
@@ -162,6 +174,22 @@ ${filteredList.map((r) => {
               onChange={(e) => setStockDateFilter(e.target.value)}
               className="h-9 w-36 text-xs"
             />
+          </div>
+        )}
+        {categoryOptions.length > 0 && setCategoryFilter && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold whitespace-nowrap">{t("itemsCategory") || "카테고리"}</label>
+            <Select value={categoryFilter || "__all__"} onValueChange={(v) => setCategoryFilter(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="h-9 w-32 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">{t("stockFilterStoreAll") || "전체"}</SelectItem>
+                {categoryOptions.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
         <div className="flex items-center gap-2">

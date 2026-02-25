@@ -1,13 +1,39 @@
-import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-/** 관리자 품목 관리 - Supabase items 테이블 전체 조회 */
-export async function GET() {
+const ITEMS_SELECT = 'id,code,category,name,spec,unit,price,cost,image,vendor,tax,outbound_location,description,purchase_source'
+
+/** 관리자 품목 관리 - Supabase items 테이블 조회. scope=outbound|order 시 본사 전용만 */
+export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  const { searchParams } = new URL(request.url)
+  const scope = String(searchParams.get('scope') || '').toLowerCase().trim()
+  const isHqOnly = scope === 'outbound' || scope === 'order'
 
   try {
-    const rows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'id,code,category,name,spec,unit,price,cost,image,vendor,tax,outbound_location,description' })) as {
+    const rows = isHqOnly
+      ? ((await supabaseSelectFilter(
+          'items',
+          'or=(purchase_source.eq.hq,purchase_source.is.null)',
+          { order: 'id.asc', limit: 5000, select: ITEMS_SELECT }
+        )) as {
+        id?: number
+        code?: string
+        category?: string
+        name?: string
+        spec?: string
+        unit?: string
+        price?: number
+        cost?: number
+        image?: string
+        vendor?: string
+        tax?: string
+        outbound_location?: string
+        description?: string
+        purchase_source?: string
+      }[] | null)
+      : ((await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: ITEMS_SELECT })) as {
       id?: number
       code?: string
       category?: string
@@ -21,7 +47,8 @@ export async function GET() {
       tax?: string
       outbound_location?: string
       description?: string
-    }[] | null
+      purchase_source?: string
+    }[] | null)
 
     const list = (rows || [])
       .filter((row) => row?.code)
@@ -42,6 +69,7 @@ export async function GET() {
           imageUrl: String(row.image || ''),
           hasImage: !!(row.image && String(row.image).trim()),
           description: row.description ? String(row.description).trim() : '',
+          purchaseSource: ((row.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq') as 'hq' | 'store',
         }
       })
 

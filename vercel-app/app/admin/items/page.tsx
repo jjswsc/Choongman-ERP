@@ -26,6 +26,7 @@ const emptyForm: ItemFormData = {
   description: "",
   price: "",
   cost: "",
+  purchaseSource: "hq",
 }
 
 export default function ItemsPage() {
@@ -40,6 +41,7 @@ export default function ItemsPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [outboundFilter, setOutboundFilter] = React.useState("all")
+  const [purchaseSourceFilter, setPurchaseSourceFilter] = React.useState<"all" | "hq" | "store">("all")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
 
@@ -89,6 +91,7 @@ export default function ItemsPage() {
           description: p.description ?? "",
           price: String(p.price),
           cost: String(p.cost),
+          purchaseSource: p.purchaseSource ?? "hq",
         })
       }
     } else {
@@ -121,6 +124,7 @@ export default function ItemsPage() {
       taxType: formData.taxType,
       imageUrl: formData.imageUrl.trim(),
       editingCode: editingCode || undefined,
+      purchaseSource: formData.purchaseSource,
     })
     if (!res.success) {
       alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -140,6 +144,7 @@ export default function ItemsPage() {
       taxType: formData.taxType,
       imageUrl: formData.imageUrl.trim(),
       hasImage: !!formData.imageUrl.trim(),
+      purchaseSource: formData.purchaseSource,
     }
     if (editingCode) {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
@@ -170,6 +175,7 @@ export default function ItemsPage() {
       description: product.description ?? "",
       price: String(product.price),
       cost: String(product.cost),
+      purchaseSource: product.purchaseSource ?? "hq",
     })
     setEditingCode(product.code)
   }
@@ -200,9 +206,10 @@ export default function ItemsPage() {
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter
       const pLoc = (p.outboundLocation || "").trim() || "(미지정)"
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
-      return matchTerm && matchCategory && matchOutbound
+      const matchSource = purchaseSourceFilter === "all" || (p.purchaseSource ?? "hq") === purchaseSourceFilter
+      return matchTerm && matchCategory && matchOutbound && matchSource
     })
-  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter])
+  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter, purchaseSourceFilter])
 
   const categories = React.useMemo(() => {
     const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))
@@ -273,6 +280,8 @@ export default function ItemsPage() {
             setCategoryFilter={setCategoryFilter}
             outboundFilter={outboundFilter}
             setOutboundFilter={setOutboundFilter}
+            purchaseSourceFilter={purchaseSourceFilter}
+            setPurchaseSourceFilter={setPurchaseSourceFilter}
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}

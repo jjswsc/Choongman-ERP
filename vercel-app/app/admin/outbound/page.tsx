@@ -132,7 +132,7 @@ export default function OutboundPage() {
   }, [])
 
   React.useEffect(() => {
-    Promise.all([getAdminItems(), getAdminVendors(), getStockStores(), getWarehouseLocations()])
+    Promise.all([getAdminItems({ scope: 'outbound' }), getAdminVendors(), getStockStores(), getWarehouseLocations()])
       .then(([itemList, vendorList, storeList, whLocs]) => {
         setItems(Array.isArray(itemList) ? itemList : [])
         const vendors = Array.isArray(vendorList) ? vendorList : []

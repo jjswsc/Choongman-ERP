@@ -170,7 +170,7 @@ export function OrderApproval() {
       const storesInList = [...new Set(list.map((o) => o.store).filter(Boolean))]
       const hqStore = HQ_STORES[0]
       const [{ items: hqItemsArr, stock: hqStockData }] = await Promise.all([
-        getAppData(hqStore),
+        getAppData(hqStore, { scope: 'order' }),
       ])
       const hqStock = hqStockData || {}
       const hqSafeItems = (hqItemsArr || []).map((i) => ({ code: i.code, safeQty: i.safeQty ?? 0 }))
@@ -178,7 +178,7 @@ export function OrderApproval() {
       const storeDataMap: Record<string, { stock: Record<string, number>; items: { code: string; safeQty: number }[] }> = {}
       await Promise.all(
         storesInList.map(async (store) => {
-          const { items: itms, stock } = await getAppData(store)
+          const { items: itms, stock } = await getAppData(store, { scope: 'order' })
           storeDataMap[store] = {
             stock: stock || {},
             items: (itms || []).map((i) => ({ code: i.code, safeQty: i.safeQty ?? 0 })),
