@@ -290,7 +290,7 @@ export default function InboundPage() {
   }, [histStart, histEnd, histMonth, histVendor, histStore, isOffice, auth?.store])
 
   const filteredHistoryList = React.useMemo(() => {
-    if (!histPurchaseSource || histPurchaseSource === "") return historyList
+    if (!histPurchaseSource) return historyList
     return historyList.filter((i) => (i.purchaseSource ?? "hq") === histPurchaseSource)
   }, [historyList, histPurchaseSource])
 
