@@ -34,6 +34,11 @@ const nextConfig: NextConfig = {
       path.join(vercelAppDir, "node_modules"),
       "node_modules",
     ];
+    // firebase 해석 오류 방지 (모노레포/루트 실행 시 node_modules 경로 이탈)
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      firebase: path.resolve(vercelAppDir, "node_modules", "firebase"),
+    };
     // self is not defined 오류 방지 (interception-route-rewrite-manifest 등)
     if (isServer && webpack) {
       config.plugins = config.plugins || [];

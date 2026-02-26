@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { isFirebaseConfigured, getFcmToken } from '@/lib/firebase-client'
+import { isFirebaseConfigured, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
+import { useLang } from '@/lib/lang-context'
+import { useT } from '@/lib/i18n'
 import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -11,6 +13,8 @@ interface Props {
 }
 
 export function PushNotificationSetup({ store, name }: Props) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [done, setDone] = useState(false)
@@ -19,11 +23,9 @@ export function PushNotificationSetup({ store, name }: Props) {
 
   if (!isFirebaseConfigured()) {
     return (
-      <div className="overflow-hidden rounded-xl border border-dashed border-muted-foreground/30 bg-muted/30 p-4">
-        <p className="text-xs text-muted-foreground">
-          푸시 알림 기능을 사용하려면 Firebase 설정이 필요합니다.
-        </p>
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        {t('pushFirebaseRequired')}
+      </p>
     )
   }
 
@@ -32,13 +34,36 @@ export function PushNotificationSetup({ store, name }: Props) {
     setMessage(null)
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-        setMessage('알림이 차단되어 있습니다. 브라우저 설정에서 이 사이트의 알림을 허용해 주세요.')
+        setMessage(t('pushBlocked'))
         setLoading(false)
         return
       }
-      const token = await getFcmToken()
+      const permission = await requestNotificationPermission()
+      if (permission !== 'granted') {
+        setMessage(permission === 'denied' ? t('pushDenied') : t('pushGrant'))
+        setLoading(false)
+        return
+      }
+      let lastErr: string | undefined
+      let lastDetail: string | undefined
+      const token = await getFcmToken((err, detail) => {
+        lastErr = err
+        lastDetail = detail
+      })
       if (!token) {
-        setMessage('토큰을 받지 못했습니다. 브라우저 알림 설정을 확인해 주세요.')
+        const lastError = lastDetail || lastErr || ""
+        const isNetwork = lastErr === "network" || /fetch|Failed|timeout|ERR_|network/i.test(lastError)
+        const hint =
+          lastError.includes('앱 내 브라우저') || lastError.includes('Chrome 앱을 열고') || lastError.includes('push service') || lastError.includes('지원하지 않습니다')
+            ? t('pushChromeHint')
+            : lastError.includes('HTTPS') || lastError.includes('localhost') || lastError.includes('Firebase 설정')
+                ? lastError
+                : isNetwork
+                  ? t('pushNetworkHint') + (lastError ? ` (${lastError.slice(0, 50)}…)` : '')
+                  : lastError
+                    ? lastError
+                    : t('pushChromeHint')
+        setMessage(`${t('pushTokenFail')} ${hint}`)
         setLoading(false)
         return
       }
@@ -53,46 +78,39 @@ export function PushNotificationSetup({ store, name }: Props) {
         }),
       })
       if (res.ok) {
-        setMessage('푸시 알림 설정이 완료되었습니다.')
+        setMessage(t('pushDone'))
         setDone(true)
         setTimeout(() => setMessage(null), 3000)
       } else {
         const err = await res.json().catch(() => ({}))
-        setMessage(err?.message || '저장에 실패했습니다.')
+        setMessage(err?.message || t('pushSaveFail'))
       }
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : '오류가 발생했습니다.')
+      setMessage(e instanceof Error ? e.message : t('pushError'))
     }
     setLoading(false)
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-primary/20 bg-primary/5 p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <Bell className="h-4 w-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">푸시 알림</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            공지·주문 승인 등 알림을 휴대폰으로 받으시려면 아래를 눌러 주세요.
-          </p>
-          {message && (
-            <p className={`mt-2 text-xs ${done ? 'text-green-600' : 'text-amber-600'}`}>{message}</p>
-          )}
-          {!done && (
-            <Button
-              type="button"
-              size="sm"
-              className="mt-3 h-9 px-4 text-xs font-medium"
-              onClick={handleEnablePush}
-              disabled={loading}
-            >
-              {loading ? '설정 중...' : '푸시 알림 받기'}
-            </Button>
-          )}
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2">
+      <Bell className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="text-xs text-muted-foreground">{t('pushDesc')}</span>
+      <span className="text-[10px] text-muted-foreground/70">({t('pushHint')})</span>
+      {!done && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 px-2.5 text-[11px]"
+          onClick={handleEnablePush}
+          disabled={loading}
+        >
+          {loading ? t('pushLoading') : t('pushBtn')}
+        </Button>
+      )}
+      {message && (
+        <span className={`w-full text-[11px] ${done ? 'text-green-600' : 'text-amber-600'}`}>{message}</span>
+      )}
     </div>
   )
 }
