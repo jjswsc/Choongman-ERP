@@ -268,7 +268,7 @@ export default function OutboundPage() {
         spec: c.spec,
         qty: c.qty,
       }))
-      const res = await forceOutboundBatch(list)
+      const res = await forceOutboundBatch(list, { processorName: auth?.user })
       if (res.success) {
         alert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
         setCart([])

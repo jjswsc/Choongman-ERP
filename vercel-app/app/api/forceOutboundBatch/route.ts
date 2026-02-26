@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsertMany } from '@/lib/supabase-server'
+import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 
 /** 강제 출고 - 본사 재고 차감 + 매장 재고 증가 (ForcePush + ForceOutbound) */
 export async function POST(request: NextRequest) {
@@ -8,7 +9,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const list = Array.isArray(body) ? body : (body?.list || []) as {
+    const list = (Array.isArray(body) ? body : (body?.list || [])) as {
       date?: string
       deliveryDate?: string
       store: string
@@ -70,6 +71,33 @@ export async function POST(request: NextRequest) {
 
     await supabaseInsertMany('stock_logs', rows)
     const count = Math.floor(rows.length / 2)
+
+    // 앱 내 공지: 출고된 각 매장의 매니저에게 알림
+    try {
+      const storeToCount = new Map<string, number>()
+      for (const d of list) {
+        const store = String(d.store || '').trim()
+        if (!store) continue
+        const qty = parseFloat(String(d.qty || 0).replace(/,/g, '')) || 0
+        if (qty <= 0) continue
+        storeToCount.set(store, (storeToCount.get(store) || 0) + 1)
+      }
+      const processorName = String(body?.processorName ?? body?.sender ?? '본사').trim()
+      for (const [store, itemCount] of storeToCount) {
+        const managers = await getManagersByStore(store)
+        if (managers.length > 0) {
+          await sendNoticeToRecipients({
+            title: `${store} 강제 출고 완료`,
+            content: `${itemCount}건의 품목이 해당 매장으로 출고되었습니다. 발주 내역에서 확인해 주세요.`,
+            recipients: managers,
+            sender: processorName || '본사',
+          })
+        }
+      }
+    } catch (noticeErr) {
+      console.error('forceOutboundBatch notice:', noticeErr)
+    }
+
     return NextResponse.json(
       { success: true, message: `✅ ${count}건의 강제 출고 및 매장 재고 반영이 완료되었습니다.` },
       { headers }

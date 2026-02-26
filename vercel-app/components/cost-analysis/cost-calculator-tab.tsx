@@ -85,8 +85,9 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       const price = initialLoadFromRow.priceDelivery ?? initialLoadFromRow.priceHall
       setMenuItem({
         ...sampleMenuItem,
+        menuCode: initialLoadFromRow.menuCode ?? "",
         menuName: initialLoadFromRow.menuName + (initialLoadFromRow.optionName ? ` (${initialLoadFromRow.optionName})` : ""),
-        category: initialLoadFromRow.category,
+        category: initialLoadFromRow.category ?? "",
         inclVat: price,
       })
       setFoodItems(food)
@@ -99,6 +100,11 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
   const foodSubTotal = useMemo(() => calculateSubTotal(foodItems), [foodItems])
   const packagingSubTotal = useMemo(() => calculateSubTotal(packagingItems), [packagingItems])
+
+  const categoriesFromMenus = useMemo(() => {
+    const set = new Set(menuRows.map((r) => r.category).filter(Boolean))
+    return Array.from(set).sort()
+  }, [menuRows])
 
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
@@ -231,7 +237,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6 min-w-0">
-          <MenuInfoPanel menuItem={menuItem} onMenuItemChange={setMenuItem} />
+          <MenuInfoPanel menuItem={menuItem} onMenuItemChange={setMenuItem} categories={categoriesFromMenus} />
           <Tabs defaultValue="dine-in" className="space-y-4">
             <TabsList className="bg-secondary border border-border">
               <TabsTrigger value="dine-in" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">

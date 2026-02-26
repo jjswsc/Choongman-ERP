@@ -17,11 +17,14 @@ import type { MenuItem } from "@/lib/cost-data"
 interface MenuInfoPanelProps {
   menuItem: MenuItem
   onMenuItemChange: (item: MenuItem) => void
+  /** 카테고리 목록 (메뉴 관리에서 사용 중인 값) */
+  categories?: string[]
 }
 
-export function MenuInfoPanel({ menuItem, onMenuItemChange }: MenuInfoPanelProps) {
+export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [] }: MenuInfoPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const categoryOptions = categories.length > 0 ? categories : ["Size S", "Size M", "Size L", "Set"]
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
@@ -33,16 +36,17 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange }: MenuInfoPanelProps
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
         <div className="space-y-1.5">
-          <Label htmlFor="itemNo" className="text-xs text-muted-foreground">
-            {t("posCostItemNo")}
+          <Label htmlFor="menuCode" className="text-xs text-muted-foreground">
+            {t("posMenuCode")}
           </Label>
           <Input
-            id="itemNo"
-            type="number"
-            value={menuItem.itemNo}
+            id="menuCode"
+            type="text"
+            value={menuItem.menuCode}
             onChange={(e) =>
-              onMenuItemChange({ ...menuItem, itemNo: parseInt(e.target.value) || 0 })
+              onMenuItemChange({ ...menuItem, menuCode: e.target.value })
             }
+            placeholder={t("posMenuCode")}
             className="h-9 font-mono bg-secondary/50 border-border"
           />
         </div>
@@ -56,13 +60,14 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange }: MenuInfoPanelProps
             onValueChange={(val) => onMenuItemChange({ ...menuItem, category: val })}
           >
             <SelectTrigger className="h-9 bg-secondary/50 border-border">
-              <SelectValue />
+              <SelectValue placeholder={t("posMenuCategoryAll") || "전체"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Size S">Size S</SelectItem>
-              <SelectItem value="Size M">Size M</SelectItem>
-              <SelectItem value="Size L">Size L</SelectItem>
-              <SelectItem value="Set">Set</SelectItem>
+              {categoryOptions.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

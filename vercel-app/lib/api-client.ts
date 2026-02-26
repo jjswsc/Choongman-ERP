@@ -211,6 +211,8 @@ export interface OrderHistoryItem {
   userName?: string
   userNick?: string
   rejectReason?: string
+  /** 강제 출고(출고 입력에서 직접 입력) 여부 */
+  isForceOutbound?: boolean
 }
 
 export async function getMyOrderHistory(params: {
@@ -369,6 +371,7 @@ export async function processOrderDecision(params: {
   deliveryDatesByOutbound?: Record<string, string>
   rejectReason?: string
   userRole?: string
+  processorName?: string
   updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
 }) {
   const res = await apiFetch('/api/processOrderDecision', {
@@ -2624,19 +2627,23 @@ export interface OutboundHistoryItem {
   isUnreceived?: boolean
 }
 
-export async function forceOutboundBatch(list: {
-  date?: string
-  deliveryDate?: string
-  store: string
-  code: string
-  name?: string
-  spec?: string
-  qty: number | string
-}[]) {
+export async function forceOutboundBatch(
+  list: {
+    date?: string
+    deliveryDate?: string
+    store: string
+    code: string
+    name?: string
+    spec?: string
+    qty: number | string
+  }[],
+  options?: { processorName?: string }
+) {
+  const payload = options?.processorName ? { list, processorName: options.processorName } : list
   const res = await apiFetch('/api/forceOutboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(list),
+    body: JSON.stringify(payload),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

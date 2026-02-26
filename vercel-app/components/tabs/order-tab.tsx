@@ -236,6 +236,7 @@ export function OrderTab() {
   }
 
   const canReceive = (o: OrderHistoryItem) =>
+    !o.isForceOutbound &&
     o.status === "Approved" &&
     o.deliveryStatus !== "배송완료" &&
     o.deliveryStatus !== "배송 완료" &&
@@ -798,6 +799,11 @@ export function OrderTab() {
                               )}
                               {o.deliveryDate && (
                                 <span className="text-xs text-muted-foreground">{t("deliveryDate")} {o.deliveryDate}</span>
+                              )}
+                              {o.isForceOutbound && (
+                                <Badge variant="outline" className="text-sm px-2.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-300">
+                                  {t("outTypeForce") || "강제출고"}
+                                </Badge>
                               )}
                               <Badge
                                 variant={o.status === "Rejected" ? "destructive" : "outline"}

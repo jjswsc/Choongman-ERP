@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { sendFcmToRecipients } from '@/lib/firebase-admin'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -76,6 +77,19 @@ export async function POST(request: NextRequest) {
       sender,
       attachments: attachmentsStr,
     })
+
+    // FCM 푸시 알림 (특정 수신자 지정 시)
+    if (recipientList.length > 0) {
+      const recipients = recipientList.map((s) => {
+        const [store, name] = s.split('|')
+        return { store: store || '', name: name || '' }
+      })
+      sendFcmToRecipients({
+        title,
+        body: content.slice(0, 100),
+        recipients,
+      }).catch((e) => console.error('sendNotice FCM:', e))
+    }
 
     return NextResponse.json(
       { success: true, message: '공지사항이 등록되었습니다.' },

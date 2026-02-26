@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { AppNavigation } from "@/components/app-navigation"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
+import { PushNotificationRegister } from "@/components/push-notification-register"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import { HomeTab } from "@/components/tabs/home-tab"
@@ -39,6 +40,7 @@ export default function DashboardPage() {
 
   return (
     <StoreViewProvider>
+      <PushNotificationRegister store={auth.store} name={auth.user} />
       <div className="mx-auto min-h-screen max-w-lg bg-background">
         <AppHeader />
         <MobileStoreSelectorBar />

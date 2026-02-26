@@ -13,7 +13,8 @@ export interface RecipeItem {
 }
 
 export interface MenuItem {
-  itemNo: number
+  /** POS 메뉴 코드 (메뉴 관리의 코드 = 품번) */
+  menuCode: string
   category: string
   menuName: string
   description: string
@@ -83,7 +84,7 @@ export const samplePackagingRecipe: RecipeItem[] = [
 ]
 
 export const sampleMenuItem: MenuItem = {
-  itemNo: 90,
+  menuCode: "",
   category: "Size S",
   menuName: "Snow Onion (Size S)",
   description: "สโนว์อ้อเนี่ยน ไซส์ S",

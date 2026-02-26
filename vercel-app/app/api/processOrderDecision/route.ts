@@ -7,10 +7,12 @@
  * - updatedCart: 프론트에서 수정한 수량. checked=true인 행만 승인. cart_json 덮어씀
  * - manager 권한은 승인 불가 (userRole 검사)
  * - Approved 시 receivable_transactions에 미수금 생성
+ * - 처리 완료 시 발주 직원 + 해당 매장 매니저에게 앱 내 공지 자동 발송
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
+import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
 
@@ -35,6 +37,7 @@ export async function POST(request: NextRequest) {
     }
     const rejectReason = body.rejectReason != null ? String(body.rejectReason).trim() : ''
     const userRole = String(body.userRole ?? '').toLowerCase()
+    const processorName = String(body.processorName ?? body.userName ?? '본사').trim()
     const updatedCart = Array.isArray(body.updatedCart) ? body.updatedCart : null
 
     if (userRole.includes('manager')) {
@@ -138,6 +141,43 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('orders', orderId, patch)
+
+    // 앱 내 공지: 발주 직원 + 해당 매장 매니저에게 알림
+    try {
+      const storeName = String((orders[0] as { store_name?: string }).store_name || '').trim()
+      const orderUserName = String((orders[0] as { user_name?: string }).user_name || '').trim()
+      const recipients: { store: string; name: string }[] = []
+      if (storeName && orderUserName) {
+        recipients.push({ store: storeName, name: orderUserName })
+      }
+      const managers = await getManagersByStore(storeName)
+      for (const m of managers) {
+        if (!recipients.some((r) => r.store === m.store && r.name === m.name)) {
+          recipients.push(m)
+        }
+      }
+      if (recipients.length > 0) {
+        const titleMap: Record<string, string> = {
+          Approved: `주문 #${orderId} 승인되었습니다`,
+          Rejected: `주문 #${orderId} 반려되었습니다`,
+          Hold: `주문 #${orderId} 보류되었습니다`,
+        }
+        const contentMap: Record<string, string> = {
+          Approved: `${storeName} 발주가 승인되었습니다. 배송 예정일을 확인해 주세요.`,
+          Rejected: rejectReason ? `사유: ${rejectReason}` : '본사에서 반려 처리했습니다.',
+          Hold: '추가 확인 후 진행 예정입니다.',
+        }
+        await sendNoticeToRecipients({
+          title: titleMap[decision] || `주문 #${orderId} ${decision}`,
+          content: contentMap[decision] || '',
+          recipients,
+          sender: processorName || '본사',
+        })
+      }
+    } catch (noticeErr) {
+      console.error('processOrderDecision notice:', noticeErr)
+    }
+
     if (decision === 'Approved') {
       const updated = patch as { total?: number; delivery_date?: string; cart_json?: string }
       const total = Number(updated.total ?? 0)

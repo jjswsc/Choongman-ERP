@@ -1039,9 +1039,14 @@ function getVendorStats(vendorName) {
 
 function getMyOrderHistory(store, startStr, endStr) {
   try {
+    var startDate = new Date(startStr); startDate.setHours(0, 0, 0, 0);
+    var endDate = new Date(endStr); endDate.setHours(23, 59, 59, 999);
     var endIso = endStr + "T23:59:59.999Z";
     var filter = "store_name=eq." + encodeURIComponent(store) + "&order_date=gte." + encodeURIComponent(startStr) + "&order_date=lte." + encodeURIComponent(endIso);
     var orderRows = supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 });
+    var itemList = getCommonItemData();
+    var priceByCode = {};
+    for (var k = 0; k < itemList.length; k++) priceByCode[itemList[k].code] = itemList[k].price || 0;
     var list = [];
     for (var i = 0; i < orderRows.length; i++) {
       var o = orderRows[i];
@@ -1066,6 +1071,39 @@ function getMyOrderHistory(store, startStr, endStr) {
       var rejectReason = String(o.reject_reason || "").trim() || undefined;
       list.push({ id: o.id, orderRowId: o.id, date: Utilities.formatDate(orderDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: Number(o.total) || 0, status: o.status || "Pending", deliveryStatus: deliveryStatus, items: items, userName: userName, rejectReason: rejectReason });
     }
+    // 강제 출고(ForcePush) 병합: 출고 입력에서 직접 입력한 건
+    try {
+      var fpFilter = "location=eq." + encodeURIComponent(store) + "&log_type=eq.ForcePush";
+      var fpRows = supabaseSelectFilter('stock_logs', fpFilter, { order: 'log_date.desc', limit: 300 });
+      var groups = {};
+      for (var f = 0; f < (fpRows || []).length; f++) {
+        var row = fpRows[f];
+        var rowDate = new Date(row.log_date);
+        if (isNaN(rowDate.getTime()) || rowDate < startDate || rowDate > endDate) continue;
+        var key = rowDate.toISOString() + "\t" + (row.delivery_status || "");
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(row);
+      }
+      for (var gk in groups) {
+        var batch = groups[gk];
+        var first = batch[0];
+        var rowDate = new Date(first.log_date);
+        var items = [];
+        var total = 0;
+        for (var b = 0; b < batch.length; b++) {
+          var r = batch[b];
+          var code = String(r.item_code || "").trim();
+          var qty = Math.abs(Number(r.qty) || 0);
+          var price = priceByCode[code] != null ? priceByCode[code] : 0;
+          items.push({ name: String(r.item_name || "").trim(), code: code, qty: qty, price: price, receivedQty: qty });
+          total += price * qty;
+        }
+        var summary = items.length > 0 ? items[0].name + (items.length > 1 ? " 외 " + (items.length - 1) + "건" : "") : "강제출고";
+        var deliveryDate = (first.delivery_status && /^\d{4}-\d{2}-\d{2}/.test(String(first.delivery_status))) ? String(first.delivery_status).substring(0, 10) : Utilities.formatDate(rowDate, "GMT+7", "yyyy-MM-dd");
+        list.push({ id: -Math.abs(rowDate.getTime()), orderRowId: 0, date: Utilities.formatDate(rowDate, "GMT+7", "yyyy-MM-dd"), deliveryDate: deliveryDate, summary: summary, total: total, status: "Approved", deliveryStatus: "배송완료", items: items, isForceOutbound: true });
+      }
+    } catch (fpErr) { Logger.log('getMyOrderHistory ForcePush: ' + fpErr.message); }
+    list.sort(function(a, b) { var da = new Date(a.date + "T" + (a.deliveryDate || "00:00:00")); var db = new Date(b.date + "T" + (b.deliveryDate || "00:00:00")); return db.getTime() - da.getTime(); });
     return list;
   } catch (e) {
     return [];

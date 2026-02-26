@@ -322,6 +322,7 @@ export function OrderApproval() {
         deliveryDatesByOutbound: decision === "Approved" && Object.keys(datesByOutbound).length > 0 ? datesByOutbound : undefined,
         rejectReason: decision === "Rejected" ? (rejectReasonByOrderId[idStr] || "").trim() : undefined,
         userRole: auth?.role,
+        processorName: auth?.user,
         updatedCart: decision === "Approved" ? updatedCart : undefined,
       })
       if (!res.success) {

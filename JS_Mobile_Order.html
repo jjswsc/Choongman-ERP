@@ -192,7 +192,8 @@ function updateCart(type){
         var deliveryStatusBadge = "";
         if (o.deliveryStatus === "배송완료" || o.deliveryStatus === "배송 완료") deliveryStatusBadge = "<span class=\"status-badge st-Received\" style=\"margin-left:4px;\">" + statusDelivered + "</span>";
         else if (o.status === "Approved" && o.deliveryStatus === "배송중") deliveryStatusBadge = "<span class=\"status-badge\" style=\"background:#2196F3;margin-left:4px;\">" + statusInTransit + "</span>";
-        var btn = o.status == "Approved" && o.deliveryStatus !== "배송완료" && o.deliveryStatus !== "배송 완료" ? "<button class=\"login-btn\" style=\"padding:8px;margin-top:5px;background:#E91E63;\" onclick=\"doReceive(" + o.id + ")\">" + recTxt + "</button>" : ""; 
+        var forceBadge = o.isForceOutbound ? "<span class=\"status-badge\" style=\"background:#FF9800;color:#fff;margin-left:4px;\">" + ((typeof I18N !== "undefined" && I18N[currentLang] && I18N[currentLang].outTypeForce) ? I18N[currentLang].outTypeForce : "강제출고") + "</span>" : "";
+        var btn = !o.isForceOutbound && o.status == "Approved" && o.deliveryStatus !== "배송완료" && o.deliveryStatus !== "배송 완료" ? "<button class=\"login-btn\" style=\"padding:8px;margin-top:5px;background:#E91E63;\" onclick=\"doReceive(" + o.id + ")\">" + recTxt + "</button>" : ""; 
         var items = "<div class='detail-list'>"; 
         o.items.forEach(function(i) { var dispQty = (i.receivedQty != null ? i.receivedQty : i.qty); items += "<div class='detail-item'><span>" + i.name + "</span><span>x" + dispQty + "</span></div>"; }); 
         items += "</div>"; 
@@ -208,7 +209,7 @@ function updateCart(type){
           var reasonLabel = (typeof I18N !== "undefined" && I18N[currentLang] && (I18N[currentLang].reasonPh || I18N[currentLang].m_reason_ph)) ? (I18N[currentLang].reasonPh || I18N[currentLang].m_reason_ph) : "사유";
           rejectReasonHtml = "<div style=\"font-size:11px;color:#C62828;margin-top:4px;\">" + reasonLabel + ": " + (o.rejectReason || "").replace(/</g, "&lt;") + "</div>";
         }
-        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + rejectReasonHtml + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
+        c.innerHTML += "<div class=\"history-card\"><div class=\"history-header\">" + dateLine + forceBadge + "<span class=\"status-badge st-" + o.status + "\">" + o.status + "</span>" + deliveryStatusBadge + "</div>" + rejectReasonHtml + items + "<div style=\"text-align:right;font-weight:bold;color:#E65100;\">" + Number(o.total).toLocaleString() + " ฿</div>" + btn + "</div>"; 
       }); 
     }).getMyOrderHistory(loggedInStore, s, e); 
   }

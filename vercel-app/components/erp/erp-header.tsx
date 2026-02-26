@@ -4,7 +4,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User } from "lucide-react"
+import { Bell, Search, User, Smartphone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -77,6 +77,13 @@ export function ErpHeader() {
     <header className="sticky top-0 z-30 flex h-14 items-center border-b bg-card px-4 print:hidden">
       <div className="flex items-center gap-3">
         <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:text-foreground" />
+        <Link
+          href="/"
+          className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title={t("goToMobile") || "모바일"}
+        >
+          <Smartphone className="h-4 w-4" />
+        </Link>
         <Separator orientation="vertical" className="h-5" />
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-foreground">{title}</h2>

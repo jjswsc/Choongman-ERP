@@ -17,6 +17,8 @@ export interface OrderHistoryItem {
   userName?: string
   userNick?: string
   rejectReason?: string
+  /** 강제 출고(출고 입력에서 직접 입력) 여부 - 발주 없이 본사가 직접 출고한 건 */
+  isForceOutbound?: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -32,6 +34,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const startD = new Date(startStr)
+    startD.setHours(0, 0, 0, 0)
+    const endD = new Date(endStr)
+    endD.setHours(23, 59, 59, 999)
+
     const endIso = endStr + 'T23:59:59.999Z'
     const filter =
       `store_name=eq.${encodeURIComponent(store)}` +
@@ -57,14 +64,18 @@ export async function GET(request: NextRequest) {
     }[]
 
     const itemMap: Record<string, string> = {}
+    const priceMap: Record<string, number> = {}
     try {
       const itemRows = (await supabaseSelect('items', {
-        select: 'code,outbound_location',
+        select: 'code,outbound_location,price',
         limit: 5000,
-      })) as { code?: string; outbound_location?: string }[]
+      })) as { code?: string; outbound_location?: string; price?: number }[]
       for (const it of itemRows || []) {
         const c = String(it.code || '').trim()
-        if (c) itemMap[c] = String(it.outbound_location || '').trim() || '(미지정)'
+        if (c) {
+          itemMap[c] = String(it.outbound_location || '').trim() || '(미지정)'
+          priceMap[c] = Number(it.price) || 0
+        }
       }
     } catch {}
 
@@ -143,6 +154,82 @@ export async function GET(request: NextRequest) {
         userNick: nameToNick[String(o.user_name || '').trim()] || undefined,
         rejectReason: String(o.reject_reason || '').trim() || undefined,
       }
+    })
+
+    // 강제 출고(ForcePush) 병합: 출고 입력에서 직접 입력한 건 - stock_logs
+    try {
+      const fpFilter =
+        `location=eq.${encodeURIComponent(store)}` +
+        `&log_type=eq.ForcePush`
+      const forcePushRows = (await supabaseSelectFilter('stock_logs', fpFilter, {
+        order: 'log_date.desc',
+        limit: 300,
+      })) as {
+        log_date?: string
+        item_code?: string
+        item_name?: string
+        qty?: number
+        delivery_status?: string
+      }[]
+
+      const groups = new Map<string, typeof forcePushRows>()
+      for (const row of forcePushRows || []) {
+        const rowDate = new Date(row.log_date || '')
+        if (isNaN(rowDate.getTime()) || rowDate < startD || rowDate > endD) continue
+        const key = rowDate.toISOString() + '\t' + (row.delivery_status || '')
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(row)
+      }
+
+      for (const [, batch] of groups) {
+        const first = batch[0]
+        const rowDate = new Date(first.log_date || '')
+        const items = batch.map((r, idx) => {
+          const code = String(r.item_code || '').trim()
+          const qty = Math.abs(Number(r.qty) || 0)
+          const price = priceMap[code] ?? 0
+          return {
+            name: String(r.item_name || '').trim(),
+            code,
+            qty,
+            price,
+            receivedQty: qty,
+            outboundLocation: code ? (itemMap[code] || '(미지정)') : '(미지정)',
+            index: idx,
+          }
+        })
+        const total = items.reduce((s, i) => s + (i.price ?? 0) * (i.qty ?? 0), 0)
+        const summary =
+          items.length > 0
+            ? (items[0].name || '') + (items.length > 1 ? ` 외 ${items.length - 1}건` : '')
+            : '강제출고'
+        const deliveryDate =
+          first.delivery_status && /^\d{4}-\d{2}-\d{2}/.test(String(first.delivery_status))
+            ? String(first.delivery_status).slice(0, 10)
+            : rowDate.toISOString().slice(0, 10)
+
+        list.push({
+          id: -Math.abs(rowDate.getTime()),
+          orderRowId: 0,
+          date: rowDate.toISOString().slice(0, 10),
+          deliveryDate,
+          summary,
+          total,
+          status: 'Approved',
+          deliveryStatus: '배송완료',
+          items,
+          receivedIndices: items.map((_, i) => i),
+          isForceOutbound: true,
+        })
+      }
+    } catch (fpErr) {
+      console.error('getMyOrderHistory ForcePush merge:', fpErr)
+    }
+
+    list.sort((a, b) => {
+      const da = new Date(a.date + 'T' + (a.deliveryDate || '00:00:00'))
+      const db = new Date(b.date + 'T' + (b.deliveryDate || '00:00:00'))
+      return db.getTime() - da.getTime()
     })
 
     return NextResponse.json(list, { headers })
