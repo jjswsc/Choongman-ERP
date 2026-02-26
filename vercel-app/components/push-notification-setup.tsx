@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { isFirebaseConfigured, getFcmToken } from '@/lib/firebase-client'
 import { Bell } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   store: string
