@@ -21,8 +21,10 @@ export interface OutboundHistoryItem {
   receiveImageUrls?: string[]
   receivedIndices?: number[]
   totalOrderItems?: number
-  /** 원본 주문 수량 (수령 시 조정된 경우 표시용) */
+  /** 원본 주문 수량 (수령 시 조정된 경우 표시용) - 하위 호환 */
   originalOrderQty?: number
+  /** 수량 변경 이력 [원본, 승인후?, 수령후] - 3단계 표기용 */
+  qtyStages?: number[]
   /** 품목별 출고지(창고) - items.outbound_location */
   outboundLocation?: string
   /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
@@ -171,6 +173,7 @@ export async function GET(request: NextRequest) {
         received_indices?: number[]
         received_qty_json?: Record<string, number>
         original_order_qty_json?: Record<string, number>
+        approved_original_qty_json?: Record<string, number>
         cart?: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
       }> = {}
 
@@ -184,6 +187,7 @@ export async function GET(request: NextRequest) {
           received_indices?: string | number[]
           received_qty_json?: string
           original_order_qty_json?: string
+          approved_original_qty_json?: string
           cart_json?: string
         }[]
         if (ords && ords.length > 0) {
@@ -203,6 +207,10 @@ export async function GET(request: NextRequest) {
           let origQtyMap: Record<string, number> = {}
           try {
             if (o.original_order_qty_json) origQtyMap = JSON.parse(String(o.original_order_qty_json)) || {}
+          } catch {}
+          let approvedOrigQtyMap: Record<string, number> = {}
+          try {
+            if (o.approved_original_qty_json) approvedOrigQtyMap = JSON.parse(String(o.approved_original_qty_json)) || {}
           } catch {}
           let cart: { code?: string; name?: string; qty?: number }[] = []
           try {
@@ -226,6 +234,7 @@ export async function GET(request: NextRequest) {
             received_indices: recIdx,
             received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
             original_order_qty_json: Object.keys(origQtyMap).length > 0 ? origQtyMap : undefined,
+            approved_original_qty_json: Object.keys(approvedOrigQtyMap).length > 0 ? approvedOrigQtyMap : undefined,
             cart,
           }
         }
@@ -285,9 +294,27 @@ export async function GET(request: NextRequest) {
         if (usedByOrder[uk]) continue
         usedByOrder[uk] = true
         const cartItem = cart[matchIdx]
-        const originalQty = o.original_order_qty_json?.[String(matchIdx)] ?? Number(cartItem?.qty ?? 0)
-        if (originalQty > 0 && originalQty !== r.qty) {
-          r.originalOrderQty = originalQty
+        const finalQty = r.qty
+        const recQty = o.received_qty_json?.[String(matchIdx)] ?? finalQty
+        const origAtReceive = o.original_order_qty_json?.[String(matchIdx)]
+        const approvedOrig = o.approved_original_qty_json?.[String(matchIdx)]
+        const cartQty = Number(cartItem?.qty ?? 0)
+        const qtyStages: number[] = []
+        if (approvedOrig != null && approvedOrig !== cartQty) {
+          qtyStages.push(approvedOrig)
+        }
+        const midQty = origAtReceive ?? cartQty
+        if (qtyStages.length > 0) {
+          if (midQty !== approvedOrig && midQty !== finalQty) qtyStages.push(midQty)
+        } else if (origAtReceive != null && origAtReceive !== finalQty) {
+          qtyStages.push(origAtReceive)
+        }
+        if (qtyStages.length > 0 && finalQty !== (qtyStages[qtyStages.length - 1] ?? 0)) {
+          qtyStages.push(finalQty)
+        }
+        if (qtyStages.length >= 2) {
+          r.qtyStages = qtyStages
+          if (qtyStages.length === 2) r.originalOrderQty = qtyStages[0]
         }
         filteredList.push(r)
       }

@@ -27,7 +27,7 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
-  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; outboundLocation?: string; deliveryDate?: string; isUnreceived?: boolean }[]
+  items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; qtyStages?: number[]; outboundLocation?: string; deliveryDate?: string; isUnreceived?: boolean }[]
   itemsSummary: string
   totalQty: number
   totalAmt: number
@@ -345,7 +345,18 @@ function TableRow({
                       <td className="px-4 py-2 text-center text-muted-foreground">{d.outboundLocation || "-"}</td>
                       <td className="px-4 py-2 text-center text-muted-foreground whitespace-nowrap">{d.deliveryDate || "-"}</td>
                       <td className="px-4 py-2 text-center font-medium tabular-nums">
-                        {d.originalOrderQty != null && d.originalOrderQty !== d.qty ? (
+                        {d.qtyStages && d.qtyStages.length >= 2 ? (
+                          <span className="text-card-foreground">
+                            {d.qtyStages.map((stage, i) => (
+                              <span key={i}>
+                                {i > 0 && <span className="mx-1 text-muted-foreground">→</span>}
+                                <span className={i < d.qtyStages!.length - 1 ? "text-destructive line-through" : ""}>
+                                  {stage.toLocaleString()}
+                                </span>
+                              </span>
+                            ))}
+                          </span>
+                        ) : d.originalOrderQty != null && d.originalOrderQty !== d.qty ? (
                           <>
                             <span className="text-destructive line-through">{d.originalOrderQty.toLocaleString()}</span>
                             <span className="mx-1 text-muted-foreground">→</span>

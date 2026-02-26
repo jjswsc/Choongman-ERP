@@ -2622,6 +2622,8 @@ export interface OutboundHistoryItem {
   receiveImageUrls?: string[]
   receivedIndices?: number[]
   originalOrderQty?: number
+  /** 수량 변경 이력 [원본, 승인후?, 수령후] - 3단계 표기용 */
+  qtyStages?: number[]
   totalOrderItems?: number
   /** 미수령 품목 여부 (부분 배송 시 누락 품목) */
   isUnreceived?: boolean

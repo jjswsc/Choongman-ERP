@@ -147,7 +147,16 @@ export async function GET(request: NextRequest) {
         userNick: userNick || undefined,
         total: Number(o.total) || 0,
         status: o.status || 'Pending',
-        deliveryStatus: (o.received_indices ? '일부배송완료' : null) ?? o.delivery_status ?? (o.status === 'Approved' ? '배송중' : ''),
+        deliveryStatus: (() => {
+          const ds = (o.delivery_status || '').trim()
+          if (ds === '배송완료' || ds === '배송 완료' || ds === '일부배송완료' || ds === '일부 배송 완료') {
+            return ds === '일부 배송 완료' ? '일부배송완료' : (ds === '배송 완료' ? '배송완료' : ds)
+          }
+          if (o.received_indices && receivedIndices.length > 0) {
+            return receivedIndices.length >= items.length ? '배송완료' : '일부배송완료'
+          }
+          return o.status === 'Approved' ? '배송중' : ''
+        })(),
         deliveryDate: legacyDeliveryDate || firstFromOutbound,
         deliveryDatesByOutbound,
         items: itemsWithOriginal,
