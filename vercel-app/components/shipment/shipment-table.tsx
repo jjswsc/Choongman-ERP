@@ -32,6 +32,7 @@ export interface ShipmentTableRow {
   totalQty: number
   totalAmt: number
   receiveImageUrl?: string
+  receiveImageUrls?: string[]
 }
 
 interface ShipmentTableProps {
@@ -42,7 +43,7 @@ interface ShipmentTableProps {
   selectedIndices: Set<number>
   onToggleSelect: (idx: number) => void
   onToggleSelectAll: () => void
-  onPhotoClick?: (url: string) => void
+  onPhotoClick?: (urls: string[]) => void
   /** 비본사용: 단순 { date, item, qty, amount } */
   usageRows?: { date: string; item: string; qty: number; amount: number }[]
 }
@@ -197,7 +198,7 @@ function TableRow({
   isSelected: boolean
   onToggleExpand: () => void
   onToggleSelect: () => void
-  onPhotoClick?: (url: string) => void
+  onPhotoClick?: (urls: string[]) => void
   getOrderTypeBadge: (type: string) => StatusBadgeKey | null
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
@@ -258,15 +259,18 @@ function TableRow({
         </td>
         <td className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1.5">
-            {row.receiveImageUrl ? (
+            {(() => {
+              const urls = (row.receiveImageUrls?.length ? row.receiveImageUrls : row.receiveImageUrl ? [row.receiveImageUrl] : []) as string[]
+              return urls.length > 0 ? (
               <button
                 type="button"
-                onClick={() => onPhotoClick?.(row.receiveImageUrl!)}
+                onClick={() => onPhotoClick?.(urls)}
                 className="inline-block w-9 h-9 rounded overflow-hidden border border-border hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <img src={row.receiveImageUrl} alt={t("outPhotoView")} className="w-full h-full object-cover" />
+                <img src={urls[0]} alt={t("outPhotoView")} className="w-full h-full object-cover" />
               </button>
-            ) : (
+              ) : null
+            })() ?? (
               <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
             )}
           </div>

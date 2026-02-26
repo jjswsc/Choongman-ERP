@@ -57,6 +57,59 @@ import {
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
+function ReceivePhotoGallery({ urls }: { urls: string[] }) {
+  const [idx, setIdx] = React.useState(0)
+  const current = urls[idx] ?? urls[0]
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <div className="flex items-center justify-center bg-black/30 min-h-[200px] rounded-lg">
+        <img
+          src={current}
+          alt=""
+          className="max-w-full max-h-[70vh] object-contain rounded"
+        />
+      </div>
+      {urls.length > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIdx((i) => (i <= 0 ? urls.length - 1 : i - 1))}
+          >
+            ‹
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {idx + 1} / {urls.length}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIdx((i) => (i >= urls.length - 1 ? 0 : i + 1))}
+          >
+            ›
+          </Button>
+        </div>
+      )}
+      {urls.length > 1 && (
+        <div className="flex flex-wrap justify-center gap-1">
+          {urls.map((url, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIdx(i)}
+              className={`h-12 w-12 rounded border-2 overflow-hidden shrink-0 ${
+                i === idx ? "border-primary" : "border-transparent opacity-60 hover:opacity-100"
+              }`}
+            >
+              <img src={url} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface OutboundCartItem {
   date: string
   deliveryDate: string
@@ -96,7 +149,7 @@ export default function OutboundPage() {
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
   const [itemSearch, setItemSearch] = React.useState("")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
-  const [photoModalUrl, setPhotoModalUrl] = React.useState<string | null>(null)
+  const [photoModalUrls, setPhotoModalUrls] = React.useState<string[]>([])
 
   const [whStart, setWhStart] = React.useState("")
   const [whEnd, setWhEnd] = React.useState("")
@@ -498,6 +551,7 @@ export default function OutboundPage() {
       items: OutboundHistoryItem[]
       invoiceNo?: string
       receiveImageUrl?: string
+      receiveImageUrls?: string[]
     }> = {}
     for (const i of historyList) {
       const k = `${i.date}_${i.target}_${i.type}_${i.orderRowId || ""}`
@@ -515,7 +569,8 @@ export default function OutboundPage() {
       g[k].totalQty += i.qty
       g[k].totalAmt += (i.amount || 0)
       if (i.invoiceNo) g[k].invoiceNo = i.invoiceNo
-      if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
+      if (i.receiveImageUrls?.length) g[k].receiveImageUrls = i.receiveImageUrls
+      else if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
     }
     return Object.values(g).sort((a, b) => (b.date + b.target).localeCompare(a.date + a.target))
   }, [historyList, isOffice])
@@ -583,7 +638,8 @@ export default function OutboundPage() {
         itemsSummary,
         totalQty: g.totalQty,
         totalAmt: g.totalAmt,
-        receiveImageUrl: g.receiveImageUrl,
+        receiveImageUrl: g.receiveImageUrls?.[0] ?? g.receiveImageUrl,
+        receiveImageUrls: g.receiveImageUrls ?? (g.receiveImageUrl ? [g.receiveImageUrl] : undefined),
       }
     })
   }, [filteredGroupedHistory, isOffice, t])
@@ -1341,7 +1397,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 selectedIndices={selectedForPrint}
                 onToggleSelect={togglePrintSelect}
                 onToggleSelectAll={togglePrintSelectAll}
-                onPhotoClick={(url) => setPhotoModalUrl(url)}
+                onPhotoClick={(urls) => setPhotoModalUrls(urls)}
                 usageRows={usageTableRows}
               />
             </div>
@@ -1355,19 +1411,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           onSelect={handleItemSelect}
         />
 
-        {photoModalUrl && (
-          <Dialog open onOpenChange={(o) => !o && setPhotoModalUrl(null)}>
+        {photoModalUrls.length > 0 && (
+          <Dialog open onOpenChange={(o) => !o && setPhotoModalUrls([])}>
             <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
               <DialogHeader className="sr-only">
                 <DialogTitle>{t("outPhotoView")}</DialogTitle>
               </DialogHeader>
-              <div className="flex items-center justify-center bg-black/50 min-h-[200px]">
-                <img
-                  src={photoModalUrl}
-                  alt={t("outPhotoView")}
-                  className="max-w-full max-h-[85vh] object-contain"
-                />
-              </div>
+              <ReceivePhotoGallery urls={photoModalUrls} />
             </DialogContent>
           </Dialog>
         )}

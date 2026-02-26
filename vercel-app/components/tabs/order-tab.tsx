@@ -106,8 +106,8 @@ export function OrderTab() {
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
   const [descriptionTranslated, setDescriptionTranslated] = useState<string | null>(null)
   const [receiveModal, setReceiveModal] = useState<{ orderId: number; order: OrderHistoryItem } | null>(null)
-  const [receivePhotoFile, setReceivePhotoFile] = useState<File | null>(null)
-  const [receivePhotoPreview, setReceivePhotoPreview] = useState<string | null>(null)
+  const [receivePhotoFiles, setReceivePhotoFiles] = useState<File[]>([])
+  const [receivePhotoPreviews, setReceivePhotoPreviews] = useState<string[]>([])
   const [receiveSubmitting, setReceiveSubmitting] = useState(false)
   const [rejectReasonModal, setRejectReasonModal] = useState<{ order: OrderHistoryItem } | null>(null)
   const [inspectedItems, setInspectedItems] = useState<Record<number, Set<number>>>({})
@@ -279,38 +279,68 @@ export function OrderTab() {
     return items.every((_, idx) => checked.has(idx))
   }
 
+  const MAX_RECEIVE_PHOTOS = 5
+
   const openReceiveModal = (orderId: number, o: OrderHistoryItem) => {
     setReceiveModal({ orderId, order: o })
-    setReceivePhotoFile(null)
-    setReceivePhotoPreview(null)
+    setReceivePhotoFiles([])
+    setReceivePhotoPreviews((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p))
+      return []
+    })
   }
 
   const closeReceiveModal = () => {
-    setReceivePhotoPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev)
-      return null
+    setReceivePhotoPreviews((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p))
+      return []
     })
     setReceiveModal(null)
-    setReceivePhotoFile(null)
+    setReceivePhotoFiles([])
     if (receiveCameraRef.current) receiveCameraRef.current.value = ""
     if (receiveFileRef.current) receiveFileRef.current.value = ""
   }
 
-  const onReceiveFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const appendReceivePhotos = (newFiles: FileList | null) => {
+    if (!newFiles?.length) return
+    const valid = Array.from(newFiles).filter((f) => f.type.startsWith("image/"))
+    if (!valid.length) return
+    setReceivePhotoFiles((prev) => {
+      const next = [...prev, ...valid].slice(0, MAX_RECEIVE_PHOTOS)
+      setReceivePhotoPreviews((p) => {
+        p.forEach((u) => URL.revokeObjectURL(u))
+        return next.map((f) => URL.createObjectURL(f))
+      })
+      return next
+    })
+  }
+
+  const removeReceivePhoto = (idx: number) => {
+    setReceivePhotoFiles((prev) => prev.filter((_, i) => i !== idx))
+    setReceivePhotoPreviews((prev) => {
+      if (prev[idx]) URL.revokeObjectURL(prev[idx])
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
+  const onReceiveCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file && file.type.startsWith("image/")) {
-      setReceivePhotoPreview((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return URL.createObjectURL(file)
-      })
-      setReceivePhotoFile(file)
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      appendReceivePhotos(dt.files)
     }
+    e.target.value = ""
+  }
+
+  const onReceiveFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    appendReceivePhotos(e.target.files)
     e.target.value = ""
   }
 
   const handleReceiveSubmit = async () => {
     if (!receiveModal) return
-    if (!receivePhotoFile) {
+    if (!receivePhotoFiles.length) {
       alert(t("receivePhotoRequired"))
       return
     }
@@ -325,8 +355,12 @@ export function OrderTab() {
     setReceiveSubmitting(true)
     const modal = receiveModal
     try {
-      const dataUrl = await compressImageForUpload(receivePhotoFile)
-      if (!dataUrl?.startsWith("data:image")) {
+      const dataUrls: string[] = []
+      for (const file of receivePhotoFiles) {
+        const dataUrl = await compressImageForUpload(file)
+        if (dataUrl?.startsWith("data:image")) dataUrls.push(dataUrl)
+      }
+      if (!dataUrls.length) {
         alert(t("orderFail"))
         setReceiveSubmitting(false)
         return
@@ -350,7 +384,7 @@ export function OrderTab() {
         }
         const res = await processOrderReceive({
             orderRowId: modal.orderId,
-            imageUrl: dataUrl,
+            imageUrls: dataUrls,
             isPartialReceive: isPartial,
             inspectedIndices: isPartial ? inspectedIndices : undefined,
             receivedQtys: receivedQtysMap,
@@ -362,9 +396,9 @@ export function OrderTab() {
           if (effectiveStore) {
             getAppData(effectiveStore, { scope: 'order' }).then((r) => setStock(r.stock || {}))
           }
-          setReceivePhotoPreview((p) => { if (p) URL.revokeObjectURL(p); return null })
+          setReceivePhotoPreviews((p) => { p.forEach((u) => URL.revokeObjectURL(u)); return [] })
           setReceiveModal(null)
-          setReceivePhotoFile(null)
+          setReceivePhotoFiles([])
           setReceivedQtys((prev) => {
             const next = { ...prev }
             delete next[modal.orderId]
@@ -462,12 +496,13 @@ export function OrderTab() {
               accept="image/*"
               capture="environment"
               className="absolute h-0 w-0 opacity-0"
-              onChange={onReceiveFileSelect}
+              onChange={onReceiveCameraChange}
             />
             <input
               ref={receiveFileRef}
               type="file"
               accept="image/*"
+              multiple
               className="absolute h-0 w-0 opacity-0"
               onChange={onReceiveFileSelect}
             />
@@ -492,8 +527,31 @@ export function OrderTab() {
               </Button>
             </div>
             <div className="mb-3 min-h-[80px] rounded-lg border border-border bg-muted/30 p-2">
-              {receivePhotoPreview ? (
-                <img src={receivePhotoPreview} alt="Preview" className="max-h-[120px] max-w-full rounded-lg object-contain" />
+              {receivePhotoPreviews.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {receivePhotoPreviews.map((src, idx) => (
+                    <div key={idx} className="relative">
+                      <img src={src} alt="" className="h-[80px] w-[80px] rounded-lg object-cover" />
+                      <button
+                        type="button"
+                        className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white text-xs"
+                        onClick={() => removeReceivePhoto(idx)}
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {receivePhotoFiles.length < MAX_RECEIVE_PHOTOS && (
+                    <button
+                      type="button"
+                      onClick={() => receiveFileRef.current?.click()}
+                      className="flex h-[80px] w-[80px] items-center justify-center rounded-lg border border-dashed border-muted-foreground/40 text-2xl text-muted-foreground hover:bg-muted/50"
+                    >
+                      +
+                    </button>
+                  )}
+                </div>
               ) : (
                 <p className="py-4 text-center text-xs text-muted-foreground">{t("receivePhotoRequired")}</p>
               )}
@@ -502,7 +560,7 @@ export function OrderTab() {
               <Button variant="outline" size="sm" onClick={closeReceiveModal}>
                 {t("cancel")}
               </Button>
-              <Button size="sm" onClick={handleReceiveSubmit} disabled={!receivePhotoFile || receiveSubmitting}>
+              <Button size="sm" onClick={handleReceiveSubmit} disabled={!receivePhotoFiles.length || receiveSubmitting}>
                 {receiveSubmitting ? t("loading") : t("confirmReceive")}
               </Button>
             </div>

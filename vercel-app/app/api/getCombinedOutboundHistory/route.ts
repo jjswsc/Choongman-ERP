@@ -15,7 +15,10 @@ export interface OutboundHistoryItem {
   deliveryDate?: string
   orderDate?: string
   invoiceNo?: string
+  /** @deprecated use receiveImageUrls[0] - 첫 번째 수령 사진 (썸네일용) */
   receiveImageUrl?: string
+  /** 수령 사진 URL 배열 (다중 지원) */
+  receiveImageUrls?: string[]
   receivedIndices?: number[]
   totalOrderItems?: number
   /** 원본 주문 수량 (수령 시 조정된 경우 표시용) */
@@ -24,6 +27,23 @@ export interface OutboundHistoryItem {
   outboundLocation?: string
   /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
   isUnreceived?: boolean
+}
+
+function parseImageUrls(imageUrl: unknown): string[] {
+  if (!imageUrl || typeof imageUrl !== 'string') return []
+  const s = String(imageUrl).trim()
+  if (!s) return []
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s) as unknown[]
+      return (Array.isArray(arr) ? arr : [])
+        .filter((u): u is string => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image')))
+    } catch {
+      return []
+    }
+  }
+  if (s.indexOf('http') === 0 || s.indexOf('data:image') === 0) return [s]
+  return []
 }
 
 export async function GET(request: NextRequest) {
@@ -219,8 +239,10 @@ export async function GET(request: NextRequest) {
         if (o.delivery_status === '배송완료' || o.delivery_status === '일부배송완료' || o.delivery_status === '일부 배송 완료') {
           r.deliveryStatus = o.delivery_status === '일부 배송 완료' ? '일부배송완료' : o.delivery_status
         }
-        if (o.image_url && (o.image_url.indexOf('http') === 0 || o.image_url.indexOf('data:image') === 0)) {
-          r.receiveImageUrl = o.image_url
+        const urls = parseImageUrls(o.image_url)
+        if (urls.length > 0) {
+          r.receiveImageUrls = urls
+          r.receiveImageUrl = urls[0]
         }
         const outboundLoc = r.outboundLocation || '(미지정)'
         const perOutbound = o.delivery_dates_by_outbound?.[outboundLoc]
@@ -306,7 +328,10 @@ export async function GET(request: NextRequest) {
             deliveryDate: o.delivery_date?.slice(0, 16),
             orderDate: o.order_date?.slice(0, 10),
             invoiceNo: baseInvoiceNo,
-            receiveImageUrl: o.image_url,
+            ...(() => {
+              const urls = parseImageUrls(o.image_url)
+              return { receiveImageUrl: urls[0], receiveImageUrls: urls }
+            })(),
             outboundLocation: info.outboundLocation,
             originalOrderQty: qty,
             isUnreceived: true,

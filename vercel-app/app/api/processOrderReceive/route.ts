@@ -19,6 +19,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const orderId = Number(body.orderRowId ?? body.row ?? body.orderId)
     const imageUrl = body.imageUrl ? String(body.imageUrl).trim() : ''
+    const imageUrlsRaw = body.imageUrls
+    const imageUrls: string[] = Array.isArray(imageUrlsRaw)
+      ? imageUrlsRaw.filter((u: unknown) => typeof u === 'string' && u.trim().length > 0).map((u: string) => String(u).trim())
+      : []
     const isPartialReceive = Boolean(body.isPartialReceive)
     const inspectedIndices: number[] = Array.isArray(body.inspectedIndices) ? body.inspectedIndices : []
     const receivedQtysRaw = body.receivedQtys && typeof body.receivedQtys === 'object' ? body.receivedQtys : null
@@ -140,7 +144,11 @@ export async function POST(request: NextRequest) {
     } else if (!isPartialReceive) {
       patch.received_indices = JSON.stringify(cart.map((_, i) => i))
     }
-    if (imageUrl) patch.image_url = imageUrl
+    if (imageUrls.length > 0) {
+      patch.image_url = JSON.stringify(imageUrls)
+    } else if (imageUrl) {
+      patch.image_url = imageUrl
+    }
     if (hasQtyAdjustments && receivedQtysRaw) {
       const qtyMap: Record<string, number> = {}
       const originalQtyMap: Record<string, number> = {}

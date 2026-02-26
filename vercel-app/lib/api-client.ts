@@ -259,6 +259,7 @@ export async function getMyUsageHistory(params: {
 export async function processOrderReceive(params: {
   orderRowId: number
   imageUrl?: string
+  imageUrls?: string[]
   isPartialReceive?: boolean
   inspectedIndices?: number[]
   receivedQtys?: Record<number, number>
@@ -2615,6 +2616,7 @@ export interface OutboundHistoryItem {
   orderDate?: string
   invoiceNo?: string
   receiveImageUrl?: string
+  receiveImageUrls?: string[]
   receivedIndices?: number[]
   originalOrderQty?: number
   totalOrderItems?: number
