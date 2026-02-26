@@ -138,7 +138,7 @@ export function IngredientSheet() {
                           </TableCell>
                           <TableCell className="text-sm">{s.name}</TableCell>
                           <TableCell className="text-right font-mono text-sm text-chart-1">
-                            {(s.cost_per_unit ?? 0).toFixed(3)}
+                            {(s.costPerUnit ?? 0).toFixed(3)}
                           </TableCell>
                         </TableRow>
                       ))}
