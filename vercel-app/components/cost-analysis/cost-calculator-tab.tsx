@@ -4,6 +4,13 @@ import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calculator, ChefHat, Truck, RotateCcw, Save } from "lucide-react"
@@ -19,18 +26,22 @@ import {
   calculateSubTotal,
   setRuntimeIngredients,
   setRuntimeSauces,
+  setRuntimeApiItems,
   clearRuntimeIngredients,
   getIngredientItemCode,
   MISE_DEFAULT,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
-import { getSauces, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient } from "@/lib/api-client"
+import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
   onSaveSuccess?: () => void
+  /** POS 메뉴 목록 (메뉴 불러오기용) */
+  menuRows?: PosMenuCostAnalysisRow[]
+  onSelectMenu?: (row: PosMenuCostAnalysisRow) => void
 }
 
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
@@ -56,7 +67,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [], onSelectMenu }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(sampleMenuItem)
@@ -64,6 +75,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(samplePackagingRecipe)
 
   useEffect(() => {
+    getAdminItems().then((items) => setRuntimeApiItems(items)).catch(() => {})
     getSauces().then((list) => setRuntimeSauces(list)).catch(() => {})
   }, [])
 
@@ -97,6 +109,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   }, [onClearLoad])
 
   const [saving, setSaving] = useState(false)
+  const [menuSelectKey, setMenuSelectKey] = useState("")
   const canSave = !!initialLoadFromRow
   const handleSave = useCallback(async () => {
     if (!initialLoadFromRow || saving) return
@@ -153,8 +166,35 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <IngredientSheet />
+          {menuRows.length > 0 && onSelectMenu && (
+            <Select
+              value={menuSelectKey}
+              onValueChange={(key) => {
+                const row = menuRows.find((r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key)
+                if (row) {
+                  onSelectMenu(row)
+                  setMenuSelectKey("")
+                }
+              }}
+            >
+              <SelectTrigger className="h-8 w-[200px] text-xs">
+                <SelectValue placeholder={t("posCostLoadMenu") || "POS 메뉴 불러오기"} />
+              </SelectTrigger>
+              <SelectContent>
+                {menuRows.map((r) => {
+                  const key = r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId
+                  const label = r.optionName ? `${r.menuName} (${r.optionName})` : r.menuName
+                  return (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant="ghost"
             size="sm"

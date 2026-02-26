@@ -22,24 +22,30 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Database, Search } from "lucide-react"
-import { ingredientDatabase } from "@/lib/cost-data"
-import { getSauces } from "@/lib/api-client"
-import type { SauceRow } from "@/lib/api-client"
+import { getSauces, getAdminItems } from "@/lib/api-client"
+import type { SauceRow, AdminItem } from "@/lib/api-client"
+
+function isPackagingCategory(cat: string): boolean {
+  const c = String(cat || "").toLowerCase()
+  return /포장|packaging|박스|용기|봉지|pack|pouch|box|bag/.test(c)
+}
 
 export function IngredientSheet() {
   const { lang } = useLang()
   const t = useT(lang)
   const [search, setSearch] = useState("")
+  const [items, setItems] = useState<AdminItem[]>([])
   const [sauces, setSauces] = useState<SauceRow[]>([])
 
   useEffect(() => {
+    getAdminItems().then(setItems).catch(() => [])
     getSauces().then(setSauces).catch(() => {})
   }, [])
 
-  const filtered = ingredientDatabase.filter(
+  const itemFiltered = items.filter(
     (i) =>
-      i.name.toLowerCase().includes(search.toLowerCase()) ||
-      String(i.code).includes(search)
+      (i.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (i.code ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
   const sauceFiltered = sauces.filter(
@@ -48,8 +54,8 @@ export function IngredientSheet() {
       (s.code ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
-  const foodItems = filtered.filter((i) => i.category === "food")
-  const packagingItems = filtered.filter((i) => i.category === "packaging")
+  const foodItems = itemFiltered.filter((i) => !isPackagingCategory(i.category ?? ""))
+  const packagingItems = itemFiltered.filter((i) => isPackagingCategory(i.category ?? ""))
 
   return (
     <Sheet>
@@ -103,7 +109,7 @@ export function IngredientSheet() {
                           </TableCell>
                           <TableCell className="text-sm">{item.name}</TableCell>
                           <TableCell className="text-right font-mono text-sm text-primary">
-                            {item.bahtPerUnit.toFixed(3)}
+                            {(item.cost ?? 0).toFixed(3)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -173,7 +179,7 @@ export function IngredientSheet() {
                           </TableCell>
                           <TableCell className="text-sm">{item.name}</TableCell>
                           <TableCell className="text-right font-mono text-sm text-accent">
-                            {item.bahtPerUnit.toFixed(3)}
+                            {(item.cost ?? 0).toFixed(3)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -183,7 +189,7 @@ export function IngredientSheet() {
               </div>
             )}
 
-            {filtered.length === 0 && sauceFiltered.length === 0 && (
+            {itemFiltered.length === 0 && sauceFiltered.length === 0 && (
               <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                 {t("posCostNoIngredientsFound")}{search ? ` "${search}"` : ""}
               </div>

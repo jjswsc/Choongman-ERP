@@ -112,30 +112,71 @@ export function getRuntimeIngredients(): Array<{ code: number; name: string; bah
 const SAUCE_CODE_OFFSET = 20000
 let runtimeSauceMap = new Map<number, { name: string; bahtPerUnit: number; itemCode: string }>()
 
-export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; cost_per_unit?: number }>) {
+export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; cost_per_unit?: number; costPerUnit?: number }>) {
   runtimeSauceMap = new Map(
     sauces.map((s, idx) => {
       const code = SAUCE_CODE_OFFSET + idx + 1
       const itemCode = String(s.code ?? '').trim()
+      const cost = Number(s.costPerUnit ?? s.cost_per_unit) ?? 0
       return [code, {
         name: String(s.name ?? s.code ?? ''),
-        bahtPerUnit: Number(s.cost_per_unit) ?? 0,
+        bahtPerUnit: cost,
         itemCode: itemCode || String(code),
       }]
     })
   )
 }
 
+// 품목 관리(API)에서 로드한 재료
+const API_ITEMS_CODE_OFFSET = 30000
+let runtimeApiItemsMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }>()
+
+function inferIngredientCategory(itemCategory: string): "food" | "packaging" {
+  const c = String(itemCategory || "").toLowerCase()
+  if (/포장|packaging|박스|용기|봉지|pack|pouch|box|bag/.test(c)) return "packaging"
+  return "food"
+}
+
+export function setRuntimeApiItems(items: Array<{ code: string; name?: string; cost?: number; category?: string }>) {
+  const entries: [number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }][] = []
+  let idx = 0
+  items.forEach((item) => {
+    const itemCode = String(item.code ?? "").trim()
+    if (!itemCode) return
+    const code = API_ITEMS_CODE_OFFSET + idx + 1
+    idx += 1
+    const cat = inferIngredientCategory(item.category ?? "")
+    entries.push([code, {
+      name: String(item.name ?? item.code ?? ""),
+      bahtPerUnit: Number(item.cost) || 0,
+      category: cat,
+      itemCode,
+    }])
+  })
+  runtimeApiItemsMap = new Map(entries)
+}
+
+export function getRuntimeApiItems(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }> {
+  return Array.from(runtimeApiItemsMap.entries()).map(([code, v]) => ({
+    code,
+    name: v.name,
+    bahtPerUnit: v.bahtPerUnit,
+    category: v.category,
+  }))
+}
+
 export function getRuntimeSauces(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" }> {
   return Array.from(runtimeSauceMap.entries()).map(([code, v]) => ({ code, name: v.name, bahtPerUnit: v.bahtPerUnit, category: "food" as const }))
 }
 
-/** ingredientCode(number) → item_code(string) for API 저장. runtime/sauce만 반환, static DB는 String(code) 시도 */
+/** ingredientCode(number) → item_code(string) for API 저장 */
 export function getIngredientItemCode(code: number): string | undefined {
   const runtime = runtimeIngredientMap.get(code)
   if (runtime?.itemCode) return runtime.itemCode
   const sauce = runtimeSauceMap.get(code)
   if (sauce?.itemCode) return sauce.itemCode
+  const apiItem = runtimeApiItemsMap.get(code)
+  if (apiItem?.itemCode) return apiItem.itemCode
   const stat = ingredientDatabase.find((i) => i.code === code)
   return stat ? String(stat.code) : undefined
 }
@@ -146,6 +187,8 @@ export function getIngredient(code: number): Ingredient | { code: number; name: 
   if (runtime) return { code, ...runtime }
   const sauce = runtimeSauceMap.get(code)
   if (sauce) return { code, ...sauce, category: "food" as const }
+  const apiItem = runtimeApiItemsMap.get(code)
+  if (apiItem) return { code, ...apiItem }
   return ingredientDatabase.find((i) => i.code === code)
 }
 
