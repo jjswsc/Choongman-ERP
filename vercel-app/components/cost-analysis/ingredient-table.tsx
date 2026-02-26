@@ -23,7 +23,7 @@ import {
 import { Plus, Trash2, GripVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, ingredientDatabase, getRuntimeIngredients, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, ingredientDatabase, getRuntimeIngredients, getRuntimeSauces, MISE_DEFAULT } from "@/lib/cost-data"
 
 interface IngredientTableProps {
   title: string
@@ -43,11 +43,13 @@ export function IngredientTable({
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
 
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
+  const sauceIngs = type === "food" ? getRuntimeSauces() : []
   const dbByType = ingredientDatabase.filter((i) => i.category === type)
   const usedRuntimeCodes = new Set(runtimeByType.map((i) => i.code))
   const availableIngredients = [
     ...dbByType.filter((i) => !usedRuntimeCodes.has(i.code)),
     ...runtimeByType,
+    ...sauceIngs,
   ]
 
   const updateQuantity = useCallback(

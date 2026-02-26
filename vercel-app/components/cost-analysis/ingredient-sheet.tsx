@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -23,16 +23,29 @@ import {
 } from "@/components/ui/table"
 import { Database, Search } from "lucide-react"
 import { ingredientDatabase } from "@/lib/cost-data"
+import { getSauces } from "@/lib/api-client"
+import type { SauceRow } from "@/lib/api-client"
 
 export function IngredientSheet() {
   const { lang } = useLang()
   const t = useT(lang)
   const [search, setSearch] = useState("")
+  const [sauces, setSauces] = useState<SauceRow[]>([])
+
+  useEffect(() => {
+    getSauces().then(setSauces).catch(() => {})
+  }, [])
 
   const filtered = ingredientDatabase.filter(
     (i) =>
       i.name.toLowerCase().includes(search.toLowerCase()) ||
       String(i.code).includes(search)
+  )
+
+  const sauceFiltered = sauces.filter(
+    (s) =>
+      (s.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.code ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
   const foodItems = filtered.filter((i) => i.category === "food")
@@ -100,6 +113,41 @@ export function IngredientSheet() {
               </div>
             )}
 
+            {sauceFiltered.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-2 w-2 rounded-full bg-chart-1" />
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {t("posCostTabSauce") || "소스 원가"} ({sauceFiltered.length})
+                  </h4>
+                </div>
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border hover:bg-transparent">
+                        <TableHead className="text-xs w-16">{t("posMenuCode")}</TableHead>
+                        <TableHead className="text-xs">{t("posCostName")}</TableHead>
+                        <TableHead className="text-xs text-right">{t("posCostBahtPerUnit")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sauceFiltered.map((s) => (
+                        <TableRow key={s.code ?? ""} className="border-border">
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {s.code}
+                          </TableCell>
+                          <TableCell className="text-sm">{s.name}</TableCell>
+                          <TableCell className="text-right font-mono text-sm text-chart-1">
+                            {(s.cost_per_unit ?? 0).toFixed(3)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
             {packagingItems.length > 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-2">
@@ -135,7 +183,7 @@ export function IngredientSheet() {
               </div>
             )}
 
-            {filtered.length === 0 && (
+            {filtered.length === 0 && sauceFiltered.length === 0 && (
               <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                 {t("posCostNoIngredientsFound")}{search ? ` "${search}"` : ""}
               </div>

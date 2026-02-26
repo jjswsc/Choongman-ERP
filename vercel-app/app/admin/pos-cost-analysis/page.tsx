@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Calculator, ChevronDown, ChevronRight, Download, Search, X } from "lucide-react"
+import { Calculator, ChevronDown, ChevronRight, Download, Search, X, List, Bottle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { List } from "lucide-react"
 import { CostCalculatorTab } from "@/components/cost-analysis/cost-calculator-tab"
+import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
@@ -44,6 +44,7 @@ export default function PosCostAnalysisPage() {
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = React.useState("list")
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     getPosMenuCostAnalysis()
@@ -147,6 +148,10 @@ export default function PosCostAnalysisPage() {
               <List className="h-4 w-4" />
               {t("posCostTabList") || "목록"}
             </TabsTrigger>
+            <TabsTrigger value="sauce" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+              <Bottle className="h-4 w-4" />
+              {t("posCostTabSauce") || "소스 원가"}
+            </TabsTrigger>
             <TabsTrigger value="calculator" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
               <Calculator className="h-4 w-4" />
               {t("posCostCalculator") || "원가 계산기"}
@@ -161,26 +166,37 @@ export default function PosCostAnalysisPage() {
         )}
 
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={t("posCostSearchPh") || "코드·메뉴명·옵션 검색"}
-              className="h-9 pl-9 pr-9 text-sm border-border"
-              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            />
-            {searchTerm && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                onClick={() => setSearchTerm("")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            )}
+          <div className="relative flex-1 min-w-[200px] max-w-sm flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                ref={searchInputRef}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t("posCostSearchPh") || "코드·메뉴명·옵션 검색"}
+                className="h-9 pl-9 pr-9 text-sm border-border"
+                onKeyDown={(e) => e.key === "Enter" && searchInputRef.current?.blur?.()}
+              />
+              {searchTerm && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchTerm("")}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="h-9 px-4 gap-1.5 text-xs font-semibold"
+              onClick={() => searchInputRef.current?.focus?.()}
+            >
+              <Search className="h-3.5 w-3.5" />
+              {t("itemsBtnSearch") || "검색"}
+            </Button>
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="h-9 w-40 text-xs">
@@ -361,11 +377,16 @@ export default function PosCostAnalysisPage() {
         </div>
           </TabsContent>
 
+          <TabsContent value="sauce" className="space-y-4">
+            <SauceCostTab />
+          </TabsContent>
+
           <TabsContent value="calculator" className="space-y-4">
             <div className="dark rounded-lg">
               <CostCalculatorTab
                 initialLoadFromRow={selectedForCalculator}
                 onClearLoad={() => setSelectedForCalculator(null)}
+                onSaveSuccess={() => getPosMenuCostAnalysis().then(setRows).catch(() => {})}
               />
             </div>
           </TabsContent>

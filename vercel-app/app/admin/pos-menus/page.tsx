@@ -701,7 +701,6 @@ export default function PosMenusPage() {
                     <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[140px]">{t("posMenuName")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-36">{t("posMenuPriceHall")} / {t("posMenuPriceDelivery")}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posMenuActive")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posSoldOut")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("itemsColAction")}</th>
                   </tr>
@@ -709,13 +708,13 @@ export default function PosMenusPage() {
                 <tbody>
                   {!hasSearched ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsSearchHint")}
                       </td>
                     </tr>
                   ) : filteredMenus.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsNoResults")}
                       </td>
                     </tr>
@@ -749,13 +748,6 @@ export default function PosMenusPage() {
                           {m.price > 0 ? `${m.price.toLocaleString()} ฿` : "-"}
                           {m.priceDelivery != null ? ` / ${m.priceDelivery.toLocaleString()} ฿` : ""}
                         </td>
-                        <td className="px-5 py-3 text-center">
-                          {m.isActive ? (
-                            <span className="text-[10px] text-green-600 font-medium">Y</span>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">-</span>
-                          )}
-                        </td>
                         <td className="px-5 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
@@ -770,29 +762,29 @@ export default function PosMenusPage() {
                         <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-center gap-1">
                             <Button
-                              size="sm"
                               variant="outline"
-                              className="h-6 px-2 text-[10px]"
+                              size="icon"
+                              className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
                               onClick={() => handleEdit(m)}
+                              title={t("itemsBtnEdit")}
                             >
-                              <Pencil className="mr-1 h-2.5 w-2.5" />
-                              {t("itemsBtnEdit")}
+                              <Pencil className="h-3.5 w-3.5" />
                             </Button>
                             <Button
-                              size="sm"
                               variant="outline"
-                              className="h-6 px-2 text-[10px] text-destructive"
+                              size="icon"
+                              className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => handleDelete(m)}
+                              title={t("itemsBtnDelete")}
                             >
-                              <Trash2 className="mr-1 h-2.5 w-2.5" />
-                              {t("itemsBtnDelete")}
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </td>
                       </tr>
                       {isExpanded && expanded && (
                         <tr className="bg-amber-500/5 border-b">
-                          <td colSpan={8} className="px-6 py-4">
+                          <td colSpan={7} className="px-6 py-4">
                             <div className="rounded border border-amber-500/30 bg-amber-500/5 p-4">
                               <h5 className="text-xs font-semibold mb-2">{t("posMenuIngredients") || "재료"} ({expanded.ingredients.length}개)</h5>
                               <ul className="space-y-1 mb-3 max-h-32 overflow-y-auto">

@@ -7,21 +7,26 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const [menuRows, ingRows, optRows, itemRows] = await Promise.all([
-      supabaseSelect('pos_menus', {
-        order: 'category.asc,sort_order.asc,name.asc',
-        limit: 500,
-        select: 'id,code,name,category,price,price_delivery,vat_included',
-      }),
-      supabaseSelect('pos_menu_ingredients', { limit: 5000, select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type' }),
-      supabaseSelect('pos_menu_options', { limit: 2000, select: 'id,menu_id,name,option_type,item_code,quantity' }),
-      supabaseSelect('items', { limit: 5000, select: 'code,name,cost,unit,purchase_source' }),
-    ]) as [
+    const [menuData, sauceData] = await Promise.all([
+      Promise.all([
+        supabaseSelect('pos_menus', {
+          order: 'category.asc,sort_order.asc,name.asc',
+          limit: 500,
+          select: 'id,code,name,category,price,price_delivery,vat_included',
+        }),
+        supabaseSelect('pos_menu_ingredients', { limit: 5000, select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type' }),
+        supabaseSelect('pos_menu_options', { limit: 2000, select: 'id,menu_id,name,option_type,item_code,quantity' }),
+        supabaseSelect('items', { limit: 5000, select: 'code,name,cost,unit,purchase_source' }),
+      ]),
+      supabaseSelect('sauces', { limit: 500, select: 'code,name,cost_per_unit,unit' }).catch(() => null),
+    ])
+    const [menuRows, ingRows, optRows, itemRows] = menuData as [
       { id?: number; code?: string; name?: string; category?: string; price?: number; price_delivery?: number | null; vat_included?: boolean }[] | null,
       { id?: number; menu_id?: number; option_id?: number | null; item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null,
       { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; quantity?: number }[] | null,
       { code?: string; name?: string; cost?: number; unit?: string; purchase_source?: string }[] | null,
     ]
+    const sauceRows = sauceData as { code?: string; name?: string; cost_per_unit?: number; unit?: string }[] | null
 
     const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store' }> = {}
     for (const r of itemRows || []) {
@@ -32,6 +37,17 @@ export async function GET() {
           cost: Number(r.cost) ?? 0,
           unit: String(r.unit ?? ''),
           purchaseSource: (r.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq',
+        }
+      }
+    }
+    for (const r of sauceRows || []) {
+      const code = String(r.code ?? '').trim()
+      if (code && !itemMap[code]) {
+        itemMap[code] = {
+          name: String(r.name ?? ''),
+          cost: Number(r.cost_per_unit) ?? 0,
+          unit: String(r.unit ?? 'g'),
+          purchaseSource: 'hq',
         }
       }
     }

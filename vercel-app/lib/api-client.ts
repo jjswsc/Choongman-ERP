@@ -1952,6 +1952,70 @@ export async function getPosMenuCostAnalysis() {
   return res.json() as Promise<PosMenuCostAnalysisRow[]>
 }
 
+// ─── 소스(합성품) 원가 ───
+export interface SauceRow {
+  id?: number
+  code: string
+  name: string
+  unit: string
+  totalQuantity: number
+  totalCost: number
+  overheadPercent: number
+  totalWithOverhead: number
+  costPerUnit: number
+  ingredients: { id?: number; itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number; unit: string }[]
+  purchaseSource: 'hq' | 'store'
+}
+
+export async function getSauces() {
+  const res = await apiFetch('/api/sauces')
+  return res.json() as Promise<SauceRow[]>
+}
+
+export async function saveSauce(params: {
+  id?: number
+  code: string
+  name: string
+  unit?: string
+  overheadPercent?: number
+  ingredients: { itemCode: string; quantity: number; lossRate?: number }[]
+}) {
+  const res = await apiFetch('/api/sauces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteSauce(params: { id: number }) {
+  const res = await apiFetch('/api/sauces/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function recalculateSauces() {
+  const res = await apiFetch('/api/sauces/recalculate', { method: 'POST' })
+  return res.json() as Promise<{ success: boolean; count?: number; message?: string }>
+}
+
+export async function getCostSettings() {
+  const res = await apiFetch('/api/costSettings')
+  return res.json() as Promise<{ defaultOverheadPercent: number; globalOverheadPercent: number }>
+}
+
+export async function updateCostSettings(params: { globalOverheadPercent?: number; defaultOverheadPercent?: number }) {
+  const res = await apiFetch('/api/costSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
 export async function deletePosMenuIngredient(params: { id: string }) {
   const res = await apiFetch('/api/deletePosMenuIngredient', {
     method: 'POST',

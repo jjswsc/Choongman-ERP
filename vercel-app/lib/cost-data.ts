@@ -93,11 +93,11 @@ export const sampleMenuItem: MenuItem = {
   misePercent: 3,
 }
 
-// Runtime ingredients (API 로드 시 사용)
-let runtimeIngredientMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging" }>()
+// Runtime ingredients (API 로드 시 사용, itemCode는 저장 시 매핑용)
+let runtimeIngredientMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode?: string }>()
 
-export function setRuntimeIngredients(items: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }>) {
-  runtimeIngredientMap = new Map(items.map((i) => [i.code, { name: i.name, bahtPerUnit: i.bahtPerUnit, category: i.category }]))
+export function setRuntimeIngredients(items: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode?: string }>) {
+  runtimeIngredientMap = new Map(items.map((i) => [i.code, { name: i.name, bahtPerUnit: i.bahtPerUnit, category: i.category, itemCode: i.itemCode }]))
 }
 
 export function clearRuntimeIngredients() {
@@ -105,13 +105,47 @@ export function clearRuntimeIngredients() {
 }
 
 export function getRuntimeIngredients(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }> {
-  return Array.from(runtimeIngredientMap.entries()).map(([code, v]) => ({ code, ...v }))
+  return Array.from(runtimeIngredientMap.entries()).map(([code, v]) => ({ code, name: v.name, bahtPerUnit: v.bahtPerUnit, category: v.category }))
+}
+
+// Runtime sauces (소스 원가 탭에서 등록한 소스, 원가 계산기에서 선택 가능)
+const SAUCE_CODE_OFFSET = 20000
+let runtimeSauceMap = new Map<number, { name: string; bahtPerUnit: number; itemCode: string }>()
+
+export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; cost_per_unit?: number }>) {
+  runtimeSauceMap = new Map(
+    sauces.map((s, idx) => {
+      const code = SAUCE_CODE_OFFSET + idx + 1
+      const itemCode = String(s.code ?? '').trim()
+      return [code, {
+        name: String(s.name ?? s.code ?? ''),
+        bahtPerUnit: Number(s.cost_per_unit) ?? 0,
+        itemCode: itemCode || String(code),
+      }]
+    })
+  )
+}
+
+export function getRuntimeSauces(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" }> {
+  return Array.from(runtimeSauceMap.entries()).map(([code, v]) => ({ code, name: v.name, bahtPerUnit: v.bahtPerUnit, category: "food" as const }))
+}
+
+/** ingredientCode(number) → item_code(string) for API 저장. runtime/sauce만 반환, static DB는 String(code) 시도 */
+export function getIngredientItemCode(code: number): string | undefined {
+  const runtime = runtimeIngredientMap.get(code)
+  if (runtime?.itemCode) return runtime.itemCode
+  const sauce = runtimeSauceMap.get(code)
+  if (sauce?.itemCode) return sauce.itemCode
+  const stat = ingredientDatabase.find((i) => i.code === code)
+  return stat ? String(stat.code) : undefined
 }
 
 // Helper functions
 export function getIngredient(code: number): Ingredient | { code: number; name: string; bahtPerUnit: number } | undefined {
   const runtime = runtimeIngredientMap.get(code)
   if (runtime) return { code, ...runtime }
+  const sauce = runtimeSauceMap.get(code)
+  if (sauce) return { code, ...sauce, category: "food" as const }
   return ingredientDatabase.find((i) => i.code === code)
 }
 

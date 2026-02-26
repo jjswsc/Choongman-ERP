@@ -201,7 +201,14 @@ export default function ItemsPage() {
   const filteredProducts = React.useMemo(() => {
     if (!hasSearched) return []
     return products.filter((p) => {
-      const matchTerm = !searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.code.toLowerCase().includes(searchTerm.toLowerCase())
+      const q = searchTerm.toLowerCase().trim()
+      const matchTerm =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q) ||
+        (p.category || "").toLowerCase().includes(q) ||
+        (p.spec || "").toLowerCase().includes(q) ||
+        (p.description || "").toLowerCase().includes(q)
       const matchCategory = categoryFilter === "all" || p.category === categoryFilter
       const pLoc = (p.outboundLocation || "").trim() || "(미지정)"
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter

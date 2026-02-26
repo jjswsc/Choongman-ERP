@@ -55,7 +55,10 @@ export async function GET(request: NextRequest) {
         if (!row) return false
         const c = String(row.code || '').trim()
         if (c) return true
-        return row.purchase_source === 'store' && row.id != null
+        // 매장 전용 품목: purchase_source=store 이거나 category=매장 전용 (미설정 케이스 대비)
+        const isStore =
+          row.purchase_source === 'store' || String(row.category || '').trim() === '매장 전용'
+        return isStore && row.id != null
       })
       .map((row) => {
         const tax = String(row.tax || '').trim()

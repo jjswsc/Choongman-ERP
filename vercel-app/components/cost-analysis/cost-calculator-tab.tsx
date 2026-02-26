@@ -6,7 +6,7 @@ import { useT } from "@/lib/i18n"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calculator, ChefHat, Truck, RotateCcw } from "lucide-react"
+import { Calculator, ChefHat, Truck, RotateCcw, Save } from "lucide-react"
 import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
@@ -17,29 +17,32 @@ import {
   sampleFoodRecipe,
   samplePackagingRecipe,
   calculateSubTotal,
-  calculateExclVat,
   setRuntimeIngredients,
+  setRuntimeSauces,
   clearRuntimeIngredients,
+  getIngredientItemCode,
   MISE_DEFAULT,
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
+import { getSauces, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
+  onSaveSuccess?: () => void
 }
 
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
   const food: RecipeItem[] = []
   const packaging: RecipeItem[] = []
-  const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }> = []
+  const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
 
   row.breakdown.forEach((b, idx) => {
     const codeNum = parseInt(b.itemCode, 10)
     const code = !isNaN(codeNum) ? codeNum : 10000 + idx
     const cat = b.ingredientType === "packaging" ? "packaging" : "food"
-    runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat })
+    runtimeItems.push({ code, name: b.itemName, bahtPerUnit: b.costPerUnit, category: cat, itemCode: b.itemCode })
     const item: RecipeItem = {
       ingredientCode: code,
       quantity: b.quantity,
@@ -53,12 +56,16 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(sampleMenuItem)
   const [foodItems, setFoodItems] = useState<RecipeItem[]>(sampleFoodRecipe)
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(samplePackagingRecipe)
+
+  useEffect(() => {
+    getSauces().then((list) => setRuntimeSauces(list)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (initialLoadFromRow) {
@@ -81,15 +88,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalcu
   const foodSubTotal = useMemo(() => calculateSubTotal(foodItems), [foodItems])
   const packagingSubTotal = useMemo(() => calculateSubTotal(packagingItems), [packagingItems])
 
-  const totalFoodCost = foodSubTotal
-  const totalCost =
-    menuItem.serviceType === "Delivery"
-      ? totalFoodCost + packagingSubTotal
-      : totalFoodCost
-  const exclVat = calculateExclVat(menuItem.inclVat)
-  const margin = exclVat - totalCost
-  const marginPercent = exclVat > 0 ? (margin / exclVat) * 100 : 0
-
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
     onClearLoad?.()
@@ -97,6 +95,60 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalcu
     setFoodItems(sampleFoodRecipe)
     setPackagingItems(samplePackagingRecipe)
   }, [onClearLoad])
+
+  const [saving, setSaving] = useState(false)
+  const canSave = !!initialLoadFromRow
+  const handleSave = useCallback(async () => {
+    if (!initialLoadFromRow || saving) return
+    const menuId = Number(initialLoadFromRow.menuId)
+    const optionId = initialLoadFromRow.optionId ? Number(initialLoadFromRow.optionId) : null
+    if (!menuId) return
+
+    const allItems = [
+      ...foodItems.map((r) => ({ ...r, ingredientType: "food" as const })),
+      ...packagingItems.map((r) => ({ ...r, ingredientType: "packaging" as const })),
+    ]
+    const toSave: { itemCode: string; quantity: number; lossRate: number; ingredientType: "food" | "packaging" }[] = []
+    for (const r of allItems) {
+      const itemCode = getIngredientItemCode(r.ingredientCode)
+      if (!itemCode?.trim()) continue
+      toSave.push({
+        itemCode: itemCode.trim(),
+        quantity: r.quantity,
+        lossRate: r.misePercent ?? MISE_DEFAULT,
+        ingredientType: r.ingredientType,
+      })
+    }
+
+    setSaving(true)
+    try {
+      const existing = await getPosMenuIngredients({
+        menuId: String(menuId),
+        optionId: optionId != null ? String(optionId) : undefined,
+      })
+      for (const ing of existing) {
+        const res = await deletePosMenuIngredient({ id: String(ing.id) })
+        if (!res.success) throw new Error(res.message)
+      }
+      for (const row of toSave) {
+        const res = await savePosMenuIngredient({
+          menuId,
+          optionId,
+          itemCode: row.itemCode,
+          quantity: row.quantity,
+          lossRate: row.lossRate,
+          ingredientType: row.ingredientType,
+        })
+        if (!res.success) throw new Error(res.message)
+      }
+      alert(t("msg_save_success") || "저장되었습니다.")
+      onSaveSuccess?.()
+    } catch (e) {
+      alert(String(e) || (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+    } finally {
+      setSaving(false)
+    }
+  }, [initialLoadFromRow, foodItems, packagingItems, saving, t, onSaveSuccess])
 
   return (
     <div className="space-y-6">
@@ -112,34 +164,34 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalcu
             <RotateCcw className="h-3.5 w-3.5" />
             {t("posCostReset")}
           </Button>
-        </div>
-        <div className="flex items-center gap-3 overflow-x-auto">
-          <QuickStat label={t("posCostFood")} value={`${foodSubTotal.toFixed(2)}`} color="primary" />
-          <QuickStat label={t("posCostPkg")} value={`${packagingSubTotal.toFixed(2)}`} color="accent" />
-          <QuickStat label={t("posCostTotal")} value={`${totalCost.toFixed(2)}`} color="default" />
-          <QuickStat
-            label={t("posCostMargin")}
-            value={`${marginPercent.toFixed(1)}%`}
-            color={marginPercent >= 60 ? "primary" : "warning"}
-          />
-          <Badge
-            variant="outline"
-            className="border-border font-mono text-xs text-muted-foreground flex-shrink-0"
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className="gap-1.5 text-xs"
+            title={!canSave ? (t("posCostSaveHint") || "목록에서 메뉴를 선택한 후 저장할 수 있습니다.") : undefined}
           >
-            {menuItem.serviceType === "Delivery" ? (
-              <Truck className="mr-1.5 h-3 w-3" />
-            ) : (
-              <ChefHat className="mr-1.5 h-3 w-3" />
-            )}
-            {menuItem.serviceType === "Delivery" ? t("posCostDelivery") : t("posCostDineIn")}
-          </Badge>
+            <Save className="h-3.5 w-3.5" />
+            {saving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
+          </Button>
         </div>
+        <Badge
+          variant="outline"
+          className="border-border font-mono text-xs text-muted-foreground flex-shrink-0"
+        >
+          {menuItem.serviceType === "Delivery" ? (
+            <Truck className="mr-1.5 h-3 w-3" />
+          ) : (
+            <ChefHat className="mr-1.5 h-3 w-3" />
+          )}
+          {menuItem.serviceType === "Delivery" ? t("posCostDelivery") : t("posCostDineIn")}
+        </Badge>
       </div>
 
-      <MenuInfoPanel menuItem={menuItem} onMenuItemChange={setMenuItem} />
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6 min-w-0">
+          <MenuInfoPanel menuItem={menuItem} onMenuItemChange={setMenuItem} />
           <Tabs defaultValue="dine-in" className="space-y-4">
             <TabsList className="bg-secondary border border-border">
               <TabsTrigger value="dine-in" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
@@ -168,7 +220,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalcu
           </Tabs>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 self-start">
           <CostSummary
             foodSubTotal={foodSubTotal}
             packagingSubTotal={packagingSubTotal}
@@ -185,32 +237,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad }: CostCalcu
           />
         </div>
       </div>
-    </div>
-  )
-}
-
-function QuickStat({
-  label,
-  value,
-  color,
-}: {
-  label: string
-  value: string
-  color: "primary" | "accent" | "default" | "warning"
-}) {
-  const colorClasses = {
-    primary: "bg-primary/10 text-primary border-primary/20",
-    accent: "bg-accent/10 text-accent border-accent/20",
-    default: "bg-secondary text-foreground border-border",
-    warning: "bg-chart-2/10 text-chart-2 border-chart-2/20",
-  }
-
-  return (
-    <div
-      className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 flex-shrink-0 ${colorClasses[color]}`}
-    >
-      <span className="text-[10px] font-medium uppercase tracking-wider opacity-70">{label}</span>
-      <span className="font-mono text-sm font-semibold">{value}</span>
     </div>
   )
 }
