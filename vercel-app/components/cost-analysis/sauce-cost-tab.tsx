@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Bottle, Plus, Pencil, Trash2, RefreshCw, Settings } from "lucide-react"
+import { FlaskConical, Plus, Pencil, Trash2, RefreshCw, Settings } from "lucide-react"
 import {
   Select,
   SelectContent,

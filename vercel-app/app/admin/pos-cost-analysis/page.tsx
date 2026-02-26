@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Calculator, ChevronDown, ChevronRight, Download, Search, X, List, Bottle } from "lucide-react"
+import { Calculator, ChevronDown, ChevronRight, Download, Search, X, List, FlaskConical } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CostCalculatorTab } from "@/components/cost-analysis/cost-calculator-tab"
 import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
@@ -149,7 +149,7 @@ export default function PosCostAnalysisPage() {
               {t("posCostTabList") || "목록"}
             </TabsTrigger>
             <TabsTrigger value="sauce" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <Bottle className="h-4 w-4" />
+              <FlaskConical className="h-4 w-4" />
               {t("posCostTabSauce") || "소스 원가"}
             </TabsTrigger>
             <TabsTrigger value="calculator" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
