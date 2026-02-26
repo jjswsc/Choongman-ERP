@@ -6,7 +6,7 @@ import { isFirebaseConfigured, getFcmToken } from '@/lib/firebase-client'
 export function PushNotificationRegister(props: { store: string; name: string }) {
   const { store, name } = props
   const registered = useRef(false)
-  const [showBanner, setShowBanner] = useState(false)
+  const [showBanner, setShowBanner] = useState(true)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -96,7 +96,7 @@ export function PushNotificationRegister(props: { store: string; name: string })
     setLoading(false)
   }
 
-  if (!showBanner && !message && !isFirebaseConfigured()) return null
+  if (!isFirebaseConfigured()) return null
   if (!showBanner && !message) return null
 
   return (
