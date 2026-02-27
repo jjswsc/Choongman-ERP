@@ -37,15 +37,17 @@ export async function POST(request: NextRequest) {
     const existingByDateStore = (await supabaseSelectFilter('check_results', dupFilter, { limit: 1 })) as { id?: string }[]
     if (existingByDateStore && existingByDateStore.length > 0) {
       const existId = existingByDateStore[0].id
-      await supabaseUpdateByFilter('check_results', `id=eq.${encodeURIComponent(existId)}`, {
-        check_date: dateStr,
-        store_name: store,
-        inspector,
-        summary,
-        memo,
-        json_data: jsonData,
-      })
-      return NextResponse.json({ success: true, result: 'UPDATED' })
+      if (existId != null && String(existId).trim()) {
+        await supabaseUpdateByFilter('check_results', `id=eq.${encodeURIComponent(String(existId))}`, {
+          check_date: dateStr,
+          store_name: store,
+          inspector,
+          summary,
+          memo,
+          json_data: jsonData,
+        })
+        return NextResponse.json({ success: true, result: 'UPDATED' })
+      }
     }
 
     const newId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${store}`
