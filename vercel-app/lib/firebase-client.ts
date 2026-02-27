@@ -43,6 +43,13 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 export type FcmTokenError = "unsupported" | "webview" | "permission" | "network" | "unknown"
 
+/** 페이지 로드 시 미리 호출하여 SW 등록 - 푸시 받기 클릭 시 준비 완료되도록 */
+export function preRegisterServiceWorker(): void {
+  if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
+  if (!isFirebaseConfigured()) return
+  navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" }).catch(() => {})
+}
+
 export async function getFcmToken(
   onError?: (err: FcmTokenError, detail?: string) => void
 ): Promise<string | null> {
@@ -99,6 +106,9 @@ export async function getFcmToken(
         resolve()
       }
     })
+
+    // SW 활성화 직후 PushManager가 준비될 때까지 추가 대기
+    await new Promise((r) => setTimeout(r, 1000))
 
     const messaging = getMessaging(app)
     let token: string | null = null

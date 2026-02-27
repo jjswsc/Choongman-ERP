@@ -44,6 +44,7 @@ export function BankInboundLinkDialog({
   const { lang } = useLang()
   const t = useT(lang)
   const [vendorCode, setVendorCode] = React.useState("")
+  const [vendorSearch, setVendorSearch] = React.useState("")
   const [batches, setBatches] = React.useState<InboundBatchForLink[]>([])
   const [existingLinks, setExistingLinks] = React.useState<{ inboundBatchId?: number; amount: number }[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -126,17 +127,31 @@ export function BankInboundLinkDialog({
             {!row.vendorCode?.trim() && (
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">거래처</label>
-                <Select value={vendorCode || "__none__"} onValueChange={(v) => setVendorCode(v === "__none__" ? "" : v)}>
+                <Select
+                  value={vendorCode || "__none__"}
+                  onValueChange={(v) => setVendorCode(v === "__none__" ? "" : v)}
+                  onOpenChange={(open) => !open && setVendorSearch("")}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="거래처 선택" />
                   </SelectTrigger>
                   <SelectContent>
+                    <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                      <Input
+                        placeholder={t("search") || "검색"}
+                        value={vendorSearch}
+                        onChange={(e) => setVendorSearch(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
                     <SelectItem value="__none__">—</SelectItem>
-                    {vendorOptions.map((v) => (
-                      <SelectItem key={v.code} value={v.code}>
-                        {v.name} ({v.code})
-                      </SelectItem>
-                    ))}
+                    {vendorOptions
+                      .filter((v) => !vendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(vendorSearch.trim().toLowerCase()))
+                      .map((v) => (
+                        <SelectItem key={v.code} value={v.code}>
+                          {v.name} ({v.code})
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

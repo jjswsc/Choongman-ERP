@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { isFirebaseConfigured, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
+import { useEffect, useState } from 'react'
+import { isFirebaseConfigured, preRegisterServiceWorker, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { Bell } from 'lucide-react'
@@ -18,6 +18,10 @@ export function PushNotificationSetup({ store, name }: Props) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    if (store?.trim() && name?.trim()) preRegisterServiceWorker()
+  }, [store, name])
 
   if (!store?.trim() || !name?.trim()) return null
 

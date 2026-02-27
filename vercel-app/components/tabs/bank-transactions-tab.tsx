@@ -109,6 +109,8 @@ export function BankTransactionsTab() {
   const [filterAccountSubjectEmpty, setFilterAccountSubjectEmpty] = React.useState(false)
   const [filterInvoiceNotReceived, setFilterInvoiceNotReceived] = React.useState(false)
   const [importSaving, setImportSaving] = React.useState(false)
+  const [importVendorSearch, setImportVendorSearch] = React.useState("")
+  const [importStoreSearch, setImportStoreSearch] = React.useState("")
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const [accountSubjectsAll, setAccountSubjectsAll] = React.useState<AccountSubjectItem[]>([])
@@ -1144,30 +1146,52 @@ export function BankTransactionsTab() {
                             <Select
                               value={importRowEdits[idx]?.vendorCode || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "vendorCode", v === "__none__" ? "" : v)}
+                              onOpenChange={(open) => !open && setImportVendorSearch("")}
                             >
                               <SelectTrigger className="h-8 text-xs max-w-[140px]">
                                 <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
                               </SelectTrigger>
                               <SelectContent>
+                                <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    placeholder={t("search") || "검색"}
+                                    value={importVendorSearch}
+                                    onChange={(e) => setImportVendorSearch(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
                                 <SelectItem value="__none__">—</SelectItem>
-                                {vendorOptions.map((v) => (
-                                  <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
-                                ))}
+                                {vendorOptions
+                                  .filter((v) => !importVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(importVendorSearch.trim().toLowerCase()))
+                                  .map((v) => (
+                                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
                           ) : r.transType === "deposit" && importRowEdits[idx]?.category === "receivable_receive" ? (
                             <Select
                               value={importRowEdits[idx]?.storeName || "__none__"}
                               onValueChange={(v) => setImportRowEdit(idx, "storeName", v === "__none__" ? "" : v)}
+                              onOpenChange={(open) => !open && setImportStoreSearch("")}
                             >
                               <SelectTrigger className="h-8 text-xs max-w-[120px]">
                                 <SelectValue placeholder={t("store") || "매장"} />
                               </SelectTrigger>
                               <SelectContent>
+                                <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    placeholder={t("search") || "검색"}
+                                    value={importStoreSearch}
+                                    onChange={(e) => setImportStoreSearch(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
                                 <SelectItem value="__none__">—</SelectItem>
-                                {receivableOptions.map((s) => (
-                                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                                ))}
+                                {receivableOptions
+                                  .filter((s) => !importStoreSearch.trim() || (s || "").toLowerCase().includes(importStoreSearch.trim().toLowerCase()))
+                                  .map((s) => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
                           ) : r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(importRowEdits[idx]?.category || "") ? (
