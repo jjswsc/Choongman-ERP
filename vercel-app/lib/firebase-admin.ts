@@ -1,9 +1,11 @@
 /**
  * Firebase Admin SDK - FCM 푸시 발송용 (서버 전용)
  * FIREBASE_SERVICE_ACCOUNT_JSON 환경 변수에 서비스 계정 JSON 문자열 설정
+ * 수신자별 lang에 맞게 자동 번역 후 발송
  */
 import * as admin from 'firebase-admin'
 import { supabaseSelect, supabaseSelectFilter } from './supabase-server'
+import { translateTextsServer } from './translate-server'
 
 let initialized = false
 
@@ -64,6 +66,7 @@ export async function getRecipientsByTargetStoreRole(
 
 /**
  * store|name 목록에 해당하는 push_tokens 조회 후 FCM 전송
+ * 수신자별 lang(선호 언어)에 맞게 title/body 자동 번역
  */
 export async function sendFcmToRecipients(params: {
   title: string
@@ -78,44 +81,76 @@ export async function sendFcmToRecipients(params: {
   }
   if (!recipients?.length) return { sent: 0, failed: 0 }
 
-  const tokens: string[] = []
+  // token + lang 조회 (lang 없으면 ko로 처리)
+  const tokenLangList: { token: string; lang: string }[] = []
   for (const r of recipients) {
     if (!r.store?.trim() || !r.name?.trim()) continue
     const rows = (await supabaseSelectFilter(
       'push_tokens',
       `store=eq.${encodeURIComponent(r.store.trim())}&name=eq.${encodeURIComponent(r.name.trim())}`,
-      { select: 'token', limit: 1 }
-    )) as { token?: string }[] | null
-    if (rows?.[0]?.token) tokens.push(rows[0].token)
+      { select: 'token,lang', limit: 1 }
+    )) as { token?: string; lang?: string }[] | null
+    const row = rows?.[0]
+    if (row?.token) {
+      const lang = String(row.lang || 'ko').toLowerCase().slice(0, 2)
+      const normalized = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang
+      tokenLangList.push({ token: row.token, lang: normalized || 'ko' })
+    }
   }
 
-  const uniqueTokens = [...new Set(tokens)].filter(Boolean)
-  if (uniqueTokens.length === 0) return { sent: 0, failed: 0 }
+  // 토큰 중복 제거 (동일 토큰이면 첫 lang 사용)
+  const seen = new Set<string>()
+  const unique: { token: string; lang: string }[] = []
+  for (const t of tokenLangList) {
+    if (!t.token || seen.has(t.token)) continue
+    seen.add(t.token)
+    unique.push(t)
+  }
+
+  if (unique.length === 0) return { sent: 0, failed: 0 }
+
+  // lang별로 그룹화
+  const byLang = new Map<string, string[]>()
+  for (const { token, lang } of unique) {
+    const key = ['ko', 'en', 'th', 'my', 'lo'].includes(lang) ? lang : 'ko'
+    if (!byLang.has(key)) byLang.set(key, [])
+    byLang.get(key)!.push(token)
+  }
 
   const messaging = admin.messaging()
   let sent = 0
   let failed = 0
-
   const appName = 'CM ERP'
-  const displayTitle = title.startsWith('[') ? title : `[${appName}] ${title}`
 
-  // FCM은 한 번에 500개까지. 배치로 나눠 전송
-  const batchSize = 500
-  for (let i = 0; i < uniqueTokens.length; i += batchSize) {
-    const chunk = uniqueTokens.slice(i, i + batchSize)
-    // notification 필드 사용 시 FCM이 자동 표시 + SW onBackgroundMessage가 또 표시 → 중복 알림
-    // data만 보내고 SW에서 showNotification 처리
-    const message: admin.messaging.MulticastMessage = {
-      tokens: chunk,
-      data: { title: displayTitle, body },
+  for (const [lang, tokens] of byLang) {
+    let finalTitle = title.startsWith('[') ? title : `[${appName}] ${title}`
+    let finalBody = body
+
+    if (lang !== 'ko') {
+      try {
+        const [transTitle, transBody] = await translateTextsServer([finalTitle, finalBody], lang)
+        if (transTitle?.trim()) finalTitle = transTitle
+        if (transBody?.trim()) finalBody = transBody
+      } catch (e) {
+        console.warn('FCM translate fallback:', e)
+      }
     }
-    try {
-      const res = await messaging.sendEachForMulticast(message)
-      sent += res.successCount
-      failed += res.failureCount
-    } catch (e) {
-      console.error('FCM sendEachForMulticast:', e)
-      failed += chunk.length
+
+    const batchSize = 500
+    for (let i = 0; i < tokens.length; i += batchSize) {
+      const chunk = tokens.slice(i, i + batchSize)
+      const message: admin.messaging.MulticastMessage = {
+        tokens: chunk,
+        data: { title: finalTitle, body: finalBody.slice(0, 100) },
+      }
+      try {
+        const res = await messaging.sendEachForMulticast(message)
+        sent += res.successCount
+        failed += res.failureCount
+      } catch (e) {
+        console.error('FCM sendEachForMulticast:', e)
+        failed += chunk.length
+      }
     }
   }
 

@@ -8,6 +8,12 @@ export { apiFetch } from './api/fetch'
 export { getLoginData, loginCheck, changePassword } from './api/auth'
 export { useStoreList } from './use-store-list'
 
+export interface NoticeAttachment {
+  name?: string
+  mime?: string
+  url?: string
+}
+
 export interface NoticeItem {
   id: number
   date: string
@@ -15,7 +21,7 @@ export interface NoticeItem {
   content: string
   sender: string
   status: string
-  attachments: unknown[]
+  attachments: NoticeAttachment[]
 }
 
 export async function getMyNotices(params: { store: string; name: string }) {

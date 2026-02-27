@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { isFirebaseConfigured, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
+import { useLang } from '@/lib/lang-context'
 
 export function PushNotificationRegister(props: { store: string; name: string }) {
   const { store, name } = props
+  const { lang } = useLang()
   const registered = useRef(false)
   const [showBanner, setShowBanner] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -37,6 +39,7 @@ export function PushNotificationRegister(props: { store: string; name: string })
             name: name.trim(),
             token,
             userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+            lang,
           }),
         })
         if (res.ok) {
@@ -96,6 +99,7 @@ export function PushNotificationRegister(props: { store: string; name: string })
           name: name.trim(),
           token,
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          lang,
         }),
       })
       if (res.ok) {

@@ -8,7 +8,7 @@ import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
-import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
+import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -209,7 +209,7 @@ export function NoticesPanel() {
                       </p>
                       {Array.isArray(n.attachments) && n.attachments.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {n.attachments.map((att: { name?: string; mime?: string; url?: string }, idx: number) => {
+                          {n.attachments.map((att: NoticeAttachment, idx: number) => {
                             const url = att?.url || ""
                             const mime = String(att?.mime || "").toLowerCase()
                             const isImg = mime.startsWith("image/") || url.startsWith("data:image/")

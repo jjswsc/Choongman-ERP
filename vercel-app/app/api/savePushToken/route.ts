@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const name = String(body?.name || '').trim()
     const token = String(body?.token || '').trim()
     const userAgent = String(body?.userAgent ?? body?.user_agent ?? '').trim()
+    const lang = String(body?.lang ?? body?.language ?? 'ko').toLowerCase().slice(0, 2)
 
     if (!store || !name || !token) {
       return NextResponse.json(
@@ -21,19 +22,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await supabaseUpsert(
-      'push_tokens',
-      [
-        {
-          store,
-          name,
-          token,
-          user_agent: userAgent,
-          updated_at: new Date().toISOString(),
-        },
-      ],
-      'store,name'
-    )
+    const row: Record<string, unknown> = {
+      store,
+      name,
+      token,
+      user_agent: userAgent,
+      updated_at: new Date().toISOString(),
+    }
+    if (['ko', 'en', 'th', 'my', 'lo', 'mm', 'la'].includes(lang)) {
+      row.lang = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang
+    }
+    await supabaseUpsert('push_tokens', [row], 'store,name')
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

@@ -103,6 +103,7 @@ export function PushNotificationSetup({ store, name }: Props) {
           name: name.trim(),
           token,
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          lang: lang,
         }),
       })
       if (res.ok) {
