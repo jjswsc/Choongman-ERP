@@ -11,7 +11,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { getNoticeOptions, sendNotice } from "@/lib/api-client"
+import { getNoticeOptions, sendNotice, useStoreList } from "@/lib/api-client"
 
 export function AdminNoticeSection() {
   const { auth } = useAuth()
@@ -22,9 +22,11 @@ export function AdminNoticeSection() {
   const [noticeContent, setNoticeContent] = useState("")
   const [noticeStoreSelected, setNoticeStoreSelected] = useState<string[]>([])
   const [noticeRoleSelected, setNoticeRoleSelected] = useState<string[]>([])
+  const [noticeRecipientsSelected, setNoticeRecipientsSelected] = useState<string[]>([])
   const [noticeStores, setNoticeStores] = useState<string[]>([])
   const [noticeRoles, setNoticeRoles] = useState<string[]>([])
   const [noticeSending, setNoticeSending] = useState(false)
+  const { staffByStore } = useStoreList()
 
   useEffect(() => {
     if (!auth?.store) return
@@ -51,6 +53,30 @@ export function AdminNoticeSection() {
     })
   }
 
+  const toggleNoticeRecipient = (store: string, name: string) => {
+    const key = `${store}|${name}`
+    setNoticeRecipientsSelected((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+    )
+  }
+
+  // 선택된 매장에 해당하는 직원 목록 (닉네임 기준 표시)
+  const noticeEmployeeList = (() => {
+    const allowedStores = new Set(noticeStores)
+    const storesToShow =
+      noticeStoreSelected.length === 0 || noticeStoreSelected.includes("전체")
+        ? noticeStores
+        : noticeStoreSelected.filter((s) => allowedStores.has(s))
+    const list: { store: string; name: string; nick: string }[] = []
+    for (const store of storesToShow) {
+      const staff = staffByStore[store] || []
+      for (const s of staff) {
+        if (s.name) list.push({ store, name: s.name, nick: s.nick || s.name })
+      }
+    }
+    return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))
+  })()
+
   const handleSendNotice = async () => {
     if (!noticeTitle.trim()) {
       alert(t("adminNoticeSubjectRequired"))
@@ -59,6 +85,13 @@ export function AdminNoticeSection() {
     if (!auth?.store || !auth?.user) return
     const targetStore = noticeStoreSelected.length === 0 || noticeStoreSelected.includes("전체") ? "전체" : noticeStoreSelected.join(",")
     const targetRole = noticeRoleSelected.length === 0 || noticeRoleSelected.includes("전체") ? "전체" : noticeRoleSelected.join(",")
+    const targetRecipients =
+      noticeRecipientsSelected.length > 0
+        ? noticeRecipientsSelected.map((k) => {
+            const [store, name] = k.split("|")
+            return { store: store || "", name: name || "" }
+          })
+        : undefined
     setNoticeSending(true)
     const res = await sendNotice({
       title: noticeTitle.trim(),
@@ -68,11 +101,13 @@ export function AdminNoticeSection() {
       sender: auth.user,
       userStore: auth.store,
       userRole: auth.role,
+      targetRecipients,
     })
     setNoticeSending(false)
     if (res.success) {
       setNoticeTitle("")
       setNoticeContent("")
+      setNoticeRecipientsSelected([])
       alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
     } else {
       alert(translateApiMessage(res.message, t) || t("noticeSendFail"))
@@ -139,6 +174,34 @@ export function AdminNoticeSection() {
               </button>
             ))}
           </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs text-muted-foreground">{t("adminTargetIndividuals")}</Label>
+          <div className="flex flex-wrap gap-1.5 rounded-lg border border-input p-2.5 min-h-[42px] max-h-[120px] overflow-y-auto bg-background">
+            {noticeEmployeeList.length === 0 ? (
+              <span className="text-xs text-muted-foreground py-1">-</span>
+            ) : (
+              noticeEmployeeList.map((emp) => {
+                const key = `${emp.store}|${emp.name}`
+                const isSelected = noticeRecipientsSelected.includes(key)
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleNoticeRecipient(emp.store, emp.name)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                  >
+                    {emp.nick}
+                  </button>
+                )
+              })
+            )}
+          </div>
+          {noticeRecipientsSelected.length > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              {noticeRecipientsSelected.length}{t("adminRecipientsCountSuffix")}
+            </span>
+          )}
         </div>
         <Button className="mt-1 h-11 font-semibold" onClick={handleSendNotice} disabled={noticeSending}>
           <Send className="mr-2 h-4 w-4" />

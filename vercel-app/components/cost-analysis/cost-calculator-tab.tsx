@@ -1,20 +1,12 @@
 "use client"
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Calculator, ChefHat, Truck, RotateCcw, Save, Search } from "lucide-react"
+import { Calculator, ChefHat, Truck, RotateCcw, Save } from "lucide-react"
 import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
@@ -40,9 +32,8 @@ interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
   onSaveSuccess?: () => void
-  /** POS 메뉴 목록 (메뉴 불러오기용) */
+  /** POS 메뉴 목록 (카테고리 목록 추출용) */
   menuRows?: PosMenuCostAnalysisRow[]
-  onSelectMenu?: (row: PosMenuCostAnalysisRow) => void
 }
 
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
@@ -68,7 +59,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [], onSelectMenu }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [] }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(sampleMenuItem)
@@ -106,23 +97,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     const set = new Set(menuRows.map((r) => r.category).filter(Boolean))
     return Array.from(set).sort()
   }, [menuRows])
-
-  const [menuSearchTerm, setMenuSearchTerm] = useState("")
-  const [menuCategoryFilter, setMenuCategoryFilter] = useState("all")
-  const [menuPickerOpen, setMenuPickerOpen] = useState(false)
-  const menuPickerRef = useRef<HTMLDivElement>(null)
-
-  const filteredMenuRows = useMemo(() => {
-    return menuRows.filter((r) => {
-      const matchTerm =
-        !menuSearchTerm ||
-        (r.menuCode || "").toLowerCase().includes(menuSearchTerm.toLowerCase()) ||
-        (r.menuName || "").toLowerCase().includes(menuSearchTerm.toLowerCase()) ||
-        (r.optionName || "").toLowerCase().includes(menuSearchTerm.toLowerCase())
-      const matchCat = menuCategoryFilter === "all" || r.category === menuCategoryFilter
-      return matchTerm && matchCat
-    })
-  }, [menuRows, menuSearchTerm, menuCategoryFilter])
 
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
@@ -191,72 +165,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           <IngredientSheet />
-          {menuRows.length > 0 && onSelectMenu && (
-            <div ref={menuPickerRef} className="relative">
-              <div className="flex gap-1.5">
-                <Select value={menuCategoryFilter} onValueChange={setMenuCategoryFilter}>
-                  <SelectTrigger className="h-8 w-24 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
-                    {categoriesFromMenus.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input
-                    className="h-8 w-[220px] pl-8 pr-2 text-xs"
-                    placeholder={t("posCostSearchPh") || "코드·메뉴명 검색"}
-                    value={menuSearchTerm}
-                    onChange={(e) => setMenuSearchTerm(e.target.value)}
-                    onFocus={() => setMenuPickerOpen(true)}
-                    onBlur={() => setTimeout(() => setMenuPickerOpen(false), 150)}
-                  />
-                  {menuPickerOpen && (
-                    <div className="absolute left-0 top-full mt-1 z-50 w-full min-w-[320px] max-h-[280px] overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-md py-1">
-                      {filteredMenuRows.length === 0 ? (
-                        <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                          {t("posCostNoIngredientsFound") || "검색 결과가 없습니다"}
-                        </div>
-                      ) : filteredMenuRows.slice(0, 50).map((r) => {
-                        const key = r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId
-                        const label = r.optionName ? `${r.menuName} (${r.optionName})` : r.menuName
-                        const price = r.priceDelivery ?? r.priceHall
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            className="w-full px-3 py-2 text-left text-xs hover:bg-muted/80 flex justify-between items-center gap-2"
-                            onMouseDown={(e) => {
-                              e.preventDefault()
-                              onSelectMenu(r)
-                              setMenuSearchTerm("")
-                              setMenuPickerOpen(false)
-                            }}
-                          >
-                            <span className="truncate">
-                              <span className="font-mono text-muted-foreground">{r.menuCode}</span>
-                              <span className="mx-1.5">·</span>
-                              <span className="font-medium">{label}</span>
-                            </span>
-                            <span className="shrink-0 tabular-nums text-primary font-semibold">{price.toFixed(0)} ฿</span>
-                          </button>
-                        )
-                      })}
-                      {filteredMenuRows.length > 0 && filteredMenuRows.length > 50 && (
-                        <div className="px-3 py-2 text-xs text-muted-foreground border-t">
-                          {filteredMenuRows.length}건 — {t("posCostSearchPh") || "검색"}으로 좁히기
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
           <Button
             variant="ghost"
             size="sm"
@@ -293,7 +201,12 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6 min-w-0">
-          <MenuInfoPanel menuItem={menuItem} onMenuItemChange={setMenuItem} categories={categoriesFromMenus} />
+          <MenuInfoPanel
+            menuItem={menuItem}
+            onMenuItemChange={setMenuItem}
+            categories={categoriesFromMenus}
+            readOnlyMenuInfo={!!initialLoadFromRow}
+          />
           <Tabs defaultValue="dine-in" className="space-y-4">
             <TabsList className="bg-secondary border border-border">
               <TabsTrigger value="dine-in" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">

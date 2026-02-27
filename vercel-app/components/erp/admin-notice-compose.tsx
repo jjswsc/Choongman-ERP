@@ -7,6 +7,7 @@ import {
   X,
   Store,
   Briefcase,
+  Users,
   FileText,
   Image as ImageIcon,
   File,
@@ -21,7 +22,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getNoticeOptions, sendNotice } from "@/lib/api-client"
+import { getNoticeOptions, sendNotice, useStoreList } from "@/lib/api-client"
 
 interface AttachedFile {
   id: string
@@ -45,7 +46,9 @@ export function AdminNoticeCompose() {
   const [positions, setPositions] = React.useState<string[]>([])
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [selectedPositions, setSelectedPositions] = React.useState<string[]>([])
+  const [selectedRecipients, setSelectedRecipients] = React.useState<string[]>([])
   const [files, setFiles] = React.useState<AttachedFile[]>([])
+  const { staffByStore } = useStoreList()
   const [sending, setSending] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -90,6 +93,30 @@ export function AdminNoticeCompose() {
         : [...prev, position]
     )
   }
+
+  const toggleRecipient = (store: string, name: string) => {
+    const key = `${store}|${name}`
+    setSelectedRecipients((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+    )
+  }
+
+  const allStoresForStaff =
+    selectedStores.length === 0 ||
+    selectedStores.length === stores.length - 1
+  const storeNamesForStaff = allStoresForStaff
+    ? stores.filter((s) => s !== t("noticeFilterAll"))
+    : selectedStores
+  const employeeList = (() => {
+    const list: { store: string; name: string; nick: string }[] = []
+    for (const store of storeNamesForStaff) {
+      const staff = staffByStore[store] || []
+      for (const s of staff) {
+        if (s.name) list.push({ store, name: s.name, nick: s.nick || s.name })
+      }
+    }
+    return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))
+  })()
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id))
@@ -152,6 +179,13 @@ export function AdminNoticeCompose() {
       selectedStores.length === 0 || allStores ? "전체" : selectedStores.join(",")
     const targetRole =
       selectedPositions.length === 0 || allPos ? "전체" : selectedPositions.join(",")
+    const targetRecipients =
+      selectedRecipients.length > 0
+        ? selectedRecipients.map((k) => {
+            const [s, n] = k.split("|")
+            return { store: s || "", name: n || "" }
+          })
+        : undefined
     setSending(true)
     try {
       const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.dataUrl }))
@@ -164,12 +198,14 @@ export function AdminNoticeCompose() {
         userStore: auth.store,
         userRole: auth.role,
         attachments,
+        targetRecipients,
       })
       if (res.success) {
         setTitle("")
         setContent("")
         setSelectedStores([])
         setSelectedPositions([])
+        setSelectedRecipients([])
         setFiles([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
         alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
@@ -301,6 +337,49 @@ export function AdminNoticeCompose() {
               </div>
             </ScrollArea>
           </div>
+        </div>
+
+        {/* Individual employees (by nickname) */}
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <Users className="h-3.5 w-3.5 text-amber-500" />
+            {t("adminTargetIndividuals")}
+            {selectedRecipients.length > 0 && (
+              <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">
+                {selectedRecipients.length}{t("adminRecipientsCountSuffix")}
+              </span>
+            )}
+          </label>
+          <ScrollArea className="h-[120px] rounded-lg border bg-muted/20 p-2">
+            <div className="flex flex-wrap gap-1.5">
+              {employeeList.length === 0 ? (
+                <span className="text-xs text-muted-foreground">-</span>
+              ) : (
+                employeeList.map((emp) => {
+                  const key = `${emp.store}|${emp.name}`
+                  const checked = selectedRecipients.includes(key)
+                  return (
+                    <label
+                      key={key}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs cursor-pointer transition-colors",
+                        checked
+                          ? "bg-amber-500/15 font-semibold text-amber-700"
+                          : "text-card-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleRecipient(emp.store, emp.name)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span>{emp.nick}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
         {/* Content */}

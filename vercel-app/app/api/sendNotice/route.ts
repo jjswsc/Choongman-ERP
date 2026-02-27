@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
-import { sendFcmToRecipients } from '@/lib/firebase-admin'
+import { sendFcmToRecipients, getRecipientsByTargetStoreRole } from '@/lib/firebase-admin'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -78,16 +78,22 @@ export async function POST(request: NextRequest) {
       attachments: attachmentsStr,
     })
 
-    // FCM 푸시 알림 (특정 수신자 지정 시)
+    // FCM 푸시 알림
+    let fcmRecipients: { store: string; name: string }[] = []
     if (recipientList.length > 0) {
-      const recipients = recipientList.map((s) => {
+      fcmRecipients = recipientList.map((s) => {
         const [store, name] = s.split('|')
         return { store: store || '', name: name || '' }
       })
+    } else {
+      // 매장/역할만 지정된 경우: targetStore·targetRole에 해당하는 직원 조회 후 푸시
+      fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole)
+    }
+    if (fcmRecipients.length > 0) {
       sendFcmToRecipients({
         title,
         body: content.slice(0, 100),
-        recipients,
+        recipients: fcmRecipients,
       }).catch((e) => console.error('sendNotice FCM:', e))
     }
 

@@ -19,9 +19,11 @@ interface MenuInfoPanelProps {
   onMenuItemChange: (item: MenuItem) => void
   /** 카테고리 목록 (메뉴 관리에서 사용 중인 값) */
   categories?: string[]
+  /** 코드·카테고리·메뉴명 읽기 전용 (pos 메뉴 관리와 연동) */
+  readOnlyMenuInfo?: boolean
 }
 
-export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [] }: MenuInfoPanelProps) {
+export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], readOnlyMenuInfo = false }: MenuInfoPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const categoryOptions = categories.length > 0 ? categories : ["Size S", "Size M", "Size L", "Set"]
@@ -39,51 +41,69 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [] }: M
           <Label htmlFor="menuCode" className="text-xs text-muted-foreground">
             {t("posMenuCode")}
           </Label>
-          <Input
-            id="menuCode"
-            type="text"
-            value={menuItem.menuCode}
-            onChange={(e) =>
-              onMenuItemChange({ ...menuItem, menuCode: e.target.value })
-            }
-            placeholder={t("posMenuCode")}
-            className="h-9 font-mono bg-secondary/50 border-border"
-          />
+          {readOnlyMenuInfo ? (
+            <div className="h-9 px-3 flex items-center font-mono text-sm bg-muted/30 rounded-md border border-border">
+              {menuItem.menuCode || "—"}
+            </div>
+          ) : (
+            <Input
+              id="menuCode"
+              type="text"
+              value={menuItem.menuCode}
+              onChange={(e) =>
+                onMenuItemChange({ ...menuItem, menuCode: e.target.value })
+              }
+              placeholder={t("posMenuCode")}
+              className="h-9 font-mono bg-secondary/50 border-border"
+            />
+          )}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="category" className="text-xs text-muted-foreground">
             {t("posMenuCategory")}
           </Label>
-          <Select
-            value={menuItem.category}
-            onValueChange={(val) => onMenuItemChange({ ...menuItem, category: val })}
-          >
-            <SelectTrigger className="h-9 bg-secondary/50 border-border">
-              <SelectValue placeholder={t("posMenuCategoryAll") || "전체"} />
-            </SelectTrigger>
-            <SelectContent>
-              {categoryOptions.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {readOnlyMenuInfo ? (
+            <div className="h-9 px-3 flex items-center text-sm bg-muted/30 rounded-md border border-border">
+              {menuItem.category || "—"}
+            </div>
+          ) : (
+            <Select
+              value={menuItem.category}
+              onValueChange={(val) => onMenuItemChange({ ...menuItem, category: val })}
+            >
+              <SelectTrigger className="h-9 bg-secondary/50 border-border">
+                <SelectValue placeholder={t("posMenuCategoryAll") || "전체"} />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryOptions.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div className="space-y-1.5 col-span-2">
           <Label htmlFor="menuName" className="text-xs text-muted-foreground">
             {t("posMenuName")}
           </Label>
-          <Input
-            id="menuName"
-            value={menuItem.menuName}
-            onChange={(e) =>
-              onMenuItemChange({ ...menuItem, menuName: e.target.value })
-            }
-            className="h-9 bg-secondary/50 border-border"
-          />
+          {readOnlyMenuInfo ? (
+            <div className="h-9 px-3 flex items-center text-sm bg-muted/30 rounded-md border border-border">
+              {menuItem.menuName || "—"}
+            </div>
+          ) : (
+            <Input
+              id="menuName"
+              value={menuItem.menuName}
+              onChange={(e) =>
+                onMenuItemChange({ ...menuItem, menuName: e.target.value })
+              }
+              className="h-9 bg-secondary/50 border-border"
+            />
+          )}
         </div>
 
         <div className="space-y-1.5 col-span-2">
