@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2, Link2 } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2, Link2, Save, Pencil, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -32,6 +32,7 @@ import {
   getVendorsForPurchase,
   getVendorsForSales,
   updateBankTransactionInvoice,
+  updateBankTransaction,
   getPurchaseOrders,
   getBankMemoRules,
   saveBankMemoRule,
@@ -62,7 +63,7 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; invoicePhotoUrl?: string; purchaseOrderId?: number; vendorCode?: string }[]>([])
+  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; invoicePhotoUrl?: string; purchaseOrderId?: number; vendorCode?: string; storeName?: string }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
@@ -103,6 +104,7 @@ export function BankTransactionsTab() {
   const [newRuleCategory, setNewRuleCategory] = React.useState("")
   const [newRuleAccountSubjectId, setNewRuleAccountSubjectId] = React.useState<string>("")
   const [savingMemoRule, setSavingMemoRule] = React.useState(false)
+  const [editingMemoRuleId, setEditingMemoRuleId] = React.useState<number | null>(null)
   const [filterTransType, setFilterTransType] = React.useState<string>("")
   const [filterCategory, setFilterCategory] = React.useState<string>("")
   const [filterAccountSubjectId, setFilterAccountSubjectId] = React.useState<string>("")
@@ -111,7 +113,65 @@ export function BankTransactionsTab() {
   const [importSaving, setImportSaving] = React.useState(false)
   const [importVendorSearch, setImportVendorSearch] = React.useState("")
   const [importStoreSearch, setImportStoreSearch] = React.useState("")
+  const [queryRowEdits, setQueryRowEdits] = React.useState<Record<number, Partial<{ category: string; accountSubjectId: string; note: string; salesDate: string; expenseDate: string; vendorCode: string; storeName: string }>>>({})
+  const [queryVendorSearch, setQueryVendorSearch] = React.useState("")
+  const [queryStoreSearch, setQueryStoreSearch] = React.useState("")
+  const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+
+  const setQueryRowEdit = (rowId: number, field: string, value: string | undefined) => {
+    setQueryRowEdits((prev) => ({
+      ...prev,
+      [rowId]: { ...prev[rowId], [field]: value },
+    }))
+  }
+
+  const handleQueryRowSave = async (r: (typeof list)[0]) => {
+    if (!r.id) return
+    const edits = queryRowEdits[r.id]
+    if (!edits || Object.keys(edits).length === 0) return
+    setQuerySavingId(r.id)
+    try {
+      const payload: Parameters<typeof updateBankTransaction>[0] = { bankTransactionId: r.id }
+      if (edits.category !== undefined) payload.category = edits.category
+      if (edits.accountSubjectId !== undefined) payload.accountSubjectId = edits.accountSubjectId === "__none__" || !edits.accountSubjectId ? null : Number(edits.accountSubjectId)
+      if (edits.note !== undefined) payload.note = edits.note ?? ""
+      if (edits.salesDate !== undefined) payload.salesDate = edits.salesDate || undefined
+      if (edits.expenseDate !== undefined) payload.expenseDate = edits.expenseDate || undefined
+      if (edits.vendorCode !== undefined) payload.vendorCode = edits.vendorCode || undefined
+      if (edits.storeName !== undefined) payload.storeName = edits.storeName === "__none__" ? "" : edits.storeName || undefined
+      const res = await updateBankTransaction(payload)
+      if (res.success) {
+        setQueryRowEdits((prev) => {
+          const next = { ...prev }
+          delete next[r.id!]
+          return next
+        })
+        setList((prev) =>
+          prev.map((x) =>
+            x.id === r.id
+              ? {
+                  ...x,
+                  category: edits.category ?? x.category,
+                  accountSubjectId: edits.accountSubjectId !== undefined ? (edits.accountSubjectId === "__none__" || !edits.accountSubjectId ? null : Number(edits.accountSubjectId)) : x.accountSubjectId,
+                  note: edits.note !== undefined ? edits.note : x.note,
+                  salesDate: edits.salesDate ?? x.salesDate,
+                  expenseDate: edits.expenseDate ?? x.expenseDate,
+                  vendorCode: edits.vendorCode ?? x.vendorCode,
+                  storeName: edits.storeName !== undefined ? (edits.storeName === "__none__" ? "" : edits.storeName) : x.storeName,
+                }
+              : x
+          )
+        )
+      } else {
+        alert(res.message || t("processFail"))
+      }
+    } catch (e) {
+      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setQuerySavingId(null)
+    }
+  }
 
   const [accountSubjectsAll, setAccountSubjectsAll] = React.useState<AccountSubjectItem[]>([])
   const [accountSubjectForm, setAccountSubjectForm] = React.useState<{ id?: number; code: string; name: string; nameEn: string; type: string; pAndLSection: string; sortOrder: number }>({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })
@@ -142,6 +202,7 @@ export function BankTransactionsTab() {
   const loadData = React.useCallback(() => {
     if (!accountId) return
     setLoading(true)
+    setQueryRowEdits({})
     getBankTransactions({
       accountId,
       startStr,
@@ -502,6 +563,21 @@ export function BankTransactionsTab() {
     return result.length ? result : ["본사"]
   }, [storeOptions])
 
+  const handleEditMemoRule = (rule: BankMemoRule) => {
+    setEditingMemoRuleId(rule.id ?? null)
+    setNewRuleKeyword(rule.keyword || "")
+    setNewRuleTransType((rule.transType || "withdraw") as "deposit" | "withdraw")
+    setNewRuleCategory(rule.category || "")
+    setNewRuleAccountSubjectId(rule.accountSubjectId != null ? String(rule.accountSubjectId) : "")
+  }
+
+  const handleCancelEditMemoRule = () => {
+    setEditingMemoRuleId(null)
+    setNewRuleKeyword("")
+    setNewRuleCategory("")
+    setNewRuleAccountSubjectId("")
+  }
+
   const handleAddMemoRule = async () => {
     if (!newRuleKeyword.trim() || !newRuleCategory) {
       alert(t("bankMemoRuleKeywordRequired") || "키워드와 용도를 입력하세요.")
@@ -510,15 +586,14 @@ export function BankTransactionsTab() {
     setSavingMemoRule(true)
     try {
       const res = await saveBankMemoRule({
+        ...(editingMemoRuleId ? { id: editingMemoRuleId } : {}),
         keyword: newRuleKeyword.trim(),
         transType: newRuleTransType,
         category: newRuleCategory,
         accountSubjectId: newRuleAccountSubjectId ? Number(newRuleAccountSubjectId) : null,
       })
       if (res.success) {
-        setNewRuleKeyword("")
-        setNewRuleCategory("")
-        setNewRuleAccountSubjectId("")
+        handleCancelEditMemoRule()
         getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
       } else {
         alert(res.message || t("processFail"))
@@ -559,6 +634,83 @@ export function BankTransactionsTab() {
       return true
     })
   }, [list, filterTransType, filterCategory, filterAccountSubjectId, filterAccountSubjectEmpty, filterInvoiceNotReceived])
+
+  const getCategoryLabel = (cat: string, transType: string) => {
+    const depositMap: Record<string, string> = {
+      revenue_delivery: t("bankRevenueDelivery") || "배달앱",
+      revenue_card: t("bankRevenueCard") || "카드",
+      revenue_qr: t("bankRevenueQr") || "QR/이체",
+      revenue_cash: t("bankRevenueCash") || "현금",
+      receivable_receive: t("bankCategoryReceivableReceive") || "매출 수령",
+      loan: t("bankCategoryLoan") || "대출",
+      advance: t("bankCategoryAdvance") || "선지급",
+      unclassified: t("bankCategoryUnclassified") || "미분류",
+      correction: t("bankCategoryCorrection") || "정정",
+    }
+    const withdrawMap: Record<string, string> = {
+      transfer: t("bankCategoryTransfer") || "이체",
+      expense: t("bankCategoryExpense") || "비용",
+      fixed: t("bankCategoryFixed") || "고정비",
+      purchase_payment: t("bankCategoryPurchasePayment") || "매입 대금",
+      loan: t("bankCategoryLoan") || "대출",
+      advance: t("bankCategoryAdvance") || "선지급",
+      unclassified: t("bankCategoryUnclassified") || "미분류",
+      correction: t("bankCategoryCorrection") || "정정",
+    }
+    return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
+  }
+
+  const exportBankTransactionsExcel = React.useCallback(() => {
+    if (filteredList.length === 0) {
+      alert(t("pettyNoData") || "내보낼 데이터가 없습니다.")
+      return
+    }
+    const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+    const headers = [
+      t("date") || "날짜",
+      t("pettyColType") || "유형",
+      t("bankCategoryLabel") || "용도",
+      t("accountSubject") || "계정과목",
+      t("pettyColAmount") || "금액",
+      t("bankAttributedDate") || "인식일",
+      t("bankMemoLabel") || "은행 적요",
+      t("bankNoteLabel") || "상세 내용",
+    ]
+    const rows: (string | number)[][] = [headers]
+    for (const r of filteredList) {
+      const cat = r.category ?? "expense"
+      const catLabel = getCategoryLabel(cat, r.transType || "withdraw")
+      const sub = (r.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === r.accountSubjectId)
+      const subLabel = sub ? `${sub.code} ${asDisplayName(sub)}` : "—"
+      const attrDate = r.transType === "deposit" && r.salesDate ? r.salesDate : r.transType === "withdraw" && r.expenseDate ? r.expenseDate : "—"
+      rows.push([
+        r.transDate || "",
+        r.transType === "deposit" ? (t("bankDeposit") || "입금") : (t("bankWithdraw") || "출금"),
+        catLabel,
+        subLabel,
+        r.amount ?? 0,
+        attrDate,
+        r.memo || "",
+        r.note || "",
+      ])
+    }
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"/><style>td,th{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{border-collapse:collapse;width:100%}</style></head>
+<body>
+<table>
+<tr class="head">${rows[0].map((c) => `<th>${escapeXml(String(c))}</th>`).join("")}</tr>
+${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}</td>`).join("")}</tr>`).join("")}
+</table>
+</body>
+</html>`
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `bank_transactions_${startStr}_${endStr}.xls`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [filteredList, startStr, endStr, accountSubjectOptions, revenueAccountOptions, t])
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -837,6 +989,10 @@ export function BankTransactionsTab() {
                     <span className="text-sm text-muted-foreground">
                       {filteredList.length} {t("receivPayCount")}
                     </span>
+                    <Button size="sm" variant="outline" onClick={exportBankTransactionsExcel} disabled={filteredList.length === 0} title={t("excelBtn") || "엑셀"}>
+                      <FileSpreadsheet className="h-4 w-4 mr-1" />
+                      {t("excelBtn") || "엑셀"}
+                    </Button>
                   </div>
 
                   <div className="rounded-lg border max-h-[360px] overflow-auto">
@@ -857,59 +1013,158 @@ export function BankTransactionsTab() {
                         <th className="p-2 text-center min-w-[120px]" title={t("poInvoice") || "인보이스"}>{t("poInvoice") || "인보이스"}</th>
                         <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
                         <th className="p-2 text-center min-w-[120px]">{t("bankNoteLabel") || "상세 내용"}</th>
+                        <th className="p-2 text-center w-12"></th>
                       </tr>
                         </thead>
                         <tbody>
-                          {filteredList.map((r, i) => (
-                            <tr key={r.id ?? i} className={`border-t ${r.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
+                          {filteredList.map((r, i) => {
+                            const edits = r.id ? queryRowEdits[r.id] : undefined
+                            const cat = edits?.category ?? r.category ?? "expense"
+                            const hasEdits = r.id && edits && Object.keys(edits).length > 0
+                            const isSaving = querySavingId === r.id
+                            return (
+                            <tr key={r.id ?? i} className={`border-t ${cat === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
                               <td className="p-2 text-center">{r.transDate}</td>
                               <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
-                              <td className={`p-2 text-center text-xs ${r.category === "correction" ? "text-pink-600 dark:text-pink-400 font-medium" : "text-muted-foreground"}`}>
-                                {r.category === "correction"
-                                  ? t("bankCategoryCorrection")
-                                  : r.category === "loan"
-                                    ? t("bankCategoryLoan")
-                                    : r.category === "advance"
-                                      ? t("bankCategoryAdvance")
-                                      : r.category === "unclassified"
-                                        ? t("bankCategoryUnclassified")
-                                        : r.transType === "withdraw" && r.category === "transfer"
-                                          ? t("bankCategoryTransfer")
-                                          : r.transType === "withdraw" && r.category === "fixed"
-                                            ? t("bankCategoryFixed")
-                                            : r.transType === "withdraw" && r.category === "purchase_payment"
-                                          ? (t("bankCategoryPurchasePayment") || "매입 대금")
-                                          : r.transType === "deposit" && r.category === "receivable_receive"
-                                            ? (t("bankCategoryReceivableReceive") || "매출 수령")
-                                            : r.transType === "deposit" && r.category === "revenue_delivery"
-                                                ? (t("bankRevenueDelivery") || "배달앱")
-                                                : r.transType === "deposit" && r.category === "revenue_card"
-                                                  ? (t("bankRevenueCard") || "카드")
-                                                  : r.transType === "deposit" && r.category === "revenue_qr"
-                                                    ? (t("bankRevenueQr") || "QR/이체")
-                                                    : r.transType === "deposit" && r.category === "revenue_cash"
-                                                    ? (t("bankRevenueCash") || "현금")
-                                                    : r.transType === "withdraw"
-                                                      ? t("bankCategoryExpense")
-                                                      : "—"}
+                              <td className="p-2">
+                                {r.transType === "withdraw" ? (
+                                  <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                                      <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                      <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                                      <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
+                                      <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                      <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                      <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                      <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
+                                      <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
+                                      <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
+                                      <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                                      <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
+                                      <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                      <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                      <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                      <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
                               </td>
-                              <td className="p-2 text-center text-muted-foreground text-xs">
-                                {r.accountSubjectId
-                                  ? (() => {
-                                      const sub = accountSubjectOptions.find((a) => a.id === r.accountSubjectId) || revenueAccountOptions.find((a) => a.id === r.accountSubjectId)
-                                      return sub ? `${sub.code} ${asDisplayName(sub)}` : "-"
-                                    })()
-                                  : "—"}
+                              <td className="p-2">
+                                {r.transType === "withdraw" && cat === "purchase_payment" ? (
+                                  <Select
+                                    value={(edits?.vendorCode ?? r.vendorCode ?? "") || "__none__"}
+                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "vendorCode", v === "__none__" ? "" : v)}
+                                    onOpenChange={(open) => !open && setQueryVendorSearch("")}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                      <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                        <Input placeholder={t("search") || "검색"} value={queryVendorSearch} onChange={(e) => setQueryVendorSearch(e.target.value)} className="h-7 text-xs" />
+                                      </div>
+                                      <SelectItem value="__none__">—</SelectItem>
+                                      {vendorOptions
+                                        .filter((v) => !queryVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(queryVendorSearch.trim().toLowerCase()))
+                                        .map((v) => (
+                                          <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : r.transType === "deposit" && cat === "receivable_receive" ? (
+                                  <Select
+                                    value={(edits?.storeName ?? r.storeName ?? "") || "__none__"}
+                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "storeName", v === "__none__" ? "" : v)}
+                                    onOpenChange={(open) => !open && setQueryStoreSearch("")}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs max-w-[120px]">
+                                      <SelectValue placeholder={t("store") || "매장"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                        <Input placeholder={t("search") || "검색"} value={queryStoreSearch} onChange={(e) => setQueryStoreSearch(e.target.value)} className="h-7 text-xs" />
+                                      </div>
+                                      <SelectItem value="__none__">—</SelectItem>
+                                      {receivableOptions
+                                        .filter((s) => !queryStoreSearch.trim() || (s || "").toLowerCase().includes(queryStoreSearch.trim().toLowerCase()))
+                                        .map((s) => (
+                                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(cat) ? (
+                                  <Select
+                                    value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
+                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "accountSubjectId", v === "__none__" ? "" : v)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                      <SelectValue placeholder="—" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">—</SelectItem>
+                                      {(cat === "transfer"
+                                        ? accountSubjectOptions.filter((a) => a.type === "transfer")
+                                        : cat === "fixed"
+                                          ? accountSubjectOptions.filter((a) => a.pAndLSection === "fixed")
+                                          : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "fixed")
+                                      ).map((a) => (
+                                        <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                  <Select
+                                    value={(edits?.accountSubjectId !== undefined ? edits.accountSubjectId : r.accountSubjectId != null ? String(r.accountSubjectId) : "__none__") || "__none__"}
+                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "accountSubjectId", v === "__none__" ? "" : v)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs max-w-[120px]">
+                                      <SelectValue placeholder="—" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">—</SelectItem>
+                                      {revenueAccountOptions.map((a) => (
+                                        <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className={`p-2 text-right whitespace-nowrap ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                                 {(r.amount ?? 0).toLocaleString()}
                               </td>
-                              <td className="p-2 text-center text-muted-foreground text-xs">
-                                {r.transType === "deposit" && r.salesDate
-                                  ? r.salesDate
-                                  : r.transType === "withdraw" && r.expenseDate
-                                    ? r.expenseDate
-                                    : "—"}
+                              <td className="p-2">
+                                {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(cat) ? (
+                                  <Input
+                                    type="date"
+                                    value={edits?.salesDate ?? r.salesDate ?? (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
+                                    onChange={(e) => r.id && setQueryRowEdit(r.id, "salesDate", e.target.value)}
+                                    className="h-8 text-xs min-w-[110px] w-[110px]"
+                                  />
+                                ) : r.transType === "withdraw" && (cat === "expense" || cat === "fixed") ? (
+                                  <Input
+                                    type="date"
+                                    value={edits?.expenseDate ?? r.expenseDate ?? r.transDate}
+                                    onChange={(e) => r.id && setQueryRowEdit(r.id, "expenseDate", e.target.value)}
+                                    className="h-8 text-xs min-w-[110px] w-[110px]"
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </td>
                               <td className="p-2 text-center">
                                 {r.transType === "withdraw" && r.category === "purchase_payment" ? (
@@ -958,15 +1213,37 @@ export function BankTransactionsTab() {
                                 ) : "—"}
                               </td>
                               <td
-                              className="p-2 min-w-[140px] max-w-[140px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
-                              onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
-                              title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
-                            >
-                              {r.memo || "-"}
-                            </td>
-                              <td className="p-2 truncate max-w-[160px]" title={r.note}>{r.note || "-"}</td>
+                                className="p-2 min-w-[140px] max-w-[140px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                                onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
+                                title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                              >
+                                {r.memo || "-"}
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  placeholder={t("bankNotePlaceholder") || "상세 내용 입력"}
+                                  value={edits?.note !== undefined ? edits.note : (r.note ?? "")}
+                                  onChange={(e) => r.id && setQueryRowEdit(r.id, "note", e.target.value)}
+                                  className="h-8 text-xs min-w-[120px] max-w-[160px]"
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                {hasEdits && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleQueryRowSave(r)}
+                                    disabled={isSaving}
+                                    title={t("btn_save") || "저장"}
+                                  >
+                                    {isSaving ? <span className="text-xs">...</span> : <Save className="h-4 w-4" />}
+                                  </Button>
+                                )}
+                              </td>
                             </tr>
-                          ))}
+                          );
+                          })}
                         </tbody>
                       </table>
                     )}
@@ -1080,8 +1357,8 @@ export function BankTransactionsTab() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">{t("bankImportDupHint") || "이미 등록된 거래(날짜·금액·적요 동일)는 자동으로 제외됩니다."}</p>
-              <div className="max-h-[520px] overflow-auto border rounded">
-                <table className="w-full text-sm min-w-[840px]">
+              <div className="max-h-[520px] overflow-x-auto overflow-y-auto border rounded">
+                <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
                       <th className="p-2 text-center">{t("date")}</th>
@@ -1089,9 +1366,9 @@ export function BankTransactionsTab() {
                       <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
                       <th className="p-2 text-center">{t("accountSubject")}</th>
                       <th className="p-2 text-center">{t("pettyColAmount")}</th>
-                      <th className="p-2 text-center min-w-[132px]">{t("bankAttributedDate") || "인식일"}</th>
-                      <th className="p-2 text-center min-w-[140px]">{t("bankMemoLabel") || "은행 적요"}</th>
+                      <th className="p-2 text-center min-w-[220px]">{t("bankMemoLabel") || "은행 적요"}</th>
                       <th className="p-2 text-center min-w-[150px]">{t("bankNoteLabel") || "상세 내용"}</th>
+                      <th className="p-2 text-center min-w-[132px]">{t("bankAttributedDate") || "인식일"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1235,6 +1512,21 @@ export function BankTransactionsTab() {
                         <td className={`p-2 text-right whitespace-nowrap ${r.amount >= 0 ? "text-green-600" : "text-orange-600 dark:text-orange-400"}`}>
                           {(r.amount ?? 0).toLocaleString()}
                         </td>
+                        <td
+                          className="p-2 min-w-[220px] max-w-[280px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
+                          onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
+                          title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                        >
+                          {r.memo || "-"}
+                        </td>
+                        <td className="p-2">
+                          <Input
+                            placeholder={t("bankNotePlaceholder") || "상세 내용 입력"}
+                            value={importRowEdits[idx]?.note ?? ""}
+                            onChange={(e) => setImportRowEdit(idx, "note", e.target.value)}
+                            className="h-8 text-xs min-w-[150px]"
+                          />
+                        </td>
                         <td className="p-2">
                           {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
                             <Input
@@ -1251,21 +1543,6 @@ export function BankTransactionsTab() {
                               className="h-8 text-xs min-w-[132px] w-[132px]"
                             />
                           ) : "—"}
-                        </td>
-                        <td
-                          className="p-2 min-w-[140px] max-w-[140px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
-                          onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
-                          title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
-                        >
-                          {r.memo || "-"}
-                        </td>
-                        <td className="p-2">
-                          <Input
-                            placeholder={t("bankNotePlaceholder") || "상세 내용 입력"}
-                            value={importRowEdits[idx]?.note ?? ""}
-                            onChange={(e) => setImportRowEdit(idx, "note", e.target.value)}
-                            className="h-8 text-xs min-w-[150px]"
-                          />
                         </td>
                       </tr>
                     ))}
@@ -1580,9 +1857,14 @@ export function BankTransactionsTab() {
                       </Select>
                     </div>
                     <Button size="sm" onClick={handleAddMemoRule} disabled={savingMemoRule || !newRuleKeyword.trim()}>
-                      {savingMemoRule ? "..." : <Plus className="h-4 w-4 mr-1" />}
-                      {t("btn_add")}
+                      {savingMemoRule ? "..." : editingMemoRuleId ? <Save className="h-4 w-4 mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                      {editingMemoRuleId ? (t("btn_save") || "저장") : t("btn_add")}
                     </Button>
+                    {editingMemoRuleId && (
+                      <Button size="sm" variant="outline" onClick={handleCancelEditMemoRule} disabled={savingMemoRule}>
+                        {t("cancel")}
+                      </Button>
+                    )}
                   </div>
                   {memoRules.length > 0 && (
                     <div className="rounded border overflow-hidden">
@@ -1593,7 +1875,7 @@ export function BankTransactionsTab() {
                             <th className="p-2 text-left">{t("pettyColType") || "유형"}</th>
                             <th className="p-2 text-left">{t("bankCategoryLabel") || "용도"}</th>
                             <th className="p-2 text-left">{t("accountSubject") || "계정과목"}</th>
-                            <th className="p-2 w-10"></th>
+                            <th className="p-2 w-20"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1609,9 +1891,14 @@ export function BankTransactionsTab() {
                                 <td className="p-2">{catLabel}</td>
                                 <td className="p-2 text-muted-foreground">{sub ? `${sub.code} ${asDisplayName(sub)}` : "—"}</td>
                                 <td className="p-2">
-                                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleEditMemoRule(rule)} title={t("btn_edit") || "수정"}>
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)} title={t("delete")}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
                                 </td>
                               </tr>
                             )

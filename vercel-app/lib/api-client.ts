@@ -1494,6 +1494,24 @@ export async function updateBankTransactionInvoice(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function updateBankTransaction(params: {
+  bankTransactionId: number
+  category?: string
+  accountSubjectId?: number | null
+  note?: string
+  salesDate?: string
+  expenseDate?: string
+  vendorCode?: string
+  storeName?: string
+}) {
+  const res = await apiFetch('/api/updateBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface InboundBatchForLink {
   id: number
   batchDate: string

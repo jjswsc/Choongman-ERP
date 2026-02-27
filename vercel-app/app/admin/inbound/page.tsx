@@ -75,6 +75,8 @@ export default function InboundPage() {
   const [historyList, setHistoryList] = React.useState<InboundHistoryItem[]>([])
 
   const [inDate, setInDate] = React.useState("")
+  /** 입고 매장: 본사는 선택(입고등록=본사, 또는 매장명), 매니저는 자기 매장 고정 */
+  const [inStore, setInStore] = React.useState("")
   const [inVendor, setInVendor] = React.useState("")
   const [inPoNo, setInPoNo] = React.useState("")
   const [inInvoiceNo, setInInvoiceNo] = React.useState("")
@@ -104,10 +106,31 @@ export default function InboundPage() {
     return vendors.filter((v) => v.type === "purchase" || v.type === "both")
   }, [vendors])
 
+  /** 거래처 선택 시 해당 거래처에 등록된 품목만 (items.vendor = code 또는 name) */
+  const itemsForPicker = React.useMemo(() => {
+    if (!inVendor?.trim()) return items
+    const vName = inVendor.trim().toLowerCase()
+    const v = purchaseVendors.find((x) => x.name.trim().toLowerCase() === vName)
+    const vCode = v?.code?.trim().toLowerCase() ?? ""
+    return items.filter((i) => {
+      const iv = String(i.vendor || "").trim().toLowerCase()
+      if (!iv) return false
+      return iv === vName || iv === vCode
+    })
+  }, [items, inVendor, purchaseVendors])
+
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
     setInDate(today)
   }, [])
+
+  React.useEffect(() => {
+    if (isOffice) {
+      setInStore((prev) => prev || "입고등록")
+    } else if (auth?.store) {
+      setInStore(auth.store)
+    }
+  }, [isOffice, auth?.store])
 
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -229,7 +252,9 @@ export default function InboundPage() {
         qty: c.qty,
         cost: c.cost ? parseFloat(String(c.cost).replace(/,/g, "")) : undefined,
       }))
-      const storeName = !isOffice && auth?.store ? auth.store.trim() : undefined
+      const storeName = isOffice
+        ? (inStore && inStore !== "입고등록" ? inStore.trim() : undefined)
+        : (auth?.store?.trim() || undefined)
       const vendorCode = purchaseVendors.find((v) => v.name === cart[0]?.vendor)?.code
       const res = await registerInboundBatch(list, storeName, {
         vendorCode,
@@ -502,6 +527,24 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                         />
                       </div>
                       <div>
+                        <label className="text-xs font-semibold">{t("store")}</label>
+                        {isOffice ? (
+                          <Select value={inStore || "입고등록"} onValueChange={(v) => setInStore(v)}>
+                            <SelectTrigger className="mt-1 h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
+                              {(storeList || []).filter((s) => s && s !== "All").map((s) => (
+                                <SelectItem key={s} value={s}>{s}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input value={inStore || auth?.store || "-"} readOnly className="mt-1 h-9 bg-muted" />
+                        )}
+                      </div>
+                      <div>
                         <label className="text-xs font-semibold">{t("inVendor")}</label>
                         <Select value={inVendor || "__none__"} onValueChange={(v) => setInVendor(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="mt-1 h-9">
@@ -715,7 +758,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
         <ItemPickerDialog
           open={pickerOpen}
           onOpenChange={setPickerOpen}
-          items={items}
+          items={itemsForPicker}
           onSelect={handleItemSelect}
         />
       </div>
