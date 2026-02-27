@@ -14,13 +14,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    type ItemRow = { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }
     const itemRows = (await supabaseSelect('items', {
       limit: 1000,
       select: 'code,cost,price,total_quantity,unit,name,category',
-    })) as { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }[] | null
+    })) as ItemRow[] | null
 
     const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
-    const itemByCode: Record<string, (typeof itemRows)[number]> = {}
+    const itemByCode: Record<string, ItemRow> = {}
     for (const r of itemRows || []) {
       const code = String(r.code ?? '').trim()
       if (code) itemByCode[code] = r
