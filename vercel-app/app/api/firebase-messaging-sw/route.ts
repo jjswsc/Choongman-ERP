@@ -4,7 +4,11 @@
  */
 import { NextResponse } from "next/server"
 
-const SW_TEMPLATE = `importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js");
+const SW_TEMPLATE = `// 새 버전 즉시 활성화 (waiting 상태 해소)
+self.addEventListener('install', () => { self.skipWaiting(); });
+self.addEventListener('message', (e) => { if (e.data?.type === 'SKIP_WAITING') self.skipWaiting(); });
+
+importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging-compat.js");
 
 const firebaseConfig = {
@@ -55,7 +59,8 @@ export async function GET() {
     headers: {
       "Content-Type": "application/javascript",
       "Service-Worker-Allowed": "/",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache",
     },
   })
 }

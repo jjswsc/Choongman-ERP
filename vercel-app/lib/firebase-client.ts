@@ -50,6 +50,15 @@ export function preRegisterServiceWorker(): void {
   navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" }).catch(() => {})
 }
 
+/** 기존 Service Worker 전부 해제 (캐시된 이전 SW로 인한 실패 시, 해제 후 페이지 새로고침 필요) */
+export async function unregisterServiceWorkers(): Promise<void> {
+  if (typeof window === "undefined" || !navigator?.serviceWorker?.getRegistrations) return
+  const regs = await navigator.serviceWorker.getRegistrations()
+  for (const reg of regs) {
+    await reg.unregister()
+  }
+}
+
 export async function getFcmToken(
   onError?: (err: FcmTokenError, detail?: string) => void
 ): Promise<string | null> {
@@ -80,74 +89,33 @@ export async function getFcmToken(
   }
 
   try {
-    const maxRetries = 3
-    let lastError: unknown = null
-
+    // Firebase 기본 방식: serviceWorkerRegistration 생략 시 SDK가 /firebase-messaging-sw.js 자동 등록·활성화
+    const messaging = getMessaging(app)
+    const maxRetries = 4
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      // 이전 시도에서 SW가 아직 준비되지 않은 경우, 대기 후 재시도
-      if (attempt > 0) {
-        const waitMs = attempt * 3000
-        await new Promise((r) => setTimeout(r, waitMs))
+      try {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 5000 * attempt))
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+        return token
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        const isRetryable = /subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(msg)
+        if (isRetryable && attempt < maxRetries - 1) continue
+        throw e
       }
-
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
-
-      // SW가 active 상태가 될 때까지 대기
-      await new Promise<void>((resolve) => {
-        if (registration.active) {
-          resolve()
-          return
-        }
-        const sw = registration.installing || registration.waiting
-        if (sw) {
-          const onStateChange = () => {
-            if (registration.active) {
-              sw.removeEventListener("statechange", onStateChange)
-              resolve()
-            }
-          }
-          sw.addEventListener("statechange", onStateChange)
-          setTimeout(() => {
-            sw.removeEventListener("statechange", onStateChange)
-            resolve()
-          }, 15000)
-        } else {
-          resolve()
-        }
-      })
-
-      // SW 활성화 직후 PushManager 준비 대기 (모바일에서 더 필요할 수 있음)
-      await new Promise((r) => setTimeout(r, attempt === 0 ? 2000 : 1000))
-
-      const messaging = getMessaging(app)
-      const token = await getToken(messaging, {
-        vapidKey: VAPID_KEY,
-        serviceWorkerRegistration: registration,
-      })
-      return token
-    } catch (e) {
-      lastError = e
-      const msg = e instanceof Error ? e.message : String(e)
-      const isSwNotReady = /subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(msg)
-      if (isSwNotReady && attempt < maxRetries - 1) continue
-      throw e
     }
-    }
-
-    if (lastError) throw lastError
     return null
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (/permission|denied/i.test(msg)) onError?.("permission", msg)
     else if (/push service not available|Registration failed/i.test(msg))
-      onError?.("webview", "Chrome 앱을 열고 주소를 직접 입력해 접속한 뒤 시도하세요. (앱 내 브라우저·Safari·구버전 X)")
-    else if (/subscribing|subscribe|Subscription failed|no active Service Worker/i.test(msg))
-      onError?.("unknown", "브라우저를 새로고침한 뒤 다시 시도해 주세요. (Service Worker 준비 전에 요청된 경우)")
+      onError?.("webview", msg)
+    else if (/subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(msg))
+      onError?.("unknown", msg)
     else if (/service worker|registration|firebase-messaging-sw|unable to register/i.test(msg))
-      onError?.("unknown", "Service Worker 등록 실패. HTTPS로 접속했는지, /firebase-messaging-sw.js 접속이 되는지 확인해 주세요.")
+      onError?.("unknown", msg)
     else if (/network|fetch|Failed|timeout|ERR_/i.test(msg)) onError?.("network", msg || "네트워크 오류")
-    else if (/secure|https/i.test(msg)) onError?.("unknown", "푸시 알림은 HTTPS 또는 localhost에서만 동작합니다.")
+    else if (/secure|https/i.test(msg)) onError?.("unknown", msg)
     else onError?.("unknown", msg)
     console.warn("FCM getToken:", e)
     return null

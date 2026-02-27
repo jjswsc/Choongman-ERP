@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { isFirebaseConfigured, preRegisterServiceWorker, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
+import { isFirebaseConfigured, preRegisterServiceWorker, requestNotificationPermission, getFcmToken, unregisterServiceWorkers } from '@/lib/firebase-client'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { Bell } from 'lucide-react'
@@ -19,6 +19,9 @@ export function PushNotificationSetup({ store, name }: Props) {
   const [message, setMessage] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [swRetryHint, setSwRetryHint] = useState(false)
+  const [tokenFailed, setTokenFailed] = useState(false)
+  const [webViewError, setWebViewError] = useState(false)
+  const [permissionBlocked, setPermissionBlocked] = useState(false)
 
   useEffect(() => {
     if (store?.trim() && name?.trim()) preRegisterServiceWorker()
@@ -41,16 +44,20 @@ export function PushNotificationSetup({ store, name }: Props) {
   const handleEnablePush = async () => {
     setLoading(true)
     setMessage(null)
-    setSwRetryHint(false)
+    setTokenFailed(false)
+    setWebViewError(false)
+    setPermissionBlocked(false)
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
-        setMessage(t('pushBlocked'))
+        setMessage((t('pushBlocked') || '') + (t('pushAllowGuide') || ''))
+        setPermissionBlocked(true)
         setLoading(false)
         return
       }
       const permission = await requestNotificationPermission()
       if (permission !== 'granted') {
-        setMessage(permission === 'denied' ? t('pushDenied') : t('pushGrant'))
+        setMessage((permission === 'denied' ? t('pushDenied') : t('pushGrant')) + (t('pushAllowGuide') || ''))
+        setPermissionBlocked(permission === 'denied')
         setLoading(false)
         return
       }
@@ -61,22 +68,18 @@ export function PushNotificationSetup({ store, name }: Props) {
         lastDetail = detail
       })
       if (!token) {
-        const lastError = lastDetail || lastErr || ""
-        const isSwNotReady = /Service Worker|새로고침|준비 전/.test(lastError)
-        const isNetwork = lastErr === "network" || /fetch|Failed|timeout|ERR_|network/i.test(lastError)
-        const hint = isSwNotReady
-          ? (t('pushSwRetryHint') || '페이지를 10~20초 정도 두었다가 아래 "다시 시도"를 눌러 주세요.')
-          : lastError.includes('앱 내 브라우저') || lastError.includes('Chrome 앱을 열고') || lastError.includes('push service') || lastError.includes('지원하지 않습니다')
-            ? t('pushChromeHint')
-            : lastError.includes('HTTPS') || lastError.includes('localhost') || lastError.includes('Firebase 설정')
-                ? lastError
-                : isNetwork
-                  ? t('pushNetworkHint') + (lastError ? ` (${lastError.slice(0, 50)}…)` : '')
-                  : lastError
-                    ? lastError
-                    : t('pushChromeHint')
-        setMessage(`${t('pushTokenFail')} ${hint}`)
-        setSwRetryHint(isSwNotReady)
+        const lastError = (lastDetail || lastErr || "").trim()
+        const isSwRelated = /subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(lastError)
+        const isWebView = lastErr === "webview" || /push service not available|Registration failed|앱 내 브라우저|WebView/i.test(lastError)
+        setWebViewError(isWebView)
+        const pushServiceUnavail = /push service not available|Registration failed/i.test(lastError)
+        const baseMsg = lastError ? `${t('pushTokenFail')} ${lastError}` : `${t('pushTokenFail')} ${t('pushChromeHint')}`
+        const troubleshootHint = pushServiceUnavail
+          ? (t('pushTroubleshootHint') || '\n→ 광고차단 해제, 시크릿 모드, Chrome 새 프로필에서 시도해 보세요.')
+          : ''
+        setMessage(baseMsg + troubleshootHint)
+        setSwRetryHint(isSwRelated)
+        setTokenFailed(true)
         setLoading(false)
         return
       }
@@ -97,6 +100,34 @@ export function PushNotificationSetup({ store, name }: Props) {
       } else {
         const err = await res.json().catch(() => ({}))
         setMessage(err?.message || t('pushSaveFail'))
+        setTokenFailed(true)
+      }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : t('pushError'))
+      setTokenFailed(true)
+    }
+    setLoading(false)
+  }
+
+  const handleDisablePush = async () => {
+    setLoading(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/deletePushToken', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store: store.trim(),
+          name: name.trim(),
+        }),
+      })
+      if (res.ok) {
+        setDone(false)
+        setMessage(t('pushDisabled'))
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setMessage(err?.message || t('pushSaveFail'))
       }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : t('pushError'))
@@ -107,8 +138,26 @@ export function PushNotificationSetup({ store, name }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2">
       <Bell className="h-3.5 w-3.5 shrink-0 text-primary" />
-      <span className="text-xs text-muted-foreground">{t('pushDesc')}</span>
-      <span className="text-[10px] text-muted-foreground/70">({t('pushHint')})</span>
+      {done ? (
+        <>
+          <span className="text-xs text-muted-foreground">{t('pushEnabled')}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2.5 text-[11px] text-muted-foreground"
+            onClick={handleDisablePush}
+            disabled={loading}
+          >
+            {t('pushDisable')}
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs text-muted-foreground">{t('pushDesc')}</span>
+          <span className="text-[10px] text-muted-foreground/70">({t('pushHint')})</span>
+        </>
+      )}
       {!done && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <Button
@@ -121,21 +170,82 @@ export function PushNotificationSetup({ store, name }: Props) {
           >
             {loading ? t('pushLoading') : t('pushBtn')}
           </Button>
-          {swRetryHint && (
+          {permissionBlocked && (
             <Button
               type="button"
               size="sm"
               variant="secondary"
               className="h-7 px-2.5 text-[11px]"
-              onClick={() => {
-                setMessage(null)
-                setSwRetryHint(false)
-                setTimeout(handleEnablePush, 500)
-              }}
+              onClick={() => typeof window !== 'undefined' && window.location.reload()}
               disabled={loading}
             >
-              {t('posRetrySync') || '다시 시도'}
+              {t('pushRefreshHint') || '페이지 새로고침'}
             </Button>
+          )}
+          {tokenFailed && (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="h-7 px-2.5 text-[11px]"
+                onClick={async () => {
+                  setMessage(null)
+                  if (swRetryHint) {
+                    setLoading(true)
+                    setMessage(t('pushRetryWait') || '15초 후 자동으로 다시 시도합니다...')
+                    await new Promise((r) => setTimeout(r, 15000))
+                    setMessage(null)
+                  }
+                  handleEnablePush()
+                }}
+                disabled={loading}
+              >
+                {t('posRetrySync') || '다시 시도'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2.5 text-[11px]"
+                onClick={() => typeof window !== 'undefined' && window.location.reload()}
+                disabled={loading}
+              >
+                {t('pushRefreshHint') || '페이지 새로고침'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-[11px] border-amber-400 text-amber-700 dark:text-amber-400"
+                onClick={async () => {
+                  setLoading(true)
+                  setMessage(t('pushSwResetHint') || 'Service Worker를 초기화한 뒤 새로고침합니다...')
+                  await unregisterServiceWorkers()
+                  if (typeof window !== 'undefined') window.location.reload()
+                }}
+                disabled={loading}
+              >
+                {t('pushSwReset') || 'SW 초기화 후 새로고침'}
+              </Button>
+              {webViewError && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="h-7 px-2.5 text-[11px] bg-primary"
+                  onClick={() => {
+                    const url = typeof window !== 'undefined' ? window.location.href : ''
+                    if (url && navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(url)
+                      setMessage(t('pushUrlCopied') || '주소가 복사되었습니다. Chrome 앱을 열고 붙여넣기 후 접속하세요.')
+                    }
+                  }}
+                >
+                  {t('pushCopyUrl') || '주소 복사'}
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}

@@ -19,12 +19,7 @@ const nextConfig: NextConfig = {
     return [{ source: "/app", destination: "/", permanent: false }]
   },
   async rewrites() {
-    return [
-      {
-        source: "/firebase-messaging-sw.js",
-        destination: "/api/firebase-messaging-sw",
-      },
-    ]
+    return []
   },
   // webpack(PostCSS 등) 모듈 해석을 vercel-app 기준으로 (상위 lockfile로 인한 충돌 방지)
   webpack: (config, { isServer, webpack }) => {
