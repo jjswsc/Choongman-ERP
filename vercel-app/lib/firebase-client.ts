@@ -75,19 +75,58 @@ export async function getFcmToken(
   try {
     // Service Worker를 명시적으로 등록 후 getToken에 전달 (Next.js/rewrite 환경에서 안정화)
     const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
-    await navigator.serviceWorker.ready
+    // SW가 active 상태가 될 때까지 대기 (subscription 실패 방지)
+    await new Promise<void>((resolve) => {
+      if (registration.active) {
+        resolve()
+        return
+      }
+      const sw = registration.installing || registration.waiting
+      if (sw) {
+        const onStateChange = () => {
+          if (registration.active) {
+            sw.removeEventListener("statechange", onStateChange)
+            resolve()
+          }
+        }
+        sw.addEventListener("statechange", onStateChange)
+        // 타임아웃 10초
+        setTimeout(() => {
+          sw.removeEventListener("statechange", onStateChange)
+          resolve()
+        }, 10000)
+      } else {
+        resolve()
+      }
+    })
 
     const messaging = getMessaging(app)
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration,
-    })
+    let token: string | null = null
+    try {
+      token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration,
+      })
+    } catch (firstErr) {
+      const firstMsg = firstErr instanceof Error ? firstErr.message : String(firstErr)
+      if (/subscribing|subscribe|Subscription failed/i.test(firstMsg)) {
+        await new Promise((r) => setTimeout(r, 2000))
+        token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: registration,
+        })
+      } else {
+        throw firstErr
+      }
+    }
     return token
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (/permission|denied/i.test(msg)) onError?.("permission", msg)
     else if (/push service not available|Registration failed/i.test(msg))
       onError?.("webview", "Chrome 앱을 열고 주소를 직접 입력해 접속한 뒤 시도하세요. (앱 내 브라우저·Safari·구버전 X)")
+    else if (/subscribing|subscribe|Subscription failed|no active Service Worker/i.test(msg))
+      onError?.("unknown", "브라우저를 새로고침한 뒤 다시 시도해 주세요. (Service Worker 준비 전에 요청된 경우)")
     else if (/service worker|registration|firebase-messaging-sw|unable to register/i.test(msg))
       onError?.("unknown", "Service Worker 등록 실패. HTTPS로 접속했는지, /firebase-messaging-sw.js 접속이 되는지 확인해 주세요.")
     else if (/network|fetch|Failed|timeout|ERR_/i.test(msg)) onError?.("network", msg || "네트워크 오류")
