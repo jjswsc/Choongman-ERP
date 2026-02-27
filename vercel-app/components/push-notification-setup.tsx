@@ -18,6 +18,7 @@ export function PushNotificationSetup({ store, name }: Props) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [swRetryHint, setSwRetryHint] = useState(false)
 
   useEffect(() => {
     if (store?.trim() && name?.trim()) preRegisterServiceWorker()
@@ -40,6 +41,7 @@ export function PushNotificationSetup({ store, name }: Props) {
   const handleEnablePush = async () => {
     setLoading(true)
     setMessage(null)
+    setSwRetryHint(false)
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
         setMessage(t('pushBlocked'))
@@ -60,9 +62,11 @@ export function PushNotificationSetup({ store, name }: Props) {
       })
       if (!token) {
         const lastError = lastDetail || lastErr || ""
+        const isSwNotReady = /Service Worker|새로고침|준비 전/.test(lastError)
         const isNetwork = lastErr === "network" || /fetch|Failed|timeout|ERR_|network/i.test(lastError)
-        const hint =
-          lastError.includes('앱 내 브라우저') || lastError.includes('Chrome 앱을 열고') || lastError.includes('push service') || lastError.includes('지원하지 않습니다')
+        const hint = isSwNotReady
+          ? (t('pushSwRetryHint') || '페이지를 10~20초 정도 두었다가 아래 "다시 시도"를 눌러 주세요.')
+          : lastError.includes('앱 내 브라우저') || lastError.includes('Chrome 앱을 열고') || lastError.includes('push service') || lastError.includes('지원하지 않습니다')
             ? t('pushChromeHint')
             : lastError.includes('HTTPS') || lastError.includes('localhost') || lastError.includes('Firebase 설정')
                 ? lastError
@@ -72,6 +76,7 @@ export function PushNotificationSetup({ store, name }: Props) {
                     ? lastError
                     : t('pushChromeHint')
         setMessage(`${t('pushTokenFail')} ${hint}`)
+        setSwRetryHint(isSwNotReady)
         setLoading(false)
         return
       }
@@ -105,16 +110,34 @@ export function PushNotificationSetup({ store, name }: Props) {
       <span className="text-xs text-muted-foreground">{t('pushDesc')}</span>
       <span className="text-[10px] text-muted-foreground/70">({t('pushHint')})</span>
       {!done && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 px-2.5 text-[11px]"
-          onClick={handleEnablePush}
-          disabled={loading}
-        >
-          {loading ? t('pushLoading') : t('pushBtn')}
-        </Button>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2.5 text-[11px]"
+            onClick={handleEnablePush}
+            disabled={loading}
+          >
+            {loading ? t('pushLoading') : t('pushBtn')}
+          </Button>
+          {swRetryHint && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-7 px-2.5 text-[11px]"
+              onClick={() => {
+                setMessage(null)
+                setSwRetryHint(false)
+                setTimeout(handleEnablePush, 500)
+              }}
+              disabled={loading}
+            >
+              {t('posRetrySync') || '다시 시도'}
+            </Button>
+          )}
+        </div>
       )}
       {message && (
         <div className={`w-full rounded-md px-2 py-1.5 text-[11px] ${done ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}>

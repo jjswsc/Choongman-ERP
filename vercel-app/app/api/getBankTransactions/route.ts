@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const filter = `account_id=eq.${accountId}&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
-      order: 'trans_date.asc,id.asc',
+      order: 'id.asc',
       limit: 2000,
     }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
 

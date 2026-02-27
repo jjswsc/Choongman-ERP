@@ -574,6 +574,7 @@ export function BankTransactionsTab() {
   const handleCancelEditMemoRule = () => {
     setEditingMemoRuleId(null)
     setNewRuleKeyword("")
+    setNewRuleTransType("withdraw")
     setNewRuleCategory("")
     setNewRuleAccountSubjectId("")
   }
@@ -1361,21 +1362,21 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 <table className="w-full text-sm min-w-[900px]">
                   <thead className="bg-muted/50 sticky top-0">
                     <tr>
-                      <th className="p-2 text-center">{t("date")}</th>
-                      <th className="p-2 text-center">{t("pettyColType")}</th>
+                      <th className="p-2 text-center min-w-[96px]">{t("date")}</th>
+                      <th className="p-2 text-center min-w-[64px]">{t("pettyColType")}</th>
                       <th className="p-2 text-center">{t("bankCategoryLabel")}</th>
                       <th className="p-2 text-center">{t("accountSubject")}</th>
                       <th className="p-2 text-center">{t("pettyColAmount")}</th>
                       <th className="p-2 text-center min-w-[220px]">{t("bankMemoLabel") || "은행 적요"}</th>
                       <th className="p-2 text-center min-w-[150px]">{t("bankNoteLabel") || "상세 내용"}</th>
-                      <th className="p-2 text-center min-w-[132px]">{t("bankAttributedDate") || "인식일"}</th>
+                      <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {importPreview.rows.map((r, idx) => (
                       <tr key={idx} className={`border-t ${importRowEdits[idx]?.category === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
-                        <td className="p-2">{r.transDate}</td>
-                        <td className="p-2 text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
+                        <td className="p-2 whitespace-nowrap">{r.transDate}</td>
+                        <td className="p-2 text-center whitespace-nowrap">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                         <td className="p-2">
                           {r.transType === "withdraw" ? (
                             <Select
@@ -1527,20 +1528,20 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             className="h-8 text-xs min-w-[150px]"
                           />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 whitespace-nowrap">
                           {r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(importRowEdits[idx]?.category || "") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()}
                               onChange={(e) => setImportRowEdit(idx, "salesDate", e.target.value)}
-                              className="h-8 text-xs min-w-[132px] w-[132px]"
+                              className="h-8 text-xs w-[110px]"
                             />
                           ) : r.transType === "withdraw" && (importRowEdits[idx]?.category === "expense" || importRowEdits[idx]?.category === "fixed") ? (
                             <Input
                               type="date"
                               value={importRowEdits[idx]?.expenseDate ?? r.transDate}
                               onChange={(e) => setImportRowEdit(idx, "expenseDate", e.target.value)}
-                              className="h-8 text-xs min-w-[132px] w-[132px]"
+                              className="h-8 text-xs w-[110px]"
                             />
                           ) : "—"}
                         </td>
@@ -1880,24 +1881,104 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         </thead>
                         <tbody>
                           {memoRules.map((rule) => {
+                            const isEditing = editingMemoRuleId === (rule.id ?? 0)
                             const catLabel = rule.transType === "deposit"
                               ? (rule.category === "revenue_delivery" ? (t("bankRevenueDelivery") || "배달앱") : rule.category === "revenue_card" ? (t("bankRevenueCard") || "카드") : rule.category === "revenue_qr" ? (t("bankRevenueQr") || "QR/이체") : rule.category === "revenue_cash" ? (t("bankRevenueCash") || "현금") : rule.category === "receivable_receive" ? (t("bankCategoryReceivableReceive") || "매출 수령") : rule.category)
                               : (rule.category === "transfer" ? t("bankCategoryTransfer") : rule.category === "expense" ? t("bankCategoryExpense") : rule.category === "fixed" ? t("bankCategoryFixed") : rule.category === "purchase_payment" ? (t("bankCategoryPurchasePayment") || "매입 대금") : rule.category)
                             const sub = (rule.transType === "deposit" ? revenueAccountOptions : accountSubjectOptions).find((a) => a.id === rule.accountSubjectId)
                             return (
-                              <tr key={rule.id} className="border-t">
+                              <tr key={rule.id} className={`border-t ${isEditing ? "bg-primary/5" : ""}`}>
                                 <td className="p-2 font-mono text-xs">{rule.keyword}</td>
-                                <td className="p-2">{rule.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
-                                <td className="p-2">{catLabel}</td>
-                                <td className="p-2 text-muted-foreground">{sub ? `${sub.code} ${asDisplayName(sub)}` : "—"}</td>
+                                <td className="p-2">
+                                  {isEditing ? (
+                                    <Select value={newRuleTransType} onValueChange={(v) => { setNewRuleTransType(v as "deposit" | "withdraw"); setNewRuleCategory(""); setNewRuleAccountSubjectId("") }}>
+                                      <SelectTrigger className="h-8 w-[90px]">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="deposit">{t("bankDeposit")}</SelectItem>
+                                        <SelectItem value="withdraw">{t("bankWithdraw")}</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    rule.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isEditing ? (
+                                    <Select value={newRuleCategory} onValueChange={setNewRuleCategory}>
+                                      <SelectTrigger className="h-8 w-[130px]">
+                                        <SelectValue placeholder={t("optional")} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {newRuleTransType === "deposit" ? (
+                                          <>
+                                            <SelectItem value="revenue_delivery">{t("bankRevenueDelivery") || "배달앱"}</SelectItem>
+                                            <SelectItem value="revenue_card">{t("bankRevenueCard") || "카드"}</SelectItem>
+                                            <SelectItem value="revenue_qr">{t("bankRevenueQr") || "QR/이체"}</SelectItem>
+                                            <SelectItem value="revenue_cash">{t("bankRevenueCash") || "현금"}</SelectItem>
+                                            <SelectItem value="receivable_receive">{t("bankCategoryReceivableReceive") || "매출 수령"}</SelectItem>
+                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                            <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                            <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                            <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                                            <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                            <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                                            <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
+                                            <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                            <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                            <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                            <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                                          </>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    catLabel
+                                  )}
+                                </td>
+                                <td className="p-2">
+                                  {isEditing ? (
+                                    <Select value={newRuleAccountSubjectId || "__none__"} onValueChange={(v) => setNewRuleAccountSubjectId(v === "__none__" ? "" : v)}>
+                                      <SelectTrigger className="h-8 w-[160px]">
+                                        <SelectValue placeholder={t("placeholderOptional")} />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__">— {t("accountSubject") || "계정과목"}</SelectItem>
+                                        {(newRuleTransType === "deposit" ? revenueAccountOptions : accountSubjectOptions).map((a) => (
+                                          <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-muted-foreground">{sub ? `${sub.code} ${asDisplayName(sub)}` : "—"}</span>
+                                  )}
+                                </td>
                                 <td className="p-2">
                                   <div className="flex items-center gap-1">
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleEditMemoRule(rule)} title={t("btn_edit") || "수정"}>
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)} title={t("delete")}>
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    {isEditing ? (
+                                      <>
+                                        <Button size="sm" variant="default" className="h-8 gap-1 text-xs" onClick={handleAddMemoRule} disabled={savingMemoRule || !newRuleCategory}>
+                                          {savingMemoRule ? "..." : <><Save className="h-3.5 w-3.5" />{t("btn_save") || "저장"}</>}
+                                        </Button>
+                                        <Button size="sm" variant="outline" className="h-8" onClick={handleCancelEditMemoRule} disabled={savingMemoRule}>
+                                          {t("cancel")}
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => handleEditMemoRule(rule)} title={t("btn_edit") || "수정"}>
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive" onClick={() => rule.id && handleDeleteMemoRule(rule.id)} title={t("delete")}>
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

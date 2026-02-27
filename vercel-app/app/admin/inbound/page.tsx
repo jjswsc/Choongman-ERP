@@ -85,6 +85,7 @@ export default function InboundPage() {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
   const [saving, setSaving] = React.useState(false)
+  const [inVendorSearch, setInVendorSearch] = React.useState("")
 
   const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
@@ -546,17 +547,27 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("inVendor")}</label>
-                        <Select value={inVendor || "__none__"} onValueChange={(v) => setInVendor(v === "__none__" ? "" : v)}>
+                        <Select value={inVendor || "__none__"} onValueChange={(v) => setInVendor(v === "__none__" ? "" : v)} onOpenChange={(open) => !open && setInVendorSearch("")}>
                           <SelectTrigger className="mt-1 h-9">
                             <SelectValue placeholder={t("inVendorPlaceholder")} />
                           </SelectTrigger>
                           <SelectContent>
+                            <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                              <Input
+                                placeholder={t("search") || "검색"}
+                                value={inVendorSearch}
+                                onChange={(e) => setInVendorSearch(e.target.value)}
+                                className="h-7 text-xs"
+                              />
+                            </div>
                             <SelectItem value="__none__">{t("inVendorPlaceholder")}</SelectItem>
-                            {purchaseVendors.map((v) => (
-                              <SelectItem key={v.code} value={v.name}>
-                                {v.name}
-                              </SelectItem>
-                            ))}
+                            {purchaseVendors
+                              .filter((v) => !inVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(inVendorSearch.trim().toLowerCase()))
+                              .map((v) => (
+                                <SelectItem key={v.code} value={v.name}>
+                                  {v.name}
+                                </SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>

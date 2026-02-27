@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -20,10 +20,152 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Trash2, GripVertical } from "lucide-react"
+import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
+
+type IngredientSource = "api" | "ingredient" | "sauce"
+
+interface IngredientWithSource {
+  code: number
+  name: string
+  source: IngredientSource
+}
+
+interface IngredientPickerProps {
+  value: number
+  onChange: (code: number) => void
+  ingredients: IngredientWithSource[]
+  openRowIndex: number | null
+  rowIndex: number
+  onOpenChange: (index: number | null) => void
+  t: (key: string) => string
+}
+
+function IngredientPicker({
+  value,
+  onChange,
+  ingredients,
+  openRowIndex,
+  rowIndex,
+  onOpenChange,
+  t,
+}: IngredientPickerProps) {
+  const [searchTerm, setSearchTerm] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const isOpen = openRowIndex === rowIndex
+
+  const categories = [
+    { value: "all", label: t("posMenuCategoryAll") || "전체" },
+    { value: "api", label: t("posCostCategoryItems") || "품목관리" },
+    { value: "ingredient", label: t("posCostCategoryIngredient") || "재료" },
+    { value: "sauce", label: t("posCostCategorySauce") || "소스" },
+  ]
+
+  const filtered = ingredients.filter((ing) => {
+    const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
+    const matchSearch =
+      !searchTerm ||
+      ing.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      itemCode.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchCat = categoryFilter === "all" || ing.source === categoryFilter
+    return matchSearch && matchCat
+  })
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchTerm("")
+      setCategoryFilter("all")
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        onOpenChange(null)
+      }
+    }
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [isOpen, onOpenChange])
+
+  const currentIng = ingredients.find((i) => i.code === value)
+  const fallbackIng = getIngredient(value)
+  const displayLabel = currentIng?.name ?? fallbackIng?.name ?? "-"
+
+  return (
+    <div ref={wrapperRef} className="relative min-w-[180px]">
+      <button
+        type="button"
+        onClick={() => onOpenChange(isOpen ? null : rowIndex)}
+        className={cn(
+          "flex h-8 w-full items-center justify-between gap-1 rounded-md border border-transparent bg-transparent px-2 text-left text-sm hover:bg-secondary/50 focus:ring-1 focus:ring-primary/30",
+          isOpen && "ring-1 ring-primary/30"
+        )}
+      >
+        <span className="truncate">{displayLabel}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      </button>
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[280px] max-h-[320px] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md flex flex-col">
+          <div className="p-2 border-b border-border space-y-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="h-8 pl-8 pr-2 text-xs"
+                placeholder={t("posCostSearchIngredientPh") || "이름 또는 코드 검색..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="overflow-y-auto max-h-[220px] py-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-xs text-muted-foreground text-center">
+                {t("posCostNoIngredientsFound") || "검색 결과가 없습니다"}
+              </div>
+            ) : (
+              filtered.map((ing) => {
+                const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
+                return (
+                  <button
+                    key={ing.code}
+                    type="button"
+                    className={cn(
+                      "w-full px-3 py-2 text-left text-xs flex items-center gap-2 hover:bg-muted/80",
+                      ing.code === value && "bg-primary/10 text-primary"
+                    )}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      onChange(ing.code)
+                      onOpenChange(null)
+                    }}
+                  >
+                    <span className="font-mono text-muted-foreground shrink-0 w-12">{itemCode}</span>
+                    <span className="truncate">{ing.name}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface IngredientTableProps {
   title: string
@@ -41,15 +183,16 @@ export function IngredientTable({
   const { lang } = useLang()
   const t = useT(lang)
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
+  const [openPickerRow, setOpenPickerRow] = useState<number | null>(null)
 
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngs = type === "food" ? getRuntimeSauces() : []
   const apiItemsByType = getRuntimeApiItems().filter((i) => i.category === type)
   const usedRuntimeCodes = new Set(runtimeByType.map((i) => i.code))
-  const availableIngredients = [
-    ...apiItemsByType.filter((i) => !usedRuntimeCodes.has(i.code)),
-    ...runtimeByType,
-    ...sauceIngs,
+  const availableIngredients: IngredientWithSource[] = [
+    ...apiItemsByType.filter((i) => !usedRuntimeCodes.has(i.code)).map((i) => ({ ...i, source: "api" as const })),
+    ...runtimeByType.map((i) => ({ ...i, source: "ingredient" as const })),
+    ...sauceIngs.map((i) => ({ ...i, source: "sauce" as const })),
   ]
 
   const updateQuantity = useCallback(
@@ -131,9 +274,6 @@ export function IngredientTable({
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="w-10 text-center text-xs font-medium text-muted-foreground">
-                {t("posCostNo")}
-              </TableHead>
               <TableHead className="text-xs font-medium text-muted-foreground">
                 {t("posMenuCode")}
               </TableHead>
@@ -171,30 +311,19 @@ export function IngredientTable({
                   onMouseEnter={() => setHoveredRow(index)}
                   onMouseLeave={() => setHoveredRow(null)}
                 >
-                  <TableCell className="text-center">
-                    <GripVertical className="mx-auto h-3.5 w-3.5 text-muted-foreground/40" />
-                  </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
-                    {ingredient?.code ?? "-"}
+                    {getIngredientItemCode(item.ingredientCode) ?? ingredient?.code ?? "-"}
                   </TableCell>
                   <TableCell>
-                    <Select
-                      value={String(item.ingredientCode)}
-                      onValueChange={(val) =>
-                        changeIngredient(index, Number(val))
-                      }
-                    >
-                      <SelectTrigger className="h-8 border-transparent bg-transparent text-sm hover:bg-secondary/50 focus:ring-1 focus:ring-primary/30">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableIngredients.map((ing) => (
-                          <SelectItem key={ing.code} value={String(ing.code)}>
-                            {ing.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <IngredientPicker
+                      value={item.ingredientCode}
+                      onChange={(code) => changeIngredient(index, code)}
+                      ingredients={availableIngredients}
+                      openRowIndex={openPickerRow}
+                      rowIndex={index}
+                      onOpenChange={setOpenPickerRow}
+                      t={t}
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm text-muted-foreground">
                     {ingredient?.bahtPerUnit.toFixed(3) ?? "-"}
@@ -256,7 +385,7 @@ export function IngredientTable({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={7}
                   className="h-20 text-center text-sm text-muted-foreground"
                 >
                   {t("posCostNoIngredients")}

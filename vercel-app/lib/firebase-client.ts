@@ -80,56 +80,63 @@ export async function getFcmToken(
   }
 
   try {
-    // Service Worker를 명시적으로 등록 후 getToken에 전달 (Next.js/rewrite 환경에서 안정화)
-    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
-    // SW가 active 상태가 될 때까지 대기 (subscription 실패 방지)
-    await new Promise<void>((resolve) => {
-      if (registration.active) {
-        resolve()
-        return
+    const maxRetries = 3
+    let lastError: unknown = null
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // 이전 시도에서 SW가 아직 준비되지 않은 경우, 대기 후 재시도
+      if (attempt > 0) {
+        const waitMs = attempt * 3000
+        await new Promise((r) => setTimeout(r, waitMs))
       }
-      const sw = registration.installing || registration.waiting
-      if (sw) {
-        const onStateChange = () => {
-          if (registration.active) {
+
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
+
+      // SW가 active 상태가 될 때까지 대기
+      await new Promise<void>((resolve) => {
+        if (registration.active) {
+          resolve()
+          return
+        }
+        const sw = registration.installing || registration.waiting
+        if (sw) {
+          const onStateChange = () => {
+            if (registration.active) {
+              sw.removeEventListener("statechange", onStateChange)
+              resolve()
+            }
+          }
+          sw.addEventListener("statechange", onStateChange)
+          setTimeout(() => {
             sw.removeEventListener("statechange", onStateChange)
             resolve()
-          }
-        }
-        sw.addEventListener("statechange", onStateChange)
-        // 타임아웃 10초
-        setTimeout(() => {
-          sw.removeEventListener("statechange", onStateChange)
+          }, 15000)
+        } else {
           resolve()
-        }, 10000)
-      } else {
-        resolve()
-      }
-    })
+        }
+      })
 
-    // SW 활성화 직후 PushManager가 준비될 때까지 추가 대기
-    await new Promise((r) => setTimeout(r, 1000))
+      // SW 활성화 직후 PushManager 준비 대기 (모바일에서 더 필요할 수 있음)
+      await new Promise((r) => setTimeout(r, attempt === 0 ? 2000 : 1000))
 
-    const messaging = getMessaging(app)
-    let token: string | null = null
-    try {
-      token = await getToken(messaging, {
+      const messaging = getMessaging(app)
+      const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration,
       })
-    } catch (firstErr) {
-      const firstMsg = firstErr instanceof Error ? firstErr.message : String(firstErr)
-      if (/subscribing|subscribe|Subscription failed/i.test(firstMsg)) {
-        await new Promise((r) => setTimeout(r, 2000))
-        token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: registration,
-        })
-      } else {
-        throw firstErr
-      }
+      return token
+    } catch (e) {
+      lastError = e
+      const msg = e instanceof Error ? e.message : String(e)
+      const isSwNotReady = /subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(msg)
+      if (isSwNotReady && attempt < maxRetries - 1) continue
+      throw e
     }
-    return token
+    }
+
+    if (lastError) throw lastError
+    return null
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (/permission|denied/i.test(msg)) onError?.("permission", msg)

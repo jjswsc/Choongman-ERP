@@ -4,6 +4,7 @@ import { Inter, Geist_Mono, Noto_Sans_KR, Orbitron } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { SwPreregister } from "@/components/sw-preregister"
 
 import "./globals.css"
 
@@ -52,6 +53,7 @@ export default function RootLayout({
     <html lang="ko">
       <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} ${orbitron.variable} font-sans antialiased`}>
         <ErrorBoundary>
+          <SwPreregister />
           <AuthProvider>
             <LangProvider>{children}</LangProvider>
           </AuthProvider>
