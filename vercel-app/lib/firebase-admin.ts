@@ -70,13 +70,12 @@ export async function sendFcmToRecipients(params: {
   body: string
   recipients: { store: string; name: string }[]
 }): Promise<{ sent: number; failed: number }> {
+  const { title, body, recipients } = params
   const app = getAdminApp()
   if (!app) {
     if (recipients?.length) console.warn('FCM skipped: FIREBASE_SERVICE_ACCOUNT_JSON not set')
     return { sent: 0, failed: 0 }
   }
-
-  const { title, body, recipients } = params
   if (!recipients?.length) return { sent: 0, failed: 0 }
 
   const tokens: string[] = []
