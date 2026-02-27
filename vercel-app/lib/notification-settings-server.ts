@@ -12,7 +12,7 @@ export async function getNotificationSettings(): Promise<{
       'system_settings',
       'or=(key.eq.push_notice_enabled,key.eq.push_order_approval_enabled)',
       { limit: 10 }
-    )) as { key?: string; value_json?: number }[] | null
+    )) as { key?: string; value_json?: number | boolean }[] | null
 
     const map: Record<string, boolean> = {
       push_notice_enabled: true,
