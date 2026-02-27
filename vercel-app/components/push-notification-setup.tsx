@@ -21,7 +21,20 @@ export function PushNotificationSetup({ store, name }: Props) {
 
   if (!store?.trim() || !name?.trim()) return null
 
-  if (!isFirebaseConfigured()) return null
+  // Firebase 미설정 시에도 안내 문구 표시 (알림 설정이 있다는 것을 사용자에게 알림)
+  if (!isFirebaseConfigured()) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+        <Bell className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+        <span className="text-xs text-muted-foreground">
+          {t('pushFirebaseRequired')}
+        </span>
+        <span className="text-[10px] text-muted-foreground/70">
+          (Vercel 환경 변수에 NEXT_PUBLIC_FIREBASE_*, VAPID_KEY 설정 필요)
+        </span>
+      </div>
+    )
+  }
 
   const handleEnablePush = async () => {
     setLoading(true)
@@ -103,7 +116,9 @@ export function PushNotificationSetup({ store, name }: Props) {
         </Button>
       )}
       {message && (
-        <span className={`w-full text-[11px] ${done ? 'text-green-600' : 'text-amber-600'}`}>{message}</span>
+        <div className={`w-full rounded-md px-2 py-1.5 text-[11px] ${done ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}>
+          {message}
+        </div>
       )}
     </div>
   )

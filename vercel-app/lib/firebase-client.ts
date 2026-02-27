@@ -73,16 +73,25 @@ export async function getFcmToken(
   }
 
   try {
+    // Service Worker를 명시적으로 등록 후 getToken에 전달 (Next.js/rewrite 환경에서 안정화)
+    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" })
+    await navigator.serviceWorker.ready
+
     const messaging = getMessaging(app)
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: registration,
+    })
     return token
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     if (/permission|denied/i.test(msg)) onError?.("permission", msg)
     else if (/push service not available|Registration failed/i.test(msg))
       onError?.("webview", "Chrome 앱을 열고 주소를 직접 입력해 접속한 뒤 시도하세요. (앱 내 브라우저·Safari·구버전 X)")
+    else if (/service worker|registration|firebase-messaging-sw|unable to register/i.test(msg))
+      onError?.("unknown", "Service Worker 등록 실패. HTTPS로 접속했는지, /firebase-messaging-sw.js 접속이 되는지 확인해 주세요.")
     else if (/network|fetch|Failed|timeout|ERR_/i.test(msg)) onError?.("network", msg || "네트워크 오류")
-    else if (/service worker|firebase-messaging-sw|secure|https/i.test(msg)) onError?.("unknown", "HTTPS 또는 localhost에서 접속해 주세요.")
+    else if (/secure|https/i.test(msg)) onError?.("unknown", "푸시 알림은 HTTPS 또는 localhost에서만 동작합니다.")
     else onError?.("unknown", msg)
     console.warn("FCM getToken:", e)
     return null

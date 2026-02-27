@@ -40,18 +40,30 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [pwNew2, setPwNew2] = useState("")
   const [pwChanging, setPwChanging] = useState(false)
   const [pwError, setPwError] = useState("")
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     if (auth) {
       router.replace(redirectTo)
       return
     }
-    getLoginData()
+    setLoadError(null)
+    const timeoutMs = 15000
+    const withTimeout = Promise.race([
+      getLoginData(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`연결 시간 초과 (${timeoutMs / 1000}초)`)), timeoutMs)
+      ),
+    ])
+    withTimeout
       .then((d) => {
         setLoginData(d.users || {})
+        setLoadError(null)
         setLoading(false)
       })
-      .catch(() => {
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        setLoadError(msg.includes('시간 초과') ? msg : '매장 목록을 불러오지 못했습니다. 네트워크와 SUPABASE 환경 변수를 확인해 주세요.')
         setLoginData({})
         setLoading(false)
       })
@@ -99,7 +111,11 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
         setError(translateApiMessage(res.message, tMsg) || res.message || tMsg("msg_login_failed"))
       }
     } catch (err) {
-      setError(tMsg("msg_server_error_prefix") + (err instanceof Error ? err.message : String(err)))
+      const msg = err instanceof Error ? err.message : String(err)
+      if (typeof console !== "undefined" && console.error) {
+        console.error("[Login] loginCheck failed:", err)
+      }
+      setError(tMsg("msg_server_error_prefix") + msg)
     } finally {
       setSubmitting(false)
     }
@@ -193,6 +209,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       <div className="login-page">
         <div className="login-loading">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
+          <p className="mt-4 text-sm text-white/70">매장 목록 불러오는 중...</p>
         </div>
       </div>
     )
@@ -246,10 +263,17 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            {noStores && (
-              <p className="-mt-2 mb-2 text-xs text-amber-400">
-                {tMsg("msg_no_stores_env")}
-              </p>
+            {(noStores || loadError) && (
+              <div className="-mt-2 mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+                <span>{loadError || tMsg("msg_no_stores_env")}</span>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="self-start rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
+                >
+                  새로고침
+                </button>
+              </div>
             )}
 
             <Select value={user} onValueChange={setUser} disabled={!store}>
@@ -275,7 +299,11 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               aria-label="Password"
             />
 
-            {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+            {error && (
+              <div className="mb-3 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {error}
+              </div>
+            )}
 
             <button type="submit" className="login-btn" disabled={submitting}>
               {submitting ? t.loggingIn : t.login}

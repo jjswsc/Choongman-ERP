@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { StatCard } from "@/components/erp/stat-card"
 import { NoticesPanel } from "@/components/erp/notices-panel"
+import { PushNotificationSetup } from "@/components/push-notification-setup"
 import { QuickActions } from "@/components/erp/quick-actions"
 import { RecentActivity } from "@/components/erp/recent-activity"
 import { useAuth } from "@/lib/auth-context"
@@ -46,6 +47,12 @@ export default function AdminDashboardPage() {
               {t("adminWelcomeSub")}
             </p>
           </div>
+
+          {auth?.store && auth?.user && (
+            <div className="mb-6">
+              <PushNotificationSetup store={auth.store} name={auth.user} />
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <Link href="/admin/orders" className="block h-full min-h-[132px] transition-opacity hover:opacity-90">
