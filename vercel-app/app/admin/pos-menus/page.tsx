@@ -43,6 +43,7 @@ const emptyForm = {
   imageUrl: "",
   vatIncluded: true,
   isActive: true,
+  optionSelectionGroups: "",
 }
 
 export default function PosMenusPage() {
@@ -66,6 +67,7 @@ export default function PosMenusPage() {
   const [newOptionType, setNewOptionType] = React.useState<"substitution" | "additive">("substitution")
   const [newOptionItemCode, setNewOptionItemCode] = React.useState("")
   const [newOptionQuantity, setNewOptionQuantity] = React.useState("1")
+  const [newOptionStepValues, setNewOptionStepValues] = React.useState<Record<string, string>>({})
   const [selectedIngredientOptionId, setSelectedIngredientOptionId] = React.useState<string>("")
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
   const [newIngredientQty, setNewIngredientQty] = React.useState("1")
@@ -167,6 +169,7 @@ export default function PosMenusPage() {
           imageUrl: m.imageUrl,
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
+          optionSelectionGroups: (m.optionSelectionGroups || []).join(", "),
         })
       }
     } else {
@@ -185,6 +188,9 @@ export default function PosMenusPage() {
       alert(t("itemsAlertCodeExists"))
       return
     }
+    const optionSelectionGroups = formData.optionSelectionGroups
+      ? formData.optionSelectionGroups.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined
     const res = await savePosMenu({
       id: editingId || undefined,
       code,
@@ -195,6 +201,7 @@ export default function PosMenusPage() {
       imageUrl: formData.imageUrl.trim(),
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
+      optionSelectionGroups,
     })
     if (!res.success) {
       alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -211,6 +218,7 @@ export default function PosMenusPage() {
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       sortOrder: 0,
+      optionSelectionGroups: optionSelectionGroups,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
@@ -237,6 +245,7 @@ export default function PosMenusPage() {
       imageUrl: menu.imageUrl,
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
+      optionSelectionGroups: (menu.optionSelectionGroups || []).join(", "),
     })
     setEditingId(menu.id)
     setNewOptionName("")
@@ -245,12 +254,30 @@ export default function PosMenusPage() {
     setSelectedIngredientOptionId("")
   }
 
+  const currentMenuGroups = (formData.optionSelectionGroups || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
   const handleAddOption = async () => {
     if (!editingId || !newOptionName.trim()) return
     if (newOptionType === "additive" && !newOptionItemCode.trim()) {
       alert(t("posOptionAdditiveItemRequired") || "추가형 옵션은 품목을 선택해야 합니다.")
       return
     }
+    if (newOptionType === "substitution" && currentMenuGroups.length > 0) {
+      const missing = currentMenuGroups.filter((g) => !(newOptionStepValues[g] ?? "").trim())
+      if (missing.length > 0) {
+        alert(
+          t("posOptionStepValuesRequired") ||
+            `옵션 선택 단계가 설정된 메뉴는 대체형 옵션에 모든 단계 값을 입력해야 합니다. (빈 값: ${missing.join(", ")})`
+        )
+        return
+      }
+    }
+    const optionStepValues =
+      newOptionType === "substitution" && currentMenuGroups.length > 0
+        ? Object.fromEntries(currentMenuGroups.map((g) => [g, (newOptionStepValues[g] || "").trim()]))
+        : undefined
     const res = await savePosMenuOption({
       menuId: Number(editingId),
       name: newOptionName.trim(),
@@ -260,6 +287,7 @@ export default function PosMenusPage() {
       optionType: newOptionType,
       itemCode: newOptionType === "additive" ? newOptionItemCode.trim() : null,
       quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
+      optionStepValues,
     })
     if (res.success) {
       getPosMenuOptions({ menuId: editingId }).then(setMenuOptions)
@@ -269,6 +297,7 @@ export default function PosMenusPage() {
       setNewOptionType("substitution")
       setNewOptionItemCode("")
       setNewOptionQuantity("1")
+      setNewOptionStepValues({})
     } else {
       alert(res.message)
     }
@@ -448,6 +477,18 @@ export default function PosMenusPage() {
                         {t("posMenuActive")}
                       </label>
                     </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</label>
+                      <Input
+                        placeholder="size, bone"
+                        className="mt-1 h-10 text-xs"
+                        value={formData.optionSelectionGroups}
+                        onChange={(e) => setFormData((p) => ({ ...p, optionSelectionGroups: e.target.value }))}
+                      />
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {t("posOptionSelectionGroupsHint") || "쉼표로 구분. 예: size, bone — POS에서 1단계(사이즈) → 2단계(순살/뼈) 순서로 선택"}
+                      </p>
+                    </div>
                     <div className="rounded border border-dashed p-3">
                       <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
                       <ul className="mb-2 space-y-1">
@@ -457,6 +498,9 @@ export default function PosMenusPage() {
                               <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{o.name}</span>
                               {o.optionType === "additive" && o.itemCode && (
                                 <span className="ml-1 text-muted-foreground">+{o.itemCode}×{o.quantity ?? 1}</span>
+                              )}
+                              {o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0 && (
+                                <span className="ml-1 text-muted-foreground">({Object.entries(o.optionStepValues).map(([k, v]) => `${k}:${v}`).join(" / ")})</span>
                               )}
                               {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
                                 ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)` : ""}
@@ -482,6 +526,22 @@ export default function PosMenusPage() {
                             </SelectContent>
                           </Select>
                         </div>
+                        {newOptionType === "substitution" && currentMenuGroups.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {currentMenuGroups.map((g) => (
+                              <div key={g} className="flex items-center gap-1">
+                                <span className="text-[10px] text-muted-foreground">{g}</span>
+                                <Input
+                                  placeholder={g}
+                                  className="h-8 w-24 text-xs"
+                                  value={newOptionStepValues[g] ?? ""}
+                                  onChange={(e) => setNewOptionStepValues((p) => ({ ...p, [g]: e.target.value }))}
+                                />
+                              </div>
+                            ))}
+                            <p className="text-[10px] text-muted-foreground w-full">예: size=M, bone=순살</p>
+                          </div>
+                        )}
                         {newOptionType === "additive" && (
                           <div className="flex flex-col gap-2">
                             <div className="flex gap-2 items-center flex-wrap">
@@ -651,6 +711,18 @@ export default function PosMenusPage() {
                       <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
                       {t("posMenuActive")}
                     </label>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</label>
+                    <Input
+                      placeholder="size, bone"
+                      className="mt-1 h-10 text-xs"
+                      value={formData.optionSelectionGroups}
+                      onChange={(e) => setFormData((p) => ({ ...p, optionSelectionGroups: e.target.value }))}
+                    />
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {t("posOptionSelectionGroupsHint") || "쉼표로 구분. 예: size, bone — POS에서 1단계(사이즈) → 2단계(순살/뼈) 순서로 선택"}
+                    </p>
                   </div>
                   <div className="flex gap-3 pt-2">
                     <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>

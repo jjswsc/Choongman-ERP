@@ -1857,6 +1857,8 @@ export interface PosMenu {
   isActive: boolean
   sortOrder: number
   soldOutDate?: string | null
+  /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
+  optionSelectionGroups?: string[]
 }
 
 export interface PosMenuOption {
@@ -1869,6 +1871,8 @@ export interface PosMenuOption {
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
   quantity?: number
+  /** 복합 옵션의 단계별 값. 예: {"size":"M","bone":"순살"} */
+  optionStepValues?: Record<string, string> | null
 }
 
 export async function getPosMenus() {
@@ -1898,6 +1902,7 @@ export async function savePosMenuOption(params: {
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
   quantity?: number
+  optionStepValues?: Record<string, string> | null
 }) {
   const res = await apiFetch('/api/savePosMenuOption', {
     method: 'POST',
@@ -2098,6 +2103,7 @@ export async function savePosMenu(params: {
   vatIncluded?: boolean
   isActive?: boolean
   sortOrder?: number
+  optionSelectionGroups?: string[]
 }) {
   const res = await apiFetch('/api/savePosMenu', {
     method: 'POST',

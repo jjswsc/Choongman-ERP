@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
   const menuId = searchParams.get('menuId')?.trim()
 
   try {
-    const selectCols = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,option_type,item_code,quantity'
-    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; quantity?: number }[] | null
+    const selectCols = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,option_type,item_code,quantity,option_step_values'
+    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; quantity?: number; option_step_values?: Record<string, string> | null }[] | null
     try {
       if (menuId) {
         rows = (await supabaseSelectFilter(
@@ -34,17 +34,22 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const list = (rows || []).map((row) => ({
-      id: String(row.id ?? ''),
-      menuId: String(row.menu_id ?? ''),
-      name: String(row.name ?? ''),
-      priceModifier: Number(row.price_modifier) ?? 0,
-      priceModifierDelivery: row.price_modifier_delivery != null ? Number(row.price_modifier_delivery) : null,
-      sortOrder: Number(row.sort_order) ?? 0,
-      optionType: (row.option_type || 'substitution') as 'substitution' | 'additive',
-      itemCode: row.item_code ? String(row.item_code).trim() : null,
-      quantity: Number(row.quantity) ?? 1,
-    }))
+    const list = (rows || []).map((row) => {
+      const stepValues = row.option_step_values
+      const sv = stepValues && typeof stepValues === 'object' && !Array.isArray(stepValues) ? stepValues as Record<string, string> : null
+      return {
+        id: String(row.id ?? ''),
+        menuId: String(row.menu_id ?? ''),
+        name: String(row.name ?? ''),
+        priceModifier: Number(row.price_modifier) ?? 0,
+        priceModifierDelivery: row.price_modifier_delivery != null ? Number(row.price_modifier_delivery) : null,
+        sortOrder: Number(row.sort_order) ?? 0,
+        optionType: (row.option_type || 'substitution') as 'substitution' | 'additive',
+        itemCode: row.item_code ? String(row.item_code).trim() : null,
+        quantity: Number(row.quantity) ?? 1,
+        optionStepValues: sv || null,
+      }
+    })
 
     return NextResponse.json(list, { headers })
   } catch (e) {

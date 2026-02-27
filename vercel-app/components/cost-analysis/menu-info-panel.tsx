@@ -173,6 +173,38 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], rea
             </button>
           </div>
         </div>
+
+        {menuItem.serviceType === "Delivery" && (
+          <div className="space-y-1.5 col-span-2">
+            <Label htmlFor="appFeePercent" className="text-xs text-muted-foreground">
+              {t("posCostAppFeePercent")}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="appFeePercent"
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={menuItem.deliveryPercent}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value)
+                  if (!Number.isNaN(v) && v >= 0 && v <= 100) {
+                    onMenuItemChange({ ...menuItem, deliveryPercent: v })
+                  } else if (e.target.value === "" || e.target.value === "-") {
+                    onMenuItemChange({ ...menuItem, deliveryPercent: 0 })
+                  }
+                }}
+                className="h-9 w-20 font-mono bg-secondary/50 border-border text-right"
+                placeholder="25"
+              />
+              <span className="text-xs text-muted-foreground">%</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {t("posCostAppFeePercentHint")}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

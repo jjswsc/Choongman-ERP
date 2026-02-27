@@ -10,7 +10,7 @@ export async function GET() {
     const rows = (await supabaseSelect('pos_menus', {
       order: 'sort_order.asc,name.asc',
       limit: 1000,
-      select: 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date',
+      select: 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date,option_selection_groups',
     })) as {
       id?: number
       code?: string
@@ -23,6 +23,7 @@ export async function GET() {
       is_active?: boolean
       sort_order?: number
       sold_out_date?: string | null
+      option_selection_groups?: string[] | null
     }[] | null
 
     const list = (rows || []).map((row) => ({
@@ -37,6 +38,12 @@ export async function GET() {
       isActive: row.is_active !== false,
       sortOrder: Number(row.sort_order) ?? 0,
       soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
+      optionSelectionGroups: (() => {
+        const v = row.option_selection_groups
+        if (Array.isArray(v)) return v
+        if (v && typeof v === 'string') try { return JSON.parse(v) as string[] } catch { return [] }
+        return []
+      })(),
     }))
 
     return NextResponse.json(list, { headers })

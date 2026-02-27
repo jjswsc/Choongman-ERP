@@ -32,6 +32,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 같은 날짜·매장에 이미 점검 결과가 있으면 UPDATE (duplicate key 방지)
+    const dupFilter = `check_date=eq.${encodeURIComponent(dateStr)}&store_name=eq.${encodeURIComponent(store)}`
+    const existingByDateStore = (await supabaseSelectFilter('check_results', dupFilter, { limit: 1 })) as { id?: string }[]
+    if (existingByDateStore && existingByDateStore.length > 0) {
+      const existId = existingByDateStore[0].id
+      await supabaseUpdateByFilter('check_results', `id=eq.${encodeURIComponent(existId)}`, {
+        check_date: dateStr,
+        store_name: store,
+        inspector,
+        summary,
+        memo,
+        json_data: jsonData,
+      })
+      return NextResponse.json({ success: true, result: 'UPDATED' })
+    }
+
     const newId = `${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}_${store}`
     await supabaseInsert('check_results', {
       id: newId,

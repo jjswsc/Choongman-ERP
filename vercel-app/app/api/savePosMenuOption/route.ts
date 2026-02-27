@@ -17,12 +17,15 @@ export async function POST(req: NextRequest) {
     const optionType = (body?.optionType || 'substitution') as string
     const itemCode = body?.itemCode ? String(body.itemCode).trim() : null
     const quantity = Math.max(0.001, Number(body?.quantity) ?? 1)
+    const optionStepValues = body?.optionStepValues && typeof body.optionStepValues === 'object' && !Array.isArray(body.optionStepValues)
+      ? (body.optionStepValues as Record<string, string>)
+      : null
 
     if (!menuId || !name) {
       return NextResponse.json({ success: false, message: 'menuId and name required' }, { headers })
     }
 
-    const rowFull = {
+    const rowFull: Record<string, unknown> = {
       name,
       price_modifier: priceModifier,
       price_modifier_delivery: priceModifierDelivery,
@@ -31,6 +34,7 @@ export async function POST(req: NextRequest) {
       item_code: optionType === 'additive' && itemCode ? itemCode : null,
       quantity: optionType === 'additive' ? quantity : 1,
     }
+    if (optionStepValues) rowFull.option_step_values = optionStepValues
     const rowBasic = { name, price_modifier: priceModifier, price_modifier_delivery: priceModifierDelivery, sort_order: sortOrder }
 
     try {

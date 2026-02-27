@@ -66,6 +66,8 @@ export default function PosPage() {
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [loading, setLoading] = React.useState(true)
   const [optionPickerMenu, setOptionPickerMenu] = React.useState<PosMenu | null>(null)
+  const [optionPickerStep, setOptionPickerStep] = React.useState(0)
+  const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
@@ -229,6 +231,8 @@ export default function PosPage() {
       }]
     })
     setOptionPickerMenu(null)
+    setOptionPickerStep(0)
+    setOptionPickerSelections({})
   }
 
   const addToCart = (menu: PosMenu) => {
@@ -1070,30 +1074,97 @@ export default function PosPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 옵션 선택 모달 */}
-      <Dialog open={!!optionPickerMenu} onOpenChange={(open) => !open && setOptionPickerMenu(null)}>
+      {/* 옵션 선택 모달 - 단계별(사이즈→순살/뼈) 또는 평면 목록 */}
+      <Dialog
+        open={!!optionPickerMenu}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOptionPickerMenu(null)
+            setOptionPickerStep(0)
+            setOptionPickerSelections({})
+          }
+        }}
+      >
         <DialogContent className="max-w-xs sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>
               {optionPickerMenu?.name} — {t("posSelectOption") || "옵션 선택"}
+              {optionPickerMenu?.optionSelectionGroups?.length
+                ? ` (${(optionPickerStep || 0) + 1}/${optionPickerMenu.optionSelectionGroups.length})`
+                : ""}
             </DialogTitle>
           </DialogHeader>
-          {optionPickerMenu && (
-            <div className="flex flex-col gap-2 py-2">
-              {optionsByMenuId[optionPickerMenu.id]?.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => addToCartWithOption(optionPickerMenu, opt)}
-                  className="flex justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
-                >
-                  <span>{opt.name}</span>
-                  <span className="font-bold text-amber-400">
-                    {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+          {optionPickerMenu && (() => {
+            const opts = optionsByMenuId[optionPickerMenu.id] || []
+            const groups = optionPickerMenu.optionSelectionGroups || []
+            const optsWithSteps = opts.filter(
+              (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
+            )
+            const useMultiStep = groups.length > 0 && optsWithSteps.length > 0
+            if (useMultiStep) {
+              const groupKey = groups[optionPickerStep]
+              const values = [...new Set(optsWithSteps.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
+              const handleStepSelect = (value: string) => {
+                const nextSelections = { ...optionPickerSelections, [groupKey]: value }
+                setOptionPickerSelections(nextSelections)
+                if (optionPickerStep >= groups.length - 1) {
+                  const match = optsWithSteps.find((o) =>
+                    groups.every((g) => o.optionStepValues?.[g] === nextSelections[g])
+                  )
+                  if (match) {
+                    addToCartWithOption(optionPickerMenu, match)
+                  }
+                } else {
+                  setOptionPickerStep((s) => s + 1)
+                }
+              }
+              const groupLabels: Record<string, string> = { size: "사이즈", bone: "뼈/순살", type: "타입" }
+              return (
+                <div className="flex flex-col gap-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    {groupLabels[groupKey] || groupKey}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {values.map((val) => (
+                      <button
+                        key={val}
+                        onClick={() => handleStepSelect(val)}
+                        className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 transition hover:border-amber-500/50 hover:bg-slate-700"
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+                  {optionPickerStep > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setOptionPickerStep((s) => s - 1)}
+                    >
+                      ← {t("posBack") || "이전"}
+                    </Button>
+                  )}
+                </div>
+              )
+            }
+            return (
+              <div className="flex flex-col gap-2 py-2">
+                {opts.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => addToCartWithOption(optionPickerMenu, opt)}
+                    className="flex justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
+                  >
+                    <span>{opt.name}</span>
+                    <span className="font-bold text-amber-400">
+                      {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 

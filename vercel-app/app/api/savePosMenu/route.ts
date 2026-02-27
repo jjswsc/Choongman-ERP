@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       vatIncluded?: boolean
       isActive?: boolean
       sortOrder?: number
+      optionSelectionGroups?: string[]
       id?: string
     }
 
@@ -35,7 +36,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const row = {
+    const optionSelectionGroups = Array.isArray(body.optionSelectionGroups) && body.optionSelectionGroups.length > 0
+      ? body.optionSelectionGroups
+      : null
+    const row: Record<string, unknown> = {
       code,
       name,
       category: String(body.category ?? '').trim(),
@@ -46,6 +50,7 @@ export async function POST(req: NextRequest) {
       is_active: body.isActive !== false,
       sort_order: Number(body.sortOrder) ?? 0,
     }
+    if (optionSelectionGroups) row.option_selection_groups = optionSelectionGroups
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
