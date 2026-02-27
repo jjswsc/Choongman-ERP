@@ -43,6 +43,7 @@ export interface ItemFormData {
   taxType: "taxable" | "exempt" | "zero"
   spec: string
   unit: string
+  totalQuantity: string
   description: string
   price: string
   cost: string
@@ -298,21 +299,37 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="text-xs font-semibold text-foreground">{t("itemsUnit") || "표준 단위"}</label>
-          <Select value={formData.unit || "_"} onValueChange={(v) => update("unit", v === "_" ? "" : v)}>
-            <SelectTrigger className="h-10 text-sm">
-              <SelectValue placeholder={t("itemsUnitPh") || "선택 (예: kg, g, 개)"} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_">—</SelectItem>
-              {UNIT_OPTIONS.filter(Boolean).map((u) => (
-                <SelectItem key={u} value={u}>{u}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[10px] text-muted-foreground">{t("itemsUnitHint") || "재료 사용량(quantity)의 단위. 메뉴 원가 계산에 사용됩니다."}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-foreground">{t("itemsUnit") || "표준 단위"}</label>
+            <Select value={formData.unit || "_"} onValueChange={(v) => update("unit", v === "_" ? "" : v)}>
+              <SelectTrigger className="h-10 text-sm">
+                <SelectValue placeholder={t("itemsUnitPh") || "선택 (예: kg, g, 개)"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_">—</SelectItem>
+                {UNIT_OPTIONS.filter(Boolean).map((u) => (
+                  <SelectItem key={u} value={u}>{u}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-semibold text-foreground">{t("itemsTotalQuantity") || "총 수량"}</label>
+            <Input
+              type="number"
+              placeholder="0"
+              min="0"
+              step="0.0001"
+              className="h-10 text-sm text-right tabular-nums"
+              value={formData.totalQuantity}
+              onChange={(e) => update("totalQuantity", e.target.value)}
+            />
+          </div>
         </div>
+        <p className="text-[10px] text-muted-foreground -mt-1">
+          {(t("itemsTotalQuantityHint") || "총 수량 있으면 1{unit}당 원가 = 판매가 ÷ 총 수량 (원가 계산기 반영)").replace("{unit}", formData.unit || "?")}
+        </p>
 
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
@@ -355,6 +372,17 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             </div>
           </div>
         </div>
+        {formData.unit && parseFloat(formData.totalQuantity) > 0 && parseFloat(formData.price) >= 0 && (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2">
+            <span className="text-xs text-muted-foreground">
+              {t("itemsCostPerUnitPreview") || "1"}{formData.unit}
+              {t("itemsCostPerUnitPreview2") || "당 원가"}:
+            </span>
+            <span className="ml-2 text-sm font-semibold tabular-nums text-primary">
+              {(parseFloat(formData.price) / parseFloat(formData.totalQuantity)).toFixed(4)} ฿
+            </span>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-1">
           <Button className="flex-1 h-11 text-sm font-bold" onClick={onSave}>

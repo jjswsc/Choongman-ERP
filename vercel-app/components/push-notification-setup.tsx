@@ -21,13 +21,7 @@ export function PushNotificationSetup({ store, name }: Props) {
 
   if (!store?.trim() || !name?.trim()) return null
 
-  if (!isFirebaseConfigured()) {
-    return (
-      <p className="text-[11px] text-muted-foreground">
-        {t('pushFirebaseRequired')}
-      </p>
-    )
-  }
+  if (!isFirebaseConfigured()) return null
 
   const handleEnablePush = async () => {
     setLoading(true)

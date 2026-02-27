@@ -58,14 +58,17 @@ export async function sendFcmToRecipients(params: {
   let sent = 0
   let failed = 0
 
+  const appName = 'CM ERP'
+  const displayTitle = title.startsWith('[') ? title : `[${appName}] ${title}`
+
   // FCM은 한 번에 500개까지. 배치로 나눠 전송
   const batchSize = 500
   for (let i = 0; i < uniqueTokens.length; i += batchSize) {
     const chunk = uniqueTokens.slice(i, i + batchSize)
     const message: admin.messaging.MulticastMessage = {
       tokens: chunk,
-      notification: { title, body },
-      data: { title, body },
+      notification: { title: displayTitle, body },
+      data: { title: displayTitle, body },
     }
     try {
       const res = await messaging.sendEachForMulticast(message)

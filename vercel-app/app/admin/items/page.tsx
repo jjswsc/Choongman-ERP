@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Tags, Settings } from "lucide-react"
+import { Tags, Settings, FileSpreadsheet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
@@ -9,7 +9,7 @@ import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-locati
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
 
@@ -23,6 +23,7 @@ const emptyForm: ItemFormData = {
   taxType: "taxable",
   spec: "",
   unit: "",
+  totalQuantity: "",
   description: "",
   price: "",
   cost: "",
@@ -43,6 +44,8 @@ export default function ItemsPage() {
   const [outboundFilter, setOutboundFilter] = React.useState("all")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
+  const [excelImporting, setExcelImporting] = React.useState(false)
+  const excelInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadOutboundLocations = React.useCallback(async () => {
     try {
@@ -87,6 +90,7 @@ export default function ItemsPage() {
           taxType: p.taxType,
           spec: p.spec,
           unit: p.unit ?? "",
+          totalQuantity: p.totalQuantity != null ? String(p.totalQuantity) : "",
           description: p.description ?? "",
           price: String(p.price),
           cost: String(p.cost),
@@ -109,6 +113,7 @@ export default function ItemsPage() {
       alert(t("itemsAlertCodeExists"))
       return
     }
+    const totalQty = formData.totalQuantity.trim() ? parseFloat(formData.totalQuantity) : null
     const res = await saveItem({
       code,
       name,
@@ -117,6 +122,7 @@ export default function ItemsPage() {
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
       unit: formData.unit.trim(),
+      totalQuantity: totalQty != null && totalQty > 0 ? totalQty : null,
       description: formData.description.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
@@ -137,6 +143,7 @@ export default function ItemsPage() {
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
       unit: formData.unit.trim(),
+      totalQuantity: totalQty != null && totalQty > 0 ? totalQty : null,
       description: formData.description.trim(),
       price: Number(formData.price) || 0,
       cost: Number(formData.cost) || 0,
@@ -171,6 +178,7 @@ export default function ItemsPage() {
       taxType: product.taxType,
       spec: product.spec,
       unit: product.unit ?? "",
+      totalQuantity: product.totalQuantity != null ? String(product.totalQuantity) : "",
       description: product.description ?? "",
       price: String(product.price),
       cost: String(product.cost),
@@ -196,6 +204,27 @@ export default function ItemsPage() {
 
   const handleSearch = () => {
     setHasSearched(true)
+  }
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setExcelImporting(true)
+    try {
+      const res = await importItemsFromExcel(file)
+      if (res.success) {
+        alert(res.message || (res.added ? `${res.added}건 등록` : '완료'))
+        const [list] = await Promise.all([getAdminItems()])
+        setProducts(list || [])
+      } else {
+        alert(res.message || '가져오기 실패')
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류')
+    } finally {
+      setExcelImporting(false)
+    }
   }
 
   const filteredProducts = React.useMemo(() => {
@@ -241,15 +270,35 @@ export default function ItemsPage() {
               <p className="text-xs text-muted-foreground">{t("itemsMgmtSub")}</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5 px-3 text-xs"
-            onClick={() => setOutboundSettingsOpen(true)}
-          >
-            <Settings className="h-3.5 w-3.5" />
-            {t("outboundLocationSettings") || "출고지 설정"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={excelInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleExcelImport}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 px-3 text-xs"
+              onClick={() => excelInputRef.current?.click()}
+              disabled={excelImporting}
+              title={t("itemsExcelImportHint")}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              {excelImporting ? t("loading") : t("itemsExcelImport")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 px-3 text-xs"
+              onClick={() => setOutboundSettingsOpen(true)}
+            >
+              <Settings className="h-3.5 w-3.5" />
+              {t("outboundLocationSettings") || "출고지 설정"}
+            </Button>
+          </div>
         </div>
 
         <OutboundLocationSettingsDialog

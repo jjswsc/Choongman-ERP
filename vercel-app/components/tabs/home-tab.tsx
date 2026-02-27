@@ -17,6 +17,7 @@ import { useT } from "@/lib/i18n"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
 import { Megaphone, Bell, Search } from "lucide-react"
 import { PushNotificationSetup } from "@/components/push-notification-setup"
+import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -126,6 +127,9 @@ export function HomeTab() {
         <h2 className="text-xl font-bold text-foreground">{t('welcome')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t('welcomeSub')}</p>
       </div>
+
+      {/* 앱 설치 안내 - 휴대폰 알림 설정에 CM ERP 별도 표시됨 */}
+      <PwaInstallBanner />
 
       {/* 푸시 알림 설정 */}
       {auth?.store && auth?.user && (

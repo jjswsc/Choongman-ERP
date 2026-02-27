@@ -144,7 +144,7 @@ export function IngredientTable({
                 {t("posCostBahtPerUnit")}
               </TableHead>
               <TableHead className="text-right text-xs font-medium text-muted-foreground w-28">
-                {type === "food" ? t("posCostGPerUnit") : t("posCostQty")}
+                {type === "food" ? (t("posCostQtyG") || "수량 (g)") : (t("posCostQty") || "수량")}
               </TableHead>
               <TableHead className="text-right text-xs font-medium text-muted-foreground w-20">
                 {t("posCostMise")}

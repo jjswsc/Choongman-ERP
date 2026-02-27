@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-const ITEMS_SELECT = 'id,code,category,name,spec,unit,price,cost,image,vendor,tax,outbound_location,description,purchase_source'
+const ITEMS_SELECT = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source'
 
 /** 관리자 품목 관리 - Supabase items 테이블 조회. scope=outbound|order 시 본사 전용만 */
 export async function GET(request: NextRequest) {
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
         unit?: string
         price?: number
         cost?: number
+        total_quantity?: number
         image?: string
         vendor?: string
         tax?: string
@@ -41,13 +42,14 @@ export async function GET(request: NextRequest) {
       spec?: string
       unit?: string
       price?: number
-      cost?: number
-      image?: string
-      vendor?: string
-      tax?: string
-      outbound_location?: string
-      description?: string
-      purchase_source?: string
+        cost?: number
+        total_quantity?: number
+        image?: string
+        vendor?: string
+        tax?: string
+        outbound_location?: string
+        description?: string
+        purchase_source?: string
     }[] | null)
 
     const list = (rows || [])
@@ -77,6 +79,7 @@ export async function GET(request: NextRequest) {
           unit: String(row.unit || ''),
           price: Number(row.price) || 0,
           cost: Number(row.cost) || 0,
+          totalQuantity: row.total_quantity != null ? Number(row.total_quantity) : null,
           taxType,
           imageUrl: String(row.image || ''),
           hasImage: !!(row.image && String(row.image).trim()),

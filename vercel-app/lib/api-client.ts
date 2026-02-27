@@ -1704,6 +1704,8 @@ export interface AdminItem {
   unit?: string
   price: number
   cost: number
+  /** 총 수량 (표준 단위). 있으면 단위당 원가 = price/totalQuantity */
+  totalQuantity?: number | null
   taxType: 'taxable' | 'exempt' | 'zero'
   imageUrl: string
   hasImage: boolean
@@ -1789,6 +1791,7 @@ export async function saveItem(params: {
   unit?: string
   price?: number
   cost?: number
+  totalQuantity?: number | null
   taxType?: string
   imageUrl?: string
   description?: string
@@ -1810,6 +1813,17 @@ export async function deleteItem(params: { code: string }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** Excel 원가 파일 → 코드가 없는 품목만 신규 등록 */
+export async function importItemsFromExcel(file: File) {
+  const form = new FormData()
+  form.set('file', file)
+  const res = await apiFetch('/api/importItemsFromExcel', {
+    method: 'POST',
+    body: form,
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; added?: number }>
 }
 
 // ─── POS 메뉴 관리 ───

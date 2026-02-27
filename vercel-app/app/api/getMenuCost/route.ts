@@ -16,13 +16,14 @@ export async function GET(request: NextRequest) {
   try {
     const itemRows = (await supabaseSelect('items', {
       limit: 1000,
-      select: 'code,cost,name',
-    })) as { code?: string; cost?: number; name?: string }[] | null
+      select: 'code,cost,price,total_quantity,unit,name,category',
+    })) as { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }[] | null
 
-    const itemMap: Record<string, { cost: number; name: string }> = {}
+    const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
+    const itemByCode: Record<string, (typeof itemRows)[number]> = {}
     for (const r of itemRows || []) {
       const code = String(r.code ?? '').trim()
-      if (code) itemMap[code] = { cost: Number(r.cost) ?? 0, name: String(r.name ?? '') }
+      if (code) itemByCode[code] = r
     }
 
     const breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] = []
@@ -71,14 +72,15 @@ export async function GET(request: NextRequest) {
       const qty = Number(ing.quantity) ?? 1
       const lossRate = Number(ing.loss_rate) ?? 0
       const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
-      const costPerUnit = itemMap[code]?.cost ?? 0
+      const item = itemByCode[code]
+      const costPerUnit = item ? getItemCostPerUnit(item, itype === 'packaging') : 0
       const costTotal = costPerUnit * qty * (1 + lossRate / 100)
       if (itype === 'packaging') packageCost += costTotal
       else foodCost += costTotal
       totalCost += costTotal
       breakdown.push({
         itemCode: code,
-        itemName: itemMap[code]?.name ?? code,
+        itemName: item?.name ?? code,
         quantity: qty,
         lossRate,
         costPerUnit,
@@ -87,13 +89,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (optionType === 'additive' && optionItemCode && optionId && optionId !== 'null') {
-      const costPerUnit = itemMap[optionItemCode]?.cost ?? 0
+      const optItem = itemByCode[optionItemCode]
+      const costPerUnit = optItem ? getItemCostPerUnit(optItem, false) : 0
       const costTotal = costPerUnit * optionQty
       foodCost += costTotal
       totalCost += costTotal
       breakdown.push({
         itemCode: optionItemCode,
-        itemName: itemMap[optionItemCode]?.name ?? optionItemCode,
+        itemName: optItem?.name ?? optionItemCode,
         quantity: optionQty,
         lossRate: 0,
         costPerUnit,

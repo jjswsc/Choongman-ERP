@@ -17,17 +17,21 @@ export async function GET() {
     const [sauceRows, ingRows, itemRows] = await Promise.all([
       supabaseSelect('sauces', { order: 'sort_order.asc,id.asc', limit: 500, select: 'id,code,name,unit,total_quantity,cost_per_unit,overhead_percent,sort_order' }),
       supabaseSelect('sauce_ingredients', { limit: 5000, select: 'id,sauce_id,item_code,quantity,loss_rate,sort_order' }),
-      supabaseSelect('items', { limit: 5000, select: 'code,name,cost,unit' }),
+      supabaseSelect('items', { limit: 5000, select: 'code,name,cost,price,total_quantity,unit' }),
     ]) as [
       { id?: number; code?: string; name?: string; unit?: string; total_quantity?: number; cost_per_unit?: number; overhead_percent?: number; sort_order?: number }[] | null,
       { id?: number; sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number; sort_order?: number }[] | null,
-      { code?: string; name?: string; cost?: number; unit?: string }[] | null,
+      { code?: string; name?: string; cost?: number; price?: number; total_quantity?: number; unit?: string }[] | null,
     ]
 
+    const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
     const itemMap: Record<string, { name: string; cost: number; unit: string }> = {}
     for (const r of itemRows || []) {
       const code = String(r.code ?? '').trim()
-      if (code) itemMap[code] = { name: String(r.name ?? ''), cost: Number(r.cost) ?? 0, unit: String(r.unit ?? '') }
+      if (code) {
+        const costPerUnit = getItemCostPerUnit(r, false) // 소스 재료는 음식(g 기준)
+        itemMap[code] = { name: String(r.name ?? ''), cost: costPerUnit, unit: String(r.unit ?? 'g') }
+      }
     }
 
     const sauceCostMap: Record<string, number> = {}

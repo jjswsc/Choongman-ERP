@@ -34,7 +34,7 @@ export function SauceCostTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [sauces, setSauces] = React.useState<SauceRow[]>([])
-  const [items, setItems] = React.useState<{ code: string; name: string }[]>([])
+  const [items, setItems] = React.useState<{ code: string; name: string; unit: string; cost: number }[]>([])
   const [loading, setLoading] = React.useState(true)
   const [recalcLoading, setRecalcLoading] = React.useState(false)
   const [overheadPercent, setOverheadPercent] = React.useState(5)
@@ -59,7 +59,7 @@ export function SauceCostTab() {
         getCostSettings(),
       ])
       setSauces(sauceList || [])
-      setItems((itemList || []).map((i) => ({ code: i.code, name: i.name })))
+      setItems((itemList || []).map((i) => ({ code: i.code, name: i.name, unit: i.unit || "g", cost: i.cost || 0 })))
       setOverheadPercent(settings?.globalOverheadPercent ?? 5)
     } catch {
       setSauces([])
@@ -300,19 +300,29 @@ export function SauceCostTab() {
                     <TableHead>{t("posMenuCode")}</TableHead>
                     <TableHead>{t("posCostName")}</TableHead>
                     <TableHead className="text-right">{t("posCostQty")}</TableHead>
+                    <TableHead className="text-center">{t("posCostUnit") || "단위"}</TableHead>
+                    <TableHead className="text-right">{t("posCostSauceCostPerUnit") || "단가"}</TableHead>
                     <TableHead className="text-right">{t("posIngredientLoss")}</TableHead>
+                    <TableHead className="text-right">{t("posCostCostShort") || "소요비용"}</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {formIngredients.map((ing, idx) => {
-                    const item = items.find((i) => i.code === ing.itemCode) || sauces.find((s) => s.code === ing.itemCode)
+                    const refItem = items.find((i) => i.code === ing.itemCode)
+                    const refSauce = sauces.find((s) => s.code === ing.itemCode)
+                    const unit = refItem?.unit ?? refSauce?.unit ?? "g"
+                    const costPerUnit = refItem?.cost ?? refSauce?.costPerUnit ?? 0
+                    const costTotal = ing.quantity * costPerUnit * (1 + (ing.lossRate || 0) / 100)
                     return (
                       <TableRow key={idx}>
                         <TableCell className="font-mono text-xs">{ing.itemCode}</TableCell>
-                        <TableCell>{item?.name ?? ing.itemCode}</TableCell>
-                        <TableCell className="text-right">{ing.quantity}</TableCell>
-                        <TableCell className="text-right">{ing.lossRate > 0 ? `${ing.lossRate}%` : "-"}</TableCell>
+                        <TableCell>{refItem?.name ?? refSauce?.name ?? ing.itemCode}</TableCell>
+                        <TableCell className="text-right tabular-nums">{ing.quantity}</TableCell>
+                        <TableCell className="text-center text-muted-foreground">{unit}</TableCell>
+                        <TableCell className="text-right tabular-nums">{costPerUnit.toFixed(4)} ฿</TableCell>
+                        <TableCell className="text-right tabular-nums">{ing.lossRate > 0 ? `${ing.lossRate}%` : "-"}</TableCell>
+                        <TableCell className="text-right tabular-nums font-medium">{costTotal.toFixed(2)} ฿</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleRemoveIngredient(idx)}>
                             <Trash2 className="h-3 w-3 text-destructive" />
@@ -351,24 +361,51 @@ export function SauceCostTab() {
                 </SelectTrigger>
                 <SelectContent>
                   {availableCodes.map((code) => {
-                    const item = items.find((i) => i.code === code) || sauces.find((s) => s.code === code)
+                    const refItem = items.find((i) => i.code === code)
+                    const refSauce = sauces.find((s) => s.code === code)
                     return (
                       <SelectItem key={code} value={code}>
-                        {code} - {item?.name ?? code}
+                        {code} - {refItem?.name ?? refSauce?.name ?? code}
                       </SelectItem>
                     )
                   })}
                 </SelectContent>
               </Select>
             </div>
+            {newIngCode && (
+              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">{t("posCostUnit") || "단위"}: </span>
+                <span className="font-medium">{(items.find((i) => i.code === newIngCode) || sauces.find((s) => s.code === newIngCode))?.unit ?? "g"}</span>
+                <span className="mx-2 text-muted-foreground">|</span>
+                <span className="text-muted-foreground">{t("posCostSauceCostPerUnit") || "단가"}: </span>
+                <span className="font-medium tabular-nums">
+                  {((items.find((i) => i.code === newIngCode)?.cost ?? sauces.find((s) => s.code === newIngCode)?.costPerUnit) ?? 0).toFixed(4)} ฿
+                </span>
+              </div>
+            )}
             <div>
-              <label className="text-xs font-medium">{t("posCostQty")}</label>
-              <Input type="number" min={0} step={0.01} value={newIngQty} onChange={(e) => setNewIngQty(e.target.value)} className="mt-1" />
+              <label className="text-xs font-medium">
+                {t("posCostQty")}{newIngCode ? ` (${(items.find((i) => i.code === newIngCode) || sauces.find((s) => s.code === newIngCode))?.unit ?? "g"})` : ""}
+              </label>
+              <Input type="number" min={0} step={0.01} value={newIngQty} onChange={(e) => setNewIngQty(e.target.value)} className="mt-1" placeholder="0" />
             </div>
             <div>
-              <label className="text-xs font-medium">{t("posIngredientLoss")}</label>
+              <label className="text-xs font-medium">{t("posIngredientLoss")} (%)</label>
               <Input type="number" min={0} max={100} step={0.5} value={newIngLoss} onChange={(e) => setNewIngLoss(e.target.value)} placeholder="0" className="mt-1" />
             </div>
+            {newIngCode && parseFloat(newIngQty) > 0 && (
+              <div className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-2">
+                <span className="text-sm text-muted-foreground">{t("posCostCostShort") || "예상 소요비용"}: </span>
+                <span className="text-sm font-semibold tabular-nums text-primary">
+                  {(
+                    (parseFloat(newIngQty) || 0) *
+                    ((items.find((i) => i.code === newIngCode)?.cost ?? sauces.find((s) => s.code === newIngCode)?.costPerUnit) ?? 0) *
+                    (1 + (parseFloat(newIngLoss) || 0) / 100)
+                  ).toFixed(2)}{" "}
+                  ฿
+                </span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddIngOpen(false)}>

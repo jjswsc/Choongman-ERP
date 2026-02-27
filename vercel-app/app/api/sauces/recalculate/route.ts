@@ -10,17 +10,18 @@ export async function POST() {
     const [sauceRows, ingRows, itemRows] = await Promise.all([
       supabaseSelect('sauces', { order: 'sort_order.asc,id.asc', limit: 500 }),
       supabaseSelect('sauce_ingredients', { limit: 5000, select: 'sauce_id,item_code,quantity,loss_rate' }),
-      supabaseSelect('items', { limit: 5000, select: 'code,cost' }),
+      supabaseSelect('items', { limit: 5000, select: 'code,cost,price,total_quantity,unit' }),
     ]) as [
       { id?: number; code?: string; overhead_percent?: number }[] | null,
       { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[] | null,
-      { code?: string; cost?: number }[] | null,
+      { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string }[] | null,
     ]
 
+    const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
     const itemCost: Record<string, number> = {}
     for (const r of itemRows || []) {
       const code = String(r.code ?? '').trim()
-      if (code) itemCost[code] = Number(r.cost) ?? 0
+      if (code) itemCost[code] = getItemCostPerUnit(r, false)
     }
 
     const sauceCostPerUnit: Record<string, number> = {}

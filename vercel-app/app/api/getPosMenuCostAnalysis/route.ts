@@ -16,7 +16,7 @@ export async function GET() {
         }),
         supabaseSelect('pos_menu_ingredients', { limit: 5000, select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type' }),
         supabaseSelect('pos_menu_options', { limit: 2000, select: 'id,menu_id,name,option_type,item_code,quantity' }),
-        supabaseSelect('items', { limit: 5000, select: 'code,name,cost,unit,purchase_source' }),
+        supabaseSelect('items', { limit: 5000, select: 'code,name,cost,price,total_quantity,unit,purchase_source,category' }),
       ]),
       supabaseSelect('sauces', { limit: 500, select: 'code,name,cost_per_unit,unit' }).catch(() => null),
     ])
@@ -24,19 +24,22 @@ export async function GET() {
       { id?: number; code?: string; name?: string; category?: string; price?: number; price_delivery?: number | null; vat_included?: boolean }[] | null,
       { id?: number; menu_id?: number; option_id?: number | null; item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null,
       { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; quantity?: number }[] | null,
-      { code?: string; name?: string; cost?: number; unit?: string; purchase_source?: string }[] | null,
+      { code?: string; name?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; purchase_source?: string; category?: string }[] | null,
     ]
     const sauceRows = sauceData as { code?: string; name?: string; cost_per_unit?: number; unit?: string }[] | null
 
-    const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store' }> = {}
+    const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
+    const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store'; raw?: typeof itemRows extends (infer R)[] | null ? R : never }> = {}
     for (const r of itemRows || []) {
       const code = String(r.code ?? '').trim()
       if (code) {
+        const isPkg = /포장|packaging|박스|용기|봉지/.test(String(r.category ?? ''))
         itemMap[code] = {
           name: String(r.name ?? ''),
-          cost: Number(r.cost) ?? 0,
-          unit: String(r.unit ?? ''),
+          cost: getItemCostPerUnit(r, isPkg),
+          unit: String(r.unit ?? 'g'),
           purchaseSource: (r.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq',
+          raw: r,
         }
       }
     }
@@ -123,7 +126,7 @@ export async function GET() {
           const lossRate = Number(ing.loss_rate) ?? 0
           const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' as const : 'food' as const
           const info = itemMap[code]
-          const costPerUnit = info?.cost ?? 0
+          const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
           const costTotal = additive ? costPerUnit * qty : costPerUnit * qty * (1 + lossRate / 100)
           if (itype === 'packaging') packageCost += costTotal
           else foodCost += costTotal

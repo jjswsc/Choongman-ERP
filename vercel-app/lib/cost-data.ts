@@ -138,7 +138,41 @@ function inferIngredientCategory(itemCategory: string): "food" | "packaging" {
   return "food"
 }
 
-export function setRuntimeApiItems(items: Array<{ code: string; name?: string; cost?: number; category?: string }>) {
+/** 표준 단위 → 1g 또는 1ea당 원가 환산. 반환값 = 수량 1당 ฿ (food=g, packaging=ea) */
+function calcBahtPerUnit(
+  price: number,
+  totalQuantity: number | null | undefined,
+  unit: string,
+  isPackaging: boolean
+): number {
+  const u = String(unit || "").toLowerCase().trim()
+  if (totalQuantity != null && totalQuantity > 0 && price >= 0) {
+    const costPerStdUnit = price / totalQuantity // 1 표준단위당 ฿
+    if (isPackaging) {
+      // 포장: 개, ea, 팩, 박스 등 → 1ea당
+      return costPerStdUnit
+    }
+    // 음식: g 기준 환산
+    if (u === "g" || u === "ml") return costPerStdUnit
+    if (u === "kg") return costPerStdUnit / 1000
+    if (u === "l") return costPerStdUnit / 1000 // 1L→1ml당≈1g당
+    if (u === "oz") return costPerStdUnit / 28.35 // 1oz≈28.35g
+    if (u === "lb") return costPerStdUnit / 453.6
+    if (u === "개" || u === "ea" || u === "팩" || u === "박스") return costPerStdUnit // 개당
+    return costPerStdUnit
+  }
+  return 0
+}
+
+export function setRuntimeApiItems(items: Array<{
+  code: string
+  name?: string
+  cost?: number
+  price?: number
+  totalQuantity?: number | null
+  unit?: string
+  category?: string
+}>) {
   const entries: [number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }][] = []
   let idx = 0
   items.forEach((item) => {
@@ -147,9 +181,18 @@ export function setRuntimeApiItems(items: Array<{ code: string; name?: string; c
     const code = API_ITEMS_CODE_OFFSET + idx + 1
     idx += 1
     const cat = inferIngredientCategory(item.category ?? "")
+    const price = Number(item.price ?? item.cost ?? 0)
+    const totalQty = item.totalQuantity != null ? Number(item.totalQuantity) : null
+    const unit = String(item.unit ?? "").trim()
+    let bahtPerUnit: number
+    if (totalQty != null && totalQty > 0) {
+      bahtPerUnit = calcBahtPerUnit(price, totalQty, unit, cat === "packaging")
+    } else {
+      bahtPerUnit = Number(item.cost ?? 0) // 기존: cost를 1단위당으로
+    }
     entries.push([code, {
       name: String(item.name ?? item.code ?? ""),
-      bahtPerUnit: Number(item.cost) || 0,
+      bahtPerUnit,
       category: cat,
       itemCode,
     }])
