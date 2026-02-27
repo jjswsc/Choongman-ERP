@@ -71,12 +71,13 @@ export function PushNotificationSetup({ store, name }: Props) {
         const lastError = (lastDetail || lastErr || "").trim()
         const isSwRelated = /subscribing|subscribe|Subscription failed|no active Service Worker|Service Worker/i.test(lastError)
         const isWebView = lastErr === "webview" || /push service not available|Registration failed|앱 내 브라우저|WebView/i.test(lastError)
+        const isAuthCred = /authentication credential|token-subscribe-failed/i.test(lastError)
         setWebViewError(isWebView)
         const pushServiceUnavail = /push service not available|Registration failed/i.test(lastError)
         const baseMsg = lastError ? `${t('pushTokenFail')} ${lastError}` : `${t('pushTokenFail')} ${t('pushChromeHint')}`
-        const troubleshootHint = pushServiceUnavail
-          ? (t('pushTroubleshootHint') || '\n→ 광고차단 해제, 시크릿 모드, Chrome 새 프로필에서 시도해 보세요.')
-          : ''
+        let troubleshootHint = ''
+        if (pushServiceUnavail) troubleshootHint = t('pushTroubleshootHint') || '\n→ 광고차단 해제, 시크릿 모드, Chrome 새 프로필에서 시도해 보세요.'
+        else if (isAuthCred) troubleshootHint = t('pushAuthCredHint') || '\n→ VAPID 키 앞뒤 공백 제거, Firebase Console·Google Cloud에서 FCM API 활성화 확인.'
         setMessage(baseMsg + troubleshootHint)
         setSwRetryHint(isSwRelated)
         setTokenFailed(true)

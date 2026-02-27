@@ -19,7 +19,7 @@ function getFirebaseApp(): FirebaseApp | null {
   return initializeApp(firebaseConfig)
 }
 
-const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+const VAPID_KEY = (process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || '').trim()
 
 export function isFirebaseConfigured(): boolean {
   return !!(
