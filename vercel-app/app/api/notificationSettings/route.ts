@@ -14,7 +14,7 @@ export async function GET() {
       'system_settings',
       orFilter,
       { limit: 10 }
-    )) as { key?: string; value_json?: number }[] | null
+    )) as { key?: string; value_json?: number | boolean }[] | null
 
     const map: Record<string, boolean> = {
       push_notice_enabled: true,
