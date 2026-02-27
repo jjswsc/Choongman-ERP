@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { parseOr400, processOrderSchema } from '@/lib/api-validate'
+import { sendNoticeToRecipients, getLogisticRecipients } from '@/lib/send-notice-util'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -33,6 +34,20 @@ export async function POST(request: NextRequest) {
       total,
       status: 'Pending',
     })
+
+    try {
+      const logisticRecipients = await getLogisticRecipients()
+      if (logisticRecipients.length > 0) {
+        await sendNoticeToRecipients({
+          title: `매장 발주: ${storeName}`,
+          content: `${storeName}에서 발주를 넣었습니다. 주문/승인 화면에서 확인해 주세요.`,
+          recipients: logisticRecipients,
+          sender: '시스템',
+        })
+      }
+    } catch (noticeErr) {
+      console.error('processOrder notice:', noticeErr)
+    }
 
     return NextResponse.json({ success: true, message: '✅ 주문 완료' }, { headers })
   } catch (e) {

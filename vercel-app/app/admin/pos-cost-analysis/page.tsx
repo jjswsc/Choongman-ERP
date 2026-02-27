@@ -388,6 +388,7 @@ export default function PosCostAnalysisPage() {
                 onClearLoad={() => setSelectedForCalculator(null)}
                 onSaveSuccess={() => getPosMenuCostAnalysis().then(setRows).catch(() => {})}
                 menuRows={rows}
+                onMenuSelect={(row) => setSelectedForCalculator(row)}
               />
             </div>
           </TabsContent>

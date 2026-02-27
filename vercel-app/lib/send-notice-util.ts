@@ -58,6 +58,20 @@ export async function sendNoticeToRecipients(params: {
 }
 
 /**
+ * Logistic 직무 담당자 조회 (job = Logistic, 대소문자 무시)
+ */
+export async function getLogisticRecipients(): Promise<NoticeRecipient[]> {
+  const rows = (await supabaseSelectFilter('employees', 'job=ilike.Logistic', {
+    select: 'store,name',
+    limit: 50,
+  })) as { store?: string; name?: string }[] | null
+  if (!rows?.length) return []
+  return rows
+    .map((r) => ({ store: String(r.store || '').trim(), name: String(r.name || '').trim() }))
+    .filter((r) => r.store && r.name)
+}
+
+/**
  * 매장별 매니저 조회 (role에 manager 포함)
  */
 export async function getManagersByStore(store: string): Promise<NoticeRecipient[]> {

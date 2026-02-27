@@ -35,6 +35,7 @@ const JOB_STYLE: Record<string, { bg: string; label: string }> = {
   Kitchen: { bg: "bg-emerald-50/90 dark:bg-emerald-950/20", label: "empJobKitchen" },
   Officer: { bg: "bg-sky-50/90 dark:bg-sky-950/20", label: "empJobOfficer" },
   Director: { bg: "bg-violet-50/90 dark:bg-violet-950/20", label: "empJobDirector" },
+  Logistic: { bg: "bg-teal-50/90 dark:bg-teal-950/20", label: "empJobLogistic" },
   기타: { bg: "bg-slate-50/90 dark:bg-slate-800/15", label: "workLogOther" },
 }
 
@@ -45,17 +46,14 @@ function JobCountSummary({
   rows: { job?: string }[]
   t: (k: string) => string
 }) {
-  const counts = { Service: 0, Kitchen: 0, Officer: 0, Director: 0, 기타: 0 }
+  const counts: Record<string, number> = { Service: 0, Kitchen: 0, Officer: 0, Director: 0, Logistic: 0, 기타: 0 }
   for (const r of rows) {
     const j = String(r.job || "").trim()
-    if (JOB_OPTIONS.includes(j as (typeof JOB_OPTIONS)[number])) {
-      counts[j as keyof typeof counts]++
-    } else {
-      counts.기타++
-    }
+    if (j && counts[j] !== undefined) counts[j]++
+    else counts.기타++
   }
   const unit = t("empJobCountUnit")
-  const items = [...JOB_OPTIONS, "기타"].filter((j) => counts[j as keyof typeof counts] > 0)
+  const items = ["Service", "Kitchen", "Officer", "Director", "Logistic", "기타"].filter((j) => counts[j] > 0)
   const total = items.reduce((s, j) => s + counts[j as keyof typeof counts], 0)
   if (items.length === 0) return null
   return (
@@ -132,6 +130,7 @@ export default function EmployeesPage() {
   const [form, setForm] = React.useState<EmployeeFormData>({ ...emptyForm })
   const fullListRef = React.useRef<EmployeeTableRow[]>([])
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  const [apiJobOptions, setApiJobOptions] = React.useState<string[]>([])
 
   const loadEmployeeList = React.useCallback(
     async (opts?: { updateDisplay?: boolean }, callback?: () => void) => {
@@ -142,10 +141,12 @@ export default function EmployeesPage() {
           getAdminEmployeeList({ userStore, userRole }),
           getEmployeeLatestGrades(),
         ])
-        const list = (listRes as { list?: EmployeeTableRow[]; stores?: string[]; _debug?: Record<string, unknown> }).list || []
+        const list = (listRes as { list?: EmployeeTableRow[]; stores?: string[]; jobOptions?: string[]; _debug?: Record<string, unknown> }).list || []
         const storeList = (listRes as { stores?: string[] }).stores || []
+        const jobOpts = (listRes as { jobOptions?: string[] }).jobOptions || []
         const debug = (listRes as { _debug?: Record<string, unknown> })._debug
         setStores(storeList)
+        setApiJobOptions(jobOpts)
 
         if (list.length === 0 && debug) {
           setLoadError(
@@ -208,14 +209,15 @@ export default function EmployeesPage() {
   }, [loadEmployeeList])
 
   const jobOptions = React.useMemo(() => {
+    if (apiJobOptions.length > 0) return apiJobOptions
     const set = new Set<string>()
     for (const e of allEmployees) {
       const j = String(e.job || "").trim()
       if (j) set.add(j)
     }
     const arr = Array.from(set).sort((a, b) => a.localeCompare(b))
-    return arr.length > 0 ? arr : [...JOB_OPTIONS, "기타"]
-  }, [allEmployees])
+    return arr.length > 0 ? arr : [...JOB_OPTIONS, "기타", "Logistic"]
+  }, [allEmployees, apiJobOptions])
 
   const filteredRows = React.useMemo(() => {
     const s = storeFilter || "All"
@@ -344,6 +346,7 @@ export default function EmployeesPage() {
                   form={form}
                   onChange={setForm}
                   stores={storesForForm}
+                  jobOptions={jobOptions}
                   onSave={handleSave}
                   onNew={handleNew}
                   saving={saving}

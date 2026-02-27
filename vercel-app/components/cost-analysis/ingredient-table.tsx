@@ -20,6 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
@@ -184,6 +191,9 @@ export function IngredientTable({
   const t = useT(lang)
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
   const [openPickerRow, setOpenPickerRow] = useState<number | null>(null)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addSearchTerm, setAddSearchTerm] = useState("")
+  const [addCategoryFilter, setAddCategoryFilter] = useState<string>("all")
 
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngs = type === "food" ? getRuntimeSauces() : []
@@ -213,18 +223,41 @@ export function IngredientTable({
     [items, onItemsChange]
   )
 
-  const addItem = useCallback(() => {
-    const usedCodes = new Set(items.map((i) => i.ingredientCode))
-    const nextIngredient = availableIngredients.find(
-      (i) => !usedCodes.has(i.code)
-    )
-    if (nextIngredient) {
+  const usedCodes = new Set(items.map((i) => i.ingredientCode))
+  const addDialogCategories = [
+    { value: "all", label: t("posMenuCategoryAll") || "전체" },
+    { value: "api", label: t("posCostCategoryItems") || "품목관리" },
+    { value: "ingredient", label: t("posCostCategoryIngredient") || "재료" },
+    { value: "sauce", label: t("posCostCategorySauce") || "소스" },
+  ]
+  const addDialogFiltered = availableIngredients.filter((ing) => {
+    const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
+    const matchSearch =
+      !addSearchTerm ||
+      ing.name.toLowerCase().includes(addSearchTerm.toLowerCase()) ||
+      itemCode.toLowerCase().includes(addSearchTerm.toLowerCase())
+    const matchCat = addCategoryFilter === "all" || ing.source === addCategoryFilter
+    return matchSearch && matchCat && !usedCodes.has(ing.code)
+  })
+
+  const addItemViaPicker = useCallback(
+    (code: number) => {
       onItemsChange([
         ...items,
-        { ingredientCode: nextIngredient.code, quantity: 1, misePercent: MISE_DEFAULT },
+        { ingredientCode: code, quantity: 1, misePercent: MISE_DEFAULT },
       ])
-    }
-  }, [items, availableIngredients, onItemsChange])
+      setAddDialogOpen(false)
+      setAddSearchTerm("")
+      setAddCategoryFilter("all")
+    },
+    [items, onItemsChange]
+  )
+
+  const openAddDialog = useCallback(() => {
+    setAddSearchTerm("")
+    setAddCategoryFilter("all")
+    setAddDialogOpen(true)
+  }, [])
 
   const removeItem = useCallback(
     (index: number) => {
@@ -262,7 +295,7 @@ export function IngredientTable({
         <Button
           variant="ghost"
           size="sm"
-          onClick={addItem}
+          onClick={openAddDialog}
           className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -274,22 +307,22 @@ export function IngredientTable({
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
-              <TableHead className="text-xs font-medium text-muted-foreground">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posMenuCode")}
               </TableHead>
-              <TableHead className="text-xs font-medium text-muted-foreground min-w-[200px]">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground min-w-[200px]">
                 {t("posCostIngredient")}
               </TableHead>
-              <TableHead className="text-right text-xs font-medium text-muted-foreground">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posCostBahtPerUnit")}
               </TableHead>
-              <TableHead className="text-right text-xs font-medium text-muted-foreground w-28">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground w-28">
                 {type === "food" ? (t("posCostQtyG") || "수량 (g)") : (t("posCostQty") || "수량")}
               </TableHead>
-              <TableHead className="text-right text-xs font-medium text-muted-foreground w-20">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground w-20">
                 {t("posCostMise")}
               </TableHead>
-              <TableHead className="text-right text-xs font-medium text-muted-foreground">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posCostCostThb")}
               </TableHead>
               <TableHead className="w-10" />
@@ -395,6 +428,69 @@ export function IngredientTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* 재료 추가 팝업 */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{t("posCostAddItem")} — {title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 flex-1 min-h-0 flex flex-col">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="h-9 pl-8"
+                placeholder={t("posCostSearchIngredientPh") || "이름 또는 코드 검색..."}
+                value={addSearchTerm}
+                onChange={(e) => setAddSearchTerm(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <Select value={addCategoryFilter} onValueChange={setAddCategoryFilter}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {addDialogCategories.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="overflow-y-auto flex-1 min-h-[200px] border rounded-md py-2">
+              {addDialogFiltered.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {t("posCostNoIngredientsFound") || "검색 결과가 없습니다"}
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {addDialogFiltered.map((ing) => {
+                    const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
+                    return (
+                      <button
+                        key={ing.code}
+                        type="button"
+                        className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-muted/80 rounded-none"
+                        onClick={() => addItemViaPicker(ing.code)}
+                      >
+                        <span className="font-mono text-muted-foreground shrink-0 w-14">{itemCode}</span>
+                        <span className="truncate">{ing.name}</span>
+                        <span className="ml-auto font-mono text-xs text-muted-foreground">
+                          {(getIngredient(ing.code)?.bahtPerUnit ?? 0).toFixed(3)} ฿
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+              {t("cancel") || "취소"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Subtotal */}
       <div className="flex items-center justify-between border-t border-border bg-secondary/30 px-5 py-3">

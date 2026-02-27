@@ -82,6 +82,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 출퇴근
   "위치 확인 대기 중입니다.": "attGpsPendingSaved",
+  "❌ 위치 확인 실패! GPS를 켜고 매장 근처에서 다시 시도해 주세요. (현재 위치를 확인할 수 없습니다)": "attLocationVerifyFail",
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   supabaseInsertMany,
 } from '@/lib/supabase-server'
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
+import { sendNoticeToRecipients, getLogisticRecipients } from '@/lib/send-notice-util'
 
 const TZ = 'Asia/Bangkok'
 
@@ -177,6 +178,21 @@ export async function POST(request: NextRequest) {
       patch.total = total
     }
     await supabaseUpdate('orders', orderId, patch)
+
+    try {
+      const logisticRecipients = await getLogisticRecipients()
+      if (logisticRecipients.length > 0) {
+        await sendNoticeToRecipients({
+          title: `매장 수령 완료: ${store}`,
+          content: `${store}에서 주문 수령(받기)을 완료했습니다.`,
+          recipients: logisticRecipients,
+          sender: '시스템',
+        })
+      }
+    } catch (noticeErr) {
+      console.error('processOrderReceive notice:', noticeErr)
+    }
+
     if (hasQtyAdjustments && receivedQtysRaw) {
       const newTotal = Number(patch.total ?? 0)
       const storeName = String(o.store_name || '').trim()

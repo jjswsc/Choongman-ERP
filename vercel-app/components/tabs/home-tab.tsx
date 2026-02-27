@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
-import { Megaphone, Bell, Search } from "lucide-react"
+import { Megaphone, Bell, Search, FileText } from "lucide-react"
 import { PushNotificationSetup } from "@/components/push-notification-setup"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
@@ -218,6 +218,43 @@ export function HomeTab() {
                         <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
                           {n.content ? getTrans(n.content) : "(내용 없음)"}
                         </p>
+                        {Array.isArray(n.attachments) && n.attachments.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {n.attachments.map((att: { name?: string; mime?: string; url?: string }, idx: number) => {
+                              const url = att?.url || ""
+                              const mime = String(att?.mime || "").toLowerCase()
+                              const isImg = mime.startsWith("image/") || (url.startsWith("data:image/"))
+                              if (!url) return null
+                              return isImg ? (
+                                <a
+                                  key={idx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="block rounded-md overflow-hidden border border-border bg-background max-w-[200px]"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={att?.name || "첨부"}
+                                    className="max-h-40 w-auto object-contain"
+                                    onError={(e) => { e.currentTarget.style.display = "none" }}
+                                  />
+                                </a>
+                              ) : (
+                                <a
+                                  key={idx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-muted"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                  {att?.name || "첨부파일"}
+                                </a>
+                              )
+                            })}
+                          </div>
+                        )}
                         {!isRead(n.status) && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button

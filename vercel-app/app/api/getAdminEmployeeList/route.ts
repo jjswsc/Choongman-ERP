@@ -87,6 +87,13 @@ export async function GET(req: Request) {
       })
     }
 
+    const jobSet = new Set<string>()
+    for (const r of rows || []) {
+      const j = String(r.job || r.role || '').trim()
+      if (j && j !== '매장명' && j !== 'Store' && j !== '직급' && j !== 'Job' && j !== '부서') jobSet.add(j)
+    }
+    const allJobOptions = Array.from(jobSet).sort((a, b) => a.localeCompare(b))
+
     const storeSet = new Set((rows || []).map((r) => String(r.store || '').trim()).filter(Boolean))
     let allStores = Array.from(storeSet).sort((a, b) => {
       const aLower = a.toLowerCase()
@@ -100,9 +107,10 @@ export async function GET(req: Request) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }
 
-    const body: { list: Record<string, unknown>[]; stores: string[]; _debug?: Record<string, unknown> } = {
+    const body: { list: Record<string, unknown>[]; stores: string[]; jobOptions?: string[]; _debug?: Record<string, unknown> } = {
       list,
       stores: allStores,
+      jobOptions: allJobOptions.length > 0 ? allJobOptions : ['Service', 'Kitchen', 'Officer', 'Director', 'Logistic'],
     }
     if (list.length === 0 && rows && rows.length > 0) {
       body._debug = {

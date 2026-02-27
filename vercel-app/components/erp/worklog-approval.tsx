@@ -441,9 +441,9 @@ export function WorklogApproval() {
                                 </span>
                               </td>
                               <td className="px-5 py-2">
-                                <p className="text-sm text-foreground">{getTransContent(it.content || "")}</p>
+                                <p className="text-sm text-foreground whitespace-pre-wrap">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground">{getTransComment(it.managerComment)}</p>
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground whitespace-pre-wrap">{getTransComment(it.managerComment)}</p>
                                 )}
                               </td>
                               <td className="px-5 py-2 text-center">

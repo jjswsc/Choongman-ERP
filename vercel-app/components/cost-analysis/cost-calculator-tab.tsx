@@ -30,8 +30,10 @@ interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
   onSaveSuccess?: () => void
-  /** POS 메뉴 목록 (카테고리 목록 추출용) */
+  /** POS 메뉴 목록 (카테고리 목록 추출·검색용) */
   menuRows?: PosMenuCostAnalysisRow[]
+  /** 메뉴 검색에서 선택 시 (목록 로드) */
+  onMenuSelect?: (row: PosMenuCostAnalysisRow) => void
 }
 
 function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem[]; packaging: RecipeItem[] } {
@@ -57,7 +59,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [] }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
@@ -195,6 +197,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             menuItem={menuItem}
             onMenuItemChange={setMenuItem}
             categories={categoriesFromMenus}
+            menuRows={menuRows}
+            onMenuSelect={onMenuSelect}
             readOnlyMenuInfo={!!initialLoadFromRow}
           />
           <div className="space-y-6">

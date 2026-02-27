@@ -16,7 +16,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 
-const JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director"]
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly"]
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
@@ -79,6 +78,8 @@ interface EmployeeFormProps {
   form: EmployeeFormData
   onChange: (form: EmployeeFormData) => void
   stores: string[]
+  /** 직무 옵션 (Supabase employees.job 기준). 없으면 기본 4종 + Logistic */
+  jobOptions?: string[]
   onSave: () => void
   onNew: () => void
   saving?: boolean
@@ -86,10 +87,13 @@ interface EmployeeFormProps {
   roleDisabled?: boolean
 }
 
+const DEFAULT_JOB_OPTIONS = ["Service", "Kitchen", "Officer", "Director", "Logistic"]
+
 export function EmployeeForm({
   form,
   onChange,
   stores,
+  jobOptions = DEFAULT_JOB_OPTIONS,
   onSave,
   onNew,
   saving = false,
@@ -175,12 +179,12 @@ export function EmployeeForm({
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_label_job")}</label>
-          <Select value={form.job} onValueChange={(v) => update("job", v)}>
+          <Select value={form.job || jobOptions[0]} onValueChange={(v) => update("job", v)}>
             <SelectTrigger className="h-8 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {JOB_OPTIONS.map((j) => (
+              {jobOptions.map((j) => (
                 <SelectItem key={j} value={j}>{j}</SelectItem>
               ))}
             </SelectContent>
