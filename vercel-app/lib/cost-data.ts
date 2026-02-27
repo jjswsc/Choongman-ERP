@@ -63,36 +63,20 @@ export const ingredientDatabase: Ingredient[] = [
 
 export const MISE_DEFAULT = 3
 
-// Sample recipe for Snow Onion (Size S)
-export const sampleFoodRecipe: RecipeItem[] = [
-  { ingredientCode: 3, quantity: 5.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 5, quantity: 36.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 75, quantity: 70.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 65, quantity: 1.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 16, quantity: 50.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 79, quantity: 30.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 135, quantity: 50.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 28, quantity: 30.0, misePercent: MISE_DEFAULT },
-]
-
-export const samplePackagingRecipe: RecipeItem[] = [
-  { ingredientCode: 116, quantity: 1.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 234, quantity: 1.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 109, quantity: 1.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 204, quantity: 1.0, misePercent: MISE_DEFAULT },
-  { ingredientCode: 202, quantity: 1.0, misePercent: MISE_DEFAULT },
-]
-
-export const sampleMenuItem: MenuItem = {
+/** 초기 상태: 메뉴 미선택 */
+export const emptyMenuItem: MenuItem = {
   menuCode: "",
-  category: "Size S",
-  menuName: "Snow Onion (Size S)",
-  description: "สโนว์อ้อเนี่ยน ไซส์ S",
-  inclVat: 139.0,
+  category: "",
+  menuName: "",
+  description: "",
+  inclVat: 0,
   serviceType: "Dine-In",
   deliveryPercent: 25,
-  misePercent: 3,
+  misePercent: MISE_DEFAULT,
 }
+
+export const emptyFoodRecipe: RecipeItem[] = []
+export const emptyPackagingRecipe: RecipeItem[] = []
 
 // Runtime ingredients (API 로드 시 사용, itemCode는 저장 시 매핑용)
 let runtimeIngredientMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode?: string }>()

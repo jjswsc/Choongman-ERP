@@ -11,7 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { UtensilsCrossed } from "lucide-react"
+import { UtensilsCrossed, ChefHat, Truck } from "lucide-react"
+import { cn } from "@/lib/utils"
 import type { MenuItem } from "@/lib/cost-data"
 
 interface MenuInfoPanelProps {
@@ -140,26 +141,37 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], rea
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="serviceType" className="text-xs text-muted-foreground">
+          <Label className="text-xs text-muted-foreground">
             {t("posCostServiceType")}
           </Label>
-          <Select
-            value={menuItem.serviceType}
-            onValueChange={(val) =>
-              onMenuItemChange({
-                ...menuItem,
-                serviceType: val as "Dine-In" | "Delivery",
-              })
-            }
-          >
-            <SelectTrigger className="h-9 bg-secondary/50 border-border">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Dine-In">{t("posCostDineIn")}</SelectItem>
-              <SelectItem value="Delivery">{t("posCostDelivery")}</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => onMenuItemChange({ ...menuItem, serviceType: "Dine-In" })}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-sm font-medium transition-colors",
+                menuItem.serviceType === "Dine-In"
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "bg-muted/50 text-muted-foreground border border-border hover:bg-muted"
+              )}
+            >
+              <ChefHat className="h-3.5 w-3.5" />
+              {t("posCostDineIn")}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMenuItemChange({ ...menuItem, serviceType: "Delivery" })}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-sm font-medium transition-colors",
+                menuItem.serviceType === "Delivery"
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "bg-muted/50 text-muted-foreground border border-border hover:bg-muted"
+              )}
+            >
+              <Truck className="h-3.5 w-3.5" />
+              {t("posCostDelivery")}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -3,19 +3,17 @@
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Calculator, ChefHat, Truck, RotateCcw, Save } from "lucide-react"
+import { RotateCcw, Save } from "lucide-react"
 import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
 import { CostChart } from "@/components/cost-analysis/cost-chart"
 import { IngredientSheet } from "@/components/cost-analysis/ingredient-sheet"
 import {
-  sampleMenuItem,
-  sampleFoodRecipe,
-  samplePackagingRecipe,
+  emptyMenuItem,
+  emptyFoodRecipe,
+  emptyPackagingRecipe,
   calculateSubTotal,
   setRuntimeIngredients,
   setRuntimeSauces,
@@ -62,9 +60,9 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
 export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [] }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
-  const [menuItem, setMenuItem] = useState<MenuItem>(sampleMenuItem)
-  const [foodItems, setFoodItems] = useState<RecipeItem[]>(sampleFoodRecipe)
-  const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(samplePackagingRecipe)
+  const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
+  const [foodItems, setFoodItems] = useState<RecipeItem[]>(emptyFoodRecipe)
+  const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
 
   useEffect(() => {
     getAdminItems().then((items) => setRuntimeApiItems(items)).catch(() => {})
@@ -76,7 +74,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       const { food, packaging } = breakdownToRecipeItems(initialLoadFromRow)
       const price = initialLoadFromRow.priceDelivery ?? initialLoadFromRow.priceHall
       setMenuItem({
-        ...sampleMenuItem,
+        ...emptyMenuItem,
         menuCode: initialLoadFromRow.menuCode ?? "",
         menuName: initialLoadFromRow.menuName + (initialLoadFromRow.optionName ? ` (${initialLoadFromRow.optionName})` : ""),
         category: initialLoadFromRow.category ?? "",
@@ -86,6 +84,9 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       setPackagingItems(packaging)
     } else {
       clearRuntimeIngredients()
+      setMenuItem(emptyMenuItem)
+      setFoodItems(emptyFoodRecipe)
+      setPackagingItems(emptyPackagingRecipe)
     }
     return () => clearRuntimeIngredients()
   }, [initialLoadFromRow])
@@ -101,9 +102,9 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
     onClearLoad?.()
-    setMenuItem(sampleMenuItem)
-    setFoodItems(sampleFoodRecipe)
-    setPackagingItems(samplePackagingRecipe)
+    setMenuItem(emptyMenuItem)
+    setFoodItems(emptyFoodRecipe)
+    setPackagingItems(emptyPackagingRecipe)
   }, [onClearLoad])
 
   const [saving, setSaving] = useState(false)
@@ -186,17 +187,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             {saving ? (t("loading") || "저장 중...") : (t("itemsBtnSave") || "저장")}
           </Button>
         </div>
-        <Badge
-          variant="outline"
-          className="border-border font-mono text-xs text-muted-foreground flex-shrink-0"
-        >
-          {menuItem.serviceType === "Delivery" ? (
-            <Truck className="mr-1.5 h-3 w-3" />
-          ) : (
-            <ChefHat className="mr-1.5 h-3 w-3" />
-          )}
-          {menuItem.serviceType === "Delivery" ? t("posCostDelivery") : t("posCostDineIn")}
-        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -207,32 +197,17 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             categories={categoriesFromMenus}
             readOnlyMenuInfo={!!initialLoadFromRow}
           />
-          <Tabs defaultValue="dine-in" className="space-y-4">
-            <TabsList className="bg-secondary border border-border">
-              <TabsTrigger value="dine-in" className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-                <ChefHat className="mr-1.5 h-3.5 w-3.5" />
-                {t("posCostDineIn")}
-              </TabsTrigger>
-              <TabsTrigger value="delivery" className="data-[state=active]:bg-accent/10 data-[state=active]:text-accent">
-                <Truck className="mr-1.5 h-3.5 w-3.5" />
-                {t("posCostDelivery")}
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="dine-in" className="space-y-6">
-              <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} />
-            </TabsContent>
-
-            <TabsContent value="delivery" className="space-y-6">
-              <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} />
+          <div className="space-y-6">
+            <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} />
+            {menuItem.serviceType === "Delivery" && (
               <IngredientTable
                 title={t("posCostPackagingDelivery")}
                 type="packaging"
                 items={packagingItems}
                 onItemsChange={setPackagingItems}
               />
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
         </div>
 
         <div className="space-y-6 self-start">
