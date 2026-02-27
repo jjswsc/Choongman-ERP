@@ -25,8 +25,8 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   const messaging = firebase.messaging();
 
   messaging.onBackgroundMessage((payload) => {
-    const title = payload.notification?.title || "CM ERP";
-    const body = payload.notification?.body || "";
+    const title = payload.data?.title || payload.notification?.title || "CM ERP";
+    const body = payload.data?.body || payload.notification?.body || "";
     const options = {
       body,
       icon: "/icon-192.png",

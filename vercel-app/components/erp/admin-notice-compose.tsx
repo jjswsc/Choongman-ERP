@@ -107,12 +107,28 @@ export function AdminNoticeCompose() {
   const storeNamesForStaff = allStoresForStaff
     ? stores.filter((s) => s !== t("noticeFilterAll"))
     : selectedStores
+  const allPositionsForStaff =
+    selectedPositions.length === 0 ||
+    selectedPositions.length === positions.length - 1
+  const positionsToMatch = allPositionsForStaff
+    ? null
+    : new Set(
+        selectedPositions
+          .filter((p) => p !== t("noticeFilterAll"))
+          .map((r) => r.trim().toLowerCase())
+          .filter(Boolean)
+      )
   const employeeList = (() => {
     const list: { store: string; name: string; nick: string }[] = []
     for (const store of storeNamesForStaff) {
       const staff = staffByStore[store] || []
       for (const s of staff) {
-        if (s.name) list.push({ store, name: s.name, nick: s.nick || s.name })
+        if (!s.name) continue
+        if (positionsToMatch && positionsToMatch.size > 0) {
+          const empJob = String(s.job || "").trim().toLowerCase()
+          if (!empJob || !positionsToMatch.has(empJob)) continue
+        }
+        list.push({ store, name: s.name, nick: s.nick || s.name })
       }
     }
     return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))

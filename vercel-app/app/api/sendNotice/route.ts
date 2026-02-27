@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { sendFcmToRecipients, getRecipientsByTargetStoreRole } from '@/lib/firebase-admin'
+import { getNotificationSettings } from '@/lib/notification-settings-server'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -90,11 +91,14 @@ export async function POST(request: NextRequest) {
       fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole)
     }
     if (fcmRecipients.length > 0) {
-      sendFcmToRecipients({
-        title,
-        body: content.slice(0, 100),
-        recipients: fcmRecipients,
-      }).catch((e) => console.error('sendNotice FCM:', e))
+      const settings = await getNotificationSettings()
+      if (settings.pushNoticeEnabled) {
+        sendFcmToRecipients({
+          title,
+          body: content.slice(0, 100),
+          recipients: fcmRecipients,
+        }).catch((e) => console.error('sendNotice FCM:', e))
+      }
     }
 
     return NextResponse.json(

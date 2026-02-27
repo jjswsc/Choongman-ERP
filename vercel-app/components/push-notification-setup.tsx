@@ -17,7 +17,7 @@ export function PushNotificationSetup({ store, name }: Props) {
   const t = useT(lang)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
+  const [done, setDone] = useState<boolean | null>(null) // null = 로딩 중, true/false = 확인 완료
   const [swRetryHint, setSwRetryHint] = useState(false)
   const [tokenFailed, setTokenFailed] = useState(false)
   const [webViewError, setWebViewError] = useState(false)
@@ -25,6 +25,17 @@ export function PushNotificationSetup({ store, name }: Props) {
 
   useEffect(() => {
     if (store?.trim() && name?.trim()) preRegisterServiceWorker()
+  }, [store, name])
+
+  // DB에 푸시 토큰 등록 여부 확인 (새로고침 시에도 상태 유지)
+  useEffect(() => {
+    if (!store?.trim() || !name?.trim()) return
+    const s = store.trim()
+    const n = name.trim()
+    fetch(`/api/checkPushToken?store=${encodeURIComponent(s)}&name=${encodeURIComponent(n)}`)
+      .then((r) => r.json())
+      .then((data) => setDone(!!data?.registered))
+      .catch(() => setDone(false))
   }, [store, name])
 
   if (!store?.trim() || !name?.trim()) return null
@@ -96,7 +107,7 @@ export function PushNotificationSetup({ store, name }: Props) {
       })
       if (res.ok) {
         setMessage(t('pushDone'))
-        setDone(true)
+        setDone(true) // DB에 저장됨 - 새로고침 시 checkPushToken에서 확인
         setTimeout(() => setMessage(null), 3000)
       } else {
         const err = await res.json().catch(() => ({}))
@@ -123,7 +134,7 @@ export function PushNotificationSetup({ store, name }: Props) {
         }),
       })
       if (res.ok) {
-        setDone(false)
+        setDone(false) // DB에서 삭제됨
         setMessage(t('pushDisabled'))
         setTimeout(() => setMessage(null), 3000)
       } else {
@@ -136,10 +147,15 @@ export function PushNotificationSetup({ store, name }: Props) {
     setLoading(false)
   }
 
+  const doneResolved = done === true
+  const checking = done === null
+
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2">
       <Bell className="h-3.5 w-3.5 shrink-0 text-primary" />
-      {done ? (
+      {checking ? (
+        <span className="text-xs text-muted-foreground">{t('loading') || '확인 중...'}</span>
+      ) : doneResolved ? (
         <>
           <span className="text-xs text-muted-foreground">{t('pushEnabled')}</span>
           <Button
@@ -159,7 +175,7 @@ export function PushNotificationSetup({ store, name }: Props) {
           <span className="text-[10px] text-muted-foreground/70">({t('pushHint')})</span>
         </>
       )}
-      {!done && (
+      {!doneResolved && !checking && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <Button
             type="button"
@@ -251,7 +267,7 @@ export function PushNotificationSetup({ store, name }: Props) {
         </div>
       )}
       {message && (
-        <div className={`w-full rounded-md px-2 py-1.5 text-[11px] ${done ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}>
+        <div className={`w-full rounded-md px-2 py-1.5 text-[11px] ${doneResolved ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'}`}>
           {message}
         </div>
       )}

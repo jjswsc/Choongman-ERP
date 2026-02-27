@@ -2038,6 +2038,23 @@ export async function recalculateSauces() {
   return res.json() as Promise<{ success: boolean; count?: number; message?: string }>
 }
 
+export async function getNotificationSettings() {
+  const res = await apiFetch('/api/notificationSettings')
+  return res.json() as Promise<{ pushNoticeEnabled: boolean; pushOrderApprovalEnabled: boolean }>
+}
+
+export async function updateNotificationSettings(params: {
+  pushNoticeEnabled?: boolean
+  pushOrderApprovalEnabled?: boolean
+}) {
+  const res = await apiFetch('/api/notificationSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
 export async function getCostSettings() {
   const res = await apiFetch('/api/costSettings')
   return res.json() as Promise<{ defaultOverheadPercent: number; globalOverheadPercent: number }>

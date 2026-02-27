@@ -103,9 +103,10 @@ export async function sendFcmToRecipients(params: {
   const batchSize = 500
   for (let i = 0; i < uniqueTokens.length; i += batchSize) {
     const chunk = uniqueTokens.slice(i, i + batchSize)
+    // notification 필드 사용 시 FCM이 자동 표시 + SW onBackgroundMessage가 또 표시 → 중복 알림
+    // data만 보내고 SW에서 showNotification 처리
     const message: admin.messaging.MulticastMessage = {
       tokens: chunk,
-      notification: { title: displayTitle, body },
       data: { title: displayTitle, body },
     }
     try {

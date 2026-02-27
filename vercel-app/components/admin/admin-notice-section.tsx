@@ -60,18 +60,27 @@ export function AdminNoticeSection() {
     )
   }
 
-  // 선택된 매장에 해당하는 직원 목록 (닉네임 기준 표시)
+  // 선택된 매장·부서에 해당하는 직원 목록 (닉네임 기준 표시)
   const noticeEmployeeList = (() => {
     const allowedStores = new Set(noticeStores)
     const storesToShow =
       noticeStoreSelected.length === 0 || noticeStoreSelected.includes("전체")
         ? noticeStores
         : noticeStoreSelected.filter((s) => allowedStores.has(s))
+    const rolesToMatch =
+      noticeRoleSelected.length === 0 || noticeRoleSelected.includes("전체")
+        ? null
+        : new Set(noticeRoleSelected.map((r) => r.trim().toLowerCase()).filter(Boolean))
     const list: { store: string; name: string; nick: string }[] = []
     for (const store of storesToShow) {
       const staff = staffByStore[store] || []
       for (const s of staff) {
-        if (s.name) list.push({ store, name: s.name, nick: s.nick || s.name })
+        if (!s.name) continue
+        if (rolesToMatch && rolesToMatch.size > 0) {
+          const empJob = String(s.job || "").trim().toLowerCase()
+          if (!empJob || !rolesToMatch.has(empJob)) continue
+        }
+        list.push({ store, name: s.name, nick: s.nick || s.name })
       }
     }
     return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))

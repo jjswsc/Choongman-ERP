@@ -25,6 +25,8 @@ import {
   saveHeadOfficeInfo,
   getMenuPermission,
   setMenuPermission,
+  getNotificationSettings,
+  updateNotificationSettings,
   type HeadOfficeInfo,
 } from "@/lib/api-client"
 
@@ -61,7 +63,7 @@ export function AdminSettings() {
   const { lang } = useLang()
   const t = useT(lang)
 
-  const [tab, setTab] = useState<"office" | "permission" | "about">("office")
+  const [tab, setTab] = useState<"office" | "permission" | "notification" | "about">("office")
 
   const [companyName, setCompanyName] = useState("")
   const [taxId, setTaxId] = useState("")
@@ -77,6 +79,11 @@ export function AdminSettings() {
   const [permChecks, setPermChecks] = useState<Record<string, boolean>>({})
   const [permLoading, setPermLoading] = useState(false)
   const [permSaving, setPermSaving] = useState(false)
+
+  const [pushNoticeEnabled, setPushNoticeEnabled] = useState(true)
+  const [pushOrderApprovalEnabled, setPushOrderApprovalEnabled] = useState(true)
+  const [notificationLoading, setNotificationLoading] = useState(false)
+  const [notificationSaving, setNotificationSaving] = useState(false)
 
   const isHQ = auth?.role === "director" || auth?.role === "officer"
 
@@ -130,6 +137,20 @@ export function AdminSettings() {
     }
   }, [permStore, permEmployee])
 
+  const loadNotificationSettings = useCallback(async () => {
+    setNotificationLoading(true)
+    try {
+      const d = await getNotificationSettings()
+      setPushNoticeEnabled(d.pushNoticeEnabled ?? true)
+      setPushOrderApprovalEnabled(d.pushOrderApprovalEnabled ?? true)
+    } catch {
+      setPushNoticeEnabled(true)
+      setPushOrderApprovalEnabled(true)
+    } finally {
+      setNotificationLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadHeadOffice()
   }, [loadHeadOffice])
@@ -137,6 +158,10 @@ export function AdminSettings() {
   useEffect(() => {
     loadPermOptions()
   }, [loadPermOptions])
+
+  useEffect(() => {
+    if (tab === "notification") loadNotificationSettings()
+  }, [tab, loadNotificationSettings])
 
   useEffect(() => {
     if (permStore && permEmployee) loadPermForEmployee()
@@ -159,6 +184,22 @@ export function AdminSettings() {
       alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setOfficeSaving(false)
+    }
+  }
+
+  const handleSaveNotification = async () => {
+    setNotificationSaving(true)
+    try {
+      const res = await updateNotificationSettings({
+        pushNoticeEnabled,
+        pushOrderApprovalEnabled,
+      })
+      alert(res.success ? (t("settings_saved") || "저장되었습니다.") : (t("msg_save_fail") || "저장에 실패했습니다."))
+      if (res.success) loadNotificationSettings()
+    } catch (e) {
+      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setNotificationSaving(false)
     }
   }
 
@@ -197,10 +238,11 @@ export function AdminSettings() {
           <h1 className="text-xl font-bold tracking-tight">{t("adminSettings")}</h1>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "about")}>
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "notification" | "about")}>
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="office">{t("settings_head_office")}</TabsTrigger>
             <TabsTrigger value="permission">{t("settings_menu_permission")}</TabsTrigger>
+            <TabsTrigger value="notification">{t("settings_notification_tab")}</TabsTrigger>
             <TabsTrigger value="about">{t("settings_permission_title")}</TabsTrigger>
           </TabsList>
 
@@ -288,6 +330,43 @@ export function AdminSettings() {
                         </label>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notification" className="mt-4">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-xs text-muted-foreground mb-4">{t("settings_notification_desc")}</p>
+                {notificationLoading ? (
+                  <p className="py-6 text-center text-muted-foreground text-xs">{t("loading")}</p>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div>
+                        <p className="text-sm font-medium">{t("settings_push_notice")}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t("settings_push_notice_desc")}</p>
+                      </div>
+                      <Checkbox
+                        checked={pushNoticeEnabled}
+                        onCheckedChange={(v) => setPushNoticeEnabled(!!v)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div>
+                        <p className="text-sm font-medium">{t("settings_push_order_approval")}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t("settings_push_order_approval_desc")}</p>
+                      </div>
+                      <Checkbox
+                        checked={pushOrderApprovalEnabled}
+                        onCheckedChange={(v) => setPushOrderApprovalEnabled(!!v)}
+                      />
+                    </div>
+                    <Button className="h-9" onClick={handleSaveNotification} disabled={notificationSaving}>
+                      {notificationSaving ? t("loading") : t("settings_save_btn")}
+                    </Button>
                   </div>
                 )}
               </CardContent>

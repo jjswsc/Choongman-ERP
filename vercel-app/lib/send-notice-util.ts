@@ -1,10 +1,11 @@
 /**
  * 앱 내 공지 자동 발송 유틸
  * - 주문 승인/보류/반려, 강제 출고 등 변동 시 발주 직원·매장 매니저에게 알림
- * - FCM 푸시 알림(휴대폰)도 함께 발송 (Firebase Admin 설정 시)
+ * - FCM 푸시 알림(휴대폰)도 함께 발송 (Firebase Admin 설정 시, push_order_approval_enabled일 때)
  */
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { sendFcmToRecipients } from '@/lib/firebase-admin'
+import { getNotificationSettings } from '@/lib/notification-settings-server'
 
 export interface NoticeRecipient {
   store: string
@@ -41,7 +42,10 @@ export async function sendNoticeToRecipients(params: {
     attachments: '[]',
   })
 
-  // FCM 푸시 알림 (Firebase Admin 설정 시)
+  // FCM 푸시 알림 (시스템 설정 > 알림 > 주문/승인 상태 푸시가 활성일 때)
+  const settings = await getNotificationSettings()
+  if (!settings.pushOrderApprovalEnabled) return
+
   const recipientsList = unique.map((s) => {
     const [store, name] = s.split('|')
     return { store: store || '', name: name || '' }
