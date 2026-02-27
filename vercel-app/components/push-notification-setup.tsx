@@ -29,9 +29,6 @@ export function PushNotificationSetup({ store, name }: Props) {
         <span className="text-xs text-muted-foreground">
           {t('pushFirebaseRequired')}
         </span>
-        <span className="text-[10px] text-muted-foreground/70">
-          (Vercel 환경 변수에 NEXT_PUBLIC_FIREBASE_*, VAPID_KEY 설정 필요)
-        </span>
       </div>
     )
   }

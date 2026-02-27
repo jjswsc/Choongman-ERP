@@ -209,7 +209,6 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       <div className="login-page">
         <div className="login-loading">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
-          <p className="mt-4 text-sm text-white/70">매장 목록 불러오는 중...</p>
         </div>
       </div>
     )

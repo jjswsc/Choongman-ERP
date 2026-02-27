@@ -5,7 +5,6 @@ import {
   CalendarIcon,
   Search,
   ShieldCheck,
-  CheckCircle2,
   MessageSquarePlus,
   Building2,
   User,
@@ -486,12 +485,12 @@ export function WorklogApproval() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      className="h-7 px-2 text-[10px] text-success shrink-0"
+                                      className="h-7 w-7 p-0 text-success shrink-0"
                                       onClick={() => handleConfirm(it.id)}
                                       disabled={updating === it.id}
+                                      title={t("workLogConfirmBtn")}
                                     >
-                                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                                      {t("workLogConfirmBtn")}
+                                      ✓
                                     </Button>
                                   )}
                                   <Button
