@@ -51,6 +51,7 @@ export interface ItemTableProps {
   onSearch: () => void
   onEdit: (product: Product) => void
   onDelete: (product: Product) => void
+  onToggleOrderDisabled?: (product: Product) => void | Promise<void>
 }
 
 export function ItemTable({
