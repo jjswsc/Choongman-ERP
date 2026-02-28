@@ -41,7 +41,7 @@ interface CartItem {
   price: number
   qty: number
   store?: string
-  taxType?: 'taxable' | 'exempt' | 'zero'
+  taxType?: 'taxable' | 'exempt' | 'zero' | '면세' | '영세율'
 }
 
 export function AdminPurchaseOrder() {
