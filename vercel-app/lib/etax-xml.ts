@@ -1,7 +1,8 @@
 /**
  * 태국 e-Tax Invoice XML 생성
- * ETDA UN/CEFACT Cross Industry Invoice 2.0 형식 기반
- * @see https://schemas.teda.th/ ETDA 스키마
+ * ETDA TaxInvoice_CrossIndustryInvoice 2.0 (태국 국세청 e-Tax 양식)
+ * OID: 2.16.764.1.4.1.1.4.1.1 (ใบกำกับภาษีอิเล็กทรอนิกส์)
+ * @see https://gitlab.com/etdath-teda-schema/teda-objects/common/e-tax-invoice-receipt
  */
 
 export interface EtaxSeller {
@@ -62,7 +63,7 @@ function escapeXml(s: string): string {
 }
 
 function formatDateForXml(isoDate: string): string {
-  if (!isoDate) return new Date().toISOString().replace('Z', '')
+  if (!isoDate) return new Date().toISOString().slice(0, 23).replace('Z', '')
   const d = isoDate.slice(0, 10)
   return `${d}T00:00:00.0`
 }
@@ -143,13 +144,13 @@ export function generateEtaxXml(input: EtaxInvoiceInput): string {
 <rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
   <rsm:ExchangedDocumentContext>
     <ram:GuidelineSpecifiedDocumentContextParameter>
-      <ram:ID>urn:cen.eu:en16931:2017</ram:ID>
+      <ram:ID>2.16.764.1.4.1.1.4.1.1</ram:ID>
     </ram:GuidelineSpecifiedDocumentContextParameter>
   </rsm:ExchangedDocumentContext>
   <rsm:ExchangedDocument>
     <ram:ID>${docId}</ram:ID>
     <ram:Name>${docType}</ram:Name>
-    <ram:TypeCode>380</ram:TypeCode>
+    <ram:TypeCode>388</ram:TypeCode>
     <ram:IssueDateTime format="102">${docDate}</ram:IssueDateTime>
   </rsm:ExchangedDocument>
   <rsm:SupplyChainTradeTransaction>

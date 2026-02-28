@@ -41,6 +41,7 @@ interface CartItem {
   price: number
   qty: number
   store?: string
+  taxType?: 'taxable' | 'exempt' | 'zero'
 }
 
 export function AdminPurchaseOrder() {
@@ -78,8 +79,14 @@ export function AdminPurchaseOrder() {
 
   const { subtotal, vat, total } = React.useMemo(() => {
     let sub = 0
-    for (const c of cart) sub += c.price * c.qty
-    const v = Math.round(sub * 0.07)
+    let taxableSub = 0
+    for (const c of cart) {
+      const amt = c.price * c.qty
+      sub += amt
+      const isExempt = c.taxType === 'exempt' || c.taxType === 'zero' || c.taxType === '면세' || c.taxType === '영세율'
+      if (!isExempt) taxableSub += amt
+    }
+    const v = Math.round(taxableSub * 0.07)
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
   const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
@@ -188,6 +195,7 @@ export function AdminPurchaseOrder() {
           name: selectedItem.name,
           price: selectedItem.cost > 0 ? selectedItem.cost : selectedItem.price,
           qty: quantity,
+          taxType: selectedItem.taxType ?? 'taxable',
         },
       ]
     })
@@ -213,7 +221,7 @@ export function AdminPurchaseOrder() {
         locationName: locationSelect.name,
         locationAddress: locationSelect.address,
         locationCode: locationSelect.location_code,
-        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store })),
+        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store, taxType: c.taxType })),
         userName: auth.user,
         withholdingTaxAmount: Number(withholdingTaxAmount?.replace(/,/g, "")) || 0,
       })

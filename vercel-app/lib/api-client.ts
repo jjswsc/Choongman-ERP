@@ -1865,6 +1865,10 @@ export interface PosMenu {
   soldOutDate?: string | null
   /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
   optionSelectionGroups?: string[]
+  /** 주방 프린터: null=카테고리기준, 1=주방1, 2=주방2 */
+  kitchenPrinter?: number | null
+  /** 조리 시간(분), 예상 완성 시간/KDS 등 활용 */
+  cookingTimeMin?: number | null
 }
 
 export interface PosMenuOption {
@@ -2110,6 +2114,8 @@ export async function savePosMenu(params: {
   isActive?: boolean
   sortOrder?: number
   optionSelectionGroups?: string[]
+  kitchenPrinter?: number | null
+  cookingTimeMin?: number | null
 }) {
   const res = await apiFetch('/api/savePosMenu', {
     method: 'POST',
@@ -3303,6 +3309,7 @@ export interface ItemByVendor {
   category: string
   image: string
   outbound_location?: string
+  taxType?: 'taxable' | 'exempt' | 'zero'
 }
 
 export async function getPurchaseLocations() {

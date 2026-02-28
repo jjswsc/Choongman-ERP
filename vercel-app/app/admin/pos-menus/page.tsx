@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Search, Plus, ChevronDown, ChevronRight } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, Settings2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,7 +32,19 @@ import {
   type PosMenuOption,
   type PosMenuIngredient,
 } from "@/lib/api-client"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+
+/** 옵션 단계 프리셋 (키 → 표시명) */
+const OPTION_GROUP_PRESETS: Record<string, string> = {
+  size: "사이즈",
+  part: "부위",
+  topping: "토핑",
+  bone: "뼈/순살",
+  sauce: "소스",
+  spice: "맵기",
+  extra: "추가옵션",
+}
 
 const emptyForm = {
   code: "",
@@ -54,7 +66,6 @@ export default function PosMenusPage() {
   const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState(emptyForm)
   const [editingId, setEditingId] = React.useState<string | null>(null)
-  const [hasSearched, setHasSearched] = React.useState(false)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
@@ -77,6 +88,15 @@ export default function PosMenusPage() {
   const [baseMenuCost, setBaseMenuCost] = React.useState<number | null>(null)
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ ingredients: PosMenuIngredient[]; cost: number; breakdown: { itemCode: string; itemName: string; quantity: number; lossRate: number; costPerUnit: number; costTotal: number }[] } | null>(null)
+  const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
+  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "menuBoard">("screen")
+  const [menuBoardView, setMenuBoardView] = React.useState<"pos" | "tablet" | "kiosk">("pos")
+  const [optionStepSearch, setOptionStepSearch] = React.useState("")
+  const [optionStepDropdownOpen, setOptionStepDropdownOpen] = React.useState(false)
+  const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
+  const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
+  const [optionsConfigSearchTerm, setOptionsConfigSearchTerm] = React.useState("")
+  const [optionsConfigCategoryFilter, setOptionsConfigCategoryFilter] = React.useState("all")
 
   React.useEffect(() => {
     Promise.all([getPosMenus(), getPosMenuCategories()])
@@ -140,11 +160,35 @@ export default function PosMenusPage() {
 
   const ADDITIVE_OPTION_CATEGORY = "POS추가옵션"
 
-  React.useEffect(() => {
+  const loadItems = React.useCallback(() => {
     getAdminItems()
       .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name, category: x.category || "" }))))
       .catch(() => setItems([]))
   }, [])
+
+  React.useEffect(() => {
+    if (editingId) loadItems()
+    else setItems([])
+  }, [editingId, loadItems])
+
+  React.useEffect(() => {
+    if (!optionsConfigSelectedMenuId) {
+      setOptionsConfigMenuOptions([])
+      return
+    }
+    getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
+    setNewOptionName("")
+    setNewOptionModifier("0")
+    setNewOptionModifierDelivery("")
+    setNewOptionType("substitution")
+    setNewOptionItemCode("")
+    setNewOptionQuantity("1")
+    setNewOptionStepValues({})
+  }, [optionsConfigSelectedMenuId])
+
+  React.useEffect(() => {
+    if (mainTab === "optionsConfig" && optionsConfigSelectedMenuId) loadItems()
+  }, [mainTab, optionsConfigSelectedMenuId, loadItems])
 
   const additiveOptionItems = React.useMemo(
     () => items.filter((it) => (it.category || "").trim() === ADDITIVE_OPTION_CATEGORY),
@@ -344,6 +388,64 @@ export default function PosMenusPage() {
     }
   }
 
+  const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
+  const optionsConfigCurrentGroups = (optionsConfigSelectedMenu?.optionSelectionGroups || []).filter((s): s is string => !!s)
+
+  const handleAddOptionForConfig = async () => {
+    if (!optionsConfigSelectedMenuId || !newOptionName.trim()) return
+    if (newOptionType === "additive" && !newOptionItemCode.trim()) {
+      alert(t("posOptionAdditiveItemRequired") || "추가형 옵션은 품목을 선택해야 합니다.")
+      return
+    }
+    if (newOptionType === "substitution" && optionsConfigCurrentGroups.length > 0) {
+      const missing = optionsConfigCurrentGroups.filter((g) => !(newOptionStepValues[g] ?? "").trim())
+      if (missing.length > 0) {
+        alert(
+          t("posOptionStepValuesRequired") ||
+            `옵션 선택 단계가 설정된 메뉴는 대체형 옵션에 모든 단계 값을 입력해야 합니다. (빈 값: ${missing.join(", ")})`
+        )
+        return
+      }
+    }
+    const optionStepValues =
+      newOptionType === "substitution" && optionsConfigCurrentGroups.length > 0
+        ? Object.fromEntries(optionsConfigCurrentGroups.map((g) => [g, (newOptionStepValues[g] || "").trim()]))
+        : undefined
+    const res = await savePosMenuOption({
+      menuId: Number(optionsConfigSelectedMenuId),
+      name: newOptionName.trim(),
+      priceModifier: Number(newOptionModifier) || 0,
+      priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
+      sortOrder: optionsConfigMenuOptions.length,
+      optionType: newOptionType,
+      itemCode: newOptionType === "additive" ? newOptionItemCode.trim() : null,
+      quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
+      optionStepValues,
+    })
+    if (res.success) {
+      getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
+      setNewOptionName("")
+      setNewOptionModifier("0")
+      setNewOptionModifierDelivery("")
+      setNewOptionType("substitution")
+      setNewOptionItemCode("")
+      setNewOptionQuantity("1")
+      setNewOptionStepValues({})
+    } else {
+      alert(res.message)
+    }
+  }
+
+  const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
+    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    const res = await deletePosMenuOption({ id: opt.id })
+    if (res.success) {
+      setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
+    } else {
+      alert(res.message)
+    }
+  }
+
   const handleDelete = async (menu: PosMenu) => {
     if (!confirm(`"${menu.name}" ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenu({ id: menu.id })
@@ -358,8 +460,6 @@ export default function PosMenusPage() {
     }
     alert(t("itemsAlertDeleted"))
   }
-
-  const handleSearch = () => setHasSearched(true)
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const handleSoldOutToggle = async (menu: PosMenu) => {
@@ -386,7 +486,6 @@ export default function PosMenusPage() {
   }
 
   const filteredMenus = React.useMemo(() => {
-    if (!hasSearched) return []
     return menus.filter((m) => {
       const matchTerm =
         !searchTerm ||
@@ -395,7 +494,18 @@ export default function PosMenusPage() {
       const matchCategory = categoryFilter === "all" || m.category === categoryFilter
       return matchTerm && matchCategory
     })
-  }, [menus, hasSearched, searchTerm, categoryFilter])
+  }, [menus, searchTerm, categoryFilter])
+
+  const optionsConfigFilteredMenus = React.useMemo(() => {
+    return menus.filter((m) => {
+      const matchTerm =
+        !optionsConfigSearchTerm ||
+        m.name.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase()) ||
+        m.code.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase())
+      const matchCategory = optionsConfigCategoryFilter === "all" || m.category === optionsConfigCategoryFilter
+      return matchTerm && matchCategory
+    })
+  }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter])
 
   const categories = React.useMemo(() => {
     const fromMenus = new Set(menus.map((m) => m.category).filter(Boolean))
@@ -421,6 +531,15 @@ export default function PosMenusPage() {
             {t("loading")}
           </div>
         )}
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className="w-full">
+          <TabsList className="mb-4 h-9">
+            <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid className="h-3.5 w-3.5" />{t("posMenuTabScreen")}</TabsTrigger>
+            <TabsTrigger value="optionsConfig" className="gap-1.5 text-xs"><Layers className="h-3.5 w-3.5" />{t("posMenuTabOptionsConfig")}</TabsTrigger>
+            <TabsTrigger value="topping" className="gap-1.5 text-xs"><Pizza className="h-3.5 w-3.5" />{t("posMenuTabTopping")}</TabsTrigger>
+            <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
+            <TabsTrigger value="menuBoard" className="gap-1.5 text-xs"><Settings2 className="h-3.5 w-3.5" />{t("posMenuTabMenuBoard")}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="screen" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           {/* Form */}
           <div className="rounded-xl border bg-card shadow-sm">
@@ -438,7 +557,14 @@ export default function PosMenusPage() {
             </div>
             <div className="flex flex-col gap-4 p-6">
               {editingId ? (
-                <div className="space-y-4">
+                <>
+                <Tabs value={formTab} onValueChange={(v) => setFormTab(v as typeof formTab)}>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="info" className="text-xs">{t("posFormTabInfo") || "메뉴정보"}</TabsTrigger>
+                    <TabsTrigger value="options" className="text-xs">{t("posFormTabOptions") || "옵션"}</TabsTrigger>
+                    <TabsTrigger value="cost" className="text-xs">{t("posFormTabCost") || "원가"}</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="info" className="space-y-4 mt-4">
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCode")}</label>
                       <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} disabled />
@@ -479,16 +605,63 @@ export default function PosMenusPage() {
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</label>
-                      <Input
-                        placeholder="size, bone"
-                        className="mt-1 h-10 text-xs"
-                        value={formData.optionSelectionGroups}
-                        onChange={(e) => setFormData((p) => ({ ...p, optionSelectionGroups: e.target.value }))}
-                      />
+                      <div className="mt-1 relative">
+                        <div className="flex flex-wrap gap-1.5 min-h-10 rounded-md border bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                          {(formData.optionSelectionGroups || "").split(",").map((s) => s.trim()).filter(Boolean).map((g) => (
+                            <span key={g} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                              {OPTION_GROUP_PRESETS[g] || g}
+                              <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => {
+                                const arr = (formData.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean).filter((x) => x !== g)
+                                setFormData((p) => ({ ...p, optionSelectionGroups: arr.join(", ") }))
+                              }}><X className="h-3 w-3" /></button>
+                            </span>
+                          ))}
+                          <input
+                            type="text"
+                            placeholder={t("posOptionStepSearchPh") || "검색하여 추가..."}
+                            className="flex-1 min-w-[120px] bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                            value={optionStepSearch}
+                            onChange={(e) => { setOptionStepSearch(e.target.value); setOptionStepDropdownOpen(true) }}
+                            onFocus={() => setOptionStepDropdownOpen(true)}
+                            onBlur={() => setTimeout(() => setOptionStepDropdownOpen(false), 150)}
+                          />
+                        </div>
+                        {optionStepDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md py-1">
+                            {Object.entries(OPTION_GROUP_PRESETS)
+                              .filter(([k]) => !(formData.optionSelectionGroups || "").split(",").map((x) => x.trim()).includes(k))
+                              .filter(([k, v]) => !optionStepSearch || k.toLowerCase().includes(optionStepSearch.toLowerCase()) || v.toLowerCase().includes(optionStepSearch.toLowerCase()))
+                              .map(([k, v]) => (
+                                <button
+                                  key={k}
+                                  type="button"
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                                  onMouseDown={(e) => { e.preventDefault(); setFormData((p) => ({ ...p, optionSelectionGroups: [...(p.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean), k].join(", ") })); setOptionStepSearch(""); setOptionStepDropdownOpen(false) }}
+                                >{v} ({k})</button>
+                              ))}
+                            {optionStepSearch.trim() && !Object.keys(OPTION_GROUP_PRESETS).some((k) => k.toLowerCase() === optionStepSearch.trim().toLowerCase()) && !(formData.optionSelectionGroups || "").split(",").map((x) => x.trim().toLowerCase()).includes(optionStepSearch.trim().toLowerCase()) && (
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-xs hover:bg-muted border-t"
+                                onMouseDown={(e) => { e.preventDefault(); const val = optionStepSearch.trim(); setFormData((p) => ({ ...p, optionSelectionGroups: [...(p.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean), val].join(", ") })); setOptionStepSearch(""); setOptionStepDropdownOpen(false) }}
+                              >+ {optionStepSearch.trim()} (직접 입력)</button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <p className="mt-0.5 text-[10px] text-muted-foreground">
-                        {t("posOptionSelectionGroupsHint") || "쉼표로 구분. 예: size, bone — POS에서 1단계(사이즈) → 2단계(순살/뼈) 순서로 선택"}
+                        {t("posOptionSelectionGroupsHint") || "1단계 → 2단계 → 3단계 순서. 옵션 탭에서 각 단계별 항목 추가"}
                       </p>
                     </div>
+                    <div className="rounded border border-dashed border-primary/30 bg-muted/20 p-3">
+                      <h4 className="text-xs font-semibold text-muted-foreground">{t("posMenuOptions") || "옵션"}</h4>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {menuOptions.length > 0 ? `${menuOptions.length}개 설정됨 — 옵션 탭에서 관리` : (t("posMenuOptionsSelectHint") || "옵션 탭에서 사이즈, 부위, 토핑 등을 추가해 주세요.")}
+                      </p>
+                      <Button variant="outline" size="sm" className="mt-2 text-xs" onClick={() => setFormTab("options")}>{t("posMenuGoToOptions") || "옵션 탭으로 이동"}</Button>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="options" className="mt-4">
                     <div className="rounded border border-dashed p-3">
                       <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
                       <ul className="mb-2 space-y-1">
@@ -566,6 +739,8 @@ export default function PosMenusPage() {
                         </div>
                       </div>
                     </div>
+                  </TabsContent>
+                  <TabsContent value="cost" className="mt-4">
                     {menuOptions.some((o) => o.optionType === "substitution") && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground shrink-0">{t("posIngredientScope") || "재료 범위"}</span>
@@ -667,11 +842,13 @@ export default function PosMenusPage() {
                         </span>
                       </div>
                     )}
+                  </TabsContent>
+                </Tabs>
                     <div className="flex gap-3 pt-2">
                       <Button className="flex-1" onClick={handleSave}><Save className="mr-2 h-4 w-4" />{t("itemsBtnSave")}</Button>
                       <Button variant="outline" onClick={handleReset}><RotateCcw className="mr-2 h-4 w-4" />{t("itemsBtnReset")}</Button>
                     </div>
-                  </div>
+                </>
               ) : (
                 <>
                   <div>
@@ -714,14 +891,52 @@ export default function PosMenusPage() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold">{t("posOptionSelectionGroups") || "옵션 선택 단계"}</label>
-                    <Input
-                      placeholder="size, bone"
-                      className="mt-1 h-10 text-xs"
-                      value={formData.optionSelectionGroups}
-                      onChange={(e) => setFormData((p) => ({ ...p, optionSelectionGroups: e.target.value }))}
-                    />
+                    <div className="mt-1 relative">
+                      <div className="flex flex-wrap gap-1.5 min-h-10 rounded-md border bg-background px-3 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                        {(formData.optionSelectionGroups || "").split(",").map((s) => s.trim()).filter(Boolean).map((g) => (
+                          <span key={g} className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                            {OPTION_GROUP_PRESETS[g] || g}
+                            <button type="button" className="ml-0.5 hover:text-destructive" onClick={() => {
+                              const arr = (formData.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean).filter((x) => x !== g)
+                              setFormData((p) => ({ ...p, optionSelectionGroups: arr.join(", ") }))
+                            }}><X className="h-3 w-3" /></button>
+                          </span>
+                        ))}
+                        <input
+                          type="text"
+                          placeholder={t("posOptionStepSearchPh") || "검색하여 추가..."}
+                          className="flex-1 min-w-[120px] bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                          value={optionStepSearch}
+                          onChange={(e) => { setOptionStepSearch(e.target.value); setOptionStepDropdownOpen(true) }}
+                          onFocus={() => setOptionStepDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setOptionStepDropdownOpen(false), 150)}
+                        />
+                      </div>
+                      {optionStepDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md py-1">
+                          {Object.entries(OPTION_GROUP_PRESETS)
+                            .filter(([k]) => !(formData.optionSelectionGroups || "").split(",").map((x) => x.trim()).includes(k))
+                            .filter(([k, v]) => !optionStepSearch || k.toLowerCase().includes(optionStepSearch.toLowerCase()) || v.toLowerCase().includes(optionStepSearch.toLowerCase()))
+                            .map(([k, v]) => (
+                              <button
+                                key={k}
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                                onMouseDown={(e) => { e.preventDefault(); setFormData((p) => ({ ...p, optionSelectionGroups: [...(p.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean), k].join(", ") })); setOptionStepSearch(""); setOptionStepDropdownOpen(false) }}
+                              >{v} ({k})</button>
+                            ))}
+                          {optionStepSearch.trim() && !Object.keys(OPTION_GROUP_PRESETS).some((k) => k.toLowerCase() === optionStepSearch.trim().toLowerCase()) && !(formData.optionSelectionGroups || "").split(",").map((x) => x.trim().toLowerCase()).includes(optionStepSearch.trim().toLowerCase()) && (
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-muted border-t"
+                              onMouseDown={(e) => { e.preventDefault(); const val = optionStepSearch.trim(); setFormData((p) => ({ ...p, optionSelectionGroups: [...(p.optionSelectionGroups || "").split(",").map((x) => x.trim()).filter(Boolean), val].join(", ") })); setOptionStepSearch(""); setOptionStepDropdownOpen(false) }}
+                            >+ {optionStepSearch.trim()} (직접 입력)</button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <p className="mt-0.5 text-[10px] text-muted-foreground">
-                      {t("posOptionSelectionGroupsHint") || "쉼표로 구분. 예: size, bone — POS에서 1단계(사이즈) → 2단계(순살/뼈) 순서로 선택"}
+                      {t("posOptionSelectionGroupsHint") || "1단계 → 2단계 → 3단계 순서. 옵션 탭에서 각 단계별 항목 추가"}
                     </p>
                   </div>
                   <div className="flex gap-3 pt-2">
@@ -757,12 +972,7 @@ export default function PosMenusPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder={t("itemsSearchPh")}
                 className="h-9 flex-1 text-xs"
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               />
-              <Button size="sm" className="h-9 px-4 text-xs" onClick={handleSearch}>
-                <Search className="mr-1.5 h-3.5 w-3.5" />
-                {t("itemsBtnSearch")}
-              </Button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -778,13 +988,7 @@ export default function PosMenusPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {!hasSearched ? (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
-                        {t("itemsSearchHint")}
-                      </td>
-                    </tr>
-                  ) : filteredMenus.length === 0 ? (
+                  {filteredMenus.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
                         {t("itemsNoResults")}
@@ -884,6 +1088,182 @@ export default function PosMenusPage() {
             </div>
           </div>
         </div>
+          </TabsContent>
+          <TabsContent value="optionsConfig" className="mt-0">
+            <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+              {/* 좌측: 메뉴 리스트 */}
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="border-b px-4 py-3 bg-muted/20">
+                  <h3 className="text-sm font-bold">{t("posMenuList")}</h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{t("posMenuOptionsConfigSelectHint") || "메뉴를 선택하면 옵션을 구성할 수 있습니다"}</p>
+                </div>
+                <div className="p-3 space-y-2 border-b">
+                  <Select value={optionsConfigCategoryFilter} onValueChange={setOptionsConfigCategoryFilter}>
+                    <SelectTrigger className="h-9 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={optionsConfigSearchTerm}
+                    onChange={(e) => setOptionsConfigSearchTerm(e.target.value)}
+                    placeholder={t("itemsSearchPh")}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="max-h-[400px] overflow-y-auto p-2">
+                  {optionsConfigFilteredMenus.length === 0 ? (
+                    <p className="py-6 text-center text-xs text-muted-foreground">{t("itemsNoResults")}</p>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {optionsConfigFilteredMenus.map((m) => {
+                        const isSelected = optionsConfigSelectedMenuId === m.id
+                        const optCount = isSelected ? optionsConfigMenuOptions.length : null
+                        return (
+                          <li key={m.id}>
+                            <button
+                              type="button"
+                              className={cn(
+                                "w-full text-left px-3 py-2.5 rounded-lg text-xs transition-colors",
+                                isSelected ? "bg-primary text-primary-foreground font-medium" : "hover:bg-muted/60"
+                              )}
+                              onClick={() => setOptionsConfigSelectedMenuId(m.id)}
+                            >
+                              <span className="font-medium">{m.code}</span>
+                              <span className="text-muted-foreground ml-1">—</span>
+                              <span className={isSelected ? "text-primary-foreground/90" : ""}>{m.name}</span>
+                              {optCount != null && optCount > 0 && (
+                                <span className={cn("ml-1.5", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>({optCount})</span>
+                              )}
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              {/* 우측: 옵션 설정 패널 */}
+              <div className="rounded-xl border bg-card overflow-hidden">
+                {!optionsConfigSelectedMenuId ? (
+                  <div className="p-12 text-center">
+                    <p className="text-sm text-muted-foreground">{t("posMenuOptionsConfigNoSelect") || "왼쪽에서 메뉴를 선택해 주세요"}</p>
+                  </div>
+                ) : (
+                  <div className="p-6">
+                    <div className="mb-4 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold">{optionsConfigSelectedMenu?.name} ({optionsConfigSelectedMenu?.code})</h3>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {optionsConfigCurrentGroups.length > 0
+                            ? `${t("posOptionSelectionGroups") || "옵션 단계"}: ${optionsConfigCurrentGroups.map((g) => OPTION_GROUP_PRESETS[g] || g).join(" → ")}`
+                            : t("posMenuOptionsSelectHint") || "메뉴 정보 탭에서 옵션 선택 단계를 먼저 설정하세요."}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="rounded border p-3">
+                        <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 목록"}</h4>
+                        <ul className="mb-3 space-y-1 max-h-40 overflow-y-auto">
+                          {optionsConfigMenuOptions.map((o) => (
+                            <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1.5 text-xs">
+                              <span>
+                                <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{o.name}</span>
+                                {o.optionType === "additive" && o.itemCode && (
+                                  <span className="ml-1 text-muted-foreground">+{o.itemCode}×{o.quantity ?? 1}</span>
+                                )}
+                                {o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0 && (
+                                  <span className="ml-1 text-muted-foreground">({Object.entries(o.optionStepValues).map(([k, v]) => `${k}:${v}`).join(" / ")})</span>
+                                )}
+                                {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
+                                  ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)` : ""}
+                              </span>
+                              <Button size="sm" variant="ghost" className="h-6 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteOptionForConfig(o)}><Trash2 className="h-3 w-3" /></Button>
+                            </li>
+                          ))}
+                          {optionsConfigMenuOptions.length === 0 && (
+                            <li className="py-4 text-center text-xs text-muted-foreground">{t("posOptionsConfigEmptyOptions") || "아래에서 옵션을 추가해 주세요."}</li>
+                          )}
+                        </ul>
+                        <div className="flex flex-col gap-2 pt-2 border-t">
+                          <div className="flex gap-2">
+                            <Input placeholder={t("posOptionNamePh") || "옵션명"} className="h-8 text-xs flex-1" value={newOptionName} onChange={(e) => setNewOptionName(e.target.value)} />
+                            <Button size="sm" className="h-8 px-2 shrink-0" onClick={handleAddOptionForConfig}><Plus className="h-3.5 w-3.5" /></Button>
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <span className="text-[10px] text-muted-foreground shrink-0">{t("posOptionType") || "타입"}</span>
+                            <Select value={newOptionType} onValueChange={(v) => setNewOptionType(v as "substitution" | "additive")}>
+                              <SelectTrigger className="h-8 w-28 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="substitution">{t("posOptionTypeSubstitution") || "대체형"}</SelectItem>
+                                <SelectItem value="additive">{t("posOptionTypeAdditive") || "추가형"}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {newOptionType === "substitution" && optionsConfigCurrentGroups.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {optionsConfigCurrentGroups.map((g) => (
+                                <div key={g} className="flex items-center gap-1">
+                                  <span className="text-[10px] text-muted-foreground">{OPTION_GROUP_PRESETS[g] || g}</span>
+                                  <Input placeholder={g} className="h-8 w-24 text-xs" value={newOptionStepValues[g] ?? ""} onChange={(e) => setNewOptionStepValues((p) => ({ ...p, [g]: e.target.value }))} />
+                                </div>
+                              ))}
+                              <p className="text-[10px] text-muted-foreground w-full">예: size=M, bone=순살</p>
+                            </div>
+                          )}
+                          {newOptionType === "additive" && (
+                            <div className="flex flex-col gap-2">
+                              <div className="flex gap-2 items-center flex-wrap">
+                                <Select value={newOptionItemCode} onValueChange={setNewOptionItemCode}>
+                                  <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
+                                    <SelectValue placeholder={t("posOptionAdditiveItem") || "추가 품목"} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {additiveOptionItems.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">{t("posAdditiveOptionCategoryHint") || "품목 관리에서 카테고리를 'POS추가옵션'으로 설정한 품목만 선택할 수 있습니다."}</p>
+                            </div>
+                          )}
+                          <div className="flex gap-2 text-xs">
+                            <span className="shrink-0 py-2 text-muted-foreground w-16">{t("posOptionModifierHall")}</span>
+                            <Input type="number" placeholder="+0" className="h-8 w-20 text-right text-xs" value={newOptionModifier} onChange={(e) => setNewOptionModifier(e.target.value)} />
+                            <span className="shrink-0 py-2 text-muted-foreground w-20">{t("posOptionModifierDelivery")}</span>
+                            <Input type="number" placeholder="홀과 동일" className="h-8 w-20 text-right text-xs" value={newOptionModifierDelivery} onChange={(e) => setNewOptionModifierDelivery(e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="topping" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <p className="text-sm text-muted-foreground">{t("posToppingPlaceholder") || "토핑 관리 (준비 중)"}</p>
+            </div>
+          </TabsContent>
+          <TabsContent value="set" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <p className="text-sm text-muted-foreground">{t("posSetPlaceholder") || "세트 메뉴 관리 (준비 중)"}</p>
+            </div>
+          </TabsContent>
+          <TabsContent value="menuBoard" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <p className="text-sm text-muted-foreground">{t("posMenuBoardPlaceholder") || "메뉴판 미리보기 (준비 중)"}</p>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

@@ -67,6 +67,7 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  taxType?: string
 }
 
 export function AdminOrderCreate() {
@@ -100,8 +101,13 @@ export function AdminOrderCreate() {
 
   const { subtotal, vat, total } = React.useMemo(() => {
     let sub = 0
-    for (const c of cart) sub += c.price * c.qty
-    const v = Math.round(sub * 0.07)
+    let taxableSub = 0
+    for (const c of cart) {
+      const amt = c.price * c.qty
+      sub += amt
+      if (c.taxType !== '면세' && c.taxType !== '영세율') taxableSub += amt
+    }
+    const v = Math.round(taxableSub * 0.07)
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
 
@@ -154,6 +160,7 @@ export function AdminOrderCreate() {
           name: selectedItem.name,
           price: selectedItem.price,
           qty: quantity,
+          taxType: selectedItem.taxType,
         },
       ]
     })
@@ -172,7 +179,7 @@ export function AdminOrderCreate() {
       const res = await processOrder({
         storeName: storeSelect,
         userName: auth.user,
-        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty })),
+        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, taxType: c.taxType })),
       })
       if (res.success) {
         alert(t("orderSuccess"))

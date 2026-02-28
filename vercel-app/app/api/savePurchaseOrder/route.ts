@@ -25,12 +25,17 @@ export async function POST(request: NextRequest) {
     }
 
     let subtotal = 0
+    let taxableSubtotal = 0
     for (const c of cart) {
       const price = Number(c.price || c.cost || 0)
       const qty = Number(c.qty || 0)
-      subtotal += price * qty
+      const amt = price * qty
+      subtotal += amt
+      const taxType = (c as { taxType?: string }).taxType
+      const isExempt = taxType === 'exempt' || taxType === '면세' || taxType === '영세율' || taxType === 'zero'
+      if (!isExempt) taxableSubtotal += amt
     }
-    const vat = Math.round(subtotal * 0.07)
+    const vat = Math.round(taxableSubtotal * 0.07)
     const total = subtotal + vat
     const netAmount = Math.max(0, total - withholdingTaxAmount)
 

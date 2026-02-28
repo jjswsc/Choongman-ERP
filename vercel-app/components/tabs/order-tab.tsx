@@ -81,6 +81,7 @@ interface CartItem {
   name: string
   price: number
   qty: number
+  taxType?: string
 }
 
 export function OrderTab() {
@@ -163,7 +164,7 @@ export function OrderTab() {
           x.code === selectedItem.code ? { ...x, qty: x.qty + quantity } : x
         )
       }
-      return [...prev, { code: selectedItem.code, name: selectedItem.name, price: selectedItem.price, qty: quantity }]
+      return [...prev, { code: selectedItem.code, name: selectedItem.name, price: selectedItem.price, qty: quantity, taxType: selectedItem.taxType }]
     })
     setSelectedItem(null)
     setQuantity(1)
@@ -175,8 +176,13 @@ export function OrderTab() {
 
   const { subtotal, vat, total } = useMemo(() => {
     let sub = 0
-    for (const c of cart) sub += c.price * c.qty
-    const v = Math.round(sub * 0.07)
+    let taxableSub = 0
+    for (const c of cart) {
+      const amt = c.price * c.qty
+      sub += amt
+      if (c.taxType !== '면세' && c.taxType !== '영세율') taxableSub += amt
+    }
+    const v = Math.round(taxableSub * 0.07)
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
 
@@ -187,7 +193,7 @@ export function OrderTab() {
       const res = await processOrder({
         storeName: effectiveStore,
         userName: auth.user,
-        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty })),
+        cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, taxType: c.taxType })),
       })
       if (res.success) {
         alert(t('orderSuccess'))

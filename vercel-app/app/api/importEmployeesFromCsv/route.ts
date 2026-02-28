@@ -160,11 +160,11 @@ export async function POST(request: NextRequest) {
         const n = parseFloat(v)
         if (!Number.isNaN(n)) salAmt = n
       }
-      let annualLeave = 15
+      let annualLeave = 6
       if (col.annual_leave_days >= 0) {
         const v = String(r[col.annual_leave_days] ?? '').replace(/,/g, '').trim()
         const n = parseFloat(v)
-        if (v && !Number.isNaN(n)) annualLeave = n
+        if (v && !Number.isNaN(n) && n >= 0) annualLeave = n
       }
       let positionAllowance = 0
       if (col.position_allowance >= 0) {

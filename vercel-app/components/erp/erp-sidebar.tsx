@@ -95,7 +95,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosOrder", icon: ShoppingCart, href: "/pos" },
       { titleKey: "adminPosOrderList", icon: Receipt, href: "/admin/pos-orders" },
       { titleKey: "adminPosSettlement", icon: Wallet, href: "/admin/pos-settlement" },
-      { titleKey: "adminPosTables", icon: LayoutGrid, href: "/admin/pos-tables" },
+      { titleKey: "adminPosScreenConfig", icon: LayoutGrid, href: "/admin/pos-screen-config" },
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
       { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/pos-coupons" },
@@ -143,6 +143,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-settlement": canAccessPosSettlement,
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
+  "/admin/pos-screen-config": canAccessPosTables, // 테이블/메뉴 통합
   "/admin/pos-cost-analysis": canAccessPosMenus,
   "/admin/pos-printers": canAccessPosPrinters,
   "/admin/pos-coupons": canAccessPosCoupons,

@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
 
       const input: EtaxInvoiceInput = {
         documentId: invoiceNo,
-        documentType: 'ใบแจ้งหนี้',
+        documentType: 'ใบกำกับภาษี',
         issueDate: dateStr,
         invoiceNo,
         seller: {

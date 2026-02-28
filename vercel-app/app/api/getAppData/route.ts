@@ -59,7 +59,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   for (let i = 0; i < (rows || []).length; i++) {
     const row = rows![i]
     if (!row?.code) continue
-    const taxType = row.tax === '면세' ? '면세' : '과세'
+    const taxType = row.tax === '면세' ? '면세' : row.tax === '영세율' ? '영세율' : '과세'
     const ps = String(row.purchase_source || '').trim()
     list.push({
       code: String(row.code),

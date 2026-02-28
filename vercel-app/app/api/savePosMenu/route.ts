@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
       isActive?: boolean
       sortOrder?: number
       optionSelectionGroups?: string[]
+      kitchenPrinter?: number | null
+      cookingTimeMin?: number | null
       id?: string
     }
 
@@ -39,7 +41,9 @@ export async function POST(req: NextRequest) {
     const optionSelectionGroups = Array.isArray(body.optionSelectionGroups) && body.optionSelectionGroups.length > 0
       ? body.optionSelectionGroups
       : null
-    const row: Record<string, unknown> = {
+    const kitchenPrinter = body.kitchenPrinter === 1 || body.kitchenPrinter === 2 ? body.kitchenPrinter : null
+    const cookingTimeMin = body.cookingTimeMin != null && Number.isFinite(body.cookingTimeMin) && body.cookingTimeMin >= 0 ? body.cookingTimeMin : null
+    const baseRow: Record<string, unknown> = {
       code,
       name,
       category: String(body.category ?? '').trim(),
@@ -50,34 +54,53 @@ export async function POST(req: NextRequest) {
       is_active: body.isActive !== false,
       sort_order: Number(body.sortOrder) ?? 0,
     }
-    if (optionSelectionGroups) row.option_selection_groups = optionSelectionGroups
+    if (optionSelectionGroups) baseRow.option_selection_groups = optionSelectionGroups
+    if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
+    if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
 
-    if (editingId) {
-      const existing = (await supabaseSelectFilter(
+    const doSave = async (row: Record<string, unknown>): Promise<{ success: boolean; message: string; newId?: string }> => {
+      if (editingId) {
+        const existing = (await supabaseSelectFilter(
+          'pos_menus',
+          `id=eq.${editingId}`,
+          { limit: 1 }
+        )) as { id?: number }[] | null
+        if (existing && existing.length > 0) {
+          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
+          return { success: true, message: '수정되었습니다.' }
+        }
+      }
+
+      const codeExists = (await supabaseSelectFilter(
         'pos_menus',
-        `id=eq.${editingId}`,
+        `code=eq.${encodeURIComponent(code)}`,
         { limit: 1 }
       )) as { id?: number }[] | null
-      if (existing && existing.length > 0) {
-        await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
-        return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+      if (codeExists && codeExists.length > 0 && !editingId) {
+        return { success: false, message: '이미 존재하는 메뉴 코드입니다.' }
       }
+
+      const inserted = (await supabaseInsert('pos_menus', row)) as { id?: number }[] | { id?: number }
+      const newRow = Array.isArray(inserted) ? inserted[0] : inserted
+      const newId = newRow?.id != null ? String(newRow.id) : undefined
+      return { success: true, message: '저장되었습니다.', newId }
     }
 
-    const codeExists = (await supabaseSelectFilter(
-      'pos_menus',
-      `code=eq.${encodeURIComponent(code)}`,
-      { limit: 1 }
-    )) as { id?: number }[] | null
-    if (codeExists && codeExists.length > 0 && !editingId) {
-      return NextResponse.json(
-        { success: false, message: '이미 존재하는 메뉴 코드입니다.' },
-        { headers }
-      )
+    try {
+      const result = await doSave(baseRow)
+      return NextResponse.json(result, { headers })
+    } catch (saveErr: unknown) {
+      const err = String(saveErr)
+      if ((optionSelectionGroups || kitchenPrinter != null || cookingTimeMin != null) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('42703'))) {
+        const rowWithout = { ...baseRow }
+        delete rowWithout.option_selection_groups
+        delete rowWithout.kitchen_printer
+        delete rowWithout.cooking_time_min
+        const result = await doSave(rowWithout)
+        return NextResponse.json(result, { headers })
+      }
+      throw saveErr
     }
-
-    await supabaseInsert('pos_menus', row)
-    return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('savePosMenu:', e)
     return NextResponse.json(

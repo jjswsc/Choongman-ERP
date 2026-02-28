@@ -136,8 +136,8 @@ export function ItemTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("itemsColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("itemsColSpec")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("itemsColPrice")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[160px] text-center">{t("itemsColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-16 text-center">{t("itemsColPrice")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-28 text-center">{t("itemsColAction")}</th>
             </tr>
           </thead>
@@ -189,11 +189,11 @@ export function ItemTable({
                   <td className="px-5 py-3 min-w-[120px]">
                     <span className="text-sm font-medium text-foreground">{product.name}</span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 min-w-[160px]">
                     <span className="text-[11px] text-muted-foreground">{product.spec}</span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    <span className="text-sm font-bold tabular-nums text-foreground">
+                    <span className="text-xs tabular-nums text-foreground">
                       {product.price > 0 ? `${product.price.toLocaleString()} ฿` : "-"}
                     </span>
                   </td>

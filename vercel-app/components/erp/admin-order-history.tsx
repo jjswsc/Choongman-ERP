@@ -71,6 +71,7 @@ interface ItemRow {
   qty: number
   price: number
   status: string
+  taxType?: string
 }
 
 export function AdminOrderHistory() {
@@ -303,6 +304,7 @@ export function AdminOrderHistory() {
           qty,
           price,
           status: o.status || "Pending",
+          taxType: (it as { taxType?: string }).taxType,
         })
       }
     }
@@ -366,7 +368,7 @@ export function AdminOrderHistory() {
     )
     const vendorCode = matched?.code ?? vendorStr
     const vendorName = matched?.name ?? vendorStr
-    let cart: { code: string; name: string; price: number; qty: number; store?: string }[]
+    let cart: { code: string; name: string; price: number; qty: number; store?: string; taxType?: string }[]
     if (groupByStore) {
       cart = vendorRows.map((r) => ({
         code: r.code,
@@ -374,20 +376,24 @@ export function AdminOrderHistory() {
         price: r.price || 0,
         qty: r.qty,
         store: r.store || "",
+        taxType: r.taxType,
       }))
     } else {
-      const byCode = new Map<string, { code: string; name: string; price: number; qty: number }>()
+      const byCode = new Map<string, { code: string; name: string; price: number; qty: number; taxType?: string }>()
       for (const r of vendorRows) {
         const existing = byCode.get(r.code)
-        if (existing) existing.qty += r.qty
-        else byCode.set(r.code, { code: r.code, name: r.name, price: r.price || 0, qty: r.qty })
+        if (existing) {
+          existing.qty += r.qty
+        } else {
+          byCode.set(r.code, { code: r.code, name: r.name, price: r.price || 0, qty: r.qty, taxType: r.taxType })
+        }
       }
       cart = Array.from(byCode.values())
     }
     setTransferToPo({
       vendorCode,
       vendorName,
-      cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty, store: x.store })),
+      cart: cart.map((x) => ({ code: x.code, name: x.name, price: x.price, qty: x.qty, store: x.store, taxType: x.taxType })),
       groupByStore,
       outboundLocation: outboundLoc || undefined,
     })

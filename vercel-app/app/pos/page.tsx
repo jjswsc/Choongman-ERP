@@ -587,6 +587,26 @@ export default function PosPage() {
       <div className="flex flex-1 overflow-hidden">
       {/* 메뉴 영역 */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {/* 1단계: 주문 유형 선택 (매장/포장/배달) */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
+          <span className="shrink-0 text-xs font-medium text-slate-400">
+            {t("posOrderType") || "주문 유형"}
+          </span>
+          <div className="flex gap-2">
+            {(["dine_in", "takeout", "delivery"] as OrderType[]).map((typ) => (
+              <button
+                key={typ}
+                onClick={() => setOrderType(typ)}
+                className={cn(
+                  "rounded-lg px-5 py-2.5 text-sm font-semibold transition",
+                  orderType === typ ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300"
+                )}
+              >
+                {orderTypeLabels[typ]}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900/50 px-3 py-2">
           <Button
             variant="ghost"
@@ -1118,7 +1138,7 @@ export default function PosPage() {
                   setOptionPickerStep((s) => s + 1)
                 }
               }
-              const groupLabels: Record<string, string> = { size: "사이즈", bone: "뼈/순살", type: "타입" }
+              const groupLabels: Record<string, string> = { size: "사이즈", part: "부위", topping: "토핑", bone: "뼈/순살", type: "타입" }
               return (
                 <div className="flex flex-col gap-3 py-2">
                   <p className="text-xs text-muted-foreground">

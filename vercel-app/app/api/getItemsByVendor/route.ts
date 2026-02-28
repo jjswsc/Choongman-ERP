@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       category?: string
       image?: string
       outbound_location?: string
+      tax?: string
     }[] | null = []
 
     const hqFilter = `or=(purchase_source.eq.hq,purchase_source.is.null)`
@@ -51,16 +52,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const list = filtered.map((row) => ({
-      code: String(row.code || ''),
-      name: String(row.name || ''),
-      spec: String(row.spec || ''),
-      price: Number(row.price) || 0,
-      cost: Number(row.cost) || 0,
-      category: String(row.category || ''),
-      image: String(row.image || ''),
-      outbound_location: String(row.outbound_location || ''),
-    }))
+    const list = filtered.map((row) => {
+      const tax = String(row.tax || '').trim()
+      const taxType = tax === '면세' ? 'exempt' : tax === '영세율' ? 'zero' : 'taxable'
+      return {
+        code: String(row.code || ''),
+        name: String(row.name || ''),
+        spec: String(row.spec || ''),
+        price: Number(row.price) || 0,
+        cost: Number(row.cost) || 0,
+        category: String(row.category || ''),
+        image: String(row.image || ''),
+        outbound_location: String(row.outbound_location || ''),
+        taxType,
+      }
+    })
 
     return NextResponse.json(list, { headers })
   } catch (e) {

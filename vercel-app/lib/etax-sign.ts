@@ -50,8 +50,9 @@ export function signEtaxXml(xmlString: string, options: EtaxSignOptions): string
     signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
     canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
   })
+  const rootXpath = "//*[local-name()='TaxInvoice_CrossIndustryInvoice' or local-name()='CrossIndustryInvoice']"
   sig.addReference({
-    xpath: "//*[local-name()='CrossIndustryInvoice']",
+    xpath: rootXpath,
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
     transforms: [
       'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
@@ -60,7 +61,7 @@ export function signEtaxXml(xmlString: string, options: EtaxSignOptions): string
   })
   const signOpts = {
     prefix: 'ds',
-    location: { reference: "//*[local-name()='CrossIndustryInvoice']", action: 'append' as const },
+    location: { reference: rootXpath, action: 'append' as const },
   }
   sig.computeSignature(xmlString, signOpts)
   return sig.getSignedXml()

@@ -17,11 +17,14 @@ export async function POST(request: NextRequest) {
     const { storeName, userName, cart } = validated.parsed
 
     let sub = 0
+    let taxableSub = 0
     for (let i = 0; i < cart.length; i++) {
-      const item = cart[i] as { price?: number; qty?: number }
-      sub += Number(item.price || 0) * Number(item.qty || 0)
+      const item = cart[i] as { price?: number; qty?: number; taxType?: string }
+      const amt = Number(item.price || 0) * Number(item.qty || 0)
+      sub += amt
+      if (item.taxType !== '면세' && item.taxType !== '영세율') taxableSub += amt
     }
-    const vat = Math.round(sub * 0.07)
+    const vat = Math.round(taxableSub * 0.07)
     const total = sub + vat
 
     await supabaseInsert('orders', {

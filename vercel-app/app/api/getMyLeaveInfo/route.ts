@@ -8,27 +8,17 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
-/** 연차일 수: Hourly는 0. 직원관리 직접 입력 우선. null이면 근속연수에 따라 1년↑6일, 2년↑7일, 3년↑8일... (1년마다 +1일) */
+/** 연차일 수: Hourly는 0. 직원관리 직접 입력 우선. null/미입력이면 기본 6일 (입사일 무관) */
 function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
   if (!emp) return 0
   const salType = String(emp.sal_type ?? emp.salType ?? '').trim()
   if (salType.toLowerCase() === 'hourly') return 0
   const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
-  if (directVal != null && directVal !== '' && Number(directVal) > 0) {
+  if (directVal != null && directVal !== '' && Number(directVal) >= 0) {
     const direct = Number(directVal)
-    if (!Number.isNaN(direct) && direct >= 0) return direct
+    if (!Number.isNaN(direct)) return direct
   }
-  const joinVal = emp.join_date ?? emp.joinDate
-  if (joinVal == null || (typeof joinVal === 'string' && !joinVal.trim())) return 0
-  const joinStr = typeof joinVal === 'string' || joinVal instanceof Date ? toDateStr(joinVal) : ''
-  if (!joinStr) return 0
-  const joinDate = new Date(joinStr + 'T12:00:00')
-  if (isNaN(joinDate.getTime())) return 0
-  const now = new Date()
-  const msPerYear = 365.25 * 24 * 60 * 60 * 1000
-  const fullYears = Math.floor((now.getTime() - joinDate.getTime()) / msPerYear)
-  if (fullYears < 1) return 0
-  return 6 + (fullYears - 1)
+  return 6
 }
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */

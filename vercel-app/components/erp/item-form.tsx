@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getVendorsForPurchase } from "@/lib/api-client"
-const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', '개', '팩', 'oz', 'lb', '박스']
+const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', '개', '팩', 'oz', 'lb']
 
 export interface ItemFormData {
   code: string
@@ -357,6 +357,9 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">฿</span>
             </div>
+            {formData.taxType === "taxable" && (
+              <p className="text-[10px] text-muted-foreground">{t("itemsPriceVatExclHint")}</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold text-foreground">{t("itemsCost")}</label>
@@ -372,17 +375,47 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             </div>
           </div>
         </div>
-        {formData.unit && parseFloat(formData.totalQuantity) > 0 && parseFloat(formData.price) >= 0 && (
-          <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2">
-            <span className="text-xs text-muted-foreground">
-              {t("itemsCostPerUnitPreview") || "1"}{formData.unit}
-              {t("itemsCostPerUnitPreview2") || "당 원가"}:
-            </span>
-            <span className="ml-2 text-sm font-semibold tabular-nums text-primary">
-              {(parseFloat(formData.price) / parseFloat(formData.totalQuantity)).toFixed(4)} ฿
-            </span>
-          </div>
-        )}
+        {formData.unit && parseFloat(formData.totalQuantity) > 0 && parseFloat(formData.price) >= 0 && (() => {
+          const price = parseFloat(formData.price)
+          const totalQty = parseFloat(formData.totalQuantity)
+          const costPerStdUnit = price / totalQty
+          const u = formData.unit.toLowerCase().trim()
+          const isPackaging = /포장|packaging|박스|용기|봉지|pack|pouch|box|bag/.test((formData.category || "").toLowerCase())
+          let costPerBaseUnit: number | null = null
+          let baseUnitLabel = ""
+          if (!isPackaging) {
+            if (u === "kg" || u === "oz" || u === "lb") {
+              if (u === "kg") { costPerBaseUnit = costPerStdUnit / 1000; baseUnitLabel = "g" }
+              else if (u === "oz") { costPerBaseUnit = costPerStdUnit / 28.35; baseUnitLabel = "g" }
+              else if (u === "lb") { costPerBaseUnit = costPerStdUnit / 453.6; baseUnitLabel = "g" }
+            } else if (u === "l") {
+              costPerBaseUnit = costPerStdUnit / 1000
+              baseUnitLabel = "ml"
+            }
+          }
+          return (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 space-y-1">
+              <div>
+                <span className="text-xs text-muted-foreground">
+                  {t("itemsCostPerUnitPreview") || "1"}{formData.unit}
+                  {t("itemsCostPerUnitPreview2") || "당 원가"}:
+                </span>
+                <span className="ml-2 text-sm font-semibold tabular-nums text-primary">
+                  {costPerStdUnit.toFixed(4)} ฿
+                </span>
+              </div>
+              {costPerBaseUnit != null && baseUnitLabel && (
+                <div className="text-xs text-muted-foreground">
+                  {t("itemsCostPerUnitConverted") || "→ 1"}{baseUnitLabel}{t("itemsCostPerUnitPreview2") || "당 원가"}:
+                  <span className="ml-2 font-semibold tabular-nums text-primary">
+                    {costPerBaseUnit.toFixed(4)} ฿
+                  </span>
+                  <span className="text-[10px] ml-1">({t("itemsCostConversionHint") || "원가 분석에 사용"})</span>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="flex gap-3 pt-1">
           <Button className="flex-1 h-11 text-sm font-bold" onClick={onSave}>

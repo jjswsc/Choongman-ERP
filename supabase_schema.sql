@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS employees (
   password TEXT DEFAULT '',
   role TEXT DEFAULT 'Staff',
   email TEXT DEFAULT '',
-  annual_leave_days NUMERIC(5,2) DEFAULT 15,
+  annual_leave_days NUMERIC(5,2) DEFAULT 6,
   bank_name TEXT DEFAULT '',
   account_number TEXT DEFAULT '',
   position_allowance NUMERIC(12,2) DEFAULT 0,
@@ -160,7 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_employees_store ON employees(store);
 CREATE INDEX IF NOT EXISTS idx_employees_name ON employees(name);
 
 -- 기존 employees 테이블에 컬럼이 없다면 추가 (마이그레이션)
-ALTER TABLE employees ADD COLUMN IF NOT EXISTS annual_leave_days NUMERIC(5,2) DEFAULT 15;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS annual_leave_days NUMERIC(5,2) DEFAULT 6;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT '';
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS account_number TEXT DEFAULT '';
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance NUMERIC(12,2) DEFAULT 0;
