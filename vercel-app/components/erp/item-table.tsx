@@ -7,6 +7,8 @@ import {
   Search,
   Pencil,
   Trash2,
+  PauseCircle,
+  PlayCircle,
   ImageIcon,
   ChevronLeft,
   ChevronRight,
@@ -65,6 +67,7 @@ export function ItemTable({
   onSearch,
   onEdit,
   onDelete,
+  onToggleOrderDisabled,
 }: ItemTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -194,11 +197,31 @@ export function ItemTable({
                   </td>
                   <td className="px-5 py-3 text-right">
                     <span className="text-xs tabular-nums text-foreground">
-                      {product.price > 0 ? `${product.price.toLocaleString()} ฿` : "-"}
+                      {product.price > 0 ? product.price.toLocaleString() : "-"}
                     </span>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-center gap-1">
+                      {onToggleOrderDisabled != null && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className={cn(
+                            "h-7 w-7",
+                            product.orderDisabled
+                              ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                              : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                          )}
+                          onClick={() => onToggleOrderDisabled(product)}
+                          title={product.orderDisabled ? (t("itemsOrderResume") || "재개") : (t("itemsOrderDisabled") || "발주 중지")}
+                        >
+                          {product.orderDisabled ? (
+                            <PlayCircle className="h-3.5 w-3.5" />
+                          ) : (
+                            <PauseCircle className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="icon"

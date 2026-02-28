@@ -16,6 +16,7 @@ export interface MenuItem {
   /** POS 메뉴 코드 (메뉴 관리의 코드 = 품번) */
   menuCode: string
   category: string
+  categoryMain?: string
   menuName: string
   description: string
   inclVat: number
@@ -142,7 +143,7 @@ function calcBahtPerUnit(
     if (u === "l") return costPerStdUnit / 1000 // 1L→1ml당≈1g당
     if (u === "oz") return costPerStdUnit / 28.35 // 1oz≈28.35g
     if (u === "lb") return costPerStdUnit / 453.6
-    if (u === "개" || u === "ea" || u === "팩" || u === "박스") return costPerStdUnit // 개당
+    if (u === "개" || u === "ea" || u === "팩" || u === "pack" || u === "박스") return costPerStdUnit // 개당
     return costPerStdUnit
   }
   return 0

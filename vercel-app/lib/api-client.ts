@@ -1735,6 +1735,8 @@ export interface AdminItem {
   hasImage: boolean
   description?: string
   purchaseSource?: 'hq' | 'store'
+  /** true이면 매장 발주 품목 검색에 노출되지 않음 */
+  orderDisabled?: boolean
 }
 
 export interface AdminVendor {
@@ -1839,6 +1841,15 @@ export async function deleteItem(params: { code: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function updateItemOrderDisabled(params: { code: string; disabled: boolean }) {
+  const res = await apiFetch('/api/updateItemOrderDisabled', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; disabled?: boolean; message?: string }>
+}
+
 /** Excel 원가 파일 → 코드가 없는 품목만 신규 등록 */
 export async function importItemsFromExcel(file: File) {
   const form = new FormData()
@@ -1856,6 +1867,7 @@ export interface PosMenu {
   code: string
   name: string
   category: string
+  categoryMain?: string
   price: number
   priceDelivery?: number | null
   imageUrl: string
@@ -1877,12 +1889,19 @@ export interface PosMenuOption {
   name: string
   priceModifier: number
   priceModifierDelivery?: number | null
+  priceModifierPackaging?: number | null
   sortOrder: number
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
   quantity?: number
-  /** 복합 옵션의 단계별 값. 예: {"size":"M","bone":"순살"} */
+  /** 복합 옵션의 단계별 값. 예: {"size":"M","part":"순살"} */
   optionStepValues?: Record<string, string> | null
+  /** 홀에서 판매 */
+  sellHall?: boolean
+  /** 배달에서 판매 */
+  sellDelivery?: boolean
+  /** 포장에서 판매 */
+  sellPackaging?: boolean
 }
 
 export async function getPosMenus() {
@@ -1892,7 +1911,7 @@ export async function getPosMenus() {
 
 export async function getPosMenuCategories() {
   const res = await apiFetch('/api/getPosMenuCategories')
-  return res.json() as Promise<{ categories: string[] }>
+  return res.json() as Promise<{ categories: string[]; mainCategories: string[] }>
 }
 
 export async function getPosMenuOptions(params?: { menuId?: string }) {
@@ -1908,11 +1927,15 @@ export async function savePosMenuOption(params: {
   name: string
   priceModifier?: number
   priceModifierDelivery?: number | null
+  priceModifierPackaging?: number | null
   sortOrder?: number
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
   quantity?: number
   optionStepValues?: Record<string, string> | null
+  sellHall?: boolean
+  sellDelivery?: boolean
+  sellPackaging?: boolean
 }) {
   const res = await apiFetch('/api/savePosMenuOption', {
     method: 'POST',
@@ -1979,6 +2002,7 @@ export interface PosMenuCostAnalysisRow {
   menuCode: string
   menuName: string
   category: string
+  categoryMain?: string
   priceHall: number
   priceDelivery: number | null
   optionId: string | null
@@ -2107,6 +2131,7 @@ export async function savePosMenu(params: {
   code: string
   name: string
   category?: string
+  categoryMain?: string
   price?: number
   priceDelivery?: number | null
   imageUrl?: string

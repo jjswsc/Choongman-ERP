@@ -16,7 +16,7 @@ export interface AppItem {
   purchaseSource?: 'hq' | 'store'
 }
 
-const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description,purchase_source'
+const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description,purchase_source,order_disabled'
 
 async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   const isOrderScope = String(scope || '').toLowerCase().trim() === 'order'
@@ -31,6 +31,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
     image?: string
     description?: string
     purchase_source?: string
+    order_disabled?: boolean
   }[] | null
 
   if (isOrderScope) {
@@ -59,6 +60,8 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   for (let i = 0; i < (rows || []).length; i++) {
     const row = rows![i]
     if (!row?.code) continue
+    // 매장 발주 품목(scope=order)에서 order_disabled=true면 제외
+    if (isOrderScope && row.order_disabled === true) continue
     const taxType = row.tax === '면세' ? '면세' : row.tax === '영세율' ? '영세율' : '과세'
     const ps = String(row.purchase_source || '').trim()
     list.push({

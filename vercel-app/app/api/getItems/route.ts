@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-const ITEMS_SELECT = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source'
+const ITEMS_SELECT = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled'
 
 /** 관리자 품목 관리 - Supabase items 테이블 조회. scope=outbound|order 시 본사 전용만 */
 export async function GET(request: NextRequest) {
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
         outbound_location?: string
         description?: string
         purchase_source?: string
+        order_disabled?: boolean
       }[] | null)
       : ((await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: ITEMS_SELECT })) as {
       id?: number
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
         outbound_location?: string
         description?: string
         purchase_source?: string
+        order_disabled?: boolean
     }[] | null)
 
     const list = (rows || [])
@@ -85,6 +87,7 @@ export async function GET(request: NextRequest) {
           hasImage: !!(row.image && String(row.image).trim()),
           description: row.description ? String(row.description).trim() : '',
           purchaseSource: ((row.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq') as 'hq' | 'store',
+          orderDisabled: row.order_disabled === true,
         }
       })
 

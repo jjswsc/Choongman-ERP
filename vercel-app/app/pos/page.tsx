@@ -179,14 +179,17 @@ export default function PosPage() {
   }, [loadMenusAndPromos])
 
   const optionsByMenuId = React.useMemo(() => {
+    const sellKey = orderType === "dine_in" ? "sellHall" : orderType === "delivery" ? "sellDelivery" : "sellPackaging"
     const m: Record<string, PosMenuOption[]> = {}
     for (const o of allOptions) {
+      const sell = o[sellKey]
+      if (sell === false) continue
       const mid = o.menuId
       if (!m[mid]) m[mid] = []
       m[mid].push(o)
     }
     return m
-  }, [allOptions])
+  }, [allOptions, orderType])
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const filteredMenus = React.useMemo(() => {
@@ -207,8 +210,11 @@ export default function PosPage() {
 
   const getMenuPrice = (menu: PosMenu) =>
     orderType === "delivery" && menu.priceDelivery != null ? menu.priceDelivery : menu.price
-  const getOptionModifier = (opt: PosMenuOption) =>
-    orderType === "delivery" && opt.priceModifierDelivery != null ? opt.priceModifierDelivery : (opt.priceModifier ?? 0)
+  const getOptionModifier = (opt: PosMenuOption) => {
+    if (orderType === "delivery" && opt.priceModifierDelivery != null) return opt.priceModifierDelivery
+    if (orderType === "takeout" && opt.priceModifierPackaging != null) return opt.priceModifierPackaging
+    return opt.priceModifier ?? 0
+  }
 
   const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null) => {
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id

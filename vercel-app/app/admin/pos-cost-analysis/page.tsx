@@ -20,6 +20,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosMenuCostAnalysis, type PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { POS_MAIN_CATEGORIES } from "@/lib/pos-menu-categories"
 
 const MISE_RATE_DEFAULT = 3
 
@@ -40,6 +41,7 @@ export default function PosCostAnalysisPage() {
   const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
+  const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
   const [miseRate, setMiseRate] = React.useState(MISE_RATE_DEFAULT)
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = React.useState("list")
@@ -58,6 +60,11 @@ export default function PosCostAnalysisPage() {
     return Array.from(set).sort()
   }, [rows])
 
+  const mainCategories = React.useMemo(() => {
+    const fromRows = new Set(rows.map((r) => r.categoryMain).filter(Boolean))
+    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows])).sort()
+  }, [rows])
+
   const filtered = React.useMemo(() => {
     return rows.filter((r) => {
       const matchTerm =
@@ -66,9 +73,10 @@ export default function PosCostAnalysisPage() {
         r.menuCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (r.optionName || "").toLowerCase().includes(searchTerm.toLowerCase())
       const matchCat = categoryFilter === "all" || r.category === categoryFilter
-      return matchTerm && matchCat
+      const matchMainCat = mainCategoryFilter === "all" || (r.categoryMain ?? "") === mainCategoryFilter
+      return matchTerm && matchCat && matchMainCat
     })
-  }, [rows, searchTerm, categoryFilter])
+  }, [rows, searchTerm, categoryFilter, mainCategoryFilter])
 
   const toggleExpand = (key: string) => {
     setExpandedIds((prev) => {
@@ -87,7 +95,7 @@ export default function PosCostAnalysisPage() {
 
   const handleExportCsv = () => {
     const csvRows: string[] = [
-      toCsvRow(["코드", "카테고리", "메뉴명", "옵션", "홀가격", "배달가격", "음식원가", "포장원가", "미세포함(홀)", "미세포함(배달)", "원가율(홀)%", "원가율(배달)%", "마진(홀)", "마진(배달)"]),
+      toCsvRow(["코드", "대분류", "카테고리", "메뉴명", "옵션", "홀가격", "배달가격", "음식원가", "포장원가", "미세포함(홀)", "미세포함(배달)", "원가율(홀)%", "원가율(배달)%", "마진(홀)", "마진(배달)"]),
     ]
     for (const r of filtered) {
       const priceH = r.priceHall || 1
@@ -96,6 +104,7 @@ export default function PosCostAnalysisPage() {
       const costDMise = withMise(r.costDelivery)
       csvRows.push(toCsvRow([
         r.menuCode,
+        r.categoryMain ?? "",
         r.category,
         r.menuName,
         r.optionName || "",
@@ -165,7 +174,29 @@ export default function PosCostAnalysisPage() {
           </div>
         )}
 
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+          <Select value={mainCategoryFilter} onValueChange={setMainCategoryFilter}>
+            <SelectTrigger className="h-9 w-36 text-xs">
+              <SelectValue placeholder={t("posMenuCategoryMain") || "대분류"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
+              {mainCategories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-9 w-40 text-xs">
+              <SelectValue placeholder={t("posMenuCategory") || "카테고리"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <div className="relative flex-1 min-w-[200px] max-w-sm flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -198,17 +229,6 @@ export default function PosCostAnalysisPage() {
               {t("itemsBtnSearch") || "검색"}
             </Button>
           </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="h-9 w-40 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c} value={c}>{c}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">{t("posCostMise") || "미세(%)"}</span>
             <Input
@@ -234,6 +254,7 @@ export default function PosCostAnalysisPage() {
                 <tr className="border-b bg-muted/50">
                   <th className="w-8 px-2 py-3"></th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCode") || "코드"}</th>
+                  <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategoryMain") || "대분류"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategory") || "카테고리"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuName") || "메뉴명"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posMenuPriceHall") || "홀(฿)"}</th>
@@ -289,6 +310,7 @@ export default function PosCostAnalysisPage() {
                           )}
                         </td>
                         <td className="px-3 py-2 font-mono text-xs">{r.menuCode}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">{r.categoryMain ?? "-"}</td>
                         <td className="px-3 py-2 text-xs">{r.category}</td>
                         <td className="px-3 py-2">
                           <span className="font-medium">{r.menuName}</span>
@@ -316,7 +338,7 @@ export default function PosCostAnalysisPage() {
                       </tr>
                       {expanded && hasBreakdown && (
                         <tr className="border-b bg-muted/10">
-                          <td colSpan={13} className="px-4 py-3">
+                          <td colSpan={14} className="px-4 py-3">
                             <div className="rounded border bg-background overflow-hidden">
                               <table className="w-full text-xs">
                                 <thead>

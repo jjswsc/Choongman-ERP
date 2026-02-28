@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getVendorsForPurchase } from "@/lib/api-client"
-const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', '개', '팩', 'oz', 'lb']
+const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', 'ea', 'pack', 'oz', 'lb']
 
 export interface ItemFormData {
   code: string

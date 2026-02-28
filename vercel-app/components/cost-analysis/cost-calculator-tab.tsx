@@ -9,7 +9,6 @@ import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
 import { CostChart } from "@/components/cost-analysis/cost-chart"
-import { IngredientSheet } from "@/components/cost-analysis/ingredient-sheet"
 import {
   emptyMenuItem,
   emptyFoodRecipe,
@@ -24,6 +23,7 @@ import {
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
+import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
@@ -80,6 +80,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         menuCode: initialLoadFromRow.menuCode ?? "",
         menuName: initialLoadFromRow.menuName + (initialLoadFromRow.optionName ? ` (${initialLoadFromRow.optionName})` : ""),
         category: initialLoadFromRow.category ?? "",
+        categoryMain: initialLoadFromRow.categoryMain ?? "",
         inclVat: price,
       })
       setFoodItems(food)
@@ -100,6 +101,22 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     const set = new Set(menuRows.map((r) => r.category).filter(Boolean))
     return Array.from(set).sort()
   }, [menuRows])
+
+  const mainCategoriesFromMenus = useMemo(() => {
+    const fromRows = new Set(menuRows.map((r) => r.categoryMain).filter(Boolean))
+    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows])).sort()
+  }, [menuRows])
+
+  const categoriesFromMenusByMain = useMemo(() => {
+    return (mainCat: string) => {
+      if (mainCat && mainCat in POS_CATEGORIES_BY_MAIN) {
+        const preset = POS_CATEGORIES_BY_MAIN[mainCat as keyof typeof POS_CATEGORIES_BY_MAIN]
+        const fromRows = menuRows.filter((r) => (r.categoryMain ?? "") === mainCat).map((r) => r.category).filter(Boolean)
+        return Array.from(new Set([...preset, ...fromRows])).sort()
+      }
+      return categoriesFromMenus
+    }
+  }, [menuRows, categoriesFromMenus])
 
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
@@ -167,7 +184,6 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <IngredientSheet />
           <Button
             variant="ghost"
             size="sm"
@@ -196,9 +212,11 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
           <MenuInfoPanel
             menuItem={menuItem}
             onMenuItemChange={setMenuItem}
-            categories={categoriesFromMenus}
+            categories={menuItem.categoryMain ? categoriesFromMenusByMain(menuItem.categoryMain) : categoriesFromMenus}
+            mainCategories={mainCategoriesFromMenus}
             menuRows={menuRows}
             onMenuSelect={onMenuSelect}
+            onRequestChangeMenu={onClearLoad}
             readOnlyMenuInfo={!!initialLoadFromRow}
           />
           <div className="space-y-6">

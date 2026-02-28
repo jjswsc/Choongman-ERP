@@ -15,7 +15,7 @@ export function getItemCostPerUnit(
     if (u === "l") return costPerStdUnit / 1000
     if (u === "oz") return costPerStdUnit / 28.35
     if (u === "lb") return costPerStdUnit / 453.6
-    if (/개|ea|팩|박스/.test(u)) return costPerStdUnit
+    if (/개|ea|팩|pack|박스/.test(u)) return costPerStdUnit
     return costPerStdUnit
   }
   return Number(item.cost ?? 0)

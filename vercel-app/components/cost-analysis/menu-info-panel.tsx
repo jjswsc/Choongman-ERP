@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { UtensilsCrossed, ChefHat, Truck, Search } from "lucide-react"
+import { UtensilsCrossed, ChefHat, Truck, Search, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { MenuItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
@@ -22,15 +22,19 @@ interface MenuInfoPanelProps {
   onMenuItemChange: (item: MenuItem) => void
   /** 카테고리 목록 (메뉴 관리에서 사용 중인 값) */
   categories?: string[]
+  /** 대분류 목록 */
+  mainCategories?: string[]
   /** POS 메뉴 목록 (검색·선택용) */
   menuRows?: PosMenuCostAnalysisRow[]
   /** 메뉴 선택 시 (원가 계산기에서 목록 로드) */
   onMenuSelect?: (row: PosMenuCostAnalysisRow) => void
+  /** 메뉴 변경 요청 시 (다시 검색 가능하도록) */
+  onRequestChangeMenu?: () => void
   /** 코드·카테고리·메뉴명 읽기 전용 (pos 메뉴 관리와 연동) */
   readOnlyMenuInfo?: boolean
 }
 
-export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], menuRows = [], onMenuSelect, readOnlyMenuInfo = false }: MenuInfoPanelProps) {
+export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mainCategories = [], menuRows = [], onMenuSelect, onRequestChangeMenu, readOnlyMenuInfo = false }: MenuInfoPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const categoryOptions = categories.length > 0 ? categories : ["Size S", "Size M", "Size L", "Set"]
@@ -38,7 +42,11 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], men
   const [menuSearchTerm, setMenuSearchTerm] = useState("")
   const menuSearchRef = useRef<HTMLDivElement>(null)
 
-  const menuFilteredByCat = menuRows.filter((r) => !menuItem.category || r.category === menuItem.category)
+  const menuFilteredByCat = menuRows.filter((r) => {
+    if (menuItem.categoryMain && (r.categoryMain ?? "") !== menuItem.categoryMain) return false
+    if (menuItem.category && r.category !== menuItem.category) return false
+    return true
+  })
   const menuFiltered = menuFilteredByCat.filter((r) => {
     if (!menuSearchTerm.trim()) return true
     const term = menuSearchTerm.toLowerCase()
@@ -75,6 +83,33 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], men
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
+        {mainCategories.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="categoryMain" className="text-xs text-muted-foreground">
+              {t("posMenuCategoryMain")}
+            </Label>
+            {readOnlyMenuInfo ? (
+              <div className="h-9 px-3 flex items-center text-sm bg-muted/30 rounded-md border border-border">
+                {menuItem.categoryMain || "—"}
+              </div>
+            ) : (
+              <Select
+                value={menuItem.categoryMain || "_all"}
+                onValueChange={(val) => onMenuItemChange({ ...menuItem, categoryMain: val === "_all" ? "" : val })}
+              >
+                <SelectTrigger className="h-9 bg-secondary/50 border-border">
+                  <SelectValue placeholder={t("posMenuCategoryAll") || "전체"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
+                  {mainCategories.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="category" className="text-xs text-muted-foreground">
             {t("posMenuCategory")}
@@ -107,7 +142,21 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], men
           <Label className="text-xs text-muted-foreground">
             {t("posMenuCode")} / {t("posMenuName")}
           </Label>
-          {readOnlyMenuInfo ? (
+          {readOnlyMenuInfo && menuRows.length > 0 && onMenuSelect && onRequestChangeMenu ? (
+            <div className="flex items-center gap-2">
+              <div className="h-9 px-3 flex-1 flex items-center text-sm bg-muted/30 rounded-md border border-border">
+                {menuItem.menuCode ? `${menuItem.menuCode} — ${menuItem.menuName || ""}` : (menuItem.menuName || "—")}
+              </div>
+              <button
+                type="button"
+                onClick={onRequestChangeMenu}
+                className="h-9 px-3 flex items-center gap-1.5 rounded-md border border-border bg-secondary/50 hover:bg-muted text-xs font-medium shrink-0"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {t("posCostChangeMenu") || "메뉴 변경"}
+              </button>
+            </div>
+          ) : readOnlyMenuInfo ? (
             <div className="h-9 px-3 flex items-center text-sm bg-muted/30 rounded-md border border-border">
               {menuItem.menuCode ? `${menuItem.menuCode} — ${menuItem.menuName || ""}` : (menuItem.menuName || "—")}
             </div>

@@ -9,28 +9,35 @@ export async function GET(request: NextRequest) {
   const menuId = searchParams.get('menuId')?.trim()
 
   try {
-    const selectCols = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order,option_type,item_code,quantity,option_step_values'
-    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; quantity?: number; option_step_values?: Record<string, string> | null }[] | null
-    try {
+    const selectCols = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,quantity,option_step_values,sell_hall,sell_delivery,sell_packaging'
+    const colsWithoutSellAndStep = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order,option_type,item_code,quantity'
+    const colsBaseWithDelivery = 'id,menu_id,name,price_modifier,price_modifier_delivery,price_modifier_packaging,sort_order'
+    const colsBaseWithDeliveryOnly = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order'
+    const minimalCols = 'id,menu_id,name,price_modifier,sort_order'
+    let rows: { id?: number; menu_id?: number; name?: string; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null; sort_order?: number; option_type?: string; item_code?: string | null; quantity?: number; option_step_values?: Record<string, string> | null; sell_hall?: boolean; sell_delivery?: boolean; sell_packaging?: boolean }[] | null = null
+
+    const doSelect = async (cols: string) => {
       if (menuId) {
-        rows = (await supabaseSelectFilter(
-          'pos_menu_options',
-          `menu_id=eq.${encodeURIComponent(menuId)}`,
-          { order: 'sort_order.asc,name.asc', limit: 200, select: selectCols }
-        )) as typeof rows
-      } else {
-        rows = (await supabaseSelect('pos_menu_options', {
-          order: 'menu_id.asc,sort_order.asc,name.asc',
-          limit: 1000,
-          select: selectCols,
-        })) as typeof rows
+        return (await supabaseSelectFilter('pos_menu_options', `menu_id=eq.${encodeURIComponent(menuId)}`, { order: 'sort_order.asc,name.asc', limit: 200, select: cols })) as typeof rows
       }
+      return (await supabaseSelect('pos_menu_options', { order: 'menu_id.asc,sort_order.asc,name.asc', limit: 1000, select: cols })) as typeof rows
+    }
+
+    try {
+      rows = await doSelect(selectCols)
     } catch {
-      const basicCols = 'id,menu_id,name,price_modifier,price_modifier_delivery,sort_order'
-      if (menuId) {
-        rows = (await supabaseSelectFilter('pos_menu_options', `menu_id=eq.${encodeURIComponent(menuId)}`, { order: 'sort_order.asc,name.asc', limit: 200, select: basicCols })) as typeof rows
-      } else {
-        rows = (await supabaseSelect('pos_menu_options', { order: 'menu_id.asc,sort_order.asc,name.asc', limit: 1000, select: basicCols })) as typeof rows
+      try {
+        rows = await doSelect(colsWithoutSellAndStep)
+      } catch {
+        try {
+          rows = await doSelect(colsBaseWithDelivery)
+        } catch {
+          try {
+            rows = await doSelect(colsBaseWithDeliveryOnly)
+          } catch {
+            rows = await doSelect(minimalCols)
+          }
+        }
       }
     }
 
@@ -43,11 +50,15 @@ export async function GET(request: NextRequest) {
         name: String(row.name ?? ''),
         priceModifier: Number(row.price_modifier) ?? 0,
         priceModifierDelivery: row.price_modifier_delivery != null ? Number(row.price_modifier_delivery) : null,
+        priceModifierPackaging: row.price_modifier_packaging != null ? Number(row.price_modifier_packaging) : null,
         sortOrder: Number(row.sort_order) ?? 0,
         optionType: (row.option_type || 'substitution') as 'substitution' | 'additive',
         itemCode: row.item_code ? String(row.item_code).trim() : null,
         quantity: Number(row.quantity) ?? 1,
         optionStepValues: sv || null,
+        sellHall: row.sell_hall != null ? !!row.sell_hall : true,
+        sellDelivery: row.sell_delivery != null ? !!row.sell_delivery : true,
+        sellPackaging: row.sell_packaging != null ? !!row.sell_packaging : true,
       }
     })
 

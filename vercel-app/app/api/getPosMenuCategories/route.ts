@@ -7,19 +7,31 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('pos_menus', {
-      select: 'category',
-      limit: 5000,
-    })) as { category?: string }[] | null
+    let rows: { category?: string; category_main?: string }[] | null = null
+    try {
+      rows = (await supabaseSelect('pos_menus', {
+        select: 'category,category_main',
+        limit: 5000,
+      })) as { category?: string; category_main?: string }[] | null
+    } catch {
+      rows = (await supabaseSelect('pos_menus', {
+        select: 'category',
+        limit: 5000,
+      })) as { category?: string }[] | null
+    }
 
-    const set = new Set<string>()
+    const catSet = new Set<string>()
+    const mainSet = new Set<string>()
     for (const r of rows || []) {
       const c = String(r.category || '').trim()
-      if (c) set.add(c)
+      if (c) catSet.add(c)
+      const m = String((r as { category_main?: string }).category_main || '').trim()
+      if (m) mainSet.add(m)
     }
-    const categories = Array.from(set).sort()
+    const categories = Array.from(catSet).sort()
+    const mainCategories = Array.from(mainSet).sort()
 
-    return NextResponse.json({ categories }, { headers })
+    return NextResponse.json({ categories, mainCategories }, { headers })
   } catch (e) {
     console.error('getPosMenuCategories:', e)
     return NextResponse.json({ categories: [] }, { headers })

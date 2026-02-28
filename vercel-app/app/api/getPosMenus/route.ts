@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
-const POS_MENUS_SELECT = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
+const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
+const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
 const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_groups'
 const POS_MENUS_SELECT_WITH_ALL = POS_MENUS_SELECT_WITH_GROUPS + ',kitchen_printer,cooking_time_min'
 
-/** POS 메뉴 목록 조회 (option_selection_groups 컬럼이 없으면 해당 필드 없이 조회) */
+/** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
     let rows: unknown[] | null = null
-    for (const cols of [POS_MENUS_SELECT_WITH_ALL, POS_MENUS_SELECT_WITH_GROUPS, POS_MENUS_SELECT]) {
+    for (const cols of [POS_MENUS_SELECT_WITH_ALL, POS_MENUS_SELECT_WITH_GROUPS, POS_MENUS_SELECT, POS_MENUS_SELECT_BASE]) {
       try {
         rows = (await supabaseSelect('pos_menus', {
           order: 'sort_order.asc,name.asc',
@@ -21,7 +22,7 @@ export async function GET() {
         })) as unknown[] | null
         break
       } catch (colErr: unknown) {
-        if (cols === POS_MENUS_SELECT) throw colErr
+        if (cols === POS_MENUS_SELECT_BASE) throw colErr
       }
     }
 
@@ -30,6 +31,7 @@ export async function GET() {
       code?: string
       name?: string
       category?: string
+      category_main?: string
       price?: number
       price_delivery?: number | null
       image?: string
@@ -54,6 +56,7 @@ export async function GET() {
         code: String(row.code ?? ''),
         name: String(row.name ?? ''),
         category: String(row.category ?? ''),
+        categoryMain: String((row as { category_main?: string }).category_main ?? ''),
         price: Number(row.price) ?? 0,
         priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
         imageUrl: String(row.image ?? ''),

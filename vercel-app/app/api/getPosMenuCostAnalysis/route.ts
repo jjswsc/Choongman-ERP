@@ -9,11 +9,21 @@ export async function GET() {
   try {
     const [menuData, sauceData] = await Promise.all([
       Promise.all([
-        supabaseSelect('pos_menus', {
-          order: 'category.asc,sort_order.asc,name.asc',
-          limit: 500,
-          select: 'id,code,name,category,price,price_delivery,vat_included',
-        }),
+        (async () => {
+          try {
+            return await supabaseSelect('pos_menus', {
+              order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
+              limit: 500,
+              select: 'id,code,name,category,category_main,price,price_delivery,vat_included',
+            })
+          } catch {
+            return supabaseSelect('pos_menus', {
+              order: 'category.asc,sort_order.asc,name.asc',
+              limit: 500,
+              select: 'id,code,name,category,price,price_delivery,vat_included',
+            })
+          }
+        })(),
         supabaseSelect('pos_menu_ingredients', { limit: 5000, select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type' }),
         supabaseSelect('pos_menu_options', { limit: 2000, select: 'id,menu_id,name,option_type,item_code,quantity' }),
         supabaseSelect('items', { limit: 5000, select: 'code,name,cost,price,total_quantity,unit,purchase_source,category' }),
@@ -21,7 +31,7 @@ export async function GET() {
       supabaseSelect('sauces', { limit: 500, select: 'code,name,cost_per_unit,unit' }).catch(() => null),
     ])
     const [menuRows, ingRows, optRows, itemRows] = menuData as [
-      { id?: number; code?: string; name?: string; category?: string; price?: number; price_delivery?: number | null; vat_included?: boolean }[] | null,
+      { id?: number; code?: string; name?: string; category?: string; category_main?: string; price?: number; price_delivery?: number | null; vat_included?: boolean }[] | null,
       { id?: number; menu_id?: number; option_id?: number | null; item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null,
       { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; quantity?: number }[] | null,
       { code?: string; name?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; purchase_source?: string; category?: string }[] | null,
@@ -93,6 +103,7 @@ export async function GET() {
       menuCode: string
       menuName: string
       category: string
+      categoryMain: string
       priceHall: number
       priceDelivery: number | null
       optionId: string | null
@@ -155,11 +166,13 @@ export async function GET() {
       }
 
       const base = computeCost(null)
+      const categoryMain = String(menu.category_main ?? '').trim()
       result.push({
         menuId: String(menu.id ?? ''),
         menuCode: String(menu.code ?? ''),
         menuName: String(menu.name ?? ''),
         category: String(menu.category ?? ''),
+        categoryMain,
         priceHall,
         priceDelivery,
         optionId: null,
@@ -176,6 +189,7 @@ export async function GET() {
           menuCode: String(menu.code ?? ''),
           menuName: String(menu.name ?? ''),
           category: String(menu.category ?? ''),
+          categoryMain,
           priceHall,
           priceDelivery,
           optionId: String(opt.id ?? ''),
@@ -213,6 +227,7 @@ export async function GET() {
           menuCode: String(menu.code ?? ''),
           menuName: String(menu.name ?? ''),
           category: String(menu.category ?? ''),
+          categoryMain,
           priceHall,
           priceDelivery,
           optionId: String(opt.id ?? ''),

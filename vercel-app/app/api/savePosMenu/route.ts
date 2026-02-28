@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       code?: string
       name?: string
       category?: string
+      categoryMain?: string
       price?: number
       priceDelivery?: number | null
       imageUrl?: string
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       code,
       name,
       category: String(body.category ?? '').trim(),
+      category_main: String(body.categoryMain ?? '').trim(),
       price: Number(body.price) ?? 0,
       price_delivery: body.priceDelivery != null ? Number(body.priceDelivery) : null,
       image: String(body.imageUrl ?? '').trim(),
@@ -66,7 +68,14 @@ export async function POST(req: NextRequest) {
           { limit: 1 }
         )) as { id?: number }[] | null
         if (existing && existing.length > 0) {
-          await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
+          try {
+            await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
+          } catch (colErr: unknown) {
+            if (String(colErr).includes('category_main') || String(colErr).includes('42703')) {
+              const { category_main: _cm, ...rowWithout } = row
+              await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, rowWithout)
+            } else throw colErr
+          }
           return { success: true, message: '수정되었습니다.' }
         }
       }
@@ -80,10 +89,21 @@ export async function POST(req: NextRequest) {
         return { success: false, message: '이미 존재하는 메뉴 코드입니다.' }
       }
 
-      const inserted = (await supabaseInsert('pos_menus', row)) as { id?: number }[] | { id?: number }
-      const newRow = Array.isArray(inserted) ? inserted[0] : inserted
-      const newId = newRow?.id != null ? String(newRow.id) : undefined
-      return { success: true, message: '저장되었습니다.', newId }
+      try {
+        const inserted = (await supabaseInsert('pos_menus', row)) as { id?: number }[] | { id?: number }
+        const newRow = Array.isArray(inserted) ? inserted[0] : inserted
+        const newId = newRow?.id != null ? String(newRow.id) : undefined
+        return { success: true, message: '저장되었습니다.', newId }
+      } catch (insErr: unknown) {
+        if (String(insErr).includes('category_main') || String(insErr).includes('42703')) {
+          const { category_main: _cm, ...rowWithout } = row
+          const inserted = (await supabaseInsert('pos_menus', rowWithout)) as { id?: number }[] | { id?: number }
+          const newRow = Array.isArray(inserted) ? inserted[0] : inserted
+          const newId = newRow?.id != null ? String(newRow.id) : undefined
+          return { success: true, message: '저장되었습니다.', newId }
+        }
+        throw insErr
+      }
     }
 
     try {

@@ -9,7 +9,7 @@ import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-locati
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
-import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
+import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
 
 export type Product = AdminItem
 
@@ -151,6 +151,7 @@ export default function ItemsPage() {
       imageUrl: formData.imageUrl.trim(),
       hasImage: !!formData.imageUrl.trim(),
       purchaseSource: formData.purchaseSource,
+      orderDisabled: false,
     }
     if (editingCode) {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
@@ -185,6 +186,18 @@ export default function ItemsPage() {
       purchaseSource: product.purchaseSource ?? "hq",
     })
     setEditingCode(product.code)
+  }
+
+  const handleToggleOrderDisabled = async (product: Product) => {
+    const nextDisabled = !product.orderDisabled
+    const res = await updateItemOrderDisabled({ code: product.code, disabled: nextDisabled })
+    if (!res.success) {
+      alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
+      return
+    }
+    setProducts((prev) =>
+      prev.map((p) => (p.code === product.code ? { ...p, orderDisabled: nextDisabled } : p))
+    )
   }
 
   const handleDelete = async (product: Product) => {
@@ -337,6 +350,7 @@ export default function ItemsPage() {
             onSearch={handleSearch}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onToggleOrderDisabled={handleToggleOrderDisabled}
           />
         </div>
       </div>
