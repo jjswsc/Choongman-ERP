@@ -103,8 +103,12 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   }, [menuRows])
 
   const mainCategoriesFromMenus = useMemo(() => {
-    const fromRows = new Set(menuRows.map((r) => r.categoryMain).filter(Boolean))
-    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows])).sort()
+    const fromRows = new Set(
+      menuRows.map((r) => r.categoryMain).filter((c): c is string => typeof c === "string" && c !== "")
+    )
+    return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows]))
+      .filter((c): c is string => typeof c === "string")
+      .sort()
   }, [menuRows])
 
   const categoriesFromMenusByMain = useMemo(() => {

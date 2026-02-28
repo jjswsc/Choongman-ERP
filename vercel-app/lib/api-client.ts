@@ -1914,6 +1914,34 @@ export async function getPosMenuCategories() {
   return res.json() as Promise<{ categories: string[]; mainCategories: string[] }>
 }
 
+export interface PosMenuCategoriesConfig {
+  mainCategories: string[]
+  categoriesByMain: Record<string, string[]>
+}
+
+export async function getPosMenuCategoriesConfig() {
+  const res = await apiFetch('/api/posMenuCategories')
+  return res.json() as Promise<PosMenuCategoriesConfig>
+}
+
+export async function savePosMenuCategoriesConfig(params: {
+  mainCategories: string[]
+  categoriesByMain: Record<string, string[]>
+  applyToMenus?: boolean
+}) {
+  const res = await apiFetch('/api/posMenuCategories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    mainCategories: string[]
+    categoriesByMain: Record<string, string[]>
+    menusUpdated?: number
+  }>
+}
+
 export async function getPosMenuOptions(params?: { menuId?: string }) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)

@@ -8,7 +8,7 @@ import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
-import { isOfficeRole } from "@/lib/permissions"
+import { isOfficeRole, canAccessPosCostAnalysis } from "@/lib/permissions"
 import {
   Select,
   SelectContent,
@@ -37,6 +37,14 @@ export default function PosCostAnalysisPage() {
   const t = useT(lang)
   const { auth } = useAuth()
   const canEdit = isOfficeRole(auth?.role || "")
+
+  if (!canAccessPosCostAnalysis(auth?.role || "")) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
+      </div>
+    )
+  }
   const [rows, setRows] = React.useState<PosMenuCostAnalysisRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -61,7 +69,7 @@ export default function PosCostAnalysisPage() {
   }, [rows])
 
   const mainCategories = React.useMemo(() => {
-    const fromRows = new Set(rows.map((r) => r.categoryMain).filter(Boolean))
+    const fromRows = rows.map((r) => r.categoryMain).filter((c): c is string => Boolean(c))
     return Array.from(new Set([...POS_MAIN_CATEGORIES, ...fromRows])).sort()
   }, [rows])
 

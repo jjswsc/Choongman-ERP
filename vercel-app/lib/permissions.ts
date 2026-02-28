@@ -80,6 +80,7 @@ const MANAGER_DENIED_PATHS = [
   "/admin/items",
   "/admin/vendors",
   "/admin/settings",
+  "/admin/pos-cost-analysis",
 ]
 
 /** 매니저·가맹점주가 해당 경로에 접근할 수 있는지 */
@@ -150,6 +151,11 @@ export function canAccessPosCoupons(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
 }
 
+/** 원가 분석 가능 (오피스 직원만) */
+export function canAccessPosCostAnalysis(role: string): boolean {
+  return isOfficeRole(role)
+}
+
 /** POS 직원(주문만/결산만)이 해당 경로 접근 가능한지 */
 export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   const p = String(pathname || "").trim()
@@ -166,7 +172,7 @@ export function canPosStaffAccessPath(pathname: string, role: string): boolean {
   if (p === "/admin/pos-screen-config" || p.startsWith("/admin/pos-screen-config"))
     return canAccessPosTables(role) || canAccessPosMenus(role)
   if (p === "/admin/pos-cost-analysis" || p.startsWith("/admin/pos-cost-analysis"))
-    return canAccessPosMenus(role)
+    return canAccessPosCostAnalysis(role)
   if (p === "/admin/pos-printers" || p.startsWith("/admin/pos-printers"))
     return canAccessPosPrinters(role)
   if (p === "/admin/pos-coupons" || p.startsWith("/admin/pos-coupons"))

@@ -49,6 +49,7 @@ import {
   canAccessPosOrders,
   canAccessPosTables,
   canAccessPosMenus,
+  canAccessPosCostAnalysis,
   canAccessPosPrinters,
   canAccessPosCoupons,
   isPosOrderOnlyRole,
@@ -144,7 +145,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-tables": canAccessPosTables,
   "/admin/pos-menus": canAccessPosMenus,
   "/admin/pos-screen-config": canAccessPosTables, // 테이블/메뉴 통합
-  "/admin/pos-cost-analysis": canAccessPosMenus,
+  "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
   "/admin/pos-printers": canAccessPosPrinters,
   "/admin/pos-coupons": canAccessPosCoupons,
 }
@@ -222,7 +223,9 @@ export function ErpSidebar() {
             {!isPosStaff && (
             <div className="mb-1">
               <div className="space-y-0.5">
-                {mainItems.map((item) => (
+                {mainItems
+                  .filter((item) => item.href !== "/admin/pos-cost-analysis" || canAccessPosCostAnalysis(auth?.role || ""))
+                  .map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
