@@ -18,7 +18,9 @@ import {
   getPosMenus,
   getPosMenuCategories,
   getPosMenuCategoriesConfig,
+  getNextPosMenuCode,
   savePosMenuCategoriesConfig,
+  applyPosMenuCategoryPresets,
   type PosMenuCategoriesConfig,
   getPosMenuOptions,
   getPosMenuIngredients,
@@ -39,6 +41,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+
+/** 코드 자동 생성 대상 대분류 (C/K/S/D 접두사) */
+const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks"] as const
 
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 const OPTION_SIZE_VALUES = ["S", "M", "L"]
@@ -66,16 +71,19 @@ const defaultCategoriesConfig: PosMenuCategoriesConfig = {
 function CategoriesTab({
   config,
   onSave,
+  onApplyPresets,
   saving,
   t,
 }: {
   config: PosMenuCategoriesConfig | null
   onSave: (next: PosMenuCategoriesConfig, applyToMenus: boolean) => Promise<void>
+  onApplyPresets?: () => Promise<{ updated: number }>
   saving: boolean
   t: (k: string) => string
 }) {
   const [local, setLocal] = React.useState<PosMenuCategoriesConfig>(() => config || defaultCategoriesConfig)
   const [applyToMenus, setApplyToMenus] = React.useState(true)
+  const [applyingPresets, setApplyingPresets] = React.useState(false)
   const [newMain, setNewMain] = React.useState("")
   const [newSubByMain, setNewSubByMain] = React.useState<Record<string, string>>({})
   const [editingSub, setEditingSub] = React.useState<{ main: string; idx: number } | null>(null)
@@ -260,6 +268,29 @@ function CategoriesTab({
             <Save className="h-4 w-4" />
             {saving ? t("loading") : t("itemsBtnSave") || "저장"}
           </Button>
+          {onApplyPresets && (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setApplyingPresets(true)
+                try {
+                  const res = await onApplyPresets()
+                  if (res?.updated !== undefined && res.updated > 0) {
+                    alert((t("posMenuCategoriesPresetsApplied") || "기존 메뉴 {n}건을 대분류·소분류에 맞게 변경했습니다.").replace("{n}", String(res.updated)))
+                  } else {
+                    alert(t("posMenuCategoriesPresetsNoChange") || "변경된 메뉴가 없습니다.")
+                  }
+                } finally {
+                  setApplyingPresets(false)
+                }
+              }}
+              disabled={applyingPresets}
+              className="gap-2"
+            >
+              <RefreshCw className={cn("h-4 w-4", applyingPresets && "animate-spin")} />
+              {applyingPresets ? t("loading") : (t("posMenuCategoriesApplyPresets") || "기존 메뉴를 대분류·소분류에 맞게 변경")}
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -280,6 +311,7 @@ export default function PosMenusPage() {
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
+  const [soldOutTogglingOptionId, setSoldOutTogglingOptionId] = React.useState<string | null>(null)
   const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
   const [menuIngredients, setMenuIngredients] = React.useState<PosMenuIngredient[]>([])
   const [items, setItems] = React.useState<{ code: string; name: string; category: string }[]>([])
@@ -603,6 +635,61 @@ export default function PosMenusPage() {
     }
   }
 
+  /** 메뉴 목록 펼침에서 옵션 삭제 시 DB 반영 및 화면 갱신 */
+  const handleDeleteOptionInList = async (opt: PosMenuOption, menuId: string) => {
+    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    const res = await deletePosMenuOption({ id: opt.id })
+    if (res.success) {
+      const opts = await getPosMenuOptions({ menuId })
+      setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
+      if (!opts || opts.length === 0) setExpandedMenuId(null)
+      getPosMenus().then(setMenus)
+    } else {
+      alert(res.message)
+    }
+  }
+
+  /** 메뉴 목록 펼침에서 옵션 수정 → 옵션 구성 탭으로 이동 */
+  const handleEditOptionInList = (menuId: string) => {
+    setOptionsConfigSelectedMenuId(menuId)
+    setMainTab("optionsConfig")
+    getPosMenuOptions({ menuId }).then(setOptionsConfigMenuOptions)
+  }
+
+  /** 옵션 판매 중지 토글 (sell_hall/delivery/packaging 모두 false면 품절) */
+  const handleSoldOutToggleOption = async (opt: PosMenuOption, menuId: string) => {
+    const isSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
+    const next = !isSoldOut
+    setSoldOutTogglingOptionId(String(opt.id))
+    try {
+      const res = await savePosMenuOption({
+        id: opt.id,
+        menuId: Number(opt.menuId),
+        name: opt.name,
+        priceModifier: opt.priceModifier ?? 0,
+        priceModifierDelivery: opt.priceModifierDelivery ?? null,
+        priceModifierPackaging: opt.priceModifierPackaging ?? null,
+        sortOrder: opt.sortOrder ?? 0,
+        optionType: opt.optionType ?? "substitution",
+        itemCode: opt.itemCode ?? undefined,
+        quantity: opt.quantity ?? undefined,
+        optionStepValues: opt.optionStepValues ?? undefined,
+        sellHall: next,
+        sellDelivery: next,
+        sellPackaging: next,
+      })
+      if (res.success) {
+        const opts = await getPosMenuOptions({ menuId })
+        setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
+        getPosMenus().then(setMenus)
+      } else {
+        alert(res.message)
+      }
+    } finally {
+      setSoldOutTogglingOptionId(null)
+    }
+  }
+
   const optionsConfigSelectedMenu = optionsConfigSelectedMenuId ? menus.find((m) => m.id === optionsConfigSelectedMenuId) : null
 
   /** 메뉴 옵션 단계가 size, part가 아니면 업데이트 */
@@ -850,10 +937,17 @@ export default function PosMenusPage() {
   }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter, mainCategoryFilter])
 
   const categories = React.useMemo(() => {
-    const fromMenus = new Set(menus.map((m) => m.category).filter(Boolean))
+    const presetFromConfig = categoriesConfig?.categoriesByMain
+      ? new Set(
+          Object.values(categoriesConfig.categoriesByMain).flat().filter((c): c is string => typeof c === "string")
+        )
+      : new Set(POS_MAIN_CATEGORIES.flatMap((m) => POS_CATEGORIES_BY_MAIN[m as keyof typeof POS_CATEGORIES_BY_MAIN] ?? []))
+    const fromMenus = new Set(menus.map((m) => m.category).filter((c): c is string => typeof c === "string" && c !== ""))
     const fromDb = new Set(allCategories)
-    return Array.from(new Set([...fromDb, ...fromMenus])).sort()
-  }, [menus, allCategories])
+    return Array.from(new Set([...presetFromConfig, ...fromDb, ...fromMenus]))
+      .filter((c): c is string => typeof c === "string")
+      .sort()
+  }, [menus, allCategories, categoriesConfig])
 
   const mainCategories = React.useMemo(() => {
     const preset = categoriesConfig?.mainCategories?.length
@@ -1020,7 +1114,7 @@ export default function PosMenusPage() {
                                 <span className="ml-1 text-muted-foreground">({Object.entries(o.optionStepValues).map(([k, v]) => `${k}:${v}`).join(" / ")})</span>
                               )}
                               {(o.priceModifier ?? 0) !== 0 || (o.priceModifierDelivery ?? o.priceModifier ?? 0) !== 0
-                                ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0} ฿)` : ""}
+                                ? ` (홀 ${(o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifier ?? 0} / 배달 ${(o.priceModifierDelivery ?? o.priceModifier ?? 0) >= 0 ? "+" : ""}${o.priceModifierDelivery ?? o.priceModifier ?? 0})` : ""}
                             </span>
                             <Button size="sm" variant="ghost" className="h-5 px-1 text-destructive hover:text-destructive" onClick={() => handleDeleteOption(o)}><Trash2 className="h-3 w-3" /></Button>
                           </li>
@@ -1161,14 +1255,14 @@ export default function PosMenusPage() {
                                 <td className="px-3 py-2">{b.itemName}</td>
                                 <td className="px-3 py-2 text-right tabular-nums">{b.quantity}</td>
                                 <td className="px-3 py-2 text-right tabular-nums">{(b.lossRate ?? 0) > 0 ? `${b.lossRate}%` : "-"}</td>
-                                <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)} ฿</td>
+                                <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                         <div className="flex justify-between items-center border-t bg-muted/30 px-3 py-2">
                           <span className="text-xs font-semibold">{t("posMenuCost") || "총 원가"}</span>
-                          <span className="font-bold tabular-nums">{menuCost.cost.toFixed(1)} ฿</span>
+                          <span className="font-bold tabular-nums">{menuCost.cost.toFixed(1)}</span>
                         </div>
                         {(Number(formData.price) || 0) > 0 && (
                           <div className="flex justify-between items-center border-t px-3 py-2">
@@ -1196,16 +1290,19 @@ export default function PosMenusPage() {
               ) : (
                 <>
                   <div>
-                    <label className="text-xs font-semibold">{t("posMenuCode")}</label>
-                    <Input placeholder="M001" className="mt-1 h-10" value={formData.code} onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold">{t("posMenuName")}</label>
-                    <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
-                  </div>
-                  <div>
                     <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
-                    <Select value={formData.categoryMain || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, categoryMain: v === "_" ? "" : v }))}>
+                    <Select
+                      value={formData.categoryMain || "_"}
+                      onValueChange={async (v) => {
+                        const main = v === "_" ? "" : v
+                        let code = ""
+                        if (main && (CODE_AUTO_MAINS as readonly string[]).includes(main)) {
+                          const { code: next } = await getNextPosMenuCode(main)
+                          code = next ?? ""
+                        }
+                        setFormData((p) => ({ ...p, categoryMain: main, category: "", code }))
+                      }}
+                    >
                       <SelectTrigger className="mt-1 h-10">
                         <SelectValue placeholder={t("posMenuCategoryMain")} />
                       </SelectTrigger>
@@ -1214,6 +1311,21 @@ export default function PosMenusPage() {
                         {mainCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuCode")}</label>
+                    <Input
+                      placeholder="C001"
+                      className="mt-1 h-10"
+                      value={formData.code}
+                      onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
+                      disabled={(CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain)}
+                      title={(CODE_AUTO_MAINS as readonly string[]).includes(formData.categoryMain) ? (t("posMenuCodeAuto") || "대분류 선택 시 자동 생성") : undefined}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t("posMenuName")}</label>
+                    <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
                   </div>
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
@@ -1302,12 +1414,12 @@ export default function PosMenusPage() {
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="px-2 py-3 text-[11px] font-bold text-center w-8"></th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("itemsColCode")}</th>
+                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[88px]">{t("itemsColCode")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[140px]">{t("posMenuName")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t("posMenuCategoryMain")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuCategory")}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-24">{t("posMenuPriceCol") || "가격"}</th>
-                    <th className="px-5 py-3 text-[11px] font-bold text-center w-28">{t("itemsColAction")}</th>
+                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[112px]">{t("itemsColAction")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1336,7 +1448,7 @@ export default function PosMenusPage() {
                             {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                           </Button>
                         </td>
-                        <td className="px-5 py-3 text-center">
+                        <td className="px-5 py-3 text-center min-w-[88px] whitespace-nowrap">
                           <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                             {m.code}
                           </span>
@@ -1392,25 +1504,68 @@ export default function PosMenusPage() {
                         </td>
                       </tr>
                       {isExpanded && expanded && expanded.options.length > 0 && (
-                        <tr className="bg-amber-500/5 border-b">
-                          <td colSpan={7} className="px-6 py-4">
-                            <div className="rounded border border-amber-500/30 bg-amber-500/5 p-4">
-                              <ul className="space-y-1 max-h-48 overflow-y-auto">
-                                {[...expanded.options].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((opt, i) => {
-                                  const optCode = `${m.code}-${String(i + 1).padStart(2, "0")}`
-                                  const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
-                                  return (
-                                    <li key={opt.id} className="flex justify-between items-center text-xs">
-                                      <span className="font-medium">{optCode}</span>
-                                      <span>{opt.name}</span>
-                                      <span className="tabular-nums text-amber-600 font-medium">{optPrice.toLocaleString()} ฿</span>
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
+                        [...expanded.options].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((opt, i) => {
+                          const optCode = `${m.code}-${String(i + 1).padStart(2, "0")}`
+                          const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
+                          const isOptSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
+                          return (
+                            <tr key={opt.id} className="bg-amber-500/5 border-b hover:bg-amber-500/10" onClick={(e) => e.stopPropagation()}>
+                              <td className="px-2 py-2 w-8" />
+                              <td className="px-5 py-2 text-center min-w-[88px] whitespace-nowrap">
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{optCode}</span>
+                              </td>
+                              <td className="px-5 py-2 min-w-[140px] pl-8">
+                                <span className="text-sm">{opt.name}</span>
+                              </td>
+                              <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
+                              <td className="px-5 py-2 text-center text-muted-foreground w-24">{m.category || "-"}</td>
+                              <td className="px-5 py-2 text-right font-medium tabular-nums text-xs w-24">{optPrice > 0 ? optPrice.toLocaleString() : "-"}</td>
+                              <td className="px-5 py-2 w-28" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className={cn(
+                                      "h-7 w-7",
+                                      isOptSoldOut
+                                        ? "text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                        : "text-muted-foreground border-muted hover:bg-muted/50"
+                                    )}
+                                    onClick={() => handleSoldOutToggleOption(opt, m.id)}
+                                    disabled={soldOutTogglingOptionId === String(opt.id)}
+                                    title={soldOutTogglingOptionId === String(opt.id) ? "..." : isOptSoldOut ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
+                                  >
+                                    {soldOutTogglingOptionId === String(opt.id) ? (
+                                      <span className="text-[10px]">...</span>
+                                    ) : isOptSoldOut ? (
+                                      <PauseCircle className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <PlayCircle className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                                    onClick={() => handleEditOptionInList(m.id)}
+                                    title={t("itemsBtnEdit")}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => handleDeleteOptionInList(opt, m.id)}
+                                    title={t("itemsBtnDelete")}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
                       )}
                       </React.Fragment>
                     )})
@@ -1618,6 +1773,14 @@ export default function PosMenusPage() {
           <TabsContent value="categories" className="mt-0">
             <CategoriesTab
               config={categoriesConfig}
+              onApplyPresets={async () => {
+                const res = await applyPosMenuCategoryPresets()
+                if (res?.success && (res.updated ?? 0) > 0) {
+                  const list = await getPosMenus()
+                  setMenus(list || [])
+                }
+                return { updated: res?.updated ?? 0 }
+              }}
               onSave={async (next, applyToMenus) => {
                 setCategoriesConfigSaving(true)
                 try {

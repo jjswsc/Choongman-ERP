@@ -216,9 +216,9 @@ export default function PosPage() {
     return opt.priceModifier ?? 0
   }
 
-  const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null) => {
+  const addToCartWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionDisplayName?: string) => {
     const cartId = opt ? `${menu.id}-${opt.id}` : menu.id
-    const name = opt ? `${menu.name} (${opt.name})` : menu.name
+    const name = opt ? `${menu.name} (${opt.name})` : (defaultOptionDisplayName ? `${menu.name} (${defaultOptionDisplayName})` : menu.name)
     const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
     setCart((prev) => {
       const i = prev.findIndex((x) => x.id === cartId)
@@ -233,7 +233,7 @@ export default function PosPage() {
         price,
         qty: 1,
         optionId: opt?.id,
-        optionName: opt?.name,
+        optionName: opt?.name ?? defaultOptionDisplayName,
       }]
     })
     setOptionPickerMenu(null)
@@ -1127,6 +1127,17 @@ export default function PosPage() {
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
             const useMultiStep = groups.length > 0 && optsWithSteps.length > 0
+            const isChickenBasePrice = (optionPickerMenu.categoryMain ?? "") === "Chicken"
+            const defaultBtn = isChickenBasePrice && (
+              <button
+                type="button"
+                onClick={() => addToCartWithOption(optionPickerMenu, null, "S 순살")}
+                className="mb-3 flex w-full justify-between rounded-lg border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-left transition hover:border-amber-500 hover:bg-amber-900/30"
+              >
+                <span className="font-medium">{t("posOptionDefault") || "기본 (S 순살)"}</span>
+                <span className="font-bold text-amber-400">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
+              </button>
+            )
             if (useMultiStep) {
               const groupKey = groups[optionPickerStep]
               const values = [...new Set(optsWithSteps.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
@@ -1147,6 +1158,7 @@ export default function PosPage() {
               const groupLabels: Record<string, string> = { size: "사이즈", part: "부위", topping: "토핑", bone: "뼈/순살", type: "타입" }
               return (
                 <div className="flex flex-col gap-3 py-2">
+                  {defaultBtn}
                   <p className="text-xs text-muted-foreground">
                     {groupLabels[groupKey] || groupKey}
                   </p>
@@ -1176,6 +1188,7 @@ export default function PosPage() {
             }
             return (
               <div className="flex flex-col gap-2 py-2">
+                {defaultBtn}
                 {opts.map((opt) => (
                   <button
                     key={opt.id}

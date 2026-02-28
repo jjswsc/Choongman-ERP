@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -582,7 +583,13 @@ export function AdminComplaints() {
             </DialogHeader>
             {photoPreviewUrl && (
               <div className="overflow-hidden rounded-md">
-                <img src={photoPreviewUrl} alt={t("photo")} className="w-full h-auto max-h-[70vh] object-contain" />
+                <ImageViewerWithRotate
+                  src={photoPreviewUrl}
+                  alt={t("photo")}
+                  imgClassName="w-full h-auto max-h-[70vh] object-contain"
+                  rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                  rotateRightLabel={t("imageRotateRight") || "시계"}
+                />
               </div>
             )}
           </DialogContent>

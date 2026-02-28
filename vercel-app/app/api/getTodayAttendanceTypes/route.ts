@@ -16,9 +16,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+    // store_name: contains 패턴 사용 (예: "Union Mall" → "CM Union Mall" 매칭)
+    const storePattern = '*' + String(storeName).replace(/\*/g, '') + '*'
     const rows = (await supabaseSelectFilter(
       'attendance_logs',
-      `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(name)}`,
+      `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
       { order: 'log_at.desc', limit: 50 }
     )) as { log_at?: string; log_type?: string }[]
 

@@ -12,15 +12,18 @@
     return L || key;
   }
 
-  /** 인사 탭 진입 시: 출근을 먼저 해야 휴식/재개/퇴근 가능. 이미 기록된 유형은 버튼 비활성화 */
+  /** 인사 탭 진입 시: 출근을 먼저 해야 휴식/재개/퇴근 가능. Break 후에만 Resume 활성화 */
   function updateAttendanceButtonState() {
     if (typeof loggedInStore === 'undefined' || typeof loggedInUser === 'undefined') return;
     google.script.run.withSuccessHandler(function(types) {
       var hasClockIn = (types && types.indexOf('출근') !== -1);
+      var hasBreak = (types && types.indexOf('휴식시작') !== -1);
+      var hasResume = (types && types.indexOf('휴식종료') !== -1);
+      var hasClockOut = (types && types.indexOf('퇴근') !== -1);
       setAttendanceButtonDisabled('출근', hasClockIn);
-      setAttendanceButtonDisabled('휴식시작', !hasClockIn || (types && types.indexOf('휴식시작') !== -1));
-      setAttendanceButtonDisabled('휴식종료', !hasClockIn || (types && types.indexOf('휴식종료') !== -1));
-      setAttendanceButtonDisabled('퇴근', !hasClockIn || (types && types.indexOf('퇴근') !== -1));
+      setAttendanceButtonDisabled('휴식시작', !hasClockIn || hasBreak || hasClockOut);
+      setAttendanceButtonDisabled('휴식종료', !hasClockIn || !hasBreak || hasResume || hasClockOut);
+      setAttendanceButtonDisabled('퇴근', !hasClockIn || hasClockOut);
     }).getTodayAttendanceTypes(loggedInStore, loggedInUser);
   }
 

@@ -1540,22 +1540,49 @@ function submitAttendance(data) {
   return "✅ " + data.type + " 완료! (" + status + ")";
 }
 
-/** [모바일] 오늘 해당 직원이 이미 기록한 근태 유형 목록 반환 (Supabase attendance_logs) */
+/** [모바일] 오늘 해당 직원이 이미 기록한 근태 유형 목록 반환 (Supabase attendance_logs)
+ *  최신 50건만 조회(log_at.desc)하여 오늘 Break 후 Resume 버튼이 정상 활성화되도록 함.
+ *  이전: getAttendanceLogsData()가 log_at.asc 2000건 → 오늘(최신) 기록 누락 가능 */
 function getTodayAttendanceTypes(storeName, name) {
   try {
     var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || "Asia/Bangkok";
     var todayStr = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-    var data = getAttendanceLogsData();
-    var types = [];
     var storeStr = String(storeName || "").trim();
     var nameStr = String(name || "").trim();
-    for (var i = 0; i < data.length; i++) {
-      var rowDate = "";
-      if (data[i][0]) { try { rowDate = Utilities.formatDate(new Date(data[i][0]), tz, "yyyy-MM-dd"); } catch (e) {} }
-      if (rowDate !== todayStr) continue;
-      if (String(data[i][1] || "").trim() !== storeStr || String(data[i][2] || "").trim() !== nameStr) continue;
-      var typ = String(data[i][3] || "").trim();
+    if (!storeStr || !nameStr) return [];
+    var filter = "store_name=ilike." + encodeURIComponent(storeStr) + "&name=ilike." + encodeURIComponent(nameStr);
+    var rows = supabaseSelectFilter("attendance_logs", filter, { order: "log_at.desc", limit: 50 });
+    if (!rows || rows.length === 0) return [];
+    var types = [];
+    var idxOfLastClockOut = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i].log_type || "").trim() === "퇴근") {
+        idxOfLastClockOut = i;
+        break;
+      }
+    }
+    if (idxOfLastClockOut >= 0) {
+      var hasNewSessionAfterClockOut = false;
+      for (var j = 0; j < idxOfLastClockOut; j++) {
+        if (String(rows[j].log_type || "").trim() === "출근") {
+          hasNewSessionAfterClockOut = true;
+          break;
+        }
+      }
+      if (!hasNewSessionAfterClockOut) {
+        for (var k = 0; k < rows.length; k++) {
+          var rDate = rows[k].log_at ? Utilities.formatDate(new Date(rows[k].log_at), tz, "yyyy-MM-dd") : "";
+          if (rDate !== todayStr) continue;
+          var t = String(rows[k].log_type || "").trim();
+          if (t && types.indexOf(t) === -1) types.push(t);
+        }
+        return types;
+      }
+    }
+    for (var m = 0; m < rows.length; m++) {
+      var typ = String(rows[m].log_type || "").trim();
       if (typ && types.indexOf(typ) === -1) types.push(typ);
+      if (typ === "출근") break;
     }
     return types;
   } catch (e) { return []; }

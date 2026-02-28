@@ -38,6 +38,7 @@ import {
   type AccountSubjectItem,
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -1010,7 +1011,13 @@ ${rows.map((row, ri) => {
           onClick={() => setReceiptModalUrl(null)}
         >
           <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <img src={receiptModalUrl} alt={t("pettyColReceipt")} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+            <ImageViewerWithRotate
+              src={receiptModalUrl}
+              alt={t("pettyColReceipt")}
+              imgClassName="max-w-full max-h-[80vh] rounded-lg object-contain"
+              rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+              rotateRightLabel={t("imageRotateRight") || "시계"}
+            />
             <Button
               variant="ghost"
               size="sm"

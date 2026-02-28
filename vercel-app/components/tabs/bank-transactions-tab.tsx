@@ -46,6 +46,7 @@ import { compressImageForUpload } from "@/lib/utils"
 import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { FixedExpensesTab } from "@/components/tabs/fixed-expenses-tab"
 import { useSearchParams } from "next/navigation"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -2117,7 +2118,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           <DialogHeader>
             <DialogTitle>{t("poInvoice") || "인보이스"}</DialogTitle>
           </DialogHeader>
-          <img src={invoicePhotoPreviewUrl || ""} alt="" className="max-h-[70vh] w-full object-contain rounded" />
+          <ImageViewerWithRotate
+            src={invoicePhotoPreviewUrl || ""}
+            alt=""
+            imgClassName="max-h-[70vh] w-full object-contain rounded"
+            rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+            rotateRightLabel={t("imageRotateRight") || "시계"}
+          />
         </DialogContent>
       </Dialog>
 

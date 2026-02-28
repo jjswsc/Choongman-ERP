@@ -54,19 +54,22 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
-function ReceivePhotoGallery({ urls }: { urls: string[] }) {
+function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => string }) {
   const [idx, setIdx] = React.useState(0)
   const current = urls[idx] ?? urls[0]
   return (
     <div className="flex flex-col gap-2 p-4">
       <div className="flex items-center justify-center bg-black/30 min-h-[200px] rounded-lg">
-        <img
+        <ImageViewerWithRotate
           src={current}
           alt=""
-          className="max-w-full max-h-[70vh] object-contain rounded"
+          imgClassName="max-w-full max-h-[70vh] object-contain rounded"
+          rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+          rotateRightLabel={t("imageRotateRight") || "시계"}
         />
       </div>
       {urls.length > 1 && (
@@ -1418,7 +1421,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               <DialogHeader className="sr-only">
                 <DialogTitle>{t("outPhotoView")}</DialogTitle>
               </DialogHeader>
-              <ReceivePhotoGallery urls={photoModalUrls} />
+              <ReceivePhotoGallery urls={photoModalUrls} t={t} />
             </DialogContent>
           </Dialog>
         )}

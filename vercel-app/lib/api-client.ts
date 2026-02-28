@@ -1909,6 +1909,12 @@ export async function getPosMenus() {
   return res.json() as Promise<PosMenu[]>
 }
 
+export async function getNextPosMenuCode(mainCategory: string) {
+  const q = new URLSearchParams({ mainCategory })
+  const res = await apiFetch(`/api/getNextPosMenuCode?${q}`)
+  return res.json() as Promise<{ code: string | null; message?: string }>
+}
+
 export async function getPosMenuCategories() {
   const res = await apiFetch('/api/getPosMenuCategories')
   return res.json() as Promise<{ categories: string[]; mainCategories: string[] }>
@@ -1922,6 +1928,13 @@ export interface PosMenuCategoriesConfig {
 export async function getPosMenuCategoriesConfig() {
   const res = await apiFetch('/api/posMenuCategories')
   return res.json() as Promise<PosMenuCategoriesConfig>
+}
+
+export async function applyPosMenuCategoryPresets() {
+  const res = await apiFetch('/api/applyPosMenuCategoryPresets', {
+    method: 'POST',
+  })
+  return res.json() as Promise<{ success: boolean; updated: number; total: number }>
 }
 
 export async function savePosMenuCategoriesConfig(params: {

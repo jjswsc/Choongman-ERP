@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { compressImageForUpload } from "@/lib/utils"
 
 const EVAL_WEIGHTS = { 메뉴숙련: 0.4, 원가정확도: 0.2, 위생: 0.2, 태도: 0.2 }
@@ -1056,7 +1057,13 @@ export function EmployeeEvalTab({
               onClick={() => setWarningLetterViewUrl(null)}
             >
               <div className="relative max-w-[90vw] max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-                <img src={warningLetterViewUrl} alt={t("eval_warning_letter")} className="max-w-full max-h-[80vh] rounded-lg object-contain" />
+                <ImageViewerWithRotate
+                  src={warningLetterViewUrl}
+                  alt={t("eval_warning_letter")}
+                  imgClassName="max-w-full max-h-[80vh] rounded-lg object-contain"
+                  rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                  rotateRightLabel={t("imageRotateRight") || "시계"}
+                />
                 <Button
                   variant="ghost"
                   size="sm"

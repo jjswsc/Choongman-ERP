@@ -24,6 +24,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList, getAppData, processOrder, type AppItem } from "@/lib/api-client"
 import { isManagerRole } from "@/lib/permissions"
 import { Minus, Plus, ShoppingCart, Trash2, Package } from "lucide-react"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function hasValidImage(url: string | undefined): boolean {
   if (!url || typeof url !== "string") return false
@@ -421,13 +422,15 @@ export function AdminOrderCreate() {
                 <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
               </div>
             ) : (
-              <img
+              <ImageViewerWithRotate
                 src={imageModal.url}
                 alt={imageModal.name}
-                className="max-h-[70vh] max-w-full rounded-lg object-contain"
+                imgClassName="max-h-[70vh] max-w-full rounded-lg object-contain"
                 referrerPolicy="no-referrer"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
+                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                rotateRightLabel={t("imageRotateRight") || "시계"}
               />
             )}
             <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => setImageModal(null)}>

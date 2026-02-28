@@ -28,6 +28,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, translateTexts, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -454,12 +455,14 @@ export function OrderTab() {
                 <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
               </div>
             ) : (
-              <img
+              <ImageViewerWithRotate
                 src={imageModal.url}
                 alt={imageModal.name}
-                className="max-w-full max-h-[80vh] rounded-lg object-contain"
+                imgClassName="max-w-full max-h-[80vh] rounded-lg object-contain"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
+                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                rotateRightLabel={t("imageRotateRight") || "시계"}
               />
             )}
             <p className="mt-2 text-center text-sm text-white">{imageModal.name}</p>

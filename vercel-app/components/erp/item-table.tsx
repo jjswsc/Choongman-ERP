@@ -26,6 +26,8 @@ import {
 import { cn } from "@/lib/utils"
 import type { Product } from "@/app/admin/items/page"
 
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+
 /** 외부 이미지 URL → 프록시 또는 직접 사용 */
 function toImageUrl(url: string): string {
   const s = String(url || '').trim()
@@ -266,13 +268,15 @@ export function ItemTable({
                 <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
               </div>
             ) : (
-              <img
+              <ImageViewerWithRotate
                 src={imagePreview.url}
                 alt={imagePreview.name}
-                className="max-h-[70vh] max-w-full rounded-lg object-contain"
+                imgClassName="max-h-[70vh] max-w-full rounded-lg object-contain"
                 referrerPolicy="no-referrer"
                 onError={() => setImageLoadError(true)}
                 onLoad={() => setImageLoadError(false)}
+                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                rotateRightLabel={t("imageRotateRight") || "시계"}
               />
             )}
             <Button

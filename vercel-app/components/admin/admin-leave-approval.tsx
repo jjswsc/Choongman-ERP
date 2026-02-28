@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { CalendarCheck, Search, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -219,7 +220,13 @@ export function AdminLeaveApproval() {
         </DialogHeader>
         {certPreviewUrl && (
           <div className="overflow-hidden rounded-md">
-            <img src={certPreviewUrl} alt={t("leaveCertView")} className="w-full h-auto max-h-[70vh] object-contain" />
+            <ImageViewerWithRotate
+              src={certPreviewUrl}
+              alt={t("leaveCertView")}
+              imgClassName="w-full h-auto max-h-[70vh] object-contain"
+              rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+              rotateRightLabel={t("imageRotateRight") || "시계"}
+            />
           </div>
         )}
       </DialogContent>

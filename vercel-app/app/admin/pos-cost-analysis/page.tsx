@@ -86,17 +86,38 @@ export default function PosCostAnalysisPage() {
     })
   }, [rows, searchTerm, categoryFilter, mainCategoryFilter])
 
-  const toggleExpand = (key: string) => {
+  // 부모(메뉴) + 자식(옵션) 그룹화
+  const grouped = React.useMemo(() => {
+    const menuIdsInFiltered = new Set(filtered.map((r) => r.menuId))
+    const parentMap = new Map<string, PosMenuCostAnalysisRow>()
+    const childrenByMenu: Record<string, PosMenuCostAnalysisRow[]> = {}
+    for (const r of rows) {
+      if (!r.optionId) {
+        if (menuIdsInFiltered.has(r.menuId)) parentMap.set(r.menuId, r)
+      }
+    }
+    for (const r of filtered) {
+      if (r.optionId) {
+        const key = r.menuId
+        if (!childrenByMenu[key]) childrenByMenu[key] = []
+        childrenByMenu[key].push(r)
+      }
+    }
+    const parents = Array.from(menuIdsInFiltered)
+      .map((mid) => parentMap.get(mid))
+      .filter((p): p is PosMenuCostAnalysisRow => !!p)
+    return { parents, childrenByMenu }
+  }, [rows, filtered])
+
+  const toggleExpand = (menuId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
     setExpandedIds((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (next.has(menuId)) next.delete(menuId)
+      else next.add(menuId)
       return next
     })
   }
-
-  const getRowKey = (r: PosMenuCostAnalysisRow) =>
-    r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId
 
   const withMise = (cost: number) =>
     Math.round(cost * (1 + miseRate / 100) * 10) / 10
@@ -265,8 +286,8 @@ export default function PosCostAnalysisPage() {
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategoryMain") || "대분류"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategory") || "카테고리"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuName") || "메뉴명"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posMenuPriceHall") || "홀(฿)"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posMenuPriceDelivery") || "배달(฿)"}</th>
+                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posMenuPriceHall") || "홀"}</th>
+                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posMenuPriceDelivery") || "배달"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostFood") || "음식"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPackaging") || "포장"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostMiseTotal") || "미세(홀)"}</th>
@@ -277,9 +298,12 @@ export default function PosCostAnalysisPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => {
-                  const key = getRowKey(r)
-                  const expanded = expandedIds.has(key)
+                {grouped.parents.map((r) => {
+                  const menuId = r.menuId
+                  const expanded = expandedIds.has(menuId)
+                  const optionRows = grouped.childrenByMenu[menuId] || []
+                  const hasOptions = optionRows.length > 0
+                  const hasBreakdown = r.breakdown.length > 0
                   const priceH = r.priceHall || 1
                   const priceD = (r.priceDelivery ?? r.priceHall) || 1
                   const costHMise = withMise(r.costHall)
@@ -290,9 +314,8 @@ export default function PosCostAnalysisPage() {
                   const marginD = priceD - costDMise
                   const marginPctH = (marginH / priceH) * 100
                   const marginPctD = (marginD / priceD) * 100
-                  const hasBreakdown = r.breakdown.length > 0
                   return (
-                    <React.Fragment key={key}>
+                    <React.Fragment key={menuId}>
                       <tr
                         className={cn(
                           "border-b transition-colors cursor-pointer",
@@ -304,12 +327,12 @@ export default function PosCostAnalysisPage() {
                         }}
                       >
                         <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-                          {hasBreakdown ? (
+                          {(hasOptions || hasBreakdown) ? (
                             <Button
                               size="sm"
                               variant="ghost"
                               className="h-6 w-6 p-0"
-                              onClick={() => toggleExpand(key)}
+                              onClick={(e) => toggleExpand(menuId, e)}
                             >
                               {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </Button>
@@ -322,9 +345,6 @@ export default function PosCostAnalysisPage() {
                         <td className="px-3 py-2 text-xs">{r.category}</td>
                         <td className="px-3 py-2">
                           <span className="font-medium">{r.menuName}</span>
-                          {r.optionName && (
-                            <span className="ml-1 text-xs text-muted-foreground">({r.optionName})</span>
-                          )}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{r.priceHall.toFixed(0)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{(r.priceDelivery ?? r.priceHall).toFixed(0)}</td>
@@ -344,7 +364,52 @@ export default function PosCostAnalysisPage() {
                           </span>
                         </td>
                       </tr>
-                      {expanded && hasBreakdown && (
+                      {expanded && hasOptions && (
+                        <tr className="border-b bg-amber-500/5">
+                          <td colSpan={14} className="px-6 py-4">
+                            <div className="rounded border border-amber-500/30 bg-amber-500/5 p-4">
+                              <p className="text-xs font-semibold text-muted-foreground mb-2">{t("posMenuOptions") || "옵션"}</p>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b">
+                                      <th className="px-3 py-1.5 text-left font-semibold">{t("posMenuName") || "옵션명"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posMenuPriceHall") || "홀"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posMenuPriceDelivery") || "배달"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posCostFood") || "음식"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posCostPackaging") || "포장"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posCostMiseTotal") || "미세(홀)"}</th>
+                                      <th className="px-3 py-1.5 text-right font-semibold">{t("posMenuCostRatio") || "원가율"}</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {optionRows.map((opt) => {
+                                      const ph = opt.priceHall || 1
+                                      const pd = (opt.priceDelivery ?? opt.priceHall) || 1
+                                      const cmh = withMise(opt.costHall)
+                                      const cmd = withMise(opt.costDelivery)
+                                      const crH = (cmh / ph) * 100
+                                      const crD = (cmd / pd) * 100
+                                      return (
+                                        <tr key={opt.optionId!} className="border-b last:border-b-0 hover:bg-white/30 cursor-pointer" onClick={() => { setSelectedForCalculator(opt); setActiveTab("calculator"); }}>
+                                          <td className="px-3 py-2 font-medium">{opt.optionName}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums">{opt.priceHall.toFixed(0)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums">{(opt.priceDelivery ?? opt.priceHall).toFixed(0)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums">{opt.costHall.toFixed(1)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{(opt.costDelivery - opt.costHall).toFixed(1)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums font-medium">{cmh.toFixed(1)}</td>
+                                          <td className="px-3 py-2 text-right tabular-nums text-amber-600">{crH.toFixed(0)}% / {crD.toFixed(0)}%</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {expanded && hasBreakdown && !hasOptions && (
                         <tr className="border-b bg-muted/10">
                           <td colSpan={14} className="px-4 py-3">
                             <div className="rounded border bg-background overflow-hidden">
@@ -379,15 +444,51 @@ export default function PosCostAnalysisPage() {
                                       <td className="px-3 py-2 text-right">{b.unit || "—"}</td>
                                       <td className="px-3 py-2 text-right tabular-nums">{b.quantity}</td>
                                       <td className="px-3 py-2 text-right tabular-nums">{(b.lossRate ?? 0) > 0 ? `${b.lossRate}%` : "—"}</td>
-                                      <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)} ฿</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                               <div className="flex justify-between border-t bg-muted/20 px-3 py-2 text-xs">
-                                <span>{t("posCostFood") || "음식"}: {r.costHall.toFixed(1)} ฿</span>
-                                <span className="text-amber-600">{t("posCostPackaging") || "포장"}: {(r.costDelivery - r.costHall).toFixed(1)} ฿</span>
-                                <span className="font-semibold">{t("posMenuCost") || "총"}: {r.costDelivery.toFixed(1)} ฿</span>
+                                <span>{t("posCostFood") || "음식"}: {r.costHall.toFixed(1)}</span>
+                                <span className="text-amber-600">{t("posCostPackaging") || "포장"}: {(r.costDelivery - r.costHall).toFixed(1)}</span>
+                                <span className="font-semibold">{t("posMenuCost") || "총"}: {r.costDelivery.toFixed(1)}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {expanded && hasBreakdown && hasOptions && (
+                        <tr className="border-b bg-muted/10">
+                          <td colSpan={14} className="px-4 py-3">
+                            <div className="rounded border bg-background overflow-hidden">
+                              <p className="text-xs font-semibold text-muted-foreground mb-2 px-2">{t("posMenuIngredients") || "재료 내역"} (기본)</p>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b bg-muted/30">
+                                    <th className="px-3 py-2 text-left font-semibold">{t("posCostItemCode") || "품목코드"}</th>
+                                    <th className="px-3 py-2 text-left font-semibold">{t("posCostSource") || "구분"}</th>
+                                    <th className="px-3 py-2 text-left font-semibold">{t("posMenuIngredients") || "재료"}</th>
+                                    <th className="px-3 py-2 text-right font-semibold">{t("posMenuCost") || "원가"}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {r.breakdown.map((b, i) => (
+                                    <tr key={i} className="border-b last:border-b-0">
+                                      <td className="px-3 py-2 font-mono">{b.itemCode || "—"}</td>
+                                      <td className="px-3 py-2">
+                                        <span className={b.source === "hq" ? "text-blue-600" : "text-muted-foreground"}>
+                                          {b.source === "hq" ? (t("posCostSourceHq") || "본사") : (t("posCostSourceStore") || "매장")}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2">{b.itemName}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums font-medium">{b.costTotal.toFixed(1)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              <div className="border-t bg-muted/20 px-3 py-2 text-xs">
+                                {t("posMenuCost") || "총"}: {r.costDelivery.toFixed(1)}
                               </div>
                             </div>
                           </td>
@@ -399,7 +500,7 @@ export default function PosCostAnalysisPage() {
               </tbody>
             </table>
           </div>
-          {filtered.length === 0 && !loading && (
+          {grouped.parents.length === 0 && !loading && (
             <div className="px-6 py-12 text-center text-sm text-muted-foreground">
               {t("posCostNoData") || "표시할 데이터가 없습니다."}
             </div>

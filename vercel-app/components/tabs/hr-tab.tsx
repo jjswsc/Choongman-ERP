@@ -21,6 +21,7 @@ import {
 import { compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image, Upload } from "lucide-react"
 
 function todayStr() {
@@ -778,7 +779,13 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
           </DialogHeader>
           {certPreviewUrl && (
             <div className="overflow-hidden rounded-md">
-              <img src={certPreviewUrl} alt={t("leaveCertView")} className="w-full h-auto max-h-[70vh] object-contain" />
+              <ImageViewerWithRotate
+                src={certPreviewUrl}
+                alt={t("leaveCertView")}
+                imgClassName="w-full h-auto max-h-[70vh] object-contain"
+                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                rotateRightLabel={t("imageRotateRight") || "시계"}
+              />
             </div>
           )}
         </DialogContent>
