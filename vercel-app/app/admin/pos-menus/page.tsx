@@ -47,7 +47,18 @@ const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks"] as const
 
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 const OPTION_SIZE_VALUES = ["S", "M", "L"]
-const OPTION_PART_VALUES = ["순살", "윙", "봉"]
+const OPTION_PART_VALUES = ["순살", "윙", "봉"] as const
+/** 치킨 메뉴: 코드가 c로 시작. 기본가=S 순살, 옵션은 M 순살/윙/봉 3개만 */
+const CHICKEN_CODE_PREFIX = "c"
+function isChickenMenu(code: string | undefined): boolean {
+  return !!code?.trim().toLowerCase().startsWith(CHICKEN_CODE_PREFIX)
+}
+/** 치킨 기본 옵션(S 순살): 메뉴 관리 옵션 목록에서 제외하고, 기본 행 하나로만 표시 */
+function isChickenDefaultOption(name: string | undefined): boolean {
+  if (!name?.trim()) return false
+  const n = name.trim()
+  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+}
 
 const emptyForm = {
   code: "",
@@ -59,6 +70,7 @@ const emptyForm = {
   imageUrl: "",
   vatIncluded: true,
   isActive: true,
+  isBanban: false,
 }
 
 const defaultCategoriesConfig: PosMenuCategoriesConfig = {
@@ -300,16 +312,21 @@ function CategoriesTab({
 export default function PosMenusPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  /** 옵션 부위명(순살/윙/봉) 표시 시 현재 언어로 번역 */
+  const optionPartLabel = (name: string) =>
+    name === "순살" ? t("posOptionPartBoneless") : name === "윙" ? t("posOptionPartWing") : name === "봉" ? t("posOptionPartDrumstick") : name
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [allMainCategories, setAllMainCategories] = React.useState<string[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
   const [refreshLoading, setRefreshLoading] = React.useState(false)
   const [formData, setFormData] = React.useState(emptyForm)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
+  const [soldOutFilter, setSoldOutFilter] = React.useState<"all" | "selling" | "soldOut">("all")
+  const [optionsConfigListLoading, setOptionsConfigListLoading] = React.useState(false)
   const [soldOutTogglingId, setSoldOutTogglingId] = React.useState<string | null>(null)
   const [soldOutTogglingOptionId, setSoldOutTogglingOptionId] = React.useState<string | null>(null)
   const [menuOptions, setMenuOptions] = React.useState<PosMenuOption[]>([])
@@ -343,23 +360,34 @@ export default function PosMenusPage() {
   const [newOptionSize, setNewOptionSize] = React.useState("")
   const [newOptionPart, setNewOptionPart] = React.useState("")
   const [newOptionModifierPackaging, setNewOptionModifierPackaging] = React.useState("")
+  const [chickenBatchApplying, setChickenBatchApplying] = React.useState(false)
 
-  React.useEffect(() => {
-    Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuCategoriesConfig()])
-      .then(([list, { categories, mainCategories }, config]) => {
-        setMenus(list || [])
-        setAllCategories(categories || [])
-        setAllMainCategories(mainCategories || [])
-        setCategoriesConfig(config || null)
-      })
-      .catch(() => {
-        setMenus([])
-        setAllCategories([])
-        setAllMainCategories([])
-        setCategoriesConfig(null)
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  const loadMenusAndCategories = React.useCallback(async (setLoadingState?: (v: boolean) => void) => {
+    const setBusy = setLoadingState ?? (() => {})
+    setBusy(true)
+    try {
+      // 세 API를 동시에 호출해 대기 시간 단축 (순차 호출 대비)
+      const [list, catRes, config] = await Promise.all([
+        getPosMenus(),
+        getPosMenuCategories().catch(() => ({ categories: [] as string[], mainCategories: [] as string[] })),
+        getPosMenuCategoriesConfig().catch(() => null),
+      ])
+      setMenus(Array.isArray(list) ? list : [])
+      const { categories, mainCategories } = catRes ?? { categories: [], mainCategories: [] }
+      setAllCategories(Array.isArray(categories) ? categories : [])
+      setAllMainCategories(Array.isArray(mainCategories) ? mainCategories : [])
+      setCategoriesConfig(config ?? null)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const isNetworkError = /failed to fetch|network error|load failed|connection/i.test(msg)
+      const hint = isNetworkError ? "\n\n" + (t("msg_load_fail_network") || "연결할 수 없습니다. 로그인 상태를 확인하거나, 개발 서버가 실행 중인지 확인해 주세요.") : ""
+      alert((t("msg_load_fail") || "목록을 불러오지 못했습니다.") + "\n" + msg + hint)
+    } finally {
+      setBusy(false)
+    }
+  }, [t])
+
+  // 메뉴 목록은 조회 버튼을 눌렀을 때만 불러옴 (초기 자동 로드 없음)
 
   const effectiveOptionIdForIngredients = selectedIngredientOptionId === "" || selectedIngredientOptionId === "null" ? undefined : selectedIngredientOptionId
 
@@ -491,6 +519,7 @@ export default function PosMenusPage() {
       imageUrl: formData.imageUrl.trim(),
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
+      isBanban: formData.isBanban,
     })
     if (!res.success) {
       alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -509,6 +538,7 @@ export default function PosMenusPage() {
       isActive: formData.isActive,
       sortOrder: 0,
       optionSelectionGroups: editingMenu?.optionSelectionGroups,
+      isBanban: formData.isBanban,
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
@@ -540,6 +570,7 @@ export default function PosMenusPage() {
       imageUrl: menu.imageUrl,
       vatIncluded: menu.vatIncluded,
       isActive: menu.isActive,
+      isBanban: menu.isBanban ?? false,
     })
     setEditingId(menu.id)
     setNewOptionName("")
@@ -703,12 +734,14 @@ export default function PosMenusPage() {
         code: optionsConfigSelectedMenu.code,
         name: optionsConfigSelectedMenu.name,
         category: optionsConfigSelectedMenu.category,
+        categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
         price: optionsConfigSelectedMenu.price,
         priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
         imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
         vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
         isActive: optionsConfigSelectedMenu.isActive ?? true,
         optionSelectionGroups: ["size", "part"],
+        isBanban: optionsConfigSelectedMenu.isBanban ?? false,
       })
       if (res.success) {
         setMenus((prev) =>
@@ -761,37 +794,139 @@ export default function PosMenusPage() {
   }
 
   const handleAddAllOptionsForConfig = async () => {
-    if (!optionsConfigSelectedMenuId) return
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
     await ensureMenuOptionGroups()
     const existingKeys = new Set(
       optionsConfigMenuOptions.map((o) => `${o.optionStepValues?.size ?? ""}_${o.optionStepValues?.part ?? ""}`)
     )
+    const isChicken = isChickenMenu(optionsConfigSelectedMenu.code)
+    const price = 0
+    const combinations: { size: string; part: string; sellHall: boolean; sellDelivery: boolean; sellPackaging: boolean }[] = isChicken
+      ? [
+          { size: "M", part: "순살", sellHall: true, sellDelivery: true, sellPackaging: true },
+          { size: "M", part: "윙", sellHall: true, sellDelivery: true, sellPackaging: true },
+          { size: "M", part: "봉", sellHall: true, sellDelivery: true, sellPackaging: true },
+        ]
+      : OPTION_SIZE_VALUES.flatMap((size) =>
+          OPTION_PART_VALUES.map((part) => ({
+            size,
+            part,
+            sellHall: true,
+            sellDelivery: true,
+            sellPackaging: true,
+          }))
+        )
     let added = 0
-    for (const size of OPTION_SIZE_VALUES) {
-      for (const part of OPTION_PART_VALUES) {
-        if (existingKeys.has(`${size}_${part}`)) continue
-        const name = `${size} - ${part}`
-        const res = await savePosMenuOption({
-          menuId: Number(optionsConfigSelectedMenuId),
-          name,
-          priceModifier: Number(newOptionModifier) || 0,
-          priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
-          priceModifierPackaging: newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
-          sortOrder: optionsConfigMenuOptions.length + added,
-          optionType: "substitution",
-          optionStepValues: { size, part },
-          sellHall: true,
-          sellDelivery: true,
-          sellPackaging: true,
-        })
-        if (res.success) {
-          existingKeys.add(`${size}_${part}`)
-          added++
-        }
+    for (const { size, part, sellHall, sellDelivery, sellPackaging } of combinations) {
+      if (existingKeys.has(`${size}_${part}`)) continue
+      const name = `${size} - ${part}`
+      const res = await savePosMenuOption({
+        menuId: Number(optionsConfigSelectedMenuId),
+        name,
+        priceModifier: isChicken ? price : Number(newOptionModifier) || 0,
+        priceModifierDelivery: isChicken ? price : newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
+        priceModifierPackaging: isChicken ? price : newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
+        sortOrder: optionsConfigMenuOptions.length + added,
+        optionType: "substitution",
+        optionStepValues: { size, part },
+        sellHall,
+        sellDelivery,
+        sellPackaging,
+      })
+      if (res.success) {
+        existingKeys.add(`${size}_${part}`)
+        added++
       }
     }
     if (added > 0) {
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
+    }
+  }
+
+  /** 기본가 = S 순살. 옵션으로 붙는 것은 M 순살/윙/봉 3개만 */
+  const CHICKEN_OPTION_COMBOS = [
+    { size: "M", part: "순살", sellHall: true, sellDelivery: true, sellPackaging: true },
+    { size: "M", part: "윙", sellHall: true, sellDelivery: true, sellPackaging: true },
+    { size: "M", part: "봉", sellHall: true, sellDelivery: true, sellPackaging: true },
+  ] as const
+
+  const handleChickenBatchApply = async () => {
+    let list = menus
+    if (list.length === 0) {
+      try {
+        list = await getPosMenus()
+        setMenus(list || [])
+      } catch (e) {
+        alert(t("posChickenBatchNoMenus") || "메뉴 목록을 불러올 수 없습니다.")
+        return
+      }
+    }
+    const chickenMenus = (list || []).filter((m) => isChickenMenu(m.code))
+    if (chickenMenus.length === 0) {
+      alert(t("posChickenBatchNoMenus") || "코드가 c로 시작하는 메뉴가 없습니다.")
+      return
+    }
+    if (!confirm((t("posChickenBatchConfirm") || "코드가 c로 시작하는 {n}개 치킨 메뉴에 옵션(M 순살/윙/봉 3개)을 일괄 적용합니다. 기본가=S 순살. 기존 옵션은 삭제됩니다. 계속하시겠습니까?").replace("{n}", String(chickenMenus.length)))) return
+    setChickenBatchApplying(true)
+    try {
+      let done = 0
+      for (const menu of chickenMenus) {
+        const saveMenuRes = await savePosMenu({
+          id: menu.id,
+          code: menu.code,
+          name: menu.name,
+          category: menu.category ?? "",
+          categoryMain: menu.categoryMain ?? "",
+          sortOrder: menu.sortOrder ?? 0,
+          price: menu.price,
+          priceDelivery: menu.priceDelivery ?? null,
+          imageUrl: menu.imageUrl ?? "",
+          vatIncluded: menu.vatIncluded ?? true,
+          isActive: menu.isActive ?? true,
+          optionSelectionGroups: ["size", "part"],
+        })
+        if (!saveMenuRes.success) {
+          throw new Error(`메뉴 ${menu.code} 저장 실패: ${saveMenuRes.message}`)
+        }
+        const existing = await getPosMenuOptions({ menuId: menu.id })
+        for (const opt of existing || []) {
+          const delRes = await deletePosMenuOption({ id: String(opt.id) })
+          if (!delRes.success) {
+            throw new Error(`옵션 삭제 실패: ${delRes.message}`)
+          }
+        }
+        for (let i = 0; i < CHICKEN_OPTION_COMBOS.length; i++) {
+          const { size, part, sellHall, sellDelivery, sellPackaging } = CHICKEN_OPTION_COMBOS[i]
+          const optRes = await savePosMenuOption({
+            menuId: Number(menu.id),
+            name: `${size} - ${part}`,
+            priceModifier: 0,
+            priceModifierDelivery: null,
+            priceModifierPackaging: null,
+            sortOrder: i,
+            optionType: "substitution",
+            optionStepValues: { size, part },
+            sellHall,
+            sellDelivery,
+            sellPackaging,
+          })
+          if (!optRes.success) {
+            throw new Error(`옵션 저장 실패 (${menu.code} ${size} ${part}): ${optRes.message}`)
+          }
+        }
+        done++
+      }
+      const updated = await getPosMenus()
+      setMenus(updated || [])
+      alert((t("posChickenBatchDone") || "치킨 메뉴 {n}건에 옵션(M 순살/윙/봉)을 적용했습니다.").replace("{n}", String(done)))
+      if (optionsConfigSelectedMenuId && chickenMenus.some((m) => m.id === optionsConfigSelectedMenuId)) {
+        getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
+      }
+    } catch (e) {
+      console.error("handleChickenBatchApply:", e)
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setChickenBatchApplying(false)
     }
   }
 
@@ -918,11 +1053,20 @@ export default function PosMenusPage() {
         !searchTerm ||
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchCategory = categoryFilter === "all" || m.category === categoryFilter
-      const matchMainCategory = mainCategoryFilter === "all" || (m.categoryMain ?? "") === mainCategoryFilter
-      return matchTerm && matchCategory && matchMainCategory
+      const categoryEq = m.category === categoryFilter
+      const chickenCategorySelected = categoryFilter === "Chicken" || categoryFilter === "치킨"
+      const matchCategory = categoryFilter === "all" || categoryEq || (chickenCategorySelected && isChickenMenu(m.code))
+      const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
+      const chickenMainSelected = mainCategoryFilter === "Chicken" || mainCategoryFilter === "치킨"
+      const matchMainCategory = mainCategoryFilter === "all" || mainEq || (chickenMainSelected && isChickenMenu(m.code))
+      const isSoldOut = !!(m.soldOutDate && String(m.soldOutDate).trim())
+      const matchSoldOut =
+        soldOutFilter === "all" ||
+        (soldOutFilter === "selling" && !isSoldOut) ||
+        (soldOutFilter === "soldOut" && isSoldOut)
+      return matchTerm && matchCategory && matchMainCategory && matchSoldOut
     })
-  }, [menus, searchTerm, categoryFilter, mainCategoryFilter])
+  }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter])
 
   const optionsConfigFilteredMenus = React.useMemo(() => {
     return menus.filter((m) => {
@@ -930,8 +1074,12 @@ export default function PosMenusPage() {
         !optionsConfigSearchTerm ||
         m.name.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase())
-      const matchCategory = optionsConfigCategoryFilter === "all" || m.category === optionsConfigCategoryFilter
-      const matchMainCategory = mainCategoryFilter === "all" || (m.categoryMain ?? "") === mainCategoryFilter
+      const categoryEq = m.category === optionsConfigCategoryFilter
+      const chickenCategorySelected = optionsConfigCategoryFilter === "Chicken" || optionsConfigCategoryFilter === "치킨"
+      const matchCategory = optionsConfigCategoryFilter === "all" || categoryEq || (chickenCategorySelected && isChickenMenu(m.code))
+      const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
+      const chickenMainSelected = mainCategoryFilter === "Chicken" || mainCategoryFilter === "치킨"
+      const matchMainCategory = mainCategoryFilter === "all" || mainEq || (chickenMainSelected && isChickenMenu(m.code))
       return matchTerm && matchCategory && matchMainCategory
     })
   }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter, mainCategoryFilter])
@@ -974,6 +1122,22 @@ export default function PosMenusPage() {
       .filter((c): c is string => typeof c === "string")
       .sort()
   }, [formData.categoryMain, menus, categories, categoriesConfig])
+
+  /** 옵션 구성 탭: 대분류 선택 시 해당 대분류에 속한 소분류만 */
+  const optionsConfigCategoriesByMain = React.useMemo(() => {
+    const main = mainCategoryFilter === "all" ? null : mainCategoryFilter?.trim() || null
+    if (!main) return categories.filter((c): c is string => typeof c === "string")
+    const presetFromConfig = categoriesConfig?.categoriesByMain?.[main]
+    const presetFromLib = main in POS_CATEGORIES_BY_MAIN ? POS_CATEGORIES_BY_MAIN[main as keyof typeof POS_CATEGORIES_BY_MAIN] : null
+    const preset = presetFromConfig?.length ? presetFromConfig : (presetFromLib ?? [])
+    const fromMenus = menus
+      .filter((m) => (m.categoryMain ?? "") === main || (main === "Chicken" || main === "치킨" ? isChickenMenu(m.code) : false))
+      .map((m) => m.category)
+      .filter((c): c is string => typeof c === "string" && c !== "")
+    return Array.from(new Set([...preset, ...fromMenus]))
+      .filter((c): c is string => typeof c === "string")
+      .sort()
+  }, [mainCategoryFilter, menus, categories, categoriesConfig])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -1079,14 +1243,20 @@ export default function PosMenusPage() {
                         <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
                         {t("posMenuActive")}
                       </label>
+                      <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
+                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} />
+                        {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
+                      </label>
                     </div>
                     <div className="rounded border border-dashed border-primary/30 bg-muted/20 p-3">
                       <h4 className="text-xs font-semibold text-muted-foreground">{t("posMenuOptions") || "옵션"}</h4>
-                      {menuOptions.length > 0 ? (
+                      {(() => {
+                        const optsToShow = isChickenMenu(formData.code) ? menuOptions.filter((o) => !isChickenDefaultOption(o.name)) : menuOptions
+                        return optsToShow.length > 0 ? (
                         <ul className="mt-2 space-y-1 max-h-28 overflow-y-auto">
-                          {menuOptions.map((o) => (
+                          {optsToShow.map((o) => (
                             <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
-                              <span>{o.name}</span>
+                              <span>{optionPartLabel(o.name)}</span>
                               <span className="text-muted-foreground tabular-nums">
                                 {(o.priceModifier ?? 0) !== 0 ? `+${o.priceModifier}` : "-"}
                               </span>
@@ -1095,7 +1265,8 @@ export default function PosMenusPage() {
                         </ul>
                       ) : (
                         <p className="mt-1 text-xs text-muted-foreground">{t("posMenuOptionsSelectHint") || "옵션 구성 탭에서 사이즈, 부위를 추가해 주세요."}</p>
-                      )}
+                      )
+                      })()}
                       <Button variant="outline" size="sm" className="mt-2 text-xs" onClick={() => { setFormTab("options"); setMainTab("optionsConfig"); setOptionsConfigSelectedMenuId(editingId); }}>{t("posMenuTabOptionsConfig") || "옵션 구성"}</Button>
                     </div>
                   </TabsContent>
@@ -1103,10 +1274,10 @@ export default function PosMenusPage() {
                     <div className="rounded border border-dashed p-3">
                       <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 (반반, 뼈/순살 등)"}</h4>
                       <ul className="mb-2 space-y-1">
-                        {menuOptions.map((o) => (
+                        {(isChickenMenu(formData.code) ? menuOptions.filter((o) => !isChickenDefaultOption(o.name)) : menuOptions).map((o) => (
                           <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
                             <span>
-                              <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{o.name}</span>
+                              <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{optionPartLabel(o.name)}</span>
                               {o.optionType === "additive" && o.itemCode && (
                                 <span className="ml-1 text-muted-foreground">+{o.itemCode}×{o.quantity ?? 1}</span>
                               )}
@@ -1179,7 +1350,7 @@ export default function PosMenusPage() {
                     </div>
                   </TabsContent>
                   <TabsContent value="cost" className="mt-4">
-                    {menuOptions.some((o) => o.optionType === "substitution") && (
+                    {(isChickenMenu(formData.code) ? menuOptions.some((o) => o.optionType === "substitution" && !isChickenDefaultOption(o.name)) : menuOptions.some((o) => o.optionType === "substitution")) && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground shrink-0">{t("posIngredientScope") || "재료 범위"}</span>
                         <Select value={selectedIngredientOptionId || "base"} onValueChange={(v) => setSelectedIngredientOptionId(v === "base" ? "" : v)}>
@@ -1187,9 +1358,9 @@ export default function PosMenusPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="base">{t("posIngredientScopeBase") || "기본 (옵션 없음)"}</SelectItem>
-                            {menuOptions.filter((o) => o.optionType === "substitution").map((o) => (
-                              <SelectItem key={o.id} value={o.id}>{t("posIngredientScopeOption") || "옵션"}: {o.name}</SelectItem>
+                            <SelectItem value="base">{isChickenMenu(formData.code) ? (t("posIngredientScopeBaseChicken") || "기본 (S 순살)") : (t("posIngredientScopeBase") || "기본 (옵션 없음)")}</SelectItem>
+                            {(isChickenMenu(formData.code) ? menuOptions.filter((o) => o.optionType === "substitution" && !isChickenDefaultOption(o.name)) : menuOptions.filter((o) => o.optionType === "substitution")).map((o) => (
+                              <SelectItem key={o.id} value={o.id}>{t("posIngredientScopeOption") || "옵션"}: {optionPartLabel(o.name)}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -1197,7 +1368,7 @@ export default function PosMenusPage() {
                     )}
                     <div className="rounded border border-dashed border-amber-500/50 p-3">
                       <h4 className="mb-2 text-xs font-semibold">
-                        {selectedIngredientOptionId ? `${t("posIngredientScopeOption") || "옵션"}: ${menuOptions.find((o) => o.id === selectedIngredientOptionId)?.name ?? ""}` : t("posMenuIngredients") || "재료 (BOM)"}
+                        {selectedIngredientOptionId ? `${t("posIngredientScopeOption") || "옵션"}: ${optionPartLabel(menuOptions.find((o) => o.id === selectedIngredientOptionId)?.name ?? "")}` : t("posMenuIngredients") || "재료 (BOM)"}
                       </h4>
                       <ul className="mb-2 max-h-48 overflow-y-auto space-y-1">
                         {menuIngredients.map((ing) => (
@@ -1372,13 +1543,25 @@ export default function PosMenusPage() {
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
               <h3 className="text-sm font-bold">{t("posMenuList") || "메뉴 목록"}</h3>
-              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={async () => { setRefreshLoading(true); try { const [list, { categories, mainCategories }, config] = await Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuCategoriesConfig()]); setMenus(list || []); setAllCategories(categories || []); setAllMainCategories(mainCategories || []); setCategoriesConfig(config || null); } finally { setRefreshLoading(false); } }} disabled={refreshLoading}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={refreshLoading}
+                onClick={() => loadMenusAndCategories(setRefreshLoading)}
+              >
                 <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", refreshLoading && "animate-spin")} />
                 {t("btn_query") || t("stockBtnSearch") || "조회"}
               </Button>
             </div>
             <div className="flex items-center gap-3 border-b bg-muted/20 px-6 py-3">
-              <Select value={mainCategoryFilter} onValueChange={setMainCategoryFilter}>
+              <Select
+                value={mainCategoryFilter}
+                onValueChange={(v) => {
+                  setMainCategoryFilter(v)
+                  setCategoryFilter("all")
+                }}
+              >
                 <SelectTrigger className="h-9 w-32 text-xs">
                   <SelectValue placeholder={t("posMenuCategoryMain")} />
                 </SelectTrigger>
@@ -1391,15 +1574,23 @@ export default function PosMenusPage() {
               </Select>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="h-9 w-36 text-xs">
+                  <SelectValue placeholder={t("posMenuCategorySub") || "소분류"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
+                  {optionsConfigCategoriesByMain.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={soldOutFilter} onValueChange={(v) => setSoldOutFilter(v as "all" | "selling" | "soldOut")}>
+                <SelectTrigger className="h-9 w-28 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                  {categories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="selling">{t("posAvailable") || "판매"}</SelectItem>
+                  <SelectItem value="soldOut">{t("posSoldOut") || "품절"}</SelectItem>
                 </SelectContent>
               </Select>
               <Input
@@ -1434,6 +1625,86 @@ export default function PosMenusPage() {
                       const isSoldOutToday = m.soldOutDate === todayStr
                       const isExpanded = expandedMenuId === m.id
                       const expanded = isExpanded ? expandedMenuData : null
+                      const expandedRows = (() => {
+                        if (!isExpanded || !expanded) return null
+                        const sorted = [...expanded.options].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+                        const toShow = isChickenMenu(m.code) ? sorted.filter((opt) => !isChickenDefaultOption(opt.name)) : sorted
+                        if (toShow.length === 0) {
+                          if (isChickenMenu(m.code) && sorted.length > 0) {
+                            return (
+                              <tr key={`${m.id}-base`} className="bg-amber-500/5 border-b">
+                                <td className="px-2 py-2 w-8" />
+                                <td className="px-5 py-2 text-center min-w-[88px] font-mono text-[10px] text-muted-foreground">{m.code}</td>
+                                <td className="px-5 py-2 min-w-[140px] pl-8 text-xs text-muted-foreground">{t("posIngredientScopeBaseChicken") || "기본 (S 순살)"}</td>
+                                <td colSpan={4} className="px-5 py-2 text-xs text-muted-foreground">{t("posChickenBaseOnlyHint") || "메뉴 기본가에 해당. M 순살/윙/봉은 옵션 구성에서 추가."}</td>
+                              </tr>
+                            )
+                          }
+                          return null
+                        }
+                        return toShow.map((opt, i) => {
+                          const optCode = `${m.code}-${i + 1}`
+                          const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
+                          const isOptSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
+                          return (
+                            <tr key={opt.id} className="bg-amber-500/5 border-b hover:bg-amber-500/10" onClick={(e) => e.stopPropagation()}>
+                              <td className="px-2 py-2 w-8" />
+                              <td className="px-5 py-2 text-center min-w-[88px] whitespace-nowrap">
+                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{optCode}</span>
+                              </td>
+                              <td className="px-5 py-2 min-w-[140px] pl-8">
+                                <span className="text-sm">{optionPartLabel(opt.name)}</span>
+                              </td>
+                              <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
+                              <td className="px-5 py-2 text-center text-muted-foreground w-24">{m.category || "-"}</td>
+                              <td className="px-5 py-2 text-right font-medium tabular-nums text-xs w-24">{optPrice > 0 ? optPrice.toLocaleString() : "-"}</td>
+                              <td className="px-5 py-2 w-28" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className={cn(
+                                      "h-7 w-7",
+                                      isOptSoldOut
+                                        ? "text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                        : "text-muted-foreground border-muted hover:bg-muted/50"
+                                    )}
+                                    onClick={() => handleSoldOutToggleOption(opt, m.id)}
+                                    disabled={soldOutTogglingOptionId === String(opt.id)}
+                                    title={soldOutTogglingOptionId === String(opt.id) ? "..." : isOptSoldOut ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
+                                  >
+                                    {soldOutTogglingOptionId === String(opt.id) ? (
+                                      <span className="text-[10px]">...</span>
+                                    ) : isOptSoldOut ? (
+                                      <PauseCircle className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <PlayCircle className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
+                                    onClick={() => handleEditOptionInList(m.id)}
+                                    title={t("itemsBtnEdit")}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => handleDeleteOptionInList(opt, m.id)}
+                                    title={t("itemsBtnDelete")}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      })()
                       return (
                       <React.Fragment key={m.id}>
                       <tr
@@ -1503,72 +1774,10 @@ export default function PosMenusPage() {
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && expanded && expanded.options.length > 0 && (
-                        [...expanded.options].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((opt, i) => {
-                          const optCode = `${m.code}-${String(i + 1).padStart(2, "0")}`
-                          const optPrice = (m.price ?? 0) + (opt.priceModifier ?? 0)
-                          const isOptSoldOut = !(opt.sellHall ?? true) && !(opt.sellDelivery ?? true) && !(opt.sellPackaging ?? true)
-                          return (
-                            <tr key={opt.id} className="bg-amber-500/5 border-b hover:bg-amber-500/10" onClick={(e) => e.stopPropagation()}>
-                              <td className="px-2 py-2 w-8" />
-                              <td className="px-5 py-2 text-center min-w-[88px] whitespace-nowrap">
-                                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">{optCode}</span>
-                              </td>
-                              <td className="px-5 py-2 min-w-[140px] pl-8">
-                                <span className="text-sm">{opt.name}</span>
-                              </td>
-                              <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
-                              <td className="px-5 py-2 text-center text-muted-foreground w-24">{m.category || "-"}</td>
-                              <td className="px-5 py-2 text-right font-medium tabular-nums text-xs w-24">{optPrice > 0 ? optPrice.toLocaleString() : "-"}</td>
-                              <td className="px-5 py-2 w-28" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex justify-center gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className={cn(
-                                      "h-7 w-7",
-                                      isOptSoldOut
-                                        ? "text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                        : "text-muted-foreground border-muted hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleSoldOutToggleOption(opt, m.id)}
-                                    disabled={soldOutTogglingOptionId === String(opt.id)}
-                                    title={soldOutTogglingOptionId === String(opt.id) ? "..." : isOptSoldOut ? (t("posSoldOut") || "품절") : (t("posAvailable") || "판매")}
-                                  >
-                                    {soldOutTogglingOptionId === String(opt.id) ? (
-                                      <span className="text-[10px]">...</span>
-                                    ) : isOptSoldOut ? (
-                                      <PauseCircle className="h-3.5 w-3.5" />
-                                    ) : (
-                                      <PlayCircle className="h-3.5 w-3.5" />
-                                    )}
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-7 w-7 text-primary border-primary/30 hover:bg-primary/10 hover:text-primary"
-                                    onClick={() => handleEditOptionInList(m.id)}
-                                    title={t("itemsBtnEdit")}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-7 w-7 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                                    onClick={() => handleDeleteOptionInList(opt, m.id)}
-                                    title={t("itemsBtnDelete")}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
+                      {expandedRows}
                       </React.Fragment>
-                    )})
+                    )
+                    })
                   )}
                 </tbody>
               </table>
@@ -1577,15 +1786,45 @@ export default function PosMenusPage() {
         </div>
           </TabsContent>
           <TabsContent value="optionsConfig" className="mt-0">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{t("posChickenBatchHint") || "코드가 c로 시작하는 메뉴(치킨)에 S/M·부위 옵션을 한 번에 적용할 수 있습니다."}</p>
+              <Button variant="outline" size="sm" onClick={handleChickenBatchApply} disabled={chickenBatchApplying}>
+                {chickenBatchApplying ? (t("loading") || "적용 중...") : (t("posChickenBatchButton") || "치킨 메뉴 일괄 옵션 적용")}
+              </Button>
+            </div>
             <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
               {/* 좌측: 메뉴 리스트 */}
               <div className="rounded-xl border bg-card overflow-hidden">
-                <div className="border-b px-4 py-3 bg-muted/20">
-                  <h3 className="text-sm font-bold">{t("posMenuList")}</h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{t("posMenuOptionsConfigSelectHint") || "메뉴를 선택하면 옵션을 구성할 수 있습니다"}</p>
+                <div className="border-b px-4 py-3 bg-muted/20 flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold">{t("posMenuList")}</h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{t("posMenuOptionsConfigSelectHint") || "메뉴를 선택하면 옵션을 구성할 수 있습니다"}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs shrink-0"
+                    disabled={optionsConfigListLoading}
+                    onClick={async () => {
+                      await loadMenusAndCategories(setOptionsConfigListLoading)
+                      if (optionsConfigSelectedMenuId) {
+                        const opts = await getPosMenuOptions({ menuId: optionsConfigSelectedMenuId })
+                        setOptionsConfigMenuOptions(Array.isArray(opts) ? opts : [])
+                      }
+                    }}
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", optionsConfigListLoading && "animate-spin")} />
+                    {t("btn_query") || "조회"}
+                  </Button>
                 </div>
                 <div className="p-3 space-y-2 border-b">
-                  <Select value={mainCategoryFilter} onValueChange={setMainCategoryFilter}>
+                  <Select
+                    value={mainCategoryFilter}
+                    onValueChange={(v) => {
+                      setMainCategoryFilter(v)
+                      setOptionsConfigCategoryFilter("all")
+                    }}
+                  >
                     <SelectTrigger className="h-9 w-full text-xs">
                       <SelectValue placeholder={t("posMenuCategoryMain")} />
                     </SelectTrigger>
@@ -1596,11 +1835,11 @@ export default function PosMenusPage() {
                   </Select>
                   <Select value={optionsConfigCategoryFilter} onValueChange={setOptionsConfigCategoryFilter}>
                     <SelectTrigger className="h-9 w-full text-xs">
-                      <SelectValue />
+                      <SelectValue placeholder={t("posMenuCategorySub") || "소분류"} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
-                      {categories.map((c) => (
+                      {optionsConfigCategoriesByMain.map((c) => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1656,7 +1895,7 @@ export default function PosMenusPage() {
                       <div>
                         <h3 className="text-sm font-bold">{optionsConfigSelectedMenu?.name} ({optionsConfigSelectedMenu?.code})</h3>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          1. {t("posOptionGroupSize") || "사이즈"} (S, M, L) → 2. {t("posOptionGroupPart") || "부위"} (순살, 윙, 봉)
+                          1. {t("posOptionGroupSize") || "사이즈"} (S, M, L) → 2. {t("posOptionGroupPart") || "부위"} ({t("posOptionPartBoneless")}, {t("posOptionPartWing")}, {t("posOptionPartDrumstick")})
                         </p>
                       </div>
                       <div className="flex gap-2 shrink-0">
@@ -1665,6 +1904,10 @@ export default function PosMenusPage() {
                       </div>
                     </div>
                     <div className="space-y-4">
+                      {/* 기존 옵션을 비우고 새로 쓸 때는 먼저 초기화 후 추가 */}
+                      <p className="text-[11px] text-muted-foreground">
+                        {t("posOptionResetHint") || "기존 옵션을 지우고 새로 적용하려면 먼저 [초기화]를 누른 뒤 옵션을 추가하세요."}
+                      </p>
                       {/* 옵션 추가: 1단계 사이즈 + 2단계 부위 */}
                       <div className="rounded border p-3 bg-muted/20">
                         <div className="flex flex-wrap gap-2 items-end">
@@ -1688,7 +1931,11 @@ export default function PosMenusPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="_">{t("posMenuCategoryAll") || "선택"}</SelectItem>
-                                {OPTION_PART_VALUES.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                                {OPTION_PART_VALUES.map((v) => (
+                                  <SelectItem key={v} value={v}>
+                                    {v === "순살" ? t("posOptionPartBoneless") : v === "윙" ? t("posOptionPartWing") : t("posOptionPartDrumstick")}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1708,17 +1955,30 @@ export default function PosMenusPage() {
                               </div>
                             </div>
                             <Button size="sm" className="h-8 px-3" onClick={handleAddOptionForConfig} disabled={!newOptionSize || !newOptionPart} type="button"><Plus className="h-3.5 w-3.5 mr-1" /></Button>
-                            <Button variant="outline" size="sm" className="h-8" onClick={handleAddAllOptionsForConfig}>{t("posOptionAddAll")}</Button>
+                            <Button variant="outline" size="sm" className="h-8" onClick={handleResetOptionsForConfig} disabled={optionsConfigMenuOptions.length === 0} title={t("posMenuOptionsConfigReset") || "초기화"}>
+                              <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                              {t("posMenuOptionsConfigReset") || "초기화"}
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-8" onClick={handleAddAllOptionsForConfig}>
+                              {optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
+                                ? (t("posOptionAddAllChicken") || "치킨 옵션 추가 (M 순살/윙/봉 3개)")
+                                : t("posOptionAddAll")}
+                            </Button>
                           </div>
                         </div>
                       </div>
-                      {/* 옵션 목록: 각 행에 홀/배달/포장 체크박스 */}
+                      {/* 옵션 목록: 각 행에 홀/배달/포장 체크박스. 치킨은 S 순살(기본) 제외하고 M 순살/윙/봉만 표시 */}
                       <div className="rounded border p-3">
                         <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 목록"}</h4>
                         <div className="max-h-60 overflow-y-auto">
-                          {optionsConfigMenuOptions.length === 0 ? (
-                            <p className="py-6 text-center text-xs text-muted-foreground">{t("posOptionsConfigEmptyOptions") || "위에서 옵션을 추가해 주세요."}</p>
-                          ) : (
+                          {(() => {
+                            const optionsToShow = optionsConfigSelectedMenu && isChickenMenu(optionsConfigSelectedMenu.code)
+                              ? optionsConfigMenuOptions.filter((o) => !isChickenDefaultOption(o.name))
+                              : optionsConfigMenuOptions
+                            if (optionsToShow.length === 0) {
+                              return <p className="py-6 text-center text-xs text-muted-foreground">{optionsConfigMenuOptions.length === 0 ? (t("posOptionsConfigEmptyOptions") || "위에서 옵션을 추가해 주세요.") : (t("posChickenBaseOnlyHint") || "치킨은 기본(S 순살)만 있습니다. M 순살/윙/봉은 \"치킨 옵션 추가\"로 넣으세요.")}</p>
+                            }
+                            return (
                             <table className="w-full text-xs">
                               <thead>
                                 <tr className="border-b text-muted-foreground">
@@ -1733,9 +1993,9 @@ export default function PosMenusPage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {optionsConfigMenuOptions.map((o) => (
+                                {optionsToShow.map((o) => (
                                   <tr key={o.id} className="border-b last:border-b-0">
-                                    <td className="py-2 px-2 font-medium">{o.name}</td>
+                                    <td className="py-2 px-2 font-medium">{optionPartLabel(o.name)}</td>
                                     <td className="py-2 px-2 text-center">
                                       <Checkbox checked={o.sellHall !== false} onCheckedChange={() => handleToggleSellChannelForConfig(o, "sellHall")} />
                                     </td>
@@ -1761,7 +2021,8 @@ export default function PosMenusPage() {
                                 ))}
                               </tbody>
                             </table>
-                          )}
+                            )
+                          })()}
                         </div>
                       </div>
                     </div>

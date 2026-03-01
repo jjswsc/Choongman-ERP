@@ -14,6 +14,8 @@ import {
   RotateCcw,
   ChevronDown,
   AlignLeft,
+  Plus,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,8 +48,18 @@ export interface ItemFormData {
   totalQuantity: string
   description: string
   price: string
+  /** 과세 품목일 때, 입력 가격이 부가세 포함인지(저장 시 공급가로 환산) */
+  priceInputVatIncluded?: boolean
   cost: string
+  /** 과세 품목일 때, 입력 원가가 부가세 포함인지(저장 시 공급가로 환산) */
+  costInputVatIncluded?: boolean
   purchaseSource: "hq" | "store"
+  /** 재고 기본 단위 (하위 호환, 저장용) */
+  stockBaseUnit: string
+  /** 조정/조사 시 선택 단위 (하위 호환) */
+  stockUnitOptions: { unit: string; factor: number }[]
+  /** 표준 단위 목록. (총 수량) [단위] = 1 규격. 재고/사용/원가에서 선택 */
+  standardUnits: { unit: string; totalQuantity: number }[]
 }
 
 export interface ItemFormProps {
@@ -299,37 +311,100 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-foreground">{t("itemsUnit") || "표준 단위"}</label>
-            <Select value={formData.unit || "_"} onValueChange={(v) => update("unit", v === "_" ? "" : v)}>
-              <SelectTrigger className="h-10 text-sm">
-                <SelectValue placeholder={t("itemsUnitPh") || "선택 (예: kg, g, 개)"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_">—</SelectItem>
-                {UNIT_OPTIONS.filter(Boolean).map((u) => (
-                  <SelectItem key={u} value={u}>{u}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold text-foreground">{t("itemsTotalQuantity") || "총 수량"}</label>
-            <Input
-              type="number"
-              placeholder="0"
-              min="0"
-              step="0.0001"
-              className="h-10 text-sm text-right tabular-nums"
-              value={formData.totalQuantity}
-              onChange={(e) => update("totalQuantity", e.target.value)}
-            />
+        <div className="space-y-2 col-span-2">
+          <label className="text-xs font-semibold text-foreground">{t("itemsStandardUnitsSection") || "표준 단위 / 총 수량"}</label>
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+            {(formData.standardUnits || []).map((o, idx) => (
+              <div key={idx} className="flex gap-2 items-center flex-wrap">
+                <Select
+                  value={(o.unit || "").trim() || "_"}
+                  onValueChange={(v) => {
+                    const u = v === "_" ? "" : v
+                    setFormData((p) => {
+                      const arr = [...(p.standardUnits || [])]
+                      arr[idx] = { ...arr[idx], unit: u }
+                      const next = { ...p, standardUnits: arr }
+                      if (idx === 0) {
+                        next.unit = u
+                        if (arr[0]) next.totalQuantity = String(arr[0].totalQuantity)
+                      }
+                      return next
+                    })
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-sm w-[100px]">
+                    <SelectValue placeholder={t("itemsUnitPh") || "선택"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_">—</SelectItem>
+                    {UNIT_OPTIONS.filter(Boolean).map((u) => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[11px] text-muted-foreground shrink-0">Total</span>
+                <Input
+                  type="number"
+                  min="0.0001"
+                  step="1"
+                  placeholder="0"
+                  className="h-9 text-sm w-24 text-right tabular-nums"
+                  value={o.totalQuantity}
+                  onChange={(e) => {
+                    const n = Number(e.target.value) || 0
+                    setFormData((p) => {
+                      const arr = [...(p.standardUnits || [])]
+                      arr[idx] = { ...arr[idx], totalQuantity: n }
+                      const next = { ...p, standardUnits: arr }
+                      if (idx === 0) {
+                        next.totalQuantity = e.target.value
+                        if (arr[0]) next.unit = arr[0].unit
+                      }
+                      return next
+                    })
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 text-destructive"
+                  onClick={() =>
+                    setFormData((p) => {
+                      const arr = (p.standardUnits || []).filter((_, i) => i !== idx)
+                      const next = { ...p, standardUnits: arr }
+                      if (idx === 0 && arr.length > 0) {
+                        next.unit = arr[0].unit
+                        next.totalQuantity = String(arr[0].totalQuantity)
+                      } else if (idx === 0) {
+                        next.unit = ""
+                        next.totalQuantity = ""
+                      }
+                      return next
+                    })
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] gap-1"
+                onClick={() => setFormData((p) => ({ ...p, standardUnits: [...(p.standardUnits || []), { unit: "", totalQuantity: 1 }] }))}
+              >
+                <Plus className="h-3 w-3" />
+                {t("itemsAdd") || "추가"}
+              </Button>
+              {(formData.standardUnits || []).length === 0 && (
+                <span className="text-[10px] text-muted-foreground italic">{t("itemsStandardUnitsEmpty") || "표준 단위 없으면 재고/사용/원가에서 규격(1개) 기준만 입력 가능"}</span>
+              )}
+            </div>
           </div>
         </div>
-        <p className="text-[10px] text-muted-foreground -mt-1">
-          {(t("itemsTotalQuantityHint") || "총 수량 있으면 1{unit}당 원가 = 판매가 ÷ 총 수량 (원가 계산기 반영)").replace("{unit}", formData.unit || "?")}
-        </p>
 
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
@@ -358,7 +433,29 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">฿</span>
             </div>
             {formData.taxType === "taxable" && (
-              <p className="text-[10px] text-muted-foreground">{t("itemsPriceVatExclHint")}</p>
+              <>
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!formData.priceInputVatIncluded}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setFormData((prev) => {
+                        const num = Number(prev.price) || 0
+                        const next = { ...prev, priceInputVatIncluded: checked }
+                        if (checked) next.price = String(Math.round(num * 1.07 * 100) / 100)
+                        else next.price = String(Math.round((num / 1.07) * 100) / 100)
+                        return next
+                      })
+                    }}
+                    className="rounded border-input"
+                  />
+                  {t("itemsPriceVatIncluded")}
+                </label>
+                <p className="text-[10px] text-muted-foreground">
+                  {formData.priceInputVatIncluded ? (t("itemsPriceVatIncludedHint") || "저장 시 공급가(부가세 제외)로 환산됩니다.") : t("itemsPriceVatExclHint")}
+                </p>
+              </>
             )}
           </div>
           <div className="flex flex-col gap-2">
@@ -373,6 +470,31 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-muted-foreground">฿</span>
             </div>
+            {formData.taxType === "taxable" && (
+              <>
+                <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!formData.costInputVatIncluded}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setFormData((prev) => {
+                        const num = Number(prev.cost) || 0
+                        const next = { ...prev, costInputVatIncluded: checked }
+                        if (checked) next.cost = String(Math.round(num * 1.07 * 100) / 100)
+                        else next.cost = String(Math.round((num / 1.07) * 100) / 100)
+                        return next
+                      })
+                    }}
+                    className="rounded border-input"
+                  />
+                  {t("itemsCostVatIncluded")}
+                </label>
+                <p className="text-[10px] text-muted-foreground">
+                  {formData.costInputVatIncluded ? (t("itemsCostVatIncludedHint") || "저장 시 공급가(부가세 제외)로 환산됩니다.") : (t("itemsCostVatExclHint") || "원가는 부가세 제외 기준.")}
+                </p>
+              </>
+            )}
           </div>
         </div>
         {formData.unit && parseFloat(formData.totalQuantity) > 0 && parseFloat(formData.price) >= 0 && (() => {

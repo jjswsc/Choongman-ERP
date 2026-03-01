@@ -37,11 +37,26 @@ export async function GET() {
   headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS')
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
+  const url = (process.env.SUPABASE_URL || '').trim()
+  const key = process.env.SUPABASE_ANON_KEY
+  if (!url || !key) {
+    const msg = 'SUPABASE_URL 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
+    console.error('getLoginData:', msg)
+    return NextResponse.json(
+      { users: {}, vendors: [], error: msg },
+      { status: 503, headers }
+    )
+  }
+
   try {
     const data = await getLoginDataHandler()
     return NextResponse.json(data, { headers })
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
     console.error('getLoginData:', e)
-    return NextResponse.json({ users: {}, vendors: [] }, { headers })
+    return NextResponse.json(
+      { users: {}, vendors: [], error: msg },
+      { status: 503, headers }
+    )
   }
 }

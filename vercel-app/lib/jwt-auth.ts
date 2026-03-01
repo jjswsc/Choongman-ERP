@@ -15,9 +15,19 @@ export interface JwtPayload {
 const ALG = 'HS256'
 const EXPIRY = '7d'
 
+const FALLBACK_SECRET = 'cm-erp-fallback'
+
 function getSecret(): Uint8Array {
-  const secret = (process.env.JWT_SECRET || process.env.SUPABASE_ANON_KEY || 'cm-erp-fallback').trim()
-  return new TextEncoder().encode(secret)
+  const secret = (process.env.JWT_SECRET || process.env.SUPABASE_ANON_KEY || '').trim()
+  if (secret.length >= 16) {
+    return new TextEncoder().encode(secret)
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '운영 환경에서는 .env에 JWT_SECRET(32자 이상 권장) 또는 SUPABASE_ANON_KEY를 반드시 설정하세요.'
+    )
+  }
+  return new TextEncoder().encode(FALLBACK_SECRET)
 }
 
 /** 로그인 성공 시 토큰 발급 */

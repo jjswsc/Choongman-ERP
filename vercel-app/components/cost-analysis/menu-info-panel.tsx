@@ -50,7 +50,9 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
   const menuFiltered = menuFilteredByCat.filter((r) => {
     if (!menuSearchTerm.trim()) return true
     const term = menuSearchTerm.toLowerCase()
+    const displayCode = (r as PosMenuCostAnalysisRow & { displayCode?: string }).displayCode ?? r.menuCode
     return (
+      (displayCode || "").toLowerCase().includes(term) ||
       (r.menuCode || "").toLowerCase().includes(term) ||
       (r.menuName || "").toLowerCase().includes(term) ||
       (r.optionName || "").toLowerCase().includes(term)
@@ -187,7 +189,7 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
                           handleMenuSelect(r)
                         }}
                       >
-                        <span className="font-mono text-muted-foreground shrink-0 w-16">{r.menuCode}</span>
+                        <span className="font-mono text-muted-foreground shrink-0 w-20">{(r as PosMenuCostAnalysisRow & { displayCode?: string }).displayCode ?? r.menuCode}</span>
                         <span className="truncate">
                           {r.menuName}{r.optionName ? ` (${r.optionName})` : ""}
                         </span>

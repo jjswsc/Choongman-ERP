@@ -115,7 +115,7 @@ export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; co
 
 // 품목 관리(API)에서 로드한 재료
 const API_ITEMS_CODE_OFFSET = 30000
-let runtimeApiItemsMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }>()
+let runtimeApiItemsMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string; standardUnits?: { unit: string; totalQuantity: number }[] }>()
 
 function inferIngredientCategory(itemCategory: string): "food" | "packaging" {
   const c = String(itemCategory || "").toLowerCase()
@@ -157,8 +157,9 @@ export function setRuntimeApiItems(items: Array<{
   totalQuantity?: number | null
   unit?: string
   category?: string
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }>) {
-  const entries: [number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }][] = []
+  const entries: [number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string; standardUnits?: { unit: string; totalQuantity: number }[] }][] = []
   let idx = 0
   items.forEach((item) => {
     const itemCode = String(item.code ?? "").trim()
@@ -175,22 +176,27 @@ export function setRuntimeApiItems(items: Array<{
     } else {
       bahtPerUnit = Number(item.cost ?? 0) // 기존: cost를 1단위당으로
     }
+    const standardUnits = Array.isArray(item.standardUnits)
+      ? item.standardUnits.filter((o) => (o.unit || "").trim() && o.totalQuantity > 0)
+      : undefined
     entries.push([code, {
       name: String(item.name ?? item.code ?? ""),
       bahtPerUnit,
       category: cat,
       itemCode,
+      standardUnits: standardUnits?.length ? standardUnits : undefined,
     }])
   })
   runtimeApiItemsMap = new Map(entries)
 }
 
-export function getRuntimeApiItems(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging" }> {
+export function getRuntimeApiItems(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; standardUnits?: { unit: string; totalQuantity: number }[] }> {
   return Array.from(runtimeApiItemsMap.entries()).map(([code, v]) => ({
     code,
     name: v.name,
     bahtPerUnit: v.bahtPerUnit,
     category: v.category,
+    standardUnits: v.standardUnits,
   }))
 }
 
@@ -211,7 +217,7 @@ export function getIngredientItemCode(code: number): string | undefined {
 }
 
 // Helper functions
-export function getIngredient(code: number): Ingredient | { code: number; name: string; bahtPerUnit: number } | undefined {
+export function getIngredient(code: number): (Ingredient & { standardUnits?: { unit: string; totalQuantity: number }[] }) | { code: number; name: string; bahtPerUnit: number; standardUnits?: { unit: string; totalQuantity: number }[] } | undefined {
   const runtime = runtimeIngredientMap.get(code)
   if (runtime) return { code, ...runtime }
   const sauce = runtimeSauceMap.get(code)
@@ -219,6 +225,12 @@ export function getIngredient(code: number): Ingredient | { code: number; name: 
   const apiItem = runtimeApiItemsMap.get(code)
   if (apiItem) return { code, ...apiItem }
   return ingredientDatabase.find((i) => i.code === code)
+}
+
+/** API 품목의 표준 단위 목록 (원가 계산기 수량 입력용) */
+export function getIngredientStandardUnits(code: number): { unit: string; totalQuantity: number }[] | undefined {
+  const apiItem = runtimeApiItemsMap.get(code)
+  return apiItem?.standardUnits
 }
 
 export function calculateItemCost(item: RecipeItem): number {

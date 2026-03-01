@@ -30,7 +30,7 @@ import {
 import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, MISE_DEFAULT } from "@/lib/cost-data"
 
 type IngredientSource = "api" | "ingredient" | "sauce"
 
@@ -194,6 +194,8 @@ export function IngredientTable({
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [addSearchTerm, setAddSearchTerm] = useState("")
   const [addCategoryFilter, setAddCategoryFilter] = useState<string>("all")
+  /** 행별 입력 단위. "spec" = 규격 1개, "unit::totalQty" = 표준 단위 (입력÷totalQty = 규격) */
+  const [rowUnitKeys, setRowUnitKeys] = useState<Record<number, string>>({})
 
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngs = type === "food" ? getRuntimeSauces() : []
@@ -212,6 +214,28 @@ export function IngredientTable({
       onItemsChange(updated)
     },
     [items, onItemsChange]
+  )
+
+  const getRowDisplayQuantity = useCallback((index: number, quantity: number) => {
+    const key = rowUnitKeys[index] ?? "spec"
+    if (!key || key === "spec") return quantity
+    const [, tqStr] = key.split("::")
+    const tq = Number(tqStr)
+    return tq > 0 ? quantity * tq : quantity
+  }, [rowUnitKeys])
+
+  const setRowQuantityFromDisplay = useCallback(
+    (index: number, displayValue: number) => {
+      const key = rowUnitKeys[index] ?? "spec"
+      if (!key || key === "spec") {
+        updateQuantity(index, displayValue)
+        return
+      }
+      const [, tqStr] = key.split("::")
+      const tq = Number(tqStr)
+      updateQuantity(index, tq > 0 ? displayValue / tq : displayValue)
+    },
+    [rowUnitKeys, updateQuantity]
   )
 
   const updateMisePercent = useCallback(
@@ -362,16 +386,51 @@ export function IngredientTable({
                     {ingredient?.bahtPerUnit.toFixed(3) ?? "-"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateQuantity(index, parseFloat(e.target.value) || 0)
-                      }
-                      className="h-8 w-24 ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
-                      step="0.1"
-                      min="0"
-                    />
+                    <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                      {(() => {
+                        const standardUnits = getIngredientStandardUnits(item.ingredientCode)
+                        const hasUnits = standardUnits && standardUnits.length > 0
+                        const unitKey = rowUnitKeys[index] ?? "spec"
+                        const displayQty = getRowDisplayQuantity(index, item.quantity)
+                        return (
+                          <>
+                            {hasUnits && (
+                              <Select
+                                value={unitKey}
+                                onValueChange={(v) => setRowUnitKeys((prev) => ({ ...prev, [index]: v }))}
+                              >
+                                <SelectTrigger className="h-8 w-[140px] text-[11px] border-dashed shrink-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="spec">
+                                    <span className="font-medium">{t("posCostUnitSpec") || "규격 (1개)"}</span>
+                                    <span className="ml-1 text-muted-foreground">— 입력=규격</span>
+                                  </SelectItem>
+                                  {standardUnits!.map((o) => (
+                                    <SelectItem key={`${o.unit}::${o.totalQuantity}`} value={`${o.unit}::${o.totalQuantity}`}>
+                                      {`${o.unit} (${o.totalQuantity}=1 ${t("specUnit") || "규격"})`}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Input
+                              type="number"
+                              value={hasUnits ? displayQty : item.quantity}
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value) || 0
+                                if (hasUnits) setRowQuantityFromDisplay(index, v)
+                                else updateQuantity(index, v)
+                              }}
+                              className="h-8 w-24 ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
+                              step={hasUnits && unitKey !== "spec" ? "1" : "0.1"}
+                              min="0"
+                            />
+                          </>
+                        )
+                      })()}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Input

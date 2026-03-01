@@ -4,7 +4,7 @@ import { supabaseSelect } from '@/lib/supabase-server'
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
 const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_groups'
-const POS_MENUS_SELECT_WITH_ALL = POS_MENUS_SELECT_WITH_GROUPS + ',kitchen_printer,cooking_time_min'
+const POS_MENUS_SELECT_WITH_ALL = POS_MENUS_SELECT_WITH_GROUPS + ',kitchen_printer,cooking_time_min,is_banban'
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
 export async function GET() {
@@ -42,6 +42,7 @@ export async function GET() {
       option_selection_groups?: unknown
       kitchen_printer?: number | null
       cooking_time_min?: number | null
+      is_banban?: boolean
     }[]
 
     const list = (typedRows || []).map((row) => {
@@ -51,6 +52,7 @@ export async function GET() {
       else if (v && typeof v === 'string') try { optionSelectionGroups = JSON.parse(v) as string[] } catch { /* ignore */ }
       const kp = row.kitchen_printer
       const ctm = row.cooking_time_min
+      const isBanban = (row as { is_banban?: boolean }).is_banban === true
       return {
         id: String(row.id ?? ''),
         code: String(row.code ?? ''),
@@ -67,6 +69,7 @@ export async function GET() {
         optionSelectionGroups,
         kitchenPrinter: kp === 1 || kp === 2 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
+        isBanban,
       }
     })
 

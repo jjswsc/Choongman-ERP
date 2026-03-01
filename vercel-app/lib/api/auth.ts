@@ -2,7 +2,14 @@ import { apiFetch } from './fetch'
 
 export async function getLoginData() {
   const res = await apiFetch('/api/getLoginData')
-  return res.json() as Promise<{ users: Record<string, string[]>; vendors: string[] }>
+  const data = (await res.json()) as {
+    users?: Record<string, string[]>
+    vendors?: string[]
+    error?: string
+  }
+  if (!res.ok && data?.error) throw new Error(data.error)
+  if (!res.ok) throw new Error('매장 목록을 불러오지 못했습니다.')
+  return { users: data.users ?? {}, vendors: data.vendors ?? [] }
 }
 
 export async function loginCheck(params: {

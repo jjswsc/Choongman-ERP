@@ -266,7 +266,7 @@ ${filteredList.map((r) => {
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("stockColName")}</th>
-              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColSpec")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[5rem] text-center">{t("stockColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColQty")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColSafeQty")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColAmount")}</th>
@@ -312,7 +312,7 @@ ${filteredList.map((r) => {
                     <td className="px-5 py-3 min-w-[120px]">
                       <span className="text-sm font-medium text-foreground">{row.name}</span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3 w-40 min-w-[5rem]">
                       <span className="text-[11px] text-muted-foreground">{row.spec}</span>
                     </td>
                     <td className="px-5 py-3 text-right">

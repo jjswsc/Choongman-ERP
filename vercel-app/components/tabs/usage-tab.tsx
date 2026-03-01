@@ -16,6 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
@@ -25,7 +32,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processUsage, getMyUsageHistory, translateTexts, type AppItem, type UsageHistoryItem } from "@/lib/api-client"
-import { Minus, Plus, ShoppingCart, Trash2, Package, Info } from "lucide-react"
+import { Plus, ShoppingCart, Trash2, Package, Info } from "lucide-react"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 function hasValidImage(url: string | undefined): boolean {
@@ -74,6 +81,8 @@ interface CartItem {
   qty: number
 }
 
+type UsageRow = { unitKey: string; qty: string }
+
 export function UsageTab() {
   const { auth } = useAuth()
   const { viewStore } = useStoreView()
@@ -84,7 +93,6 @@ export function UsageTab() {
   const [items, setItems] = useState<AppItem[]>([])
   const [stock, setStock] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [quantity, setQuantity] = useState(0.5)
   const [selectedItem, setSelectedItem] = useState<AppItem | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -96,10 +104,36 @@ export function UsageTab() {
   const [imageLoadError, setImageLoadError] = useState(false)
   const [descriptionModal, setDescriptionModal] = useState<{ name: string; description: string } | null>(null)
   const [descriptionTranslated, setDescriptionTranslated] = useState<string | null>(null)
-  const [fractionRow, setFractionRow] = useState<0 | 1>(0)
-  const [fractionStep, setFractionStep] = useState(0.25)
-  const [smallFractionMultiplier, setSmallFractionMultiplier] = useState(1)
-  const [selectedSmallFraction, setSelectedSmallFraction] = useState(0.02)
+  /** 사용 수량 여러 행 (재고 조정과 동일: 단위 + 수량, 합산 후 장바구니 추가) */
+  const [usageRows, setUsageRows] = useState<UsageRow[]>([])
+
+  const usageUnitOptions = useMemo(() => {
+    const std = selectedItem?.standardUnits?.filter((o) => (o.unit || "").trim() && o.totalQuantity > 0) ?? []
+    return [{ kind: "spec" as const }, ...std.map((o) => ({ kind: "standard" as const, unit: o.unit, totalQuantity: o.totalQuantity }))]
+  }, [selectedItem])
+
+  const defaultUsageRow = useCallback((): UsageRow => {
+    const first = usageUnitOptions[0]
+    return { unitKey: first?.kind === "spec" ? "spec" : first ? `${first.unit}::${first.totalQuantity}` : "spec", qty: "" }
+  }, [usageUnitOptions])
+
+  const usageRowToSpecQty = useCallback((unitKey: string, qtyStr: string): number => {
+    const n = Number(qtyStr)
+    if (isNaN(n) || n === 0) return 0
+    if (!unitKey || unitKey === "spec") return n
+    const [, tqStr] = unitKey.split("::")
+    const tq = Number(tqStr)
+    return tq > 0 ? n / tq : n
+  }, [])
+
+  const totalUsageSpecQty = useMemo(
+    () => usageRows.reduce((sum, r) => sum + usageRowToSpecQty(r.unitKey, r.qty), 0),
+    [usageRows, usageRowToSpecQty]
+  )
+
+  useEffect(() => {
+    if (selectedItem) setUsageRows([defaultUsageRow()])
+  }, [selectedItem?.code, defaultUsageRow])
 
   useEffect(() => {
     if (!descriptionModal?.description?.trim()) {
@@ -146,19 +180,29 @@ export function UsageTab() {
       .finally(() => setHistoryLoading(false))
   }, [effectiveStore, histStart, histEnd])
 
+  const addUsageRow = () => setUsageRows((prev) => [...prev, defaultUsageRow()])
+  const removeUsageRow = (idx: number) => setUsageRows((prev) => prev.filter((_, i) => i !== idx))
+  const setUsageRow = (idx: number, upd: Partial<UsageRow>) =>
+    setUsageRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...upd } : r)))
+
   const addToCart = () => {
     if (!selectedItem) return
+    const qtyToAdd = Math.round(totalUsageSpecQty * 1e6) / 1e6
+    if (qtyToAdd === 0) {
+      alert(t("stockAdjustQtyRequired") || "수량을 입력해 주세요.")
+      return
+    }
     setCart((prev) => {
       const existing = prev.find((x) => x.code === selectedItem.code)
       if (existing) {
         return prev.map((x) =>
-          x.code === selectedItem.code ? { ...x, qty: x.qty + quantity } : x
+          x.code === selectedItem.code ? { ...x, qty: x.qty + qtyToAdd } : x
         )
       }
-      return [...prev, { code: selectedItem.code, name: selectedItem.name, qty: quantity }]
+      return [...prev, { code: selectedItem.code, name: selectedItem.name, qty: qtyToAdd }]
     })
     setSelectedItem(null)
-    setQuantity(0.5)
+    setUsageRows([defaultUsageRow()])
   }
 
   const removeFromCart = (code: string) => {
@@ -342,76 +386,71 @@ export function UsageTab() {
             </CardContent>
           </Card>
 
-          <div className="flex flex-col gap-2 shrink-0">
-            <div className="flex flex-col gap-1.5">
-              <div className={`flex items-center gap-1 ${fractionRow === 1 ? "flex-nowrap" : "flex-wrap"}`}>
-                {fractionRow === 0 && <span className="text-xs text-muted-foreground shrink-0 py-1.5">{t("useQtyFraction") || "분수"}:</span>}
-                {fractionRow === 0 ? (
-                  <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(1); setFractionStep(1); }}>1</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(0.5); setFractionStep(0.5); }}>½</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(0.25); setFractionStep(0.25); }}>¼</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(0.2); setFractionStep(0.2); }}>⅕</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { const v = Math.round((1 / 6) * 1000) / 1000; setQuantity(v); setFractionStep(v); }}>⅙</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(0.1); setFractionStep(0.1); }}>⅒</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-lg font-medium shrink-0" onClick={() => { setQuantity(0.04); setFractionStep(0.04); }}>1/25</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2 min-w-0 text-lg font-medium shrink-0" onClick={() => setFractionRow(1)} title={t("switchFraction") || "전환"}>⇄</Button>
-                  </>
-                ) : (
-                  <>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.02); setFractionStep(0.02); setSelectedSmallFraction(0.02); }}>1/50</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.01); setFractionStep(0.01); setSelectedSmallFraction(0.01); }}>1/100</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { setQuantity(0.005); setFractionStep(0.005); setSelectedSmallFraction(0.005); }}>1/200</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-3 font-medium shrink-0" onClick={() => { const v = 1 / 1200; setQuantity(v); setFractionStep(v); setSelectedSmallFraction(v); }}>1/1200</Button>
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 font-medium shrink-0" onClick={() => setFractionRow(0)} title={t("switchFraction") || "전환"}>⇄</Button>
-                    <Input
-                      type="number"
-                      min={1}
-                      step={1}
-                      className="h-9 w-12 text-center text-sm shrink-0"
-                      value={smallFractionMultiplier}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10)
-                        if (!isNaN(v) && v >= 1) setSmallFractionMultiplier(v)
-                      }}
-                    />
-                    <Button type="button" variant="outline" size="sm" className="h-9 px-2.5 text-xs shrink-0" onClick={() => { const m = Math.max(1, smallFractionMultiplier); setQuantity(m * selectedSmallFraction); }}>
-                      {t("apply")}
-                    </Button>
-                  </>
+          {selectedItem && (
+            <Card className="shrink-0 border-2 border-primary/40 bg-primary/5 shadow-md">
+              <CardHeader className="pb-2 pt-4 px-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-bold text-foreground">{t("useQtyLabel") || "사용 수량"}</CardTitle>
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1 border-primary/50 bg-background" onClick={addUsageRow}>
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("itemsAdd") || "추가"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-3">
+                <div className="space-y-2.5 max-h-[220px] overflow-y-auto">
+                  {usageRows.map((row, idx) => (
+                    <div key={idx} className="flex gap-2 items-center flex-nowrap">
+                      <Select value={row.unitKey} onValueChange={(v) => setUsageRow(idx, { unitKey: v })}>
+                        <SelectTrigger className="w-[180px] min-w-[180px] shrink-0 text-sm h-10 overflow-hidden text-left border-primary/30 bg-background">
+                          <SelectValue placeholder={t("stockAdjustUnit") || "단위"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {usageUnitOptions.map((o) => {
+                            const val = o.kind === "spec" ? "spec" : `${o.unit}::${o.totalQuantity}`
+                            const label = o.kind === "spec"
+                              ? (t("stockAdjustUnitSpec") || "규격 (1개)")
+                              : `${o.unit} (${o.totalQuantity} = 1 ${t("specUnit") || "규격"})`
+                            return (
+                              <SelectItem key={val} value={val}>
+                                {label}
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        placeholder={t("stockAdjustDiffPh") || "수량"}
+                        value={row.qty}
+                        onChange={(e) => setUsageRow(idx, { qty: e.target.value })}
+                        className="text-sm w-28 min-w-[5rem] h-10 shrink-0 border-primary/30 font-medium"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 shrink-0 text-destructive hover:bg-destructive/10"
+                        onClick={() => removeUsageRow(idx)}
+                        aria-label={t("cancel")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                {usageRows.length >= 2 && (
+                  <p className="text-sm font-semibold text-foreground">
+                    {t("stockAdjustTotalLabel") || "합계"}: <span className="tabular-nums font-bold text-primary">{Math.round(totalUsageSpecQty * 1e4) / 1e4}</span> {t("specUnit") || "규격"}
+                  </p>
                 )}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center rounded-xl border border-border bg-card flex-1">
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-l-xl text-primary" onClick={() => setQuantity(Math.max(0.0001, quantity - fractionStep))}>
-                  <Minus className="h-4 w-4" />
+                <Button className="h-12 w-full font-bold text-base" size="lg" onClick={addToCart} disabled={!selectedItem}>
+                  <ShoppingCart className="mr-2 h-5 w-5" />
+                  {t("addUsage")}
                 </Button>
-                <Input
-                  type="number"
-                  step="0.0001"
-                  min="0.0001"
-                  className="h-10 w-16 border-0 text-center text-sm font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  value={quantity}
-                  onChange={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (!isNaN(v) && v >= 0.0001) setQuantity(v)
-                  }}
-                  onBlur={(e) => {
-                    const v = parseFloat(e.target.value)
-                    if (isNaN(v) || v < 0.0001) setQuantity(0.5)
-                  }}
-                />
-                <Button variant="ghost" size="icon" className="h-10 w-10 rounded-r-xl text-primary" onClick={() => setQuantity(quantity + fractionStep)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
-                <ShoppingCart className="mr-2 h-4 w-4" />
-                {t("addUsage")}
-              </Button>
-            </div>
-            </div>
-          </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">

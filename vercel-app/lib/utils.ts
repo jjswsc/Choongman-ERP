@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** HTML에 삽입할 문자열 이스케이프 (XSS 방지). innerHTML/문자열 템플릿에 사용 */
+export function escapeHtml(s: string | null | undefined): string {
+  const str = String(s ?? '')
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 /** 직원 닉네임/역할 표시 시 "Part-Time"을 "P/T"로 줄여서 표시 */
 export function displayLabelShort(val: string | null | undefined): string {
   const s = String(val ?? '').trim()

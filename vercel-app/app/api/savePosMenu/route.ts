@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       optionSelectionGroups?: string[]
       kitchenPrinter?: number | null
       cookingTimeMin?: number | null
+      isBanban?: boolean
       id?: string
     }
 
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       : null
     const kitchenPrinter = body.kitchenPrinter === 1 || body.kitchenPrinter === 2 ? body.kitchenPrinter : null
     const cookingTimeMin = body.cookingTimeMin != null && Number.isFinite(body.cookingTimeMin) && body.cookingTimeMin >= 0 ? body.cookingTimeMin : null
+    const isBanban = body.isBanban === true
     const baseRow: Record<string, unknown> = {
       code,
       name,
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
     if (optionSelectionGroups) baseRow.option_selection_groups = optionSelectionGroups
     if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
     if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
+    baseRow.is_banban = isBanban
 
     const doSave = async (row: Record<string, unknown>): Promise<{ success: boolean; message: string; newId?: string }> => {
       if (editingId) {
@@ -71,8 +74,10 @@ export async function POST(req: NextRequest) {
           try {
             await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
           } catch (colErr: unknown) {
-            if (String(colErr).includes('category_main') || String(colErr).includes('42703')) {
-              const { category_main: _cm, ...rowWithout } = row
+            if (String(colErr).includes('category_main') || String(colErr).includes('42703') || String(colErr).includes('is_banban')) {
+              const rowWithout = { ...row } as Record<string, unknown>
+              if (String(colErr).includes('category_main')) delete rowWithout.category_main
+              if (String(colErr).includes('is_banban')) delete rowWithout.is_banban
               await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, rowWithout)
             } else throw colErr
           }
@@ -111,11 +116,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { headers })
     } catch (saveErr: unknown) {
       const err = String(saveErr)
-      if ((optionSelectionGroups || kitchenPrinter != null || cookingTimeMin != null) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('42703'))) {
+      if ((optionSelectionGroups || kitchenPrinter != null || cookingTimeMin != null || isBanban) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('is_banban') || err.includes('42703'))) {
         const rowWithout = { ...baseRow }
         delete rowWithout.option_selection_groups
         delete rowWithout.kitchen_printer
         delete rowWithout.cooking_time_min
+        delete rowWithout.is_banban
         const result = await doSave(rowWithout)
         return NextResponse.json(result, { headers })
       }

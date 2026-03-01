@@ -67,7 +67,7 @@ cp .env.example .env
 |------|------|------|
 | `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ |
 | `SUPABASE_ANON_KEY` | Supabase anon 키 | ✅ |
-| `JWT_SECRET` | JWT 서명용 (32자 이상). 미설정 시 ANON_KEY 사용 | 권장 |
+| `JWT_SECRET` | JWT 서명용 (32자 이상). 미설정 시 ANON_KEY 사용. **운영(Vercel)에서는 둘 중 하나 필수** | 권장 |
 | `RESEND_API_KEY` | 급여 명세서 이메일 발송 (resend.com) | 선택 |
 | `RESEND_FROM` | 발신 이메일 주소 | 선택 |
 
@@ -91,6 +91,9 @@ npm run dev
    - `supabase_migration_consolidated.sql` → 동일하게 실행 (중복 제거, 유니크 제약, 추가 테이블)
 
 상세 스키마는 [docs/DATABASE.md](./docs/DATABASE.md) 참고.
+
+- **POS 메뉴 코드·대분류 일괄 변경**: `scripts/update-dosirak-codes-to-k.sql` — (1) 도시락 3개 메뉴 코드를 k001, k002, k003으로 변경, (2) 코드가 c로 시작하는 메뉴의 대분류를 Chicken으로 일괄 변경. Supabase SQL Editor에서 실행.
+- **반반 메뉴**: `scripts/pos_menus_is_banban.sql` — `is_banban` 컬럼 추가. 반반 = 다른 치킨(S 순살) 2개를 골라 한 상으로 주문, 원가는 각 0.5씩. 관리자에서 해당 메뉴에 "반반 메뉴 (맛 2개 선택)" 체크.
 
 ## 배포 (Vercel)
 
@@ -125,3 +128,18 @@ npm run dev
 - **로그인 실패**: Supabase `store_settings`에 매장/직원이 등록되어 있는지 확인
 - **API 401**: JWT 만료 또는 `JWT_SECRET` 불일치
 - **빌드 실패**: `pnpm install` 후 `pnpm build` 재시도. Node 18+ 사용 확인
+
+## 의존성·보안
+
+- `npm audit`으로 취약점 확인. `npm audit fix`로 안전한 업데이트 적용.
+- **xlsx**: Excel import/export용. 현재 패키지에 알려진 취약점이 있으며 공식 패치가 없음. 신뢰할 수 있는 Excel 파일만 업로드하도록 제한하는 것을 권장.
+
+### CORS
+
+- API는 기본적으로 `Access-Control-Allow-Origin: *`로 응답합니다.
+- **운영에서 출처 제한**이 필요하면 환경 변수 `ALLOWED_ORIGIN`에 허용할 프론트엔드 URL을 설정하세요. (예: `https://your-erp.vercel.app`) 미설정 시 `*`가 사용됩니다.
+
+### 로그인 Rate Limit
+
+- `POST /api/loginCheck`는 **IP당 분당 15회**로 제한됩니다. 초과 시 429 응답과 "요청이 너무 많습니다" 메시지를 반환합니다. (무차별 대입 완화용)
+- Vercel 등 다중 인스턴스 환경에서는 인스턴스별로 카운트되므로, 더 강한 제한이 필요하면 Vercel Firewall·Cloudflare 등 외부 rate limit 사용을 권장합니다.

@@ -105,12 +105,21 @@ export async function processPosStockDeduction(orderId: number): Promise<{ succe
         await deductMenuIngredients(menuId, optionId, menuQty, usageByItem)
       }
     } else {
-      const parts = String(it.id ?? '').split('-')
-      const menuId = parts[0] ?? ''
-      const optionId = parts[1] || null
-      const menuQty = cartQty
-      if (!menuId) continue
-      await deductMenuIngredients(menuId, optionId, menuQty, usageByItem)
+      const itTyped = it as { id?: string; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string }
+      if (itTyped.menuId1 && itTyped.menuId2) {
+        const halfQty = cartQty * 0.5
+        const opt1 = itTyped.optionId1 ? String(itTyped.optionId1) : null
+        const opt2 = itTyped.optionId2 ? String(itTyped.optionId2) : null
+        await deductMenuIngredients(String(itTyped.menuId1), opt1, halfQty, usageByItem)
+        await deductMenuIngredients(String(itTyped.menuId2), opt2, halfQty, usageByItem)
+      } else {
+        const parts = String(it.id ?? '').split('-')
+        const menuId = parts[0] ?? ''
+        const optionId = parts[1] || null
+        const menuQty = cartQty
+        if (!menuId) continue
+        await deductMenuIngredients(menuId, optionId, menuQty, usageByItem)
+      }
     }
   }
 

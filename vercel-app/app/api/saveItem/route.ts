@@ -29,6 +29,9 @@ export async function POST(request: NextRequest) {
       description?: string
       editingCode?: string
       purchaseSource?: 'hq' | 'store'
+      stockBaseUnit?: string
+      stockUnitOptions?: { unit: string; factor: number }[]
+      standardUnits?: { unit: string; totalQuantity: number }[]
     }
 
     code = String(body.code || '').trim()
@@ -42,6 +45,16 @@ export async function POST(request: NextRequest) {
     const purchaseSource = (body.purchaseSource || 'hq') === 'store' ? 'store' : 'hq'
     const categoryRaw = String(body.category || '').trim()
     const category = purchaseSource === 'store' && !categoryRaw ? 'Store Only' : categoryRaw
+    const stockUnitOpts = Array.isArray(body.stockUnitOptions)
+      ? body.stockUnitOptions
+          .filter((x) => x && String(x.unit || '').trim())
+          .map((x) => ({ unit: String(x.unit).trim(), factor: Number(x.factor) || 1 }))
+      : []
+    const standardUnitsDb = Array.isArray(body.standardUnits)
+      ? body.standardUnits
+          .filter((x) => x && String(x.unit || '').trim() && Number(x.totalQuantity) > 0)
+          .map((x) => ({ unit: String(x.unit).trim(), total_quantity: Number(x.totalQuantity) || 1 }))
+      : []
     const row = {
       code,
       name,
@@ -57,6 +70,9 @@ export async function POST(request: NextRequest) {
       description: String(body.description || '').trim() || null,
       tax,
       purchase_source: purchaseSource,
+      stock_base_unit: String(body.stockBaseUnit || '').trim(),
+      stock_unit_options: stockUnitOpts,
+      standard_units: standardUnitsDb,
     }
 
     const filterCode = editingCode || code
@@ -65,13 +81,25 @@ export async function POST(request: NextRequest) {
       `code=eq.${encodeURIComponent(filterCode)}`
     )) as { id?: number }[] | null
 
-    if (existing && existing.length > 0) {
-      await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(filterCode)}`, row)
-      return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    const tryWrite = async (payload: Record<string, unknown>) => {
+      if (existing && existing.length > 0) {
+        await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(filterCode)}`, payload)
+      } else {
+        await supabaseInsert('items', payload)
+      }
     }
-
-    await supabaseInsert('items', row)
-    return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
+    try {
+      await tryWrite(row)
+    } catch (colErr) {
+      const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
+      if (/stock_base_unit|stock_unit_options|column.*does not exist/i.test(errMsg)) {
+        const { stock_base_unit: _sbu, stock_unit_options: _suo, ...rowWithoutStock } = row
+        await tryWrite(rowWithoutStock)
+      } else {
+        throw colErr
+      }
+    }
+    return NextResponse.json({ success: true, message: existing?.length ? '수정되었습니다.' : '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveItem:', e)
     const errMsg = e instanceof Error ? e.message : String(e)

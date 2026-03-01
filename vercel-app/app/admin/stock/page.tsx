@@ -101,6 +101,9 @@ export default function StockPage() {
         cost: i.cost ?? i.price ?? 0,
         category: i.category,
         purchaseSource: i.purchaseSource ?? 'hq',
+        stockBaseUnit: i.stockBaseUnit,
+        stockUnitOptions: i.stockUnitOptions,
+        standardUnits: i.standardUnits,
       }))
       setList(mapped)
     } catch {

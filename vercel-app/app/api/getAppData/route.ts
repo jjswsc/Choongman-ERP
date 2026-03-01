@@ -14,17 +14,42 @@ export interface AppItem {
   image: string
   description?: string
   purchaseSource?: 'hq' | 'store'
+  /** 재고 기본 단위. 비어 있으면 unit 사용 (하위 호환) */
+  stockBaseUnit?: string
+  /** 조정/조사 시 선택 단위 (하위 호환) */
+  stockUnitOptions?: { unit: string; factor: number }[]
+  /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 → 입력÷totalQuantity = 규격 수 */
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }
 
-const ITEMS_SELECT = 'code,category,name,spec,price,cost,tax,image,description,purchase_source,order_disabled'
+const ITEMS_SELECT_FULL = 'code,category,name,spec,unit,total_quantity,price,cost,tax,image,description,purchase_source,order_disabled,stock_base_unit,stock_unit_options,standard_units'
+const ITEMS_SELECT_MINIMAL = 'code,category,name,spec,unit,total_quantity,price,cost,tax,image,description,purchase_source,order_disabled'
+
+function parseStockUnitOptions(val: unknown): { unit: string; factor: number }[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter((x): x is { unit?: string; factor?: number } => x != null && typeof x === 'object')
+    .map((x) => ({ unit: String(x.unit ?? '').trim(), factor: Number(x.factor) || 1 }))
+    .filter((x) => x.unit.length > 0)
+}
+
+function parseStandardUnits(val: unknown): { unit: string; totalQuantity: number }[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter((x): x is { unit?: string; total_quantity?: number } => x != null && typeof x === 'object')
+    .map((x) => ({ unit: String(x.unit ?? '').trim(), totalQuantity: Number(x.total_quantity) || 1 }))
+    .filter((x) => x.unit.length > 0 && x.totalQuantity > 0)
+}
 
 async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
   const isOrderScope = String(scope || '').toLowerCase().trim() === 'order'
-  let rows: {
+  type Row = {
     code?: string
     category?: string
     name?: string
     spec?: string
+    unit?: string
+    total_quantity?: number | null
     price?: number
     cost?: number
     tax?: string
@@ -32,16 +57,33 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
     description?: string
     purchase_source?: string
     order_disabled?: boolean
-  }[] | null
-
-  if (isOrderScope) {
-    rows = (await supabaseSelectFilter(
-      'items',
-      `or=(purchase_source.eq.hq,purchase_source.is.null)`,
-      { order: 'id.asc', select: ITEMS_SELECT }
-    )) as typeof rows
-  } else {
-    rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT })) as typeof rows
+    stock_base_unit?: string
+    stock_unit_options?: unknown
+    standard_units?: unknown
+  }
+  let rows: Row[] | null = null
+  let useStockUnits = true
+  try {
+    if (isOrderScope) {
+      rows = (await supabaseSelectFilter(
+        'items',
+        `or=(purchase_source.eq.hq,purchase_source.is.null)`,
+        { order: 'id.asc', select: ITEMS_SELECT_FULL }
+      )) as Row[] | null
+    } else {
+      rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT_FULL })) as Row[] | null
+    }
+  } catch {
+    useStockUnits = false
+    if (isOrderScope) {
+      rows = (await supabaseSelectFilter(
+        'items',
+        `or=(purchase_source.eq.hq,purchase_source.is.null)`,
+        { order: 'id.asc', select: ITEMS_SELECT_MINIMAL }
+      )) as Row[] | null
+    } else {
+      rows = (await supabaseSelect('items', { order: 'id.asc', select: ITEMS_SELECT_MINIMAL })) as Row[] | null
+    }
   }
 
   const safeMap: Record<string, number> = {}
@@ -76,6 +118,25 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
       image: String(row.image || ''),
       description: row.description ? String(row.description).trim() : undefined,
       purchaseSource: ps === 'store' ? 'store' : 'hq',
+      ...(useStockUnits && row
+        ? (() => {
+            const parsed = parseStandardUnits((row as Row).standard_units)
+            const standardUnits =
+              parsed.length > 0
+                ? parsed
+                : (() => {
+                    const u = String((row as Row).unit ?? '').trim()
+                    const tq = Number((row as Row).total_quantity)
+                    if (u && !isNaN(tq) && tq > 0) return [{ unit: u, totalQuantity: tq }]
+                    return []
+                  })()
+            return {
+              stockBaseUnit: String((row as Row).stock_base_unit ?? '').trim(),
+              stockUnitOptions: parseStockUnitOptions((row as Row).stock_unit_options),
+              standardUnits,
+            }
+          })()
+        : {}),
     })
   }
   return list

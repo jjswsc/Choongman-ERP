@@ -6,12 +6,12 @@ importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"
 importScripts("https://www.gstatic.com/firebasejs/11.0.2/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyCn2w84byUN5EeA-JveKmiwqiwIsE_CP_g",
+  authDomain: "cm-erp-63fa8.firebaseapp.com",
+  projectId: "cm-erp-63fa8",
+  storageBucket: "cm-erp-63fa8.appspot.com",
+  messagingSenderId: "675759915232",
+  appId: "1:675759915232:web:225e05c4d9c62a6e4f9085",
 };
 
 if (firebaseConfig.apiKey && firebaseConfig.projectId) {

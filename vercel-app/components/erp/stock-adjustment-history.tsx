@@ -144,7 +144,7 @@ export function StockAdjustmentHistory({ isManager = false, userStore = "" }: St
                   <td className="px-5 py-3 text-xs whitespace-nowrap">{row.date}</td>
                   <td className="px-5 py-3 text-xs font-medium min-w-[145px]" title={row.store}>{row.store}</td>
                   <td className="px-5 py-3 text-xs min-w-[100px] truncate" title={row.item}>{row.item}</td>
-                  <td className="px-5 py-3 text-[11px] text-muted-foreground w-14">{row.spec}</td>
+                  <td className="px-5 py-3 text-[11px] text-muted-foreground w-36 min-w-[7rem]">{row.spec}</td>
                   <td className={cn(
                     "px-5 py-3 text-right font-semibold tabular-nums",
                     row.diff > 0 ? "text-primary" : "text-destructive"

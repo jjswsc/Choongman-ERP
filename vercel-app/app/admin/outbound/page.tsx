@@ -55,6 +55,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { escapeHtml } from "@/lib/utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
@@ -708,7 +709,7 @@ export default function OutboundPage() {
       inv_date: "Date",
       inv_baht_only: "baht only",
     }
-    const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
+    const docNo = escapeHtml((group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim())
     const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
     const d = dateStr.length === 10
       ? `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}/${dateStr.slice(0, 4)}`
@@ -718,15 +719,15 @@ export default function OutboundPage() {
     const grandTotal = totalBaht + vat7
     const grandWords = `( ${grandTotal.toLocaleString()} ${inv.inv_baht_only} )`
     const rawCompanyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
-    const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
-    const address = company?.address || "-"
-    const taxId = company?.taxId || ""
-    const phone = company?.phone || ""
-    const bankInfo = company?.bankInfo || ""
-    const clientName = client?.companyName || group.target || "-"
-    const clientAddr = (client as InvoiceDataClient)?.address || ""
-    const clientTaxId = (client as InvoiceDataClient)?.taxId || ""
-    const clientPhone = (client as InvoiceDataClient)?.phone || ""
+    const companyName = escapeHtml(rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd."))
+    const address = escapeHtml(company?.address || "-")
+    const taxId = escapeHtml(company?.taxId || "")
+    const phone = escapeHtml(company?.phone || "")
+    const bankInfo = escapeHtml(company?.bankInfo || "")
+    const clientName = escapeHtml(client?.companyName || group.target || "-")
+    const clientAddr = escapeHtml((client as InvoiceDataClient)?.address || "")
+    const clientTaxId = escapeHtml((client as InvoiceDataClient)?.taxId || "")
+    const clientPhone = escapeHtml((client as InvoiceDataClient)?.phone || "")
     const borderStyle = "1px solid #cbd5e1"
     const rowBg = (idx: number) => idx % 2 === 0 ? "background:#f8fafc;" : "background:#fff;"
     const cellStyle = (idx: number, extra = "") => `padding:6px 10px;border:${borderStyle};${rowBg(idx)}${extra ? " " + extra : ""}`
@@ -734,7 +735,8 @@ export default function OutboundPage() {
       const amt = Math.round(Math.abs(it.amount || 0))
       const qty = Math.abs(it.qty || 0)
       const price = qty ? amt / qty : 0
-      return `<tr><td style="${cellStyle(idx,"text-align:center;font-weight:500")}">${idx + 1}</td><td style="${cellStyle(idx)}">${(it.name || "-")}${it.spec ? ` ${it.spec}` : ""}</td><td style="${cellStyle(idx,"text-align:center")}">${qty}</td><td style="${cellStyle(idx,"text-align:right")}">${price.toLocaleString()}</td><td style="${cellStyle(idx,"text-align:right")}">0</td><td style="${cellStyle(idx,"text-align:right;font-weight:600")}">${amt.toLocaleString()}</td></tr>`
+      const nameCell = escapeHtml((it.name || "-") + (it.spec ? ` ${it.spec}` : ""))
+      return `<tr><td style="${cellStyle(idx,"text-align:center;font-weight:500")}">${idx + 1}</td><td style="${cellStyle(idx)}">${nameCell}</td><td style="${cellStyle(idx,"text-align:center")}">${qty}</td><td style="${cellStyle(idx,"text-align:right")}">${price.toLocaleString()}</td><td style="${cellStyle(idx,"text-align:right")}">0</td><td style="${cellStyle(idx,"text-align:right;font-weight:600")}">${amt.toLocaleString()}</td></tr>`
     }).join("")
     const tableStyle = "width:100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; border: " + borderStyle + ";"
     const thStyle = "background: #1e40af; color: #fff; padding: 8px 10px; text-align: center; border: " + borderStyle + "; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;"
@@ -746,7 +748,7 @@ export default function OutboundPage() {
       <div>${inv.inv_original_doc}</div>
       <div><strong>${inv.inv_doc_no}:</strong> ${docNo}</div>
       <div><strong>${inv.inv_due_date}:</strong> ${d}</div>
-      <div><strong>${inv.inv_reference}:</strong> ${group.invoiceNo || "-"}</div>
+      <div><strong>${inv.inv_reference}:</strong> ${escapeHtml(group.invoiceNo || "-")}</div>
     </div>
   </div>
   <div style="display:flex; justify-content:space-between; margin-bottom:12px;">

@@ -22,7 +22,7 @@ import { savePosOrderWithOffline } from "@/lib/offline"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
+import { cn, escapeHtml } from "@/lib/utils"
 import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,6 +44,13 @@ import { OfflineBanner } from "@/components/offline-banner"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
+/** 치킨 기본 옵션(S 순살): POS 옵션 목록에서 제외, "기본 (S 순살)" 버튼으로만 선택 */
+function isChickenDefaultOption(name: string | undefined): boolean {
+  if (!name?.trim()) return false
+  const n = name.trim()
+  return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+}
+
 interface CartItem {
   id: string
   name: string
@@ -51,6 +58,11 @@ interface CartItem {
   qty: number
   optionId?: string
   optionName?: string
+  /** 반반: 1번째 맛 메뉴/옵션 ID (S 순살) */
+  menuId1?: string
+  optionId1?: string
+  menuId2?: string
+  optionId2?: string
   promoId?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
@@ -63,11 +75,15 @@ export default function PosPage() {
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
+  const [mainCategories, setMainCategories] = React.useState<string[]>([])
+  const [selectedMainCategory, setSelectedMainCategory] = React.useState<string>("")
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [loading, setLoading] = React.useState(true)
   const [optionPickerMenu, setOptionPickerMenu] = React.useState<PosMenu | null>(null)
   const [optionPickerStep, setOptionPickerStep] = React.useState(0)
   const [optionPickerSelections, setOptionPickerSelections] = React.useState<Record<string, string>>({})
+  /** 반반: 1번째 맛(메뉴) 선택 후 저장, 2번째 맛 선택 시 장바구니 추가 */
+  const [optionPickerBanbanFirst, setOptionPickerBanbanFirst] = React.useState<PosMenu | null>(null)
   const [selectedCategory, setSelectedCategory] = React.useState<string>("")
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [orderType, setOrderType] = React.useState<OrderType>("dine_in")
@@ -156,14 +172,16 @@ export default function PosPage() {
   const loadMenusAndPromos = React.useCallback(() => {
     setLoading(true)
     Promise.all([getPosMenus(), getPosMenuCategories(), getPosMenuOptions(), getPosPromosWithItems()])
-      .then(([list, { categories: cats }, opts, promoList]) => {
+      .then(([list, { categories: cats, mainCategories: mains }, opts, promoList]) => {
         setMenus(list || [])
         setPromos(promoList || [])
         setAllOptions(opts || [])
         const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
         const merged = [...new Set([...(cats || []), ...promoCategories])].sort()
         setCategories(merged)
-        setSelectedCategory((prev) => (merged.includes(prev) ? prev : merged[0] || ""))
+        setMainCategories(mains || [])
+        setSelectedMainCategory((prev) => ((mains || []).includes(prev) ? prev : ""))
+        setSelectedCategory((prev) => (merged.includes(prev) ? prev : ""))
       })
       .catch(() => {
         setMenus([])
@@ -191,13 +209,34 @@ export default function PosPage() {
     return m
   }, [allOptions, orderType])
 
+  /** 반반용: 코드 c로 시작하는 치킨 메뉴 (기본가=S 순살, 옵션 없이 맛 2개 선택) */
+  const chickenMenusForBanban = React.useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return menus.filter(
+      (m) =>
+        m.isActive &&
+        (!m.soldOutDate || m.soldOutDate !== today) &&
+        m.code?.trim().toLowerCase().startsWith("c") &&
+        !m.isBanban
+    )
+  }, [menus])
+
   const todayStr = new Date().toISOString().slice(0, 10)
+  /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
+  const categoriesForSelectedMain = React.useMemo(() => {
+    if (!selectedMainCategory) return [] as string[]
+    const set = new Set(menus.filter((m) => (m.categoryMain ?? "") === selectedMainCategory).map((m) => m.category).filter(Boolean))
+    return Array.from(set).sort()
+  }, [menus, selectedMainCategory])
+
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
-    if (!selectedCategory) return notSoldOut
-    return notSoldOut.filter((m) => m.category === selectedCategory)
-  }, [menus, selectedCategory, todayStr])
+    if (!selectedMainCategory || !selectedCategory) return []
+    return notSoldOut.filter(
+      (m) => (m.categoryMain ?? "") === selectedMainCategory && m.category === selectedCategory
+    )
+  }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
   const filteredPromos = React.useMemo(() => {
     const active = promos.filter((p) => p.isActive)
@@ -242,12 +281,45 @@ export default function PosPage() {
   }
 
   const addToCart = (menu: PosMenu) => {
+    if (menu.isBanban) {
+      setOptionPickerBanbanFirst(null)
+      setOptionPickerMenu(menu)
+      return
+    }
     const opts = optionsByMenuId[menu.id]
     if (opts && opts.length > 0) {
       setOptionPickerMenu(menu)
       return
     }
     addToCartWithOption(menu, null)
+  }
+
+  /** 반반: 치킨 메뉴 2개(기본가=S 순살)를 골라 한 상으로 추가, 원가 = 각 0.5씩 */
+  const addToCartBanban = (banbanMenu: PosMenu, menu1: PosMenu, menu2: PosMenu) => {
+    const ids = [menu1.id, menu2.id].sort()
+    const cartId = `banban-${ids.join("-")}`
+    const name = `${banbanMenu.name} (${menu1.name} / ${menu2.name})`
+    const price = Math.round((getMenuPrice(menu1) + getMenuPrice(menu2)) / 2)
+    setCart((prev) => {
+      const i = prev.findIndex((x) => x.id === cartId)
+      if (i >= 0) {
+        const n = [...prev]
+        n[i] = { ...n[i], qty: n[i].qty + 1 }
+        return n
+      }
+      return [...prev, {
+        id: cartId,
+        name,
+        price,
+        qty: 1,
+        menuId1: menu1.id,
+        optionId1: undefined,
+        menuId2: menu2.id,
+        optionId2: undefined,
+      }]
+    })
+    setOptionPickerMenu(null)
+    setOptionPickerBanbanFirst(null)
   }
 
   const addPromoToCart = (promo: PosPromoWithItems) => {
@@ -308,14 +380,14 @@ export default function PosPage() {
     if (!order.items?.length) return
     setCart((prev) => {
       const next = [...prev]
-      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
+      for (const it of order.items as { id?: string; name?: string; price?: number; qty?: number; menuId1?: string; optionId1?: string; menuId2?: string; optionId2?: string; promoId?: string; promoItems?: { menuId: string; optionId: string | null; quantity: number }[] }[]) {
         const id = String(it.id ?? "")
         const name = String(it.name ?? "")
         const price = Number(it.price ?? 0)
         const qty = Number(it.qty ?? 1)
         if (!id) continue
         const i = next.findIndex((x) => x.id === id)
-        const item = { id, name, price, qty, ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
+        const item = { id, name, price, qty, ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }), ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }) }
         if (i >= 0) {
           next[i] = { ...next[i], qty: next[i].qty + qty }
         } else {
@@ -409,6 +481,7 @@ export default function PosPage() {
           name: it.name,
           price: it.price,
           qty: it.qty,
+          ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
           ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }),
         })),
       })
@@ -520,20 +593,20 @@ export default function PosPage() {
         if (!w) return
         const html = `
           <!DOCTYPE html>
-          <html><head><title>${slip.label}</title>
+          <html><head><title>${escapeHtml(slip.label)}</title>
           <style>
             body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
             .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
             .k-row { margin: 6px 0; font-size: 18px; }
             .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
           </style></head><body>
-          <div class="k-header">${slip.label}</div>
-          <div class="k-row"><strong>${receiptData.orderNo}</strong></div>
-          <div class="k-row">${receiptData.storeCode} · ${orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}${receiptData.tableName ? ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}` : ""}</div>
+          <div class="k-header">${escapeHtml(slip.label)}</div>
+          <div class="k-row"><strong>${escapeHtml(receiptData.orderNo)}</strong></div>
+          <div class="k-row">${escapeHtml(receiptData.storeCode + " · " + (orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}` : ""))}</div>
           <div class="k-row">${new Date().toLocaleString("ko-KR")}</div>
           <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${it.name} × ${it.qty}</div>`).join("")}
-          ${receiptData.memo ? `<div class="k-memo">${t("posCustomerMemo") || "메모"}: ${receiptData.memo}</div>` : ""}
+          ${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join("")}
+          ${receiptData.memo ? `<div class="k-memo">${escapeHtml((t("posCustomerMemo") || "메모") + ": " + receiptData.memo)}</div>` : ""}
           </body></html>`
         w.document.write(html)
         w.document.close()
@@ -613,6 +686,7 @@ export default function PosPage() {
             ))}
           </div>
         </div>
+        {/* 2단계: 대분류 선택 */}
         <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900/50 px-3 py-2">
           <Button
             variant="ghost"
@@ -620,27 +694,49 @@ export default function PosPage() {
             className="h-8 shrink-0 text-slate-400 hover:text-white"
             onClick={loadMenusAndPromos}
             disabled={loading}
-            title="메뉴·프로모션 새로고침"
+            title={t("posRefreshMenus") || "메뉴 새로고침"}
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
+          <span className="shrink-0 text-xs text-slate-400">{t("posMainCategory") || "대분류"}</span>
           <div className="flex flex-1 gap-2 overflow-x-auto">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setSelectedCategory(c)}
-              className={cn(
-                "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
-                selectedCategory === c
-                  ? "bg-amber-500 text-slate-900"
-                  : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-              )}
-            >
-              {c}
-            </button>
-          ))}
+            {mainCategories.map((main) => (
+              <button
+                key={main}
+                onClick={() => {
+                  setSelectedMainCategory(main)
+                  setSelectedCategory("")
+                }}
+                className={cn(
+                  "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
+                  selectedMainCategory === main ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                )}
+              >
+                {main}
+              </button>
+            ))}
           </div>
         </div>
+        {/* 3단계: 카테고리(소분류) 선택 */}
+        {selectedMainCategory && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-800/50 px-3 py-2">
+            <span className="shrink-0 text-xs text-slate-400">{t("posCategory") || "카테고리"}</span>
+            <div className="flex flex-1 gap-2 overflow-x-auto">
+              {categoriesForSelectedMain.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setSelectedCategory(c)}
+                  className={cn(
+                    "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
+                    selectedCategory === c ? "bg-amber-500 text-slate-900" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  )}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {filteredPromos.map((p) => (
@@ -690,8 +786,18 @@ export default function PosPage() {
               </button>
             ))}
           </div>
-          {filteredMenus.length === 0 && filteredPromos.length === 0 && (
-            <div className="py-12 text-center text-slate-400">
+          {!selectedMainCategory && (
+            <div className="col-span-full py-12 text-center text-slate-400">
+              {t("posSelectMainCategoryFirst") || "주문 유형 선택 후, 위에서 대분류를 선택하세요."}
+            </div>
+          )}
+          {selectedMainCategory && !selectedCategory && (
+            <div className="col-span-full py-12 text-center text-slate-400">
+              {t("posSelectCategoryFirst") || "카테고리를 선택하세요."}
+            </div>
+          )}
+          {selectedMainCategory && selectedCategory && filteredMenus.length === 0 && filteredPromos.length === 0 && (
+            <div className="col-span-full py-12 text-center text-slate-400">
               {t("posNoMenus") || "등록된 메뉴가 없습니다."}
             </div>
           )}
@@ -1108,6 +1214,7 @@ export default function PosPage() {
             setOptionPickerMenu(null)
             setOptionPickerStep(0)
             setOptionPickerSelections({})
+            setOptionPickerBanbanFirst(null)
           }
         }}
       >
@@ -1121,14 +1228,61 @@ export default function PosPage() {
             </DialogTitle>
           </DialogHeader>
           {optionPickerMenu && (() => {
+            if (optionPickerMenu.isBanban) {
+              const first = optionPickerBanbanFirst
+              const list = chickenMenusForBanban
+              return (
+                <div className="flex flex-col gap-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    {first ? (t("posBanbanSecondHalf") || "2번째 맛") : (t("posBanbanFirstHalf") || "1번째 맛")}
+                  </p>
+                  {first && (
+                    <p className="text-xs font-medium text-amber-400">
+                      {t("posBanbanFirstSelected") || "1번째"}: {first.name}
+                    </p>
+                  )}
+                  {list.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">{t("posBanbanNoChicken") || "치킨 메뉴가 없습니다."}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {list.map((menu) => (
+                        <button
+                          key={menu.id}
+                          type="button"
+                          onClick={() => {
+                            if (first) {
+                              addToCartBanban(optionPickerMenu, first, menu)
+                            } else {
+                              setOptionPickerBanbanFirst(menu)
+                            }
+                          }}
+                          className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
+                        >
+                          <span className="block font-medium">{menu.name}</span>
+                          <span className="text-xs text-amber-400">{getMenuPrice(menu).toLocaleString()} ฿</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {first && (
+                    <Button variant="ghost" size="sm" className="text-xs" onClick={() => setOptionPickerBanbanFirst(null)}>
+                      ← {t("posBack") || "이전"} ({t("posBanbanFirstHalf") || "1번째 맛 다시"})
+                    </Button>
+                  )}
+                </div>
+              )
+            }
             const opts = optionsByMenuId[optionPickerMenu.id] || []
+            const isChickenBasePrice = (optionPickerMenu.categoryMain ?? "") === "Chicken" || optionPickerMenu.code?.trim().toLowerCase().startsWith("c")
+            const optsToShow = isChickenBasePrice ? opts.filter((o) => !isChickenDefaultOption(o.name)) : opts
             const groups = optionPickerMenu.optionSelectionGroups || []
             const optsWithSteps = opts.filter(
               (o) => o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0
             )
-            const useMultiStep = groups.length > 0 && optsWithSteps.length > 0
-            const isChickenBasePrice = (optionPickerMenu.categoryMain ?? "") === "Chicken"
-            const defaultBtn = isChickenBasePrice && (
+            const optsWithStepsToShow = isChickenBasePrice ? optsWithSteps.filter((o) => !isChickenDefaultOption(o.name)) : optsWithSteps
+            const useMultiStep = groups.length > 0 && optsWithStepsToShow.length > 0
+            /** S 사이즈(기본 S 순살)는 배달에서만 사용: 배달일 때만 "기본 (S 순살)" 버튼 표시 */
+            const defaultBtn = isChickenBasePrice && orderType === "delivery" && (
               <button
                 type="button"
                 onClick={() => addToCartWithOption(optionPickerMenu, null, "S 순살")}
@@ -1140,12 +1294,12 @@ export default function PosPage() {
             )
             if (useMultiStep) {
               const groupKey = groups[optionPickerStep]
-              const values = [...new Set(optsWithSteps.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
+              const values = [...new Set(optsWithStepsToShow.map((o) => o.optionStepValues?.[groupKey]).filter(Boolean))] as string[]
               const handleStepSelect = (value: string) => {
                 const nextSelections = { ...optionPickerSelections, [groupKey]: value }
                 setOptionPickerSelections(nextSelections)
                 if (optionPickerStep >= groups.length - 1) {
-                  const match = optsWithSteps.find((o) =>
+                  const match = optsWithStepsToShow.find((o) =>
                     groups.every((g) => o.optionStepValues?.[g] === nextSelections[g])
                   )
                   if (match) {
@@ -1189,7 +1343,7 @@ export default function PosPage() {
             return (
               <div className="flex flex-col gap-2 py-2">
                 {defaultBtn}
-                {opts.map((opt) => (
+                {optsToShow.map((opt) => (
                   <button
                     key={opt.id}
                     onClick={() => addToCartWithOption(optionPickerMenu, opt)}

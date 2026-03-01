@@ -63,7 +63,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       })
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e)
-        setLoadError(msg.includes('시간 초과') ? msg : '매장 목록을 불러오지 못했습니다. 네트워크와 SUPABASE 환경 변수를 확인해 주세요.')
+        setLoadError(msg)
         setLoginData({})
         setLoading(false)
       })

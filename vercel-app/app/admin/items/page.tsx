@@ -26,8 +26,13 @@ const emptyForm: ItemFormData = {
   totalQuantity: "",
   description: "",
   price: "",
+  priceInputVatIncluded: false,
   cost: "",
+  costInputVatIncluded: false,
   purchaseSource: "hq",
+  stockBaseUnit: "",
+  stockUnitOptions: [],
+  standardUnits: [],
 }
 
 export default function ItemsPage() {
@@ -80,6 +85,15 @@ export default function ItemsPage() {
     if (editingCode) {
       const p = products.find((x) => x.code === editingCode)
       if (p) {
+        const derivedStandardUnits = (() => {
+          const su = Array.isArray(p.standardUnits) ? p.standardUnits : []
+          if (su.length > 0) return su
+          const u = p.unit ?? ""
+          const tq = p.totalQuantity != null ? Number(p.totalQuantity) : 0
+          if (u || tq > 0) return [{ unit: u, totalQuantity: tq > 0 ? tq : 1 }]
+          return []
+        })()
+        const firstRow = derivedStandardUnits[0]
         setFormData({
           code: p.code,
           category: p.category,
@@ -89,12 +103,17 @@ export default function ItemsPage() {
           imageUrl: p.imageUrl,
           taxType: p.taxType,
           spec: p.spec,
-          unit: p.unit ?? "",
-          totalQuantity: p.totalQuantity != null ? String(p.totalQuantity) : "",
+          unit: firstRow ? firstRow.unit : (p.unit ?? ""),
+          totalQuantity: firstRow ? String(firstRow.totalQuantity) : (p.totalQuantity != null ? String(p.totalQuantity) : ""),
           description: p.description ?? "",
           price: String(p.price),
+          priceInputVatIncluded: false,
           cost: String(p.cost),
+          costInputVatIncluded: false,
           purchaseSource: p.purchaseSource ?? "hq",
+          stockBaseUnit: p.stockBaseUnit ?? "",
+          stockUnitOptions: Array.isArray(p.stockUnitOptions) ? p.stockUnitOptions : [],
+          standardUnits: derivedStandardUnits,
         })
       }
     } else {
@@ -113,7 +132,18 @@ export default function ItemsPage() {
       alert(t("itemsAlertCodeExists"))
       return
     }
-    const totalQty = formData.totalQuantity.trim() ? parseFloat(formData.totalQuantity) : null
+    const validStandardUnits = (formData.standardUnits || []).filter((o) => (o.unit || "").trim() && o.totalQuantity > 0)
+    const firstRow = validStandardUnits[0]
+    const unitForSave = firstRow ? firstRow.unit.trim() : formData.unit.trim()
+    const totalQty = firstRow ? firstRow.totalQuantity : (formData.totalQuantity.trim() ? parseFloat(formData.totalQuantity) : null)
+    const rawPrice = Number(formData.price) || 0
+    const priceToSave = formData.taxType === "taxable" && formData.priceInputVatIncluded
+      ? Math.round((rawPrice / 1.07) * 100) / 100
+      : rawPrice
+    const rawCost = Number(formData.cost) || 0
+    const costToSave = formData.taxType === "taxable" && formData.costInputVatIncluded
+      ? Math.round((rawCost / 1.07) * 100) / 100
+      : rawCost
     const res = await saveItem({
       code,
       name,
@@ -121,15 +151,18 @@ export default function ItemsPage() {
       vendor: formData.vendor.trim(),
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
-      unit: formData.unit.trim(),
+      unit: unitForSave,
       totalQuantity: totalQty != null && totalQty > 0 ? totalQty : null,
       description: formData.description.trim(),
-      price: Number(formData.price) || 0,
-      cost: Number(formData.cost) || 0,
+      price: priceToSave,
+      cost: costToSave,
       taxType: formData.taxType,
       imageUrl: formData.imageUrl.trim(),
       editingCode: editingCode || undefined,
       purchaseSource: formData.purchaseSource,
+      stockBaseUnit: formData.stockBaseUnit.trim(),
+      stockUnitOptions: formData.stockUnitOptions.filter((o) => (o.unit || "").trim()),
+      standardUnits: validStandardUnits,
     })
     if (!res.success) {
       alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -142,16 +175,19 @@ export default function ItemsPage() {
       vendor: formData.vendor.trim(),
       outboundLocation: formData.outboundLocation.trim(),
       spec: formData.spec.trim(),
-      unit: formData.unit.trim(),
+      unit: unitForSave,
       totalQuantity: totalQty != null && totalQty > 0 ? totalQty : null,
       description: formData.description.trim(),
-      price: Number(formData.price) || 0,
-      cost: Number(formData.cost) || 0,
+      price: priceToSave,
+      cost: costToSave,
       taxType: formData.taxType,
       imageUrl: formData.imageUrl.trim(),
       hasImage: !!formData.imageUrl.trim(),
       purchaseSource: formData.purchaseSource,
       orderDisabled: false,
+      stockBaseUnit: formData.stockBaseUnit.trim(),
+      stockUnitOptions: formData.stockUnitOptions.filter((o) => (o.unit || "").trim()),
+      standardUnits: validStandardUnits,
     }
     if (editingCode) {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
@@ -169,6 +205,15 @@ export default function ItemsPage() {
   }
 
   const handleEdit = (product: Product) => {
+    const derivedStandardUnits = (() => {
+      const su = Array.isArray(product.standardUnits) ? product.standardUnits : []
+      if (su.length > 0) return su
+      const u = product.unit ?? ""
+      const tq = product.totalQuantity != null ? Number(product.totalQuantity) : 0
+      if (u || tq > 0) return [{ unit: u, totalQuantity: tq > 0 ? tq : 1 }]
+      return []
+    })()
+    const firstRow = derivedStandardUnits[0]
     setFormData({
       code: product.code,
       category: product.category,
@@ -178,12 +223,15 @@ export default function ItemsPage() {
       imageUrl: product.imageUrl,
       taxType: product.taxType,
       spec: product.spec,
-      unit: product.unit ?? "",
-      totalQuantity: product.totalQuantity != null ? String(product.totalQuantity) : "",
+      unit: firstRow ? firstRow.unit : (product.unit ?? ""),
+      totalQuantity: firstRow ? String(firstRow.totalQuantity) : (product.totalQuantity != null ? String(product.totalQuantity) : ""),
       description: product.description ?? "",
       price: String(product.price),
       cost: String(product.cost),
       purchaseSource: product.purchaseSource ?? "hq",
+      stockBaseUnit: product.stockBaseUnit ?? "",
+      stockUnitOptions: Array.isArray(product.stockUnitOptions) ? product.stockUnitOptions : [],
+      standardUnits: derivedStandardUnits,
     })
     setEditingCode(product.code)
   }

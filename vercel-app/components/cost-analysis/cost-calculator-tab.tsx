@@ -41,7 +41,8 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   const packaging: RecipeItem[] = []
   const runtimeItems: Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string }> = []
 
-  row.breakdown.forEach((b, idx) => {
+  const breakdown = Array.isArray(row.breakdown) ? row.breakdown : []
+  breakdown.forEach((b, idx) => {
     const codeNum = parseInt(b.itemCode, 10)
     const code = !isNaN(codeNum) ? codeNum : 10000 + idx
     const cat = b.ingredientType === "packaging" ? "packaging" : "food"
@@ -72,15 +73,19 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
   }, [])
 
   useEffect(() => {
-    if (initialLoadFromRow) {
-      const { food, packaging } = breakdownToRecipeItems(initialLoadFromRow)
-      const price = initialLoadFromRow.priceDelivery ?? initialLoadFromRow.priceHall
+    const row = initialLoadFromRow && typeof initialLoadFromRow === "object" && !Array.isArray(initialLoadFromRow) && initialLoadFromRow.menuId != null
+      ? { ...initialLoadFromRow, breakdown: Array.isArray(initialLoadFromRow.breakdown) ? initialLoadFromRow.breakdown : [] }
+      : null
+    if (row) {
+      const { food, packaging } = breakdownToRecipeItems(row)
+      const price = row.priceDelivery ?? row.priceHall
+      const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
       setMenuItem({
         ...emptyMenuItem,
-        menuCode: initialLoadFromRow.menuCode ?? "",
-        menuName: initialLoadFromRow.menuName + (initialLoadFromRow.optionName ? ` (${initialLoadFromRow.optionName})` : ""),
-        category: initialLoadFromRow.category ?? "",
-        categoryMain: initialLoadFromRow.categoryMain ?? "",
+        menuCode: rowWithCode.displayCode ?? row.menuCode ?? "",
+        menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
+        category: row.category ?? "",
+        categoryMain: row.categoryMain ?? "",
         inclVat: price,
       })
       setFoodItems(food)

@@ -101,6 +101,10 @@ export interface AppItem {
   image?: string
   description?: string
   purchaseSource?: 'hq' | 'store'
+  stockBaseUnit?: string
+  stockUnitOptions?: { unit: string; factor: number }[]
+  /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 */
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }
 
 export async function getAppData(
@@ -130,6 +134,12 @@ export interface StockStatusItem {
   cost?: number
   category?: string
   purchaseSource?: 'hq' | 'store'
+  /** 재고 기본 단위. 비어 있으면 단위 선택 없음 (하위 호환) */
+  stockBaseUnit?: string
+  /** 조정/조사 시 선택 단위 옵션 (하위 호환) */
+  stockUnitOptions?: { unit: string; factor: number }[]
+  /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 */
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }
 
 export interface AdjustmentHistoryItem {
@@ -1737,6 +1747,12 @@ export interface AdminItem {
   purchaseSource?: 'hq' | 'store'
   /** true이면 매장 발주 품목 검색에 노출되지 않음 */
   orderDisabled?: boolean
+  /** 재고 기본 단위 (저장 단위). 비어 있으면 unit 사용 (하위 호환) */
+  stockBaseUnit?: string
+  /** 조정/조사 시 선택 단위 (하위 호환) */
+  stockUnitOptions?: { unit: string; factor: number }[]
+  /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 */
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }
 
 export interface AdminVendor {
@@ -1823,6 +1839,9 @@ export async function saveItem(params: {
   description?: string
   editingCode?: string
   purchaseSource?: 'hq' | 'store'
+  stockBaseUnit?: string
+  stockUnitOptions?: { unit: string; factor: number }[]
+  standardUnits?: { unit: string; totalQuantity: number }[]
 }) {
   const res = await apiFetch('/api/saveItem', {
     method: 'POST',
@@ -1881,6 +1900,8 @@ export interface PosMenu {
   kitchenPrinter?: number | null
   /** 조리 시간(분), 예상 완성 시간/KDS 등 활용 */
   cookingTimeMin?: number | null
+  /** 반반 메뉴: POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문, 원가는 각 0.5씩 */
+  isBanban?: boolean
 }
 
 export interface PosMenuOption {
@@ -2063,9 +2084,11 @@ export interface PosMenuCostAnalysisRow {
   }[]
 }
 
-export async function getPosMenuCostAnalysis() {
+export async function getPosMenuCostAnalysis(): Promise<PosMenuCostAnalysisRow[]> {
   const res = await apiFetch('/api/getPosMenuCostAnalysis')
-  return res.json() as Promise<PosMenuCostAnalysisRow[]>
+  const data = await res.json().catch(() => [])
+  if (!res.ok) return []
+  return Array.isArray(data) ? data : []
 }
 
 // ─── 소스(합성품) 원가 ───
@@ -2182,6 +2205,7 @@ export async function savePosMenu(params: {
   optionSelectionGroups?: string[]
   kitchenPrinter?: number | null
   cookingTimeMin?: number | null
+  isBanban?: boolean
 }) {
   const res = await apiFetch('/api/savePosMenu', {
     method: 'POST',
