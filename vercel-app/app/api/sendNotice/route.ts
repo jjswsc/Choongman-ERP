@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const content = String(body?.content || '').trim()
     let targetStore = String(body?.targetStore ?? body?.target_store ?? '전체').trim()
     const targetRole = String(body?.targetRole ?? body?.target_role ?? '전체').trim()
+    const targetPermissionGroup = String(body?.targetPermissionGroup ?? body?.target_permission_group ?? '').trim() || null
     const sender = String(body?.sender || '').trim()
     const targetRecipients = body?.targetRecipients ?? body?.target_recipients
     const userStore = String(body?.userStore ?? body?.user_store ?? '').trim()
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       : []
     const targetRecipientsStr = recipientList.length > 0 ? JSON.stringify(recipientList) : null
 
-    await supabaseInsert('notices', {
+    const noticeRow: Record<string, unknown> = {
       id,
       title,
       content,
@@ -77,7 +78,19 @@ export async function POST(request: NextRequest) {
       target_recipients: targetRecipientsStr,
       sender,
       attachments: attachmentsStr,
-    })
+    }
+    if (targetPermissionGroup != null && targetPermissionGroup !== '') noticeRow.target_permission_group = targetPermissionGroup
+    try {
+      await supabaseInsert('notices', noticeRow)
+    } catch (colErr) {
+      const errMsg = colErr instanceof Error ? colErr.message : String(colErr)
+      if (/target_permission_group|column.*does not exist/i.test(errMsg)) {
+        delete noticeRow.target_permission_group
+        await supabaseInsert('notices', noticeRow)
+      } else {
+        throw colErr
+      }
+    }
 
     // FCM 푸시 알림
     let fcmRecipients: { store: string; name: string }[] = []
@@ -87,8 +100,7 @@ export async function POST(request: NextRequest) {
         return { store: store || '', name: name || '' }
       })
     } else {
-      // 매장/역할만 지정된 경우: targetStore·targetRole에 해당하는 직원 조회 후 푸시
-      fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole)
+      fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole, targetPermissionGroup ?? undefined)
     }
     if (fcmRecipients.length > 0) {
       const settings = await getNotificationSettings()

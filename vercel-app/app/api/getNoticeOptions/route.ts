@@ -10,13 +10,30 @@ export async function GET() {
     const list = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,role' })) as { store?: string; job?: string; role?: string }[] || []
     const stores: Record<string, boolean> = {}
     const jobs: Record<string, boolean> = {}
+    const permissionGroups: Record<string, boolean> = {}
 
     for (let i = 0; i < list.length; i++) {
       const store = String(list[i].store || '').trim()
       const job = String(list[i].job || list[i].role || '').trim()
+      const role = String(list[i].role || '').trim().toLowerCase()
       if (store && store !== '매장명' && store !== 'Store') stores[store] = true
       if (job && job !== '직급' && job !== 'Job' && job !== '부서' && job !== '') jobs[job] = true
+      if (role) permissionGroups[role] = true
     }
+    const PERMISSION_ORDER = ['director', 'ceo', 'hr', 'officer', 'manager', 'franchisee', 'staff']
+    const DEFAULT_PERMISSIONS = ['director', 'officer', 'manager', 'staff']
+    if (Object.keys(permissionGroups).length === 0) {
+      for (const p of DEFAULT_PERMISSIONS) permissionGroups[p] = true
+    }
+    const permKeys = Object.keys(permissionGroups)
+    const permissionGroupList = permKeys.sort((a, b) => {
+      const ai = PERMISSION_ORDER.indexOf(a)
+      const bi = PERMISSION_ORDER.indexOf(b)
+      if (ai >= 0 && bi >= 0) return ai - bi
+      if (ai >= 0) return -1
+      if (bi >= 0) return 1
+      return a.localeCompare(b)
+    })
 
     // 직원에 job 데이터가 없을 경우 기본 부서 옵션
     const DEFAULT_JOBS = ['Manager', '매니저', '직원', 'Staff', 'Service', 'Kitchen']
@@ -44,11 +61,11 @@ export async function GET() {
     })
 
     return NextResponse.json(
-      { stores: Object.keys(stores).sort(), roles: jobList },
+      { stores: Object.keys(stores).sort(), roles: jobList, permissionGroups: permissionGroupList },
       { headers }
     )
   } catch (e) {
     console.error('getNoticeOptions:', e)
-    return NextResponse.json({ stores: [], roles: [] }, { headers })
+    return NextResponse.json({ stores: [], roles: [], permissionGroups: [] }, { headers })
   }
 }

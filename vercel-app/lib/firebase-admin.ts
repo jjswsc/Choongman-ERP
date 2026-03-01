@@ -34,7 +34,8 @@ export function isFirebaseAdminConfigured(): boolean {
  */
 export async function getRecipientsByTargetStoreRole(
   targetStore: string,
-  targetRole: string
+  targetRole: string,
+  targetPermissionGroup?: string | null
 ): Promise<{ store: string; name: string }[]> {
   const empRows = (await supabaseSelect('employees', {
     select: 'store,name,job,role',
@@ -49,6 +50,8 @@ export async function getRecipientsByTargetStoreRole(
     .filter(Boolean)
   const storeMatchAll = storeList.length === 0 || (storeList.length === 1 && storeList[0] === '전체')
   const roleMatchAll = roleList.length === 0 || (roleList.length === 1 && roleList[0] === '전체')
+  const permList = (targetPermissionGroup || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const permMatchAll = permList.length === 0
 
   const result: { store: string; name: string }[] = []
   for (const emp of empRows) {
@@ -57,9 +60,11 @@ export async function getRecipientsByTargetStoreRole(
     if (!store || !name) continue
 
     const myJob = String(emp.job || emp.role || '').trim().toLowerCase()
+    const myRole = String(emp.role || '').trim().toLowerCase()
     const storeMatch = storeMatchAll || storeList.includes(store)
     const roleMatch = roleMatchAll || (myJob && roleList.includes(myJob))
-    if (storeMatch && roleMatch) result.push({ store, name })
+    const permMatch = permMatchAll || (myRole && permList.includes(myRole))
+    if (storeMatch && roleMatch && permMatch) result.push({ store, name })
   }
   return result
 }

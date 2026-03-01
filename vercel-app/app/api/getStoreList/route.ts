@@ -11,21 +11,24 @@ export async function GET() {
   try {
     const empList = await supabaseSelect('employees', {
       order: 'id.asc',
-      select: 'store,name,nick,job,role',
-    }) as { store?: string; name?: string; nick?: string; job?: string; role?: string }[] | null
+      select: 'store,name,nick,job,role,resign_date',
+    }) as { store?: string; name?: string; nick?: string; job?: string; role?: string; resign_date?: string | null }[] | null
 
     const userMap: Record<string, string[]> = {}
-    const staffByStore: Record<string, { name: string; nick: string; job?: string }[]> = {}
+    const staffByStore: Record<string, { name: string; nick: string; job?: string; role?: string }[]> = {}
     for (const r of empList || []) {
+      const resignDate = String(r.resign_date ?? '').trim()
+      if (resignDate) continue
       const store = String(r.store || '').trim()
       const name = String(r.name || '').trim()
       const nick = String(r.nick || r.name || '').trim() || name
       const job = String(r.job || r.role || '').trim() || undefined
+      const role = String(r.role || '').trim().toLowerCase() || undefined
       if (store && name) {
         if (!userMap[store]) userMap[store] = []
         userMap[store].push(name)
         if (!staffByStore[store]) staffByStore[store] = []
-        staffByStore[store].push({ name, nick, job })
+        staffByStore[store].push({ name, nick, job, role })
       }
     }
     const stores = Object.keys(userMap).filter(Boolean).sort()

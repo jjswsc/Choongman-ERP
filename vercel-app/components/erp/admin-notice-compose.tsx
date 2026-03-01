@@ -7,6 +7,7 @@ import {
   X,
   Store,
   Briefcase,
+  Shield,
   Users,
   FileText,
   Image as ImageIcon,
@@ -44,8 +45,10 @@ export function AdminNoticeCompose() {
   const [content, setContent] = React.useState("")
   const [stores, setStores] = React.useState<string[]>([])
   const [positions, setPositions] = React.useState<string[]>([])
+  const [permissionGroups, setPermissionGroups] = React.useState<string[]>([])
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [selectedPositions, setSelectedPositions] = React.useState<string[]>([])
+  const [selectedPermissionGroups, setSelectedPermissionGroups] = React.useState<string[]>([])
   const [selectedRecipients, setSelectedRecipients] = React.useState<string[]>([])
   const [files, setFiles] = React.useState<AttachedFile[]>([])
   const { staffByStore } = useStoreList()
@@ -59,6 +62,7 @@ export function AdminNoticeCompose() {
       const storeList = isOffice ? (r.stores || []) : [auth.store!]
       setStores([t("noticeFilterAll"), ...storeList])
       setPositions([t("noticeFilterAll"), ...(r.roles || [])])
+      setPermissionGroups([t("noticeFilterAll"), ...(r.permissionGroups || [])])
     })
   }, [auth?.store, auth?.role, t])
 
@@ -94,6 +98,21 @@ export function AdminNoticeCompose() {
     )
   }
 
+  const togglePermissionGroup = (perm: string) => {
+    const allLabel = t("noticeFilterAll")
+    if (perm === allLabel) {
+      setSelectedPermissionGroups(
+        selectedPermissionGroups.length === permissionGroups.length - 1
+          ? []
+          : permissionGroups.filter((p) => p !== allLabel)
+      )
+      return
+    }
+    setSelectedPermissionGroups((prev) =>
+      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+    )
+  }
+
   const toggleRecipient = (store: string, name: string) => {
     const key = `${store}|${name}`
     setSelectedRecipients((prev) =>
@@ -118,6 +137,17 @@ export function AdminNoticeCompose() {
           .map((r) => r.trim().toLowerCase())
           .filter(Boolean)
       )
+  const allPermissionGroupsForStaff =
+    selectedPermissionGroups.length === 0 ||
+    selectedPermissionGroups.length === permissionGroups.length - 1
+  const permissionGroupsToMatch = allPermissionGroupsForStaff
+    ? null
+    : new Set(
+        selectedPermissionGroups
+          .filter((p) => p !== t("noticeFilterAll"))
+          .map((r) => r.trim().toLowerCase())
+          .filter(Boolean)
+      )
   const employeeList = (() => {
     const list: { store: string; name: string; nick: string }[] = []
     for (const store of storeNamesForStaff) {
@@ -127,6 +157,10 @@ export function AdminNoticeCompose() {
         if (positionsToMatch && positionsToMatch.size > 0) {
           const empJob = String(s.job || "").trim().toLowerCase()
           if (!empJob || !positionsToMatch.has(empJob)) continue
+        }
+        if (permissionGroupsToMatch && permissionGroupsToMatch.size > 0) {
+          const empRole = String(s.role || "").trim().toLowerCase()
+          if (!empRole || !permissionGroupsToMatch.has(empRole)) continue
         }
         list.push({ store, name: s.name, nick: s.nick || s.name })
       }
@@ -191,10 +225,13 @@ export function AdminNoticeCompose() {
     if (!auth?.store || !auth?.user) return
     const allStores = selectedStores.length === stores.length - 1
     const allPos = selectedPositions.length === positions.length - 1
+    const allPerm = selectedPermissionGroups.length === permissionGroups.length - 1
     const targetStore =
       selectedStores.length === 0 || allStores ? "전체" : selectedStores.join(",")
     const targetRole =
       selectedPositions.length === 0 || allPos ? "전체" : selectedPositions.join(",")
+    const targetPermissionGroup =
+      selectedPermissionGroups.length === 0 || allPerm ? "" : selectedPermissionGroups.join(",")
     const targetRecipients =
       selectedRecipients.length > 0
         ? selectedRecipients.map((k) => {
@@ -210,6 +247,7 @@ export function AdminNoticeCompose() {
         content: content.trim(),
         targetStore,
         targetRole,
+        targetPermissionGroup: targetPermissionGroup || undefined,
         sender: auth.user,
         userStore: auth.store,
         userRole: auth.role,
@@ -221,6 +259,7 @@ export function AdminNoticeCompose() {
         setContent("")
         setSelectedStores([])
         setSelectedPositions([])
+        setSelectedPermissionGroups([])
         setSelectedRecipients([])
         setFiles([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
@@ -266,13 +305,13 @@ export function AdminNoticeCompose() {
           />
         </div>
 
-        {/* Store & Position side by side */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Store list */}
+        {/* 매장 | 권한 그룹 | 대상 부서 한 줄 */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* 매장 */}
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
               <Store className="h-3.5 w-3.5 text-primary" />
-              {t("adminTargetStores").split(" ")[0] || t("store")}
+              {t("store")}
               {selectedStores.length > 0 && (
                 <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
                   {selectedStores.length === stores.length - 1
@@ -311,11 +350,54 @@ export function AdminNoticeCompose() {
             </ScrollArea>
           </div>
 
-          {/* Position list */}
+          {/* 권한 그룹 */}
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
+              <Shield className="h-3.5 w-3.5 text-amber-600" />
+              {t("adminTargetPermissionGroups")}
+              {selectedPermissionGroups.length > 0 && (
+                <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                  {selectedPermissionGroups.length === permissionGroups.length - 1
+                    ? t("noticePermissionGroupAll")
+                    : `${selectedPermissionGroups.length}${t("noticePermissionGroupCountSuffix")}`}
+                </span>
+              )}
+            </label>
+            <ScrollArea className="h-[180px] rounded-lg border bg-muted/20 p-1">
+              <div className="flex flex-col gap-0.5">
+                {permissionGroups.map((perm) => {
+                  const isAll = perm === t("noticeFilterAll")
+                  const checked = isAll
+                    ? selectedPermissionGroups.length === permissionGroups.length - 1
+                    : selectedPermissionGroups.includes(perm)
+                  return (
+                    <label
+                      key={perm}
+                      className={cn(
+                        "flex items-center gap-2.5 rounded-md px-3 py-2 text-xs cursor-pointer transition-colors",
+                        checked
+                          ? "bg-amber-500/10 font-semibold text-amber-700"
+                          : "text-card-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => togglePermissionGroup(perm)}
+                        className="h-4 w-4"
+                      />
+                      <span>{perm}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* 대상 부서 */}
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 text-xs font-semibold text-foreground">
               <Briefcase className="h-3.5 w-3.5 text-success" />
-              {t("adminTargetRoles").split("/")[0]?.trim() || t("leaveType")}
+              {t("noticeTargetDept") || "대상 부서"}
               {selectedPositions.length > 0 && (
                 <span className="rounded-md bg-success/10 px-1.5 py-0.5 text-[10px] font-bold text-success">
                   {selectedPositions.length === positions.length - 1

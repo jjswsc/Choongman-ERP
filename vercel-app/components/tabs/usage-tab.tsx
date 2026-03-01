@@ -119,7 +119,7 @@ export function UsageTab() {
 
   const usageRowToSpecQty = useCallback((unitKey: string, qtyStr: string): number => {
     const n = Number(qtyStr)
-    if (isNaN(n) || n === 0) return 0
+    if (isNaN(n) || n <= 0) return 0
     if (!unitKey || unitKey === "spec") return n
     const [, tqStr] = unitKey.split("::")
     const tq = Number(tqStr)
@@ -188,7 +188,7 @@ export function UsageTab() {
   const addToCart = () => {
     if (!selectedItem) return
     const qtyToAdd = Math.round(totalUsageSpecQty * 1e6) / 1e6
-    if (qtyToAdd === 0) {
+    if (qtyToAdd <= 0) {
       alert(t("stockAdjustQtyRequired") || "수량을 입력해 주세요.")
       return
     }
@@ -421,9 +421,16 @@ export function UsageTab() {
                       </Select>
                       <Input
                         type="number"
+                        min={0}
+                        step="any"
                         placeholder={t("stockAdjustDiffPh") || "수량"}
                         value={row.qty}
-                        onChange={(e) => setUsageRow(idx, { qty: e.target.value })}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          const num = Number(v)
+                          if (v !== "" && (v.includes("-") || num < 0)) return
+                          setUsageRow(idx, { qty: v })
+                        }}
                         className="text-sm w-28 min-w-[5rem] h-10 shrink-0 border-primary/30 font-medium"
                       />
                       <Button

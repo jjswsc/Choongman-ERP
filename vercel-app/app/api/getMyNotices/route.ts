@@ -13,12 +13,14 @@ export interface NoticeItem {
 
 async function getMyNoticesHandler(store: string, name: string): Promise<NoticeItem[]> {
   let myJob = ''
+  let myRole = ''
   const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as { store?: string; name?: string; job?: string; role?: string }[] || []
   for (let i = 0; i < empList.length; i++) {
     const s = String(empList[i].store || '').trim()
     const n = String(empList[i].name || '').trim()
     if (s === store && n === name) {
       myJob = String(empList[i].job || empList[i].role || '').trim()
+      myRole = String(empList[i].role || '').trim().toLowerCase()
       break
     }
   }
@@ -42,6 +44,7 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
     sender?: string
     target_store?: string
     target_role?: string
+    target_permission_group?: string | null
     target_recipients?: string | null
     created_at?: string
     attachments?: string
@@ -63,10 +66,13 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
     } else {
       const targetStores = String(row.target_store || '전체').trim()
       const targetJobs = String(row.target_role || '전체').trim()
+      const targetPerms = String(row.target_permission_group || '').trim()
       const storeMatch = targetStores === '전체' || targetStores.indexOf(store) > -1
       const jobList = String(targetJobs || '전체').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
       const jobMatch = !targetJobs || targetJobs.trim() === '전체' || jobList.length === 0 || (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
-      if (!storeMatch || !jobMatch) continue
+      const permList = targetPerms ? targetPerms.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : []
+      const permMatch = permList.length === 0 || (myRole && permList.includes(myRole))
+      if (!storeMatch || !jobMatch || !permMatch) continue
     }
 
     let att: unknown[] = []

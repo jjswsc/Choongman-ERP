@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { UserCog, Search, Palmtree, Store } from "lucide-react"
+import { UserCog, Search, Palmtree } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-message"
@@ -171,21 +171,6 @@ export function AdminTab() {
           <NoticeHistory />
         </TabsContent>
       </Tabs>
-
-      {/* 매장 점검 링크 */}
-      <Link href="/admin/store-check">
-        <Card className="shadow-sm hover:bg-muted/50 transition-colors cursor-pointer">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Store className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium text-foreground">{t("adminStoreCheck")}</p>
-              <p className="text-xs text-muted-foreground">{t("tab_store_check")}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
 
       {/* 휴가 관리 링크 */}
       <Link href="/admin/leave">

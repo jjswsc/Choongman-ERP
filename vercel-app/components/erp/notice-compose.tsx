@@ -9,6 +9,7 @@ import {
   ChevronUp,
   Store,
   Briefcase,
+  Shield,
   FileText,
   Image as ImageIcon,
   File,
@@ -44,10 +45,13 @@ export function NoticeCompose() {
   const [content, setContent] = React.useState("")
   const [stores, setStores] = React.useState<string[]>([])
   const [positions, setPositions] = React.useState<string[]>([])
+  const [permissionGroups, setPermissionGroups] = React.useState<string[]>([])
   const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [selectedPositions, setSelectedPositions] = React.useState<string[]>([])
+  const [selectedPermissionGroups, setSelectedPermissionGroups] = React.useState<string[]>([])
   const [storesOpen, setStoresOpen] = React.useState(false)
   const [positionsOpen, setPositionsOpen] = React.useState(false)
+  const [permissionGroupsOpen, setPermissionGroupsOpen] = React.useState(false)
   const [files, setFiles] = React.useState<AttachedFile[]>([])
   const [sending, setSending] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -60,6 +64,7 @@ export function NoticeCompose() {
       const allStores = [t("noticeFilterAll"), ...storeList]
       setStores(allStores)
       setPositions([t("noticeFilterAll"), ...(r.roles || [])])
+      setPermissionGroups([t("noticeFilterAll"), ...(r.permissionGroups || [])])
     })
   }, [auth?.store, auth?.role, t])
 
@@ -92,6 +97,21 @@ export function NoticeCompose() {
       prev.includes(position)
         ? prev.filter((p) => p !== position)
         : [...prev, position]
+    )
+  }
+
+  const togglePermissionGroup = (perm: string) => {
+    const allLabel = t("noticeFilterAll")
+    if (perm === allLabel) {
+      setSelectedPermissionGroups(
+        selectedPermissionGroups.length === permissionGroups.length - 1
+          ? []
+          : permissionGroups.filter((p) => p !== allLabel)
+      )
+      return
+    }
+    setSelectedPermissionGroups((prev) =>
+      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
     )
   }
 
@@ -158,6 +178,13 @@ export function NoticeCompose() {
       ? t("noticePositionAll")
       : `${selectedPositions.length}${t("noticePositionCountSuffix")}`
 
+  const permissionGroupLabel =
+    selectedPermissionGroups.length === 0
+      ? t("noticePermissionGroupSelect")
+      : selectedPermissionGroups.length === permissionGroups.length - 1
+      ? t("noticePermissionGroupAll")
+      : `${selectedPermissionGroups.length}${t("noticePermissionGroupCountSuffix")}`
+
   const handleSend = async () => {
     if (!title.trim()) {
       alert(t("adminNoticeSubjectRequired"))
@@ -166,10 +193,13 @@ export function NoticeCompose() {
     if (!auth?.store || !auth?.user) return
     const allStores = selectedStores.length === stores.length - 1
     const allPos = selectedPositions.length === positions.length - 1
+    const allPerm = selectedPermissionGroups.length === permissionGroups.length - 1
     const targetStore =
       selectedStores.length === 0 || allStores ? "전체" : selectedStores.join(",")
     const targetRole =
       selectedPositions.length === 0 || allPos ? "전체" : selectedPositions.join(",")
+    const targetPermissionGroup =
+      selectedPermissionGroups.length === 0 || allPerm ? "" : selectedPermissionGroups.join(",")
     setSending(true)
     try {
       const attachments = files.map((f) => ({ name: f.name, mime: f.mime, url: f.dataUrl }))
@@ -178,6 +208,7 @@ export function NoticeCompose() {
         content: content.trim(),
         targetStore,
         targetRole,
+        targetPermissionGroup: targetPermissionGroup || undefined,
         sender: auth.user,
         userStore: auth.store,
         userRole: auth.role,
@@ -188,6 +219,7 @@ export function NoticeCompose() {
         setContent("")
         setSelectedStores([])
         setSelectedPositions([])
+        setSelectedPermissionGroups([])
         setFiles([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
         alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
@@ -230,20 +262,22 @@ export function NoticeCompose() {
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-3 gap-2">
+          {/* 매장 */}
+          <div className="flex flex-col gap-1.5">
           <button
             type="button"
             onClick={() => setStoresOpen(!storesOpen)}
-            className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 transition-colors active:bg-muted/30"
+            className="flex items-center justify-between rounded-lg border bg-card px-2.5 py-2 transition-colors active:bg-muted/30 min-h-10"
           >
-            <div className="flex items-center gap-2">
-              <Store className="h-4 w-4 text-[hsl(215,80%,50%)]" />
-              <span className="text-xs font-semibold text-card-foreground">
-                {t("adminTargetStores").split(" ")[0] || t("store")}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Store className="h-3.5 w-3.5 shrink-0 text-[hsl(215,80%,50%)]" />
+              <span className="text-[11px] font-semibold text-card-foreground truncate">
+                {t("store")}
               </span>
               <span
                 className={cn(
-                  "rounded-md px-2 py-0.5 text-[10px] font-bold",
+                  "rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0",
                   selectedStores.length > 0
                     ? "bg-[hsl(215,80%,50%)]/10 text-[hsl(215,80%,50%)]"
                     : "bg-muted text-muted-foreground"
@@ -253,13 +287,13 @@ export function NoticeCompose() {
               </span>
             </div>
             {storesOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
           </button>
           {storesOpen && (
-            <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/20 p-3">
+            <div className="grid grid-cols-1 gap-1 rounded-lg border bg-muted/20 p-2">
               {stores.map((store) => {
                 const isAll = store === t("noticeFilterAll")
                 const checked = isAll
@@ -269,7 +303,7 @@ export function NoticeCompose() {
                   <label
                     key={store}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer",
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors cursor-pointer",
                       checked
                         ? "bg-[hsl(215,80%,50%)]/10 font-semibold text-[hsl(215,80%,50%)]"
                         : "bg-card text-card-foreground hover:bg-muted/50"
@@ -278,9 +312,67 @@ export function NoticeCompose() {
                     <Checkbox
                       checked={checked}
                       onCheckedChange={() => toggleStore(store)}
-                      className="h-3.5 w-3.5 rounded"
+                      className="h-3 w-3 rounded"
                     />
-                    <span>{store}</span>
+                    <span className="truncate">{store}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => setPermissionGroupsOpen(!permissionGroupsOpen)}
+            className="flex items-center justify-between rounded-lg border bg-card px-2.5 py-2 transition-colors active:bg-muted/30 min-h-10"
+          >
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Shield className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+              <span className="text-[11px] font-semibold text-card-foreground truncate">
+                {t("adminTargetPermissionGroups")}
+              </span>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0",
+                  selectedPermissionGroups.length > 0
+                    ? "bg-amber-500/10 text-amber-700"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {permissionGroupLabel}
+              </span>
+            </div>
+            {permissionGroupsOpen ? (
+              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+          </button>
+          {permissionGroupsOpen && (
+            <div className="grid grid-cols-1 gap-1 rounded-lg border bg-muted/20 p-2">
+              {permissionGroups.map((perm) => {
+                const isAll = perm === t("noticeFilterAll")
+                const checked = isAll
+                  ? selectedPermissionGroups.length === permissionGroups.length - 1
+                  : selectedPermissionGroups.includes(perm)
+                return (
+                  <label
+                    key={perm}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors cursor-pointer",
+                      checked
+                        ? "bg-amber-500/10 font-semibold text-amber-700"
+                        : "bg-card text-card-foreground hover:bg-muted/50"
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => togglePermissionGroup(perm)}
+                      className="h-3 w-3 rounded"
+                    />
+                    <span className="truncate">{perm}</span>
                   </label>
                 )
               })}
@@ -292,16 +384,16 @@ export function NoticeCompose() {
           <button
             type="button"
             onClick={() => setPositionsOpen(!positionsOpen)}
-            className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 transition-colors active:bg-muted/30"
+            className="flex items-center justify-between rounded-lg border bg-card px-2.5 py-2 transition-colors active:bg-muted/30 min-h-10"
           >
-            <div className="flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-[hsl(152,60%,42%)]" />
-              <span className="text-xs font-semibold text-card-foreground">
-                {t("adminTargetRoles").split("/")[0]?.trim() || t("leaveType")}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Briefcase className="h-3.5 w-3.5 shrink-0 text-[hsl(152,60%,42%)]" />
+              <span className="text-[11px] font-semibold text-card-foreground truncate">
+                {t("noticeTargetDept") || "대상 부서"}
               </span>
               <span
                 className={cn(
-                  "rounded-md px-2 py-0.5 text-[10px] font-bold",
+                  "rounded px-1.5 py-0.5 text-[9px] font-bold shrink-0",
                   selectedPositions.length > 0
                     ? "bg-[hsl(152,60%,42%)]/10 text-[hsl(152,60%,42%)]"
                     : "bg-muted text-muted-foreground"
@@ -311,13 +403,13 @@ export function NoticeCompose() {
               </span>
             </div>
             {positionsOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
           </button>
           {positionsOpen && (
-            <div className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/20 p-3">
+            <div className="grid grid-cols-1 gap-1 rounded-lg border bg-muted/20 p-2">
               {positions.map((pos) => {
                 const isAll = pos === t("noticeFilterAll")
                 const checked = isAll
@@ -327,7 +419,7 @@ export function NoticeCompose() {
                   <label
                     key={pos}
                     className={cn(
-                      "flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer",
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] transition-colors cursor-pointer",
                       checked
                         ? "bg-[hsl(152,60%,42%)]/10 font-semibold text-[hsl(152,60%,42%)]"
                         : "bg-card text-card-foreground hover:bg-muted/50"
@@ -336,14 +428,15 @@ export function NoticeCompose() {
                     <Checkbox
                       checked={checked}
                       onCheckedChange={() => togglePosition(pos)}
-                      className="h-3.5 w-3.5 rounded"
+                      className="h-3 w-3 rounded"
                     />
-                    <span>{pos}</span>
+                    <span className="truncate">{pos}</span>
                   </label>
                 )
               })}
             </div>
           )}
+        </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

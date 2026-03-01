@@ -523,7 +523,7 @@ export async function uploadLeaveCertificate(params: {
 // ─── 관리 (Admin) ───
 export async function getNoticeOptions() {
   const res = await apiFetch('/api/getNoticeOptions')
-  return res.json() as Promise<{ stores: string[]; roles: string[] }>
+  return res.json() as Promise<{ stores: string[]; roles: string[]; permissionGroups: string[] }>
 }
 
 export async function sendNotice(params: {
@@ -531,6 +531,7 @@ export async function sendNotice(params: {
   content: string
   targetStore: string
   targetRole: string
+  targetPermissionGroup?: string | null
   sender: string
   targetRecipients?: Array<{ store: string; name: string }>
   userStore?: string

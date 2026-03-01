@@ -41,10 +41,11 @@ export async function GET(request: NextRequest) {
       content?: string
       target_store?: string
       target_role?: string
+      target_recipients?: string | null
       created_at?: string
     }[]
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as {
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role,resign_date' })) as {
       store?: string
       name?: string
       job?: string
@@ -80,36 +81,60 @@ export async function GET(request: NextRequest) {
     for (const row of rows || []) {
       const targetStores = String(row.target_store || '전체').trim()
       const targetRoles = String(row.target_role || '전체').trim()
-      const isAllStores = targetStores === '전체' || targetStores.trim() === ''
-      const isAllRoles = targetRoles === '전체' || targetRoles.trim() === ''
-      const roleList = isAllRoles
-        ? []
-        : targetRoles
-            .split(',')
-            .map((s) => s.trim().toLowerCase())
-            .filter(Boolean)
+      let targetRecipientsList: string[] = []
+      try {
+        const raw = row.target_recipients
+        if (raw && typeof raw === 'string') {
+          const parsed = JSON.parse(raw) as unknown
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            targetRecipientsList = parsed.filter((x): x is string => typeof x === 'string')
+          }
+        }
+      } catch {
+        /* ignore */
+      }
 
+      const isSpecificRecipients = targetRecipientsList.length > 0
       let totalCount = 0
       const recipientSet = new Set<string>()
-      for (const e of empList) {
-        const eStore = String(e.store || '').trim()
-        const eName = String(e.name || '').trim()
-        const resignDate = String(e.resign_date || '').trim()
-        if (!eName || (resignDate && resignDate !== '')) continue
-        if (!eStore || eStore === '매장명' || eStore === 'Store') continue
-        const eRole = (String(e.job || e.role || '').trim() || 'Staff').toLowerCase()
-        const storeMatch = isAllStores || targetStores.split(',').map((s) => s.trim()).includes(eStore)
-        const roleMatch = isAllRoles || roleList.length === 0 || roleList.some((r) => eRole === r || eRole.indexOf(r) >= 0 || r.indexOf(eRole) >= 0)
-        if (storeMatch && roleMatch) {
-          totalCount += 1
-          recipientSet.add(eStore)
+
+      if (isSpecificRecipients) {
+        totalCount = targetRecipientsList.length
+        targetRecipientsList.forEach((s) => {
+          const [store] = s.split('|')
+          if (store?.trim()) recipientSet.add(store.trim())
+        })
+      } else {
+        const isAllStores = targetStores === '전체' || targetStores.trim() === ''
+        const isAllRoles = targetRoles === '전체' || targetRoles.trim() === ''
+        const roleList = isAllRoles
+          ? []
+          : targetRoles
+              .split(',')
+              .map((s) => s.trim().toLowerCase())
+              .filter(Boolean)
+        for (const e of empList) {
+          const eStore = String(e.store || '').trim()
+          const eName = String(e.name || '').trim()
+          const resignDate = String(e.resign_date || '').trim()
+          if (!eName || (resignDate && resignDate !== '')) continue
+          if (!eStore || eStore === '매장명' || eStore === 'Store') continue
+          const eRole = (String(e.job || e.role || '').trim() || 'Staff').toLowerCase()
+          const storeMatch = isAllStores || targetStores.split(',').map((s) => s.trim()).includes(eStore)
+          const roleMatch = isAllRoles || roleList.length === 0 || roleList.some((r) => eRole === r || eRole.indexOf(r) >= 0 || r.indexOf(eRole) >= 0)
+          if (storeMatch && roleMatch) {
+            totalCount += 1
+            recipientSet.add(eStore)
+          }
         }
       }
 
       const readCount = readCountByNotice[row.id] || 0
 
       let recipients: string[]
-      if (isAllStores) {
+      if (isSpecificRecipients) {
+        recipients = recipientSet.size > 0 ? Array.from(recipientSet).sort() : [`${totalCount}명`]
+      } else if (targetStores === '전체' || targetStores.trim() === '') {
         recipients = ['전체']
       } else {
         recipients = Array.from(recipientSet).sort()

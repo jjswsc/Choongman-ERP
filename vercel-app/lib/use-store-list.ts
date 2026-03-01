@@ -5,7 +5,7 @@ import { apiFetch } from './api/fetch'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5분
 
-export type StaffByStore = Record<string, { name: string; nick: string; job?: string }[]>
+export type StaffByStore = Record<string, { name: string; nick: string; job?: string; role?: string }[]>
 
 let cache: {
   data: { stores: string[]; users: Record<string, string[]>; staffByStore?: StaffByStore } | null
