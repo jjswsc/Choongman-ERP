@@ -489,6 +489,7 @@ export default function PosMenusPage() {
           imageUrl: m.imageUrl,
           vatIncluded: m.vatIncluded,
           isActive: m.isActive,
+          isBanban: m.isBanban ?? false,
         })
       }
     } else {
