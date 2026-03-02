@@ -522,13 +522,19 @@ export default function OutboundPage() {
         setHistoryList(Array.isArray(list) ? list : [])
         setUsageList([])
       } else {
-        const list = await getMyUsageHistory({
+        const list = await getCombinedOutboundHistory({
+          startStr: s,
+          endStr: e,
+          vendorFilter: auth?.store || undefined,
+          typeFilter: histType || undefined,
+        })
+        setHistoryList(Array.isArray(list) ? list : [])
+        const usageListRes = await getMyUsageHistory({
           store: auth?.store || "",
           startStr: s,
           endStr: e,
         })
-        setUsageList(Array.isArray(list) ? list : [])
-        setHistoryList([])
+        setUsageList(Array.isArray(usageListRes) ? usageListRes : [])
       }
     } catch {
       setHistoryList([])
@@ -547,7 +553,6 @@ export default function OutboundPage() {
   }
 
   const groupedHistory = React.useMemo(() => {
-    if (!isOffice) return []
     const g: Record<string, {
       date: string
       target: string
@@ -579,7 +584,7 @@ export default function OutboundPage() {
       else if (i.receiveImageUrl) g[k].receiveImageUrl = i.receiveImageUrl
     }
     return Object.values(g).sort((a, b) => (b.date + b.target).localeCompare(a.date + a.target))
-  }, [historyList, isOffice])
+  }, [historyList])
 
   const filteredGroupedHistory = React.useMemo(() => {
     if (!isOffice) return groupedHistory
@@ -612,7 +617,6 @@ export default function OutboundPage() {
   }, [groupedHistory, histDeliveryStatus, invoiceSearch, itemSearch, isOffice])
 
   const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
-    if (!isOffice) return []
     return filteredGroupedHistory.map((g, i) => {
       const first = g.items[0]
       const orderDate = first?.orderDate || g.date?.slice(0, 10) || ""
@@ -676,7 +680,7 @@ export default function OutboundPage() {
   }
 
   const togglePrintSelectAll = () => {
-    if (!isOffice || filteredGroupedHistory.length === 0) return
+    if (filteredGroupedHistory.length === 0) return
     if (selectedForPrint.size >= filteredGroupedHistory.length) {
       setSelectedForPrint(new Set())
     } else {
@@ -1392,7 +1396,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               itemSearch={itemSearch}
               onItemSearchChange={setItemSearch}
               onSearch={fetchHistory}
-              onPrintInvoice={isOffice ? handlePrintInvoice : undefined}
+              onPrintInvoice={handlePrintInvoice}
               onExcelDownload={isOffice ? handleExcelDownload : undefined}
               onEtaxXmlDownload={isOffice ? handleEtaxXmlDownload : undefined}
               selectedCount={selectedForPrint.size}

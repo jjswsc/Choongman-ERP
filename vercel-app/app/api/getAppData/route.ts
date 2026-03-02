@@ -146,6 +146,17 @@ const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
 /** 입고 시 "입고등록"(HQ Warehouse) 선택하면 저장되는 location. 본사 재고 조회 시 포함해야 함 */
 const INBOUND_HQ_LOCATION = '입고등록'
 
+/** 매장명 변형 생성 (예: "CM The street" → ["cm the street", "the street"]) - stock_logs.location 불일치 대응 */
+function getLocationVariants(storeNorm: string): string[] {
+  const variants = [storeNorm]
+  const cmPrefix = /^cm\s+/i
+  if (cmPrefix.test(storeNorm)) {
+    const withoutCm = storeNorm.replace(cmPrefix, '').trim()
+    if (withoutCm && !variants.includes(withoutCm)) variants.push(withoutCm)
+  }
+  return variants
+}
+
 async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
   try {
     const storeNorm = String(store || '').toLowerCase().trim()
@@ -157,7 +168,13 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
       ? `or=(location.eq.${encodeURIComponent(INBOUND_HQ_LOCATION)},${OFFICE_LOCATIONS.map((l) => `location.ilike.${l}`).join(',')})`
       : isInboundHq
         ? `location=eq.${encodeURIComponent(INBOUND_HQ_LOCATION)}`
-        : `location=ilike.${encodeURIComponent(storeNorm)}`
+        : (() => {
+            const variants = getLocationVariants(storeNorm)
+            if (variants.length === 1) {
+              return `location=ilike.${encodeURIComponent(storeNorm)}`
+            }
+            return `or=(${variants.map((v) => `location.ilike.${encodeURIComponent(v)}`).join(',')})`
+          })()
     const dateSuffix = asOfDate?.trim()
       ? `&log_date=lte.${encodeURIComponent(asOfDate.trim() + 'T23:59:59.999Z')}`
       : ''

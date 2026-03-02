@@ -184,7 +184,7 @@ export function ShipmentFilterBar({
           {t("stockBtnSearch")}
         </button>
 
-        {isOffice && onPrintInvoice && (
+        {onPrintInvoice && (
           <button
             type="button"
             onClick={onPrintInvoice}

@@ -84,7 +84,8 @@ export function ShipmentTable({
     return null
   }
 
-  if (!isOffice) {
+  /* 매장: 출고 행이 있으면 출고 테이블(인보이스 인쇄) 표시, 없으면 사용 내역 테이블 표시 */
+  if (!isOffice && rows.length === 0) {
     return (
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-xs">
