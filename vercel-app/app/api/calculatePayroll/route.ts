@@ -55,7 +55,7 @@ async function getPublicHolidays(year: number): Promise<{ date: string; name: st
   return fixed
 }
 
-type AttSummaryRow = { lateMin: number; otMin: number; workMin: number; workDays: number; workDates: string[] }
+type AttSummaryRow = { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number; workDates: string[] }
 
 /** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates. 방콕 기준 + 자정 넘김은 출근일로 합침 */
 async function getAttendanceSummary(monthStr: string): Promise<Record<string, AttSummaryRow>> {
@@ -76,13 +76,14 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     name?: string
     log_type?: string
     late_min?: number
+    early_min?: number
     ot_min?: number
     break_min?: number
     status?: string
     approved?: string
   }[]
 
-  type DayRec = { inMs: number | null; outMs: number | null; breakMin: number; otMin: number; outApproved: boolean }
+  type DayRec = { inMs: number | null; outMs: number | null; breakMin: number; otMin: number; earlyMin: number; outApproved: boolean }
   const byDay: Record<string, DayRec> = {}
   const map: Record<string, AttSummaryRow> = {}
 
@@ -100,8 +101,8 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     if (!store || !name) continue
     const key = store + '_' + name
     const dayKey = rowDate + '_' + key
-    if (!map[key]) map[key] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
-    if (!byDay[dayKey]) byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, otMin: 0, outApproved: false }
+    if (!map[key]) map[key] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
+    if (!byDay[dayKey]) byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, otMin: 0, earlyMin: 0, outApproved: false }
 
     const approval = String(r.approved || '').trim()
     const status = String(r.status || '').trim()
@@ -119,6 +120,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
         byDay[dayKey].breakMin = Number(r.break_min) || 0
         byDay[dayKey].outApproved = isApproved
         byDay[dayKey].otMin = Number(r.ot_min) || 0
+        byDay[dayKey].earlyMin = Number((r as { early_min?: number }).early_min) || 0
       }
     }
   }
@@ -136,6 +138,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
         prev.breakMin += v.breakMin
         prev.outApproved = v.outApproved
         prev.otMin = v.otMin
+        prev.earlyMin = v.earlyMin || 0
         v.outMs = null
       }
     }
@@ -146,10 +149,11 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const attKey = dk.slice(11)
     const rowDate = dk.slice(0, 10)
     if (v.inMs != null && v.outMs != null && v.outApproved && v.outMs > v.inMs) {
-      if (!map[attKey]) map[attKey] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
+      if (!map[attKey]) map[attKey] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
       const minWork = Math.max(0, Math.floor((v.outMs - v.inMs) / 60000) - (v.breakMin || 0))
       map[attKey].workMin += minWork
       map[attKey].otMin += v.otMin || 0
+      map[attKey].earlyMin += v.earlyMin || 0
       map[attKey].workDays += 1
       if (rowDate && !map[attKey].workDates.includes(rowDate)) map[attKey].workDates.push(rowDate)
     }
@@ -250,23 +254,29 @@ export async function GET(request: NextRequest) {
       const isKitchen = job === 'Kitchen' || job === '주방'
 
       const attKey = store + '_' + name
-      const att = attSummary[attKey] || { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
+      const att = attSummary[attKey] || { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
       const lateMin = att.lateMin
+      const earlyMin = att.earlyMin
       const otMin = att.otMin
       const workMin = att.workMin
       const workDays = att.workDays
 
       let salary = 0
       let lateDed = 0
+      let earlyDed = 0
       let otAmt = 0
       if (isHourly) {
         salary = salAmt > 0 && workMin > 0 ? Math.floor((workMin / 60) * salAmt) : 0
         lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
+        earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
         otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
       } else {
         salary = salAmt
         lateDed = LATE_DED_HOURS_BASE > 0 && salary > 0 && lateMin > 0
           ? Math.floor((lateMin / 60) * (salary / LATE_DED_HOURS_BASE))
+          : 0
+        earlyDed = LATE_DED_HOURS_BASE > 0 && salary > 0 && earlyMin > 0
+          ? Math.floor((earlyMin / 60) * (salary / LATE_DED_HOURS_BASE))
           : 0
         const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
         otAmt = hourlyForOt > 0 && otMin > 0 ? Math.floor((otMin / 60) * hourlyForOt * OT_MULTIPLIER) : 0
@@ -297,7 +307,7 @@ export async function GET(request: NextRequest) {
       const sso = Math.min(Math.floor(contributable * 0.05), ssoLimits.maxDed)
 
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
-      const deduct = lateDed + sso
+      const deduct = lateDed + earlyDed + sso
       const netPay = Math.max(0, income - deduct)
 
       list.push({
@@ -311,6 +321,8 @@ export async function GET(request: NextRequest) {
         otAmt,
         lateMin,
         lateDed,
+        earlyMin,
+        earlyDed,
         sso,
         netPay,
       })

@@ -678,7 +678,7 @@ export async function getAttendancePendingList(params: {
   return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
 }
 
-export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
+export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; optEarlyMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
   const res = await apiFetch('/api/processAttendanceApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -767,6 +767,8 @@ export interface AttendanceDailyRow {
   pendingInId?: number | null
   pendingOutId?: number | null
   inStatus?: string
+  /** 파트타임/시급이면 계획 0이어도 빨간 행 미적용 */
+  isPartTime?: boolean
 }
 
 export async function getAttendanceRecordsAdmin(params: {

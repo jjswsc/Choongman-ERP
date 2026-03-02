@@ -88,6 +88,23 @@ export async function POST(request: NextRequest) {
           )
         }
       }
+      // 퇴근·휴식시작·휴식종료(재개)는 당일 출근 기록이 있어야만 기록 가능
+      if (logType === '퇴근' || logType === '휴식시작' || logType === '휴식종료') {
+        const hasInToday = (logs || []).some(
+          (r) =>
+            (r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : '') === todayStrVal &&
+            String(r.log_type || '').trim() === '출근'
+        )
+        if (!hasInToday) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: '출근을 먼저 기록해 주세요. 오늘 출근 기록이 없으면 휴식·재개·퇴근을 기록할 수 없습니다.',
+            },
+            { headers }
+          )
+        }
+      }
     }
 
     let targetLat = 0,

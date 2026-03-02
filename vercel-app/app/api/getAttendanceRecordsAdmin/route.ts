@@ -18,6 +18,13 @@ function toTimeStr(iso: string | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+/** log_at(UTC ISO) → 방콕 기준 시간 HH:mm:ss (출근=퇴근 여부 확인용) */
+function toTimeStrWithSec(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
 /** 방콕 기준 날짜(YYYY-MM-DD)에서 N일 더한 날짜 */
 function addDay(dateStr: string, delta: number): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -38,6 +45,11 @@ function parsePlanToMinutes(plan: string | null | undefined): number {
   const m = plan.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
   if (!m) return 0
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+}
+
+/** Mr./Ms./Mrs. 접두어 제거 - 스케줄(이름만)과 근태(호칭 포함) 매칭용 */
+function normalizeNameForSchedule(name: string): string {
+  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
 }
 
 function plannedHrsFromPlans(planIn: string, planOut: string, planBS: string, planBE: string, planInPrevDay?: boolean): number {
@@ -71,6 +83,8 @@ export interface AttendanceDailyRow {
   pendingInId: number | null
   pendingOutId: number | null
   inStatus?: string
+  /** 파트타임/시급이면 계획 0이어도 빨간 행 표시 안 함 */
+  isPartTime?: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -134,6 +148,26 @@ export async function GET(request: NextRequest) {
       )) as AttRow[]
     }
 
+    /** 파트타임/시급 직원 식별: store|name (정규화 포함) → 계획 0이어도 빨간 행 미적용 */
+    const partTimeKeys = new Set<string>()
+    try {
+      const empRows = (await supabaseSelect('employees', { select: 'store,name,job,sal_type', limit: 500 })) as { store?: string; name?: string; job?: string; sal_type?: string }[]
+      const partTimeSal = /시급|hourly|hour|part-time|part\s*time/i
+      const partTimeJob = /part|파트|part-time/i
+      for (const e of empRows || []) {
+        const store = String(e.store || '').trim()
+        const nm = String(e.name || '').trim()
+        if (!store || !nm) continue
+        const job = String(e.job || '').trim()
+        const salType = String(e.sal_type || '').trim()
+        const isPart = partTimeSal.test(salType) || partTimeJob.test(job)
+        if (isPart) {
+          partTimeKeys.add(`${store}|${nm}`)
+          partTimeKeys.add(`${store}|${normalizeNameForSchedule(nm)}`)
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }
     const scheduleMap: Record<string, SchRow> = {}
     const schFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr.slice(0, 10)}`
@@ -142,7 +176,11 @@ export async function GET(request: NextRequest) {
       const d = toDateStr(s.schedule_date)
       const store = String(s.store_name || '').trim()
       const nm = String(s.name || '').trim()
-      if (d && store && nm) scheduleMap[`${d}|${store}|${nm}`] = s
+      if (d && store && nm) {
+        scheduleMap[`${d}|${store}|${nm}`] = s
+        const nmNorm = normalizeNameForSchedule(nm)
+        if (nmNorm !== nm) scheduleMap[`${d}|${store}|${nmNorm}`] = s
+      }
     }
 
     const byKey: Record<
@@ -277,7 +315,23 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const sch = scheduleMap[`${dateForRow}|${rec.store}|${rec.name}`]
+      let sch =
+        scheduleMap[`${dateForRow}|${rec.store}|${rec.name}`] ||
+        scheduleMap[`${dateForRow}|${rec.store}|${normalizeNameForSchedule(rec.name)}`]
+      // 스케줄은 닉네임/이름만, 근태는 풀네임인 경우: 같은 날·매장에서 이름 부분 일치로 매칭
+      if (!sch) {
+        const recNorm = normalizeNameForSchedule(rec.name)
+        const prefix = `${dateForRow}|${rec.store}|`
+        for (const key of Object.keys(scheduleMap)) {
+          if (!key.startsWith(prefix)) continue
+          const schName = key.slice(prefix.length)
+          if (!schName) continue
+          if (recNorm.includes(schName) || schName.includes(recNorm)) {
+            sch = scheduleMap[key]
+            break
+          }
+        }
+      }
       const planIn = sch?.plan_in || ''
       const planOut = sch?.plan_out || ''
       const planBS = sch?.break_start || ''
@@ -300,28 +354,42 @@ export async function GET(request: NextRequest) {
 
       // 실제 근무시간이 0이면 지각/연장은 의미 없음 → 0으로 통일해 잘못된 표시 방지
       const effectiveLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
-      // 연장 표시는 (차이 + 지각)을 넘을 수 없음 → 잘못된 DB/병합 값 방지 (차이 = 실제−계획, 지각은 별도이므로 연장 상한 = diffMin + lateMin)
-      const otCap = Math.max(0, diffMin + lateMinForRow)
-      const effectiveOtMin = actualWorkMin <= 0 ? 0 : Math.min(otMinForRow, otCap)
+      // 계획 시간이 0(스케줄 없음)이면 연장으로 보지 않음 → 일반 근무로만 계산
+      const otCap = plannedWorkMin <= 0 ? 0 : Math.max(0, diffMin + lateMinForRow)
+      const effectiveOtMin =
+        actualWorkMin <= 0 || plannedWorkMin <= 0
+          ? 0
+          : otMinForRow > 0
+            ? Math.min(otMinForRow, otCap)
+            : Math.min(Math.max(0, diffMin), otCap)
 
       if (pendingOnly && !isPending) continue
 
-      // 상태 표시: 퇴근 없음→퇴근미기록, 차이 -30분 미만→조퇴, 차이 부족 없는데 DB가 조퇴→정상(계획 대비 실제 근무로 판단)
+      // 상태 표시: 퇴근 없음→퇴근미기록, 차이 음수(계획보다 적게 근무)→조퇴, 연장 30분 이상→연장, 그 외 DB값 또는 정상
       const displayStatus =
         !outTimeForRow
           ? '퇴근미기록'
-          : diffMin < -30
+          : diffMin < 0
             ? '조퇴'
-            : statusForRow === '조퇴'
-              ? '정상'
-              : statusForRow
+            : effectiveOtMin >= 30
+              ? '연장'
+              : statusForRow === '조퇴'
+                ? '정상'
+                : statusForRow
 
+      const isPartTime =
+        partTimeKeys.has(`${rec.store}|${rec.name}`) ||
+        partTimeKeys.has(`${rec.store}|${normalizeNameForSchedule(rec.name)}`)
+      // 출근·퇴근이 동일하게 보이면(같은 분 또는 실제 동일) 초까지 표시해 오입력/앱 버그 확인 가능하도록
+      const inStr = toTimeStr(inTimeForRow)
+      const outStr = outTimeForRow ? toTimeStr(outTimeForRow) : '-'
+      const sameMinute = outTimeForRow && inStr === outStr
       result.push({
         date: dateForRow,
         store: rec.store,
         name: rec.name,
-        inTimeStr: toTimeStr(inTimeForRow),
-        outTimeStr: outTimeForRow ? toTimeStr(outTimeForRow) : '-',
+        inTimeStr: sameMinute ? toTimeStrWithSec(inTimeForRow) : inStr,
+        outTimeStr: outTimeForRow ? (sameMinute ? toTimeStrWithSec(outTimeForRow) : outStr) : '-',
         breakMin: breakMinForRow,
         actualWorkHrs: Math.round(actualWorkHrs * 100) / 100,
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
@@ -334,6 +402,7 @@ export async function GET(request: NextRequest) {
         pendingInId: inIdForRow,
         pendingOutId: outIdForRow,
         inStatus: inStatusForRow,
+        isPartTime,
       })
     }
 

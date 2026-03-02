@@ -26,14 +26,14 @@ function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
 }
 
 /** 근태 집계: 지각분, 연장분, 근무분, 출근일수 (store|name 기준). 방콕 기준 + 자정 넘김은 출근일로 합침 */
-async function getAttendanceSummary(monthStr: string, storeFilter?: string): Promise<Record<string, { lateMin: number; otMin: number; workMin: number; workDays: number }>> {
+async function getAttendanceSummary(monthStr: string, storeFilter?: string): Promise<Record<string, { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number }>> {
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
   const endStr = lastDay.toISOString().slice(0, 10)
   const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
   const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
-  type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }
+  type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }
   let attRows: AttRow[] = []
   if (storeFilter) {
     attRows = (await supabaseSelectFilter(
@@ -49,7 +49,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     )) as AttRow[]
   }
 
-  const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; otMin: number }> = {}
+  const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; earlyMin: number; otMin: number }> = {}
   for (const r of attRows || []) {
     const rowDate = toDateStrBangkok(r.log_at)
     const type = String(r.log_type || '').trim()
@@ -64,7 +64,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     if (!store || !name) continue
     const dayKey = `${rowDate}|${store}|${name}`
     if (!byDay[dayKey]) {
-      byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, outApproved: false, lateMin: 0, otMin: 0 }
+      byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, outApproved: false, lateMin: 0, earlyMin: 0, otMin: 0 }
     }
     const v = byDay[dayKey]
     const approved = String(r.approved || '').trim()
@@ -85,6 +85,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
         v.breakMin = Number(r.break_min) || 0
         v.outApproved = isApproved
         v.otMin = Number(r.ot_min) || 0
+        v.earlyMin = Number(r.early_min) || 0
       }
     } else if (type === '휴식종료') {
       v.breakMin += Number(r.break_min) || 0
@@ -105,21 +106,23 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
         prev.breakMin += v.breakMin
         prev.outApproved = v.outApproved
         prev.otMin = v.otMin
+        prev.earlyMin = v.earlyMin || 0
         v.outMs = null
       }
     }
   }
 
-  const map: Record<string, { lateMin: number; otMin: number; workMin: number; workDays: number }> = {}
+  const map: Record<string, { lateMin: number; earlyMin: number; otMin: number; workMin: number; workDays: number }> = {}
   for (const [dayKey, v] of Object.entries(byDay)) {
     if (v.inMs == null || v.outMs == null || !v.outApproved || v.outMs <= v.inMs) continue
     const parts = dayKey.split('|')
     const store = parts[1] || ''
     const name = parts[2] || ''
     const key = `${store}_${name}`
-    if (!map[key]) map[key] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0 }
+    if (!map[key]) map[key] = { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0 }
     map[key].workMin += Math.max(0, Math.floor((v.outMs - v.inMs) / 60000) - v.breakMin)
     map[key].lateMin += v.lateMin
+    map[key].earlyMin += v.earlyMin || 0
     map[key].otMin += v.otMin
     map[key].workDays += 1
   }
@@ -202,6 +205,8 @@ export interface PayrollPreviewRow {
   otAmt: number
   lateMin: number
   lateDed: number
+  earlyMin: number
+  earlyDed: number
   sso: number
   otherDed: number
   netPay: number
@@ -280,8 +285,9 @@ export async function GET(request: NextRequest) {
       }
 
       const attKey = `${store}_${name}`
-      const att = attSummary[attKey] || { lateMin: 0, otMin: 0, workMin: 0, workDays: 0 }
+      const att = attSummary[attKey] || { lateMin: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0 }
       const lateMin = att.lateMin
+      const earlyMin = att.earlyMin
       const otMin = att.otMin
       const workMin = att.workMin
       const workDays = att.workDays
@@ -292,16 +298,19 @@ export async function GET(request: NextRequest) {
       }
 
       let lateDed = 0
+      let earlyDed = 0
       let otAmt = 0
       const ot15 = Math.round((otMin / 60) * 10) / 10
 
       if (isHourly) {
         salary = salAmt > 0 && workMin > 0 ? Math.floor((workMin / 60) * salAmt) : 0
         lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
+        earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
         otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
       } else {
         const hoursBase = LATE_DED_HOURS_BASE
         lateDed = hoursBase > 0 && salary > 0 ? Math.floor((lateMin / 60) * (salary / hoursBase)) : 0
+        earlyDed = hoursBase > 0 && salary > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * (salary / hoursBase)) : 0
         const hourlyRateForOt = hoursBase > 0 && salary > 0 ? salary / hoursBase : 0
         otAmt = hourlyRateForOt > 0 ? Math.floor((otMin / 60) * hourlyRateForOt * OT_MULTIPLIER) : 0
       }
@@ -317,7 +326,7 @@ export async function GET(request: NextRequest) {
       }
 
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
-      const deduct = lateDed + sso
+      const deduct = lateDed + earlyDed + sso
       const netPay = income - deduct
 
       list.push({
@@ -335,6 +344,8 @@ export async function GET(request: NextRequest) {
         otAmt,
         lateMin,
         lateDed,
+        earlyMin,
+        earlyDed,
         sso,
         otherDed: 0,
         netPay,

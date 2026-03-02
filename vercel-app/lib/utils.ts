@@ -16,11 +16,12 @@ export function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, '&#39;')
 }
 
-/** 직원 닉네임/역할 표시 시 "Part-Time"을 "P/T"로 줄여서 표시 */
+/** 직원 닉네임/역할 표시 시 "(Part-Time)"을 "(P/T)"로 줄여서 표시 */
 export function displayLabelShort(val: string | null | undefined): string {
   const s = String(val ?? '').trim()
+  if (!s) return s
   if (s === 'Part-Time') return 'P/T'
-  return s
+  return s.replace(/\s*\(Part-Time\)\s*/gi, ' (P/T)')
 }
 
 /** 모바일 사진 업로드 전 압축 (base64 크기 제한 회피). HEIC/일부 포맷 실패 시 FileReader fallback */

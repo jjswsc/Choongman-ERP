@@ -15,10 +15,11 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getTodaySchedule, getTodayAttendanceSummary, type TodayScheduleItem, type TodayAttendanceItem } from "@/lib/api-client"
+import { todayStrBangkok } from "@/lib/attendance-utils"
 import { cn } from "@/lib/utils"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return todayStrBangkok()
 }
 
 function parseTimeToDecimal(s: string | null | undefined): number | null {
@@ -141,6 +142,16 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       })
       .finally(() => setLoading(false))
   }, [storeFilterFinal, auth?.store, date])
+
+  // 당일 조회 중일 때 실시간 반영: 30초마다 출퇴근 데이터 재조회
+  const isViewingToday = date === todayStr()
+  React.useEffect(() => {
+    if (!hasSearched || !isViewingToday) return
+    const interval = setInterval(() => {
+      loadTodayData()
+    }, 30 * 1000)
+    return () => clearInterval(interval)
+  }, [hasSearched, isViewingToday, loadTodayData])
 
   const filteredSchedule =
     areaFilter === "all"
@@ -289,9 +300,13 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   const outDec = parseTimeToDecimal(p.pOut)
                   const bsDec = parseTimeToDecimal(p.pBS)
                   const beDec = parseTimeToDecimal(p.pBE)
+                  // 출근만 하면 파란색. 휴식·퇴근 시간 안 맞으면(조퇴/휴게초과) 실시간으로 빨간색
                   const hasProblem: boolean = !att
                     ? true
-                    : Boolean((att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status)))
+                    : Boolean(
+                        (att.lateMin && att.lateMin > 0) ||
+                          (att.status && /지각|결석|미기록|조퇴|휴게초과/.test(att.status))
+                      )
                   const rowBg = hasProblem ? "bg-red-50/60 dark:bg-red-950/40" : "bg-white dark:bg-card"
 
                   return (

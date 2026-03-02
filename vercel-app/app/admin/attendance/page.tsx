@@ -84,7 +84,7 @@ export default function AdminAttendancePage() {
   const [loading, setLoading] = React.useState(false)
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
-  const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number, string>>({})
+  const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -137,7 +137,7 @@ export default function AdminAttendancePage() {
         endDate,
         storeFilter: storeFilter === "All" ? undefined : storeFilter,
         employeeFilter: employeeFilter === "All" ? undefined : employeeFilter,
-        statusFilter,
+        statusFilter: "all",
         userStore: auth?.store,
         userRole: auth?.role,
       })
@@ -146,6 +146,17 @@ export default function AdminAttendancePage() {
         .finally(() => setLoading(false))
     }
   }, [startDate, endDate, storeFilter, employeeFilter, statusFilter, auth?.store, auth?.role])
+
+  const uniqueStatuses = React.useMemo(
+    () => [...new Set(list.map((r) => r.status).filter(Boolean))].sort(),
+    [list]
+  )
+  const displayList =
+    statusFilter === "all"
+      ? list
+      : statusFilter === "exceptNormal"
+        ? list.filter((r) => r.status !== "정상")
+        : list.filter((r) => r.status === statusFilter)
 
   const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
     const res = await createAttendanceFromSchedule({
@@ -162,11 +173,12 @@ export default function AdminAttendancePage() {
     }
   }
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean) => {
+  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null) => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
       optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
+      optEarlyMinutes: optEarlyMinutes != null ? optEarlyMinutes : undefined,
       waiveLate,
       userStore: auth?.store,
       userRole: auth?.role,
@@ -218,12 +230,45 @@ export default function AdminAttendancePage() {
         </div>
 
         <Tabs defaultValue="status" className="space-y-4">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
+          <TabsList className="grid w-full max-w-2xl grid-cols-5">
             <TabsTrigger value="status">{t("tab_att_status")}</TabsTrigger>
+            <TabsTrigger value="help">{t("att_tab_help")}</TabsTrigger>
             <TabsTrigger value="today">{t("tab_att_today_realtime")}</TabsTrigger>
             <TabsTrigger value="view">{t("tab_att_view")}</TabsTrigger>
             <TabsTrigger value="schedule">{t("tab_att_schedule")}</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="help" className="mt-0 space-y-4">
+            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+              <h2 className="text-base font-semibold">{t("att_help_title")}</h2>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_approve_in")} / {t("att_approve_out")}</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_approval_in")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("att_help_approval_out")}</p>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_adjust_label")}</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_adjust")}</p>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_ot_label")} (O.T)</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_ot")}</p>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_col_diff")} / {t("att_late_extra")}</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_diff")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("att_help_late_ot")}</p>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_col_status")}</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_status")}</p>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("att_tab_no_record")}</h3>
+                <p className="text-xs text-muted-foreground">{t("att_help_no_record")}</p>
+              </section>
+            </div>
+          </TabsContent>
 
           <TabsContent value="status" className="mt-0 space-y-4">
             <div className="rounded-lg border border-border bg-card p-4">
@@ -264,14 +309,28 @@ export default function AdminAttendancePage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold">{t("att_status_filter")}</label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <Select
+                    value={
+                      ["all", "noRecord", "exceptNormal", "연장", "지각"].includes(statusFilter) || uniqueStatuses.includes(statusFilter)
+                        ? statusFilter
+                        : "all"
+                    }
+                    onValueChange={setStatusFilter}
+                  >
                     <SelectTrigger className="h-9 w-28 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{t("noticeFilterAll")}</SelectItem>
-                      <SelectItem value="pending">{t("att_pending_only")}</SelectItem>
                       <SelectItem value="noRecord">{t("att_tab_no_record")}</SelectItem>
+                      <SelectItem value="exceptNormal">{t("att_status_except_normal")}</SelectItem>
+                      <SelectItem value="연장">{statusToKey("연장") ? t(statusToKey("연장")!) : "연장"}</SelectItem>
+                      <SelectItem value="지각">{statusToKey("지각") ? t(statusToKey("지각")!) : "지각"}</SelectItem>
+                      {uniqueStatuses.filter((s) => s !== "연장" && s !== "지각").map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {statusToKey(s) ? t(statusToKey(s)!) : s}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -280,8 +339,6 @@ export default function AdminAttendancePage() {
                   {loading ? t("loading") : t("stockBtnSearch")}
                 </Button>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">{t("att_approval_help")}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("att_adjust_help")}</p>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -334,7 +391,7 @@ export default function AdminAttendancePage() {
                   </tbody>
                 </table>
                 )
-              ) : list.length === 0 ? (
+              ) : displayList.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   {t("adminLeaveNoResult")}
                 </div>
@@ -352,13 +409,13 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold min-w-[3rem]">{t("att_late_extra")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20" title={t("att_adjust_help")}>{t("att_adjust_label")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20">{t("att_adjust_label")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_approve_btn")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map((row, i) => {
+                    {displayList.map((row, i) => {
                       const pendingIn = row.pendingInId ?? null
                       const pendingOut = row.pendingOutId ?? null
                       const hasNewPending = pendingIn != null || pendingOut != null
@@ -371,7 +428,7 @@ export default function AdminAttendancePage() {
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
                           className={cn(
                             "border-b last:border-b-0",
-                            row.plannedWorkHrs === 0 && "bg-red-100 dark:bg-red-950/40"
+                            row.plannedWorkHrs === 0 && !row.isPartTime && "bg-red-100 dark:bg-red-950/40"
                           )}
                         >
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
@@ -385,33 +442,58 @@ export default function AdminAttendancePage() {
                           <td className="px-3 py-2.5 text-center">
                             {row.plannedWorkHrs === 0 ? "-" : (
                               <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
-                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin} M`}
+                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}`}
                               </span>
                             )}
                           </td>
                           <td className="px-2 py-2.5 text-center">
-                            {row.lateMin > 0 && <span className="font-medium text-red-600">{row.lateMin}</span>}
-                            {row.lateMin > 0 && row.otMin > 0 && " "}
-                            {row.otMin > 0 && <span className="font-medium text-blue-600">{row.otMin}</span>}
-                            {row.lateMin === 0 && row.otMin === 0 && "-"}
+                            {(() => {
+                              const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                              const hasAny = row.lateMin > 0 || earlyMinDisplay > 0 || row.otMin > 0
+                              return hasAny ? (
+                                <>
+                                  {row.lateMin > 0 && <span className="font-medium text-red-600">{row.lateMin}</span>}
+                                  {row.lateMin > 0 && (earlyMinDisplay > 0 || row.otMin > 0) && " "}
+                                  {earlyMinDisplay > 0 && <span className="font-medium text-amber-600">{earlyMinDisplay}</span>}
+                                  {earlyMinDisplay > 0 && row.otMin > 0 && " "}
+                                  {row.otMin > 0 && <span className="font-medium text-blue-600">{row.otMin}</span>}
+                                </>
+                              ) : "-"
+                            })()}
                           </td>
-                          <td className="px-2 py-2.5 text-center min-w-[4.5rem]">
-                            {hasPendingOut ? (
-                              <Input
-                                type="number"
-                                min={0}
-                                max={999}
-                                placeholder="0"
-                                value={otMinutesByRow[pendingOut ?? row.pendingId!] ?? String(row.otMin ?? 0)}
-                                onChange={(e) => setOtMinutesByRow((p) => ({ ...p, [pendingOut ?? row.pendingId!]: e.target.value }))}
-                                className="h-7 min-w-[3.5rem] w-14 text-[11px] text-center mx-auto"
-                                title={t("att_adjust_help")}
-                              />
-                            ) : row.otMin > 0 ? (
-                              <span className="text-blue-600 text-[11px]">{row.otMin}</span>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
+                          <td className="px-2 py-2.5 text-center min-w-[5rem]">
+                            {(() => {
+                              const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                              const showAdjustInput = row.lateMin > 0 || row.otMin >= 30 || earlyMinDisplay > 0
+                              const adjustKey =
+                                hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                  ? (pendingOut ?? row.pendingId)!
+                                  : `${row.date}-${row.store}-${row.name}`
+                              const defaultVal = String(
+                                row.otMin >= 30 && earlyMinDisplay === 0
+                                  ? row.otMin
+                                  : row.lateMin > 0 || earlyMinDisplay > 0
+                                    ? row.lateMin + earlyMinDisplay
+                                    : 0
+                              )
+                              return showAdjustInput ? (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={999}
+                                  placeholder="0"
+                                  value={otMinutesByRow[adjustKey] ?? defaultVal}
+                                  onChange={(e) =>
+                                    setOtMinutesByRow((p) => ({ ...p, [adjustKey]: e.target.value }))
+                                  }
+                                  className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
+                                />
+                              ) : (
+                                <span className="text-muted-foreground text-xs">
+                                  {row.otMin > 0 ? "0" : "-"}
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             {pendingIn != null ? (
@@ -427,7 +509,9 @@ export default function AdminAttendancePage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="center">
-                                  <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, row.lateMin > 0 ? true : undefined)}>{t("att_approve_in")}</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, row.lateMin > 0 ? true : undefined)}>
+                                  {row.lateMin > 0 ? t("att_approve_in_waive_late") : t("att_approve_in")}
+                                </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem variant="destructive" onClick={() => handleReject(pendingIn)}>{t("att_btn_reject")}</DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -436,10 +520,12 @@ export default function AdminAttendancePage() {
                               <span
                                 className={cn(
                                   "text-[10px] font-medium",
-                                  isPending && "text-amber-600",
+                                  row.status === "정상" && "text-foreground",
                                   row.status === "퇴근미기록" && "text-red-600",
-                                  (row.status === "조퇴" || row.status === "지각" || row.status === "지각(승인)") && "text-amber-600",
-                                  !row.outTimeStr && "text-amber-600"
+                                  row.status !== "정상" &&
+                                    row.status !== "퇴근미기록" &&
+                                    (isPending || row.status === "조퇴" || row.status === "지각" || row.status === "지각(승인)" || !row.outTimeStr) &&
+                                    "text-amber-600"
                                 )}
                               >
                                 {!row.outTimeStr
@@ -451,7 +537,7 @@ export default function AdminAttendancePage() {
                             )}
                           </td>
                           <td className="px-2 py-2.5">
-                            {hasPendingOut ? (
+                            {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || (row.status === "조퇴" && row.diffMin < 0)) ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <Button
                                   size="sm"
@@ -459,9 +545,24 @@ export default function AdminAttendancePage() {
                                   className="h-6 px-2 text-[10px]"
                                   onClick={() => {
                                     const outId = pendingOut ?? row.pendingId!
-                                    const otVal = otMinutesByRow[outId] ?? String(row.otMin ?? 0)
+                                    const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                                    const defaultVal =
+                                      row.otMin >= 30 && earlyMinDisplay === 0
+                                        ? row.otMin
+                                        : row.lateMin > 0 || earlyMinDisplay > 0
+                                          ? row.lateMin + earlyMinDisplay
+                                          : 0
+                                    const otVal = otMinutesByRow[outId] ?? String(defaultVal)
                                     const n = parseInt(otVal, 10)
-                                    handleApprove(outId, !isNaN(n) && n >= 0 ? n : undefined)
+                                    const num = !isNaN(n) && n >= 0 ? n : undefined
+                                    if (earlyMinDisplay > 0) {
+                                      const earlyPart = row.lateMin > 0 ? Math.max(0, (num ?? 0) - row.lateMin) : (num ?? 0)
+                                      handleApprove(outId, undefined, undefined, earlyPart)
+                                    } else if (row.otMin >= 30) {
+                                      handleApprove(outId, num, undefined)
+                                    } else {
+                                      handleApprove(outId, undefined, undefined)
+                                    }
                                   }}
                                 >
                                   {t("att_btn_approve")}

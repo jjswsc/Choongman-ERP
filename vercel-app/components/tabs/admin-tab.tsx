@@ -12,6 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { UserCog, Search, Palmtree } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -19,24 +26,37 @@ import { translateApiMessage as translateApiMsg } from "@/lib/translate-api-mess
 import { useAuth } from "@/lib/auth-context"
 import {
   useStoreList,
-  getAttendancePendingList,
+  getAttendanceRecordsAdmin,
   processAttendanceApproval,
+  approveNoClockOut,
   getAttendanceNoRecordList,
   createAttendanceFromSchedule,
+  type AttendanceDailyRow,
   type AttendanceNoRecordRow,
 } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
 import { displayLabelShort } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
-function weekAgoStr() {
-  const d = new Date()
-  d.setDate(d.getDate() - 7)
-  return d.toISOString().slice(0, 10)
+
+function statusToKey(s: string): string | null {
+  const st = (s || "").trim()
+  if (!st) return null
+  if (st === "정상") return "att_status_normal"
+  if (st.includes("정상") && st.includes("승인")) return "att_status_approved"
+  if (st === "반려") return "att_status_rejected"
+  if (st === "퇴근미기록") return "att_status_no_out"
+  if (st === "지각" || st === "지각(승인)") return "att_status_late"
+  if (st === "조퇴") return "att_status_early"
+  if (st === "연장") return "att_status_overtime"
+  if (st.includes("위치미확인") && st.includes("승인대기")) return "att_status_gps_pending"
+  if (st.includes("강제퇴근") && st.includes("승인대기")) return "att_status_forced_out_pending"
+  return null
 }
 
 export function AdminTab() {
@@ -44,16 +64,17 @@ export function AdminTab() {
   const { lang } = useLang()
   const t = useT(lang)
 
-  // 근태 승인
+  // 근태 승인: 관리자 기준 단일 목록 (기록 + 미기록 통합)
   const [attStart, setAttStart] = useState(todayStr)
   const [attEnd, setAttEnd] = useState(todayStr)
   const [attStoreFilter, setAttStoreFilter] = useState("All")
+  const [attStatusFilter, setAttStatusFilter] = useState("all")
   const [attStores, setAttStores] = useState<string[]>([])
-  const [attList, setAttList] = useState<{ id: number; log_at: string; store_name: string; name: string; nick?: string; log_type: string; status?: string; approved?: string; late_min?: number; ot_min?: number }[]>([])
+  const [recordList, setRecordList] = useState<AttendanceDailyRow[]>([])
   const [noRecordList, setNoRecordList] = useState<AttendanceNoRecordRow[]>([])
   const [attLoading, setAttLoading] = useState(false)
-  const [attMode, setAttMode] = useState<"pending" | "noRecord">("pending")
-  const [otMinutesByItem, setOtMinutesByItem] = useState<Record<number, string>>({})
+  const [attHasSearched, setAttHasSearched] = useState(false)
+  const [otMinutesByRow, setOtMinutesByRow] = useState<Record<number | string, string>>({})
 
   const { stores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
@@ -70,49 +91,93 @@ export function AdminTab() {
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
 
-  const loadAttList = useCallback(() => {
-    if (!auth) return
-    if (attStores.length === 0 && !isOffice) return
+  const loadAttendance = useCallback(() => {
+    if (!auth || (attStores.length === 0 && !isOffice)) return
     setAttLoading(true)
-    getAttendancePendingList({
-      startStr: attStart,
-      endStr: attEnd,
-      store: attStoreFilter === "All" ? undefined : attStoreFilter,
-      userStore: auth.store || "",
-      userRole: auth.role || "",
-    })
-      .then(setAttList)
-      .catch(() => setAttList([]))
+    setAttHasSearched(true)
+    const storeParam = attStoreFilter === "All" ? undefined : attStoreFilter
+    const userStore = auth.store || ""
+    const userRole = auth.role || ""
+    Promise.all([
+      getAttendanceRecordsAdmin({
+        startDate: attStart,
+        endDate: attEnd,
+        storeFilter: storeParam,
+        userStore,
+        userRole,
+      }),
+      getAttendanceNoRecordList({
+        startStr: attStart,
+        endStr: attEnd,
+        store: storeParam,
+        userStore,
+        userRole,
+      }),
+    ])
+      .then(([records, noRecord]) => {
+        setRecordList(records || [])
+        setNoRecordList(noRecord || [])
+      })
+      .catch(() => {
+        setRecordList([])
+        setNoRecordList([])
+      })
       .finally(() => setAttLoading(false))
   }, [auth, attStores.length, isOffice, attStart, attEnd, attStoreFilter])
 
-  const loadNoRecordList = useCallback(() => {
+  const uniqueStatuses = [...new Set(recordList.map((r) => r.status).filter(Boolean))].sort() as string[]
+  const displayRecordList =
+    attStatusFilter === "all"
+      ? recordList
+      : attStatusFilter === "noRecord"
+        ? []
+        : attStatusFilter === "exceptNormal"
+          ? recordList.filter((r) => r.status !== "정상")
+          : recordList.filter((r) => r.status === attStatusFilter)
+
+  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null) => {
     if (!auth) return
-    if (attStores.length === 0 && !isOffice) return
-    setAttLoading(true)
-    getAttendanceNoRecordList({
-      startStr: attStart,
-      endStr: attEnd,
-      store: attStoreFilter === "All" ? undefined : attStoreFilter,
+    const res = await processAttendanceApproval({
+      id,
+      decision: "승인완료",
+      optOtMinutes: optOtMinutes ?? undefined,
+      optEarlyMinutes: optEarlyMinutes ?? undefined,
+      waiveLate,
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
-      .then(setNoRecordList)
-      .catch(() => setNoRecordList([]))
-      .finally(() => setAttLoading(false))
-  }, [auth, attStores.length, isOffice, attStart, attEnd, attStoreFilter])
-
-  const handleSearch = useCallback(() => {
-    if (attMode === "pending") loadAttList()
-    else loadNoRecordList()
-  }, [attMode, loadAttList, loadNoRecordList])
-
-  useEffect(() => {
-    if (auth && attStores.length > 0) {
-      if (attMode === "pending") loadAttList()
-      else loadNoRecordList()
+    if (res.success) {
+      setOtMinutesByRow((p) => { const next = { ...p }; delete next[id]; return next })
+      loadAttendance()
+    } else {
+      alert(translateApiMessage(res.message) || t("processFail"))
     }
-  }, [auth?.store, auth?.role, attStart, attEnd, attStoreFilter, attStores.length, attMode, loadAttList, loadNoRecordList])
+  }
+
+  const handleReject = async (id: number) => {
+    if (!auth) return
+    const res = await processAttendanceApproval({
+      id,
+      decision: "반려",
+      userStore: auth.store || "",
+      userRole: auth.role || "",
+    })
+    if (res.success) loadAttendance()
+    else alert(translateApiMessage(res.message) || t("processFail"))
+  }
+
+  const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
+    if (!auth) return
+    const res = await approveNoClockOut({
+      date: row.date,
+      store: row.store,
+      name: row.name,
+      userStore: auth.store || "",
+      userRole: auth.role || "",
+    })
+    if (res.success) loadAttendance()
+    else alert(translateApiMessage(res.message) || t("processFail"))
+  }
 
   const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
     if (!auth) return
@@ -123,33 +188,8 @@ export function AdminTab() {
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
-    if (res.success) {
-      loadNoRecordList()
-    } else {
-      alert(translateApiMessage(res.message) || t("processFail"))
-    }
-  }
-
-  const handleAttApprove = async (id: number, decision: string, optOtMinutes?: number | null, waiveLate?: boolean) => {
-    if (!auth) return
-    const res = await processAttendanceApproval({
-      id,
-      decision,
-      optOtMinutes: optOtMinutes ?? undefined,
-      waiveLate,
-      userStore: auth.store || "",
-      userRole: auth.role || "",
-    })
-    if (res.success) {
-      setOtMinutesByItem((p) => {
-        const next = { ...p }
-        delete next[id]
-        return next
-      })
-      loadAttList()
-    } else {
-      alert(translateApiMessage(res.message) || t("processFail"))
-    }
+    if (res.success) loadAttendance()
+    else alert(translateApiMessage(res.message) || t("processFail"))
   }
 
   return (
@@ -187,7 +227,7 @@ export function AdminTab() {
         </Card>
       </Link>
 
-      {/* Attendance Approval */}
+      {/* Attendance Approval: 관리자 기준 단일 테이블 (기록 + 미기록) */}
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center gap-2 pb-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
@@ -197,12 +237,6 @@ export function AdminTab() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-xs text-muted-foreground -mt-1">{t("adminAttMobileHelp")}</p>
-          <Tabs value={attMode} onValueChange={(v) => setAttMode(v as "pending" | "noRecord")} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="pending" className="text-xs">{t("att_pending_only")}</TabsTrigger>
-              <TabsTrigger value="noRecord" className="text-xs">{t("att_tab_no_record")}</TabsTrigger>
-            </TabsList>
-          </Tabs>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground block mb-0.5">{t("att_start_date")}</label>
@@ -226,98 +260,221 @@ export function AdminTab() {
               </SelectContent>
             </Select>
           </div>
-          <Button className="h-10 w-full font-medium" onClick={handleSearch} disabled={attLoading}>
+          <div>
+            <label className="text-[10px] text-muted-foreground block mb-0.5">{t("att_status_filter")}</label>
+            <Select
+              value={
+                ["all", "noRecord", "exceptNormal", "연장", "지각"].includes(attStatusFilter) || uniqueStatuses.includes(attStatusFilter)
+                  ? attStatusFilter
+                  : "all"
+              }
+              onValueChange={setAttStatusFilter}
+            >
+              <SelectTrigger className="h-9 w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("noticeFilterAll")}</SelectItem>
+                <SelectItem value="noRecord">{t("att_tab_no_record")}</SelectItem>
+                <SelectItem value="exceptNormal">{t("att_status_except_normal")}</SelectItem>
+                <SelectItem value="연장">{statusToKey("연장") ? t(statusToKey("연장")!) : "연장"}</SelectItem>
+                <SelectItem value="지각">{statusToKey("지각") ? t(statusToKey("지각")!) : "지각"}</SelectItem>
+                {uniqueStatuses.filter((s) => s !== "연장" && s !== "지각").map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {statusToKey(s) ? t(statusToKey(s)!) : s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button className="h-10 w-full font-medium" onClick={loadAttendance} disabled={attLoading}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {attLoading ? t("loading") : t("stockBtnSearch")}
           </Button>
-          <div className="flex flex-col gap-2">
-            {attMode === "pending" ? (
-            attList.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border py-8 text-center">
-                <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
-                <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
-              </div>
-            ) : (
-              attList.map((item) => {
-                const isIn = String(item.log_type || "").includes("출근") || String(item.log_type || "").toLowerCase().includes("in")
-                const hasLate = (item.late_min ?? 0) > 0
-                const otVal = otMinutesByItem[item.id] ?? String(item.ot_min ?? 0)
-                return (
-                  <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
-                    <div className="min-w-0 flex-1 shrink">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-medium text-foreground">{item.name}</span>
-                        {item.nick && <span className="text-[10px] text-muted-foreground">({displayLabelShort(item.nick)})</span>}
-                        <span className={`text-[10px] px-1 py-0.5 rounded shrink-0 ${isIn ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"}`}>
-                          {isIn ? t("att_col_in") : t("att_col_out")}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {item.log_at} {item.store_name}
-                        {hasLate && isIn && (
-                          <span className="text-red-600 dark:text-red-400 font-semibold ml-0.5">
-                            · {t("att_late_label")} {item.late_min}{t("att_min_unit")}
-                          </span>
-                        )}
-                        {!isIn && (item.ot_min ?? 0) > 0 && (
-                          <span className="text-green-600 dark:text-green-400 font-semibold ml-0.5">
-                            · {t("att_ot_label")} {item.ot_min}{t("att_min_unit")}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-                      {!isIn && (
-                        <Input
-                          type="number"
-                          min={0}
-                          max={999}
-                          placeholder="0"
-                          value={otVal}
-                          onChange={(e) => setOtMinutesByItem((p) => ({ ...p, [item.id]: e.target.value }))}
-                          className="h-8 w-16 text-sm text-center py-0 min-w-[3.5rem]"
-                        />
-                      )}
-                      {isIn ? (
-                        <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => handleAttApprove(item.id, "승인완료", undefined, hasLate)}>{t("att_approve_in")}</Button>
-                      ) : (
-                        <Button size="sm" className="h-7 px-2 text-[10px]" onClick={() => { const n = parseInt(otVal, 10); handleAttApprove(item.id, "승인완료", !isNaN(n) && n >= 0 ? n : undefined); }}>{t("att_approve_out")}</Button>
-                      )}
-                      <Button variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => handleAttApprove(item.id, "반려")}>{t("att_btn_reject")}</Button>
-                    </div>
-                  </div>
-                )
-              })
-            )
-            ) : (
-            noRecordList.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border py-8 text-center">
-                <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
-                <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoRecord")}</p>
-              </div>
-            ) : (
-              noRecordList.map((row) => (
-                <div key={`${row.date}-${row.store}-${row.name}`} className="flex items-center justify-between gap-2 rounded-lg border border-border/60 p-2.5">
-                  <div className="min-w-0 flex-1 shrink">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-medium text-foreground">{row.name}</span>
-                      {row.nick && <span className="text-[10px] text-muted-foreground">({displayLabelShort(row.nick)})</span>}
-                      <span className="text-[10px] px-1 py-0.5 rounded shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                        {t("att_tab_no_record")}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {row.date} {row.store} · {row.inTimeStr}~{row.outTimeStr}
-                    </p>
-                  </div>
-                  <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={() => handleEmergencyApprove(row)}>
-                    {t("att_btn_emergency_approve")}
-                  </Button>
-                </div>
-              ))
-            )
-            )}
-          </div>
+
+          {!attHasSearched ? (
+            <div className="rounded-lg border border-dashed border-border py-8 text-center">
+              <p className="text-xs text-muted-foreground">{t("att_query_please")}</p>
+            </div>
+          ) : attLoading ? (
+            <div className="py-8 text-center text-xs text-muted-foreground">{t("loading")}</div>
+          ) : displayRecordList.length === 0 && noRecordList.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border py-8 text-center">
+              <UserCog className="mx-auto h-8 w-8 text-muted-foreground/30" />
+              <p className="mt-2 text-xs text-muted-foreground">{t("adminAttNoPending")}</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border bg-card -mx-1">
+              <table className="w-full text-xs min-w-[640px]">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("label_date")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("emp_label_name")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_in")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_out")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_break_min")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_actual_hrs")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_planned_hrs")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_diff")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[3rem]">{t("att_late_extra")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[4rem]">{t("att_adjust_label")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap">{t("att_col_status")}</th>
+                    <th className="px-2 py-2 text-center font-semibold whitespace-nowrap min-w-[90px]">{t("att_approve_btn")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRecordList.map((row, i) => {
+                    const pendingIn = row.pendingInId ?? null
+                    const pendingOut = row.pendingOutId ?? null
+                    const hasLegacyPending = !pendingIn && !pendingOut && row.pendingId != null
+                    const hasPendingOut = pendingOut != null || (hasLegacyPending && row.pendingId != null)
+                    const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                    const showAdjustInput = row.lateMin > 0 || row.otMin >= 30 || earlyMinDisplay > 0
+                    const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
+                      ? (pendingOut ?? row.pendingId)!
+                      : `${row.date}-${row.store}-${row.name}`
+                    const defaultVal = String(
+                      row.otMin >= 30 && earlyMinDisplay === 0
+                        ? row.otMin
+                        : row.lateMin > 0 || earlyMinDisplay > 0
+                          ? row.lateMin + earlyMinDisplay
+                          : 0
+                    )
+                    return (
+                      <tr key={`r-${row.date}-${row.store}-${row.name}-${i}`} className="border-b last:border-b-0">
+                        <td className="px-2 py-2 text-center">{row.date}</td>
+                        <td className="px-2 py-2 text-center font-medium">{row.name}</td>
+                        <td className="px-2 py-2 text-center">{row.inTimeStr}</td>
+                        <td className="px-2 py-2 text-center">{row.outTimeStr}</td>
+                        <td className="px-2 py-2 text-center">{row.breakMin}</td>
+                        <td className="px-2 py-2 text-center">{row.actualWorkHrs}</td>
+                        <td className="px-2 py-2 text-center">{row.plannedWorkHrs}</td>
+                        <td className="px-2 py-2 text-center">
+                          {row.plannedWorkHrs === 0 ? "-" : (
+                            <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
+                              {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}`}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          {row.lateMin > 0 || earlyMinDisplay > 0 || row.otMin > 0 ? (
+                            <>
+                              {row.lateMin > 0 && <span className="text-red-600">{row.lateMin}</span>}
+                              {row.lateMin > 0 && (earlyMinDisplay > 0 || row.otMin > 0) && " "}
+                              {earlyMinDisplay > 0 && <span className="text-amber-600">{earlyMinDisplay}</span>}
+                              {earlyMinDisplay > 0 && row.otMin > 0 && " "}
+                              {row.otMin > 0 && <span className="text-blue-600">{row.otMin}</span>}
+                            </>
+                          ) : "-"}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          {showAdjustInput ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              max={999}
+                              placeholder="0"
+                              value={otMinutesByRow[adjustKey] ?? defaultVal}
+                              onChange={(e) => setOtMinutesByRow((p) => ({ ...p, [adjustKey]: e.target.value }))}
+                              className="h-7 min-w-[3rem] w-14 text-xs text-center tabular-nums mx-auto"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          {pendingIn != null ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-6 px-1.5 text-[10px]">
+                                  {row.inStatus?.includes("위치미확인") ? "위치미확인" : row.status}
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="center">
+                                <DropdownMenuItem onClick={() => handleApprove(pendingIn, undefined, (row.lateMin ?? 0) > 0)}>
+                                  {(row.lateMin ?? 0) > 0 ? t("att_approve_in_waive_late") : t("att_approve_in")}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-destructive" onClick={() => handleReject(pendingIn)}>{t("att_btn_reject")}</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : (
+                            <span className={cn(
+                              "text-[10px] font-medium",
+                              row.status === "정상" && "text-foreground",
+                              row.status === "퇴근미기록" && "text-red-600",
+                              row.status !== "정상" && row.status !== "퇴근미기록" && "text-amber-600"
+                            )}>
+                              {!row.outTimeStr ? "미퇴근" : statusToKey(row.status) ? t(statusToKey(row.status)!) : row.status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2">
+                          {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || (row.status === "조퇴" && row.diffMin < 0)) ? (
+                            <div className="flex items-center gap-1 justify-center flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-6 px-1.5 text-[10px]"
+                                onClick={() => {
+                                  const outId = pendingOut ?? row.pendingId!
+                                  const otVal = otMinutesByRow[outId] ?? defaultVal
+                                  const n = parseInt(otVal, 10)
+                                  const num = !isNaN(n) && n >= 0 ? n : undefined
+                                  if (earlyMinDisplay > 0) {
+                                    const earlyPart = row.lateMin > 0 ? Math.max(0, (num ?? 0) - row.lateMin) : (num ?? 0)
+                                    handleApprove(outId, undefined, undefined, earlyPart)
+                                  } else if (row.otMin >= 30) {
+                                    handleApprove(outId, num, undefined)
+                                  } else {
+                                    handleApprove(outId, undefined, undefined)
+                                  }
+                                }}
+                              >
+                                {t("att_btn_approve")}
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
+                            </div>
+                          ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                            <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px] text-amber-600" onClick={() => handleApproveNoClockOut(row)}>
+                              {t("att_approve_forced_out")}
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {noRecordList.map((row) => (
+                    <tr key={`n-${row.date}-${row.store}-${row.name}`} className="border-b last:border-b-0 bg-muted/20">
+                      <td className="px-2 py-2 text-center">{row.date}</td>
+                      <td className="px-2 py-2 text-center font-medium">
+                        {row.name}
+                        {row.nick && <span className="text-muted-foreground ml-0.5">({displayLabelShort(row.nick)})</span>}
+                      </td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">-</td>
+                      <td className="px-2 py-2 text-center">
+                        <span className="text-[10px] text-slate-600">{t("att_tab_no_record")}</span>
+                      </td>
+                      <td className="px-2 py-2">
+                        <Button size="sm" className="h-6 px-1.5 text-[10px]" onClick={() => handleEmergencyApprove(row)}>
+                          {t("att_btn_emergency_approve")}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -32,7 +32,7 @@ interface EmployeeTableProps {
   onEdit: (idx: number) => void
   onDelete: (rowId: number) => void
   t: (k: string) => string
-  /** 전체 조회 시 퇴사자 빨간색 표시 */
+  /** 전체 조회 시 퇴사일이 지난 경우에만 퇴사자 행 빨간색 표시 */
   statusFilter?: string
 }
 
@@ -78,8 +78,11 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                 ? `${new Date().getFullYear() - new Date(e.birth).getFullYear()}`
                 : "-"
               const grade = e.finalGrade || "-"
-              const isResigned = Boolean(String(e.resign || "").trim())
-              const showResignedHighlight = (statusFilter === "" || statusFilter === "all") && isResigned
+              const resignStr = String(e.resign || "").trim()
+              const resignDate = resignStr ? resignStr.slice(0, 10) : ""
+              const todayStr = new Date().toISOString().slice(0, 10)
+              const isAfterResignDate = resignDate && todayStr > resignDate
+              const showResignedHighlight = (statusFilter === "" || statusFilter === "all") && isAfterResignDate
               return (
                 <tr
                   key={e.row}

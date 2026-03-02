@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
     const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
+    const optEarlyMinutes = body?.optEarlyMinutes != null ? Number(body.optEarlyMinutes) : null
     const waiveLate = body?.waiveLate === true
 
     if (!id || isNaN(id)) {
@@ -50,6 +51,9 @@ export async function POST(request: NextRequest) {
       }
       if (optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
         patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
+      }
+      if (optEarlyMinutes != null && !isNaN(optEarlyMinutes) && optEarlyMinutes >= 0) {
+        patch.early_min = Math.min(9999, Math.round(optEarlyMinutes))
       }
     } else if (decision === '반려') {
       patch.status = '반려'
