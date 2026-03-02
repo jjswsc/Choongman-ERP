@@ -50,6 +50,8 @@ type PayrollRow = {
   otAmt: number
   lateMin: number
   lateDed: number
+  earlyMin?: number
+  earlyDed?: number
   sso: number
   tax: number
   otherDed: number
@@ -70,7 +72,7 @@ function calcNetPay(r: PayrollRow): number {
     r.holidayPay +
     r.splBonus +
     r.otAmt
-  const deduct = r.lateDed + r.sso + r.tax + r.otherDed
+  const deduct = r.lateDed + (r.earlyDed ?? 0) + r.sso + r.tax + r.otherDed
   return Math.max(0, income - deduct)
 }
 
@@ -141,6 +143,8 @@ export function AdminPayrollCalc() {
           otAmt: Number(r.ot_amt) ?? 0,
           lateMin: Number(r.late_min) ?? 0,
           lateDed: Number(r.late_ded) ?? 0,
+          earlyMin: Number(r.early_min) ?? 0,
+          earlyDed: Number(r.early_ded) ?? 0,
           sso: Number(r.sso) ?? 0,
           tax: Number(r.tax) ?? 0,
           otherDed: Number(r.other_ded) ?? 0,
@@ -198,6 +202,8 @@ export function AdminPayrollCalc() {
           otAmt: Number(r.otAmt) || 0,
           lateMin: Number(r.lateMin) || 0,
           lateDed: Number(r.lateDed) || 0,
+          earlyMin: Number(r.earlyMin) || 0,
+          earlyDed: Number(r.earlyDed) || 0,
           sso: Number(r.sso) || 0,
           tax: Number(r.tax) || 0,
           otherDed: Number(r.otherDed) || 0,
@@ -211,6 +217,7 @@ export function AdminPayrollCalc() {
             splBonus: Number(r.splBonus) || 0,
             otAmt: Number(r.otAmt) || 0,
             lateDed: Number(r.lateDed) || 0,
+            earlyDed: Number(r.earlyDed) || 0,
             sso: Number(r.sso) || 0,
             tax: Number(r.tax) || 0,
             otherDed: Number(r.otherDed) || 0,
@@ -302,6 +309,8 @@ export function AdminPayrollCalc() {
           otAmt: r.otAmt,
           lateMin: r.lateMin,
           lateDed: r.lateDed,
+          earlyMin: r.earlyMin ?? 0,
+          earlyDed: r.earlyDed ?? 0,
           sso: r.sso,
           tax: r.tax,
           otherDed: r.otherDed,
@@ -452,7 +461,7 @@ export function AdminPayrollCalc() {
                       (1.5: {r.ot15 ?? 0}h)
                     </td>
                     <td className="p-2 text-right font-medium">{fmt(r.otAmt)}</td>
-                    <td className="p-2 text-right">{fmt(r.lateDed)}</td>
+                    <td className="p-2 text-right">{fmt((r.lateDed || 0) + (r.earlyDed ?? 0))}</td>
                     <td className="p-2 text-right">{fmt(r.sso)}</td>
                     <td className="p-2 text-right font-medium">{fmt(r.otherDed)}</td>
                     <td className="p-2 text-right font-semibold">{fmt(r.netPay)}</td>

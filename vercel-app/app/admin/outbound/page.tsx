@@ -400,6 +400,7 @@ export default function OutboundPage() {
     const thStyle = "background:linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color:#fff; padding:10px 12px; text-align:center; border:1px solid #1e3a8a; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;"
     const tdStyle = (idx: number) => `padding:10px 12px; border:1px solid #e2e8f0; ${idx % 2 === 0 ? "background:#f8fafc;" : "background:#fff;"}`
 
+    let firstSection = true
     for (const wn of whOrderToUse) {
       const items = whFilteredData.byWarehouse[wn] || []
       const byDateThenStore = new Map<string, Map<string, typeof items>>()
@@ -411,33 +412,32 @@ export default function OutboundPage() {
         if (!storeMap.has(store)) storeMap.set(store, [])
         storeMap.get(store)!.push(r)
       }
-      let rowIdx = 0
-      const whRows: string[] = []
+      const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
       for (const date of Array.from(byDateThenStore.keys()).sort()) {
         const storeMap = byDateThenStore.get(date)!
         for (const [storeName, storeItems] of Array.from(storeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-          whRows.push(`<tr><td colspan="6" style="background:linear-gradient(180deg,#f1f5f9 0%,#e2e8f0 100%); font-weight:600; padding:10px 14px; border:1px solid #cbd5e1; color:#334155; font-size:12px;">${escape(date)} · ${colStore}: ${escape(storeName)}</td></tr>`)
-          whRows.push(
-            ...storeItems.map((r) => {
-              const style = tdStyle(rowIdx++)
-              return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
-            })
-          )
-        }
-      }
-      const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
-      sections.push(`
-        <div class="wh-print-section" style="margin-bottom:32px; page-break-inside:avoid;">
+          let rowIdx = 0
+          const storeRows = storeItems.map((r) => {
+            const style = tdStyle(rowIdx++)
+            return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
+          })
+          const pageBreakBefore = firstSection ? "" : " page-break-before: always;"
+          firstSection = false
+          sections.push(`
+        <div class="wh-print-section wh-print-store-page" style="margin-bottom:32px;${pageBreakBefore}">
           <div style="margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #1e40af;">
             <h3 style="margin:0; font-size:1.1rem; font-weight:700; color:#1e40af;">${whLabel}: ${escape(whDisplay)}</h3>
-            <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">${items.length} ${t("outWhCountSuffix")}</p>
+            <p style="margin:4px 0 0 0; font-size:12px; font-weight:600; color:#334155;">${escape(date)} – ${colStore}: ${escape(storeName)}</p>
+            <p style="margin:4px 0 0 0; font-size:11px; color:#64748b;">${storeItems.length} ${t("outWhCountSuffix")}</p>
           </div>
           <table style="${tableStyle}">
             <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle} width:40px;">${colCheck}</th><th style="${thStyle} min-width:90px; white-space:nowrap;">${colDeliveryDate}</th></tr></thead>
-            <tbody>${whRows.join("")}</tbody>
+            <tbody>${storeRows.join("")}</tbody>
           </table>
         </div>
       `)
+        }
+      }
     }
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -450,6 +450,8 @@ export default function OutboundPage() {
         @media print{
           @page{margin:12mm;size:A4}
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+          .wh-print-store-page{page-break-inside:avoid;}
+          .wh-print-store-page:not(:first-of-type){page-break-before:always;}
         }
       </style>
       </head><body>

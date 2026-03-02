@@ -22,6 +22,8 @@ export interface PayrollSaveRow {
   otAmt?: number
   lateMin?: number
   lateDed?: number
+  earlyMin?: number
+  earlyDed?: number
   sso?: number
   tax?: number
   otherDed?: number
@@ -78,6 +80,8 @@ export async function POST(request: NextRequest) {
       ot_amt: Number(r.otAmt) || 0,
       late_min: Number(r.lateMin) || 0,
       late_ded: Number(r.lateDed) || 0,
+      early_min: Number(r.earlyMin) ?? 0,
+      early_ded: Number(r.earlyDed) ?? 0,
       sso: Number(r.sso) || 0,
       tax: Number(r.tax) || 0,
       other_ded: Number(r.otherDed) || 0,

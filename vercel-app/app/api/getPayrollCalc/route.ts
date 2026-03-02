@@ -38,11 +38,11 @@ const DEFAULT_HOLIDAYS: { date: string; name: string }[] = [
   { date: '-12-10', name: 'Constitution Day' },
 ]
 
-type AttSummary = { lateMin: number; lateDaysOver10: number; otMin: number; workMin: number; workDays: number; workDates: Set<string> }
+type AttSummary = { lateMin: number; lateDaysOver10: number; earlyMin: number; otMin: number; workMin: number; workDays: number; workDates: Set<string> }
 
 function buildAttendanceSummary(
   monthStr: string,
-  attRows: { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }[]
+  attRows: { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }[]
 ): Record<string, AttSummary> {
   const startStr = monthStr + '-01'
   const firstDay = new Date(monthStr + '-01')
@@ -55,7 +55,7 @@ function buildAttendanceSummary(
     return d.toISOString().slice(0, 10)
   })()
   const map: Record<string, AttSummary> = {}
-  const byDay: Record<string, { inMs: number; outMs: number; breakMin: number; otMin: number; outApproved: boolean; lateMin?: number }> = {}
+  const byDay: Record<string, { inMs: number; outMs: number; breakMin: number; otMin: number; earlyMin: number; outApproved: boolean; lateMin?: number }> = {}
 
   for (const r of attRows || []) {
     const rowDateStr = toDateStr(r.log_at)
@@ -64,9 +64,9 @@ function buildAttendanceSummary(
     const name = String(r.name || '').trim()
     if (!store || !name) continue
     const key = store + '_' + name
-    if (!map[key]) map[key] = { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
+    if (!map[key]) map[key] = { lateMin: 0, lateDaysOver10: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
     const dayKey = rowDateStr + '_' + key
-    if (!byDay[dayKey]) byDay[dayKey] = { inMs: 0, outMs: 0, breakMin: 0, otMin: 0, outApproved: false, lateMin: 0 }
+    if (!byDay[dayKey]) byDay[dayKey] = { inMs: 0, outMs: 0, breakMin: 0, otMin: 0, earlyMin: 0, outApproved: false, lateMin: 0 }
     const type = String(r.log_type || '').trim()
     const approval = String(r.approved || '').trim()
     const isApproved = approval === '승인' || approval === '승인완료'
@@ -88,7 +88,8 @@ function buildAttendanceSummary(
         byDay[dayKey].outMs = dt
         byDay[dayKey].breakMin = Number(r.break_min) || 0
         byDay[dayKey].outApproved = isApproved
-        byDay[dayKey].otMin = Number(r.ot_min) || 0
+        byDay[dayKey].otMin = Number((r as { ot_min?: number }).ot_min) || 0
+        byDay[dayKey].earlyMin = Number((r as { early_min?: number }).early_min) || 0
       }
     }
   }
@@ -100,6 +101,7 @@ function buildAttendanceSummary(
     let outMs = v.outMs
     let breakMin = v.breakMin || 0
     let otMin = v.otMin || 0
+    let earlyMin = v.earlyMin || 0
     let outApproved = v.outApproved
     if (inMs > 0 && outMs === 0) {
       const parts = dk.split('_')
@@ -116,6 +118,7 @@ function buildAttendanceSummary(
         outMs = nextV.outMs
         breakMin += nextV.breakMin || 0
         otMin += nextV.otMin || 0
+        earlyMin = nextV.earlyMin || 0
         outApproved = nextV.outApproved
         mergedPrevDay.add(nextDk)
       }
@@ -125,10 +128,11 @@ function buildAttendanceSummary(
       // 말일 기준: 출근일이 해당 월이어야 집계 (익월 1일 단독 근무는 제외)
       if (!dateStr || dateStr < startStr || dateStr > endStr) continue
       const storeName = dk.slice(11)
-      if (!map[storeName]) map[storeName] = { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
+      if (!map[storeName]) map[storeName] = { lateMin: 0, lateDaysOver10: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: new Set() }
       const minWork = Math.max(0, Math.floor((outMs - inMs) / 60000) - breakMin)
       map[storeName].workMin += minWork
       map[storeName].otMin += otMin
+      map[storeName].earlyMin += earlyMin
       map[storeName].workDays += 1
       map[storeName].workDates!.add(dateStr)
     }
@@ -168,6 +172,8 @@ export interface PayrollCalcRow {
   otAmt: number
   lateMin: number
   lateDed: number
+  earlyMin: number
+  earlyDed: number
   sso: number
   tax: number
   otherDed: number
@@ -246,6 +252,7 @@ export async function GET(request: NextRequest) {
         name?: string
         log_type?: string
         late_min?: number
+        early_min?: number
         ot_min?: number
         break_min?: number
         status?: string
@@ -342,24 +349,28 @@ export async function GET(request: NextRequest) {
       const birthBonus = birth && birth.getMonth() === targetMonth && workYears >= 1 ? 500 : 0
 
       const attKey = store + '_' + name
-      const att = attSummary[attKey] || { lateMin: 0, lateDaysOver10: 0, otMin: 0, workMin: 0, workDays: 0 }
+      const att = attSummary[attKey] || { lateMin: 0, lateDaysOver10: 0, earlyMin: 0, otMin: 0, workMin: 0, workDays: 0 }
       const lateMin = att.lateMin
       const lateDaysOver10 = att.lateDaysOver10 || 0
+      const earlyMin = att.earlyMin || 0
       const otMin = att.otMin
       const workMin = att.workMin
       const workDays = att.workDays
 
       let salary: number
       let lateDed: number
+      let earlyDed: number
       let otAmt: number
       if (isHourly) {
         salary = salAmt > 0 && workMin > 0 ? Math.floor((workMin / 60) * salAmt) : 0
         lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
+        earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
         otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
       } else {
         // 월급제: 근무일이 없으면 기본급 0 (출퇴근 데이터 없음 = 근무 없음)
         salary = workDays > 0 ? salAmt : 0
         lateDed = LATE_DED_HOURS_BASE > 0 && salary ? Math.floor((lateMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
+        earlyDed = LATE_DED_HOURS_BASE > 0 && salary && earlyMin > 0 ? Math.floor((earlyMin / 60) * (salary / LATE_DED_HOURS_BASE)) : 0
         const hourlyForOt = LATE_DED_HOURS_BASE > 0 && salary ? salary / LATE_DED_HOURS_BASE : 0
         otAmt = hourlyForOt > 0 ? Math.floor((otMin / 60) * hourlyForOt * OT_MULTIPLIER) : 0
       }
@@ -401,7 +412,7 @@ export async function GET(request: NextRequest) {
         : 0
 
       const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
-      const deduct = lateDed + sso + unpaidAbsenceDed
+      const deduct = lateDed + earlyDed + sso + unpaidAbsenceDed
       const netPay = Math.max(0, income - deduct)
       const ot15 = Math.round((otMin / 60) * 10) / 10
 
@@ -425,6 +436,8 @@ export async function GET(request: NextRequest) {
         otAmt,
         lateMin,
         lateDed,
+        earlyMin,
+        earlyDed,
         sso,
         tax: 0,
         otherDed: unpaidAbsenceDed,

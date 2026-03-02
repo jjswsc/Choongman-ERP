@@ -760,12 +760,16 @@ export interface AttendanceDailyRow {
   plannedWorkHrs: number
   diffMin: number
   lateMin: number
+  /** DB 저장값(퇴근 로그 early_min). 기존 건 조정 반영 시 사용 */
+  earlyMin?: number
   otMin: number
   status: string
   approval: string
   pendingId: number | null
   pendingInId?: number | null
   pendingOutId?: number | null
+  /** 퇴근 로그 id (조정 반영 시 사용) */
+  outLogId?: number | null
   inStatus?: string
   /** 파트타임/시급이면 계획 0이어도 빨간 행 미적용 */
   isPartTime?: boolean
@@ -960,6 +964,8 @@ export interface TodayScheduleItem {
   pBE: string
   area: string
   plan_in_prev_day?: boolean
+  /** 승인된 휴가일 때 종류 (병가, 휴가, ลากิจ 등) */
+  leaveType?: string
 }
 
 export interface TodayAttendanceItem {

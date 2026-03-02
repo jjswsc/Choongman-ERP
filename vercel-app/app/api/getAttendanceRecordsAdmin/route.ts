@@ -75,6 +75,7 @@ export interface AttendanceDailyRow {
   plannedWorkHrs: number
   diffMin: number
   lateMin: number
+  earlyMin?: number
   otMin: number
   status: string
   approval: string
@@ -82,6 +83,8 @@ export interface AttendanceDailyRow {
   pendingId: number | null
   pendingInId: number | null
   pendingOutId: number | null
+  /** 퇴근 로그 id (승인 여부 무관, 조정 반영 시 사용) */
+  outLogId: number | null
   inStatus?: string
   /** 파트타임/시급이면 계획 0이어도 빨간 행 표시 안 함 */
   isPartTime?: boolean
@@ -199,6 +202,7 @@ export async function GET(request: NextRequest) {
         approval: string
         inId: number | null
         outId: number | null
+        outLogId: number | null
         outApproved: string
         inStatus: string
       }
@@ -234,6 +238,7 @@ export async function GET(request: NextRequest) {
           approval: '대기',
           inId: null,
           outId: null,
+          outLogId: null,
           outApproved: '',
           inStatus: '',
         }
@@ -267,6 +272,7 @@ export async function GET(request: NextRequest) {
           prevRec.status = st || prevRec.status
           prevRec.outApproved = approved || ''
           if (needsOutApproval) prevRec.outId = r.id ?? null
+          prevRec.outLogId = r.id ?? null
         } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
           rec.outTime = logAt
           rec.earlyMin = Number(r.early_min) || 0
@@ -274,6 +280,7 @@ export async function GET(request: NextRequest) {
           rec.status = st || rec.status
           rec.outApproved = approved || ''
           if (needsOutApproval) rec.outId = r.id ?? null
+          rec.outLogId = r.id ?? null
         }
       } else if (type === '휴식종료') {
         rec.breakMin += Number(r.break_min) || 0
@@ -293,6 +300,7 @@ export async function GET(request: NextRequest) {
       let statusForRow = rec.status
       let outApprovedForRow = rec.outApproved
       let outIdForRow = rec.outId
+      let outLogIdForRow = rec.outLogId
       const inIdForRow = rec.inId
       const inStatusForRow = rec.inStatus || ''
 
@@ -310,6 +318,7 @@ export async function GET(request: NextRequest) {
           statusForRow = nextRec.status || ''
           outApprovedForRow = nextRec.outApproved
           outIdForRow = nextRec.outId
+          outLogIdForRow = nextRec.outLogId
           breakMinForRow += nextRec.breakMin
           // 자정 넘김 근무: 행은 출근한 날(오늘) 기준 유지, 퇴근만 익일 기록 사용
         }
@@ -356,26 +365,29 @@ export async function GET(request: NextRequest) {
       const effectiveLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
       // 계획 시간이 0(스케줄 없음)이면 연장으로 보지 않음 → 일반 근무로만 계산
       const otCap = plannedWorkMin <= 0 ? 0 : Math.max(0, diffMin + lateMinForRow)
+      // DB에 저장된 연장(조정 반영값)이 있으면 그대로 표시해 지각/연장 열에 반영
       const effectiveOtMin =
         actualWorkMin <= 0 || plannedWorkMin <= 0
           ? 0
           : otMinForRow > 0
-            ? Math.min(otMinForRow, otCap)
+            ? otMinForRow
             : Math.min(Math.max(0, diffMin), otCap)
 
       if (pendingOnly && !isPending) continue
 
-      // 상태 표시: 퇴근 없음→퇴근미기록, 차이 음수(계획보다 적게 근무)→조퇴, 연장 30분 이상→연장, 그 외 DB값 또는 정상
+      // 상태 표시: 퇴근 없음→퇴근미기록, 강제퇴근(승인)은 그대로(재계산 버튼 노출), 차이 음수→조퇴, 연장 30분 이상→연장, 그 외 DB값 또는 정상
       const displayStatus =
         !outTimeForRow
           ? '퇴근미기록'
-          : diffMin < 0
-            ? '조퇴'
-            : effectiveOtMin >= 30
-              ? '연장'
-              : statusForRow === '조퇴'
-                ? '정상'
-                : statusForRow
+          : (statusForRow && String(statusForRow).includes('강제퇴근(승인)'))
+            ? statusForRow
+            : diffMin < 0
+              ? '조퇴'
+              : effectiveOtMin >= 30
+                ? '연장'
+                : statusForRow === '조퇴'
+                  ? '정상'
+                  : statusForRow
 
       const isPartTime =
         partTimeKeys.has(`${rec.store}|${rec.name}`) ||
@@ -395,12 +407,14 @@ export async function GET(request: NextRequest) {
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
         lateMin: effectiveLateMin,
+        earlyMin: earlyMinForRow,
         otMin: effectiveOtMin,
         status: displayStatus,
         approval: approval || '대기',
         pendingId: outIdForRow ?? inIdForRow,
         pendingInId: inIdForRow,
         pendingOutId: outIdForRow,
+        outLogId: outLogIdForRow ?? null,
         inStatus: inStatusForRow,
         isPartTime,
       })

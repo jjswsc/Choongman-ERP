@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const userStore = String(body?.userStore || '').trim()
     const userRole = String(body?.userRole || '').toLowerCase()
     const optOtMinutes = body?.optOtMinutes != null ? Number(body.optOtMinutes) : null
-    const optEarlyMinutes = body?.optEarlyMinutes != null ? Number(body.optEarlyMinutes) : null
+    const optEarlyMinutes = (body && 'optEarlyMinutes' in body) ? Number(body.optEarlyMinutes) : undefined
     const waiveLate = body?.waiveLate === true
 
     if (!id || isNaN(id)) {
@@ -52,11 +52,16 @@ export async function POST(request: NextRequest) {
       if (optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
         patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
       }
-      if (optEarlyMinutes != null && !isNaN(optEarlyMinutes) && optEarlyMinutes >= 0) {
+      if (optEarlyMinutes !== undefined && !Number.isNaN(optEarlyMinutes) && optEarlyMinutes >= 0) {
         patch.early_min = Math.min(9999, Math.round(optEarlyMinutes))
       }
     } else if (decision === '반려') {
       patch.status = '반려'
+    }
+
+    // 연장/조퇴 조정 원인 파악용 임시 로그 (원인 확인 후 제거)
+    if (decision === '승인완료' && (body?.optOtMinutes != null || body?.optEarlyMinutes != null)) {
+      console.log('[processAttendanceApproval]', { id, bodyOptOt: body?.optOtMinutes, bodyOptEarly: body?.optEarlyMinutes, patchOt: patch.ot_min, patchEarly: patch.early_min })
     }
 
     await supabaseUpdate('attendance_logs', id, patch)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -75,6 +75,7 @@ export function AdminTab() {
   const [attLoading, setAttLoading] = useState(false)
   const [attHasSearched, setAttHasSearched] = useState(false)
   const [otMinutesByRow, setOtMinutesByRow] = useState<Record<number | string, string>>({})
+  const adjustInputRef = useRef<Record<string, string>>({})
 
   const { stores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
@@ -135,20 +136,21 @@ export function AdminTab() {
           ? recordList.filter((r) => r.status !== "정상")
           : recordList.filter((r) => r.status === attStatusFilter)
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null) => {
+  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null, skipReload?: boolean) => {
     if (!auth) return
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
-      optOtMinutes: optOtMinutes ?? undefined,
-      optEarlyMinutes: optEarlyMinutes ?? undefined,
+      optOtMinutes: optOtMinutes != null ? optOtMinutes : undefined,
+      optEarlyMinutes: optEarlyMinutes != null ? optEarlyMinutes : undefined,
       waiveLate,
       userStore: auth.store || "",
       userRole: auth.role || "",
     })
     if (res.success) {
+      delete adjustInputRef.current[String(id)]
       setOtMinutesByRow((p) => { const next = { ...p }; delete next[id]; return next })
-      loadAttendance()
+      if (!skipReload) loadAttendance()
     } else {
       alert(translateApiMessage(res.message) || t("processFail"))
     }
@@ -329,17 +331,25 @@ export function AdminTab() {
                     const hasLegacyPending = !pendingIn && !pendingOut && row.pendingId != null
                     const hasPendingOut = pendingOut != null || (hasLegacyPending && row.pendingId != null)
                     const earlyMinDisplay = row.diffMin < 0 ? Math.abs(row.diffMin) : 0
-                    const showAdjustInput = row.lateMin > 0 || row.otMin >= 30 || earlyMinDisplay > 0
+                    const savedEarly = row.earlyMin ?? earlyMinDisplay
+                    const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
+                    const showAdjustInput = !isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0)
                     const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
                       ? (pendingOut ?? row.pendingId)!
-                      : `${row.date}-${row.store}-${row.name}`
+                      : row.outLogId != null
+                        ? row.outLogId
+                        : `${row.date}-${row.store}-${row.name}`
+                    const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                     const defaultVal = String(
-                      row.otMin >= 30 && earlyMinDisplay === 0
-                        ? row.otMin
-                        : row.lateMin > 0 || earlyMinDisplay > 0
-                          ? row.lateMin + earlyMinDisplay
-                          : 0
+                      row.plannedWorkHrs > 0 && row.diffMin < 0
+                        ? (row.earlyMin ?? Math.abs(row.diffMin))
+                        : row.plannedWorkHrs > 0 && row.diffMin > 0
+                          ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
+                          : row.lateMin > 0
+                            ? Math.max(1, row.lateMin)
+                            : 0
                     )
+                    const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
                     return (
                       <tr key={`r-${row.date}-${row.store}-${row.name}-${i}`} className="border-b last:border-b-0">
                         <td className="px-2 py-2 text-center">{row.date}</td>
@@ -357,25 +367,29 @@ export function AdminTab() {
                           )}
                         </td>
                         <td className="px-2 py-2 text-center">
-                          {row.lateMin > 0 || earlyMinDisplay > 0 || row.otMin > 0 ? (
-                            <>
-                              {row.lateMin > 0 && <span className="text-red-600">{row.lateMin}</span>}
-                              {row.lateMin > 0 && (earlyMinDisplay > 0 || row.otMin > 0) && " "}
-                              {earlyMinDisplay > 0 && <span className="text-amber-600">{earlyMinDisplay}</span>}
-                              {earlyMinDisplay > 0 && row.otMin > 0 && " "}
-                              {row.otMin > 0 && <span className="text-blue-600">{row.otMin}</span>}
-                            </>
-                          ) : "-"}
+                          {(() => {
+                            if (row.plannedWorkHrs === 0) return "-"
+                            if (row.diffMin < 0) return <span className="text-amber-600">{row.earlyMin ?? Math.abs(row.diffMin)}</span>
+                            if (row.diffMin > 0) return <span className="text-blue-600">{row.otMin ?? row.diffMin}</span>
+                            if (row.lateMin > 0) return <span className="text-red-600">{row.lateMin}</span>
+                            return "-"
+                          })()}
                         </td>
                         <td className="px-2 py-2 text-center">
                           {showAdjustInput ? (
                             <Input
                               type="number"
-                              min={0}
+                              min={isLateOrPendingIn ? 1 : 0}
                               max={999}
-                              placeholder="0"
+                              placeholder={isLateOrPendingIn ? "1" : "0"}
                               value={otMinutesByRow[adjustKey] ?? defaultVal}
-                              onChange={(e) => setOtMinutesByRow((p) => ({ ...p, [adjustKey]: e.target.value }))}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                const k = String(adjustKey)
+                                adjustInputRef.current[k] = v
+                                setOtMinutesByRow((p) => ({ ...p, [adjustKey]: v }))
+                              }}
+                              data-adjust-key={String(adjustKey)}
                               className="h-7 min-w-[3rem] w-14 text-xs text-center tabular-nums mx-auto"
                             />
                           ) : (
@@ -416,16 +430,21 @@ export function AdminTab() {
                                 size="sm"
                                 variant="default"
                                 className="h-6 px-1.5 text-[10px]"
-                                onClick={() => {
+                                onClick={async (e) => {
                                   const outId = pendingOut ?? row.pendingId!
-                                  const otVal = otMinutesByRow[outId] ?? defaultVal
+                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                  const inputEl = tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                  const fromInput = inputEl?.value?.trim()
+                                  const otVal = fromInput ?? adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? defaultVal
                                   const n = parseInt(otVal, 10)
                                   const num = !isNaN(n) && n >= 0 ? n : undefined
-                                  if (earlyMinDisplay > 0) {
-                                    const earlyPart = row.lateMin > 0 ? Math.max(0, (num ?? 0) - row.lateMin) : (num ?? 0)
-                                    handleApprove(outId, undefined, undefined, earlyPart)
-                                  } else if (row.otMin >= 30) {
-                                    handleApprove(outId, num, undefined)
+                                  if (row.diffMin < 0) {
+                                    handleApprove(outId, undefined, undefined, num ?? 0)
+                                  } else if (row.diffMin > 0 || row.otMin >= 30) {
+                                    if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
+                                      await handleApprove(pendingIn, undefined, true, undefined, true)
+                                    }
+                                    handleApprove(outId, num ?? undefined, undefined)
                                   } else {
                                     handleApprove(outId, undefined, undefined)
                                   }
@@ -435,7 +454,43 @@ export function AdminTab() {
                               </Button>
                               <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                             </div>
-                          ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                          ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30)) ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-1.5 text-[10px]"
+                              onClick={(e) => {
+                                const outId = row.outLogId!
+                                const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${outId}"]`) ?? tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                const fromInput = inputEl?.value?.trim()
+                                const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
+                                const defaultVal =
+                                  row.plannedWorkHrs > 0 && row.diffMin < 0
+                                    ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                    : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                      ? (isOvertimeRow ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
+                                      : row.lateMin > 0
+                                        ? Math.max(1, row.lateMin)
+                                        : 0
+                                const adjustKey = row.outLogId!
+                                const otVal = (fromInput !== undefined && fromInput !== "") ? fromInput : (adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal))
+                                const n = parseInt(otVal, 10)
+                                let num = !isNaN(n) && n >= 0 ? n : 0
+                                const currentOvertime = row.diffMin > 0 ? (row.otMin ?? row.diffMin) : 0
+                                if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0) {
+                                  num = Math.min(9999, Math.round(Number(currentOvertime)))
+                                }
+                                if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
+                                  handleApprove(outId, undefined, undefined, num)
+                                } else {
+                                  handleApprove(outId, num, undefined)
+                                }
+                              }}
+                            >
+                              {t("att_apply_adjust")}
+                            </Button>
+                          ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" || (row.status && String(row.status).includes("강제퇴근(승인)")) ? (
                             <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px] text-amber-600" onClick={() => handleApproveNoClockOut(row)}>
                               {t("att_approve_forced_out")}
                             </Button>

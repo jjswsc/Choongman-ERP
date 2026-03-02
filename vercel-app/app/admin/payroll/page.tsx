@@ -39,7 +39,7 @@ export default function Page() {
           </div>
         </div>
         <Tabs defaultValue="calc" className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-4">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-4">
             <TabsTrigger value="calc" className="text-sm font-medium">
               {t("pay_tab_calc")}
             </TabsTrigger>
@@ -48,6 +48,9 @@ export default function Page() {
             </TabsTrigger>
             <TabsTrigger value="holidays" className="text-sm font-medium">
               {t("pay_tab_holidays")}
+            </TabsTrigger>
+            <TabsTrigger value="help" className="text-sm font-medium">
+              {t("pay_tab_help")}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="calc">
@@ -58,6 +61,28 @@ export default function Page() {
           </TabsContent>
           <TabsContent value="holidays">
             <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />
+          </TabsContent>
+          <TabsContent value="help" className="mt-0 space-y-4">
+            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+              <h2 className="text-base font-semibold">{t("pay_help_title")}</h2>
+              <p className="text-xs text-muted-foreground">{t("pay_help_intro")}</p>
+              <section>
+                <h3 className="text-sm font-medium mb-2">{t("pay_help_table_caption")}</h3>
+                <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
+                  <li>{t("pay_help_late")}</li>
+                  <li>{t("pay_help_early")}</li>
+                  <li>{t("pay_help_ot")}</li>
+                  <li>{t("pay_help_late_3")}</li>
+                  <li>{t("pay_help_waive")}</li>
+                  <li>{t("pay_help_absence")}</li>
+                  <li>{t("pay_help_holiday")}</li>
+                </ul>
+              </section>
+              <section>
+                <h3 className="text-sm font-medium mb-1">{t("pay_help_flow_title")}</h3>
+                <p className="text-xs text-muted-foreground">{t("pay_help_flow")}</p>
+              </section>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

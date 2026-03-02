@@ -69,11 +69,56 @@ export async function GET(request: NextRequest) {
     }
     scheduleRows = [...scheduleRows, ...prevDayRows]
 
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store' })) as { name?: string; nick?: string; store?: string }[]
+    const empList = (await supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'name,nick,store,job' })) as { name?: string; nick?: string; store?: string; job?: string }[]
     const nameToNick: Record<string, string> = {}
+    const storeNameToJob: Record<string, string> = {}
     for (const e of empList || []) {
       const nm = String(e.name || '').trim()
-      if (nm) nameToNick[nm] = String(e.nick || e.name || nm).trim() || nm
+      const st = String(e.store || '').trim()
+      if (nm) {
+        nameToNick[nm] = String(e.nick || e.name || nm).trim() || nm
+        if (st) storeNameToJob[st + '|' + nm] = String(e.job || '').trim()
+      }
+    }
+
+    const scheduleKeySet = new Set<string>()
+    for (const r of scheduleRows || []) {
+      const d = toDateStr(r.schedule_date)
+      const st = String(r.store_name || '').trim()
+      const nm = String(r.name || '').trim()
+      if (d && st && nm) scheduleKeySet.add(`${d}|${st}|${nm}`)
+    }
+
+    let leaveFilter = `leave_date=eq.${dateStr}&status=eq.승인`
+    if (!isAll && store) {
+      leaveFilter += `&store=ilike.${encodeURIComponent(store)}`
+    }
+    const leaveRows = (await supabaseSelectFilter(
+      'leave_requests',
+      leaveFilter,
+      { order: 'leave_date.asc', limit: 100, select: 'store,name,leave_date,type' }
+    )) as { store?: string; name?: string; leave_date?: string; type?: string }[]
+    const leaveMerged: { date: string; store: string; name: string; nick: string; pIn: string; pOut: string; pBS: string; pBE: string; area: string; plan_in_prev_day: boolean; leaveType: string }[] = []
+    for (const lr of leaveRows || []) {
+      const storeVal = String(lr.store || '').trim()
+      const nameVal = String(lr.name || '').trim()
+      const key = `${dateStr}|${storeVal}|${nameVal}`
+      if (scheduleKeySet.has(key)) continue
+      const type = String(lr.type || '').trim() || '휴가'
+      const area = parseAreaFromMemo(storeNameToJob[storeVal + '|' + nameVal] || '')
+      leaveMerged.push({
+        date: dateStr,
+        store: storeVal,
+        name: nameVal,
+        nick: nameToNick[nameVal] || nameVal,
+        pIn: '09:00',
+        pOut: '18:00',
+        pBS: '',
+        pBE: '',
+        area: area || 'Service',
+        plan_in_prev_day: false,
+        leaveType: type,
+      })
     }
 
     const list = (scheduleRows || []).map((r) => {
@@ -92,7 +137,8 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(list, { headers })
+    const merged = [...list, ...leaveMerged]
+    return NextResponse.json(merged, { headers })
   } catch (e) {
     console.error('getTodaySchedule:', e)
     return NextResponse.json([], { headers })

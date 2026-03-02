@@ -85,6 +85,7 @@ export default function AdminAttendancePage() {
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
   const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
+  const adjustInputRef = React.useRef<Record<string, string>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -173,7 +174,7 @@ export default function AdminAttendancePage() {
     }
   }
 
-  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null) => {
+  const handleApprove = async (id: number, optOtMinutes?: number | null, waiveLate?: boolean, optEarlyMinutes?: number | null, skipReload?: boolean) => {
     const res = await processAttendanceApproval({
       id,
       decision: "승인완료",
@@ -184,12 +185,13 @@ export default function AdminAttendancePage() {
       userRole: auth?.role,
     })
     if (res.success) {
+      delete adjustInputRef.current[String(id)]
       setOtMinutesByRow((p) => {
         const next = { ...p }
         delete next[id]
         return next
       })
-      loadRecords()
+      if (!skipReload) loadRecords()
     } else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
@@ -448,50 +450,52 @@ export default function AdminAttendancePage() {
                           </td>
                           <td className="px-2 py-2.5 text-center">
                             {(() => {
-                              const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
-                              const hasAny = row.lateMin > 0 || earlyMinDisplay > 0 || row.otMin > 0
-                              return hasAny ? (
-                                <>
-                                  {row.lateMin > 0 && <span className="font-medium text-red-600">{row.lateMin}</span>}
-                                  {row.lateMin > 0 && (earlyMinDisplay > 0 || row.otMin > 0) && " "}
-                                  {earlyMinDisplay > 0 && <span className="font-medium text-amber-600">{earlyMinDisplay}</span>}
-                                  {earlyMinDisplay > 0 && row.otMin > 0 && " "}
-                                  {row.otMin > 0 && <span className="font-medium text-blue-600">{row.otMin}</span>}
-                                </>
-                              ) : "-"
+                              if (row.plannedWorkHrs === 0) return <span className="text-muted-foreground">-</span>
+                              if (row.diffMin < 0) return <span className="font-medium text-amber-600">{row.earlyMin ?? Math.abs(row.diffMin)}</span>
+                              if (row.diffMin > 0) return <span className="font-medium text-blue-600">{row.otMin ?? row.diffMin}</span>
+                              if (row.lateMin > 0) return <span className="font-medium text-red-600">{row.lateMin}</span>
+                              return <span className="text-muted-foreground">-</span>
                             })()}
                           </td>
                           <td className="px-2 py-2.5 text-center min-w-[5rem]">
                             {(() => {
-                              const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
-                              const showAdjustInput = row.lateMin > 0 || row.otMin >= 30 || earlyMinDisplay > 0
+                              const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
+                              const showAdjustInput = !isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0)
                               const adjustKey =
                                 hasPendingOut && (pendingOut != null || row.pendingId != null)
                                   ? (pendingOut ?? row.pendingId)!
-                                  : `${row.date}-${row.store}-${row.name}`
+                                  : row.outLogId != null
+                                    ? row.outLogId
+                                    : `${row.date}-${row.store}-${row.name}`
+                              const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                               const defaultVal = String(
-                                row.otMin >= 30 && earlyMinDisplay === 0
-                                  ? row.otMin
-                                  : row.lateMin > 0 || earlyMinDisplay > 0
-                                    ? row.lateMin + earlyMinDisplay
-                                    : 0
+                                row.plannedWorkHrs > 0 && row.diffMin < 0
+                                  ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                  : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                    ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
+                                    : row.lateMin > 0
+                                      ? Math.max(1, row.lateMin)
+                                      : 0
                               )
+                              const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
                               return showAdjustInput ? (
                                 <Input
                                   type="number"
-                                  min={0}
+                                  min={isLateOrPendingIn ? 1 : 0}
                                   max={999}
-                                  placeholder="0"
+                                  placeholder={isLateOrPendingIn ? "1" : "0"}
                                   value={otMinutesByRow[adjustKey] ?? defaultVal}
-                                  onChange={(e) =>
-                                    setOtMinutesByRow((p) => ({ ...p, [adjustKey]: e.target.value }))
-                                  }
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    const k = String(adjustKey)
+                                    adjustInputRef.current[k] = v
+                                    setOtMinutesByRow((p) => ({ ...p, [adjustKey]: v }))
+                                  }}
+                                  data-adjust-key={String(adjustKey)}
                                   className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
                                 />
                               ) : (
-                                <span className="text-muted-foreground text-xs">
-                                  {row.otMin > 0 ? "0" : "-"}
-                                </span>
+                                <span className="text-muted-foreground text-xs">-</span>
                               )
                             })()}
                           </td>
@@ -543,23 +547,33 @@ export default function AdminAttendancePage() {
                                   size="sm"
                                   variant="default"
                                   className="h-6 px-2 text-[10px]"
-                                  onClick={() => {
+                                  onClick={async (e) => {
                                     const outId = pendingOut ?? row.pendingId!
-                                    const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                                    const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                    const input = tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                    const fromInput = input?.value?.trim()
                                     const defaultVal =
-                                      row.otMin >= 30 && earlyMinDisplay === 0
-                                        ? row.otMin
-                                        : row.lateMin > 0 || earlyMinDisplay > 0
-                                          ? row.lateMin + earlyMinDisplay
-                                          : 0
-                                    const otVal = otMinutesByRow[outId] ?? String(defaultVal)
+                                      row.plannedWorkHrs > 0 && row.diffMin < 0
+                                        ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                        : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                          ? row.diffMin >= 30 ? row.diffMin : 0
+                                          : row.lateMin > 0
+                                            ? Math.max(1, row.lateMin)
+                                            : 0
+                                    const adjustKey =
+                                      hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                        ? (pendingOut ?? row.pendingId)!
+                                        : `${row.date}-${row.store}-${row.name}`
+                                    const otVal = fromInput ?? adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal)
                                     const n = parseInt(otVal, 10)
                                     const num = !isNaN(n) && n >= 0 ? n : undefined
-                                    if (earlyMinDisplay > 0) {
-                                      const earlyPart = row.lateMin > 0 ? Math.max(0, (num ?? 0) - row.lateMin) : (num ?? 0)
-                                      handleApprove(outId, undefined, undefined, earlyPart)
-                                    } else if (row.otMin >= 30) {
-                                      handleApprove(outId, num, undefined)
+                                    if (row.diffMin < 0) {
+                                      handleApprove(outId, undefined, undefined, num ?? 0)
+                                    } else if (row.diffMin > 0 || row.otMin >= 30) {
+                                      if ((num ?? 0) === 0 && row.lateMin > 0 && pendingIn != null) {
+                                        await handleApprove(pendingIn, undefined, true, undefined, true)
+                                      }
+                                      handleApprove(outId, num ?? undefined, undefined)
                                     } else {
                                       handleApprove(outId, undefined, undefined)
                                     }
@@ -569,7 +583,43 @@ export default function AdminAttendancePage() {
                                 </Button>
                                 <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
-                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                            ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30)) ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px]"
+                                onClick={(e) => {
+                                  const outId = row.outLogId!
+                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                  const input = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${outId}"]`) ?? tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                  const fromInput = input?.value?.trim()
+                                  const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
+                                  const defaultVal =
+                                    row.plannedWorkHrs > 0 && row.diffMin < 0
+                                      ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                      : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                        ? (isOvertimeRow ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
+                                        : row.lateMin > 0
+                                          ? Math.max(1, row.lateMin)
+                                          : 0
+                                  const adjustKey = row.outLogId!
+                                  const otVal = (fromInput !== undefined && fromInput !== "") ? fromInput : (adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal))
+                                  const n = parseInt(otVal, 10)
+                                  let num = !isNaN(n) && n >= 0 ? n : 0
+                                  const currentOvertime = row.diffMin > 0 ? (row.otMin ?? row.diffMin) : 0
+                                  if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0) {
+                                    num = Math.min(9999, Math.round(Number(currentOvertime)))
+                                  }
+                                  if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
+                                    handleApprove(outId, undefined, undefined, num)
+                                  } else {
+                                    handleApprove(outId, num, undefined)
+                                  }
+                                }}
+                              >
+                                {t("att_apply_adjust")}
+                              </Button>
+                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" || (row.status && String(row.status).includes("강제퇴근(승인)")) ? (
                               <Button
                                 size="sm"
                                 variant="outline"

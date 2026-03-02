@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
 
-/** plan 문자열(예: "18:00")을 해당 날짜의 Date로 변환 */
-function parsePlanToDate(dateStr: string, planVal: string): Date | null {
-  if (!dateStr || !planVal || typeof planVal !== 'string') return null
-  const s = planVal.trim()
-  const m = s.match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
-  if (!m) return null
-  const h = parseInt(m[1], 10)
-  const mn = parseInt(m[2], 10)
-  const d = new Date(dateStr + 'T12:00:00')
-  if (isNaN(d.getTime())) return null
-  d.setHours(h, mn, 0, 0)
-  return d
+function normalizeNameForSchedule(name: string): string {
+  return String(name || '').trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i, '').trim()
+}
+
+function parsePlanToMinutes(plan: string | null | undefined): number {
+  if (!plan || typeof plan !== 'string') return 0
+  const m = plan.trim().match(/(\d{1,2})\s*[:\s]\s*(\d{1,2})/)
+  if (!m) return 0
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+}
+
+/** 계획 근무시간(시간). plan_in~plan_out - 휴게 */
+function plannedHrsFromPlans(planIn: string, planOut: string, planBS: string, planBE: string, planInPrevDay?: boolean): number {
+  const inMin = parsePlanToMinutes(planIn)
+  let outMin = parsePlanToMinutes(planOut)
+  if (planInPrevDay && outMin < inMin) outMin += 24 * 60
+  const bsMin = parsePlanToMinutes(planBS)
+  const beMin = parsePlanToMinutes(planBE)
+  if (inMin >= outMin) return 0
+  let workMin = outMin - inMin
+  if (bsMin && beMin && beMin > bsMin) workMin -= beMin - bsMin
+  return Math.max(0, workMin) / 60
 }
 
 function calcBreakMin(breakStart: string, breakEnd: string): number {
@@ -66,68 +76,91 @@ export async function POST(request: NextRequest) {
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
     const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { limit: 20 })) as { log_type?: string }[]
-    const hasIn = (attRows || []).some((r) => String(r.log_type || '').trim() === '출근')
-    const hasOut = (attRows || []).some((r) => String(r.log_type || '').trim() === '퇴근')
+    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { order: 'log_at.asc', limit: 20 })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
+    const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
+    const outLog = (attRows || []).find((r) => String(r.log_type || '').trim() === '퇴근')
+    const hasOut = !!outLog
 
-    if (!hasIn) {
+    if (inLogs.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 날짜에 출근 기록이 없습니다.' },
         { headers }
       )
     }
-    if (hasOut) {
+
+    const inTimeIso = inLogs[0].log_at || ''
+    if (!inTimeIso) {
+      return NextResponse.json(
+        { success: false, message: '출근 시각을 확인할 수 없습니다.' },
+        { headers }
+      )
+    }
+    if (hasOut && !/강제퇴근\(승인\)/.test(String(outLog?.status || ''))) {
       return NextResponse.json(
         { success: false, message: '이미 퇴근 기록이 있습니다.' },
         { headers }
       )
     }
 
-    const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
-    const schRows = (await supabaseSelectFilter('schedules', schFilter, { limit: 1 })) as {
+    // 스케줄: 같은 날·매장에서 이름 일치 또는 부분 일치(근태 풀네임 vs 스케줄 닉네임)
+    const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}`
+    const schRowsAll = (await supabaseSelectFilter('schedules', schFilter, { limit: 50 })) as {
+      name?: string
+      plan_in?: string
       plan_out?: string
       break_start?: string
       break_end?: string
       plan_in_prev_day?: boolean
     }[]
+    const empNorm = normalizeNameForSchedule(empName)
+    const schRow = (schRowsAll || []).find((s) => {
+      const sn = String(s?.name || '').trim()
+      const snNorm = normalizeNameForSchedule(sn)
+      return !sn ? false : sn === empName || empNorm === snNorm || empNorm.includes(snNorm) || snNorm.includes(empNorm)
+    })
+    const schRows = schRow ? [schRow] : []
 
+    const planIn = (schRows?.[0]?.plan_in || '09:00').trim()
     const planOut = (schRows?.[0]?.plan_out || '18:00').trim()
     const planBS = String(schRows?.[0]?.break_start || '').trim()
     const planBE = String(schRows?.[0]?.break_end || '').trim()
     const planInPrevDay = !!schRows?.[0]?.plan_in_prev_day
 
-    let outDateStr = dateStr
-    if (planInPrevDay) {
-      const d = new Date(dateStr + 'T12:00:00')
-      d.setDate(d.getDate() + 1)
-      outDateStr = d.toISOString().slice(0, 10)
-    }
-    const outDate = parsePlanToDate(outDateStr, planOut)
-    if (!outDate || isNaN(outDate.getTime())) {
-      return NextResponse.json(
-        { success: false, message: '스케줄 퇴근 시간을 파싱할 수 없습니다.' },
-        { headers }
-      )
-    }
-
+    const plannedWorkHrs = plannedHrsFromPlans(planIn, planOut, planBS, planBE, planInPrevDay)
+    const plannedWorkMin = Math.round(plannedWorkHrs * 60)
     const breakMin = calcBreakMin(planBS, planBE)
 
-    await supabaseInsert('attendance_logs', {
-      log_at: outDate.toISOString(),
-      store_name: storeName,
-      name: empName,
-      log_type: '퇴근',
-      lat: '',
-      lng: '',
-      planned_time: planOut,
-      late_min: 0,
-      early_min: 0,
-      ot_min: 0,
-      break_min: breakMin,
-      reason: '',
-      status: '강제퇴근(승인)',
-      approved: '승인완료',
-    })
+    // 퇴근 시각 = 출근 시각 + 계획 근무시간 + 휴게 → 실제 근무가 계획과 일치
+    const inMs = new Date(inTimeIso).getTime()
+    const outMs = inMs + (plannedWorkMin + breakMin) * 60 * 1000
+    const outDate = new Date(outMs)
+
+    if (hasOut && outLog?.id != null && /강제퇴근\(승인\)/.test(String(outLog.status || ''))) {
+      await supabaseUpdate('attendance_logs', outLog.id, {
+        log_at: outDate.toISOString(),
+        break_min: breakMin,
+        late_min: 0,
+        early_min: 0,
+        ot_min: 0,
+      })
+    } else {
+      await supabaseInsert('attendance_logs', {
+        log_at: outDate.toISOString(),
+        store_name: storeName,
+        name: empName,
+        log_type: '퇴근',
+        lat: '',
+        lng: '',
+        planned_time: planOut,
+        late_min: 0,
+        early_min: 0,
+        ot_min: 0,
+        break_min: breakMin,
+        reason: '',
+        status: '강제퇴근(승인)',
+        approved: '승인완료',
+      })
+    }
 
     return NextResponse.json(
       { success: true, message: '퇴근 미기록 인정이 완료되었습니다.' },

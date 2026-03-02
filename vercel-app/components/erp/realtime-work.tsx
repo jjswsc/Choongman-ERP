@@ -162,7 +162,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
     attByKey[`${a.store}|${a.name}`] = a
   }
 
-  const byPerson: Record<string, { name: string; store: string; area: string; pIn: string; pOut: string; pBS: string; pBE: string }> = {}
+  const byPerson: Record<string, { name: string; store: string; area: string; pIn: string; pOut: string; pBS: string; pBE: string; leaveType?: string }> = {}
   for (const s of filteredSchedule) {
     const key = `${s.store}|${s.name}`
     byPerson[key] = {
@@ -173,6 +173,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
       pOut: s.pOut,
       pBS: s.pBS,
       pBE: s.pBE,
+      leaveType: s.leaveType,
     }
   }
 
@@ -295,19 +296,24 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
               <tbody>
                 {personKeys.map((key) => {
                   const p = byPerson[key]
+                  const isLeave = !!p.leaveType
                   const att = attByKey[key]
                   const inDec = parseTimeToDecimal(p.pIn)
                   const outDec = parseTimeToDecimal(p.pOut)
                   const bsDec = parseTimeToDecimal(p.pBS)
                   const beDec = parseTimeToDecimal(p.pBE)
-                  // 출근만 하면 파란색. 휴식·퇴근 시간 안 맞으면(조퇴/휴게초과) 실시간으로 빨간색
-                  const hasProblem: boolean = !att
+                  // 휴가일: 보라 배경. 그 외 출근만 하면 파란색, 휴식·퇴근 안 맞으면 빨간색
+                  const hasProblem: boolean = !isLeave && (!att
                     ? true
                     : Boolean(
                         (att.lateMin && att.lateMin > 0) ||
                           (att.status && /지각|결석|미기록|조퇴|휴게초과/.test(att.status))
-                      )
-                  const rowBg = hasProblem ? "bg-red-50/60 dark:bg-red-950/40" : "bg-white dark:bg-card"
+                      ))
+                  const rowBg = isLeave
+                    ? "bg-violet-50/80 dark:bg-violet-950/40"
+                    : hasProblem
+                      ? "bg-red-50/60 dark:bg-red-950/40"
+                      : "bg-white dark:bg-card"
 
                   return (
                     <tr key={key} className={cn("border-b border-border last:border-b-0", rowBg)}>
@@ -322,9 +328,22 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                         </span>
                       </td>
                       <td className="border-r border-border px-2 py-2 text-[13px] font-bold text-foreground align-middle">
-                        {p.name}
+                        <span className="inline-flex items-center gap-1.5 flex-wrap">
+                          {p.name}
+                          {isLeave && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200">
+                              {t("scheduleLeave")}
+                            </span>
+                          )}
+                        </span>
                       </td>
-                      {hours.map((h) => {
+                      {isLeave ? (
+                        hours.map((h) => (
+                          <td key={h} className="border-r border-border px-0 py-1.5 text-center align-middle last:border-r-0 w-[28px] min-w-[28px]">
+                            <span className="inline-block h-4 w-4" />
+                          </td>
+                        ))
+                      ) : hours.map((h) => {
                         const h0 = h,
                           h05 = h + 0.5,
                           h1 = h + 1
@@ -381,6 +400,9 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-semibold text-muted-foreground">{t("scheduleNotWorking")}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200">{t("scheduleLeave")}</span>
         </div>
       </div>
     </div>

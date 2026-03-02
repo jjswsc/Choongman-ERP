@@ -20,6 +20,8 @@ export interface PayrollRecordRow {
   ot_amt: number
   late_min: number
   late_ded: number
+  early_min?: number
+  early_ded?: number
   sso: number
   tax: number
   other_ded: number
@@ -80,6 +82,8 @@ export async function GET(request: NextRequest) {
       ot_amt: Number(r.ot_amt) || 0,
       late_min: Number(r.late_min) || 0,
       late_ded: Number(r.late_ded) || 0,
+      early_min: Number(r.early_min) ?? 0,
+      early_ded: Number(r.early_ded) ?? 0,
       sso: Number(r.sso) || 0,
       tax: Number(r.tax) || 0,
       other_ded: Number(r.other_ded) || 0,

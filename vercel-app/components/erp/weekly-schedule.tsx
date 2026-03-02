@@ -129,14 +129,23 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const multiArea = new Set(schedule.map((r) => r.area || "Service")).size > 1
   const showArea = multiArea
 
-  type PersonData = { name: string; store: string; area: string; workDays: string[]; breakDays: string[] }
+  type PersonData = { name: string; store: string; area: string; workDays: string[]; breakDays: string[]; leaveDays: (string | undefined)[] }
   const persons: PersonData[] = []
   for (const key of personKeys) {
     const p = byPerson[key]
     const workDays: string[] = []
     const breakDays: string[] = []
+    const leaveDays: (string | undefined)[] = []
     for (let i = 0; i < 7; i++) {
-      const row = p.byDate[dayStrs[i]]
+      const row = p.byDate[dayStrs[i]] as (WeeklyScheduleItem & { leaveType?: string }) | undefined
+      const leaveType = row?.leaveType
+      leaveDays.push(leaveType)
+      if (leaveType) {
+        workDays.push("")
+        breakDays.push("")
+        dailyCount[i]++
+        continue
+      }
       const pIn = row?.pIn ? scheduleTimeOnly(row.pIn) : ""
       const pOut = row?.pOut ? scheduleTimeOnly(row.pOut) : ""
       const workStr = row && (pIn || pOut) ? `${pIn || "-"}-${pOut || "-"}` : ""
@@ -147,7 +156,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       breakDays.push(breakStr)
       if (workStr) dailyCount[i]++
     }
-    persons.push({ name: p.name, store: p.store, area: p.area, workDays, breakDays })
+    persons.push({ name: p.name, store: p.store, area: p.area, workDays, breakDays, leaveDays })
   }
 
   // 전체 매장 선택 시 매장별로 그룹화
@@ -233,8 +242,8 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
       const workRow = [p.name + (showArea ? ` (${areaLabel(p.area)})` : "")]
       const breakRow = [""]
       for (let i = 0; i < 7; i++) {
-        workRow.push(p.workDays[i] || "-")
-        breakRow.push(p.breakDays[i] ? `R ${p.breakDays[i]}` : "")
+        workRow.push(p.leaveDays?.[i] ? t("scheduleLeave") : (p.workDays[i] || "-"))
+        breakRow.push(p.leaveDays?.[i] ? "" : (p.breakDays[i] ? `R ${p.breakDays[i]}` : ""))
       }
       dataRows.push(workRow)
       dataRows.push(breakRow)
@@ -411,10 +420,18 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                             {areaLabel(p.area)}
                           </span>
                         </div>
-                        {/* 시간표 7열 - 근무 1줄, 쉬는 1줄 */}
-                        {p.workDays.map((workStr, dayIdx) => (
+                        {/* 시간표 7열 - 근무 1줄, 쉬는 1줄, 휴가 시 로 표시 */}
+                        {p.workDays.map((workStr, dayIdx) => {
+                          const leaveType = p.leaveDays?.[dayIdx]
+                          return (
                           <div key={dayIdx} className="flex flex-col items-center justify-center shrink-0 min-w-[72px]">
-                            {workStr ? (
+                            {leaveType ? (
+                              <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-violet-100 dark:bg-violet-950/50 print-schedule-slot px-1">
+                                <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap" title={leaveType}>
+                                  {t("scheduleLeave")}
+                                </span>
+                              </div>
+                            ) : workStr ? (
                               isCollapsed ? (
                                 <div className="h-[44px] w-full rounded-md flex items-center justify-center bg-[hsl(215,80%,50%)]/10 print-schedule-slot">
                                   <div className="h-2 w-2 rounded-full bg-[hsl(215,80%,50%)]" />
@@ -439,7 +456,8 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
                               </div>
                             )}
                           </div>
-                        ))}
+                          )
+                        })}
                       </button>
                     </div>
                   )
