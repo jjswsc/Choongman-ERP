@@ -86,6 +86,7 @@ export default function AdminAttendancePage() {
   const [scheduleStore, setScheduleStore] = React.useState("")
   const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
   const adjustInputRef = React.useRef<Record<string, string>>({})
+  const adjustInputElRef = React.useRef<Record<string, HTMLInputElement | null>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -480,6 +481,10 @@ export default function AdminAttendancePage() {
                               const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
                               return showAdjustInput ? (
                                 <Input
+                                  ref={(el) => {
+                                    const k = String(adjustKey)
+                                    adjustInputElRef.current[k] = el ? (el as HTMLInputElement) : null
+                                  }}
                                   type="number"
                                   min={isLateOrPendingIn ? 1 : 0}
                                   max={999}
@@ -590,9 +595,9 @@ export default function AdminAttendancePage() {
                                 className="h-6 px-2 text-[10px]"
                                 onClick={(e) => {
                                   const outId = row.outLogId!
-                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                  const input = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${outId}"]`) ?? tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
-                                  const fromInput = input?.value?.trim()
+                                  const adjustKey = row.outLogId!
+                                  const elVal = adjustInputElRef.current[String(adjustKey)]?.value?.trim()
+                                  const fromInput = elVal ?? (e.currentTarget as HTMLElement).closest("tr")?.querySelector<HTMLInputElement>("input[data-adjust-key]")?.value?.trim()
                                   const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                                   const defaultVal =
                                     row.plannedWorkHrs > 0 && row.diffMin < 0
@@ -602,12 +607,12 @@ export default function AdminAttendancePage() {
                                         : row.lateMin > 0
                                           ? Math.max(1, row.lateMin)
                                           : 0
-                                  const adjustKey = row.outLogId!
                                   const otVal = (fromInput !== undefined && fromInput !== "") ? fromInput : (adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal))
                                   const n = parseInt(otVal, 10)
                                   let num = !isNaN(n) && n >= 0 ? n : 0
                                   const currentOvertime = row.diffMin > 0 ? (row.otMin ?? row.diffMin) : 0
-                                  if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0) {
+                                  const noUserInput = (fromInput === undefined || fromInput === "") && adjustInputRef.current[String(adjustKey)] == null && otMinutesByRow[adjustKey] == null
+                                  if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0 && noUserInput) {
                                     num = Math.min(9999, Math.round(Number(currentOvertime)))
                                   }
                                   if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
