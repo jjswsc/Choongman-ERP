@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -9,6 +10,12 @@ function toDateStr(val: string | Date | null | undefined): string {
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
+function addDay(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
 }
 
 function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
@@ -50,18 +57,18 @@ async function getPublicHolidays(year: number): Promise<{ date: string; name: st
 
 type AttSummaryRow = { lateMin: number; otMin: number; workMin: number; workDays: number; workDates: string[] }
 
-/** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates */
+/** 귀속월 근태 집계: lateMin, otMin, workMin, workDays, workDates. 방콕 기준 + 자정 넘김은 출근일로 합침 */
 async function getAttendanceSummary(monthStr: string): Promise<Record<string, AttSummaryRow>> {
   const startStr = monthStr + '-01'
   const firstDay = new Date(monthStr + '-01T12:00:00')
   const lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0)
   const endStr = lastDay.toISOString().slice(0, 10)
-  const nextMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 1)
-  const nextMonthStr = nextMonth.getFullYear() + '-' + String(nextMonth.getMonth() + 1).padStart(2, '0') + '-01'
+  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
   const attRows = (await supabaseSelectFilter(
     'attendance_logs',
-    `log_at=gte.${startStr}&log_at=lt.${nextMonthStr}`,
+    `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
     { order: 'log_at.asc', limit: 3000 }
   )) as {
     log_at?: string
@@ -80,8 +87,14 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
   const map: Record<string, AttSummaryRow> = {}
 
   for (const r of attRows || []) {
-    const rowDate = toDateStr(r.log_at)
-    if (!rowDate || rowDate < startStr || rowDate > endStr) continue
+    const rowDate = toDateStrBangkok(r.log_at)
+    const type = String(r.log_type || '').trim()
+    const logAt = r.log_at || ''
+    if (!rowDate || rowDate < startStr) continue
+    if (rowDate > endStr) {
+      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDayBangkok(endStr, 1)
+      if (!allowOvernightOut) continue
+    }
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (!store || !name) continue
@@ -90,7 +103,6 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     if (!map[key]) map[key] = { lateMin: 0, otMin: 0, workMin: 0, workDays: 0, workDates: [] }
     if (!byDay[dayKey]) byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, otMin: 0, outApproved: false }
 
-    const type = String(r.log_type || '').trim()
     const approval = String(r.approved || '').trim()
     const status = String(r.status || '').trim()
     const isApproved = approval === '승인' || approval === '승인완료'
@@ -107,6 +119,24 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
         byDay[dayKey].breakMin = Number(r.break_min) || 0
         byDay[dayKey].outApproved = isApproved
         byDay[dayKey].otMin = Number(r.ot_min) || 0
+      }
+    }
+  }
+
+  // 자정 넘김: 익일 퇴근만 있는 날 → 전날(출근일)에 합침
+  for (const dk of Object.keys(byDay)) {
+    const v = byDay[dk]
+    if (v.outMs != null && v.inMs == null) {
+      const rowDate = dk.slice(0, 10)
+      const attKey = dk.slice(11)
+      const prevKey = addDay(rowDate, -1) + '_' + attKey
+      const prev = byDay[prevKey]
+      if (prev && prev.inMs != null && prev.outMs == null) {
+        prev.outMs = v.outMs
+        prev.breakMin += v.breakMin
+        prev.outApproved = v.outApproved
+        prev.otMin = v.otMin
+        v.outMs = null
       }
     }
   }

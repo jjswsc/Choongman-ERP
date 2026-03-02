@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -11,6 +12,12 @@ function toDateStr(val: string | Date | null | undefined): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
+function addDay(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
 function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
   if (year <= 2025) return { ceiling: 15000, maxDed: 750 }
   if (year <= 2028) return { ceiling: 17500, maxDed: 875 }
@@ -18,33 +25,40 @@ function getSSOLimitsByYear(year: number): { ceiling: number; maxDed: number } {
   return { ceiling: 23000, maxDed: 1150 }
 }
 
-/** 근태 집계: 지각분, 연장분, 근무분, 출근일수 (store|name 기준) */
+/** 근태 집계: 지각분, 연장분, 근무분, 출근일수 (store|name 기준). 방콕 기준 + 자정 넘김은 출근일로 합침 */
 async function getAttendanceSummary(monthStr: string, storeFilter?: string): Promise<Record<string, { lateMin: number; otMin: number; workMin: number; workDays: number }>> {
   const startStr = monthStr + '-01'
   const lastDay = new Date(parseInt(monthStr.slice(0, 4), 10), parseInt(monthStr.slice(5, 7), 10), 0)
   const endStr = lastDay.toISOString().slice(0, 10)
-  const endStrNext = new Date(lastDay.getTime() + 86400000).toISOString().slice(0, 10)
+  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  const logEndISOExclusive = addDayBangkok(endStr, 1) + 'T00:00:00.000Z'
 
   type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string }
   let attRows: AttRow[] = []
   if (storeFilter) {
     attRows = (await supabaseSelectFilter(
       'attendance_logs',
-      `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endStrNext}`,
+      `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
       { order: 'log_at.asc', limit: 3000 }
     )) as AttRow[]
   } else {
     attRows = (await supabaseSelectFilter(
       'attendance_logs',
-      `log_at=gte.${startStr}&log_at=lt.${endStrNext}`,
+      `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
       { order: 'log_at.asc', limit: 3000 }
     )) as AttRow[]
   }
 
   const byDay: Record<string, { inMs: number | null; outMs: number | null; breakMin: number; outApproved: boolean; lateMin: number; otMin: number }> = {}
   for (const r of attRows || []) {
-    const rowDate = toDateStr(r.log_at)
-    if (!rowDate || rowDate < startStr || rowDate > endStr) continue
+    const rowDate = toDateStrBangkok(r.log_at)
+    const type = String(r.log_type || '').trim()
+    const logAt = r.log_at || ''
+    if (!rowDate || rowDate < startStr) continue
+    if (rowDate > endStr) {
+      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDayBangkok(endStr, 1)
+      if (!allowOvernightOut) continue
+    }
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (!store || !name) continue
@@ -53,7 +67,6 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
       byDay[dayKey] = { inMs: null, outMs: null, breakMin: 0, outApproved: false, lateMin: 0, otMin: 0 }
     }
     const v = byDay[dayKey]
-    const type = String(r.log_type || '').trim()
     const approved = String(r.approved || '').trim()
     const status = String(r.status || '').trim()
     const isApproved = approved === '승인' || approved === '승인완료'
@@ -75,6 +88,25 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
       }
     } else if (type === '휴식종료') {
       v.breakMin += Number(r.break_min) || 0
+    }
+  }
+
+  // 자정 넘김: 익일 퇴근만 있는 날 → 전날(출근일)에 합침
+  for (const [dayKey, v] of Object.entries(byDay)) {
+    if (v.outMs != null && v.inMs == null) {
+      const parts = dayKey.split('|')
+      const rowDate = parts[0]
+      const store = parts[1] || ''
+      const name = parts[2] || ''
+      const prevKey = `${addDay(rowDate, -1)}|${store}|${name}`
+      const prev = byDay[prevKey]
+      if (prev && prev.inMs != null && prev.outMs == null) {
+        prev.outMs = v.outMs
+        prev.breakMin += v.breakMin
+        prev.outApproved = v.outApproved
+        prev.otMin = v.otMin
+        v.outMs = null
+      }
     }
   }
 
@@ -111,18 +143,19 @@ async function getHolidayWorkDaysMap(
     if (d && d >= startStr && d <= endStr) holidaySet[d] = true
   }
 
+  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
   type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; status?: string; approved?: string }
   let attRows: AttRow[] = []
   if (storeFilter) {
     attRows = (await supabaseSelectFilter(
       'attendance_logs',
-      `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${startStr}&log_at=lte.${endStr}T23:59:59`,
+      `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
       { order: 'log_at.asc', limit: 2000 }
     )) as AttRow[]
   } else {
     attRows = (await supabaseSelectFilter(
       'attendance_logs',
-      `log_at=gte.${startStr}&log_at=lte.${endStr}T23:59:59`,
+      `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`,
       { order: 'log_at.asc', limit: 3000 }
     )) as AttRow[]
   }
@@ -136,7 +169,7 @@ async function getHolidayWorkDaysMap(
     const app = String(r.approved || '').trim()
     const needApp = /위치미확인|승인대기/.test(st)
     if (needApp && app !== '승인' && app !== '승인완료') continue
-    const d = toDateStr(r.log_at)
+    const d = toDateStrBangkok(r.log_at)
     const store = String(r.store_name || '').trim()
     const name = String(r.name || '').trim()
     if (d && d >= startStr && d <= endStr && store && name) byDay[`${d}|${store}|${name}`] = true

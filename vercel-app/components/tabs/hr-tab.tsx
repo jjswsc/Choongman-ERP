@@ -10,14 +10,16 @@ import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import {
   getTodayAttendanceTypes,
-  getAttendanceList,
+  getAttendanceRecordsAdmin,
   submitAttendance,
   requestLeave,
   getMyLeaveInfo,
   uploadLeaveCertificate,
   getMyPayroll,
   getHeadOfficeInfo,
+  type AttendanceDailyRow,
 } from "@/lib/api-client"
+import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
 import { compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -25,18 +27,15 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { Users, Sun, Moon, Coffee, Play, Clock, Wallet, Search, Download, Image, Upload } from "lucide-react"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return todayStrBangkok()
 }
 
 function getAttendanceDateRange() {
   const now = new Date()
-  const today = now.toISOString().slice(0, 10)
-  const hour = now.getHours()
-  // 0~5시(자정~새벽): 전날 출근 후 퇴근 안 한 경우를 위해 전날도 포함
-  if (hour >= 0 && hour < 6) {
-    const d = new Date(today + 'T12:00:00')
-    d.setDate(d.getDate() - 1)
-    return { startDate: d.toISOString().slice(0, 10), endDate: today }
+  const today = todayStrBangkok()
+  const bangkokHour = parseInt(now.toLocaleString("en-US", { timeZone: ATTENDANCE_TZ, hour: "2-digit", hour12: false }), 10)
+  if (bangkokHour >= 0 && bangkokHour < 6) {
+    return { startDate: daysAgoStrBangkok(1), endDate: today }
   }
   return { startDate: today, endDate: today }
 }
@@ -93,13 +92,13 @@ export function HrTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [todayTypes, setTodayTypes] = useState<string[]>([])
-  const [attLog, setAttLog] = useState<{ timestamp: string; type: string; status: string }[]>([])
+  const [dailyRecords, setDailyRecords] = useState<AttendanceDailyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 15, remainLakij: 3, annualTotal: 6, lakijTotal: 3 })
   const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
-  const [leaveDate, setLeaveDate] = useState(todayStr)
+  const [leaveDate, setLeaveDate] = useState(() => todayStrBangkok())
   const [leaveReason, setLeaveReason] = useState("")
   const [leaveSubmitting, setLeaveSubmitting] = useState(false)
   const [certUploadingId, setCertUploadingId] = useState<number | null>(null)
@@ -151,13 +150,15 @@ export function HrTab() {
   const loadTodayLog = useCallback(() => {
     if (!auth?.store || !auth?.user) return
     const { startDate, endDate } = getAttendanceDateRange()
-    getAttendanceList({
+    getAttendanceRecordsAdmin({
       startDate,
       endDate,
       storeFilter: auth.store,
       employeeFilter: auth.user,
-    }).then(setAttLog)
-  }, [auth?.store, auth?.user])
+      userStore: auth.store,
+      userRole: auth?.role,
+    }).then(setDailyRecords)
+  }, [auth?.store, auth?.user, auth?.role])
 
   const loadLeaveInfo = useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -416,11 +417,23 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
     )
   }
 
-  const formatTime = (iso: string) => {
-    if (!iso) return "-"
-    const d = new Date(iso)
-    return isNaN(d.getTime()) ? "-" : d.toLocaleTimeString("ko-KR", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+  function attStatusToKey(st: string): string | null {
+    const s = (st || "").trim()
+    if (!s) return null
+    if (s === "정상") return "att_status_normal"
+    if (s.includes("정상") && s.includes("승인")) return "att_status_approved"
+    if (s === "퇴근미기록") return "att_status_no_out"
+    if (s === "지각" || s === "지각(승인)") return "att_status_late"
+    if (s === "조퇴") return "att_status_early"
+    if (s === "연장") return "att_status_overtime"
+    if (s.includes("위치미확인") && s.includes("승인대기")) return "att_status_gps_pending"
+    if (s.includes("강제퇴근") && s.includes("승인대기")) return "att_status_forced_out_pending"
+    if (s === "휴게초과") return "att_status_break_over"
+    if (s === "휴게정상") return "att_status_break_ok"
+    return null
   }
+
+  const nowBangkok = now.toLocaleTimeString("ko-KR", { timeZone: ATTENDANCE_TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -428,7 +441,7 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
         <div className="flex items-center justify-center gap-2 mb-1">
           <Clock className="h-5 w-5 text-primary" />
           <span className="text-2xl font-bold tabular-nums">
-            {now.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+            {nowBangkok}
           </span>
         </div>
         <p className="text-xs text-muted-foreground">{t("hrUser")}</p>
@@ -478,34 +491,54 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
 
           {loading ? (
             <div className="py-4 text-center text-sm text-muted-foreground">{t("loading")}</div>
-          ) : attLog.length === 0 ? (
+          ) : dailyRecords.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border/60 py-6 text-center text-sm text-muted-foreground">
               {t("attHelp")}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="px-3 py-2 text-left font-medium">{t("time")}</th>
-                    <th className="px-3 py-2 text-left font-medium">{t("leaveType")}</th>
-                    <th className="px-3 py-2 text-left font-medium">{t("attStatusCol")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("label_date")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_in")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_out")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_break_min")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_actual_hrs")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_planned_hrs")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_diff")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_late_extra")}</th>
+                    <th className="px-2 py-2 text-center font-semibold">{t("att_col_status")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {attLog.map((r, i) => {
-                    const timePart = formatTime(r.timestamp || "")
-                    const isPending =
-                      String(r.status || "").includes("위치미확인") ||
-                      String(r.status || "").includes("승인대기")
+                  {dailyRecords.map((row, i) => {
+                    const hasPending = (row.pendingInId ?? row.pendingOutId ?? row.pendingId) != null
                     return (
-                      <tr key={i} className="border-b border-border/60 last:border-0">
-                        <td className="px-3 py-2 text-muted-foreground">{timePart}</td>
-                        <td className="px-3 py-2 font-medium">{translateAttType(r.type, t)}</td>
-                        <td
-                          className={`px-3 py-2 text-xs ${isPending ? "text-amber-600 font-medium" : "text-green-600"}`}
-                        >
-                          {isPending ? t("attStatusPending") : t("attSuccess")}
+                      <tr
+                        key={`${row.date}-${row.name}-${i}`}
+                        className={`border-b border-border/60 last:border-0 ${hasPending ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}
+                      >
+                        <td className="px-2 py-2 text-center">{row.date}</td>
+                        <td className="px-2 py-2 text-center">{row.inTimeStr}</td>
+                        <td className="px-2 py-2 text-center">{row.outTimeStr}</td>
+                        <td className="px-2 py-2 text-center">{row.breakMin}</td>
+                        <td className="px-2 py-2 text-center">{row.actualWorkHrs}</td>
+                        <td className="px-2 py-2 text-center">{row.plannedWorkHrs}</td>
+                        <td className="px-2 py-2 text-center">{row.diffMin}</td>
+                        <td className="px-2 py-2 text-center">
+                          {row.lateMin > 0 && <span className="text-amber-600">{t("att_late_label")} {row.lateMin}{t("att_min_unit")} </span>}
+                          {row.otMin > 0 && <span className="text-blue-600">{t("att_ot_label")} {row.otMin}{t("att_min_unit")}</span>}
+                          {row.lateMin === 0 && row.otMin === 0 && "-"}
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <span className={cn(
+                            "text-[10px] font-medium",
+                            hasPending && "text-amber-600",
+                            row.status === "퇴근미기록" && "text-red-600"
+                          )}>
+                            {attStatusToKey(row.status) ? t(attStatusToKey(row.status)!) : row.status}
+                          </span>
                         </td>
                       </tr>
                     )

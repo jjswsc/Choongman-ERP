@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 const TZ = 'Asia/Bangkok'
 
@@ -15,6 +16,21 @@ function toTimeStr(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('ko-KR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+/** 방콕 기준 날짜(YYYY-MM-DD)에서 N일 더한 날짜 */
+function addDay(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+/** log_at(ISO) → 방콕 기준 시각의 시(hour) 0~23 */
+function getBangkokHour(iso: string): number {
+  if (!iso) return 12
+  const d = new Date(iso)
+  const str = d.toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
+  return parseInt(str, 10) || 0
 }
 
 function parsePlanToMinutes(plan: string | null | undefined): number {
@@ -76,9 +92,10 @@ export async function GET(request: NextRequest) {
   }
 
   const startStr = startDate.slice(0, 10)
-  const endD = new Date(endDate + 'T23:59:59')
-  endD.setDate(endD.getDate() + 1)
-  const endStr = endD.toISOString().slice(0, 10)
+  const endStr = endDate.slice(0, 10)
+  const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+  // 자정 넘김 퇴근(익일 00:00~06:59 방콕) 포함: log_at 조회 끝을 익일 07:00 방콕(= 익일 00:00 UTC)까지 연장
+  const logEndISOExclusive = addDay(endStr, 1) + 'T00:00:00.000Z'
 
   const isAllStores = !storeFilter || storeFilter === 'All' || storeFilter.toLowerCase() === 'all' || storeFilter === '전체' || storeFilter === '전체 매장'
   const isAllEmployees = !employeeFilter || employeeFilter === 'All' || employeeFilter === '전체 직원'
@@ -106,13 +123,13 @@ export async function GET(request: NextRequest) {
     if (isAllStores) {
       attRows = (await supabaseSelectFilter(
         'attendance_logs',
-        `log_at=gte.${startStr}&log_at=lt.${endStr}`,
+        `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
         { order: 'log_at.asc', limit: 2000 }
       )) as AttRow[]
     } else {
       attRows = (await supabaseSelectFilter(
         'attendance_logs',
-        `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endStr}`,
+        `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
         { order: 'log_at.asc', limit: 2000 }
       )) as AttRow[]
     }
@@ -151,7 +168,14 @@ export async function GET(request: NextRequest) {
 
     for (const r of attRows || []) {
       const rowDate = toDateStr(r.log_at)
-      if (!rowDate || rowDate < startStr || rowDate >= endStr) continue
+      const type = String(r.log_type || '').trim()
+      const logAt = r.log_at || ''
+      if (!rowDate || rowDate < startStr) continue
+      // 조회 구간 밖 날짜: 익일 새벽 퇴근(자정 넘김)만 허용 → 전날 행에 붙이기 위함
+      if (rowDate > endStr) {
+        const isOvernightOutForRange = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDay(endStr, 1)
+        if (!isOvernightOutForRange) continue
+      }
       const rowStore = String(r.store_name || '').trim()
       const name = String(r.name || '').trim()
       if (!isAllEmployees && name !== employeeFilter) continue
@@ -177,13 +201,11 @@ export async function GET(request: NextRequest) {
         }
       }
       const rec = byKey[key]
-      const type = String(r.log_type || '').trim()
-      const logAt = r.log_at || ''
       const approved = String(r.approved || '').trim()
       const st = String(r.status || '').trim()
       const isGpsOrForced = /위치미확인|승인대기|강제퇴근/.test(st)
       const needsInApproval = approved === '대기' && (isGpsOrForced || (Number(r.late_min) || 0) > 0)
-      const needsOutApproval = approved === '대기' && (isGpsOrForced || (Number(r.ot_min) || 0) > 0)
+      const needsOutApproval = approved === '대기' && (isGpsOrForced || (Number(r.ot_min) || 0) > 0 || (Number(r.early_min) || 0) > 0)
 
       if (type === '출근') {
         if (!rec.inTime || logAt < (rec.inTime || '')) {
@@ -195,7 +217,19 @@ export async function GET(request: NextRequest) {
           }
         }
       } else if (type === '퇴근') {
-        if (!rec.outTime || logAt > (rec.outTime || '')) {
+        const bangkokHour = getBangkokHour(logAt)
+        const isOvernightOut = bangkokHour < 7
+        const prevDayKey = `${addDay(rowDate, -1)}|${rowStore}|${name}`
+        const prevRec = byKey[prevDayKey]
+
+        if (isOvernightOut && prevRec?.inTime && !prevRec.outTime) {
+          prevRec.outTime = logAt
+          prevRec.earlyMin = Number(r.early_min) || 0
+          prevRec.otMin = Number(r.ot_min) || 0
+          prevRec.status = st || prevRec.status
+          prevRec.outApproved = approved || ''
+          if (needsOutApproval) prevRec.outId = r.id ?? null
+        } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
           rec.outTime = logAt
           rec.earlyMin = Number(r.early_min) || 0
           rec.otMin = Number(r.ot_min) || 0
@@ -239,7 +273,7 @@ export async function GET(request: NextRequest) {
           outApprovedForRow = nextRec.outApproved
           outIdForRow = nextRec.outId
           breakMinForRow += nextRec.breakMin
-          dateForRow = nextDay
+          // 자정 넘김 근무: 행은 출근한 날(오늘) 기준 유지, 퇴근만 익일 기록 사용
         }
       }
 
@@ -264,7 +298,23 @@ export async function GET(request: NextRequest) {
       const approval = outTimeForRow ? (outApprovedForRow || '대기') : '대기'
       const isPending = inIdForRow != null || outIdForRow != null
 
+      // 실제 근무시간이 0이면 지각/연장은 의미 없음 → 0으로 통일해 잘못된 표시 방지
+      const effectiveLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
+      // 연장 표시는 (차이 + 지각)을 넘을 수 없음 → 잘못된 DB/병합 값 방지 (차이 = 실제−계획, 지각은 별도이므로 연장 상한 = diffMin + lateMin)
+      const otCap = Math.max(0, diffMin + lateMinForRow)
+      const effectiveOtMin = actualWorkMin <= 0 ? 0 : Math.min(otMinForRow, otCap)
+
       if (pendingOnly && !isPending) continue
+
+      // 상태 표시: 퇴근 없음→퇴근미기록, 차이 -30분 미만→조퇴, 차이 부족 없는데 DB가 조퇴→정상(계획 대비 실제 근무로 판단)
+      const displayStatus =
+        !outTimeForRow
+          ? '퇴근미기록'
+          : diffMin < -30
+            ? '조퇴'
+            : statusForRow === '조퇴'
+              ? '정상'
+              : statusForRow
 
       result.push({
         date: dateForRow,
@@ -276,9 +326,9 @@ export async function GET(request: NextRequest) {
         actualWorkHrs: Math.round(actualWorkHrs * 100) / 100,
         plannedWorkHrs: Math.round(plannedWorkHrs * 100) / 100,
         diffMin,
-        lateMin: lateMinForRow,
-        otMin: otMinForRow,
-        status: outTimeForRow ? statusForRow : '퇴근미기록',
+        lateMin: effectiveLateMin,
+        otMin: effectiveOtMin,
+        status: displayStatus,
         approval: approval || '대기',
         pendingId: outIdForRow ?? inIdForRow,
         pendingInId: inIdForRow,

@@ -27,6 +27,7 @@ import {
   useStoreList,
   getAttendanceRecordsAdmin,
   processAttendanceApproval,
+  approveNoClockOut,
   getAttendanceNoRecordList,
   createAttendanceFromSchedule,
   type AttendanceDailyRow,
@@ -36,14 +37,13 @@ import { RealtimeWork } from "@/components/erp/realtime-work"
 import { WeeklySchedule } from "@/components/erp/weekly-schedule"
 import { AdminScheduleEdit } from "@/components/admin/admin-schedule-edit"
 import { cn } from "@/lib/utils"
+import { todayStrBangkok, daysAgoStrBangkok } from "@/lib/attendance-utils"
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return todayStrBangkok()
 }
 function weekAgoStr() {
-  const d = new Date()
-  d.setDate(d.getDate() - 7)
-  return d.toISOString().slice(0, 10)
+  return daysAgoStrBangkok(7)
 }
 
 function statusToKey(s: string): string | null {
@@ -192,6 +192,17 @@ export default function AdminAttendancePage() {
     else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
+  const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
+    const res = await approveNoClockOut({
+      date: row.date,
+      store: row.store,
+      name: row.name,
+      userStore: auth?.store,
+      userRole: auth?.role,
+    })
+    if (res.success) loadRecords()
+    else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+  }
 
   return (
     <div className="flex-1 overflow-auto">
@@ -340,8 +351,8 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_actual_hrs")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold">{t("att_late_extra")}</th>
-                      <th className="px-1 py-2.5 text-center font-semibold w-12" title={t("att_ot_help")}>{t("att_ot_label")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold min-w-[3rem]">{t("att_late_extra")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20" title={t("att_ot_help")}>{t("att_ot_label")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_approve_btn")}</th>
                     </tr>
@@ -360,7 +371,8 @@ export default function AdminAttendancePage() {
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
                           className={cn(
                             "border-b last:border-b-0",
-                            isPending && "bg-amber-50/50 dark:bg-amber-950/20"
+                            row.plannedWorkHrs === 0 && "bg-red-100 dark:bg-red-950/40",
+                            row.plannedWorkHrs !== 0 && isPending && "bg-amber-50/50 dark:bg-amber-950/20"
                           )}
                         >
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
@@ -371,13 +383,20 @@ export default function AdminAttendancePage() {
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
                           <td className="px-3 py-2.5 text-center">{row.actualWorkHrs}</td>
                           <td className="px-3 py-2.5 text-center">{row.plannedWorkHrs}</td>
-                          <td className="px-3 py-2.5 text-center">{row.diffMin}</td>
                           <td className="px-3 py-2.5 text-center">
-                            {row.lateMin > 0 && <span className="text-amber-600">{t("att_late_label")} {row.lateMin}{t("att_min_unit")} </span>}
-                            {row.otMin > 0 && <span className="text-blue-600">{t("att_ot_label")} {row.otMin}{t("att_min_unit")}</span>}
+                            {row.plannedWorkHrs === 0 ? "-" : (
+                              <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
+                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}분`}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2.5 text-center">
+                            {row.lateMin > 0 && <span className="font-medium text-red-600">{row.lateMin}</span>}
+                            {row.lateMin > 0 && row.otMin > 0 && " "}
+                            {row.otMin > 0 && <span className="font-medium text-blue-600">{row.otMin}</span>}
                             {row.lateMin === 0 && row.otMin === 0 && "-"}
                           </td>
-                          <td className="px-1 py-2.5 text-center">
+                          <td className="px-2 py-2.5 text-center min-w-[4.5rem]">
                             {hasPendingOut ? (
                               <Input
                                 type="number"
@@ -386,7 +405,7 @@ export default function AdminAttendancePage() {
                                 placeholder="0"
                                 value={otMinutesByRow[pendingOut ?? row.pendingId!] ?? String(row.otMin ?? 0)}
                                 onChange={(e) => setOtMinutesByRow((p) => ({ ...p, [pendingOut ?? row.pendingId!]: e.target.value }))}
-                                className="h-7 w-12 text-xs text-center mx-auto"
+                                className="h-7 min-w-[3.5rem] w-14 text-[11px] text-center mx-auto"
                               />
                             ) : row.otMin > 0 ? (
                               <span className="text-blue-600 text-[11px]">{row.otMin}</span>
@@ -418,10 +437,16 @@ export default function AdminAttendancePage() {
                                 className={cn(
                                   "text-[10px] font-medium",
                                   isPending && "text-amber-600",
-                                  row.status === "퇴근미기록" && "text-red-600"
+                                  row.status === "퇴근미기록" && "text-red-600",
+                                  (row.status === "조퇴" || row.status === "지각" || row.status === "지각(승인)") && "text-amber-600",
+                                  !row.outTimeStr && "text-amber-600"
                                 )}
                               >
-                                {statusToKey(row.status) ? t(statusToKey(row.status)!) : row.status}
+                                {!row.outTimeStr
+                                  ? "미퇴근"
+                                  : statusToKey(row.status)
+                                    ? t(statusToKey(row.status)!)
+                                    : row.status}
                               </span>
                             )}
                           </td>
@@ -443,6 +468,15 @@ export default function AdminAttendancePage() {
                                 </Button>
                                 <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
+                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] text-amber-600 border-amber-300 hover:bg-amber-50"
+                                onClick={() => handleApproveNoClockOut(row)}
+                              >
+                                강제퇴근 인정
+                              </Button>
                             ) : (
                               <span className="text-[10px] text-muted-foreground">-</span>
                             )}

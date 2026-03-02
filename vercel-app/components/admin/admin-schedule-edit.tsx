@@ -23,29 +23,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { getAdminEmployeeList, getWeeklySchedule, saveSchedule } from "@/lib/api-client"
+import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
-
-/** toISOString 시 타임존에 따라 날짜가 밀릴 수 있으므로 로컬 날짜만 사용 */
-function toLocalDateStr(d: Date): string {
-  const y = d.getFullYear()
-  const mo = String(d.getMonth() + 1).padStart(2, "0")
-  const da = String(d.getDate()).padStart(2, "0")
-  return `${y}-${mo}-${da}`
-}
-
-function getMondayOfWeek(dateStr?: string): string {
-  const d = dateStr ? new Date(dateStr + "T12:00:00") : new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : -(day - 1)
-  d.setDate(d.getDate() + diff)
-  return toLocalDateStr(d)
-}
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T12:00:00")
-  d.setDate(d.getDate() + days)
-  return toLocalDateStr(d)
-}
 
 function get30MinIntervals(start: string, end: string): string[] {
   const result: string[] = []
@@ -90,7 +69,7 @@ export function AdminScheduleEdit({
   const { lang } = useLang()
   const t = useT(lang)
 
-  const [monday, setMonday] = React.useState(getMondayOfWeek)
+  const [monday, setMonday] = React.useState(() => getMondayOfWeekBangkok())
   const [startHour, setStartHour] = React.useState(6)
   const [endHour, setEndHour] = React.useState(29)
   const [staffList, setStaffList] = React.useState<StaffItem[]>([])
@@ -118,7 +97,7 @@ export function AdminScheduleEdit({
   React.useEffect(() => {
     if (!store || !auth) return
     getAdminEmployeeList({ userStore: auth.store || "", userRole: auth.role || "" }).then((r) => {
-      const list = (r.list || []).filter((e) => String(e.store || "").trim() === store)
+      const list = (r.list || []).filter((e) => String(e.store || "").trim() === store && (!e.resign || String(e.resign).trim() === ""))
       if (list.length > 0) {
         setStaffList(
           list.map((e) => ({
@@ -147,7 +126,7 @@ export function AdminScheduleEdit({
   }, [store, monday])
 
   const snapToMonday = (v: string) => {
-    const m = getMondayOfWeek(v)
+    const m = getMondayOfWeekBangkok(v)
     if (m) setMonday(m)
   }
 
@@ -180,7 +159,7 @@ export function AdminScheduleEdit({
         const next: Record<string, string[]> = {}
         const leaveMap: Record<number, Set<string>> = {}
         const leaveDetailList: { name: string; dayIdx: number; dateStr: string; type: string }[] = []
-        const dayStrsLocal = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+        const dayStrsLocal = Array.from({ length: 7 }, (_, i) => addDaysSchedule(monday, i))
         for (const row of data || []) {
           const dateStr = row.date?.slice(0, 10)
           const dayIdx = dayStrsLocal.indexOf(dateStr)
@@ -330,10 +309,10 @@ export function AdminScheduleEdit({
       alert(t("att_store_monday_required"))
       return
     }
-    const nextMonday = addDays(monday, 7)
+    const nextMonday = addDaysSchedule(monday, 7)
     if (!confirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
 
-    const nextDayStrs = Array.from({ length: 7 }, (_, i) => addDays(nextMonday, i))
+    const nextDayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(nextMonday, i))
     const map: Record<string, { work: string[]; break: string[] }> = {}
     for (const [key, names] of Object.entries(slotData)) {
       if (!names.length) continue
@@ -439,7 +418,7 @@ export function AdminScheduleEdit({
       return
     }
     const map: Record<string, { work: string[]; break: string[] }> = {}
-    const dayStrs = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+    const dayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(monday, i))
 
     for (const [key, names] of Object.entries(slotData)) {
       if (!names.length) continue
@@ -536,7 +515,7 @@ export function AdminScheduleEdit({
       .finally(() => setSaving(false))
   }
 
-  const dayStrs = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
+  const dayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(monday, i))
   const dailyStaffCountByArea = React.useMemo(() => {
     const result: Record<number, Record<string, number>> = {}
     for (let d = 0; d < 7; d++) {

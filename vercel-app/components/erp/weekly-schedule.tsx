@@ -9,23 +9,8 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList, getWeeklySchedule, type WeeklyScheduleItem } from "@/lib/api-client"
+import { getMondayOfWeekBangkok, addDaysSchedule } from "@/lib/attendance-utils"
 import { cn, displayLabelShort } from "@/lib/utils"
-
-function toLocalDateStr(d: Date): string {
-  const y = d.getFullYear()
-  const mo = String(d.getMonth() + 1).padStart(2, "0")
-  const da = String(d.getDate()).padStart(2, "0")
-  return `${y}-${mo}-${da}`
-}
-
-function getMondayOfWeek(d?: Date): string {
-  const date = d ? new Date(d) : new Date()
-  const day = date.getDay()
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1)
-  const mon = new Date(date)
-  mon.setDate(diff)
-  return toLocalDateStr(mon)
-}
 
 function scheduleTimeOnly(v: string | null | undefined): string {
   if (v == null || (typeof v === "string" && !v.trim())) return ""
@@ -61,7 +46,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
   const [storeList, setStoreList] = React.useState<string[]>([])
   const [storeFilter, setStoreFilter] = React.useState("")
   const storeFilterFinal = storeFilterProp || storeFilter
-  const [date, setDate] = React.useState(getMondayOfWeek)
+  const [date, setDate] = React.useState(() => getMondayOfWeekBangkok())
   const [areaFilter, setAreaFilter] = React.useState("all")
   const [schedule, setSchedule] = React.useState<WeeklyScheduleItem[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -112,8 +97,7 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     return ar
   }
 
-  const monDate = new Date(date + "T12:00:00")
-  const dayStrs: string[] = []
+  const dayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(date, i))
   const dayLabels = [
     t("scheduleMon") || "월",
     t("scheduleTue") || "화",
@@ -123,11 +107,6 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     t("scheduleSat") || "토",
     t("scheduleSun") || "일",
   ]
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monDate.getTime())
-    d.setDate(monDate.getDate() + i)
-    dayStrs.push(toLocalDateStr(d))
-  }
   const daysFull = dayStrs.map((s) => {
     const [y, m, d] = s.split("-")
     return `${parseInt(m, 10)}/${parseInt(d, 10)}`
@@ -189,16 +168,8 @@ export function WeeklySchedule({ storeFilter: storeFilterProp = "", storeList: s
     personsByStore.push({ store: storeFilterFinal, persons })
   }
 
-  const goPrevWeek = () => {
-    const d = new Date(date + "T12:00:00")
-    d.setDate(d.getDate() - 7)
-    setDate(toLocalDateStr(d))
-  }
-  const goNextWeek = () => {
-    const d = new Date(date + "T12:00:00")
-    d.setDate(d.getDate() + 7)
-    setDate(toLocalDateStr(d))
-  }
+  const goPrevWeek = () => setDate(addDaysSchedule(date, -7))
+  const goNextWeek = () => setDate(addDaysSchedule(date, 7))
 
   const toggleRow = (key: string) => {
     setCollapsedRows((prev) => {
@@ -321,7 +292,7 @@ ${dataRows.map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("
             </SelectContent>
           </Select>
         ) : null}
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="date-input-compact h-9 w-36 rounded-lg text-xs shrink-0" />
+        <Input type="date" value={date} onChange={(e) => setDate(getMondayOfWeekBangkok(e.target.value))} className="date-input-compact h-9 w-36 rounded-lg text-xs shrink-0" />
         <Select value={areaFilter} onValueChange={setAreaFilter}>
           <SelectTrigger className="h-9 w-24 rounded-lg text-xs">
             <SelectValue />

@@ -292,7 +292,7 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   const hasProblem: boolean = !att
                     ? true
                     : Boolean((att.lateMin && att.lateMin > 0) || att.onlyIn || (att.status && /지각|결석|미기록/.test(att.status)))
-                  const rowBg = hasProblem ? "bg-red-50/60 dark:bg-red-950/40" : "bg-card"
+                  const rowBg = hasProblem ? "bg-red-50/60 dark:bg-red-950/40" : "bg-white dark:bg-card"
 
                   return (
                     <tr key={key} className={cn("border-b border-border last:border-b-0", rowBg)}>

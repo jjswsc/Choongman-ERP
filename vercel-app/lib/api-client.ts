@@ -440,6 +440,7 @@ export interface AttendanceLogItem {
   status: string
   late_min?: number
   ot_min?: number
+  approved?: string
 }
 
 export async function getAttendanceList(params: {
@@ -726,6 +727,21 @@ export async function createAttendanceFromSchedule(params: {
   userRole?: string
 }) {
   const res = await apiFetch('/api/createAttendanceFromSchedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function approveNoClockOut(params: {
+  date: string
+  store: string
+  name: string
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/approveNoClockOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
