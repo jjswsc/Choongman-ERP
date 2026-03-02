@@ -385,7 +385,7 @@ export default function AdminAttendancePage() {
                           <td className="px-3 py-2.5 text-center">
                             {row.plannedWorkHrs === 0 ? "-" : (
                               <span className={row.diffMin < 0 ? "text-amber-600" : undefined}>
-                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin}분`}
+                                {row.diffMin === 0 ? "0" : `${row.diffMin > 0 ? "+" : ""}${row.diffMin} M`}
                               </span>
                             )}
                           </td>
@@ -475,7 +475,7 @@ export default function AdminAttendancePage() {
                                 className="h-6 px-2 text-[10px] text-amber-600 border-amber-300 hover:bg-amber-50"
                                 onClick={() => handleApproveNoClockOut(row)}
                               >
-                                강제퇴근 인정
+                                {t("att_approve_forced_out")}
                               </Button>
                             ) : (
                               <span className="text-[10px] text-muted-foreground">-</span>

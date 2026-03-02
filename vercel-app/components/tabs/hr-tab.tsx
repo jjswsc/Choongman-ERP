@@ -20,7 +20,7 @@ import {
   type AttendanceDailyRow,
 } from "@/lib/api-client"
 import { todayStrBangkok, daysAgoStrBangkok, ATTENDANCE_TZ } from "@/lib/attendance-utils"
-import { compressImageForUpload } from "@/lib/utils"
+import { cn, compressImageForUpload } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
