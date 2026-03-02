@@ -236,6 +236,8 @@ export async function GET(request: NextRequest) {
       otAmt: number
       lateMin: number
       lateDed: number
+      earlyMin: number
+      earlyDed: number
       sso: number
       netPay: number
     }[] = []
