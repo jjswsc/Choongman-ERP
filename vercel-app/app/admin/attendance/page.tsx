@@ -461,7 +461,7 @@ export default function AdminAttendancePage() {
                           <td className="px-2 py-2.5 text-center min-w-[5rem]">
                             {(() => {
                               const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
-                              const showAdjustInput = !isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0)
+                              const showAdjustInput = (!isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")))) || (row.status && String(row.status).includes("정상(승인)"))
                               const adjustKey =
                                 hasPendingOut && (pendingOut != null || row.pendingId != null)
                                   ? (pendingOut ?? row.pendingId)!
@@ -588,7 +588,7 @@ export default function AdminAttendancePage() {
                                 </Button>
                                 <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
-                            ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30)) ? (
+                            ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")) || (row.status && String(row.status).includes("정상(승인)"))) ? (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -615,7 +615,10 @@ export default function AdminAttendancePage() {
                                   if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0 && noUserInput) {
                                     num = Math.min(9999, Math.round(Number(currentOvertime)))
                                   }
-                                  if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
+                                  const isLateOnly = row.lateMin > 0 && row.diffMin === 0 && (row.earlyMin ?? 0) === 0 && (row.otMin ?? 0) < 30
+                                  if (isLateOnly) {
+                                    handleApprove(outId, undefined, undefined)
+                                  } else if (row.diffMin < 0 || (row.earlyMin ?? 0) > 0) {
                                     handleApprove(outId, undefined, undefined, num)
                                   } else {
                                     handleApprove(outId, num, undefined)
@@ -624,7 +627,7 @@ export default function AdminAttendancePage() {
                               >
                                 {t("att_apply_adjust")}
                               </Button>
-                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" || (row.status && String(row.status).includes("강제퇴근(승인)")) ? (
+                            ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
                               <Button
                                 size="sm"
                                 variant="outline"

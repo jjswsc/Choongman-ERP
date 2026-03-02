@@ -143,6 +143,8 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
 }
 
 const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
+/** 입고 시 "입고등록"(HQ Warehouse) 선택하면 저장되는 location. 본사 재고 조회 시 포함해야 함 */
+const INBOUND_HQ_LOCATION = '입고등록'
 
 async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
   try {
@@ -150,9 +152,12 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
     if (!storeNorm) return {}
 
     const isOffice = OFFICE_LOCATIONS.some((x) => storeNorm === x || storeNorm.includes(x))
+    const isInboundHq = storeNorm === INBOUND_HQ_LOCATION.toLowerCase()
     const locFilter = isOffice
-      ? `or=(${OFFICE_LOCATIONS.map((l) => `location.ilike.${l}`).join(',')})`
-      : `location=ilike.${encodeURIComponent(storeNorm)}`
+      ? `or=(location.eq.${encodeURIComponent(INBOUND_HQ_LOCATION)},${OFFICE_LOCATIONS.map((l) => `location.ilike.${l}`).join(',')})`
+      : isInboundHq
+        ? `location=eq.${encodeURIComponent(INBOUND_HQ_LOCATION)}`
+        : `location=ilike.${encodeURIComponent(storeNorm)}`
     const dateSuffix = asOfDate?.trim()
       ? `&log_date=lte.${encodeURIComponent(asOfDate.trim() + 'T23:59:59.999Z')}`
       : ''
