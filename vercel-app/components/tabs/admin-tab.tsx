@@ -328,7 +328,7 @@ export function AdminTab() {
                     const pendingOut = row.pendingOutId ?? null
                     const hasLegacyPending = !pendingIn && !pendingOut && row.pendingId != null
                     const hasPendingOut = pendingOut != null || (hasLegacyPending && row.pendingId != null)
-                    const earlyMinDisplay = (row.status === "조퇴" && row.diffMin < 0) ? Math.abs(row.diffMin) : 0
+                    const earlyMinDisplay = row.diffMin < 0 ? Math.abs(row.diffMin) : 0
                     const showAdjustInput = row.lateMin > 0 || row.otMin >= 30 || earlyMinDisplay > 0
                     const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
                       ? (pendingOut ?? row.pendingId)!
@@ -410,7 +410,7 @@ export function AdminTab() {
                           )}
                         </td>
                         <td className="px-2 py-2">
-                          {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || (row.status === "조퇴" && row.diffMin < 0)) ? (
+                          {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                             <div className="flex items-center gap-1 justify-center flex-wrap">
                               <Button
                                 size="sm"
