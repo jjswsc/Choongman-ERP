@@ -50,9 +50,18 @@ export function NoticesPanel() {
   }, [fetchNotices])
 
   const filtered = React.useMemo(() => {
-    return notices.filter((n) => {
+    const list = notices.filter((n) => {
       const d = (n.date || "").slice(0, 10)
-      return d >= startDate && d <= endDate
+      const inRange = d >= startDate && d <= endDate
+      const unread = !isRead(n.status)
+      return inRange || unread
+    })
+    // 미확인 먼저, 그다음 날짜 최신순
+    return [...list].sort((a, b) => {
+      const aRead = isRead(a.status)
+      const bRead = isRead(b.status)
+      if (aRead !== bRead) return aRead ? 1 : -1
+      return (b.date || "").localeCompare(a.date || "")
     })
   }, [notices, startDate, endDate])
 
