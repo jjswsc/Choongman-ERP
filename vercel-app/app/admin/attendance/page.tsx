@@ -281,7 +281,7 @@ export default function AdminAttendancePage() {
                 </Button>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t("att_approval_help")}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{t("att_ot_help")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t("att_adjust_help")}</p>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
@@ -352,7 +352,7 @@ export default function AdminAttendancePage() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold min-w-[3rem]">{t("att_late_extra")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20" title={t("att_ot_help")}>{t("att_ot_label")}</th>
+                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20" title={t("att_adjust_help")}>{t("att_adjust_label")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_approve_btn")}</th>
                     </tr>
@@ -371,8 +371,7 @@ export default function AdminAttendancePage() {
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
                           className={cn(
                             "border-b last:border-b-0",
-                            row.plannedWorkHrs === 0 && "bg-red-100 dark:bg-red-950/40",
-                            row.plannedWorkHrs !== 0 && isPending && "bg-amber-50/50 dark:bg-amber-950/20"
+                            row.plannedWorkHrs === 0 && "bg-red-100 dark:bg-red-950/40"
                           )}
                         >
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
@@ -406,6 +405,7 @@ export default function AdminAttendancePage() {
                                 value={otMinutesByRow[pendingOut ?? row.pendingId!] ?? String(row.otMin ?? 0)}
                                 onChange={(e) => setOtMinutesByRow((p) => ({ ...p, [pendingOut ?? row.pendingId!]: e.target.value }))}
                                 className="h-7 min-w-[3.5rem] w-14 text-[11px] text-center mx-auto"
+                                title={t("att_adjust_help")}
                               />
                             ) : row.otMin > 0 ? (
                               <span className="text-blue-600 text-[11px]">{row.otMin}</span>
