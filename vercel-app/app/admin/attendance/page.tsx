@@ -537,7 +537,7 @@ export default function AdminAttendancePage() {
                             )}
                           </td>
                           <td className="px-2 py-2.5">
-                            {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || (row.status === "조퇴" && row.diffMin < 0)) ? (
+                            {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <Button
                                   size="sm"
