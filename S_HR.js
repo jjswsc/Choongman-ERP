@@ -1410,15 +1410,39 @@ function submitAttendance(data) {
   var oncePerDayTypes = ["출근", "퇴근", "휴식시작", "휴식종료"];
   if (oncePerDayTypes.indexOf(data.type) !== -1) {
     var logData = getAttendanceLogsData();
-    for (var i = 0; i < logData.length; i++) {
-      var rowDate = "";
-      if (logData[i][0]) {
-        try { rowDate = Utilities.formatDate(new Date(logData[i][0]), tz, "yyyy-MM-dd"); } catch (e) {}
+    var storeMatch = String(data.storeName || "").trim();
+    var nameMatch = String(data.name || "").trim();
+    if (data.type === "퇴근") {
+      // [퇴근 특별 처리] 퇴근→출근 시나리오(실수로 퇴근 먼저 누른 경우): 새 근무 세션으로 간주하여 퇴근 재기록 허용
+      var todayRows = [];
+      for (var i = 0; i < logData.length; i++) {
+        var rowDate = "";
+        if (logData[i][0]) { try { rowDate = Utilities.formatDate(new Date(logData[i][0]), tz, "yyyy-MM-dd"); } catch (e) {} }
+        if (rowDate === todayStr && String(logData[i][1] || "").trim() === storeMatch && String(logData[i][2] || "").trim() === nameMatch) {
+          todayRows.push({ t: new Date(logData[i][0]).getTime(), type: String(logData[i][3] || "").trim() });
+        }
       }
-      if (rowDate === todayStr && String(logData[i][1] || "").trim() === String(data.storeName || "").trim() &&
-          String(logData[i][2] || "").trim() === String(data.name || "").trim() &&
-          String(logData[i][3] || "").trim() === String(data.type || "").trim()) {
-        return "오늘 이미 [" + data.type + "] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.";
+      todayRows.sort(function(a, b) { return b.t - a.t; }); // 최신순
+      var lastOutTime = null, lastInTime = null;
+      for (var k = 0; k < todayRows.length; k++) {
+        if (todayRows[k].type === "퇴근" && lastOutTime === null) lastOutTime = todayRows[k].t;
+        if (todayRows[k].type === "출근" && lastInTime === null) lastInTime = todayRows[k].t;
+      }
+      // 최근 출근이 최근 퇴근보다 뒤(더 최신)면 → 퇴근 후 재출근한 새 세션 → 퇴근 허용
+      if (lastOutTime != null && lastInTime != null && lastInTime > lastOutTime) {
+        // 허용: 다음 로직으로 진행
+      } else if (lastOutTime != null) {
+        return "오늘 이미 [퇴근] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.";
+      }
+    } else {
+      for (var i = 0; i < logData.length; i++) {
+        var rowDate = "";
+        if (logData[i][0]) { try { rowDate = Utilities.formatDate(new Date(logData[i][0]), tz, "yyyy-MM-dd"); } catch (e) {} }
+        if (rowDate === todayStr && String(logData[i][1] || "").trim() === storeMatch &&
+            String(logData[i][2] || "").trim() === nameMatch &&
+            String(logData[i][3] || "").trim() === String(data.type || "").trim()) {
+          return "오늘 이미 [" + data.type + "] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.";
+        }
       }
     }
   }

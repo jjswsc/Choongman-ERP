@@ -443,7 +443,7 @@
   /* ----- 모바일 ----- */
   @media (max-width: 768px) {
     .sidebar { transform: translateX(-100%); border-right: none; }
-    .sidebar.open { transform: translateX(0); }
+    .sidebar.open { transform: translateX(0); width: min(260px, 65vw); max-width: 65vw; min-width: 200px; }
     .main-content { margin-left: 0; width: 100%; padding: 16px; }
     .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     body { font-size: 14px; }

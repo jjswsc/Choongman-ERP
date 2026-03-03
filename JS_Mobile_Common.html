@@ -231,10 +231,12 @@
   /**
    * 2. 실시간 시계 (1초마다 업데이트)
    */
-  setInterval(function() { 
+  function tickBangkokClock() {
     var clock = document.getElementById("live-clock");
-    if(clock) clock.innerText = new Date().toLocaleTimeString('en-GB'); 
-  }, 1000);
+    if(clock) clock.innerText = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok' }); 
+  }
+  tickBangkokClock();
+  setInterval(tickBangkokClock, 1000);
 
   /**
    * 3. [핵심] 페이지 로드 시 초기화 로직

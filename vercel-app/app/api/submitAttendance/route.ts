@@ -84,19 +84,27 @@ export async function POST(request: NextRequest) {
         `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
         { order: 'log_at.desc', limit: 100 }
       )) as { log_at?: string; log_type?: string }[]
-      for (const r of logs || []) {
-        const rowDate = r.log_at
-          ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ })
-          : ''
-        if (
-          rowDate === todayStrVal &&
-          String(r.log_type || '').trim() === logType
-        ) {
+      const todayLogs = (logs || []).filter((r) => {
+        const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
+        return rowDate === todayStrVal
+      })
+      if (logType === '퇴근') {
+        // [퇴근 특별 처리] 퇴근→출근 시나리오(실수로 퇴근 먼저 누른 경우): 새 근무 세션으로 간주하여 퇴근 재기록 허용
+        const lastOut = todayLogs.find((r) => String(r.log_type || '').trim() === '퇴근')
+        const lastIn = todayLogs.find((r) => String(r.log_type || '').trim() === '출근')
+        if (lastOut && lastIn && new Date(lastIn.log_at!).getTime() > new Date(lastOut.log_at!).getTime()) {
+          // 출근이 퇴근보다 더 최근 → 퇴근 후 재출근한 새 세션 → 퇴근 허용
+        } else if (lastOut) {
           return NextResponse.json(
-            {
-              success: false,
-              message: `오늘 이미 [${logType}] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.`,
-            },
+            { success: false, message: '오늘 이미 [퇴근] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.' },
+            { headers }
+          )
+        }
+      } else {
+        const hasDuplicate = todayLogs.some((r) => String(r.log_type || '').trim() === logType)
+        if (hasDuplicate) {
+          return NextResponse.json(
+            { success: false, message: `오늘 이미 [${logType}] 기록이 있습니다. 하루에 한 번만 기록할 수 있습니다.` },
             { headers }
           )
         }

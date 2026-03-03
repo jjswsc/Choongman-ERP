@@ -28,7 +28,7 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "14rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
+const SIDEBAR_WIDTH_MOBILE = "min(14rem, 65vw)"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
@@ -187,9 +187,9 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
+          showCloseButton={false}
           className={cn(
             "bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0",
-            "[&>button]:text-white [&>button]:opacity-100 [&>button]:top-3 [&>button]:right-3 [&>button]:size-10",
             className
           )}
           style={

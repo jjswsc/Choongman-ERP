@@ -34,7 +34,7 @@ import {
   TrendingUp,
   Calculator,
 } from "lucide-react"
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
@@ -212,6 +212,7 @@ export function ErpSidebar() {
               ERP SYSTEM
             </p>
           </div>
+          <SidebarTrigger className="ml-auto h-8 w-8 shrink-0 rounded-md text-white/80 hover:bg-sidebar-accent hover:text-white md:hidden" />
         </div>
       </SidebarHeader>
 

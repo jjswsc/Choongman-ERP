@@ -1,13 +1,13 @@
 ---
-description: 관리자 페이지 변경은 Apps Script에만 반영
-globs: **/admin-tab.tsx,**/admin/**/*.ts,**/admin/**/*.tsx,Logistics.html,JS_Logistics.html,S_Logistics.js
+description: [규칙 1] 관리자·모바일 페이지는 Vercel에만 반영
+globs: **/*
 alwaysApply: true
 ---
 
-# 관리자 페이지: Apps Script 전용
+# [규칙 1] 관리자·모바일 페이지 — Vercel 전용
 
-관리자 페이지 관련 수정·기능 추가 시 **Apps Script(clasp)에만** 반영한다.
+**관리자 페이지**와 **모바일 페이지** 관련 수정·기능 추가는 **반드시 Vercel(vercel-app/)에만** 반영한다.
 
-- **적용 경로**: `Logistics.html`, `JS_Logistics.html`, `S_Logistics.js` 등 clasp 프로젝트 루트의 파일들
-- **제외 경로**: `vercel-app/` 내 관리자 관련 코드는 사용하지 않음
-- **배포**: `clasp push`로 업데이트
+- **수정 경로**: `vercel-app/` 내 모든 관련 코드
+- **수정 금지**: `Logistics.html`, `JS_Logistics.html`, `S_Logistics.js`, `S_HR.js`, `Style_Admin.html`, `JS_Mobile_*.html`, `Page.html`, `JS_Common.html` 등 **루트의 Apps Script/clasp 관련 파일**
+- **배포**: Vercel (`vercel deploy` 또는 Git 푸시)
