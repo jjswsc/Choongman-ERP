@@ -168,6 +168,7 @@ export async function GET() {
       categoryMain: string
       priceHall: number
       priceDelivery: number | null
+      vatIncluded: boolean
       optionId: string | null
       optionName: string | null
       costHall: number
