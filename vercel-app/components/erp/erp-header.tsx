@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter, usePathname } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
@@ -26,31 +26,6 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
 
-const PATH_KEYS: Record<string, string> = {
-  "/admin": "adminDashboard",
-  "/admin/notices": "adminNotices",
-  "/admin/work-log": "adminWorkLog",
-  "/admin/items": "adminItems",
-  "/admin/vendors": "adminVendors",
-  "/admin/orders": "adminOrders",
-  "/admin/stock": "adminStock",
-  "/admin/inbound": "adminInbound",
-  "/admin/outbound": "adminOutbound",
-  "/admin/employees": "adminEmployees",
-  "/admin/attendance": "adminAttendance",
-  "/admin/payroll": "adminPayroll",
-  "/admin/leave": "adminLeave",
-  "/admin/petty-cash": "adminPettyCash",
-  "/admin/income-statement": "adminIncomeStatement",
-  "/admin/sales-management": "adminSalesManagement",
-  "/admin/bank-transactions": "adminBankTransactions",
-  "/admin/store-check": "adminStoreCheck",
-  "/admin/store-visit": "adminStoreVisit",
-  "/admin/complaints": "adminComplaints",
-  "/admin/settings": "adminSettings",
-  "/admin/profile": "adminProfile",
-}
-
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
   { value: "en", label: "English" },
@@ -60,13 +35,10 @@ const LANG_OPTIONS: { value: LangCode; label: string }[] = [
 ]
 
 export function ErpHeader() {
-  const pathname = usePathname()
   const router = useRouter()
   const { auth, logout } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
-  const pathKey = PATH_KEYS[pathname]
-  const title = pathKey ? t(pathKey) : t("adminDashboard")
 
   const handleLogout = () => {
     logout()
@@ -85,9 +57,6 @@ export function ErpHeader() {
           <Smartphone className="h-4 w-4" />
         </Link>
         <Separator orientation="vertical" className="h-5" />
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        </div>
       </div>
 
       <div className="ml-auto flex items-center gap-2">

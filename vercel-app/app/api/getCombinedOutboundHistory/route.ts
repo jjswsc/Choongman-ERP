@@ -73,16 +73,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const allLogs = (await supabaseSelect('stock_logs', { order: 'log_date.desc', limit: 500 })) as {
-      log_type?: string
-      log_date?: string
-      vendor_target?: string
-      item_code?: string
-      item_name?: string
-      qty?: number
-      order_id?: number
-      delivery_status?: string
-    }[]
+    // DB에서 출고(Outbound/ForceOutbound)만 필터 + 기간 필터 → 다른 로그(Inbound/Usage 등) 500건에 묻혀 조회 누락 방지
+    const dateRange = `log_date=gte.${startStr}&log_date=lte.${endStr}T23:59:59.999`
+    const vendorPart =
+      vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처'
+        ? `&vendor_target=eq.${encodeURIComponent(vendorFilter)}`
+        : ''
+    const baseFilter = dateRange + vendorPart
+
+    const [outboundLogs, forceLogs] = await Promise.all([
+      supabaseSelectFilter('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
+        order: 'log_date.desc',
+        limit: 500,
+      }),
+      supabaseSelectFilter('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
+        order: 'log_date.desc',
+        limit: 500,
+      }),
+    ])
+
+    const allLogs = [
+      ...((outboundLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
+      ...((forceLogs || []) as { log_type?: string; log_date?: string; vendor_target?: string; item_code?: string; item_name?: string; qty?: number; order_id?: number; delivery_status?: string }[]),
+    ].sort((a, b) => new Date(b.log_date || 0).getTime() - new Date(a.log_date || 0).getTime())
 
     const startDate = new Date(startStr)
     startDate.setHours(0, 0, 0, 0)

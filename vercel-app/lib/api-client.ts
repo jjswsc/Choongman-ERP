@@ -2931,6 +2931,22 @@ export async function getInvoiceData() {
   return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
 }
 
+export type InvoiceSettings = Record<string, string>
+
+export async function getInvoiceSettings() {
+  const res = await apiFetch('/api/getInvoiceSettings')
+  return res.json() as Promise<InvoiceSettings>
+}
+
+export async function updateInvoiceSettings(settings: InvoiceSettings) {
+  const res = await apiFetch('/api/updateInvoiceSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 직원 관리 (Employees) ───
 export interface AdminEmployeeItem {
   row: number

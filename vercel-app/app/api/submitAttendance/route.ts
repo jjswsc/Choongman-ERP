@@ -7,6 +7,19 @@ function todayStr() {
   return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
+/** 방콕 기준 현재 시(hour) 0~23. 자정 넘김 퇴근 판별용 */
+function getBangkokHour(): number {
+  const str = new Date().toLocaleTimeString('en-US', { timeZone: TZ, hour: '2-digit', hour12: false })
+  return parseInt(str, 10) || 0
+}
+
+/** 날짜 YYYY-MM-DD에 delta일 더한 날짜 */
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
 function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3
   const radLat1 = (lat1 * Math.PI) / 180
@@ -89,11 +102,18 @@ export async function POST(request: NextRequest) {
         }
       }
       // 퇴근·휴식시작·휴식종료(재개)는 당일 출근 기록이 있어야만 기록 가능
+      // 자정 넘김(00:00~06:59 방콕): 전날 출근도 인정 (오후/심야 근무 → 익일 새벽 퇴근)
       if (logType === '퇴근' || logType === '휴식시작' || logType === '휴식종료') {
+        const bangkokHour = getBangkokHour()
+        const validDates = [todayStrVal]
+        if (bangkokHour >= 0 && bangkokHour <= 6) {
+          validDates.push(addDays(todayStrVal, -1))
+        }
         const hasInToday = (logs || []).some(
-          (r) =>
-            (r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : '') === todayStrVal &&
-            String(r.log_type || '').trim() === '출근'
+          (r) => {
+            const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
+            return validDates.includes(rowDate) && String(r.log_type || '').trim() === '출근'
+          }
         )
         if (!hasInToday) {
           return NextResponse.json(

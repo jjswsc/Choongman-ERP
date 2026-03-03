@@ -181,6 +181,21 @@ body {
   color: hsl(0 72% 51%) !important;
 }
 
+/* 사이드바 메뉴 호버 시 더 잘 보이도록 (선택된 메뉴는 제외) */
+.sidebar-dark a:not(.bg-primary):hover,
+.sidebar-dark button:hover:not(.text-destructive) {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+.sidebar-dark a:not(.bg-primary):hover span,
+.sidebar-dark button:hover:not(.text-destructive) span {
+  color: #ffffff !important;
+}
+.sidebar-dark a:not(.bg-primary):hover svg,
+.sidebar-dark button:hover:not(.text-destructive) svg {
+  color: #ffffff !important;
+}
+
 /* ============================================
    로그인 9 디자인
    ============================================ */

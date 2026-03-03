@@ -1,6 +1,7 @@
 "use client"
 
-import { Search, Printer, Download, FileX, CalendarIcon } from "lucide-react"
+import * as React from "react"
+import { Search, Printer, Download, FileX, CalendarIcon, Store } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -68,6 +69,49 @@ export function ShipmentFilterBar({
 }: ShipmentFilterBarProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const [storeSearchQuery, setStoreSearchQuery] = React.useState("")
+  const [isStoreDropdownOpen, setIsStoreDropdownOpen] = React.useState(false)
+  const storeInputRef = React.useRef<HTMLInputElement>(null)
+  const storeDropdownRef = React.useRef<HTMLDivElement>(null)
+
+  const filteredStores = React.useMemo(() => {
+    const q = storeSearchQuery.trim().toLowerCase()
+    if (!q) return outboundTargets
+    return outboundTargets.filter((s) => s.toLowerCase().includes(q))
+  }, [outboundTargets, storeSearchQuery])
+
+  const displayStoreValue = histStore || ""
+
+  React.useEffect(() => {
+    if (!isStoreDropdownOpen) setStoreSearchQuery("")
+  }, [isStoreDropdownOpen])
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        storeDropdownRef.current &&
+        !storeDropdownRef.current.contains(e.target as Node) &&
+        storeInputRef.current &&
+        !storeInputRef.current.contains(e.target as Node)
+      ) {
+        setIsStoreDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const handleStoreSelect = (store: string) => {
+    onHistStoreChange(store)
+    setIsStoreDropdownOpen(false)
+    setStoreSearchQuery("")
+  }
+
+  const handleStoreClear = () => {
+    onHistStoreChange("")
+    setStoreSearchQuery("")
+    storeInputRef.current?.focus()
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-3">
@@ -137,17 +181,59 @@ export function ShipmentFilterBar({
               <option value="배송중">{t("outDeliveryTransit")}</option>
             </select>
 
-            {/* 출고처 - placeholder로 라벨 포함 */}
-            <select
-              value={histStore || "__all__"}
-              onChange={(e) => onHistStoreChange(e.target.value === "__all__" ? "" : e.target.value)}
-              className="h-8 min-w-[120px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
-            >
-              <option value="__all__">{t("outFilterStore")}: {t("outFilterStoreAll")}</option>
-              {outboundTargets.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            {/* 매장 검색 (출고처 선택) - 검색 가능한 드롭다운 */}
+            <div className="relative" ref={storeDropdownRef}>
+              <div className="flex items-center gap-1">
+                <div className="relative">
+                  <input
+                    ref={storeInputRef}
+                    type="text"
+                    value={isStoreDropdownOpen ? storeSearchQuery : displayStoreValue}
+                    onChange={(e) => {
+                      setStoreSearchQuery(e.target.value)
+                      setIsStoreDropdownOpen(true)
+                    }}
+                    onFocus={() => setIsStoreDropdownOpen(true)}
+                    placeholder={t("outStoreSearchPh") || `${t("outFilterStore")} 검색`}
+                    className="h-8 w-[160px] rounded border border-input bg-card px-2 pr-8 text-xs text-card-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <Store className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (histStore ? handleStoreClear() : setIsStoreDropdownOpen(!isStoreDropdownOpen))}
+                  className="h-8 px-2 rounded border border-input bg-card text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  title={histStore ? t("outFilterStoreAll") : (isStoreDropdownOpen ? "닫기" : "열기")}
+                >
+                  {histStore ? "×" : (isStoreDropdownOpen ? "▲" : "▼")}
+                </button>
+              </div>
+              {isStoreDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 z-50 w-[220px] max-h-[200px] overflow-y-auto rounded border border-border bg-card shadow-lg py-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStoreSelect("")}
+                    className="w-full px-3 py-2 text-left text-xs hover:bg-accent focus:bg-accent focus:outline-none"
+                  >
+                    {t("outFilterStoreAll")}
+                  </button>
+                  {filteredStores.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-muted-foreground text-center">{t("outNoStoreMatch") || "검색 결과 없음"}</div>
+                  ) : (
+                    filteredStores.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleStoreSelect(s)}
+                        className={`w-full px-3 py-2 text-left text-xs hover:bg-accent focus:bg-accent focus:outline-none ${histStore === s ? "bg-accent/50 font-medium" : ""}`}
+                      >
+                        {s}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Invoice Search */}
             <div className="relative">

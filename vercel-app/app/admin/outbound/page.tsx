@@ -30,6 +30,8 @@ import {
   getCombinedOutboundHistory,
   getMyUsageHistory,
   getInvoiceData,
+  getInvoiceSettings,
+  updateInvoiceSettings,
   getOutboundByWarehouse,
   getWarehouseLocations,
   generateEtaxXmlApi,
@@ -47,6 +49,7 @@ import {
   ShipmentTable,
   type ShipmentTableRow,
 } from "@/components/shipment"
+import type { InvoiceData } from "@/components/invoice"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Accordion,
@@ -55,9 +58,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
-import { escapeHtml } from "@/lib/utils"
 
-const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
+const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "Head Office", "HQ", "Head office", "head office"]
 
 function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => string }) {
   const [idx, setIdx] = React.useState(0)
@@ -166,10 +168,16 @@ export default function OutboundPage() {
   const [whSelectedWarehouses, setWhSelectedWarehouses] = React.useState<Set<string>>(new Set())
   const [whWarehouseOptions, setWhWarehouseOptions] = React.useState<string[]>([])
 
+  const [invSettings, setInvSettings] = React.useState<Record<string, string>>({})
+  const [invSettingsLoading, setInvSettingsLoading] = React.useState(false)
+  const [invSettingsSaving, setInvSettingsSaving] = React.useState(false)
+
   const isOffice = React.useMemo(() => {
     const store = (auth?.store || "").trim()
     return OFFICE_STORES.some((s) => store.toLowerCase().includes(s.toLowerCase()))
   }, [auth?.store])
+
+  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse" | "invoice">("hist")
 
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
@@ -320,6 +328,38 @@ export default function OutboundPage() {
     const merged = [...new Set([...fromData, ...fromLocs])].filter(Boolean).sort()
     return merged
   }, [whData?.warehouseOrder, whWarehouseOptions])
+
+  const fetchInvSettings = React.useCallback(async () => {
+    setInvSettingsLoading(true)
+    try {
+      const s = await getInvoiceSettings()
+      setInvSettings(typeof s === "object" && s !== null ? s : {})
+    } catch {
+      setInvSettings({})
+    } finally {
+      setInvSettingsLoading(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (tabValue === "invoice" && isOffice) fetchInvSettings()
+  }, [tabValue, isOffice, fetchInvSettings])
+
+  const handleSaveInvSettings = async () => {
+    setInvSettingsSaving(true)
+    try {
+      const res = await updateInvoiceSettings(invSettings)
+      if (res.success) {
+        alert(t("inv_settings_saved"))
+      } else {
+        alert(res.message || t("outSaveFailed"))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setInvSettingsSaving(false)
+    }
+  }
 
   const whStoreSelectOptions = React.useMemo(() => {
     if (whData?.byWarehouse) {
@@ -688,114 +728,6 @@ export default function OutboundPage() {
     }
   }
 
-  const buildInvoiceHtml = (
-    group: (typeof groupedHistory)[0],
-    company: InvoiceDataCompany | null,
-    client: InvoiceDataClient | { companyName: string },
-    isFirstPage: boolean
-  ) => {
-    const inv = {
-      inv_title: "Delivery Note / Tax Invoice",
-      inv_original_doc: "Original (Set Document)",
-      inv_doc_no: "Document No.",
-      inv_due_date: "Due Date",
-      inv_reference: "Reference",
-      inv_tax_id: "Tax ID",
-      inv_address: "Address",
-      inv_phone: "Phone",
-      inv_client: "Client",
-      inv_description: "Item",
-      inv_amount: "Amount",
-      inv_total: "Total",
-      inv_vat7: "VAT 7%",
-      inv_grand_total: "Grand Total",
-      inv_remarks: "Remarks",
-      inv_received_by: "Recipient",
-      inv_approved_by: "Approved by",
-      inv_date: "Date",
-      inv_baht_only: "baht only",
-    }
-    const docNo = escapeHtml((group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim())
-    const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
-    const d = dateStr.length === 10
-      ? `${dateStr.slice(5, 7)}/${dateStr.slice(8, 10)}/${dateStr.slice(0, 4)}`
-      : dateStr.replace(/-/g, "/")
-    const totalBaht = Math.round(Math.abs(group.totalAmt || 0))
-    const vat7 = Math.round(totalBaht * 0.07)
-    const grandTotal = totalBaht + vat7
-    const grandWords = `( ${grandTotal.toLocaleString()} ${inv.inv_baht_only} )`
-    const rawCompanyName = company?.companyName || "บริษัท เอสแอนด์เจ โกลบอล จำกัด (Head Office)"
-    const companyName = escapeHtml(rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd."))
-    const address = escapeHtml(company?.address || "-")
-    const taxId = escapeHtml(company?.taxId || "")
-    const phone = escapeHtml(company?.phone || "")
-    const bankInfo = escapeHtml(company?.bankInfo || "")
-    const clientName = escapeHtml(client?.companyName || group.target || "-")
-    const clientAddr = escapeHtml((client as InvoiceDataClient)?.address || "")
-    const clientTaxId = escapeHtml((client as InvoiceDataClient)?.taxId || "")
-    const clientPhone = escapeHtml((client as InvoiceDataClient)?.phone || "")
-    const borderStyle = "1px solid #cbd5e1"
-    const rowBg = (idx: number) => idx % 2 === 0 ? "background:#f8fafc;" : "background:#fff;"
-    const cellStyle = (idx: number, extra = "") => `padding:6px 10px;border:${borderStyle};${rowBg(idx)}${extra ? " " + extra : ""}`
-    const rows = (group.items || []).map((it, idx) => {
-      const amt = Math.round(Math.abs(it.amount || 0))
-      const qty = Math.abs(it.qty || 0)
-      const price = qty ? amt / qty : 0
-      const nameCell = escapeHtml((it.name || "-") + (it.spec ? ` ${it.spec}` : ""))
-      return `<tr><td style="${cellStyle(idx,"text-align:center;font-weight:500")}">${idx + 1}</td><td style="${cellStyle(idx)}">${nameCell}</td><td style="${cellStyle(idx,"text-align:center")}">${qty}</td><td style="${cellStyle(idx,"text-align:right")}">${price.toLocaleString()}</td><td style="${cellStyle(idx,"text-align:right")}">0</td><td style="${cellStyle(idx,"text-align:right;font-weight:600")}">${amt.toLocaleString()}</td></tr>`
-    }).join("")
-    const tableStyle = "width:100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; border: " + borderStyle + ";"
-    const thStyle = "background: #1e40af; color: #fff; padding: 8px 10px; text-align: center; border: " + borderStyle + "; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;"
-    const pageBreak = isFirstPage ? "" : " page-break-before: always;"
-    return `<div class="delivery-note-invoice" style="max-width:210mm; margin:0 auto 24px; padding:16px; background:#fff; border:1px solid #e2e8f0; page-break-after:always;${pageBreak} font-family:'Noto Sans KR','Noto Sans Thai',sans-serif; font-size:12px; color:#0f172a;">
-  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
-    <h2 style="margin:0; font-size:1.25rem;">${inv.inv_title}</h2>
-    <div style="text-align:right; font-size:11px;">
-      <div>${inv.inv_original_doc}</div>
-      <div><strong>${inv.inv_doc_no}:</strong> ${docNo}</div>
-      <div><strong>${inv.inv_due_date}:</strong> ${d}</div>
-      <div><strong>${inv.inv_reference}:</strong> ${escapeHtml(group.invoiceNo || "-")}</div>
-    </div>
-  </div>
-  <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-    <div style="flex:1; padding-left:5mm;">
-      <div style="font-weight:700; margin-bottom:4px;">${companyName}</div>
-      <div style="font-size:11px; color:#475569;">${address}<br>${inv.inv_tax_id} ${taxId} | ${phone}</div>
-    </div>
-    <div style="flex:1; padding-left:calc(16px + 5mm);">
-      <div style="font-weight:700; margin-bottom:4px;">${inv.inv_client}</div>
-      <div style="font-size:11px; color:#475569; line-height:1.5;">
-        ${clientName}
-        ${clientAddr ? "<br>" + inv.inv_address + ": " + clientAddr : ""}
-        ${clientTaxId ? "<br>" + inv.inv_tax_id + ": " + clientTaxId : ""}
-        ${clientPhone ? "<br>" + inv.inv_phone + ": " + clientPhone : ""}
-      </div>
-    </div>
-  </div>
-  <table style="${tableStyle}"><thead><tr><th style="${thStyle}">#</th><th style="${thStyle}">${inv.inv_description}</th><th style="${thStyle}">Qty.</th><th style="${thStyle}">U/P</th><th style="${thStyle}">Disc.</th><th style="${thStyle}">${inv.inv_amount}</th></tr></thead><tbody>${rows}</tbody></table>
-  <div style="display:flex; justify-content:flex-end;"><div style="text-align:right; font-size:12px; min-width:200px; padding: 12px 0;">
-    <div style="margin-bottom:4px;">${inv.inv_total}: ${totalBaht.toLocaleString()} THB</div>
-    <div style="margin-bottom:4px;">${inv.inv_vat7}: ${vat7.toLocaleString()} THB</div>
-    <div style="font-weight:700; font-size:13px; border-top:1px solid #e2e8f0; padding-top:8px; margin-top:8px;">${inv.inv_grand_total}: ${grandTotal.toLocaleString()} THB</div>
-    <div style="font-size:11px; margin-top:4px; color:#64748b;">${grandWords}</div>
-  </div></div>
-  <div style="margin-top:16px; font-size:11px; color:#475569;"><strong>${inv.inv_remarks}:</strong> ${bankInfo}</div>
-  <div style="margin-top:28px; display:grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 32px; font-size: 11px; min-height: 130px;">
-    <div style="display: flex; flex-direction: column; gap: 12px;">
-      <div style="font-weight: 700;">${clientName}</div>
-      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px;">${inv.inv_received_by}</div>
-      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px;">${inv.inv_date}</div>
-    </div>
-    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
-      <div style="font-weight: 700;">${companyName.split(/[\s]+/)[0] || "S&amp;J"}</div>
-      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px; text-align: right;">${inv.inv_approved_by}</div>
-      <div style="border-bottom: 1px solid #94a3b8; min-width: 140px; padding-bottom: 2px; text-align: right;">${inv.inv_date}</div>
-      <img src="${typeof window !== "undefined" && window.location?.origin ? window.location.origin + "/company-stamp.png" : "/company-stamp.png"}" alt="S&amp;J GLOBAL" class="invoice-stamp" style="width: 108px; height: 108px; object-fit: contain; opacity: 0.95; margin-top: 8px;" />
-    </div>
-  </div>
-</div>`
-  }
-
   const handleEtaxXmlDownload = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
@@ -921,6 +853,81 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     URL.revokeObjectURL(url)
   }
 
+  const buildInvoiceData = (
+    group: (typeof filteredGroupedHistory)[0],
+    company: InvoiceDataCompany | null,
+    client: InvoiceDataClient | { companyName: string },
+    invSettings: Record<string, string>
+  ): InvoiceData => {
+    const docNo = (group.invoiceNo || `IV-${(group.date || "").replace(/\D/g, "")}`).trim()
+    const dateStr = (group.date || "").split(" ")[0] || new Date().toISOString().slice(0, 10)
+    const subtotal = Math.round(Math.abs(group.totalAmt || 0))
+    const vatRate = 7
+    const vatAmount = Math.round(subtotal * 0.07)
+    const grandTotal = subtotal + vatAmount
+    const rawCompanyName = company?.companyName || "S&J Global Co., Ltd"
+    const companyName = rawCompanyName.replace(/\.\.ltd\b/gi, "Ltd.").replace(/\.ltd\b/gi, "Ltd.")
+    const termsRaw = invSettings.terms_and_conditions ?? "[]"
+    let termsAndConditions: string[] = []
+    try {
+      const arr = JSON.parse(termsRaw)
+      termsAndConditions = Array.isArray(arr) ? arr.map(String) : []
+    } catch {
+      termsAndConditions = []
+    }
+    const stampBase = typeof window !== "undefined" && window.location?.origin ? window.location.origin : ""
+    return {
+      documentType: "Delivery Note / Tax Invoice",
+      documentNo: docNo,
+      dueDate: dateStr,
+      referenceNo: group.invoiceNo || "-",
+      issueDate: dateStr,
+      paymentTerms: invSettings.payment_terms || "Net 30 Days",
+      shippingMethod: invSettings.shipping_method || "Company Delivery",
+      seller: {
+        name: companyName,
+        address: company?.address || "-",
+        taxId: company?.taxId || "-",
+        phone: company?.phone || "-",
+        email: invSettings.seller_email || undefined,
+        website: invSettings.seller_website || undefined,
+      },
+      client: {
+        name: (client as InvoiceDataClient)?.companyName || group.target || "-",
+        address: (client as InvoiceDataClient)?.address || "-",
+        taxId: (client as InvoiceDataClient)?.taxId || "-",
+        phone: (client as InvoiceDataClient)?.phone || "-",
+      },
+      items: (group.items || []).map((it, idx) => {
+        const amt = Math.round(Math.abs(it.amount || 0))
+        const qty = Math.abs(it.qty || 0)
+        const unitPrice = qty ? amt / qty : 0
+        return {
+          id: idx + 1,
+          itemCode: it.code,
+          description: (it.name || "-") + (it.spec ? ` ${it.spec}` : ""),
+          quantity: qty,
+          unitPrice,
+          discount: 0,
+          amount: amt,
+        }
+      }),
+      subtotal,
+      vatRate,
+      vatAmount,
+      grandTotal,
+      bankInfo: {
+        bankName: invSettings.bank_name || "Kasikorn Bank (KBank)",
+        accountNo: invSettings.account_no || "",
+        accountName: invSettings.account_name || companyName,
+        swiftCode: invSettings.swift_code || undefined,
+      },
+      remarks: invSettings.remarks || "Please transfer payment to the bank account shown above.",
+      termsAndConditions,
+      stampImageUrl: stampBase ? `${stampBase}/company-stamp.png` : "/company-stamp.png",
+    }
+  }
+
   const handlePrintInvoice = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
@@ -928,11 +935,10 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       return
     }
     try {
-      const { company, clients } = await getInvoiceData()
-      let prevTarget: string | null = null
-      const html = checked.map((g, idx) => {
-        const isFirst = idx === 0 || g.target !== prevTarget
-        prevTarget = g.target
+      const [invoiceDataRes, invSettings] = await Promise.all([getInvoiceData(), getInvoiceSettings()])
+      const { company, clients } = invoiceDataRes
+      const settings = typeof invSettings === "object" && invSettings !== null ? invSettings : {}
+      const invoiceDatas: InvoiceData[] = checked.map((g) => {
         const targetNorm = (g.target || "").trim()
         const targetLower = targetNorm.toLowerCase()
         const foundClient = clients && (clients[g.target || ""] ?? clients[targetNorm] ?? clients[targetLower])
@@ -952,61 +958,15 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             client = { companyName: g.target || "-" }
           }
         }
-        return buildInvoiceHtml(g, company, client, isFirst)
-      }).join("")
-      const area = document.createElement("div")
-      area.id = "invoice-print-area"
-      area.innerHTML = html
-      area.style.cssText = "position:absolute; left:-9999px; top:0; width:210mm; visibility:hidden;"
-      document.body.appendChild(area)
-      const imgs = area.querySelectorAll("img.invoice-stamp, img[alt*='S&J']")
-      await Promise.all(
-        Array.from(imgs).map(
-          (img) =>
-            new Promise<void>((r) => {
-              if ((img as HTMLImageElement).complete) {
-                r()
-                return
-              }
-              ;(img as HTMLImageElement).onload = () => r()
-              ;(img as HTMLImageElement).onerror = () => r()
-              setTimeout(() => r(), 1500)
-            })
-        )
-      )
-      await new Promise((r) => setTimeout(r, 200))
-      const style = document.createElement("style")
-      style.id = "invoice-print-style"
-      style.textContent = `@page { margin: 12mm; size: A4; }
-@media print {
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        body.invoice-printing * { visibility: hidden !important; }
-        body.invoice-printing > *:not(#invoice-print-area) { display: none !important; visibility: hidden !important; }
-        body.invoice-printing #invoice-print-area,
-        body.invoice-printing #invoice-print-area * { visibility: visible !important; }
-        body.invoice-printing #invoice-print-area {
-          display: block !important; position: absolute !important; left: 0 !important; top: 0 !important;
-          margin: 0 !important; width: 210mm !important; min-width: 210mm !important;
-          max-width: 210mm !important; padding: 0 10mm !important; box-sizing: border-box !important;
-          overflow: visible !important; line-height: 1.85 !important; z-index: 999999 !important;
-          background: #fff !important; visibility: visible !important;
-        }
-        body.invoice-printing .invoice-stamp { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        body.invoice-printing html, body.invoice-printing body { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
-        body.invoice-printing .delivery-note-invoice {
-          width: 100% !important; max-width: 210mm !important; box-sizing: border-box !important;
-          padding: 16px !important; margin: 0 auto !important;
-          border: none !important; page-break-after: always !important; line-height: 1.85 !important;
-        }
-        body.invoice-printing .delivery-note-invoice:last-child { page-break-after: auto !important; }
-      }`
-      document.head.appendChild(style)
-      document.body.classList.add("invoice-printing")
-      window.print()
-      document.body.classList.remove("invoice-printing")
-      document.body.removeChild(area)
-      const el = document.getElementById("invoice-print-style")
-      if (el) el.remove()
+        return buildInvoiceData(g, company, client, settings)
+      })
+      sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
+      const printWindow = window.open("/admin/invoice-print", "_blank")
+      if (!printWindow) {
+        alert(t("invLoadFailed") + "\n\n" + (t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+        return
+      }
+      printWindow.focus()
     } catch (e) {
       console.error(e)
       alert(t("invLoadFailed"))
@@ -1017,8 +977,6 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
     if (isOffice) return historyList.reduce((sum, i) => sum + (i.amount || 0), 0)
     return usageList.reduce((sum, i) => sum + (i.amount || 0), 0)
   }, [historyList, usageList, isOffice])
-
-  const [tabValue, setTabValue] = React.useState<"new" | "hist" | "warehouse">(isOffice ? "new" : "hist")
 
   React.useEffect(() => {
     setTabValue(isOffice ? "new" : "hist")
@@ -1047,11 +1005,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             <p className="text-xs text-muted-foreground">{t("outPageSub")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse")} className="space-y-4">
-          <TabsList className={`grid w-full max-w-2xl mb-4 ${isOffice ? "grid-cols-3" : "grid-cols-1"}`}>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice")} className="space-y-4">
+          <TabsList className={`grid w-full max-w-2xl mb-4 ${isOffice ? "grid-cols-4" : "grid-cols-1"}`}>
             {isOffice && <TabsTrigger value="new" className="text-sm font-medium">{t("outTabNew")}</TabsTrigger>}
             <TabsTrigger value="hist" className="text-sm font-medium">{t("outTabHist")}</TabsTrigger>
             {isOffice && <TabsTrigger value="warehouse" className="text-sm font-medium">{t("outTabByWarehouse")}</TabsTrigger>}
+            {isOffice && <TabsTrigger value="invoice" className="text-sm font-medium">{t("outTabInvoice")}</TabsTrigger>}
           </TabsList>
 
           {isOffice && (
@@ -1365,6 +1324,131 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   </div>
                 ) : (
                   <div className="py-12 text-center text-muted-foreground text-sm">{t("outWhNoDataHint")}</div>
+                )}
+              </div>
+            </TabsContent>
+          )}
+
+          {isOffice && (
+            <TabsContent value="invoice" className="space-y-4">
+              <div className="rounded-xl border bg-card p-5 max-w-2xl">
+                <h3 className="text-sm font-bold mb-4">{t("outTabInvoice")}</h3>
+                {invSettingsLoading ? (
+                  <div className="py-8 text-center text-muted-foreground text-sm">{t("loading")}</div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_payment_terms")}</label>
+                      <Input
+                        value={invSettings.payment_terms ?? ""}
+                        onChange={(e) => setInvSettings((p) => ({ ...p, payment_terms: e.target.value }))}
+                        placeholder="Net 30 Days"
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_shipping_method")}</label>
+                      <Input
+                        value={invSettings.shipping_method ?? ""}
+                        onChange={(e) => setInvSettings((p) => ({ ...p, shipping_method: e.target.value }))}
+                        placeholder="Company Delivery"
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold">{t("inv_bank_name")}</label>
+                        <Input
+                          value={invSettings.bank_name ?? ""}
+                          onChange={(e) => setInvSettings((p) => ({ ...p, bank_name: e.target.value }))}
+                          placeholder="Kasikorn Bank (KBank)"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("inv_account_no")}</label>
+                        <Input
+                          value={invSettings.account_no ?? ""}
+                          onChange={(e) => setInvSettings((p) => ({ ...p, account_no: e.target.value }))}
+                          placeholder="166-2-97079-0"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold">{t("inv_account_name")}</label>
+                        <Input
+                          value={invSettings.account_name ?? ""}
+                          onChange={(e) => setInvSettings((p) => ({ ...p, account_name: e.target.value }))}
+                          placeholder="S&J Global Co., Ltd."
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold">{t("inv_swift_code")}</label>
+                        <Input
+                          value={invSettings.swift_code ?? ""}
+                          onChange={(e) => setInvSettings((p) => ({ ...p, swift_code: e.target.value }))}
+                          placeholder="KASITHBK"
+                          className="mt-1 h-9"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_seller_email")}</label>
+                      <Input
+                        type="email"
+                        value={invSettings.seller_email ?? ""}
+                        onChange={(e) => setInvSettings((p) => ({ ...p, seller_email: e.target.value }))}
+                        placeholder="info@example.com"
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_seller_website")}</label>
+                      <Input
+                        value={invSettings.seller_website ?? ""}
+                        onChange={(e) => setInvSettings((p) => ({ ...p, seller_website: e.target.value }))}
+                        placeholder="https://"
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_terms_conditions")}</label>
+                      <textarea
+                        value={
+                          (() => {
+                            const raw = invSettings.terms_and_conditions ?? ""
+                            try {
+                              const arr = JSON.parse(raw || "[]")
+                              return Array.isArray(arr) ? arr.join("\n") : raw
+                            } catch {
+                              return raw
+                            }
+                          })()
+                        }
+                        onChange={(e) => {
+                          const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean)
+                          setInvSettings((p) => ({ ...p, terms_and_conditions: JSON.stringify(lines) }))
+                        }}
+                        placeholder="Goods once sold cannot be returned..."
+                        className="mt-1 w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold">{t("inv_remarks")}</label>
+                      <Input
+                        value={invSettings.remarks ?? ""}
+                        onChange={(e) => setInvSettings((p) => ({ ...p, remarks: e.target.value }))}
+                        placeholder="Please transfer payment to the bank account shown above."
+                        className="mt-1 h-9"
+                      />
+                    </div>
+                    <Button onClick={handleSaveInvSettings} disabled={invSettingsSaving}>
+                      {invSettingsSaving ? t("loading") : t("inv_settings_save")}
+                    </Button>
+                  </div>
                 )}
               </div>
             </TabsContent>
