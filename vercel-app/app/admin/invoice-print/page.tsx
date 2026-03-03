@@ -1,5 +1,6 @@
 "use client"
 
+import "./invoice-print.css"
 import * as React from "react"
 import { Invoice, type InvoiceData } from "@/components/invoice"
 import { Button } from "@/components/ui/button"
@@ -47,8 +48,8 @@ export default function InvoicePrintPage() {
   }
 
   return (
-    <div className="print:bg-white">
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 print:hidden flex items-center gap-3 z-[9999]">
+    <div className="min-h-screen bg-slate-100 print:bg-white">
+      <div className="no-print fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 z-[9999]">
         <Button onClick={handlePrint}>Print</Button>
         <Button variant="outline" onClick={() => window.close()}>
           Close
@@ -57,9 +58,9 @@ export default function InvoicePrintPage() {
           인쇄 시 브라우저 설정에서 &apos;머리글 및 바닥글&apos;을 끄면 URL·날짜가 나오지 않습니다.
         </span>
       </div>
-      <div className="pb-24 print:pb-0">
+      <div className="invoice-print-wrapper pb-24 print:pb-0 max-w-4xl mx-auto print:max-w-full print:mx-0 print:px-0">
         {datas.map((data, i) => (
-          <div key={data.documentNo + "-" + i} className={i > 0 ? "break-before-page mt-8" : ""}>
+          <div key={data.documentNo + "-" + i} className={`${i > 0 ? "break-before-page" : ""} pt-4`}>
             <Invoice data={data} />
           </div>
         ))}

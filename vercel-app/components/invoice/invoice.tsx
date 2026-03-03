@@ -78,59 +78,6 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
-function numberToWords(num: number): string {
-  const ones = [
-    "",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-    "thirteen",
-    "fourteen",
-    "fifteen",
-    "sixteen",
-    "seventeen",
-    "eighteen",
-    "nineteen",
-  ]
-  const tens = [
-    "",
-    "",
-    "twenty",
-    "thirty",
-    "forty",
-    "fifty",
-    "sixty",
-    "seventy",
-    "eighty",
-    "ninety",
-  ]
-
-  if (num === 0) return "zero"
-
-  function convert(n: number): string {
-    if (n < 20) return ones[n]
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? "-" + ones[n % 10] : "")
-    if (n < 1000)
-      return ones[Math.floor(n / 100)] + " hundred" + (n % 100 ? " " + convert(n % 100) : "")
-    if (n < 1000000)
-      return convert(Math.floor(n / 1000)) + " thousand" + (n % 1000 ? " " + convert(n % 1000) : "")
-    return (
-      convert(Math.floor(n / 1000000)) + " million" + (n % 1000000 ? " " + convert(n % 1000000) : "")
-    )
-  }
-
-  return convert(Math.floor(num)) + " baht only"
-}
-
 export function Invoice({
   data,
   onPrint,
@@ -151,9 +98,9 @@ export function Invoice({
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 p-4 md:p-8 print:bg-white print:p-0">
-      {!printOnly && (onPrint || onDownloadPdf) && (
-        <div className="max-w-4xl mx-auto mb-4 flex gap-2 print:hidden">
+    <div className="min-h-screen bg-slate-100 p-4 md:p-8 print:bg-white print:p-0 print:min-h-0">
+        {!printOnly && (onPrint || onDownloadPdf) && (
+        <div className="no-print max-w-4xl mx-auto mb-4 flex gap-2">
           <Button onClick={handlePrint} className="gap-2">
             인쇄
           </Button>
@@ -165,8 +112,8 @@ export function Invoice({
         </div>
       )}
 
-      <div className="max-w-4xl mx-auto bg-background shadow-lg print:shadow-none rounded-lg overflow-hidden">
-        <div className="bg-[#1e4d8c] text-white px-8 py-6">
+      <div className="invoice-container max-w-4xl mx-auto w-full print:max-w-full print:mx-0 bg-white shadow-lg print:shadow-none print:bg-white rounded-lg overflow-hidden border border-slate-200 print:border-0">
+        <div className="invoice-header bg-[#1e4d8c] text-white px-8 py-6">
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">{data.documentType}</h1>
@@ -201,13 +148,13 @@ export function Invoice({
           </div>
         </div>
 
-        <div className="px-8 py-6 grid md:grid-cols-2 gap-8">
+        <div className="invoice-section invoice-from-billto px-8 py-6 grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8">
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-[#1e4d8c] font-semibold">
               <Building2 className="h-5 w-5" />
               <span>FROM</span>
             </div>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-2 print:border-slate-300">
               <h3 className="font-bold text-lg">{data.seller.name}</h3>
               <div className="text-sm text-muted-foreground space-y-1">
                 <div className="flex items-start gap-2">
@@ -243,7 +190,7 @@ export function Invoice({
               <Building2 className="h-5 w-5" />
               <span>BILL TO</span>
             </div>
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-2 print:border-slate-300">
               <h3 className="font-bold text-lg">{data.client.name}</h3>
               <div className="text-sm text-muted-foreground space-y-1">
                 <div className="flex items-start gap-2">
@@ -276,8 +223,8 @@ export function Invoice({
         </div>
 
         {(data.paymentTerms || data.shippingMethod) && (
-          <div className="px-8 pb-4">
-            <div className="bg-[#1e4d8c]/5 border border-[#1e4d8c]/20 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
+          <div className="invoice-section px-8 pb-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-wrap gap-6 text-sm print:bg-white print:border-slate-300">
               {data.paymentTerms && (
                 <div className="flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-[#1e4d8c]" />
@@ -301,16 +248,15 @@ export function Invoice({
           </div>
         )}
 
-        <div className="px-8 pb-6">
+        <div className="invoice-section px-8 pb-6">
           <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
+            <table className="invoice-table w-full text-sm">
               <thead>
                 <tr className="bg-[#1e4d8c] text-white">
                   <th className="py-3 px-4 text-center font-semibold w-12">#</th>
                   <th className="py-3 px-4 text-left font-semibold w-20">Code</th>
                   <th className="py-3 px-4 text-left font-semibold">Description</th>
                   <th className="py-3 px-4 text-center font-semibold w-16">Qty</th>
-                  <th className="py-3 px-4 text-center font-semibold w-16">Unit</th>
                   <th className="py-3 px-4 text-right font-semibold w-24">Unit Price</th>
                   <th className="py-3 px-4 text-right font-semibold w-20">Disc.</th>
                   <th className="py-3 px-4 text-right font-semibold w-28">Amount</th>
@@ -328,9 +274,6 @@ export function Invoice({
                     </td>
                     <td className="py-3 px-4 text-left">{item.description}</td>
                     <td className="py-3 px-4 text-center font-medium">{item.quantity}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">
-                      {item.unit || "-"}
-                    </td>
                     <td className="py-3 px-4 text-right">{formatCurrency(item.unitPrice)}</td>
                     <td className="py-3 px-4 text-right text-muted-foreground">{item.discount}</td>
                     <td className="py-3 px-4 text-right font-semibold text-[#1e4d8c]">
@@ -353,7 +296,6 @@ export function Invoice({
                       <td className="py-3 px-4"></td>
                       <td className="py-3 px-4"></td>
                       <td className="py-3 px-4"></td>
-                      <td className="py-3 px-4"></td>
                     </tr>
                   ))}
               </tbody>
@@ -361,39 +303,15 @@ export function Invoice({
           </div>
         </div>
 
-        <div className="px-8 pb-6">
-          <div className="flex justify-end">
-            <div className="w-80 space-y-2">
-              <div className="flex justify-between text-sm py-2">
-                <span className="text-muted-foreground">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(data.subtotal)} THB</span>
-              </div>
-              <div className="flex justify-between text-sm py-2">
-                <span className="text-muted-foreground">VAT ({data.vatRate}%):</span>
-                <span className="font-medium">{formatCurrency(data.vatAmount)} THB</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between py-3 bg-[#1e4d8c] text-white -mx-4 px-4 rounded-lg">
-                <span className="font-bold text-lg">Grand Total:</span>
-                <span className="font-bold text-lg">
-                  {formatCurrency(data.grandTotal)} THB
-                </span>
-              </div>
-              <div className="text-center text-sm text-muted-foreground italic pt-2">
-                ({numberToWords(data.grandTotal)})
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-8 pb-6">
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 bg-[#1e4d8c]/5 border border-[#1e4d8c]/20 rounded-lg p-4">
+        <div className="invoice-section px-8 pb-6 space-y-6">
+          {/* 1행: Payment Information(왼쪽) | Grand Total(오른쪽) */}
+          <div className="invoice-total-payment-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 items-start">
+            <div className="bg-[#1e4d8c]/5 border border-[#1e4d8c]/20 rounded-lg p-4">
               <h4 className="font-semibold text-[#1e4d8c] mb-3 flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
                 Payment Information
               </h4>
-              <div className="grid sm:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Bank Name:</span>
                   <p className="font-medium">{data.bankInfo.bankName}</p>
@@ -414,8 +332,49 @@ export function Invoice({
                 )}
               </div>
             </div>
-            <div className="flex flex-col items-center justify-center bg-muted/50 rounded-lg p-4">
-              <div className="w-24 h-24 bg-white border-2 border-dashed border-muted-foreground/30 rounded-lg flex items-center justify-center">
+            <div className="flex justify-end md:justify-end print:justify-end">
+              <div className="w-80 space-y-2">
+                <div className="flex justify-between text-sm py-2">
+                  <span className="text-muted-foreground">Subtotal:</span>
+                  <span className="font-medium">{formatCurrency(data.subtotal)} THB</span>
+                </div>
+                <div className="flex justify-between text-sm py-2">
+                  <span className="text-muted-foreground">VAT ({data.vatRate}%):</span>
+                  <span className="font-medium">{formatCurrency(data.vatAmount)} THB</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between py-3 bg-[#1e4d8c] text-white -mx-4 px-4 rounded-lg">
+                  <span className="font-bold text-lg">Grand Total:</span>
+                  <span className="font-bold text-lg">
+                    {formatCurrency(data.grandTotal)} THB
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2행: Terms & Conditions(Remarks 포함) 넓게 | QR Code 크기에 맞춰 좁게 */}
+          <div className="invoice-terms-qr-grid grid grid-cols-1 md:grid-cols-[1fr_auto] print:grid-cols-[1fr_auto] gap-6 items-start">
+            <div className="flex flex-col gap-4 min-w-0">
+              {data.termsAndConditions && data.termsAndConditions.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+                  <h4 className="font-semibold text-amber-800 mb-2">Terms & Conditions</h4>
+                  <ul className="list-disc list-inside space-y-1 text-amber-700">
+                    {data.termsAndConditions.map((term, i) => (
+                      <li key={i}>{term}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.remarks && (
+                <div className="text-sm">
+                  <span className="font-semibold">Remarks: </span>
+                  <span className="text-muted-foreground">{data.remarks}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-center justify-center md:justify-start md:items-end print:justify-start print:items-end bg-muted/50 rounded-lg p-4 w-fit shrink-0">
+              <div className="w-24 h-24 bg-white border-2 border-dashed border-muted-foreground/30 rounded-lg flex items-center justify-center shrink-0">
                 <QrCode className="h-12 w-12 text-muted-foreground/50" />
               </div>
               <span className="text-xs text-muted-foreground mt-2">Scan to Pay</span>
@@ -423,81 +382,54 @@ export function Invoice({
           </div>
         </div>
 
-        {data.termsAndConditions && data.termsAndConditions.length > 0 && (
-          <div className="px-8 pb-6">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-              <h4 className="font-semibold text-amber-800 mb-2">Terms & Conditions</h4>
-              <ul className="list-disc list-inside space-y-1 text-amber-700">
-                {data.termsAndConditions.map((term, i) => (
-                  <li key={i}>{term}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {data.remarks && (
-          <div className="px-8 pb-6">
-            <div className="text-sm">
-              <span className="font-semibold">Remarks: </span>
-              <span className="text-muted-foreground">{data.remarks}</span>
-            </div>
-          </div>
-        )}
-
         <Separator />
 
-        <div className="px-8 py-6">
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="space-y-4">
+        <div className="invoice-section px-8 py-6">
+          <div className="invoice-signature-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 items-stretch min-h-[160px]">
+            {/* 왼쪽: 상대방 회사명 + Received by, Date - 도장 높이에 정렬 */}
+            <div className="flex flex-col justify-between min-h-[160px] py-1">
               <h4 className="font-semibold">{data.client.name}</h4>
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 <div className="flex items-end gap-2">
-                  <span className="text-sm text-muted-foreground">Received by:</span>
-                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[150px]"></div>
+                  <span className="text-sm text-muted-foreground shrink-0">Received by:</span>
+                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]"></div>
                 </div>
                 <div className="flex items-end gap-2">
-                  <span className="text-sm text-muted-foreground">Date:</span>
-                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[150px]"></div>
+                  <span className="text-sm text-muted-foreground shrink-0">Date:</span>
+                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]"></div>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-4 text-right">
-              <h4 className="font-semibold">{data.seller.name}</h4>
-              <div className="flex flex-col items-end">
+            {/* 오른쪽: [S&J + Authorized Signature](도장 왼쪽, 위·아래 높이 맞춤) | [도장] */}
+            <div className="flex items-center justify-end gap-4 min-h-[160px]">
+              <div className="flex flex-col justify-between items-end text-right min-h-[160px] py-0">
+                <h4 className="font-semibold">{data.seller.name}</h4>
+                <span className="text-xs text-muted-foreground">
+                  Authorized Signature & Company Stamp
+                </span>
+              </div>
+              <div className="invoice-stamp shrink-0 flex-shrink-0">
                 {data.stampImageUrl ? (
                   <img
                     src={data.stampImageUrl}
                     alt="S&J GLOBAL"
-                    className="w-28 h-28 object-contain opacity-90"
+                    className="w-36 h-36 md:w-40 md:h-40 print:w-40 print:h-40 object-contain opacity-90"
                     style={{ mixBlendMode: "multiply" }}
                   />
                 ) : (
-                  <div className="w-28 h-28 border-2 border-dashed border-[#1e4d8c]/30 rounded-full flex items-center justify-center bg-[#1e4d8c]/5">
+                  <div className="w-36 h-36 md:w-40 md:h-40 print:w-40 print:h-40 border-2 border-dashed border-[#1e4d8c]/30 rounded-full flex items-center justify-center bg-[#1e4d8c]/5">
                     <div className="text-center">
                       <div className="text-[#1e4d8c] font-bold text-sm">S&J</div>
                       <div className="text-[#1e4d8c] text-xs">GLOBAL</div>
                     </div>
                   </div>
                 )}
-                <span className="text-xs text-muted-foreground mt-2">
-                  Authorized Signature & Company Stamp
-                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {(data.seller.email || data.seller.phone) && (
-          <div className="bg-muted/50 px-8 py-4 text-center text-xs text-muted-foreground">
-            <p>
-              Thank you for your business! For any inquiries, please contact us at{" "}
-              {data.seller.email || data.seller.phone}
-            </p>
-            <p className="mt-1">This is a computer-generated document. No signature is required if stamped.</p>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -205,10 +205,10 @@ export function ErpSidebar() {
             </svg>
           </div>
           <div className="flex flex-col min-w-0 group-data-[collapsible=icon]:hidden">
-            <h1 className="font-orbitron text-sm font-bold text-white tracking-wide leading-tight">
+            <h1 className="font-orbitron text-sm font-bold text-white tracking-wide leading-tight drop-shadow-sm">
               CHOONGMAN
             </h1>
-            <p className="font-orbitron text-[11px] font-medium text-white/90 leading-tight">
+            <p className="font-orbitron text-[11px] font-semibold text-white leading-tight drop-shadow-sm">
               ERP SYSTEM
             </p>
           </div>

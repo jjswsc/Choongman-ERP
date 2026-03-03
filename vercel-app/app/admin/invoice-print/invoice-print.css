@@ -1,0 +1,81 @@
+/* A4 Print Styles */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  html, body {
+    width: 210mm;
+    height: 297mm;
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  .invoice-print-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .invoice-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    page-break-inside: avoid;
+  }
+  
+  .invoice-header {
+    padding: 10px 8px !important;
+  }
+  
+  .invoice-section {
+    padding: 6px 8px !important;
+  }
+  
+  .invoice-table th,
+  .invoice-table td {
+    padding: 6px 8px !important;
+  }
+  
+  /* 2열 레이아웃 유지 (인쇄 전 화면과 동일) */
+  .invoice-from-billto {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* 1행: Payment Information(왼쪽) | Grand Total(오른쪽) */
+  .invoice-total-payment-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: start !important;
+  }
+  /* 2행: Terms & Remarks 넓게 | QR Code 크기에 맞춰 좁게 */
+  .invoice-terms-qr-grid {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    align-items: start !important;
+  }
+  .invoice-signature-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    align-items: stretch !important;
+    min-height: 150px !important;
+  }
+  .invoice-signature-grid .invoice-stamp img,
+  .invoice-signature-grid .invoice-stamp > div {
+    width: 150px !important;
+    height: 150px !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
