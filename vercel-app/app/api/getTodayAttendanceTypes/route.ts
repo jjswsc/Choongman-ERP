@@ -63,7 +63,8 @@ export async function GET(request: NextRequest) {
     // 전날 출근 후 퇴근 누락이면: 오늘 출근 버튼도 활성화 (출근 먼저 누르라는 강제 해소)
     for (let i = 0; i < arr.length; i++) {
       const typ = String(arr[i].log_type || '').trim()
-      const rowDate = arr[i].log_at ? new Date(arr[i].log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
+      const logAt = arr[i].log_at
+      const rowDate = logAt ? new Date(logAt).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
       if (typ === '출근') {
         if (rowDate === todayStr && !types.includes(typ)) types.push(typ)
         break
