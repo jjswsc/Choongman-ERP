@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       quantity,
       loss_rate: lossRate,
       ingredient_type: ingredientType,
-      ...(optionId != null && { option_id: optionId }),
+      option_id: optionId,
     }
 
     if (id) {

@@ -113,6 +113,18 @@ export async function POST(req: NextRequest) {
 
     try {
       const result = await doSave(baseRow)
+      if (result.success && code && (baseRow.price != null || body.price != null)) {
+        const newPrice = Number(baseRow.price ?? body.price ?? 0)
+        try {
+          await supabaseUpdateByFilter(
+            'items',
+            `code=eq.${encodeURIComponent(code)}`,
+            { price: newPrice }
+          )
+        } catch {
+          // items에 해당 code가 없으면 무시
+        }
+      }
       return NextResponse.json(result, { headers })
     } catch (saveErr: unknown) {
       const err = String(saveErr)

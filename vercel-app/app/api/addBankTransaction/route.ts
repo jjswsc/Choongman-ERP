@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
     const expenseDate = body.expenseDate ?? body.expense_date
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
     const storeNameForReceivable = String(body.storeName || body.store_name || '').trim()
+    const refType = body.refType ?? body.ref_type
+    const refId = body.refId ?? body.ref_id
 
     if (!accountId || isNaN(accountId)) {
       return NextResponse.json({ success: false, message: '계좌를 선택하세요.' }, { status: 400, headers })
@@ -74,6 +76,8 @@ export async function POST(request: NextRequest) {
     }
     if (validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
     if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+    if (refType) row.ref_type = refType
+    if (refId != null && !isNaN(Number(refId))) row.ref_id = Number(refId)
 
     const inserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
     const bankId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined

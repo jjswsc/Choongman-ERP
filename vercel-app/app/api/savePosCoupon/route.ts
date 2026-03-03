@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     const validFrom = body.validFrom?.trim() || null
     const validTo = body.validTo?.trim() || null
     const isActive = Boolean(body.isActive !== false)
+    const marketingCampaignId = body.marketingCampaignId && body.marketingCampaignId !== 'null' ? Number(body.marketingCampaignId) : null
 
     if (!code) {
       return NextResponse.json({ success: false, message: '쿠폰 코드를 입력하세요.' }, { headers })
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
       valid_from: validFrom,
       valid_to: validTo,
       is_active: isActive,
+      marketing_campaign_id: marketingCampaignId,
       updated_at: new Date().toISOString(),
     }
 

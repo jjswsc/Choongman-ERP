@@ -36,8 +36,9 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
   const foodData = foodItems
     .map((item) => {
       const ingredient = getIngredient(item.ingredientCode)
+      const name = ingredient?.name ?? t("posCostUnknown")
       return {
-        name: ingredient?.name ?? t("posCostUnknown"),
+        name,
         value: calculateItemCost(item),
         category: "food",
       }
@@ -47,8 +48,9 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
   const packagingData = packagingItems
     .map((item) => {
       const ingredient = getIngredient(item.ingredientCode)
+      const name = ingredient?.name ?? t("posCostUnknown")
       return {
-        name: ingredient?.name ?? t("posCostUnknown"),
+        name,
         value: calculateItemCost(item),
         category: "packaging",
       }
@@ -83,7 +85,7 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
         <h3 className="text-sm font-semibold text-foreground">{t("posCostDistribution")}</h3>
       </div>
       <div className="p-5">
-        <div className="flex flex-col md:flex-row items-center gap-6">
+        <div className="flex flex-col items-center gap-4">
           <div className="relative w-[200px] h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -105,15 +107,20 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [`${value.toFixed(2)} THB`, ""]}
+                  formatter={(value: number, _name: unknown, props: { payload?: { name?: string } }) => {
+                    const label = (props?.payload as { name?: string })?.name ?? ""
+                    return [label ? `${label}: ${(value as number).toFixed(2)} THB` : `${(value as number).toFixed(2)} THB`, label]
+                  }}
                   contentStyle={{
-                    backgroundColor: "oklch(0.18 0.008 260)",
-                    border: "1px solid oklch(0.28 0.01 260)",
+                    backgroundColor: "#1e293b",
+                    border: "1px solid #334155",
                     borderRadius: "8px",
-                    color: "oklch(0.95 0.005 260)",
+                    color: "#f1f5f9",
                     fontSize: "12px",
                     fontFamily: "monospace",
                   }}
+                  itemStyle={{ color: "#f1f5f9" }}
+                  labelStyle={{ color: "#f1f5f9" }}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -126,26 +133,26 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
             </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex-1 grid grid-cols-1 gap-1.5 w-full">
+          {/* Legend: 원형표 밑 리스트 - 재료명 | 원가 | 비율 */}
+          <div className="grid grid-cols-1 gap-1.5 w-full max-w-md">
             {allData.map((entry, index) => {
               const pct = total > 0 ? (entry.value / total) * 100 : 0
               return (
                 <div
-                  key={entry.name}
+                  key={`${entry.name}-${index}`}
                   className="flex items-center gap-2 text-xs group hover:bg-secondary/30 rounded-md px-2 py-1 transition-colors"
                 >
                   <div
                     className="h-2.5 w-2.5 rounded-sm flex-shrink-0"
                     style={{ backgroundColor: COLORS[index % COLORS.length] }}
                   />
-                  <span className="text-muted-foreground truncate flex-1">
+                  <span className="text-foreground flex-1 min-w-0 truncate" title={entry.name}>
                     {entry.name}
                   </span>
-                  <span className="font-mono text-foreground tabular-nums">
+                  <span className="font-mono text-muted-foreground tabular-nums shrink-0">
                     {entry.value.toFixed(2)}
                   </span>
-                  <span className="font-mono text-muted-foreground tabular-nums w-12 text-right">
+                  <span className="font-mono text-muted-foreground tabular-nums w-10 text-right shrink-0">
                     {pct.toFixed(1)}%
                   </span>
                 </div>

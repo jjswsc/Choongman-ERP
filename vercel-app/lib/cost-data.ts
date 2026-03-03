@@ -20,47 +20,18 @@ export interface MenuItem {
   menuName: string
   description: string
   inclVat: number
+  /** 가격이 VAT 포함인지 (false면 inclVat이 이미 VAT 제외) */
+  vatIncluded?: boolean
+  /** 홀 가격 (메뉴 관리 price) */
+  priceHall?: number
+  /** 배달 가격 (메뉴 관리 price_delivery) */
+  priceDelivery?: number | null
   serviceType: "Dine-In" | "Delivery"
   deliveryPercent: number
   misePercent: number
+  /** 조리 시간(분) */
+  cookingTimeMin?: number | null
 }
-
-// Ingredient database (the "other sheet")
-export const ingredientDatabase: Ingredient[] = [
-  // Food ingredients
-  { code: 3, name: "Frozen Marinade BLK 27-35g /pcs.", bahtPerUnit: 3.75, category: "food" },
-  { code: 5, name: "Choongman Batter Mix for Chicken", bahtPerUnit: 0.107, category: "food" },
-  { code: 75, name: "Snow Onion Sauce", bahtPerUnit: 0.147, category: "food" },
-  { code: 65, name: "Dried Parsley", bahtPerUnit: 1.38, category: "food" },
-  { code: 16, name: "Onion", bahtPerUnit: 0.027, category: "food" },
-  { code: 79, name: "Pickled Radish", bahtPerUnit: 0.06, category: "food" },
-  { code: 135, name: "Oil BL", bahtPerUnit: 0.044, category: "food" },
-  { code: 28, name: "Poki Kimchi Nongyee", bahtPerUnit: 0.042, category: "food" },
-  { code: 10, name: "Garlic Powder", bahtPerUnit: 0.23, category: "food" },
-  { code: 12, name: "Soy Sauce", bahtPerUnit: 0.055, category: "food" },
-  { code: 15, name: "Sesame Oil", bahtPerUnit: 0.32, category: "food" },
-  { code: 20, name: "Rice Flour", bahtPerUnit: 0.035, category: "food" },
-  { code: 22, name: "Corn Starch", bahtPerUnit: 0.048, category: "food" },
-  { code: 30, name: "Sugar", bahtPerUnit: 0.025, category: "food" },
-  { code: 35, name: "Salt", bahtPerUnit: 0.012, category: "food" },
-  { code: 40, name: "Black Pepper", bahtPerUnit: 0.45, category: "food" },
-  { code: 45, name: "Chili Flakes", bahtPerUnit: 0.28, category: "food" },
-  { code: 50, name: "Spring Onion", bahtPerUnit: 0.035, category: "food" },
-  { code: 55, name: "Ginger", bahtPerUnit: 0.065, category: "food" },
-  { code: 60, name: "Lettuce", bahtPerUnit: 0.042, category: "food" },
-
-  // Packaging items
-  { code: 116, name: "Chopsticks", bahtPerUnit: 0.34, category: "packaging" },
-  { code: 235, name: "Spoon Set", bahtPerUnit: 0.55, category: "packaging" },
-  { code: 234, name: "Choongman Box (XS)", bahtPerUnit: 4.0, category: "packaging" },
-  { code: 109, name: "Take Away Bowl 4 oz", bahtPerUnit: 0.919, category: "packaging" },
-  { code: 204, name: "Onion Plastic Packing", bahtPerUnit: 0.748, category: "packaging" },
-  { code: 202, name: "Sauce Pouch Salad Sauce", bahtPerUnit: 0.467, category: "packaging" },
-  { code: 210, name: "Paper Bag (M)", bahtPerUnit: 2.5, category: "packaging" },
-  { code: 215, name: "Sticker Seal", bahtPerUnit: 0.15, category: "packaging" },
-  { code: 220, name: "Napkin Pack", bahtPerUnit: 0.18, category: "packaging" },
-  { code: 225, name: "Plastic Cup Lid", bahtPerUnit: 0.35, category: "packaging" },
-]
 
 export const MISE_DEFAULT = 3
 
@@ -115,11 +86,23 @@ export function setRuntimeSauces(sauces: Array<{ code: string; name?: string; co
 
 // 품목 관리(API)에서 로드한 재료
 const API_ITEMS_CODE_OFFSET = 30000
-let runtimeApiItemsMap = new Map<number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string; standardUnits?: { unit: string; totalQuantity: number }[] }>()
+let runtimeApiItemsMap = new Map<number, {
+  name: string
+  bahtPerUnit: number
+  category: "food" | "packaging"
+  itemCode: string
+  standardUnits?: { unit: string; totalQuantity: number }[]
+  /** 품목 관리 카테고리 필터용 (채소, 조미료 등) */
+  categoryRaw?: string
+  /** 표준단위별 ฿/단위 계산용 */
+  price?: number
+  itemTotalQuantity?: number | null
+  itemUnit?: string
+}>()
 
 function inferIngredientCategory(itemCategory: string): "food" | "packaging" {
-  const c = String(itemCategory || "").toLowerCase()
-  if (/포장|packaging|박스|용기|봉지|pack|pouch|box|bag/.test(c)) return "packaging"
+  const c = String(itemCategory || "").toLowerCase().trim()
+  if (/포장|패킹|packaging|packing|박스|용기|봉지|pack|pouch|box|bag/.test(c)) return "packaging"
   return "food"
 }
 
@@ -159,7 +142,8 @@ export function setRuntimeApiItems(items: Array<{
   category?: string
   standardUnits?: { unit: string; totalQuantity: number }[]
 }>) {
-  const entries: [number, { name: string; bahtPerUnit: number; category: "food" | "packaging"; itemCode: string; standardUnits?: { unit: string; totalQuantity: number }[] }][] = []
+  type ApiItem = NonNullable<ReturnType<typeof runtimeApiItemsMap.get>>
+  const entries: [number, ApiItem][] = []
   let idx = 0
   items.forEach((item) => {
     const itemCode = String(item.code ?? "").trim()
@@ -185,18 +169,30 @@ export function setRuntimeApiItems(items: Array<{
       category: cat,
       itemCode,
       standardUnits: standardUnits?.length ? standardUnits : undefined,
+      categoryRaw: String(item.category ?? "").trim() || undefined,
+      price,
+      itemTotalQuantity: totalQty,
+      itemUnit: unit || undefined,
     }])
   })
   runtimeApiItemsMap = new Map(entries)
 }
 
-export function getRuntimeApiItems(): Array<{ code: number; name: string; bahtPerUnit: number; category: "food" | "packaging"; standardUnits?: { unit: string; totalQuantity: number }[] }> {
+export function getRuntimeApiItems(): Array<{
+  code: number
+  name: string
+  bahtPerUnit: number
+  category: "food" | "packaging"
+  standardUnits?: { unit: string; totalQuantity: number }[]
+  categoryRaw?: string
+}> {
   return Array.from(runtimeApiItemsMap.entries()).map(([code, v]) => ({
     code,
     name: v.name,
     bahtPerUnit: v.bahtPerUnit,
     category: v.category,
     standardUnits: v.standardUnits,
+    categoryRaw: v.categoryRaw,
   }))
 }
 
@@ -212,8 +208,20 @@ export function getIngredientItemCode(code: number): string | undefined {
   if (sauce?.itemCode) return sauce.itemCode
   const apiItem = runtimeApiItemsMap.get(code)
   if (apiItem?.itemCode) return apiItem.itemCode
-  const stat = ingredientDatabase.find((i) => i.code === code)
-  return stat ? String(stat.code) : undefined
+  return undefined
+}
+
+/** item_code(string) → ingredientCode(number). API/소스 로드 후 사용 */
+export function getIngredientCodeByItemCode(itemCode: string): number | undefined {
+  const code = String(itemCode ?? "").trim()
+  if (!code) return undefined
+  for (const [c, v] of runtimeApiItemsMap) {
+    if (v.itemCode === code) return c
+  }
+  for (const [c, v] of runtimeSauceMap) {
+    if (v.itemCode === code) return c
+  }
+  return undefined
 }
 
 // Helper functions
@@ -224,13 +232,80 @@ export function getIngredient(code: number): (Ingredient & { standardUnits?: { u
   if (sauce) return { code, ...sauce, category: "food" as const }
   const apiItem = runtimeApiItemsMap.get(code)
   if (apiItem) return { code, ...apiItem }
-  return ingredientDatabase.find((i) => i.code === code)
+  return undefined
 }
 
-/** API 품목의 표준 단위 목록 (원가 계산기 수량 입력용) */
+/** API 품목의 표준 단위 목록 (원가 계산기 수량 입력용). food는 항상 g 포함 (품목 관리 1g당 원가 기준). */
 export function getIngredientStandardUnits(code: number): { unit: string; totalQuantity: number }[] | undefined {
   const apiItem = runtimeApiItemsMap.get(code)
-  return apiItem?.standardUnits
+  const units = apiItem?.standardUnits
+  if (!apiItem) return units
+  if (apiItem.category === "food") {
+    const hasG = units?.some((u) => String(u.unit || "").toLowerCase().trim() === "g")
+    if (!hasG) {
+      const tq = apiItem.bahtPerUnit > 0 && apiItem.price != null && apiItem.price >= 0
+        ? Math.max(1, Math.round(apiItem.price / apiItem.bahtPerUnit))
+        : 1
+      return [{ unit: "g", totalQuantity: tq }, ...(units ?? [])]
+    }
+  }
+  return units
+}
+
+/** 표준단위 key (unit::totalQuantity)에 대한 ฿/단위. API 품목만 지원. g는 항상 bahtPerUnit(1g당 원가) 사용. */
+export function getBahtPerStandardUnit(code: number, unitKey: string): number | undefined {
+  if (!unitKey || unitKey === "spec") return undefined
+  const apiItem = runtimeApiItemsMap.get(code)
+  if (!apiItem) return undefined
+  const [unit] = unitKey.split("::")
+  const u = String(unit || "").toLowerCase().trim()
+  if (u === "g" || u === "ml") return apiItem.bahtPerUnit
+  if (!apiItem.price || apiItem.price < 0) return undefined
+  const tqStr = unitKey.split("::")[1]
+  const stdTotalQty = Number(tqStr)
+  if (!stdTotalQty || stdTotalQty <= 0) return undefined
+  return apiItem.price / stdTotalQty
+}
+
+/**
+ * 표준단위 key에 대해: 사용자 입력값(표시 단위) → 저장 수량(g 또는 ea)으로 변환하는 계수.
+ * storedQuantity = displayValue * factor
+ */
+export function getQuantityFactorToStore(code: number, unitKey: string): number {
+  if (!unitKey || unitKey === "spec") return 1
+  const apiItem = runtimeApiItemsMap.get(code)
+  const [unit, tqStr] = unitKey.split("::")
+  const stdTotalQty = Number(tqStr) || 1
+  const u = String(unit || "").toLowerCase().trim()
+
+  if (apiItem?.category === "packaging") {
+    return 1
+  }
+
+  if (u === "g" || u === "ml") return 1
+  if (u === "kg") return 1000
+  if (u === "l") return 1000
+  if (u === "oz") return 28.35
+  if (u === "lb") return 453.6
+  if (/개|ea|팩|pack|박스/.test(u)) return 1
+
+  const itemTq = apiItem?.itemTotalQuantity
+  const itemUnit = String(apiItem?.itemUnit ?? "").toLowerCase().trim()
+  if (itemTq != null && itemTq > 0 && itemUnit) {
+    const gramsPerSpec = itemUnit === "kg" ? itemTq * 1000 : itemUnit === "g" || itemUnit === "ml" ? itemTq : itemTq
+    const specPerStdUnit = 1 / stdTotalQty
+    return gramsPerSpec * specPerStdUnit
+  }
+  return 1
+}
+
+/**
+ * 표준단위 key에 대해: 저장 수량 → 사용자 표시값으로 변환하는 계수.
+ * displayValue = storedQuantity / factor
+ */
+export function getQuantityFactorToDisplay(code: number, unitKey: string): number {
+  const f = getQuantityFactorToStore(code, unitKey)
+  return f > 0 ? f : 1
 }
 
 export function calculateItemCost(item: RecipeItem): number {

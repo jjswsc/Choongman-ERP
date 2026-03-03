@@ -176,6 +176,67 @@ export async function supabaseInsertMany(table: string, rows: Record<string, unk
   return text ? (JSON.parse(text) as unknown) : []
 }
 
+/**
+ * Storage: 파일 업로드
+ * path 예: "projectId/filename.pdf"
+ * @returns object path (bucket/objectPath)
+ */
+export async function supabaseStorageUpload(
+  bucket: string,
+  path: string,
+  body: Blob | ArrayBuffer,
+  options?: { contentType?: string; upsert?: boolean }
+): Promise<{ key: string; publicUrl: string }> {
+  const { url, key } = getConfig()
+  const base = url.replace(/\/$/, '')
+  const apiPath = `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${path.split('/').map((p) => encodeURIComponent(p)).join('/')}`
+
+  const headers: Record<string, string> = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': options?.contentType || 'application/octet-stream',
+  }
+  if (options?.upsert) {
+    headers['x-upsert'] = 'true'
+  }
+
+  const res = await fetch(apiPath, {
+    method: 'POST',
+    headers,
+    body,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error('Supabase storage upload failed: ' + text)
+  }
+  const json = (await res.json()) as { Key?: string }
+  const objectKey = json.Key || `${bucket}/${path}`
+  const publicUrl = `${base}/storage/v1/object/public/${encodeURIComponent(bucket)}/${path}`
+  return { key: objectKey, publicUrl }
+}
+
+/**
+ * Storage: 객체 삭제
+ * path 예: "projectId/filename.pdf"
+ */
+export async function supabaseStorageDelete(bucket: string, path: string): Promise<void> {
+  const { url, key } = getConfig()
+  const base = url.replace(/\/$/, '')
+  const apiPath = `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${path.split('/').map((p) => encodeURIComponent(p)).join('/')}`
+
+  const res = await fetch(apiPath, {
+    method: 'DELETE',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+  })
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text()
+    throw new Error('Supabase storage delete failed: ' + text)
+  }
+}
+
 /** UPSERT: 충돌 시 기존 행 갱신. onConflict 예: "month,store,name" */
 export async function supabaseUpsert(
   table: string,

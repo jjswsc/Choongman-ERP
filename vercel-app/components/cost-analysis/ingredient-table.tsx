@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -30,7 +30,7 @@ import {
 import { Plus, Trash2, Search, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { RecipeItem } from "@/lib/cost-data"
-import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, MISE_DEFAULT } from "@/lib/cost-data"
+import { getIngredient, calculateItemCost, getRuntimeIngredients, getRuntimeSauces, getRuntimeApiItems, getIngredientItemCode, getIngredientStandardUnits, getBahtPerStandardUnit, getQuantityFactorToStore, getQuantityFactorToDisplay, MISE_DEFAULT } from "@/lib/cost-data"
 
 type IngredientSource = "api" | "ingredient" | "sauce"
 
@@ -179,6 +179,14 @@ interface IngredientTableProps {
   type: "food" | "packaging"
   items: RecipeItem[]
   onItemsChange: (items: RecipeItem[]) => void
+  /** 재료 추가 다이얼로그에 소스 포함 (소스 원가 탭용) */
+  addDialogIncludeSauces?: boolean
+  /** 표준단위 필수 여부. false면 표준단위 없는 품목도 추가 가능 */
+  addDialogRequireStandardUnits?: boolean
+  /** usedRuntimeCodes 대신 사용할 제외 코드 집합 (소스 탭: 폼 내 재료만 제외) */
+  excludeCodes?: Set<number>
+  /** true면 ฿/단위·원가 텍스트를 검정색으로 표시 (소스 원가용) */
+  costTextDark?: boolean
 }
 
 export function IngredientTable({
@@ -186,12 +194,17 @@ export function IngredientTable({
   type,
   items,
   onItemsChange,
+  addDialogIncludeSauces = false,
+  addDialogRequireStandardUnits = true,
+  excludeCodes,
+  costTextDark = false,
 }: IngredientTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [hoveredRow, setHoveredRow] = useState<number | null>(null)
   const [openPickerRow, setOpenPickerRow] = useState<number | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [addSauceDialogOpen, setAddSauceDialogOpen] = useState(false)
   const [addSearchTerm, setAddSearchTerm] = useState("")
   const [addCategoryFilter, setAddCategoryFilter] = useState<string>("all")
   /** 행별 입력 단위. "spec" = 규격 1개, "unit::totalQty" = 표준 단위 (입력÷totalQty = 규격) */
@@ -200,12 +213,39 @@ export function IngredientTable({
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngs = type === "food" ? getRuntimeSauces() : []
   const apiItemsByType = getRuntimeApiItems().filter((i) => i.category === type)
-  const usedRuntimeCodes = new Set(runtimeByType.map((i) => i.code))
+  /** 음식 재료 탭: 추가 다이얼로그에 food + packaging 둘 다 포함 */
+  const apiItemsForAddDialog = type === "food"
+    ? getRuntimeApiItems().filter((i) => i.category === "food" || i.category === "packaging")
+    : apiItemsByType
+  const usedRuntimeCodes = excludeCodes ?? new Set(runtimeByType.map((i) => i.code))
   const availableIngredients: IngredientWithSource[] = [
     ...apiItemsByType.filter((i) => !usedRuntimeCodes.has(i.code)).map((i) => ({ ...i, source: "api" as const })),
     ...runtimeByType.map((i) => ({ ...i, source: "ingredient" as const })),
     ...sauceIngs.map((i) => ({ ...i, source: "sauce" as const })),
   ]
+  /** 재료 추가 팝업: 품목 관리 + (옵션) 소스 */
+  const addDialogItemsOnly = useMemo(() => {
+    const apiFiltered = apiItemsForAddDialog
+      .filter((i) => !usedRuntimeCodes.has(i.code))
+      .filter((i) => addDialogRequireStandardUnits ? (i.standardUnits?.length ?? 0) > 0 : true)
+      .map((i) => ({ ...i, source: "api" as const }))
+    const sauceFiltered = addDialogIncludeSauces && type === "food"
+      ? sauceIngs.filter((i) => !usedRuntimeCodes.has(i.code)).map((i) => ({ ...i, source: "sauce" as const, categoryRaw: t("posCostCategorySauce") || "소스" }))
+      : []
+    return [...apiFiltered, ...sauceFiltered]
+  }, [apiItemsForAddDialog, sauceIngs, usedRuntimeCodes, addDialogIncludeSauces, addDialogRequireStandardUnits, type, t])
+  /** 품목 관리 카테고리 목록 (추가 다이얼로그 필터용) - 품목의 categoryRaw만 사용 */
+  const itemCategories = useMemo(() => {
+    const set = new Set(
+      apiItemsForAddDialog
+        .map((i) => i.categoryRaw)
+        .filter((c): c is string => typeof c === "string" && c.length > 0)
+    )
+    if (addDialogIncludeSauces && type === "food" && sauceIngs.length > 0) {
+      set.add(t("posCostCategorySauce") || "소스")
+    }
+    return Array.from(set).sort()
+  }, [apiItemsForAddDialog, addDialogIncludeSauces, type, sauceIngs.length, t])
 
   const updateQuantity = useCallback(
     (index: number, quantity: number) => {
@@ -216,26 +256,31 @@ export function IngredientTable({
     [items, onItemsChange]
   )
 
-  const getRowDisplayQuantity = useCallback((index: number, quantity: number) => {
-    const key = rowUnitKeys[index] ?? "spec"
-    if (!key || key === "spec") return quantity
-    const [, tqStr] = key.split("::")
-    const tq = Number(tqStr)
-    return tq > 0 ? quantity * tq : quantity
-  }, [rowUnitKeys])
+  const getRowDisplayQuantity = useCallback(
+    (index: number, quantity: number) => {
+      const key = rowUnitKeys[index] ?? "spec"
+      const code = items[index]?.ingredientCode
+      if (!code) return quantity
+      if (!key || key === "spec") return quantity
+      const factor = getQuantityFactorToDisplay(code, key)
+      return quantity / factor
+    },
+    [rowUnitKeys, items]
+  )
 
   const setRowQuantityFromDisplay = useCallback(
     (index: number, displayValue: number) => {
       const key = rowUnitKeys[index] ?? "spec"
+      const code = items[index]?.ingredientCode
+      if (!code) return
       if (!key || key === "spec") {
         updateQuantity(index, displayValue)
         return
       }
-      const [, tqStr] = key.split("::")
-      const tq = Number(tqStr)
-      updateQuantity(index, tq > 0 ? displayValue / tq : displayValue)
+      const factor = getQuantityFactorToStore(code, key)
+      updateQuantity(index, displayValue * factor)
     },
-    [rowUnitKeys, updateQuantity]
+    [rowUnitKeys, items, updateQuantity]
   )
 
   const updateMisePercent = useCallback(
@@ -248,31 +293,43 @@ export function IngredientTable({
   )
 
   const usedCodes = new Set(items.map((i) => i.ingredientCode))
-  const addDialogCategories = [
-    { value: "all", label: t("posMenuCategoryAll") || "전체" },
-    { value: "api", label: t("posCostCategoryItems") || "품목관리" },
-    { value: "ingredient", label: t("posCostCategoryIngredient") || "재료" },
-    { value: "sauce", label: t("posCostCategorySauce") || "소스" },
-  ]
-  const addDialogFiltered = availableIngredients.filter((ing) => {
+  const addDialogFiltered = addDialogItemsOnly.filter((ing) => {
     const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
     const matchSearch =
       !addSearchTerm ||
       ing.name.toLowerCase().includes(addSearchTerm.toLowerCase()) ||
       itemCode.toLowerCase().includes(addSearchTerm.toLowerCase())
-    const matchCat = addCategoryFilter === "all" || ing.source === addCategoryFilter
+    const matchCat =
+      addCategoryFilter === "all" ||
+      (ing.categoryRaw && ing.categoryRaw.toLowerCase() === addCategoryFilter.toLowerCase())
     return matchSearch && matchCat && !usedCodes.has(ing.code)
   })
 
-  const addItemViaPicker = useCallback(
+  /** 소스 클릭 시 즉시 테이블에 추가 (기본 10g) */
+  const addSauceImmediately = useCallback(
     (code: number) => {
-      onItemsChange([
-        ...items,
-        { ingredientCode: code, quantity: 1, misePercent: MISE_DEFAULT },
-      ])
+      const newIndex = items.length
+      onItemsChange([...items, { ingredientCode: code, quantity: 10, misePercent: MISE_DEFAULT }])
+      setRowUnitKeys((prev) => ({ ...prev, [newIndex]: "spec" }))
+      setAddSauceDialogOpen(false)
+    },
+    [items, onItemsChange]
+  )
+
+  /** 품목 클릭 시 즉시 테이블에 추가 (단위/수량은 테이블에서 입력) */
+  const addItemImmediately = useCallback(
+    (code: number) => {
+      const standardUnits = getIngredientStandardUnits(code)
+      const unitKey = standardUnits?.length
+        ? `${standardUnits[0].unit}::${standardUnits[0].totalQuantity}`
+        : "spec"
+      const factor = getQuantityFactorToStore(code, unitKey)
+      const quantity = factor > 0 ? factor : 0
+      const newIndex = items.length
+      onItemsChange([...items, { ingredientCode: code, quantity, misePercent: MISE_DEFAULT }])
+      setRowUnitKeys((prev) => ({ ...prev, [newIndex]: unitKey }))
       setAddDialogOpen(false)
       setAddSearchTerm("")
-      setAddCategoryFilter("all")
     },
     [items, onItemsChange]
   )
@@ -282,6 +339,22 @@ export function IngredientTable({
     setAddCategoryFilter("all")
     setAddDialogOpen(true)
   }, [])
+
+  useEffect(() => {
+    setRowUnitKeys((prev) => {
+      let changed = false
+      const next = { ...prev }
+      items.forEach((item, i) => {
+        const units = getIngredientStandardUnits(item.ingredientCode)
+        const key = prev[i] ?? "spec"
+        if (units?.length && key === "spec") {
+          next[i] = `${units[0].unit}::${units[0].totalQuantity}`
+          changed = true
+        }
+      })
+      return changed ? next : prev
+    })
+  }, [items])
 
   const removeItem = useCallback(
     (index: number) => {
@@ -316,15 +389,28 @@ export function IngredientTable({
             {items.length}{t("posCostItemsCount")}
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={openAddDialog}
-          className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("posCostAddItem")}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={openAddDialog}
+            className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("posCostAddItem")}
+          </Button>
+          {type === "food" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAddSauceDialogOpen(true)}
+              className="h-8 gap-1.5 text-xs text-primary hover:text-primary hover:bg-primary/10"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("posCostAddSauce") || "소스 추가"}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -340,7 +426,10 @@ export function IngredientTable({
               <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posCostBahtPerUnit")}
               </TableHead>
-              <TableHead className="text-center text-xs font-medium text-muted-foreground w-28">
+              <TableHead className="text-center text-xs font-medium text-muted-foreground w-24">
+                {t("posCostUnit") || "단위"}
+              </TableHead>
+              <TableHead className="text-center text-xs font-medium text-muted-foreground w-24">
                 {type === "food" ? (t("posCostQtyG") || "수량 (g)") : (t("posCostQty") || "수량")}
               </TableHead>
               <TableHead className="text-center text-xs font-medium text-muted-foreground w-20">
@@ -382,55 +471,60 @@ export function IngredientTable({
                       t={t}
                     />
                   </TableCell>
-                  <TableCell className="text-right font-mono text-sm text-muted-foreground">
-                    {ingredient?.bahtPerUnit.toFixed(3) ?? "-"}
+                  <TableCell className={cn("text-right font-mono text-sm", costTextDark ? "text-foreground" : "text-muted-foreground")}>
+                    {(() => {
+                      const unitKey = rowUnitKeys[index] ?? "spec"
+                      const stdBaht = unitKey && unitKey !== "spec" ? getBahtPerStandardUnit(item.ingredientCode, unitKey) : undefined
+                      const val = stdBaht ?? ingredient?.bahtPerUnit
+                      return val != null ? val.toFixed(3) : "-"
+                    })()}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const standardUnits = getIngredientStandardUnits(item.ingredientCode)
+                      const hasUnits = standardUnits && standardUnits.length > 0
+                      const unitKey = rowUnitKeys[index] ?? "spec"
+                      return hasUnits ? (
+                        <Select
+                          value={unitKey}
+                          onValueChange={(v) => setRowUnitKeys((prev) => ({ ...prev, [index]: v }))}
+                        >
+                          <SelectTrigger className="h-8 w-full min-w-[72px] text-[11px] border-dashed">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {standardUnits!.map((o) => (
+                              <SelectItem key={`${o.unit}::${o.totalQuantity}`} value={`${o.unit}::${o.totalQuantity}`}>
+                                {o.unit}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">g</span>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center gap-1.5 justify-end flex-wrap">
-                      {(() => {
-                        const standardUnits = getIngredientStandardUnits(item.ingredientCode)
-                        const hasUnits = standardUnits && standardUnits.length > 0
-                        const unitKey = rowUnitKeys[index] ?? "spec"
-                        const displayQty = getRowDisplayQuantity(index, item.quantity)
-                        return (
-                          <>
-                            {hasUnits && (
-                              <Select
-                                value={unitKey}
-                                onValueChange={(v) => setRowUnitKeys((prev) => ({ ...prev, [index]: v }))}
-                              >
-                                <SelectTrigger className="h-8 w-[140px] text-[11px] border-dashed shrink-0">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="spec">
-                                    <span className="font-medium">{t("posCostUnitSpec") || "규격 (1개)"}</span>
-                                    <span className="ml-1 text-muted-foreground">— 입력=규격</span>
-                                  </SelectItem>
-                                  {standardUnits!.map((o) => (
-                                    <SelectItem key={`${o.unit}::${o.totalQuantity}`} value={`${o.unit}::${o.totalQuantity}`}>
-                                      {`${o.unit} (${o.totalQuantity}=1 ${t("specUnit") || "규격"})`}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            <Input
-                              type="number"
-                              value={hasUnits ? displayQty : item.quantity}
-                              onChange={(e) => {
-                                const v = parseFloat(e.target.value) || 0
-                                if (hasUnits) setRowQuantityFromDisplay(index, v)
-                                else updateQuantity(index, v)
-                              }}
-                              className="h-8 w-24 ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
-                              step={hasUnits && unitKey !== "spec" ? "1" : "0.1"}
-                              min="0"
-                            />
-                          </>
-                        )
-                      })()}
-                    </div>
+                    {(() => {
+                      const standardUnits = getIngredientStandardUnits(item.ingredientCode)
+                      const hasUnits = standardUnits && standardUnits.length > 0
+                      const displayQty = getRowDisplayQuantity(index, item.quantity)
+                      return (
+                        <Input
+                          type="number"
+                          value={hasUnits ? displayQty : item.quantity}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0
+                            if (hasUnits) setRowQuantityFromDisplay(index, v)
+                            else updateQuantity(index, v)
+                          }}
+                          className="h-8 w-full min-w-[80px] ml-auto text-right font-mono text-sm bg-secondary/50 border-border focus:border-primary focus:ring-1 focus:ring-primary/30"
+                          step="1"
+                          min="0"
+                        />
+                      )
+                    })()}
                   </TableCell>
                   <TableCell className="text-right">
                     <Input
@@ -450,7 +544,7 @@ export function IngredientTable({
                     <span
                       className={cn(
                         "font-mono text-sm font-medium",
-                        cost > 10 ? "text-accent" : "text-foreground"
+                        costTextDark ? "text-foreground" : cost > 10 ? "text-accent" : "text-foreground"
                       )}
                     >
                       {cost.toFixed(2)}
@@ -477,7 +571,7 @@ export function IngredientTable({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="h-20 text-center text-sm text-muted-foreground"
                 >
                   {t("posCostNoIngredients")}
@@ -488,11 +582,56 @@ export function IngredientTable({
         </Table>
       </div>
 
-      {/* 재료 추가 팝업 */}
+      {/* 소스 추가 팝업 - 소스 원가에서 등록한 소스 목록 */}
+      {type === "food" && (
+        <Dialog open={addSauceDialogOpen} onOpenChange={setAddSauceDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>{t("posCostAddSauce") || "소스 추가"} — {t("posCostCategorySauce") || "소스"}</DialogTitle>
+            </DialogHeader>
+            <div className="overflow-y-auto flex-1 min-h-[200px] py-2">
+              {sauceIngs.filter((s) => !usedCodes.has(s.code)).length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {t("posCostSauceEmpty") || "등록된 소스가 없습니다."}
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {sauceIngs
+                    .filter((s) => !usedCodes.has(s.code))
+                    .map((sauce) => {
+                      const itemCode = getIngredientItemCode(sauce.code) ?? String(sauce.code)
+                      return (
+                        <button
+                          key={sauce.code}
+                          type="button"
+                          className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 rounded-none hover:bg-muted/80"
+                          onClick={() => addSauceImmediately(sauce.code)}
+                        >
+                          <span className="font-mono text-muted-foreground shrink-0 w-14">{itemCode}</span>
+                          <span className="truncate flex-1">{sauce.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground shrink-0">
+                            {sauce.bahtPerUnit.toFixed(3)} ฿/g
+                          </span>
+                        </button>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddSauceDialogOpen(false)}>
+                {t("close") || "닫기"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 재료 추가 팝업 - 품목 관리만, 품목 클릭 시 즉시 추가 (단위/수량은 테이블에서 입력) */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>{t("posCostAddItem")} — {title}</DialogTitle>
+            <DialogTitle>{t("posCostAddItem")} — {t("posCostCategoryItems") || "품목 관리"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 flex-1 min-h-0 flex flex-col">
             <div className="relative">
@@ -506,16 +645,17 @@ export function IngredientTable({
               />
             </div>
             <Select value={addCategoryFilter} onValueChange={setAddCategoryFilter}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={t("posMenuCategoryAll") || "전체 카테고리"} />
               </SelectTrigger>
               <SelectContent>
-                {addDialogCategories.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
+                {itemCategories.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <div className="overflow-y-auto flex-1 min-h-[200px] border rounded-md py-2">
+            <div className="overflow-y-auto flex-1 min-h-[180px] border rounded-md py-2">
               {addDialogFiltered.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                   {t("posCostNoIngredientsFound") || "검색 결과가 없습니다"}
@@ -524,17 +664,23 @@ export function IngredientTable({
                 <div className="space-y-0.5">
                   {addDialogFiltered.map((ing) => {
                     const itemCode = getIngredientItemCode(ing.code) ?? String(ing.code)
+                    const units = getIngredientStandardUnits(ing.code)
+                    const firstUnitKey = units?.length ? `${units[0].unit}::${units[0].totalQuantity}` : null
+                    const bahtPerUnit = firstUnitKey ? getBahtPerStandardUnit(ing.code, firstUnitKey) : getIngredient(ing.code)?.bahtPerUnit
                     return (
                       <button
                         key={ing.code}
                         type="button"
-                        className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-muted/80 rounded-none"
-                        onClick={() => addItemViaPicker(ing.code)}
+                        className="w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 rounded-none hover:bg-muted/80"
+                        onClick={() => addItemImmediately(ing.code)}
                       >
                         <span className="font-mono text-muted-foreground shrink-0 w-14">{itemCode}</span>
-                        <span className="truncate">{ing.name}</span>
-                        <span className="ml-auto font-mono text-xs text-muted-foreground">
-                          {(getIngredient(ing.code)?.bahtPerUnit ?? 0).toFixed(3)} ฿
+                        <span className="truncate flex-1">{ing.name}</span>
+                        {ing.categoryRaw && (
+                          <span className="text-[10px] text-muted-foreground/80 shrink-0">{ing.categoryRaw}</span>
+                        )}
+                        <span className="font-mono text-xs text-muted-foreground shrink-0">
+                          {bahtPerUnit != null ? `${bahtPerUnit.toFixed(2)} ฿/${units?.[0]?.unit ?? ""}` : "-"}
                         </span>
                       </button>
                     )
@@ -545,7 +691,7 @@ export function IngredientTable({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
-              {t("cancel") || "취소"}
+              {t("close") || "닫기"}
             </Button>
           </DialogFooter>
         </DialogContent>

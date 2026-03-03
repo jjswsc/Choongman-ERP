@@ -10,7 +10,7 @@ export async function GET() {
     const rows = (await supabaseSelect('pos_promos', {
       order: 'sort_order.asc,name.asc',
       limit: 500,
-      select: 'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order',
+      select: 'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id',
     })) as {
       id?: number
       code?: string
@@ -21,6 +21,7 @@ export async function GET() {
       vat_included?: boolean
       is_active?: boolean
       sort_order?: number
+      marketing_campaign_id?: number | null
     }[] | null
 
     const list = (rows || []).map((row) => ({
@@ -33,6 +34,7 @@ export async function GET() {
       vatIncluded: !!row.vat_included,
       isActive: row.is_active !== false,
       sortOrder: Number(row.sort_order) ?? 0,
+      marketingCampaignId: row.marketing_campaign_id != null ? String(row.marketing_campaign_id) : null,
     }))
 
     return NextResponse.json(list, { headers })

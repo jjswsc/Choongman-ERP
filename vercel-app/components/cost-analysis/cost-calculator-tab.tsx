@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
-import { RotateCcw, Save } from "lucide-react"
+import { RotateCcw, Save, RefreshCw } from "lucide-react"
 import { MenuInfoPanel } from "@/components/cost-analysis/menu-info-panel"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 import { CostSummary } from "@/components/cost-analysis/cost-summary"
@@ -23,13 +23,15 @@ import {
 } from "@/lib/cost-data"
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
-import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
-import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient } from "@/lib/api-client"
+import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
+import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
   initialLoadFromRow?: PosMenuCostAnalysisRow | null
   onClearLoad?: () => void
   onSaveSuccess?: () => void
+  /** 불러오기 시 선택 메뉴 갱신용 */
+  onReloadMenu?: (row: PosMenuCostAnalysisRow) => void
   /** POS 메뉴 목록 (카테고리 목록 추출·검색용) */
   menuRows?: PosMenuCostAnalysisRow[]
   /** 메뉴 검색에서 선택 시 (목록 로드) */
@@ -60,16 +62,33 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
   return { food, packaging }
 }
 
-export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
+export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSuccess, onReloadMenu, menuRows = [], onMenuSelect }: CostCalculatorTabProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const [menuItem, setMenuItem] = useState<MenuItem>(emptyMenuItem)
   const [foodItems, setFoodItems] = useState<RecipeItem[]>(emptyFoodRecipe)
   const [packagingItems, setPackagingItems] = useState<RecipeItem[]>(emptyPackagingRecipe)
+  /** 재료·소스 API 로드 완료 시 재렌더 (소스 원가 반영) */
+  const [runtimeReady, setRuntimeReady] = useState(false)
 
   useEffect(() => {
-    getAdminItems().then((items) => setRuntimeApiItems(items)).catch(() => {})
-    getSauces().then((list) => setRuntimeSauces(list)).catch(() => {})
+    let done = 0
+    const check = () => {
+      done += 1
+      if (done >= 2) setRuntimeReady(true)
+    }
+    getAdminItems()
+      .then((items) => {
+        setRuntimeApiItems(items)
+        check()
+      })
+      .catch(check)
+    getSauces()
+      .then((list) => {
+        setRuntimeSauces(list)
+        check()
+      })
+      .catch(check)
   }, [])
 
   useEffect(() => {
@@ -87,6 +106,10 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         category: row.category ?? "",
         categoryMain: row.categoryMain ?? "",
         inclVat: price,
+        vatIncluded: row.vatIncluded !== false,
+        priceHall: row.priceHall ?? 0,
+        priceDelivery: row.priceDelivery ?? null,
+        cookingTimeMin: row.cookingTimeMin ?? null,
       })
       setFoodItems(food)
       setPackagingItems(packaging)
@@ -118,14 +141,21 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
 
   const categoriesFromMenusByMain = useMemo(() => {
     return (mainCat: string) => {
-      if (mainCat && mainCat in POS_CATEGORIES_BY_MAIN) {
-        const preset = POS_CATEGORIES_BY_MAIN[mainCat as keyof typeof POS_CATEGORIES_BY_MAIN]
-        const fromRows = menuRows.filter((r) => (r.categoryMain ?? "") === mainCat).map((r) => r.category).filter(Boolean)
+      const preset = getPresetCategoriesForMain(mainCat)
+      if (preset) {
+        const fromRows = menuRows
+          .filter((r) => mainCategoryMatches(mainCat, r.categoryMain, r.menuCode))
+          .map((r) => r.category)
+          .filter(Boolean)
         return Array.from(new Set([...preset, ...fromRows])).sort()
       }
-      return categoriesFromMenus
+      const fromRows = menuRows
+        .filter((r) => mainCategoryMatches(mainCat, r.categoryMain, r.menuCode))
+        .map((r) => r.category)
+        .filter(Boolean)
+      return Array.from(new Set(fromRows)).sort()
     }
-  }, [menuRows, categoriesFromMenus])
+  }, [menuRows])
 
   const handleReset = useCallback(() => {
     clearRuntimeIngredients()
@@ -163,7 +193,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     try {
       const existing = await getPosMenuIngredients({
         menuId: String(menuId),
-        optionId: optionId != null ? String(optionId) : undefined,
+        optionId: optionId != null ? String(optionId) : (undefined as string | undefined),
       })
       for (const ing of existing) {
         const res = await deletePosMenuIngredient({ id: String(ing.id) })
@@ -172,7 +202,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       for (const row of toSave) {
         const res = await savePosMenuIngredient({
           menuId,
-          optionId,
+          optionId: optionId != null ? optionId : null,
           itemCode: row.itemCode,
           quantity: row.quantity,
           lossRate: row.lossRate,
@@ -180,6 +210,40 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         })
         if (!res.success) throw new Error(res.message)
       }
+
+      const pHall = menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0
+      const pDelivery = menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null
+      const code = String(initialLoadFromRow.menuCode ?? "").replace(/-\d+$/, "").trim()
+      const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
+      const category = String(initialLoadFromRow.category ?? "").trim()
+      const categoryMain = String(initialLoadFromRow.categoryMain ?? "").trim()
+      if (optionId != null) {
+        const baseRow = menuRows?.find((r) => r.menuId === String(menuId) && !r.optionId)
+        const baseHall = baseRow?.priceHall ?? 0
+        const baseDelivery = baseRow?.priceDelivery ?? baseHall
+        const modHall = Math.round((pHall - baseHall) * 10) / 10
+        const modDelivery = pDelivery != null ? Math.round((pDelivery - (baseDelivery || baseHall)) * 10) / 10 : modHall
+        const optRes = await savePosMenuOption({
+          id: String(optionId),
+          menuId,
+          name: String(initialLoadFromRow.optionName ?? "").trim() || name,
+          priceModifier: modHall,
+          priceModifierDelivery: modDelivery,
+        })
+        if (!optRes.success) throw new Error(optRes.message)
+      } else if (code && name) {
+        const menuRes = await savePosMenu({
+          id: String(menuId),
+          code,
+          name,
+          category,
+          categoryMain,
+          price: Math.round(pHall),
+          priceDelivery: pDelivery != null ? Math.round(pDelivery) : null,
+        })
+        if (!menuRes.success) throw new Error(menuRes.message)
+      }
+
       alert(t("msg_save_success") || "저장되었습니다.")
       onSaveSuccess?.()
     } catch (e) {
@@ -187,27 +251,54 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     } finally {
       setSaving(false)
     }
-  }, [initialLoadFromRow, foodItems, packagingItems, saving, t, onSaveSuccess])
+  }, [initialLoadFromRow, foodItems, packagingItems, menuItem, menuRows, saving, t, onSaveSuccess])
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={handleReset}
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            className="h-9 gap-1.5 px-3 text-xs"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {t("posCostReset")}
           </Button>
+          {initialLoadFromRow && onReloadMenu && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const data = await getPosMenuCostAnalysis()
+                  const arr = Array.isArray(data) ? data : []
+                  const key = initialLoadFromRow.optionId
+                    ? `${initialLoadFromRow.menuId}:${initialLoadFromRow.optionId}`
+                    : String(initialLoadFromRow.menuId)
+                  const fresh = arr.find(
+                    (r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key
+                  )
+                  if (fresh) onReloadMenu(fresh)
+                  else alert(t("posCostLoadFail") || "데이터를 찾을 수 없습니다.")
+                } catch {
+                  alert(t("msg_load_fail") || "불러오기에 실패했습니다.")
+                }
+              }}
+              className="h-9 gap-1.5 px-3 text-xs"
+              title={t("posCostLoadSaved") || "저장된 재료·가격 다시 불러오기"}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              {t("posCostLoadSaved") || "불러오기"}
+            </Button>
+          )}
           <Button
-            variant="default"
+            variant="outline"
             size="sm"
             onClick={handleSave}
             disabled={!canSave || saving}
-            className="gap-1.5 text-xs"
+            className="h-9 gap-1.5 px-3 text-xs"
             title={!canSave ? (t("posCostSaveHint") || "목록에서 메뉴를 선택한 후 저장할 수 있습니다.") : undefined}
           >
             <Save className="h-3.5 w-3.5" />
@@ -227,17 +318,34 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             onMenuSelect={onMenuSelect}
             onRequestChangeMenu={onClearLoad}
             readOnlyMenuInfo={!!initialLoadFromRow}
+            menuId={initialLoadFromRow ? String(initialLoadFromRow.menuId) : undefined}
+            onSaveCookingTime={
+              initialLoadFromRow
+                ? async (id, cookingTimeMin) => {
+                    try {
+                      const code = String(initialLoadFromRow.menuCode ?? "").replace(/-\d+$/, "").trim()
+                      const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
+                      if (code && name) {
+                        await savePosMenu({ id, code, name, cookingTimeMin })
+                        onSaveSuccess?.()
+                      }
+                    } catch (e) {
+                      alert(String(e))
+                    }
+                  }
+                : undefined
+            }
           />
           <div className="space-y-6">
-            <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} />
-            {menuItem.serviceType === "Delivery" && (
-              <IngredientTable
-                title={t("posCostPackagingDelivery")}
-                type="packaging"
-                items={packagingItems}
-                onItemsChange={setPackagingItems}
-              />
-            )}
+            <IngredientTable title={t("posCostFoodIngredients")} type="food" items={foodItems} onItemsChange={setFoodItems} costTextDark />
+            <IngredientTable
+              title={t("posCostPackagingDelivery")}
+              type="packaging"
+              items={packagingItems}
+              onItemsChange={setPackagingItems}
+              addDialogRequireStandardUnits={false}
+              costTextDark
+            />
           </div>
         </div>
 
@@ -247,9 +355,35 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             packagingSubTotal={packagingSubTotal}
             misePercent={menuItem.misePercent}
             inclVat={menuItem.inclVat}
+            vatIncluded={menuItem.vatIncluded !== false}
             serviceType={menuItem.serviceType}
             deliveryPercent={menuItem.deliveryPercent}
+            onDeliveryPercentChange={(v) => setMenuItem((prev) => ({ ...prev, deliveryPercent: v }))}
             miseIncludedInFood
+            editablePrice={!!initialLoadFromRow}
+            onPriceChange={
+              initialLoadFromRow
+                ? (priceHall, priceDelivery) =>
+                    setMenuItem((prev) => ({
+                      ...prev,
+                      priceHall,
+                      priceDelivery,
+                      inclVat: priceDelivery ?? priceHall,
+                    }))
+                : undefined
+            }
+            basePriceHall={
+              initialLoadFromRow?.optionId
+                ? menuRows?.find((r) => r.menuId === initialLoadFromRow?.menuId && !r.optionId)
+                    ?.priceHall
+                : undefined
+            }
+            basePriceDelivery={
+              initialLoadFromRow?.optionId
+                ? menuRows?.find((r) => r.menuId === initialLoadFromRow?.menuId && !r.optionId)
+                    ?.priceDelivery
+                : undefined
+            }
           />
           <CostChart
             foodItems={foodItems}

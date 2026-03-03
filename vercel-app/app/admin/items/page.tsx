@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
+import { ItemCategorySettingsDialog } from "@/components/erp/item-category-settings-dialog"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -49,6 +50,7 @@ export default function ItemsPage() {
   const [outboundFilter, setOutboundFilter] = React.useState("all")
   const [outboundLocations, setOutboundLocations] = React.useState<{ location_code: string; name: string }[]>([])
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
+  const [categorySettingsOpen, setCategorySettingsOpen] = React.useState(false)
   const [excelImporting, setExcelImporting] = React.useState(false)
   const excelInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -359,6 +361,15 @@ export default function ItemsPage() {
               <Settings className="h-3.5 w-3.5" />
               {t("outboundLocationSettings") || "출고지 설정"}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5 px-3 text-xs"
+              onClick={() => setCategorySettingsOpen(true)}
+            >
+              <Tags className="h-3.5 w-3.5" />
+              {t("itemCategorySettings") || "카테고리 설정"}
+            </Button>
           </div>
         </div>
 
@@ -366,6 +377,14 @@ export default function ItemsPage() {
           open={outboundSettingsOpen}
           onOpenChange={setOutboundSettingsOpen}
           onSaved={loadOutboundLocations}
+        />
+        <ItemCategorySettingsDialog
+          open={categorySettingsOpen}
+          onOpenChange={setCategorySettingsOpen}
+          onSaved={async () => {
+            const { categories } = await getItemCategories()
+            setAllCategories(categories || [])
+          }}
         />
 
         {loading && (

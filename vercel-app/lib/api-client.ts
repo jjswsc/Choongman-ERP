@@ -1752,6 +1752,278 @@ export async function deleteFixedExpense(params: { id: number }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 인테리어 프로젝트 ───
+export interface InteriorProject {
+  id?: number
+  code: string
+  name: string
+  location?: string
+  status?: string
+  budgetTotal?: number
+  startDate?: string | null
+  endDate?: string | null
+}
+
+export async function getInteriorProjects() {
+  const res = await apiFetch('/api/getInteriorProjects')
+  return res.json() as Promise<InteriorProject[]>
+}
+
+export async function saveInteriorProject(params: Partial<InteriorProject> & { code: string; name: string }) {
+  const res = await apiFetch('/api/saveInteriorProject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorProject(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorProject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorScheduleItem {
+  id?: number
+  projectId?: number
+  itemNo?: number
+  workDetail?: string
+  startDate?: string | null
+  endDate?: string | null
+  dayProgress?: Record<string, unknown>
+  sortOrder?: number
+}
+
+export async function getInteriorSchedule(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorSchedule?${q}`)
+  return res.json() as Promise<InteriorScheduleItem[]>
+}
+
+export async function saveInteriorScheduleItem(params: Partial<InteriorScheduleItem> & { projectId: number; workDetail: string }) {
+  const res = await apiFetch('/api/saveInteriorScheduleItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorScheduleItem(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorScheduleItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorExpenseItem {
+  id?: number
+  projectId?: number
+  category?: string
+  description?: string
+  vendorCode?: string
+  quote?: number
+  paid?: number
+  balance?: number
+  paymentSchedule?: unknown[]
+  sortOrder?: number
+}
+
+export async function getInteriorExpenseItems(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorExpenseItems?${q}`)
+  return res.json() as Promise<InteriorExpenseItem[]>
+}
+
+export async function saveInteriorExpenseItem(params: Partial<InteriorExpenseItem> & { projectId: number; description: string }) {
+  const res = await apiFetch('/api/saveInteriorExpenseItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorExpenseItem(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorExpenseItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function payInteriorExpense(params: {
+  expenseId: number
+  accountId: number
+  transDate: string
+  amount: number
+  memo?: string
+}) {
+  const res = await apiFetch('/api/payInteriorExpense', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; bankTransactionId?: number }>
+}
+
+export interface InteriorDirectPurchase {
+  id?: number
+  projectId?: number
+  category?: string
+  itemNo?: number
+  description?: string
+  qty?: number
+  unit?: string
+  price?: number
+  sumAmount?: number
+  supplierCode?: string
+  status?: string
+  remark?: string
+}
+
+export async function getInteriorDirectPurchases(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorDirectPurchases?${q}`)
+  return res.json() as Promise<InteriorDirectPurchase[]>
+}
+
+export async function saveInteriorDirectPurchase(params: Partial<InteriorDirectPurchase> & { projectId: number; description: string }) {
+  const res = await apiFetch('/api/saveInteriorDirectPurchase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorDirectPurchase(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorDirectPurchase', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorProjectFile {
+  id?: number
+  projectId?: number
+  fileType?: string
+  fileName?: string
+  filePath?: string
+  fileSize?: number
+  uploadedAt?: string | null
+}
+
+export async function getInteriorFiles(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorFiles?${q}`)
+  return res.json() as Promise<InteriorProjectFile[]>
+}
+
+export async function uploadInteriorFile(params: {
+  projectId: string | number
+  fileType: string
+  file: File
+}) {
+  const formData = new FormData()
+  formData.append('projectId', String(params.projectId))
+  formData.append('fileType', params.fileType)
+  formData.append('file', params.file)
+  const res = await apiFetch('/api/uploadInteriorFile', {
+    method: 'POST',
+    body: formData,
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; url?: string }>
+}
+
+export async function deleteInteriorFile(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorFile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorKitchenItem {
+  id?: number
+  projectId?: number
+  itemNameKr?: string
+  itemNameEn?: string
+  sizeMm?: string
+  supplierCode?: string
+  zone?: string
+  price?: number
+  quantity?: number
+}
+
+export async function getInteriorKitchenItems(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorKitchenItems?${q}`)
+  return res.json() as Promise<InteriorKitchenItem[]>
+}
+
+export async function saveInteriorKitchenItem(params: Partial<InteriorKitchenItem> & { projectId: number }) {
+  const res = await apiFetch('/api/saveInteriorKitchenItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorKitchenItem(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorKitchenItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface InteriorSpecification {
+  id?: number
+  projectId?: number
+  description?: string
+  code?: string
+  size?: string
+  supplierCode?: string
+  location?: string
+}
+
+export async function getInteriorSpecifications(params: { projectId: string | number }) {
+  const q = new URLSearchParams({ projectId: String(params.projectId) })
+  const res = await apiFetch(`/api/getInteriorSpecifications?${q}`)
+  return res.json() as Promise<InteriorSpecification[]>
+}
+
+export async function saveInteriorSpecification(params: Partial<InteriorSpecification> & { projectId: number; description: string }) {
+  const res = await apiFetch('/api/saveInteriorSpecification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteInteriorSpecification(params: { id: number }) {
+  const res = await apiFetch('/api/deleteInteriorSpecification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 품목/거래처 관리 (Admin) ───
 export interface AdminItem {
   code: string
@@ -1831,6 +2103,40 @@ export async function saveWarehouseLocation(params: {
 
 export async function deleteWarehouseLocation(params: { id?: number; location_code?: string }) {
   const res = await apiFetch('/api/deleteWarehouseLocation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface ItemCategory {
+  id?: number
+  name: string
+  sort_order?: number
+}
+
+export async function getItemCategorySettings() {
+  const res = await apiFetch('/api/getItemCategorySettings')
+  return res.json() as Promise<ItemCategory[]>
+}
+
+export async function saveItemCategory(params: {
+  id?: number
+  name: string
+  oldName?: string
+  sort_order?: number
+}) {
+  const res = await apiFetch('/api/saveItemCategory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteItemCategory(params: { id?: number; name?: string }) {
+  const res = await apiFetch('/api/deleteItemCategory', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2092,10 +2398,13 @@ export interface PosMenuCostAnalysisRow {
   categoryMain?: string
   priceHall: number
   priceDelivery: number | null
+  /** 가격이 VAT 포함인지 (false면 이미 VAT 제외) */
+  vatIncluded?: boolean
   optionId: string | null
   optionName: string | null
   costHall: number
   costDelivery: number
+  cookingTimeMin?: number | null
   breakdown: {
     itemCode: string
     itemName: string
@@ -2142,6 +2451,7 @@ export async function saveSauce(params: {
   name: string
   unit?: string
   overheadPercent?: number
+  totalQuantity?: number
   ingredients: { itemCode: string; quantity: number; lossRate?: number }[]
 }) {
   const res = await apiFetch('/api/sauces', {
@@ -2265,6 +2575,7 @@ export interface PosPromo {
   name: string
   category: string
   price: number
+  marketingCampaignId?: string | null
   priceDelivery?: number | null
   vatIncluded: boolean
   isActive: boolean
@@ -2311,6 +2622,7 @@ export async function savePosPromo(params: {
   vatIncluded?: boolean
   isActive?: boolean
   sortOrder?: number
+  marketingCampaignId?: string | null
 }) {
   const res = await apiFetch('/api/savePosPromo', {
     method: 'POST',
@@ -2354,6 +2666,251 @@ export async function deletePosPromo(params: { id: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 마케팅 캠페인 ───
+export interface MarketingCampaign {
+  id: string
+  topic: string
+  format: string
+  status: string
+  startDate?: string | null
+  endDate?: string | null
+  branches: string[]
+  kpiTarget: number
+  kpiUnit: string
+  budgetTotal: number
+}
+
+export interface MarketingCampaignDetail extends MarketingCampaign {
+  detail: string
+  discountType: string
+  discountValue: number
+  discountPricePromotion: string
+  costAdsOnline: number
+  costAdsOffline: number
+  costProduction: number
+  costFood: number
+  costInfluencer: number
+  campaignPerformance: string
+  conclusion: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function getMarketingCampaigns() {
+  const res = await apiFetch('/api/marketingCampaigns')
+  return res.json() as Promise<MarketingCampaign[]>
+}
+
+export async function getMarketingCampaign(id: string) {
+  const q = new URLSearchParams({ id })
+  const res = await apiFetch('/api/marketingCampaigns?' + q.toString())
+  return res.json() as Promise<MarketingCampaignDetail | null>
+}
+
+export async function saveMarketingCampaign(params: {
+  id?: string
+  topic: string
+  format?: string
+  status?: string
+  detail?: string
+  startDate?: string | null
+  endDate?: string | null
+  branches?: string[]
+  discountType?: string
+  discountValue?: number
+  discountPricePromotion?: string
+  costAdsOnline?: number
+  costAdsOffline?: number
+  costProduction?: number
+  costFood?: number
+  costInfluencer?: number
+  budgetTotal?: number
+  kpiTarget?: number
+  kpiUnit?: string
+  campaignPerformance?: string
+  conclusion?: string
+}) {
+  const res = await apiFetch('/api/marketingCampaigns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingCampaign(params: { id: string }) {
+  const res = await apiFetch('/api/deleteMarketingCampaign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getMarketingCampaignCosts(campaignId: string) {
+  const q = new URLSearchParams({ campaignId })
+  const res = await apiFetch(`/api/marketingCampaignCosts?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    campaignId?: string
+    topic?: string
+    startDate?: string
+    endDate?: string
+    bankCosts?: number
+    pettyCosts?: number
+    totalCosts?: number
+  }>
+}
+
+export async function getMarketingCampaignResults(params: { campaignId: string; importId: string }) {
+  const q = new URLSearchParams({
+    campaignId: params.campaignId,
+    importId: params.importId,
+  })
+  const res = await apiFetch(`/api/marketingCampaignResults?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    campaignId?: string
+    importId?: string
+    startDate?: string | null
+    endDate?: string | null
+    dineInOrders?: number
+    deliveryOrders?: number
+    carryOutOrders?: number
+    totalOrders?: number
+    dineInSales?: number
+    deliverySales?: number
+    carryOutSales?: number
+    totalSales?: number
+  }>
+}
+
+export async function importMarketingExcel(file: File) {
+  const form = new FormData()
+  form.set('file', file)
+  const res = await apiFetch('/api/importMarketingExcel', {
+    method: 'POST',
+    body: form,
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    campaignsInserted?: number
+    adsInserted?: number
+    influencersInserted?: number
+  }>
+}
+
+// ─── 마케팅 광고 (ROAS) ───
+export interface MarketingAd {
+  id: string
+  campaignId: string | null
+  contentFormat: string
+  contentPillar: string
+  contentTopic: string
+  publishDate: string | null
+  platform: string
+  postLink: string
+  boostBudget: number
+  actualSpent: number
+}
+
+export async function getMarketingAds(params?: { campaignId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  const res = await apiFetch('/api/marketingAds' + (q.toString() ? '?' + q.toString() : ''))
+  return res.json() as Promise<MarketingAd[]>
+}
+
+export async function saveMarketingAd(params: {
+  id?: string
+  campaignId?: string | null
+  contentFormat?: string
+  contentPillar?: string
+  contentTopic?: string
+  publishDate?: string | null
+  platform: string
+  postLink?: string
+  boostBudget?: number
+  actualSpent?: number
+}) {
+  const res = await apiFetch('/api/marketingAds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingAd(params: { id: string }) {
+  const res = await apiFetch('/api/deleteMarketingAd', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+// ─── 마케팅 인플루언서 ───
+export interface MarketingInfluencer {
+  id: string
+  campaignId: string | null
+  name: string
+  followers: string
+  contentFormat: string
+  contentTopic: string
+  status: string
+  branchReview: string
+  hireType: string
+  budget: number
+  shootingDate: string | null
+  publishDate: string | null
+  platformLinks: Record<string, string>
+  note: string
+}
+
+export async function getMarketingInfluencers(params?: { campaignId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  const res = await apiFetch('/api/marketingInfluencers' + (q.toString() ? '?' + q.toString() : ''))
+  return res.json() as Promise<MarketingInfluencer[]>
+}
+
+export async function saveMarketingInfluencer(params: {
+  id?: string
+  campaignId?: string | null
+  name: string
+  followers?: string
+  contentFormat?: string
+  contentTopic?: string
+  status?: string
+  branchReview?: string
+  hireType?: string
+  budget?: number
+  shootingDate?: string | null
+  publishDate?: string | null
+  platformLinks?: Record<string, string>
+  note?: string
+}) {
+  const res = await apiFetch('/api/marketingInfluencers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingInfluencer(params: { id: string }) {
+  const res = await apiFetch('/api/deleteMarketingInfluencer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface PosCoupon {
   id?: number
   code: string
@@ -2386,6 +2943,7 @@ export async function savePosCoupon(params: {
   validTo?: string | null
   maxUses?: number | null
   isActive?: boolean
+  marketingCampaignId?: string | null
 }) {
   const res = await apiFetch('/api/savePosCoupon', {
     method: 'POST',

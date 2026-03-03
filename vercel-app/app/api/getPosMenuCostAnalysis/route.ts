@@ -13,14 +13,14 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const [menuData, sauceData] = await Promise.all([
+    const [menuData, sauceData, sauceIngData] = await Promise.all([
       Promise.all([
         (async () => {
           try {
             return await supabaseSelect('pos_menus', {
               order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
               limit: 500,
-              select: 'id,code,name,category,category_main,price,price_delivery,vat_included',
+              select: 'id,code,name,category,category_main,price,price_delivery,vat_included,cooking_time_min',
             })
           } catch {
             return supabaseSelect('pos_menus', {
@@ -40,15 +40,17 @@ export async function GET() {
         })(),
         supabaseSelect('items', { limit: 5000, select: 'code,name,cost,price,total_quantity,unit,purchase_source,category' }),
       ]),
-      supabaseSelect('sauces', { limit: 500, select: 'code,name,cost_per_unit,unit' }).catch(() => null),
+      supabaseSelect('sauces', { limit: 500, select: 'id,code,name,cost_per_unit,unit,overhead_percent' }).catch(() => null),
+      supabaseSelect('sauce_ingredients', { limit: 5000, select: 'sauce_id,item_code,quantity,loss_rate' }).catch(() => null),
     ])
     const [menuRows, ingRows, optRows, itemRows] = menuData as [
-      { id?: number; code?: string; name?: string; category?: string; category_main?: string; price?: number; price_delivery?: number | null; vat_included?: boolean }[] | null,
+      { id?: number; code?: string; name?: string; category?: string; category_main?: string; price?: number; price_delivery?: number | null; vat_included?: boolean; cooking_time_min?: number | null }[] | null,
       { id?: number; menu_id?: number; option_id?: number | null; item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null,
       { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; quantity?: number; sort_order?: number; price_modifier?: number; price_modifier_delivery?: number | null }[] | null,
       { code?: string; name?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; purchase_source?: string; category?: string }[] | null,
     ]
-    const sauceRows = sauceData as { code?: string; name?: string; cost_per_unit?: number; unit?: string }[] | null
+    const sauceRows = sauceData as { id?: number; code?: string; name?: string; cost_per_unit?: number; unit?: string; overhead_percent?: number }[] | null
+    const sauceIngRows = sauceIngData as { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[] | null
 
     const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
     const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store'; raw?: typeof itemRows extends (infer R)[] | null ? R : never }> = {}
@@ -65,12 +67,60 @@ export async function GET() {
         }
       }
     }
+    const sauceCostComputed: Record<string, number> = {}
+    const sauceByCode: Record<string, { id?: number; cost_per_unit?: number; overhead_percent?: number }> = {}
+    for (const s of sauceRows || []) {
+      const c = String(s.code ?? '').trim()
+      if (c) sauceByCode[c] = s
+    }
+    const ingBySauce: Record<number, { item_code?: string; quantity?: number; loss_rate?: number }[]> = {}
+    for (const si of sauceIngRows || []) {
+      const sid = Number(si.sauce_id ?? 0)
+      if (!ingBySauce[sid]) ingBySauce[sid] = []
+      ingBySauce[sid].push(si)
+    }
+    for (let pass = 0; pass < 5; pass++) {
+      let changed = false
+      for (const s of sauceRows || []) {
+        const code = String(s.code ?? '').trim()
+        if (!code || Number(s.cost_per_unit ?? 0) > 0) continue
+        const ings = ingBySauce[Number(s.id ?? 0)] || []
+        let totalCost = 0
+        let totalQty = 0
+        let ok = true
+        for (const ing of ings) {
+          const icode = String(ing.item_code ?? '').trim()
+          const qty = Number(ing.quantity ?? 1)
+          const lossRate = Number(ing.loss_rate ?? 0)
+          const itemInfo = itemMap[icode]
+          let subCost: number | undefined
+          if (itemInfo) subCost = itemInfo.cost
+          else if (sauceByCode[icode]) subCost = (sauceCostComputed[icode] ?? Number(sauceByCode[icode].cost_per_unit ?? 0)) || undefined
+          if (subCost === undefined) {
+            ok = false
+            break
+          }
+          totalCost += subCost * qty * (1 + lossRate / 100)
+          totalQty += qty
+        }
+        if (ok && totalQty > 0) {
+          const oh = Number(s.overhead_percent ?? 5)
+          const cost = (totalCost * (1 + oh / 100)) / totalQty
+          if (Math.abs((sauceCostComputed[code] ?? 0) - cost) > 1e-9) {
+            sauceCostComputed[code] = cost
+            changed = true
+          }
+        }
+      }
+      if (!changed) break
+    }
     for (const r of sauceRows || []) {
       const code = String(r.code ?? '').trim()
       if (code && !itemMap[code]) {
+        const cost = Number(r.cost_per_unit ?? 0) > 0 ? Number(r.cost_per_unit ?? 0) : (sauceCostComputed[code] ?? 0)
         itemMap[code] = {
           name: String(r.name ?? ''),
-          cost: Number(r.cost_per_unit) ?? 0,
+          cost,
           unit: String(r.unit ?? 'g'),
           purchaseSource: 'hq',
         }
@@ -123,6 +173,7 @@ export async function GET() {
       costHall: number
       costDelivery: number
       breakdown: BreakdownRow[]
+      cookingTimeMin?: number | null
     }
 
     const result: MenuCostRow[] = []
@@ -185,6 +236,8 @@ export async function GET() {
 
       const base = computeCost(null)
       const categoryMain = String(menu.category_main ?? '').trim()
+      const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
+      const vatIncluded = menu.vat_included !== false
       result.push({
         menuId: String(menu.id ?? ''),
         menuCode: String(menu.code ?? ''),
@@ -193,11 +246,13 @@ export async function GET() {
         categoryMain,
         priceHall,
         priceDelivery,
+        vatIncluded,
         optionId: null,
         optionName: null,
         costHall: base.costHall,
         costDelivery: base.costDelivery,
         breakdown: base.breakdown,
+        cookingTimeMin,
       })
 
       for (const opt of optsToShow) {
@@ -236,11 +291,13 @@ export async function GET() {
             categoryMain,
             priceHall: optPriceHall,
             priceDelivery: optPriceDelivery,
+            vatIncluded,
             optionId: String(opt.id ?? ''),
             optionName: String(opt.name ?? ''),
             costHall: Math.round((baseCost + addFood) * 10) / 10,
             costDelivery: Math.round((baseCost + addFood + basePkg) * 10) / 10,
             breakdown: addBreakdown,
+            cookingTimeMin,
           })
         } else {
           const computed = computeCost(String(opt.id))
@@ -252,11 +309,13 @@ export async function GET() {
             categoryMain,
             priceHall: optPriceHall,
             priceDelivery: optPriceDelivery,
+            vatIncluded,
             optionId: String(opt.id ?? ''),
             optionName: String(opt.name ?? ''),
             costHall: computed.costHall,
             costDelivery: computed.costDelivery,
             breakdown: computed.breakdown,
+            cookingTimeMin,
           })
         }
       }

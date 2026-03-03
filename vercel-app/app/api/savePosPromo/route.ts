@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       vatIncluded?: boolean
       isActive?: boolean
       sortOrder?: number
+      marketingCampaignId?: string | null
     }
 
     const code = String(body.code ?? '').trim()
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
       vat_included: body.vatIncluded !== false,
       is_active: body.isActive !== false,
       sort_order: Number(body.sortOrder) ?? 0,
+      marketing_campaign_id: body.marketingCampaignId && body.marketingCampaignId !== 'null' ? Number(body.marketingCampaignId) : null,
     }
 
     if (editingId) {

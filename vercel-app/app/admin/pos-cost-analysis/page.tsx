@@ -20,7 +20,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosMenuCostAnalysis, type PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
-import { POS_MAIN_CATEGORIES } from "@/lib/pos-menu-categories"
+import { POS_MAIN_CATEGORIES, mainCategoryMatches } from "@/lib/pos-menu-categories"
 
 const MISE_RATE_DEFAULT = 3
 
@@ -83,16 +83,26 @@ export default function PosCostAnalysisPage() {
     // 초기 마운트 시 자동 조회하지 않음. "조회" 버튼으로 로드.
   }, [])
 
+  /** 계산기 탭 진입 시 데이터 없으면 자동 조회 — 메뉴 검색 드롭다운용 */
+  React.useEffect(() => {
+    if (activeTab === "calculator" && rows.length === 0 && !loading) {
+      loadList()
+    }
+  }, [activeTab, rows.length, loading, loadList])
+
   const categories = React.useMemo(() => {
     const set = new Set(rows.map((r) => r.category).filter(Boolean))
     return Array.from(set).sort()
   }, [rows])
 
-  /** 선택한 대분류에 속한 카테고리만 (대분류 선택 시 카테고리 드롭다운용) */
+  /** 선택한 대분류에 속한 카테고리만 (대분류 선택 시 카테고리 드롭다운용, Chicken/치킨 한영 매칭) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (mainCategoryFilter === "all") return categories
     const set = new Set(
-      rows.filter((r) => (r.categoryMain ?? "") === mainCategoryFilter).map((r) => r.category).filter(Boolean)
+      rows
+        .filter((r) => mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode))
+        .map((r) => r.category)
+        .filter(Boolean)
     )
     return Array.from(set).sort()
   }, [rows, mainCategoryFilter, categories])
@@ -110,7 +120,7 @@ export default function PosCostAnalysisPage() {
         (r.menuCode ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (r.optionName ?? "").toLowerCase().includes(searchTerm.toLowerCase())
       const matchCat = categoryFilter === "all" || r.category === categoryFilter
-      const matchMainCat = mainCategoryFilter === "all" || (r.categoryMain ?? "") === mainCategoryFilter
+      const matchMainCat = mainCategoryFilter === "all" || mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode)
       return matchTerm && matchCat && matchMainCat
     })
   }, [rows, searchTerm, categoryFilter, mainCategoryFilter])
@@ -129,6 +139,21 @@ export default function PosCostAnalysisPage() {
     }
     return out
   }, [filtered])
+
+  /** 원가 계산기용: 필터 없이 전체 메뉴 — 계산기에서 대분류·카테고리로 자체 필터링 */
+  const fullFlatList = React.useMemo((): RowWithDisplayCode[] => {
+    const order = [...new Set(rows.map((r) => r.menuId))]
+    const out: RowWithDisplayCode[] = []
+    for (const menuId of order) {
+      const base = rows.find((r) => r.menuId === menuId && !r.optionId)
+      const opts = rows.filter((r) => r.menuId === menuId && r.optionId)
+      if (base) out.push({ ...base, displayCode: base.menuCode ?? "" })
+      opts.forEach((o, i) => {
+        out.push({ ...o, displayCode: `${base?.menuCode ?? menuId}-${i + 1}` })
+      })
+    }
+    return out
+  }, [rows])
 
   const toggleExpand = (rowKey: string, e?: React.MouseEvent) => {
     e?.stopPropagation()
@@ -314,11 +339,11 @@ export default function PosCostAnalysisPage() {
               disabled={loading}
             >
               <Search className={cn("h-3.5 w-3.5", loading && "animate-pulse")} />
-              {loading ? (t("loading") || "조회 중...") : (t("itemsBtnSearch") || "조회")}
+              {loading ? (t("loading") || "조회 중...") : (t("posCostBtnQuery") || "조회")}
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t("posCostMise") || "미세(%)"}</span>
+            <span className="text-xs text-muted-foreground">{t("posCostMise") || "Loss(%)"}</span>
             <Input
               type="number"
               min={0}
@@ -512,8 +537,23 @@ export default function PosCostAnalysisPage() {
               <CostCalculatorTab
                 initialLoadFromRow={selectedForCalculator}
                 onClearLoad={() => setSelectedForCalculator(null)}
-                onSaveSuccess={() => getPosMenuCostAnalysis().then(setRows).catch(() => {})}
-                menuRows={flatList}
+                onSaveSuccess={() => {
+                  getPosMenuCostAnalysis().then((data) => {
+                    const arr = Array.isArray(data) ? data : []
+                    setRows(arr)
+                    if (selectedForCalculator) {
+                      const key = selectedForCalculator.optionId
+                        ? `${selectedForCalculator.menuId}:${selectedForCalculator.optionId}`
+                        : String(selectedForCalculator.menuId)
+                      const fresh = arr.find(
+                        (r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key
+                      )
+                      if (fresh) setSelectedForCalculator(fresh)
+                    }
+                  }).catch(() => {})
+                }}
+                onReloadMenu={(row) => setSelectedForCalculator(row)}
+                menuRows={fullFlatList}
                 onMenuSelect={(row) => setSelectedForCalculator(row)}
               />
             </div>

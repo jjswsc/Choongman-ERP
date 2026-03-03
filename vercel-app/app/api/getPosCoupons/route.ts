@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
       valid_from?: string | null
       valid_to?: string | null
       is_active?: boolean
+      marketing_campaign_id?: number | null
     }[]
     const list = (rows || []).map((r) => ({
       id: r.id,
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
       validFrom: r.valid_from || null,
       validTo: r.valid_to || null,
       isActive: Boolean(r.is_active ?? true),
+      marketingCampaignId: r.marketing_campaign_id != null ? String(r.marketing_campaign_id) : null,
     }))
     return NextResponse.json(list, { headers })
   } catch (e) {

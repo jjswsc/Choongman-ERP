@@ -4,10 +4,12 @@ import * as React from "react"
 import { Tag, Save, Plus, Trash2, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
   getPosCoupons,
+  getMarketingCampaigns,
   savePosCoupon,
   deletePosCoupon,
   type PosCoupon,
@@ -24,6 +26,7 @@ export default function PosCouponsPage() {
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [editingId, setEditingId] = React.useState<number | null>(null)
+  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
   const [form, setForm] = React.useState({
     code: "",
     name: "",
@@ -31,6 +34,7 @@ export default function PosCouponsPage() {
     discountValue: "",
     validFrom: "",
     validTo: "",
+    marketingCampaignId: "" as string,
   })
 
   const loadData = React.useCallback(() => {
@@ -53,6 +57,7 @@ export default function PosCouponsPage() {
       discountValue: "",
       validFrom: "",
       validTo: "",
+      marketingCampaignId: "",
     })
   }
 
@@ -65,6 +70,7 @@ export default function PosCouponsPage() {
       discountValue: String(c.discountValue ?? 0),
       validFrom: c.validFrom ?? c.startDate ?? "",
       validTo: c.validTo ?? c.endDate ?? "",
+      marketingCampaignId: (c as { marketingCampaignId?: string | null }).marketingCampaignId ?? "",
     })
   }
 
@@ -89,6 +95,7 @@ export default function PosCouponsPage() {
         discountValue: val,
         validFrom: form.validFrom.trim() || null,
         validTo: form.validTo.trim() || null,
+        marketingCampaignId: form.marketingCampaignId || null,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -237,6 +244,20 @@ export default function PosCouponsPage() {
                     onChange={(e) => setForm((f) => ({ ...f, validTo: e.target.value }))}
                     className="mt-1"
                   />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">마케팅 캠페인</label>
+                  <Select value={form.marketingCampaignId || "_"} onValueChange={(v) => setForm((f) => ({ ...f, marketingCampaignId: v === "_" ? "" : v }))}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">없음</SelectItem>
+                      {campaigns.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.topic}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="mt-3 flex gap-2">

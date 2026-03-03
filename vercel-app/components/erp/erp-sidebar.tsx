@@ -18,6 +18,8 @@ import {
   ArrowUpFromLine,
   Users,
   CalendarClock,
+  CalendarDays,
+  FileText,
   Wallet,
   Banknote,
   Palmtree,
@@ -33,6 +35,8 @@ import {
   Tag,
   TrendingUp,
   Calculator,
+  GitCompare,
+  Settings2,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -80,6 +84,20 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionSales",
     items: [
       { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },
+    ],
+  },
+  {
+    titleKey: "adminSectionMarketing",
+    items: [
+      { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
+      { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
+      { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
+      { titleKey: "adminMarketingDashboard", icon: BarChart3, href: "/admin/marketing/dashboard" },
+      { titleKey: "adminMarketingCosts", icon: Banknote, href: "/admin/marketing/costs" },
+      { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
+      { titleKey: "adminMarketingReport", icon: FileText, href: "/admin/marketing/report" },
+      { titleKey: "adminMarketingAbCompare", icon: GitCompare, href: "/admin/marketing/ab-compare" },
+      { titleKey: "adminMarketingIntegrations", icon: Settings2, href: "/admin/marketing/integrations" },
     ],
   },
   {
@@ -132,6 +150,14 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
     ],
   },
+  {
+    titleKey: "adminSectionInterior",
+    items: [
+      { titleKey: "adminInteriorProjects", icon: LayoutGrid, href: "/admin/interior" },
+      { titleKey: "adminInteriorEstimates", icon: FileText, href: "/admin/interior-estimates" },
+      { titleKey: "adminInteriorExpense", icon: Wallet, href: "/admin/interior-expense" },
+    ],
+  },
 ]
 
 /** 매니저에게 숨길 메뉴 href */
@@ -162,11 +188,13 @@ export function ErpSidebar() {
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
     adminSectionSales: false,
+    adminSectionMarketing: false,
     adminSectionPos: false,
     adminSectionLogistics: true,
     adminSectionHr: true,
     adminSectionAccounting: true,
     adminSectionStore: true,
+    adminSectionInterior: false,
   })
 
   const toggleSection = (titleKey: string) => {

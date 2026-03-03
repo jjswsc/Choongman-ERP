@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { FlaskConical, Plus, Pencil, Trash2, RefreshCw, Settings } from "lucide-react"
+import { Plus, Pencil, Trash2, RefreshCw, Settings } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -28,13 +28,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getSauces, saveSauce, deleteSauce, recalculateSauces, getCostSettings, updateCostSettings, getAdminItems, type SauceRow } from "@/lib/api-client"
+import { getSauces, saveSauce, deleteSauce, recalculateSauces, getCostSettings, updateCostSettings, getAdminItems, type SauceRow, type AdminItem } from "@/lib/api-client"
+import { setRuntimeApiItems, setRuntimeSauces, getIngredientCodeByItemCode, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
+import type { RecipeItem } from "@/lib/cost-data"
+import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
 
 export function SauceCostTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [sauces, setSauces] = React.useState<SauceRow[]>([])
-  const [items, setItems] = React.useState<{ code: string; name: string; unit: string; cost: number }[]>([])
+  const [items, setItems] = React.useState<AdminItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [recalcLoading, setRecalcLoading] = React.useState(false)
   const [overheadPercent, setOverheadPercent] = React.useState(5)
@@ -45,11 +48,8 @@ export function SauceCostTab() {
   const [formName, setFormName] = React.useState("")
   const [formUnit, setFormUnit] = React.useState("g")
   const [formOh, setFormOh] = React.useState(5)
-  const [formIngredients, setFormIngredients] = React.useState<{ itemCode: string; quantity: number; lossRate: number }[]>([])
-  const [addIngOpen, setAddIngOpen] = React.useState(false)
-  const [newIngCode, setNewIngCode] = React.useState("")
-  const [newIngQty, setNewIngQty] = React.useState("")
-  const [newIngLoss, setNewIngLoss] = React.useState("")
+  const [formTotalQuantity, setFormTotalQuantity] = React.useState<number>(0)
+  const [formFoodItems, setFormFoodItems] = React.useState<RecipeItem[]>([])
 
   const load = React.useCallback(async () => {
     try {
@@ -59,7 +59,7 @@ export function SauceCostTab() {
         getCostSettings(),
       ])
       setSauces(sauceList || [])
-      setItems((itemList || []).map((i) => ({ code: i.code, name: i.name, unit: i.unit || "g", cost: i.cost || 0 })))
+      setItems(itemList || [])
       setOverheadPercent(settings?.globalOverheadPercent ?? 5)
     } catch {
       setSauces([])
@@ -72,6 +72,16 @@ export function SauceCostTab() {
   React.useEffect(() => {
     load()
   }, [load])
+
+  const getNextSauceCode = React.useCallback((list: SauceRow[]) => {
+    const match = /^S(\d+)$/i
+    let max = 0
+    for (const s of list) {
+      const m = String(s.code ?? "").match(match)
+      if (m) max = Math.max(max, parseInt(m[1], 10))
+    }
+    return `S${String(max + 1).padStart(3, "0")}`
+  }, [])
 
   const handleRecalculate = async () => {
     setRecalcLoading(true)
@@ -94,11 +104,14 @@ export function SauceCostTab() {
 
   const handleNew = () => {
     setEditing(null)
-    setFormCode("")
+    setFormCode(getNextSauceCode(sauces))
     setFormName("")
     setFormUnit("g")
     setFormOh(overheadPercent)
-    setFormIngredients([])
+    setFormTotalQuantity(0)
+    setFormFoodItems([])
+    setRuntimeApiItems(items)
+    setRuntimeSauces(sauces)
     setEditOpen(true)
   }
 
@@ -108,7 +121,17 @@ export function SauceCostTab() {
     setFormName(s.name)
     setFormUnit(s.unit || "g")
     setFormOh(s.overheadPercent)
-    setFormIngredients(s.ingredients.map((i) => ({ itemCode: i.itemCode, quantity: i.quantity, lossRate: i.lossRate || 0 })))
+    setFormTotalQuantity(s.totalQuantity ?? s.ingredients.reduce((sum, i) => sum + i.quantity, 0))
+    setRuntimeApiItems(items)
+    setRuntimeSauces(sauces.filter((sa) => sa.code !== s.code))
+    const foodItems = s.ingredients
+      .map((i): RecipeItem | null => {
+        const code = getIngredientCodeByItemCode(i.itemCode)
+        if (code == null) return null
+        return { ingredientCode: code, quantity: i.quantity, misePercent: i.lossRate ?? MISE_DEFAULT }
+      })
+      .filter((x): x is RecipeItem => x != null)
+    setFormFoodItems(foodItems)
     setEditOpen(true)
   }
 
@@ -119,6 +142,10 @@ export function SauceCostTab() {
       alert(t("posCostSauceCodeNameRequired") || "코드와 소스명이 필요합니다.")
       return
     }
+    const ingredients = formFoodItems.map((r) => {
+      const itemCode = getIngredientItemCode(r.ingredientCode)
+      return { itemCode: itemCode ?? "", quantity: r.quantity, lossRate: r.misePercent ?? MISE_DEFAULT }
+    }).filter((i) => i.itemCode.trim())
     try {
       await saveSauce({
         id: editing?.id,
@@ -126,8 +153,10 @@ export function SauceCostTab() {
         name,
         unit: formUnit,
         overheadPercent: formOh,
-        ingredients: formIngredients,
+        totalQuantity: formTotalQuantity > 0 ? formTotalQuantity : undefined,
+        ingredients,
       })
+      await recalculateSauces()
       setEditOpen(false)
       await load()
     } catch (e) {
@@ -146,26 +175,13 @@ export function SauceCostTab() {
     }
   }
 
-  const handleAddIngredient = () => {
-    const code = newIngCode.trim()
-    const qty = parseFloat(newIngQty) || 0
-    if (!code || qty <= 0) return
-    setFormIngredients((prev) => [...prev, { itemCode: code, quantity: qty, lossRate: parseFloat(newIngLoss) || 0 }])
-    setNewIngCode("")
-    setNewIngQty("")
-    setNewIngLoss("")
-    setAddIngOpen(false)
-  }
+  const excludeCodes = React.useMemo(() => new Set(formFoodItems.map((i) => i.ingredientCode)), [formFoodItems])
 
-  const handleRemoveIngredient = (idx: number) => {
-    setFormIngredients((prev) => prev.filter((_, i) => i !== idx))
-  }
-
-  const availableCodes = React.useMemo(() => {
-    const codes = new Set(items.map((i) => i.code))
-    sauces.forEach((s) => codes.add(s.code))
-    return Array.from(codes)
-  }, [items, sauces])
+  const handleFoodItemsChange = React.useCallback((items: RecipeItem[]) => {
+    setFormFoodItems(items)
+    const sum = Math.round(items.reduce((s, i) => s + i.quantity, 0) * 100) / 100
+    setFormTotalQuantity(sum)
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -193,19 +209,21 @@ export function SauceCostTab() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="w-20">{t("posMenuCode")}</TableHead>
-                <TableHead>{t("posCostName")}</TableHead>
-                <TableHead className="text-right">{t("posCostSauceCostPerUnit") || "단가"}</TableHead>
-                <TableHead className="text-right">{t("posCostSauceTotalCost") || "총원가"}</TableHead>
-                <TableHead className="text-right">{t("posCostSauceOh") || "OH%"}</TableHead>
-                <TableHead className="w-24"></TableHead>
+                <TableHead className="w-20 text-center">{t("posMenuCode")}</TableHead>
+                <TableHead className="text-center">{t("posCostName")}</TableHead>
+                <TableHead className="text-center">{t("posCostSauceTotalCapacity") || "총용량"} (g)</TableHead>
+                <TableHead className="text-center">{t("posCostSauceCostPerUnit") || "단가"}</TableHead>
+                <TableHead className="text-center">{t("posCostSauceTotalCost") || "총원가"}</TableHead>
+                <TableHead className="text-center">{t("posCostSauceOh") || "OH%"}</TableHead>
+                <TableHead className="w-24 text-center"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sauces.map((s) => (
                 <TableRow key={s.id ?? s.code} className="border-b">
-                  <TableCell className="font-mono text-xs">{s.code}</TableCell>
+                  <TableCell className="font-mono text-xs text-center">{s.code}</TableCell>
                   <TableCell className="font-medium">{s.name}</TableCell>
+                  <TableCell className="text-center tabular-nums">{s.totalQuantity ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums">{s.costPerUnit.toFixed(4)} ฿/{s.unit}</TableCell>
                   <TableCell className="text-right tabular-nums">{s.totalWithOverhead.toFixed(1)} ฿</TableCell>
                   <TableCell className="text-right tabular-nums">{s.overheadPercent}%</TableCell>
@@ -254,24 +272,24 @@ export function SauceCostTab() {
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? (t("posCostSauceEdit") || "소스 수정") : (t("posCostSauceNew") || "소스 추가")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-medium">{t("posMenuCode")}</label>
-                <Input value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="S001" className="mt-1" disabled={!!editing} />
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-3 rounded-xl border border-border bg-muted/20">
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">{t("posMenuCode")}</label>
+                <Input value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="" className="h-8 text-sm bg-secondary/50" disabled readOnly />
               </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCostName")}</label>
-                <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Snow Onion Sauce" className="mt-1" />
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">{t("posCostName")}</label>
+                <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="" className="h-8 text-sm bg-secondary/50" />
               </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCostUnit") || "단위"}</label>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">{t("posCostUnit") || "단위"}</label>
                 <Select value={formUnit} onValueChange={setFormUnit}>
-                  <SelectTrigger className="mt-1">
+                  <SelectTrigger className="h-8 text-sm bg-secondary/50">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -281,62 +299,32 @@ export function SauceCostTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <label className="text-xs font-medium">{t("posCostSauceOh") || "OH %"}</label>
-                <Input type="number" min={0} max={50} step={0.5} value={formOh} onChange={(e) => setFormOh(Number(e.target.value) || 0)} className="mt-1" />
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">{t("posCostSauceOh") || "OH %"}</label>
+                <Input type="number" min={0} max={50} step={0.5} value={formOh} onChange={(e) => setFormOh(Number(e.target.value) || 0)} className="h-8 text-sm bg-secondary/50" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">{t("posCostSauceTotalCapacity") || "총 용량"} (g)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={formTotalQuantity}
+                  onChange={(e) => setFormTotalQuantity(parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm bg-secondary/50 font-mono"
+                />
               </div>
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium">{t("posCostSauceIngredients") || "재료"}</label>
-                <Button variant="outline" size="sm" onClick={() => setAddIngOpen(true)}>
-                  <Plus className="h-3 w-3 mr-1" />
-                  {t("posCostSauceAddIng") || "재료 추가"}
-                </Button>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/30">
-                    <TableHead>{t("posMenuCode")}</TableHead>
-                    <TableHead>{t("posCostName")}</TableHead>
-                    <TableHead className="text-right">{t("posCostQty")}</TableHead>
-                    <TableHead className="text-center">{t("posCostUnit") || "단위"}</TableHead>
-                    <TableHead className="text-right">{t("posCostSauceCostPerUnit") || "단가"}</TableHead>
-                    <TableHead className="text-right">{t("posIngredientLoss")}</TableHead>
-                    <TableHead className="text-right">{t("posCostCostShort") || "소요비용"}</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {formIngredients.map((ing, idx) => {
-                    const refItem = items.find((i) => i.code === ing.itemCode)
-                    const refSauce = sauces.find((s) => s.code === ing.itemCode)
-                    const unit = refItem?.unit ?? refSauce?.unit ?? "g"
-                    const costPerUnit = refItem?.cost ?? refSauce?.costPerUnit ?? 0
-                    const costTotal = ing.quantity * costPerUnit * (1 + (ing.lossRate || 0) / 100)
-                    return (
-                      <TableRow key={idx}>
-                        <TableCell className="font-mono text-xs">{ing.itemCode}</TableCell>
-                        <TableCell>{refItem?.name ?? refSauce?.name ?? ing.itemCode}</TableCell>
-                        <TableCell className="text-right tabular-nums">{ing.quantity}</TableCell>
-                        <TableCell className="text-center text-muted-foreground">{unit}</TableCell>
-                        <TableCell className="text-right tabular-nums">{costPerUnit.toFixed(4)} ฿</TableCell>
-                        <TableCell className="text-right tabular-nums">{ing.lossRate > 0 ? `${ing.lossRate}%` : "-"}</TableCell>
-                        <TableCell className="text-right tabular-nums font-medium">{costTotal.toFixed(2)} ฿</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleRemoveIngredient(idx)}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-              {formIngredients.length === 0 && (
-                <div className="py-4 text-center text-sm text-muted-foreground">{t("posCostSauceNoIngredients") || "재료를 추가하세요"}</div>
-              )}
-            </div>
+            <IngredientTable
+              title={t("posCostSauceIngredients") || "재료"}
+              type="food"
+              items={formFoodItems}
+              onItemsChange={handleFoodItemsChange}
+              addDialogIncludeSauces
+              addDialogRequireStandardUnits={false}
+              excludeCodes={excludeCodes}
+              costTextDark
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>
@@ -347,74 +335,6 @@ export function SauceCostTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addIngOpen} onOpenChange={setAddIngOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("posCostSauceAddIng") || "재료 추가"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium">{t("posMenuCode")}</label>
-              <Select value={newIngCode} onValueChange={setNewIngCode}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={t("posCostSauceSelectIng") || "품목/소스 선택"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCodes.map((code) => {
-                    const refItem = items.find((i) => i.code === code)
-                    const refSauce = sauces.find((s) => s.code === code)
-                    return (
-                      <SelectItem key={code} value={code}>
-                        {code} - {refItem?.name ?? refSauce?.name ?? code}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            {newIngCode && (
-              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">{t("posCostUnit") || "단위"}: </span>
-                <span className="font-medium">{(items.find((i) => i.code === newIngCode) || sauces.find((s) => s.code === newIngCode))?.unit ?? "g"}</span>
-                <span className="mx-2 text-muted-foreground">|</span>
-                <span className="text-muted-foreground">{t("posCostSauceCostPerUnit") || "단가"}: </span>
-                <span className="font-medium tabular-nums">
-                  {((items.find((i) => i.code === newIngCode)?.cost ?? sauces.find((s) => s.code === newIngCode)?.costPerUnit) ?? 0).toFixed(4)} ฿
-                </span>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium">
-                {t("posCostQty")}{newIngCode ? ` (${(items.find((i) => i.code === newIngCode) || sauces.find((s) => s.code === newIngCode))?.unit ?? "g"})` : ""}
-              </label>
-              <Input type="number" min={0} step={0.01} value={newIngQty} onChange={(e) => setNewIngQty(e.target.value)} className="mt-1" placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs font-medium">{t("posIngredientLoss")} (%)</label>
-              <Input type="number" min={0} max={100} step={0.5} value={newIngLoss} onChange={(e) => setNewIngLoss(e.target.value)} placeholder="0" className="mt-1" />
-            </div>
-            {newIngCode && parseFloat(newIngQty) > 0 && (
-              <div className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-2">
-                <span className="text-sm text-muted-foreground">{t("posCostCostShort") || "예상 소요비용"}: </span>
-                <span className="text-sm font-semibold tabular-nums text-primary">
-                  {(
-                    (parseFloat(newIngQty) || 0) *
-                    ((items.find((i) => i.code === newIngCode)?.cost ?? sauces.find((s) => s.code === newIngCode)?.costPerUnit) ?? 0) *
-                    (1 + (parseFloat(newIngLoss) || 0) / 100)
-                  ).toFixed(2)}{" "}
-                  ฿
-                </span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddIngOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button onClick={handleAddIngredient}>{t("add") || "추가"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

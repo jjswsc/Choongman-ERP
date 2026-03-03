@@ -213,13 +213,13 @@ export async function POST(request: NextRequest) {
         Number(dataLat),
         Number(dataLng)
       )
-      if (dist <= 50) locationOk = true
-      // 매장 50m 밖이면 기록 거부 (출근/퇴근/휴식 공통)
-      if (dist > 50) {
+      if (dist <= 999) locationOk = true
+      // 매장 999m 밖이면 기록 거부 (출근/퇴근/휴식 공통)
+      if (dist > 999) {
         return NextResponse.json(
           {
             success: false,
-            message: `❌ 위치 부적합! 매장 근처(50m 이내)가 아닙니다. (현재 거리: ${Math.round(dist)}m)`,
+            message: `❌ 위치 부적합! 매장 근처(999m 이내)가 아닙니다. (현재 거리: ${Math.round(dist)}m)`,
           },
           { headers }
         )

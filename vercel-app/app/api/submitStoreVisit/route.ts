@@ -116,11 +116,11 @@ export async function POST(request: NextRequest) {
           !isNaN(lng)
         ) {
           const distance = calcDistance(targetLat, targetLng, lat, lng)
-          if (distance > 100) {
+          if (distance > 999) {
             return NextResponse.json(
               {
                 success: false,
-                msg: `❌ 위치 부적합! 매장 근처(100m 이내)가 아닙니다. (현재 거리: ${Math.round(distance)}m)`,
+                msg: `❌ 위치 부적합! 매장 근처(999m 이내)가 아닙니다. (현재 거리: ${Math.round(distance)}m)`,
               },
               { headers }
             )

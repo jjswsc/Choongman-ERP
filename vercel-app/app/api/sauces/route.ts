@@ -98,6 +98,63 @@ export async function GET() {
   }
 }
 
+async function computeAndSaveSauceCost(sauceId: number) {
+  const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
+  const [sauceRows, ingRows, itemRows, allSauceRows] = await Promise.all([
+    supabaseSelectFilter('sauces', `id=eq.${sauceId}`, { limit: 1 }),
+    supabaseSelectFilter('sauce_ingredients', `sauce_id=eq.${sauceId}`, { limit: 200 }),
+    supabaseSelect('items', { limit: 5000, select: 'code,cost,price,total_quantity,unit' }),
+    supabaseSelect('sauces', { limit: 500, select: 'id,code,cost_per_unit,overhead_percent' }),
+  ]) as [
+    { id?: number; code?: string; overhead_percent?: number }[] | null,
+    { item_code?: string; quantity?: number; loss_rate?: number }[] | null,
+    { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string }[] | null,
+    { id?: number; code?: string; cost_per_unit?: number; overhead_percent?: number }[] | null,
+  ]
+
+  const s = (sauceRows || [])[0]
+  if (!s) return
+
+  const itemCost: Record<string, number> = {}
+  for (const r of itemRows || []) {
+    const c = String(r.code ?? '').trim()
+    if (c) itemCost[c] = getItemCostPerUnit(r, false)
+  }
+
+  const sauceCostMap: Record<string, number> = {}
+  for (const row of allSauceRows || []) {
+    const c = String(row.code ?? '').trim()
+    if (c && row.id !== sauceId) sauceCostMap[c] = Number(row.cost_per_unit ?? 0)
+  }
+
+  const ings = ingRows || []
+  let totalCost = 0
+  let totalQty = 0
+  let allResolved = true
+  for (const ing of ings) {
+    const icode = String(ing.item_code ?? '').trim()
+    const qty = Number(ing.quantity ?? 1)
+    const lossRate = Number(ing.loss_rate ?? 0)
+    const cost = itemCost[icode] ?? sauceCostMap[icode]
+    if (cost === undefined) {
+      allResolved = false
+      break
+    }
+    totalCost += cost * qty * (1 + lossRate / 100)
+    totalQty += qty
+  }
+
+  if (allResolved && totalQty > 0) {
+    const oh = Number(s.overhead_percent ?? 5)
+    const costPerUnit = (totalCost * (1 + oh / 100)) / totalQty
+    await supabaseUpdate('sauces', sauceId, {
+      cost_per_unit: Math.round(costPerUnit * 1000000) / 1000000,
+      total_quantity: totalQty,
+      updated_at: new Date().toISOString(),
+    })
+  }
+}
+
 /** POST: 소스 저장 */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -110,14 +167,18 @@ export async function POST(request: NextRequest) {
     const name = String(body.name ?? '').trim()
     const unit = String(body.unit ?? 'g').trim() || 'g'
     const overheadPercent = Number(body.overheadPercent) || 5
+    const totalQuantity = body.totalQuantity != null ? Number(body.totalQuantity) : null
     const ingredients: { itemCode: string; quantity: number; lossRate?: number }[] = Array.isArray(body.ingredients) ? body.ingredients : []
 
     if (!code || !name) {
       return NextResponse.json({ success: false, message: 'code and name required' }, { status: 400, headers })
     }
 
+    const updatePayload: Record<string, unknown> = { code, name, unit, overhead_percent: overheadPercent, updated_at: new Date().toISOString() }
+    if (totalQuantity != null && totalQuantity >= 0) updatePayload.total_quantity = totalQuantity
+
     if (id) {
-      await supabaseUpdate('sauces', id, { code, name, unit, overhead_percent: overheadPercent, updated_at: new Date().toISOString() })
+      await supabaseUpdate('sauces', id, updatePayload)
       await supabaseDeleteByFilter('sauce_ingredients', `sauce_id=eq.${id}`)
       if (ingredients.length > 0) {
         const rows = ingredients.map((ing, idx) => ({
@@ -129,10 +190,13 @@ export async function POST(request: NextRequest) {
         }))
         await supabaseInsertMany('sauce_ingredients', rows)
       }
+      await computeAndSaveSauceCost(id)
       return NextResponse.json({ success: true }, { headers })
     }
 
-    const inserted = (await supabaseInsert('sauces', { code, name, unit, overhead_percent: overheadPercent })) as { id?: number }[]
+    const insertPayload: Record<string, unknown> = { code, name, unit, overhead_percent: overheadPercent }
+    if (totalQuantity != null && totalQuantity >= 0) insertPayload.total_quantity = totalQuantity
+    const inserted = (await supabaseInsert('sauces', insertPayload)) as { id?: number }[]
     const newRow = Array.isArray(inserted) ? inserted[0] : inserted
     const newId = newRow?.id
     if (!newId) return NextResponse.json({ success: false, message: 'insert failed' }, { status: 500, headers })
@@ -147,6 +211,7 @@ export async function POST(request: NextRequest) {
       }))
       await supabaseInsertMany('sauce_ingredients', rows)
     }
+    await computeAndSaveSauceCost(newId)
     return NextResponse.json({ success: true, id: newId }, { headers })
   } catch (e) {
     console.error('saveSauce:', e)

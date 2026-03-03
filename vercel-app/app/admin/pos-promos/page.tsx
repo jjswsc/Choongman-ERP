@@ -19,6 +19,7 @@ import {
   getPosPromoItems,
   getPosMenus,
   getPosMenuOptions,
+  getMarketingCampaigns,
   savePosPromo,
   savePosPromoItem,
   deletePosPromo,
@@ -38,12 +39,14 @@ const emptyForm = {
   priceDelivery: "",
   vatIncluded: true,
   isActive: true,
+  marketingCampaignId: "" as string,
 }
 
 export default function PosPromosPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const [promos, setPromos] = React.useState<PosPromo[]>([])
+  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [promoItems, setPromoItems] = React.useState<PosPromoItem[]>([])
@@ -65,11 +68,12 @@ export default function PosPromosPage() {
   }, [allOptions])
 
   React.useEffect(() => {
-    Promise.all([getPosPromos(), getPosMenus(), getPosMenuOptions()])
-      .then(([promoList, menuList, opts]) => {
+    Promise.all([getPosPromos(), getPosMenus(), getPosMenuOptions(), getMarketingCampaigns()])
+      .then(([promoList, menuList, opts, campList]) => {
         setPromos(promoList || [])
         setMenus((menuList || []).filter((m) => m.isActive))
         setAllOptions(opts || [])
+        setCampaigns((campList || []).map((c) => ({ id: c.id, topic: c.topic })))
       })
       .catch(() => {
         setPromos([])
@@ -106,6 +110,7 @@ export default function PosPromosPage() {
           priceDelivery: p.priceDelivery != null ? String(p.priceDelivery) : "",
           vatIncluded: p.vatIncluded,
           isActive: p.isActive,
+          marketingCampaignId: p.marketingCampaignId || "",
         })
       }
     } else {
@@ -133,6 +138,7 @@ export default function PosPromosPage() {
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
+      marketingCampaignId: formData.marketingCampaignId || null,
     })
     if (!res.success) {
       alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
@@ -163,6 +169,7 @@ export default function PosPromosPage() {
       priceDelivery: promo.priceDelivery != null ? String(promo.priceDelivery) : "",
       vatIncluded: promo.vatIncluded,
       isActive: promo.isActive,
+      marketingCampaignId: promo.marketingCampaignId ?? "",
     })
     setEditingId(promo.id)
     setNewItemMenuId("")
@@ -325,6 +332,20 @@ export default function PosPromosPage() {
                   />
                   {t("posMenuActive")}
                 </label>
+              </div>
+              <div>
+                <label className="text-xs font-semibold">마케팅 캠페인</label>
+                <Select value={formData.marketingCampaignId || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, marketingCampaignId: v === "_" ? "" : v }))}>
+                  <SelectTrigger className="mt-1 h-10">
+                    <SelectValue placeholder="선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_">없음</SelectItem>
+                    {campaigns.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.topic}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {editingId && (
                 <div className="rounded border border-dashed p-3">
