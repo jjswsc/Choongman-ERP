@@ -109,21 +109,28 @@ export async function POST(request: NextRequest) {
           )
         }
       }
-      // 퇴근·휴식시작·휴식종료(재개)는 당일 출근 기록이 있어야만 기록 가능
-      // 자정 넘김(00:00~06:59 방콕): 전날 출근도 인정 (오후/심야 근무 → 익일 새벽 퇴근)
+      // 퇴근·휴식시작·휴식종료(재개)는 출근 기록이 있어야만 기록 가능
+      // 1) 당일 출근, 2) 자정 넘김 00~06시: 전날 출근, 3) 미종료 세션: 전날 출근 후 퇴근 누락 → 익일 퇴근 허용
       if (logType === '퇴근' || logType === '휴식시작' || logType === '휴식종료') {
         const bangkokHour = getBangkokHour()
         const validDates = [todayStrVal]
         if (bangkokHour >= 0 && bangkokHour <= 6) {
           validDates.push(addDays(todayStrVal, -1))
         }
-        const hasInToday = (logs || []).some(
+        const hasInValidDate = (logs || []).some(
           (r) => {
             const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
             return validDates.includes(rowDate) && String(r.log_type || '').trim() === '출근'
           }
         )
-        if (!hasInToday) {
+        // 퇴근만: 미종료 세션(출근 후 퇴근 없음)이면 전날 출근도 인정 (getTodayAttendanceTypes와 동일한 오픈 세션 판단)
+        let hasOpenSession = false
+        if (logType === '퇴근' && !hasInValidDate) {
+          const lastOut = (logs || []).find((r) => String(r.log_type || '').trim() === '퇴근')
+          const lastIn = (logs || []).find((r) => String(r.log_type || '').trim() === '출근')
+          hasOpenSession = !!lastIn && (!lastOut || new Date(lastIn.log_at!).getTime() > new Date(lastOut.log_at!).getTime())
+        }
+        if (!hasInValidDate && !hasOpenSession) {
           return NextResponse.json(
             {
               success: false,
