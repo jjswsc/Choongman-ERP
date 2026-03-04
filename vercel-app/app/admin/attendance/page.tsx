@@ -555,7 +555,7 @@ export default function AdminAttendancePage() {
                                   onClick={async (e) => {
                                     const outId = pendingOut ?? row.pendingId!
                                     const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                    const keyForInput = String(pendingOut ?? row.pendingId ?? (row.outLogId ?? adjustKey))
+                                    const keyForInput = String(pendingOut ?? row.pendingId ?? row.outLogId ?? `${row.date}-${row.store}-${row.name}`)
                                     const input = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${keyForInput}"]`)
                                     const fromInput = input?.value?.trim()
                                     const defaultVal =
