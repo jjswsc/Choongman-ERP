@@ -35,7 +35,7 @@ export function AdminNoticeSection() {
       setNoticeStores(isOffice ? (r.stores || []) : [auth.store])
       setNoticeRoles(r.roles || [])
     })
-  }, [auth])
+  }, [auth?.store, auth?.role])
 
   const toggleNoticeStore = (v: string) => {
     setNoticeStoreSelected((prev) => {

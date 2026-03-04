@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
       if (!rowDate || rowDate < startStr) continue
       // 조회 구간 밖 날짜: 익일 새벽 퇴근(자정 넘김)만 허용 → 전날 행에 붙이기 위함
       if (rowDate > endStr) {
-        const isOvernightOutForRange = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDay(endStr, 1)
+        const isOvernightOutForRange = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDay(endStr, 1)
         if (!isOvernightOutForRange) continue
       }
       const rowStore = String(r.store_name || '').trim()

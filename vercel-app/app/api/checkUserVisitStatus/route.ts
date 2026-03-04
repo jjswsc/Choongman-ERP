@@ -36,9 +36,9 @@ export async function GET(request: NextRequest) {
   try {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
     let list = await fetchVisitList(userName, today)
-    // 자정 넘김(00:00~06:59 방콕): 전날 방문시작도 조회 (밤에 시작한 방문 → 익일 새벽 종료)
+    // 자정 넘김(00:00~07:59 방콕): 전날 방문시작도 조회 (밤에 시작한 방문 → 익일 새벽 종료)
     const bangkokHour = getBangkokHour()
-    if (bangkokHour >= 0 && bangkokHour <= 6) {
+    if (bangkokHour >= 0 && bangkokHour <= 7) {
       const yesterday = addDays(today, -1)
       const yesterdayList = await fetchVisitList(userName, yesterday)
       list = [...yesterdayList, ...list].sort((a, b) => {
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: TZ })
     let list = await fetchVisitList(userName, today)
     const bangkokHour = getBangkokHour()
-    if (bangkokHour >= 0 && bangkokHour <= 6) {
+    if (bangkokHour >= 0 && bangkokHour <= 7) {
       const yesterday = addDays(today, -1)
       const yesterdayList = await fetchVisitList(userName, yesterday)
       list = [...yesterdayList, ...list].sort((a, b) => {

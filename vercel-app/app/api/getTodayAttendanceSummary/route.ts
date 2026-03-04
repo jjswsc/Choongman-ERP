@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
 
 const TZ = 'Asia/Bangkok'
-
-/** log_at(UTC ISO) → 방콕 기준 날짜 YYYY-MM-DD */
-function toDateStr(val: string | Date | null | undefined): string {
-  if (!val) return ''
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
-}
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -24,24 +18,36 @@ export async function GET(request: NextRequest) {
   try {
     const isAll = !store || store.toLowerCase() === 'all' || store === '전체' || store === '전체 매장'
     type AttRow = { log_at?: string; store_name?: string; name?: string; log_type?: string; late_min?: number; early_min?: number; ot_min?: number; break_min?: number; status?: string; approved?: string; id?: number }
+
+    // dateStr ~ dateStr+1 조회 (자정 넘김 퇴근 포함: 익일 00~06시)
+    const nextDayStr = addDayBangkok(dateStr, 1)
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(dateStr, nextDayStr)
+    const logFilter = `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(endISOExclusive)}`
+    const storeFilter = isAll ? '' : `&store_name=ilike.${encodeURIComponent(store)}`
     let rows: AttRow[] = []
     if (isAll) {
-      rows = (await supabaseSelect('attendance_logs', { order: 'log_at.desc', limit: 500 })) as AttRow[]
+      rows = (await supabaseSelectFilter('attendance_logs', logFilter, { order: 'log_at.asc', limit: 500 })) as AttRow[]
     } else {
-      rows = (await supabaseSelectFilter('attendance_logs', `store_name=ilike.${encodeURIComponent(store)}`, { order: 'log_at.desc', limit: 300 })) as AttRow[]
+      rows = (await supabaseSelectFilter('attendance_logs', `${logFilter}${storeFilter}`, { order: 'log_at.asc', limit: 500 })) as AttRow[]
     }
-    const filtered = (rows || []).filter((r) => toDateStr(r.log_at) === dateStr)
 
     const byKey: Record<string, { store: string; name: string; inTime: string | null; outTime: string | null; lateMin: number; earlyMin: number; otMin: number; breakMin: number; status: string; approval: string; onlyIn: boolean }> = {}
 
-    for (const r of filtered) {
-      const rowDate = toDateStr(r.log_at)
-      if (rowDate !== dateStr) continue
+    for (const r of rows || []) {
+      const rowDate = toDateStrBangkok(r.log_at)
       const rowStore = String(r.store_name || '').trim()
       if (!isAll && rowStore.toLowerCase() !== store.toLowerCase()) continue
       const name = String(r.name || '').trim()
       const key = `${rowStore}|${name}`
       const type = String(r.log_type || '').trim()
+      const logAt = r.log_at || ''
+
+      // 익일 00~07시 퇴근만 자정 넘김으로 허용 (그 외 익일 로그는 무시)
+      if (rowDate === nextDayStr) {
+        if (type !== '퇴근' || getBangkokHour(logAt) > 7) continue
+      } else if (rowDate !== dateStr) {
+        continue
+      }
 
       if (!byKey[key]) {
         byKey[key] = {
@@ -59,7 +65,6 @@ export async function GET(request: NextRequest) {
         }
       }
       const rec = byKey[key]
-      const logAt = r.log_at || ''
 
       if (type === '출근') {
         if (!rec.inTime || (logAt && (!rec.inTime || logAt < rec.inTime))) {

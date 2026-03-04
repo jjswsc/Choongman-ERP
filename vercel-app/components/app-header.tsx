@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { LogOut, LayoutDashboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -41,13 +40,13 @@ export function AppHeader() {
       </div>
       <div className="flex items-center gap-2">
         {canShowAdminButton && (
-          <Link
+          <a
             href="/admin"
             className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
             title={t("adminDashboard") || "관리자"}
           >
             <LayoutDashboard className="h-4 w-4" />
-          </Link>
+          </a>
         )}
         <Select value={lang} onValueChange={(v) => setLang(v as LangCode)}>
           <SelectTrigger className="h-8 w-20 text-xs">

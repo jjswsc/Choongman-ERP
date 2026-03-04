@@ -60,13 +60,13 @@ export function NoticeCompose() {
     if (!auth?.store) return
     const isOffice = auth.role === "director" || auth.role === "officer"
     getNoticeOptions().then((r) => {
+      const allLabel = t("noticeFilterAll")
       const storeList = isOffice ? (r.stores || []) : [auth.store!]
-      const allStores = [t("noticeFilterAll"), ...storeList]
-      setStores(allStores)
-      setPositions([t("noticeFilterAll"), ...(r.roles || [])])
-      setPermissionGroups([t("noticeFilterAll"), ...(r.permissionGroups || [])])
+      setStores([allLabel, ...storeList])
+      setPositions([allLabel, ...(r.roles || [])])
+      setPermissionGroups([allLabel, ...(r.permissionGroups || [])])
     })
-  }, [auth?.store, auth?.role, t])
+  }, [auth?.store, auth?.role, lang])
 
   const toggleStore = (store: string) => {
     const allLabel = t("noticeFilterAll")

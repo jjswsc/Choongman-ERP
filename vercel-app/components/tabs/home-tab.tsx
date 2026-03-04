@@ -14,10 +14,15 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import dynamic from "next/dynamic"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
 import { Megaphone, Bell, Search, FileText } from "lucide-react"
-import { PushNotificationSetup } from "@/components/push-notification-setup"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
+
+const PushNotificationSetup = dynamic(
+  () => import("@/components/push-notification-setup").then((m) => ({ default: m.PushNotificationSetup })),
+  { ssr: false }
+)
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)

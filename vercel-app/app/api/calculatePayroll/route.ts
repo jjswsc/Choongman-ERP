@@ -93,7 +93,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
     const logAt = r.log_at || ''
     if (!rowDate || rowDate < startStr) continue
     if (rowDate > endStr) {
-      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDayBangkok(endStr, 1)
+      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
       if (!allowOvernightOut) continue
     }
     const store = String(r.store_name || '').trim()

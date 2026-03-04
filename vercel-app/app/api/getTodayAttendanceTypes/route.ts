@@ -60,13 +60,14 @@ export async function GET(request: NextRequest) {
     }
 
     // 오픈 세션: 출근 후 퇴근이 없는 상태 (자정 넘어도 포함)
-    // 전날 출근 후 퇴근 누락이면: 오늘 출근 버튼도 활성화 (출근 먼저 누르라는 강제 해소)
+    // 전날 출근 후 퇴근 누락이면: 출근도 types에 넣어 퇴근 버튼 활성화 (hasClockIn=true)
     for (let i = 0; i < arr.length; i++) {
       const typ = String(arr[i].log_type || '').trim()
       const logAt = arr[i].log_at
       const rowDate = logAt ? new Date(logAt).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
       if (typ === '출근') {
-        if (rowDate === todayStr && !types.includes(typ)) types.push(typ)
+        // 오픈 세션이면 당일/전날 출근 모두 인정 → 퇴근 버튼 활성화
+        if (!types.includes(typ)) types.push(typ)
         break
       }
       if (typ && !types.includes(typ)) types.push(typ)

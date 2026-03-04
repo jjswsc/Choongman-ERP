@@ -56,7 +56,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
     const logAt = r.log_at || ''
     if (!rowDate || rowDate < startStr) continue
     if (rowDate > endStr) {
-      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) < 7 && rowDate === addDayBangkok(endStr, 1)
+      const allowOvernightOut = type === '퇴근' && getBangkokHour(logAt) <= 7 && rowDate === addDayBangkok(endStr, 1)
       if (!allowOvernightOut) continue
     }
     const store = String(r.store_name || '').trim()
@@ -276,6 +276,9 @@ export async function GET(request: NextRequest) {
       const hazAllowPerDay = Number(e.haz_allow) || 0
       const joinDate = e.join_date ? new Date(e.join_date) : new Date()
 
+      /** Director는 출퇴근 개념 없이 고정 급여. 기록된 sal_amt 그대로 사용, 가감 없음 */
+      const isDirectorRole = String(e.role || '').trim().toLowerCase().includes('director')
+
       let salary = salAmt
       let birthBonus = 0
       if (e.birth) {
@@ -300,32 +303,45 @@ export async function GET(request: NextRequest) {
       let lateDed = 0
       let earlyDed = 0
       let otAmt = 0
-      const ot15 = Math.round((otMin / 60) * 10) / 10
-
-      if (isHourly) {
-        salary = salAmt > 0 && workMin > 0 ? Math.floor((workMin / 60) * salAmt) : 0
-        lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
-        earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
-        otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
-      } else {
-        const hoursBase = LATE_DED_HOURS_BASE
-        lateDed = hoursBase > 0 && salary > 0 ? Math.floor((lateMin / 60) * (salary / hoursBase)) : 0
-        earlyDed = hoursBase > 0 && salary > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * (salary / hoursBase)) : 0
-        const hourlyRateForOt = hoursBase > 0 && salary > 0 ? salary / hoursBase : 0
-        otAmt = hourlyRateForOt > 0 ? Math.floor((otMin / 60) * hourlyRateForOt * OT_MULTIPLIER) : 0
-      }
-
-      const contributable = Math.min(salary, ssoLimits.ceiling)
-      const sso = Math.min(Math.floor(contributable * 0.05), ssoLimits.maxDed)
-
-      const holidayWorkDays = holidayWorkMap[attKey] || 0
+      let sso = 0
       let holidayPay = 0
-      if (holidayWorkDays > 0) {
-        if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt)
-        else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
+      let ot15 = 0
+
+      if (isDirectorRole) {
+        salary = salAmt
+        lateDed = 0
+        earlyDed = 0
+        otAmt = 0
+        sso = 0
+        holidayPay = 0
+        hazAllow = 0
+        birthBonus = 0
+        ot15 = 0
+      } else {
+        ot15 = Math.round((otMin / 60) * 10) / 10
+        if (isHourly) {
+          salary = salAmt > 0 && workMin > 0 ? Math.floor((workMin / 60) * salAmt) : 0
+          lateDed = salAmt > 0 && lateMin > 0 ? Math.floor((lateMin / 60) * salAmt) : 0
+          earlyDed = salAmt > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * salAmt) : 0
+          otAmt = salAmt > 0 && otMin > 0 ? Math.floor((otMin / 60) * salAmt * OT_MULTIPLIER) : 0
+        } else {
+          const hoursBase = LATE_DED_HOURS_BASE
+          lateDed = hoursBase > 0 && salary > 0 ? Math.floor((lateMin / 60) * (salary / hoursBase)) : 0
+          earlyDed = hoursBase > 0 && salary > 0 && earlyMin > 0 ? Math.floor((earlyMin / 60) * (salary / hoursBase)) : 0
+          const hourlyRateForOt = hoursBase > 0 && salary > 0 ? salary / hoursBase : 0
+          otAmt = hourlyRateForOt > 0 ? Math.floor((otMin / 60) * hourlyRateForOt * OT_MULTIPLIER) : 0
+        }
+        const contributable = Math.min(salary, ssoLimits.ceiling)
+        sso = Math.min(Math.floor(contributable * 0.05), ssoLimits.maxDed)
+        const holidayWorkDays = holidayWorkMap[attKey] || 0
+        if (holidayWorkDays > 0) {
+          if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt)
+          else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
+        }
       }
 
-      const income = salary + posAllow + hazAllow + birthBonus + holidayPay + otAmt
+      const effectivePosAllow = isDirectorRole ? 0 : posAllow
+      const income = salary + effectivePosAllow + hazAllow + birthBonus + holidayPay + otAmt
       const deduct = lateDed + earlyDed + sso
       const netPay = income - deduct
 
@@ -335,7 +351,7 @@ export async function GET(request: NextRequest) {
         dept,
         role,
         salary,
-        posAllow,
+        posAllow: effectivePosAllow,
         hazAllow,
         birthBonus,
         holidayPay,

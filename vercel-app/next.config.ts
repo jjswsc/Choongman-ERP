@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { RetryChunkLoadPlugin } from "webpack-retry-chunk-load-plugin";
 
 const vercelAppDir = __dirname;
 
@@ -40,6 +41,17 @@ const nextConfig: NextConfig = {
       config.plugins.push(
         new webpack.DefinePlugin({
           self: "globalThis",
+        })
+      );
+    }
+    // ChunkLoadError 재시도 (모바일·느린 네트워크에서 layout 청크 로딩 실패 방지)
+    if (!isServer) {
+      config.plugins = config.plugins || [];
+      config.plugins.push(
+        new RetryChunkLoadPlugin({
+          maxRetries: 3,
+          retryDelay: 2000,
+          cacheBust: `function() { return Date.now(); }`,
         })
       );
     }

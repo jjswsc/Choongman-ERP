@@ -66,6 +66,40 @@ export function AdminNoticeHistory() {
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
+  const [searchType, setSearchType] = React.useState<"notice" | "order">("notice")
+  const [searchKeyword, setSearchKeyword] = React.useState("")
+
+  /** 주문승인/반려/보류/강제출고/발주 관련 공지 여부 */
+  const isOrderRelated = React.useCallback((n: SentNoticeItem) => {
+    const title = (n.title || "").toLowerCase()
+    const content = ((n.content || n.preview) || "").toLowerCase()
+    if (/주문.*(승인|반려|보류)/.test(title) || /주문\s*#\d+/.test(title)) return true
+    if (/강제|출고|발주/.test(title) || /강제|출고|발주/.test(content)) return true
+    if (/주문.*확인|승인.*화면/.test(content)) return true
+    return false
+  }, [])
+
+  const filteredNotices = React.useMemo(() => {
+    let list = notices
+    const q = searchKeyword.trim().toLowerCase()
+    if (searchType === "notice") {
+      if (q) {
+        list = list.filter(
+          (n) =>
+            (n.title || "").toLowerCase().includes(q) ||
+            ((n.content || n.preview) || "").toLowerCase().includes(q)
+        )
+      }
+    } else {
+      list = list.filter((n) => {
+        if (!isOrderRelated(n)) return false
+        if (!q) return true
+        const text = ((n.title || "") + " " + (n.content || n.preview || "")).toLowerCase()
+        return text.includes(q)
+      })
+    }
+    return list
+  }, [notices, searchType, searchKeyword, isOrderRelated])
 
   const loadNotices = React.useCallback(() => {
     if (!auth?.store || !auth?.user) return
@@ -167,63 +201,85 @@ export function AdminNoticeHistory() {
         </div>
       </div>
 
-      {/* Date filter + Sender filter */}
-      <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4 bg-muted/20">
-        <div className="min-w-[140px]">
-          <Select value={senderFilter} onValueChange={setSenderFilter}>
-            <SelectTrigger className="h-9 text-xs">
-              <SelectValue placeholder={t("noticeSenderAll")} />
+      {/* 1행: 공지사항 검색타입 + 검색창 + 검색 버튼 */}
+      {/* 2행: 내 발송분 + 기간 */}
+      <div className="border-b px-6 py-4 space-y-3 bg-muted/20">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={searchType} onValueChange={(v) => setSearchType(v as "notice" | "order")}>
+            <SelectTrigger className="h-9 w-[100px] text-xs">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t("noticeSenderAll")}</SelectItem>
-              <SelectItem value="mine">{t("noticeSenderMine")}</SelectItem>
-              {senders
-                .filter((s) => s !== (auth?.user || ''))
-                .map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
+              <SelectItem value="notice">{t("noticeSearchTypeNotice")}</SelectItem>
+              <SelectItem value="order">{t("noticeSearchTypeOrder")}</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        <Input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="date-input-compact h-9 w-40 text-xs"
-        />
-        <span className="text-xs font-medium text-muted-foreground">~</span>
-        <Input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          className="date-input-compact h-9 w-40 text-xs"
-        />
-        <Button
-          size="sm"
-          className="h-9 px-4 text-xs font-semibold"
-          onClick={loadNotices}
-          disabled={loading}
-        >
-          <Search className="mr-1.5 h-3.5 w-3.5" />
-          {loading ? t("loading") : t("search")}
-        </Button>
-        <div className="ml-auto">
-          <span className="text-[11px] font-semibold text-muted-foreground">
+          <Input
+            placeholder={
+              searchType === "notice"
+                ? t("noticeSearchNoticePh")
+                : t("noticeSearchOrderApprovalPh")
+            }
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="h-9 flex-1 min-w-[140px] max-w-[280px] text-xs"
+          />
+          <Button
+            size="sm"
+            className="h-9 px-4 text-xs font-semibold shrink-0"
+            onClick={loadNotices}
+            disabled={loading}
+          >
+            <Search className="mr-1.5 h-3.5 w-3.5" />
+            {loading ? t("loading") : t("search")}
+          </Button>
+          <span className="text-[11px] font-semibold text-muted-foreground ml-auto">
             {t("noticeCountPrefix")}{" "}
-            <span className="text-foreground">{notices.length}</span>
+            <span className="text-foreground">{filteredNotices.length}</span>
             {t("noticeCountSuffix")}
           </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-[120px]">
+            <Select value={senderFilter} onValueChange={setSenderFilter}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder={t("noticeSenderAll")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("noticeSenderAll")}</SelectItem>
+                <SelectItem value="mine">{t("noticeSenderMine")}</SelectItem>
+                {senders
+                  .filter((s) => s !== (auth?.user || ''))
+                  .map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="date-input-compact h-9 w-[140px] text-xs"
+          />
+          <span className="text-xs font-medium text-muted-foreground">~</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="date-input-compact h-9 w-[140px] text-xs"
+          />
         </div>
       </div>
 
       {/* Notice list */}
       <div className="flex flex-col">
-        {notices.length === 0 ? (
+        {filteredNotices.length === 0 ? (
           <div className="py-12 px-6 text-center text-sm text-muted-foreground">
             {t("adminNoNoticesFound")}
           </div>
         ) : (
-          notices.map((notice, idx) => {
+          filteredNotices.map((notice, idx) => {
             const isExpanded = expandedId === notice.id
             const readPercent =
               notice.totalCount > 0

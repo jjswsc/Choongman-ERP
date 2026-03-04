@@ -101,6 +101,7 @@ export function PettyCashTab() {
   })
   const [monthlyPeriodEnd, setMonthlyPeriodEnd] = useState(todayStr)
   const receiptFileInputRef = useRef<HTMLInputElement>(null)
+  const receiptCameraInputRef = useRef<HTMLInputElement>(null)
 
   const [editModalItem, setEditModalItem] = useState<PettyCashItem | null>(null)
   const [editDate, setEditDate] = useState(todayStr)
@@ -112,6 +113,7 @@ export function PettyCashTab() {
   const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
+  const editReceiptCameraInputRef = useRef<HTMLInputElement>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   useEffect(() => {
@@ -673,24 +675,38 @@ ${rows.map((row, ri) => {
                       <Camera className="h-3.5 w-3.5" />
                       {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
-                        ref={receiptFileInputRef}
+                        ref={receiptCameraInputRef}
                         type="file"
                         accept="image/*"
                         capture="environment"
                         onChange={handleReceiptChange}
                         className="sr-only"
                       />
+                      <input
+                        ref={receiptFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleReceiptChange}
+                        className="sr-only"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => receiptCameraInputRef.current?.click()}
+                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                      >
+                        {t("pettyReceiptTakePhoto")}
+                      </button>
                       <button
                         type="button"
                         onClick={() => receiptFileInputRef.current?.click()}
-                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                        className="rounded border border-input bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted"
                       >
-                        {addReceiptFile ? addReceiptFile.name : t("chooseFile")}
+                        {t("chooseFile")}
                       </button>
-                      {!addReceiptFile && (
-                        <span className="text-xs text-muted-foreground">{t("noFileChosen")}</span>
+                      {addReceiptFile && (
+                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{addReceiptFile.name}</span>
                       )}
                       {addReceiptPreview && (
                         <div className="relative shrink-0">
@@ -963,24 +979,41 @@ ${rows.map((row, ri) => {
                       <Camera className="h-3.5 w-3.5" />
                       {t("pettyReceiptPhoto")} <span className="text-muted-foreground">({t("optional")})</span>
                     </label>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       <input
-                        ref={editReceiptFileInputRef}
+                        ref={editReceiptCameraInputRef}
                         type="file"
                         accept="image/*"
                         capture="environment"
                         onChange={handleEditReceiptChange}
                         className="sr-only"
                       />
+                      <input
+                        ref={editReceiptFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditReceiptChange}
+                        className="sr-only"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editReceiptCameraInputRef.current?.click()}
+                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                      >
+                        {t("pettyReceiptTakePhoto")}
+                      </button>
                       <button
                         type="button"
                         onClick={() => editReceiptFileInputRef.current?.click()}
-                        className="rounded border border-input bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20"
+                        className="rounded border border-input bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted"
                       >
-                        {editReceiptFile ? editReceiptFile.name : t("chooseFile")}
+                        {t("chooseFile")}
                       </button>
                       {editModalItem.receipt_url && !editReceiptFile && (
                         <span className="text-xs text-muted-foreground">{t("pettyColReceipt") || "영수증"} ✓</span>
+                      )}
+                      {editReceiptFile && (
+                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">{editReceiptFile.name}</span>
                       )}
                       {editReceiptPreview && (
                         <div className="relative shrink-0">

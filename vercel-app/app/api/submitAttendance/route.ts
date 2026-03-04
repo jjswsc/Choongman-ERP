@@ -110,11 +110,11 @@ export async function POST(request: NextRequest) {
         }
       }
       // 퇴근·휴식시작·휴식종료(재개)는 출근 기록이 있어야만 기록 가능
-      // 1) 당일 출근, 2) 자정 넘김 00~06시: 전날 출근, 3) 미종료 세션: 전날 출근 후 퇴근 누락 → 익일 퇴근 허용
+      // 1) 당일 출근, 2) 자정 넘김 00~07시: 전날 출근, 3) 미종료 세션: 전날 출근 후 퇴근 누락 → 익일 퇴근 허용
       if (logType === '퇴근' || logType === '휴식시작' || logType === '휴식종료') {
         const bangkokHour = getBangkokHour()
         const validDates = [todayStrVal]
-        if (bangkokHour >= 0 && bangkokHour <= 6) {
+        if (bangkokHour >= 0 && bangkokHour <= 7) {
           validDates.push(addDays(todayStrVal, -1))
         }
         const hasInValidDate = (logs || []).some(

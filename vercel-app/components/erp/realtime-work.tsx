@@ -302,12 +302,12 @@ export function RealtimeWork({ storeFilter: storeFilterProp = "", storeList: sto
                   const outDec = parseTimeToDecimal(p.pOut)
                   const bsDec = parseTimeToDecimal(p.pBS)
                   const beDec = parseTimeToDecimal(p.pBE)
-                  // 휴가일: 보라 배경. 그 외 출근만 하면 파란색, 휴식·퇴근 안 맞으면 빨간색
+                  // 휴가일: 보라 배경. 그 외 출근만 하면 파란색, 지각·조퇴 등이면 빨간색. 퇴근미기록(근무중)은 정상
                   const hasProblem: boolean = !isLeave && (!att
                     ? true
                     : Boolean(
                         (att.lateMin && att.lateMin > 0) ||
-                          (att.status && /지각|결석|미기록|조퇴|휴게초과/.test(att.status))
+                          (att.status && att.status !== '퇴근미기록' && /지각|결석|미기록|조퇴|휴게초과/.test(att.status))
                       ))
                   const rowBg = isLeave
                     ? "bg-violet-50/80 dark:bg-violet-950/40"
