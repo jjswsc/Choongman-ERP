@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
 
 
@@ -67,13 +67,36 @@ export async function POST(req: Request) {
     }
 
     const rowId = Number(d.row)
+    const newStore = String(d.store || '').trim()
+    const newName = String(d.name || '').trim()
+
     if (rowId === 0) {
       payload.password = passwordValue || ''
       await supabaseInsert('employees', payload)
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
+
+    // 직원 수정 시: 이름·매장 변경이면 attendance_logs 등 관련 테이블도 함께 갱신 → 재출근 불필요
+    const existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, { limit: 1 })) as { store?: string; name?: string }[]
+    const oldStore = existing?.[0] ? String(existing[0].store || '').trim() : ''
+    const oldName = existing?.[0] ? String(existing[0].name || '').trim() : ''
+    const nameOrStoreChanged = (oldName !== newName || oldStore !== newStore) && (oldName || oldStore)
+
     if (passwordValue) payload.password = passwordValue
     await supabaseUpdate('employees', rowId, payload)
+
+    if (nameOrStoreChanged) {
+      try {
+        const attFilter = `store_name=ilike.${encodeURIComponent(oldStore)}&name=ilike.${encodeURIComponent(oldName)}`
+        await supabaseUpdateByFilter('attendance_logs', attFilter, {
+          store_name: newStore,
+          name: newName,
+        })
+      } catch (_) {
+        // attendance_logs 업데이트 실패해도 직원 저장은 완료됨
+      }
+    }
+
     return NextResponse.json({ success: true, message: '✅ 직원 정보가 수정되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveAdminEmployee:', e)
