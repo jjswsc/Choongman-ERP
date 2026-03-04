@@ -438,7 +438,8 @@ export function AdminTab() {
                                 onClick={async (e) => {
                                   const outId = pendingOut ?? row.pendingId!
                                   const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                  const inputEl = tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                  const keyForInput = String(pendingOut ?? row.pendingId ?? adjustKey)
+                                  const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${keyForInput}"]`)
                                   const fromInput = inputEl?.value?.trim()
                                   const otVal = fromInput ?? adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? defaultVal
                                   const n = parseInt(otVal, 10)
@@ -464,11 +465,12 @@ export function AdminTab() {
                               size="sm"
                               variant="outline"
                               className="h-6 px-1.5 text-[10px]"
-                              onClick={(e) => {
+                                onClick={(e) => {
                                 const outId = row.outLogId!
                                 const adjustKey = row.outLogId!
-                                const elVal = adjustInputElRef.current[String(adjustKey)]?.value?.trim()
-                                const fromInput = elVal ?? (e.currentTarget as HTMLElement).closest("tr")?.querySelector<HTMLInputElement>("input[data-adjust-key]")?.value?.trim()
+                                const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${adjustKey}"]`)
+                                const fromInput = inputEl?.value?.trim()
                                 const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                                 const defaultVal =
                                   row.plannedWorkHrs > 0 && row.diffMin < 0

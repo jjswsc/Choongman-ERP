@@ -555,7 +555,8 @@ export default function AdminAttendancePage() {
                                   onClick={async (e) => {
                                     const outId = pendingOut ?? row.pendingId!
                                     const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                    const input = tr?.querySelector<HTMLInputElement>("input[data-adjust-key]")
+                                    const keyForInput = String(pendingOut ?? row.pendingId ?? (row.outLogId ?? adjustKey))
+                                    const input = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${keyForInput}"]`)
                                     const fromInput = input?.value?.trim()
                                     const defaultVal =
                                       row.plannedWorkHrs > 0 && row.diffMin < 0
@@ -596,8 +597,9 @@ export default function AdminAttendancePage() {
                                 onClick={(e) => {
                                   const outId = row.outLogId!
                                   const adjustKey = row.outLogId!
-                                  const elVal = adjustInputElRef.current[String(adjustKey)]?.value?.trim()
-                                  const fromInput = elVal ?? (e.currentTarget as HTMLElement).closest("tr")?.querySelector<HTMLInputElement>("input[data-adjust-key]")?.value?.trim()
+                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
+                                  const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${adjustKey}"]`)
+                                  const fromInput = inputEl?.value?.trim()
                                   const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                                   const defaultVal =
                                     row.plannedWorkHrs > 0 && row.diffMin < 0

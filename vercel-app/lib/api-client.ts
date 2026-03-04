@@ -679,10 +679,16 @@ export async function getAttendancePendingList(params: {
 }
 
 export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; optEarlyMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
+  const body: Record<string, unknown> = { id: params.id, decision: params.decision }
+  if (params.optOtMinutes != null) body.optOtMinutes = params.optOtMinutes
+  if (params.optEarlyMinutes != null) body.optEarlyMinutes = params.optEarlyMinutes
+  if (params.waiveLate) body.waiveLate = true
+  if (params.userStore) body.userStore = params.userStore
+  if (params.userRole) body.userRole = params.userRole
   const res = await apiFetch('/api/processAttendanceApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
