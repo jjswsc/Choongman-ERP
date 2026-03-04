@@ -372,6 +372,8 @@ export async function GET(request: NextRequest) {
           : otMinForRow > 0
             ? otMinForRow
             : Math.min(Math.max(0, diffMin), otCap)
+      // 지각/연장 열 표시: 연장 30분 미만이면 0으로 표시
+      const displayOtMin = effectiveOtMin >= 30 ? effectiveOtMin : 0
 
       if (pendingOnly && !isPending) continue
 
@@ -408,7 +410,7 @@ export async function GET(request: NextRequest) {
         diffMin,
         lateMin: effectiveLateMin,
         earlyMin: earlyMinForRow,
-        otMin: effectiveOtMin,
+        otMin: displayOtMin,
         status: displayStatus,
         approval: approval || '대기',
         pendingId: outIdForRow ?? inIdForRow,

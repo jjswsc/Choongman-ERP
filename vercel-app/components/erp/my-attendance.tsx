@@ -30,6 +30,7 @@ import {
   type AttendanceLogItem,
   type LeaveHistoryItem,
 } from "@/lib/api-client"
+import { getDayOfWeekBangkok } from "@/lib/attendance-utils"
 
 const DAY_KEYS = ["scheduleSun", "scheduleMon", "scheduleTue", "scheduleWed", "scheduleThu", "scheduleFri", "scheduleSat"] as const
 
@@ -56,18 +57,18 @@ function getMonthRange(yearMonth: string): { start: string; end: string } {
   return { start, end }
 }
 
+/** 방콕 기준 월별 날짜 목록 (날짜·요일). toISOString은 UTC라 타임존에서 하루 밀리므로 방콕 날짜·getDayOfWeekBangkok 사용 */
 function getAllDaysInMonth(yearMonth: string): { date: string; day: number }[] {
   const m = yearMonth.trim().match(/^(\d{4})-(\d{1,2})/)
   if (!m) return []
   const y = parseInt(m[1], 10)
-  const mo = parseInt(m[2], 10) - 1
+  const mo = parseInt(m[2], 10)
+  const lastDay = new Date(y, mo, 0).getDate()
   const days: { date: string; day: number }[] = []
-  const d = new Date(y, mo, 1)
-  while (d.getMonth() === mo) {
-    const dateStr = d.toISOString().slice(0, 10)
-    const day = d.getDay() // 0=Sun, 6=Sat
+  for (let d = 1; d <= lastDay; d++) {
+    const dateStr = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+    const day = getDayOfWeekBangkok(dateStr) // 0=Sun, 6=Sat (방콕 기준)
     days.push({ date: dateStr, day })
-    d.setDate(d.getDate() + 1)
   }
   return days
 }
