@@ -38,9 +38,9 @@ export async function GET() {
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
   const url = (process.env.SUPABASE_URL || '').trim()
-  const key = process.env.SUPABASE_ANON_KEY
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
   if (!url || !key) {
-    const msg = 'SUPABASE_URL 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
+    const msg = 'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 없습니다. .env를 확인하고 개발 서버를 재시작하세요.'
     console.error('getLoginData:', msg)
     return NextResponse.json(
       { users: {}, vendors: [], error: msg },

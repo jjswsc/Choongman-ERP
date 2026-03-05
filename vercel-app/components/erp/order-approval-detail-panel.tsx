@@ -47,6 +47,8 @@ interface OrderApprovalDetailPanelProps {
   displayItems: OrderItem[]
   detailSortByCode: "asc" | "desc" | null
   isManager: boolean
+  /** 오피스 직원 여부 (배송일 수정·저장 가능) */
+  canEditDeliveryDate?: boolean
   submittingId: string | null
   deliveryDatesByOutboundByOrder: Record<string, Record<string, string>>
   rejectReasonByOrderId: Record<string, string>
@@ -55,6 +57,10 @@ interface OrderApprovalDetailPanelProps {
   onSetDeliveryDatesByOutbound: React.Dispatch<React.SetStateAction<Record<string, Record<string, string>>>>
   onSetRejectReason: React.Dispatch<React.SetStateAction<Record<string, string>>>
   onHandleDecision: (orderId: number, decision: "Approved" | "Rejected" | "Hold", order: Order) => void | Promise<void>
+  /** 승인된 주문 배송일 저장 (오피스 전용) */
+  onSaveDeliveryDates?: (orderId: string) => void
+  /** 저장 중인 주문 ID */
+  savingDeliveryDatesId?: string | null
 }
 
 export function OrderApprovalDetailPanel({
@@ -63,6 +69,7 @@ export function OrderApprovalDetailPanel({
   displayItems,
   detailSortByCode,
   isManager,
+  canEditDeliveryDate,
   submittingId,
   deliveryDatesByOutboundByOrder,
   rejectReasonByOrderId,
@@ -71,6 +78,8 @@ export function OrderApprovalDetailPanel({
   onSetDeliveryDatesByOutbound,
   onSetRejectReason,
   onHandleDecision,
+  onSaveDeliveryDates,
+  savingDeliveryDatesId,
 }: OrderApprovalDetailPanelProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -130,8 +139,19 @@ export function OrderApprovalDetailPanel({
                               [order.id]: { ...(prev[order.id] || {}), [loc]: v },
                             }))
                           }}
-                          readOnly={isManager}
+                          readOnly={(order.status !== "Pending" && order.status !== "Approved") || !(canEditDeliveryDate ?? false)}
                         />
+                        {order.status === "Approved" && canEditDeliveryDate && onSaveDeliveryDates && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 px-3 text-xs"
+                            disabled={!!savingDeliveryDatesId}
+                            onClick={(e) => { e.stopPropagation(); onSaveDeliveryDates(order.id) }}
+                          >
+                            {savingDeliveryDatesId === order.id ? t("loading") || "저장 중..." : t("btnSave") || "저장"}
+                          </Button>
+                        )}
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
@@ -289,7 +309,7 @@ export function OrderApprovalDetailPanel({
             )}
 
             {!isManager && (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2 pb-4">
                 {order.status === "Pending" && (
                   <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-xs font-semibold text-muted-foreground">{t("reasonPh") || "사유"}</span>

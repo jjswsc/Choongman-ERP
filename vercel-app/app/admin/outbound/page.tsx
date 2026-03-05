@@ -463,15 +463,33 @@ export default function OutboundPage() {
       whMap.get(wh)!.push(row)
     }
 
+    // (date, store)별 총 건수 미리 계산
+    const totalByDateStore = new Map<string, number>()
+    let totalPageCount = 0
+    for (const date of Array.from(byDateThenStoreThenWh.keys())) {
+      const storeMap = byDateThenStoreThenWh.get(date)!
+      for (const [storeName, whMap] of storeMap) {
+        let total = 0
+        for (const wn of whOrderToUse) {
+          const whItems = whMap.get(wn) || []
+          const jc = whItems.filter((r) => /^jd/i.test(r.code)).length
+          const hc = whItems.filter((r) => !/^jd/i.test(r.code)).length
+          total += jc + hc
+          if (jc > 0) totalPageCount++
+          if (hc > 0) totalPageCount++
+        }
+        if (total > 0) totalByDateStore.set(`${date}|${storeName}`, total)
+      }
+    }
+
+    // 창고+품목유형별로 각각 한 장씩 인쇄 (헤더는 매 페이지 동일하게 반복)
     let firstSection = true
+    let pageNum = 0
     for (const date of Array.from(byDateThenStoreThenWh.keys()).sort()) {
       const storeMap = byDateThenStoreThenWh.get(date)!
       for (const [storeName, whMap] of Array.from(storeMap.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-        const whsPresent = whOrderToUse.filter((wn) => (whMap.get(wn) || []).length > 0)
-        const totalCount = whsPresent.reduce((sum, wn) => sum + (whMap.get(wn) || []).length, 0)
-        const whListForStore = whsPresent.map((wn) => (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn).join(", ")
-        const subSections: string[] = []
-        for (const wn of whsPresent) {
+        const totalForStore = totalByDateStore.get(`${date}|${storeName}`) ?? 0
+        for (const wn of whOrderToUse) {
           const whItems = whMap.get(wn) || []
           if (whItems.length === 0) continue
           const whDisplay = (wn === "(미지정)" || !wn) ? t("outWhUnspecified") : wn
@@ -483,24 +501,14 @@ export default function OutboundPage() {
           ]
           for (const { label, items } of itemGroups) {
             if (items.length === 0) continue
-            let rowIdx = 0
-            const storeRows = items.map((r) => {
-              const style = tdStyle(rowIdx++)
-              return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
-            })
-            subSections.push(`
-          <div style="margin-bottom:20px;">
-            <h4 style="margin:0 0 8px 0; font-size:1rem; font-weight:600; color:#334155;">${whLabel}: ${escape(whDisplay)} — ${escape(label)}</h4>
-            <table style="${tableStyle}">
-              <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle} width:40px;">${colCheck}</th><th style="${thStyle} min-width:90px; white-space:nowrap;">${colDeliveryDate}</th></tr></thead>
-              <tbody>${storeRows.join("")}</tbody>
-            </table>
-          </div>`)
-          }
-        }
-        const pageBreakBefore = firstSection ? "" : " page-break-before: always;"
-        firstSection = false
-        const storeHeaderHtml = `<div style="margin-bottom:20px;">
+            pageNum++
+            const pageBreakBefore = firstSection ? "" : " page-break-before: always;"
+            firstSection = false
+            const whDisplayForHeader = `${whDisplay} - ${label}`
+            const countStr = totalForStore > 0
+              ? `${items.length}/${totalForStore} ${t("outWhCountSuffix")} (${t("outWhWarehouseAll")})`
+              : `${items.length} ${t("outWhCountSuffix")}`
+            const storeHeaderHtml = `<div style="margin-bottom:20px;">
           <h2 style="margin:0 0 12px 0; font-size:1.35rem; font-weight:700; color:#0f172a;">${escape(packingListTitle)} - ${escape(storeName)}</h2>
           <table style="width:100%; border-collapse:collapse; font-size:12px; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden;">
             <thead><tr style="background:linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color:#fff;">
@@ -510,17 +518,38 @@ export default function OutboundPage() {
             </tr></thead>
             <tbody><tr>
               <td style="padding:12px 14px; border-top:1px solid #e2e8f0; background:#f8fafc; text-align:center; font-weight:600;">${escape(date)}</td>
-              <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${escape(whListForStore)}</td>
-              <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${totalCount} ${t("outWhCountSuffix")}</td>
+              <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${escape(whDisplayForHeader)}</td>
+              <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${escape(countStr)}</td>
             </tr></tbody>
           </table>
         </div>`
-        sections.push(`
+            let rowIdx = 0
+            const storeRows = items.map((r) => {
+              const style = tdStyle(rowIdx++)
+              return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;min-width:52px;width:52px;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
+            })
+            const tableHtml = `<div style="margin-bottom:20px;">
+            <h4 style="margin:0 0 8px 0; font-size:1rem; font-weight:600; color:#334155;">${whLabel}: ${escape(whDisplay)} — ${escape(label)}</h4>
+            <table style="${tableStyle}">
+              <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle} min-width:52px; width:52px; white-space:nowrap;">${colCheck}</th><th style="${thStyle} min-width:90px; white-space:nowrap;">${colDeliveryDate}</th></tr></thead>
+              <tbody>${storeRows.join("")}</tbody>
+            </table>
+          </div>`
+            const pageLabel = (t("outWhPrintPageOf") || "페이지 %1/%2")
+              .replace("%1", String(pageNum))
+              .replace("%2", String(totalPageCount))
+            const pageFooterHtml = totalPageCount > 0
+              ? `<div class="wh-print-page-footer" style="margin-top:20px; padding-top:12px; border-top:1px solid #e2e8f0; text-align:center; font-size:11px; color:#64748b;">${escape(pageLabel)}</div>`
+              : ""
+            sections.push(`
         <div class="wh-print-section wh-print-store-page" style="margin-bottom:32px;${pageBreakBefore}">
           ${storeHeaderHtml}
-          ${subSections.join("")}
+          ${tableHtml}
+          ${pageFooterHtml}
         </div>
       `)
+          }
+        }
       }
     }
     printWindow.document.write(`
@@ -533,8 +562,10 @@ export default function OutboundPage() {
         @media print{
           @page{margin:12mm;size:A4}
           *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-          .wh-print-store-page{page-break-inside:avoid;}
+          body{padding:0;}
+          .wh-print-store-page{page-break-inside:avoid;position:relative;min-height:273mm;padding:0 12px 48px 12px;box-sizing:border-box;}
           .wh-print-store-page:not(:first-of-type){page-break-before:always;}
+          .wh-print-page-footer{position:absolute;bottom:0;left:0;right:0;}
         }
       </style>
       </head><body>

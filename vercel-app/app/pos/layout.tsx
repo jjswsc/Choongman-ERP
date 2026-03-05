@@ -2,8 +2,8 @@
 
 import { useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import { useRouter, usePathname } from "next/navigation"
+import { ArrowLeft, Home } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 
@@ -40,16 +40,30 @@ export default function PosLayout({
     )
   }
 
+  const pathname = usePathname()
+  const isMain = pathname === "/pos" || pathname === "/pos/"
+
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-950">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4">
-        <Link
-          href="/admin"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Admin
-        </Link>
+        <div className="flex items-center gap-1">
+          {!isMain && (
+            <Link
+              href="/pos"
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+            >
+              <Home className="h-4 w-4" />
+              홈
+            </Link>
+          )}
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Admin
+          </Link>
+        </div>
         <span className="text-sm font-bold text-white">POS</span>
         <div className="w-16" />
       </header>

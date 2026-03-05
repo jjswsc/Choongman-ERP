@@ -398,6 +398,19 @@ export async function processOrderDecision(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function updateOrderDeliveryDates(params: {
+  orderId: number
+  deliveryDatesByOutbound: Record<string, string>
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updateOrderDeliveryDates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function updateOrderDeliveryStatus(params: {
   orderId: number
   deliveryStatus: string

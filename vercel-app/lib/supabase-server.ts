@@ -1,13 +1,21 @@
 /**
  * Supabase REST - 서버 전용 (Next.js API routes)
  *
- * SUPABASE_URL, SUPABASE_ANON_KEY 환경 변수 필수.
+ * SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_ANON_KEY 환경 변수 필요.
+ * service_role은 RLS를 우회하여 안전한 서버 전용 접근. anon은 RLS 적용됨.
  * API 라우트(app/api/*) 내부에서만 import. 클라이언트 번들에 포함되지 않도록.
  */
 function getConfig() {
   const url = (process.env.SUPABASE_URL || '').trim()
-  const key = process.env.SUPABASE_ANON_KEY
-  if (!url || !key) throw new Error('SUPABASE_URL 또는 SUPABASE_ANON_KEY가 없습니다.')
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+  const anonKey = (process.env.SUPABASE_ANON_KEY || '').trim()
+  const key = serviceKey || anonKey
+  if (!url || !key) {
+    throw new Error(
+      'SUPABASE_URL 및 SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_ANON_KEY가 필요합니다. ' +
+        '보안을 위해 service_role 키 사용을 권장합니다.'
+    )
+  }
   const base = url.replace(/\/$/, '').replace(/^http:\/\//, 'https://')
   return { url: base, key }
 }

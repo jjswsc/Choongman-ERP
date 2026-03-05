@@ -29,8 +29,8 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole } from "@/lib/permissions"
-import { useStoreList, getAdminOrders, getAppData, processOrderDecision, type AdminOrderItem } from "@/lib/api-client"
+import { isManagerRole, isOfficeRole } from "@/lib/permissions"
+import { useStoreList, getAdminOrders, getAppData, processOrderDecision, updateOrderDeliveryDates, type AdminOrderItem } from "@/lib/api-client"
 import { OrderApprovalDetailPanel } from "@/components/erp/order-approval-detail-panel"
 
 type OrderStatus = "Pending" | "Approved" | "Rejected" | "Hold"
@@ -131,6 +131,7 @@ export function OrderApproval() {
   const t = useT(lang)
   const { auth } = useAuth()
   const isManager = isManagerRole(auth?.role || "")
+  const isOffice = isOfficeRole(auth?.role || "")
   const userStore = (auth?.store || "").trim()
   const { stores: storeList } = useStoreList()
   const [orders, setOrders] = React.useState<Order[]>([])
@@ -150,8 +151,13 @@ export function OrderApproval() {
   const [detailSortByCode, setDetailSortByCode] = React.useState<"asc" | "desc" | null>(null)
   const [rejectReasonByOrderId, setRejectReasonByOrderId] = React.useState<Record<string, string>>({})
   const [rejectReasonPopupOrder, setRejectReasonPopupOrder] = React.useState<Order | null>(null)
+  const [savingDeliveryDatesId, setSavingDeliveryDatesId] = React.useState<string | null>(null)
   /** 수량 변경 직후 승인 시 React state 미반영을 방지하기 위해 ref에 동기 저장 */
   const editedItemsRef = React.useRef<Record<string, OrderItem[]>>({})
+  const deliveryDatesRef = React.useRef<Record<string, Record<string, string>>>({})
+  React.useEffect(() => {
+    deliveryDatesRef.current = deliveryDatesByOutboundByOrder
+  }, [deliveryDatesByOutboundByOrder])
 
   const effectiveStore = isManager && userStore ? userStore : (storeFilter === "all" ? undefined : storeFilter)
 
@@ -353,6 +359,28 @@ export function OrderApproval() {
       setSubmittingId(null)
     }
   }
+
+  const handleSaveDeliveryDates = React.useCallback(async (orderId: string) => {
+    const dates = deliveryDatesRef.current[orderId]
+    if (!dates || Object.keys(dates).length === 0) return
+    setSavingDeliveryDatesId(orderId)
+    try {
+      const res = await updateOrderDeliveryDates({
+        orderId: Number(orderId),
+        deliveryDatesByOutbound: dates,
+        userRole: auth?.role,
+      })
+      if (res.success) {
+        alert(translateApiMessage(res.message, t) || t("msg_saved"))
+      } else {
+        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail"))
+      }
+    } catch (e) {
+      alert(t("msg_server_error_prefix") + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setSavingDeliveryDatesId(null)
+    }
+  }, [auth?.role, t])
 
   const filteredOrders = React.useMemo(() => {
     if (!searchTerm.trim()) return orders
@@ -572,6 +600,7 @@ export function OrderApproval() {
                     displayItems={getDisplayItems(order)}
                     detailSortByCode={detailSortByCode}
                     isManager={isManager}
+                    canEditDeliveryDate={isOffice}
                     submittingId={submittingId}
                     deliveryDatesByOutboundByOrder={deliveryDatesByOutboundByOrder}
                     rejectReasonByOrderId={rejectReasonByOrderId}
@@ -580,6 +609,8 @@ export function OrderApproval() {
                     onSetDeliveryDatesByOutbound={setDeliveryDatesByOutboundByOrder}
                     onSetRejectReason={setRejectReasonByOrderId}
                     onHandleDecision={handleDecision}
+                    onSaveDeliveryDates={isOffice ? handleSaveDeliveryDates : undefined}
+                    savingDeliveryDatesId={savingDeliveryDatesId}
                   />
                 </div>
               )
