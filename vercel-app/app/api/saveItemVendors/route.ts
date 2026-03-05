@@ -9,9 +9,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as {
       itemCode?: string
+      code?: string
       vendors?: { vendorCode: string; priority?: number; unitPrice?: number | null; minOrderQty?: number | null; memo?: string | null }[]
     }
-    const itemCode = String(body.itemCode || body.code || '').trim()
+    const itemCode = String(body.itemCode ?? body.code ?? '').trim()
     const vendors = Array.isArray(body.vendors) ? body.vendors : []
 
     if (!itemCode) {
