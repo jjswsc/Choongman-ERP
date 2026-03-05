@@ -381,17 +381,12 @@ export function AdminTab() {
                           {showAdjustInput ? (
                             <Input
                               key={String(adjustKey)}
-                              ref={(el) => {
-                                const k = String(adjustKey)
-                                adjustInputElRef.current[k] = el ? (el as HTMLInputElement) : null
-                              }}
+                              name={`adj_${adjustKey}`}
                               type="number"
                               min={isLateOrPendingIn ? 1 : 0}
                               max={999}
                               placeholder={isLateOrPendingIn ? "1" : "0"}
                               defaultValue={defaultVal}
-                              onChange={(e) => { adjustInputRef.current[String(adjustKey)] = e.target.value }}
-                              onBlur={(e) => { adjustInputRef.current[String(adjustKey)] = e.target.value }}
                               data-adjust-key={String(adjustKey)}
                               className="h-7 min-w-[3rem] w-14 text-xs text-center tabular-nums mx-auto"
                             />
