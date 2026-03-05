@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
         if (isOvernightOut && prevRec?.inTime && !prevRec.outTime) {
           prevRec.outTime = logAt
           prevRec.earlyMin = Number(r.early_min) || 0
-          prevRec.otMin = r.ot_min != null && r.ot_min !== '' ? Number(r.ot_min) : null
+          prevRec.otMin = r.ot_min != null ? Number(r.ot_min) : null
           prevRec.status = st || prevRec.status
           prevRec.outApproved = approved || ''
           if (needsOutApproval) prevRec.outId = r.id ?? null
@@ -279,7 +279,7 @@ export async function GET(request: NextRequest) {
         } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
           rec.outTime = logAt
           rec.earlyMin = Number(r.early_min) || 0
-          rec.otMin = r.ot_min != null && r.ot_min !== '' ? Number(r.ot_min) : null
+          rec.otMin = r.ot_min != null ? Number(r.ot_min) : null
           rec.status = st || rec.status
           rec.outApproved = approved || ''
           if (needsOutApproval) rec.outId = r.id ?? null
