@@ -111,7 +111,7 @@ export function ItemPickerDialog({
               <tr className="border-b">
                 <th className="text-left py-2 px-2 w-20">{t("itemsColCode")}</th>
                 <th className="text-left py-2 px-2">{t("itemsColName")}</th>
-                <th className="text-left py-2 px-2 w-16">{t("spec")}</th>
+                <th className="text-left py-2 px-2 w-32">{t("spec")}</th>
                 <th className="w-16"></th>
               </tr>
             </thead>

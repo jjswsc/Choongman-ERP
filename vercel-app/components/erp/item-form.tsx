@@ -32,7 +32,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { getVendorsForPurchase } from "@/lib/api-client"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { getVendorsForPurchase, getItemVendors, saveItemVendors, type ItemVendorRow } from "@/lib/api-client"
 const UNIT_OPTIONS = ['', 'kg', 'g', 'L', 'ml', 'ea', 'pack', 'oz', 'lb']
 
 export interface ItemFormData {
@@ -79,16 +84,57 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
   const [vendorList, setVendorList] = React.useState<{ code: string; name: string; address: string }[]>([])
   const [vendorOpen, setVendorOpen] = React.useState(false)
   const [categoryOpen, setCategoryOpen] = React.useState(false)
+  const [itemVendorsOpen, setItemVendorsOpen] = React.useState(false)
+  const [itemVendorsList, setItemVendorsList] = React.useState<ItemVendorRow[]>([])
+  const [itemVendorsSaving, setItemVendorsSaving] = React.useState(false)
 
   const update = (key: keyof ItemFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [key]: value }))
   }
 
   React.useEffect(() => {
-    if (vendorOpen && vendorList.length === 0) {
+    if ((vendorOpen || itemVendorsOpen) && vendorList.length === 0) {
       getVendorsForPurchase().then((list) => setVendorList(list || []))
     }
-  }, [vendorOpen, vendorList.length])
+  }, [vendorOpen, itemVendorsOpen, vendorList.length])
+
+  React.useEffect(() => {
+    if (isEditing && formData.code && itemVendorsOpen) {
+      getItemVendors(formData.code).then((list) => setItemVendorsList(list || []))
+    }
+  }, [isEditing, formData.code, itemVendorsOpen])
+
+  const handleSaveItemVendors = async () => {
+    if (!formData.code) return
+    setItemVendorsSaving(true)
+    try {
+      const res = await saveItemVendors({
+        itemCode: formData.code,
+        vendors: itemVendorsList.map((v) => ({
+          vendorCode: v.vendorCode,
+          priority: v.priority,
+          unitPrice: v.unitPrice,
+          minOrderQty: v.minOrderQty,
+          memo: v.memo,
+        })),
+      })
+      if (res.success) alert(t("vendorAlertUpdated") || t("itemsBtnSave") + " 완료")
+      else alert(res.message || "저장 실패")
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setItemVendorsSaving(false)
+    }
+  }
+
+  const addItemVendor = (vc: string) => {
+    if (!vc || itemVendorsList.some((v) => v.vendorCode === vc)) return
+    setItemVendorsList((prev) => [...prev, { vendorCode: vc, priority: prev.length }])
+  }
+
+  const removeItemVendor = (vc: string) => {
+    setItemVendorsList((prev) => prev.filter((v) => v.vendorCode !== vc))
+  }
 
   return (
     <div className="rounded-xl border bg-card shadow-sm">
@@ -254,6 +300,63 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             </SelectContent>
           </Select>
         </div>
+
+        {isEditing && formData.code && (
+          <Collapsible open={itemVendorsOpen} onOpenChange={setItemVendorsOpen} className="col-span-2">
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 w-full justify-between text-left">
+                <span className="text-xs font-semibold">{t("itemsVendorMulti") || "매입 거래처 (다대다)"}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${itemVendorsOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-2 space-y-2 rounded-lg border bg-muted/20 p-3">
+                <p className="text-[11px] text-muted-foreground">
+                  {t("itemsVendorMultiHint") || "품목을 여러 거래처에서 매입할 수 있도록 등록합니다. 본사 발주 시 거래처 선택 시 해당 품목이 표시됩니다."}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {itemVendorsList.map((v) => (
+                    <div key={v.vendorCode} className="flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1.5 text-sm border">
+                      <span className="font-medium">{v.vendorCode}</span>
+                      <span className="text-muted-foreground">— {vendorList.find((x) => x.code === v.vendorCode)?.name || v.vendorCode}</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItemVendor(v.vendorCode)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Select
+                    value="_add"
+                    onValueChange={(val) => {
+                      if (val && val !== "_add" && val !== "_none") addItemVendor(val)
+                    }}
+                  >
+                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                      <SelectValue placeholder={t("itemsVendorAdd") || "+ 거래처 추가"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_add">{t("itemsVendorAdd") || "+ 거래처 추가"}</SelectItem>
+                      {vendorList
+                        .filter((x) => !itemVendorsList.some((iv) => iv.vendorCode === x.code))
+                        .map((v) => (
+                          <SelectItem key={v.code} value={v.code}>
+                            {v.code} — {v.name}
+                          </SelectItem>
+                        ))}
+                      {vendorList.filter((x) => !itemVendorsList.some((iv) => iv.vendorCode === x.code)).length === 0 && (
+                        <SelectItem value="_none" disabled>{t("itemsVendorAllAdded") || "모두 추가됨"}</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="secondary" onClick={handleSaveItemVendors} disabled={itemVendorsSaving}>
+                    {itemVendorsSaving ? t("loading") : t("itemsBtnSave")}
+                  </Button>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">

@@ -20,6 +20,21 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS idx_items_code ON items(code);
 
+-- 품목–거래처 다대다 매핑 (한 품목을 여러 거래처에서 매입 가능)
+CREATE TABLE IF NOT EXISTS item_vendors (
+  id BIGSERIAL PRIMARY KEY,
+  item_code TEXT NOT NULL,
+  vendor_code TEXT NOT NULL,
+  priority INT DEFAULT 0,
+  unit_price NUMERIC(12,2) DEFAULT NULL,
+  min_order_qty NUMERIC(12,2) DEFAULT NULL,
+  memo TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(item_code, vendor_code)
+);
+CREATE INDEX IF NOT EXISTS idx_item_vendors_item_code ON item_vendors(item_code);
+CREATE INDEX IF NOT EXISTS idx_item_vendors_vendor_code ON item_vendors(vendor_code);
+
 -- 거래처 (기존 시트 "거래처") - K열=매장명(GPS대조용), L/M=위도/경도
 CREATE TABLE IF NOT EXISTS vendors (
   id BIGSERIAL PRIMARY KEY,
@@ -466,6 +481,7 @@ ALTER TABLE menu_permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluation_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluation_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE item_vendors ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow all for anon" ON items;
 CREATE POLICY "Allow all for anon" ON items FOR ALL USING (true) WITH CHECK (true);
@@ -511,6 +527,8 @@ DROP POLICY IF EXISTS "Allow all for anon" ON evaluation_items;
 CREATE POLICY "Allow all for anon" ON evaluation_items FOR ALL USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Allow all for anon" ON evaluation_results;
 CREATE POLICY "Allow all for anon" ON evaluation_results FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow all for anon" ON item_vendors;
+CREATE POLICY "Allow all for anon" ON item_vendors FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================
 -- 중복 방지: 전 테이블 유니크 제약

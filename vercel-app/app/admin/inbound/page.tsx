@@ -27,6 +27,7 @@ import {
   getInboundBatch,
   updateInboundBatch,
   deleteInboundBatch,
+  getItemsByVendor,
   useStoreList,
   type AdminItem,
   type AdminVendor,
@@ -70,6 +71,8 @@ export default function InboundPage() {
   const { auth } = useAuth()
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [vendors, setVendors] = React.useState<AdminVendor[]>([])
+  const [itemsForVendor, setItemsForVendor] = React.useState<AdminItem[]>([])
+  const [itemsForVendorLoading, setItemsForVendorLoading] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<InboundHistoryItem[]>([])
@@ -107,18 +110,52 @@ export default function InboundPage() {
     return vendors.filter((v) => v.type === "purchase" || v.type === "both")
   }, [vendors])
 
-  /** 거래처 선택 시 해당 거래처에 등록된 품목만 (items.vendor = code 또는 name) */
+  /** 거래처 선택 시 해당 거래처에 등록된 품목 (items.vendor + item_vendors 매핑) */
   const itemsForPicker = React.useMemo(() => {
     if (!inVendor?.trim()) return items
-    const vName = inVendor.trim().toLowerCase()
-    const v = purchaseVendors.find((x) => x.name.trim().toLowerCase() === vName)
-    const vCode = v?.code?.trim().toLowerCase() ?? ""
-    return items.filter((i) => {
+    return itemsForVendor.length > 0 ? itemsForVendor : items.filter((i) => {
       const iv = String(i.vendor || "").trim().toLowerCase()
+      const vName = inVendor.trim().toLowerCase()
+      const v = purchaseVendors.find((x) => x.name.trim().toLowerCase() === vName)
+      const vCode = v?.code?.trim().toLowerCase() ?? ""
       if (!iv) return false
       return iv === vName || iv === vCode
     })
-  }, [items, inVendor, purchaseVendors])
+  }, [items, inVendor, purchaseVendors, itemsForVendor])
+
+  React.useEffect(() => {
+    if (!inVendor?.trim()) {
+      setItemsForVendor([])
+      return
+    }
+    const v = purchaseVendors.find((x) => x.name.trim().toLowerCase() === inVendor.trim().toLowerCase())
+    if (!v?.code) {
+      setItemsForVendor([])
+      return
+    }
+    setItemsForVendorLoading(true)
+    getItemsByVendor(v.code, v.name)
+      .then((list) => {
+        const mapped: AdminItem[] = (list || []).map((it) => ({
+          code: it.code,
+          name: it.name,
+          category: it.category || "",
+          vendor: inVendor.trim(),
+          outboundLocation: it.outbound_location,
+          spec: it.spec || "",
+          unit: "",
+          price: it.price,
+          cost: it.cost,
+          totalQuantity: null,
+          taxType: (it.taxType as "taxable" | "exempt" | "zero") || "taxable",
+          imageUrl: it.image || "",
+          hasImage: !!(it.image || "").trim(),
+        }))
+        setItemsForVendor(mapped)
+      })
+      .catch(() => setItemsForVendor([]))
+      .finally(() => setItemsForVendorLoading(false))
+  }, [inVendor, purchaseVendors])
 
   React.useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)

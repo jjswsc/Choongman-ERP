@@ -4047,6 +4047,32 @@ export async function getItemsByVendor(
   return res.json() as Promise<ItemByVendor[]>
 }
 
+export interface ItemVendorRow {
+  vendorCode: string
+  priority?: number
+  unitPrice?: number | null
+  minOrderQty?: number | null
+  memo?: string | null
+}
+
+export async function getItemVendors(itemCode: string) {
+  const q = new URLSearchParams({ itemCode })
+  const res = await apiFetch(`/api/getItemVendors?${q}`)
+  return res.json() as Promise<ItemVendorRow[]>
+}
+
+export async function saveItemVendors(params: {
+  itemCode: string
+  vendors: { vendorCode: string; priority?: number; unitPrice?: number | null; minOrderQty?: number | null; memo?: string | null }[]
+}) {
+  const res = await apiFetch('/api/saveItemVendors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function getHqStockByLocation(locationCode: string) {
   const q = new URLSearchParams({ locationCode })
   const res = await apiFetch(`/api/getHqStockByLocation?${q}`)
