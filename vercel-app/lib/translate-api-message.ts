@@ -5,7 +5,9 @@
 const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 휴가
   "✅ 신청 완료": "leaveRequestSuccess",
+  "증명서가 업로드되었습니다.": "leaveCertUploaded",
   "진단서가 업로드되었습니다.": "leaveCertUploaded",
+  "증빙 서류가 업로드되었습니다.": "leaveCertUploaded",
   "처리되었습니다.": "processSuccess",
   "잘못된 요청입니다.": "invalidRequest",
   "승인 또는 반려를 선택해 주세요.": "selectApproveOrReject",

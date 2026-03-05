@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     const patch: Record<string, unknown> = { approved: decision }
+    const isClockOut = String(rows[0]?.log_type || '').trim() === '퇴근'
     if (decision === '승인완료') {
       const isClockIn = String(rows[0]?.log_type || '').trim() === '출근'
       const hasLate = (Number(rows[0]?.late_min) || 0) > 0
@@ -49,7 +50,8 @@ export async function POST(request: NextRequest) {
       } else {
         patch.status = '정상(승인)'
       }
-      if (optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
+      // ot_min: 퇴근 로그에만 적용 (조정 반영)
+      if (isClockOut && optOtMinutes != null && !isNaN(optOtMinutes) && optOtMinutes >= 0) {
         patch.ot_min = Math.min(9999, Math.round(optOtMinutes))
       }
       if (optEarlyMinutes !== undefined && !Number.isNaN(optEarlyMinutes) && optEarlyMinutes >= 0) {

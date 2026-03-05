@@ -85,8 +85,6 @@ export default function AdminAttendancePage() {
   const [todayStore, setTodayStore] = React.useState("")
   const [scheduleStore, setScheduleStore] = React.useState("")
   const [otMinutesByRow, setOtMinutesByRow] = React.useState<Record<number | string, string>>({})
-  const adjustInputRef = React.useRef<Record<string, string>>({})
-  const adjustInputElRef = React.useRef<Record<string, HTMLInputElement | null>>({})
 
   const isOffice = React.useMemo(() => {
     const r = (auth?.role || "").toLowerCase()
@@ -95,8 +93,8 @@ export default function AdminAttendancePage() {
 
   const { stores: storeList, users: usersMap, staffByStore } = useStoreList()
   React.useEffect(() => {
-    const st = storeList
-    setStores(isOffice ? ["All", ...st] : [auth?.store || ""].filter(Boolean))
+    const st = (storeList || []).filter((s) => s && String(s).trim())
+    setStores(isOffice ? ["All", ...st.filter((s) => s !== "All")] : ["All", auth?.store || ""].filter(Boolean))
     if (!isOffice && auth?.store) {
       setStoreFilter(auth.store)
       setTodayStore(auth.store)
@@ -186,7 +184,6 @@ export default function AdminAttendancePage() {
       userRole: auth?.role,
     })
     if (res.success) {
-      delete adjustInputRef.current[String(id)]
       setOtMinutesByRow((p) => {
         const next = { ...p }
         delete next[id]
@@ -286,11 +283,14 @@ export default function AdminAttendancePage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold">{t("stockFilterStore")}</label>
-                  <Select value={storeFilter} onValueChange={setStoreFilter}>
+                  <Select
+                    value={stores.includes(storeFilter) ? storeFilter : (stores[0] || "All")}
+                    onValueChange={(v) => setStoreFilter(v)}
+                  >
                     <SelectTrigger className="h-9 w-36 text-xs">
-                      <SelectValue />
+                      <SelectValue placeholder={t("all")} />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper">
                       {stores.map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
@@ -399,6 +399,7 @@ export default function AdminAttendancePage() {
                   {t("adminLeaveNoResult")}
                 </div>
               ) : (
+                <form id="att-adjust-form" onSubmit={(e) => e.preventDefault()} className="contents">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/50">
@@ -481,21 +482,13 @@ export default function AdminAttendancePage() {
                               const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
                               return showAdjustInput ? (
                                 <Input
-                                  ref={(el) => {
-                                    const k = String(adjustKey)
-                                    adjustInputElRef.current[k] = el ? (el as HTMLInputElement) : null
-                                  }}
+                                  key={String(adjustKey)}
+                                  name={`adj_${adjustKey}`}
                                   type="number"
                                   min={isLateOrPendingIn ? 1 : 0}
                                   max={999}
                                   placeholder={isLateOrPendingIn ? "1" : "0"}
-                                  value={otMinutesByRow[adjustKey] ?? defaultVal}
-                                  onChange={(e) => {
-                                    const v = e.target.value
-                                    const k = String(adjustKey)
-                                    adjustInputRef.current[k] = v
-                                    setOtMinutesByRow((p) => ({ ...p, [adjustKey]: v }))
-                                  }}
+                                  defaultValue={defaultVal}
                                   data-adjust-key={String(adjustKey)}
                                   className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
                                 />
@@ -549,14 +542,19 @@ export default function AdminAttendancePage() {
                             {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <Button
+                                  type="button"
                                   size="sm"
                                   variant="default"
                                   className="h-6 px-2 text-[10px]"
                                   onClick={async (e) => {
+                                    e.preventDefault()
                                     const outId = pendingOut ?? row.pendingId!
-                                    const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                    const keyForInput = String(pendingOut ?? row.pendingId ?? row.outLogId ?? `${row.date}-${row.store}-${row.name}`)
-                                    const input = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${keyForInput}"]`)
+                                    const adjustKey = hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                      ? (pendingOut ?? row.pendingId)!
+                                      : `${row.date}-${row.store}-${row.name}`
+                                    const keyForInput = String(pendingOut ?? row.pendingId ?? row.outLogId ?? adjustKey)
+                                    const form = (e.currentTarget as HTMLButtonElement).form
+                                    const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
                                     const fromInput = input?.value?.trim()
                                     const defaultVal =
                                       row.plannedWorkHrs > 0 && row.diffMin < 0
@@ -566,11 +564,7 @@ export default function AdminAttendancePage() {
                                           : row.lateMin > 0
                                             ? Math.max(1, row.lateMin)
                                             : 0
-                                    const adjustKey =
-                                      hasPendingOut && (pendingOut != null || row.pendingId != null)
-                                        ? (pendingOut ?? row.pendingId)!
-                                        : `${row.date}-${row.store}-${row.name}`
-                                    const otVal = fromInput ?? adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal)
+                                    const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
                                     const n = parseInt(otVal, 10)
                                     const num = !isNaN(n) && n >= 0 ? n : undefined
                                     if (row.diffMin < 0) {
@@ -587,19 +581,20 @@ export default function AdminAttendancePage() {
                                 >
                                   {t("att_btn_approve")}
                                 </Button>
-                                <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
+                                <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                               </div>
                             ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")) || (row.status && String(row.status).includes("정상(승인)"))) ? (
                               <Button
+                                type="button"
                                 size="sm"
                                 variant="outline"
                                 className="h-6 px-2 text-[10px]"
                                 onClick={(e) => {
+                                  e.preventDefault()
                                   const outId = row.outLogId!
-                                  const adjustKey = row.outLogId!
-                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                  const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${adjustKey}"]`)
-                                  const fromInput = inputEl?.value?.trim()
+                                  const form = (e.currentTarget as HTMLButtonElement).form
+                                  const input = form?.elements.namedItem(`adj_${outId}`) as HTMLInputElement | null
+                                  const fromInput = input?.value?.trim()
                                   const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                                   const defaultVal =
                                     row.plannedWorkHrs > 0 && row.diffMin < 0
@@ -609,14 +604,10 @@ export default function AdminAttendancePage() {
                                         : row.lateMin > 0
                                           ? Math.max(1, row.lateMin)
                                           : 0
-                                  const otVal = (fromInput !== undefined && fromInput !== "") ? fromInput : (adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal))
+                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
                                   const n = parseInt(otVal, 10)
-                                  let num = !isNaN(n) && n >= 0 ? n : 0
-                                  const currentOvertime = row.diffMin > 0 ? (row.otMin ?? row.diffMin) : 0
-                                  const noUserInput = (fromInput === undefined || fromInput === "") && adjustInputRef.current[String(adjustKey)] == null && otMinutesByRow[adjustKey] == null
-                                  if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0 && noUserInput) {
-                                    num = Math.min(9999, Math.round(Number(currentOvertime)))
-                                  }
+                                  const num = !isNaN(n) && n >= 0 ? n : 0
+                                  // 사용자가 0을 입력한 경우 절대 덮어쓰지 않음. 기존 noUserInput 시 currentOvertime으로 덮어쓰던 로직 제거.
                                   const isLateOnly = row.lateMin > 0 && row.diffMin === 0 && (row.earlyMin ?? 0) === 0 && (row.otMin ?? 0) < 30
                                   if (isLateOnly) {
                                     handleApprove(outId, undefined, undefined)
@@ -630,12 +621,13 @@ export default function AdminAttendancePage() {
                                 {t("att_apply_adjust")}
                               </Button>
                             ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-6 px-2 text-[10px] text-amber-600 border-amber-300 hover:bg-amber-50"
-                                onClick={() => handleApproveNoClockOut(row)}
-                              >
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-[10px] text-amber-600 border-amber-300 hover:bg-amber-50"
+                              onClick={() => handleApproveNoClockOut(row)}
+                            >
                                 {t("att_approve_forced_out")}
                               </Button>
                             ) : (
@@ -647,6 +639,7 @@ export default function AdminAttendancePage() {
                     })}
                   </tbody>
                 </table>
+                </form>
               )}
             </div>
           </TabsContent>

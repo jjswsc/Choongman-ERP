@@ -652,7 +652,7 @@ export default function PosOrderPage() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-slate-50">
       <OfflineBanner
           onSyncComplete={loadTodaySales}
           offlineMsg={t("posOfflineSaved") || "오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다."}
@@ -660,13 +660,13 @@ export default function PosOrderPage() {
           retryLabel={t("posRetrySync") || "재시도"}
         />
       {todaySales != null && (
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-800/50 px-4 py-2 text-xs">
-          <span className="text-slate-400">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2 text-xs shadow-sm">
+          <span className="text-slate-600">
             {t("posTodayCompleted") || "오늘 완료"}:{" "}
-            <span className="font-bold text-amber-400">{todaySales.completedCount}</span>
+            <span className="font-bold text-emerald-600">{todaySales.completedCount}</span>
             {t("posCount") || "건"}
           </span>
-          <span className="font-bold tabular-nums text-white">
+          <span className="font-bold tabular-nums text-slate-800">
             {todaySales.completedTotal.toLocaleString()} ฿
           </span>
         </div>
@@ -674,39 +674,19 @@ export default function PosOrderPage() {
       <div className="flex flex-1 overflow-hidden">
       {/* 메뉴 영역 */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* 1단계: 주문 유형 선택 (매장/포장/배달) */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
-          <span className="shrink-0 text-xs font-medium text-slate-400">
-            {t("posOrderType") || "주문 유형"}
-          </span>
-          <div className="flex gap-2">
-            {(["dine_in", "takeout", "delivery"] as OrderType[]).map((typ) => (
-              <button
-                key={typ}
-                onClick={() => setOrderType(typ)}
-                className={cn(
-                  "rounded-lg px-5 py-2.5 text-sm font-semibold transition",
-                  orderType === typ ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-300"
-                )}
-              >
-                {orderTypeLabels[typ]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* 2단계: 대분류 선택 */}
-        <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-900/50 px-3 py-2">
+        {/* 대분류 선택 (유형은 첫 화면에서 선택됨) */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 text-slate-400 hover:text-white"
+            className="h-8 shrink-0 text-slate-600 hover:text-slate-900"
             onClick={loadMenusAndPromos}
             disabled={loading}
             title={t("posRefreshMenus") || "메뉴 새로고침"}
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           </Button>
-          <span className="shrink-0 text-xs text-slate-400">{t("posMainCategory") || "대분류"}</span>
+          <span className="shrink-0 text-xs text-slate-600">{t("posMainCategory") || "대분류"}</span>
           <div className="flex flex-1 gap-2 overflow-x-auto">
             {mainCategories.map((main) => (
               <button
@@ -717,7 +697,7 @@ export default function PosOrderPage() {
                 }}
                 className={cn(
                   "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
-                  selectedMainCategory === main ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  selectedMainCategory === main ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 )}
               >
                 {main}
@@ -727,8 +707,8 @@ export default function PosOrderPage() {
         </div>
         {/* 3단계: 카테고리(소분류) 선택 */}
         {selectedMainCategory && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-800 bg-slate-800/50 px-3 py-2">
-            <span className="shrink-0 text-xs text-slate-400">{t("posCategory") || "카테고리"}</span>
+          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="shrink-0 text-xs text-slate-600">{t("posCategory") || "카테고리"}</span>
             <div className="flex flex-1 gap-2 overflow-x-auto">
               {categoriesForSelectedMain.map((c) => (
                 <button
@@ -736,7 +716,7 @@ export default function PosOrderPage() {
                   onClick={() => setSelectedCategory(c)}
                   className={cn(
                     "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
-                    selectedCategory === c ? "bg-amber-500 text-slate-900" : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    selectedCategory === c ? "bg-emerald-500 text-white" : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
                   )}
                 >
                   {c}
@@ -745,19 +725,20 @@ export default function PosOrderPage() {
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {/* Oll star pos 15dlscl (1024x768/1366x768) 최적화: 1024 이하 3열, 이상 4~5열 */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
             {filteredPromos.map((p) => (
               <button
                 key={`promo-${p.id}`}
                 onClick={() => addPromoToCart(p)}
-                className="flex flex-col overflow-hidden rounded-xl border border-amber-600/50 bg-amber-900/30 p-2 text-left transition hover:border-amber-500 hover:bg-amber-800/40 active:scale-[0.98]"
+                className="flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-2 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-700/80 flex items-center justify-center">
+                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
                   <span className="text-3xl">🏷️</span>
                 </div>
-                <div className="mt-2 truncate text-sm font-medium text-white">{p.name}</div>
-                <div className="text-xs font-bold text-amber-400">
+                <div className="mt-2 truncate text-sm font-medium text-slate-800">{p.name}</div>
+                <div className="text-xs font-bold text-amber-600">
                   {(getPromoPrice(p)) > 0 ? `${(getPromoPrice(p)).toLocaleString()} ฿` : "-"}
                 </div>
               </button>
@@ -766,9 +747,9 @@ export default function PosOrderPage() {
               <button
                 key={m.id}
                 onClick={() => addToCart(m)}
-                className="flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-800/80 p-2 text-left transition hover:border-amber-500/50 hover:bg-slate-700/80 active:scale-[0.98]"
+                className="flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-2 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-700">
+                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {m.imageUrl ? (
                     <Image
                       src={m.imageUrl}
@@ -782,61 +763,61 @@ export default function PosOrderPage() {
                       }}
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-3xl text-slate-500">
+                    <div className="flex h-full items-center justify-center text-3xl text-slate-400">
                       🍗
                     </div>
                   )}
                 </div>
-                <div className="mt-2 truncate text-sm font-medium text-white">{m.name}</div>
-                <div className="text-xs font-bold text-amber-400">
+                <div className="mt-2 truncate text-sm font-medium text-slate-800">{m.name}</div>
+                <div className="text-xs font-bold text-emerald-600">
                   {(getMenuPrice(m)) > 0 ? `${(getMenuPrice(m)).toLocaleString()} ฿` : "-"}
                 </div>
               </button>
             ))}
           </div>
           {!selectedMainCategory && (
-            <div className="col-span-full py-12 text-center text-slate-400">
-              {t("posSelectMainCategoryFirst") || "주문 유형 선택 후, 위에서 대분류를 선택하세요."}
+            <div className="col-span-full py-12 text-center text-slate-500">
+              {t("posSelectMainCategoryFirst") || "위에서 대분류를 선택하세요."}
             </div>
           )}
           {selectedMainCategory && !selectedCategory && (
-            <div className="col-span-full py-12 text-center text-slate-400">
+            <div className="col-span-full py-12 text-center text-slate-500">
               {t("posSelectCategoryFirst") || "카테고리를 선택하세요."}
             </div>
           )}
           {selectedMainCategory && selectedCategory && filteredMenus.length === 0 && filteredPromos.length === 0 && (
-            <div className="col-span-full py-12 text-center text-slate-400">
+            <div className="col-span-full py-12 text-center text-slate-500">
               {t("posNoMenus") || "등록된 메뉴가 없습니다."}
             </div>
           )}
         </div>
       </div>
 
-      {/* 장바구니 */}
-      <div className="flex w-80 shrink-0 flex-col border-l border-slate-800 bg-slate-900">
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-white">
+      {/* 장바구니: 1024 이하 260px, 이상 320px (Oll star 15dlscl 최적화) */}
+      <div className="flex w-[260px] min-[1025px]:w-80 shrink-0 flex-col border-l border-slate-200 bg-white shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-slate-800">
             <ShoppingCart className="h-4 w-4" />
             {t("posCart") || "장바구니"}
           </h2>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-slate-400 hover:text-white"
+            className="h-7 text-slate-600 hover:text-slate-900"
             onClick={clearCart}
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" />
             {t("posClear") || "비우기"}
           </Button>
         </div>
-        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-800 px-4 py-3">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
           {stores.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs text-slate-400 w-12">
+              <span className="shrink-0 text-xs text-slate-600 w-12">
                 {t("store") || "매장"}
               </span>
               <Select value={storeCode || stores[0]} onValueChange={setStoreCode}>
-                <SelectTrigger className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm">
+                <SelectTrigger className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -849,9 +830,17 @@ export default function PosOrderPage() {
               </Select>
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-xs text-slate-600 w-12">
+              {t("posOrderType") || "유형"}
+            </span>
+            <span className="rounded-lg bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-700">
+              {orderTypeLabels[orderType]}
+            </span>
+          </div>
           {orderType === "dine_in" && (
             <div className="flex items-center gap-2">
-              <span className="shrink-0 text-xs text-slate-400 w-12">
+              <span className="shrink-0 text-xs text-slate-600 w-12">
                 {t("posTable") || "테이블"}
               </span>
               {tableOptions.length > 0 ? (
@@ -860,7 +849,7 @@ export default function PosOrderPage() {
                     value={tableOptions.some((x) => x.name === tableName) ? tableName : "_"}
                     onValueChange={(v) => setTableName(v === "_" ? "" : v)}
                   >
-                    <SelectTrigger className="h-8 min-w-[80px] border-slate-600 bg-slate-800 text-sm">
+                    <SelectTrigger className="h-8 min-w-[80px] border-slate-200 bg-white text-sm text-slate-800">
                       <SelectValue placeholder={t("posTablePh") || "1번"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -879,7 +868,7 @@ export default function PosOrderPage() {
                       placeholder={t("posTableCustomPh") || "테이블명"}
                       value={tableName}
                       onChange={(e) => setTableName(e.target.value)}
-                      className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
+                      className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800"
                     />
                   )}
                 </>
@@ -888,30 +877,16 @@ export default function PosOrderPage() {
                   placeholder={t("posTablePh") || "1번"}
                   value={tableName}
                   onChange={(e) => setTableName(e.target.value)}
-                  className="h-8 flex-1 border-slate-600 bg-slate-800 text-sm"
+                  className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800"
                 />
               )}
             </div>
           )}
-          <div className="flex gap-2">
-            {(["dine_in", "takeout", "delivery"] as OrderType[]).map((typ) => (
-              <button
-                key={typ}
-                onClick={() => setOrderType(typ)}
-                className={cn(
-                  "flex-1 rounded-lg py-2 text-xs font-medium",
-                  orderType === typ ? "bg-amber-500 text-slate-900" : "bg-slate-800 text-slate-400"
-                )}
-              >
-                {orderTypeLabels[typ]}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="h-8 flex-1 border-slate-600 bg-slate-800 text-xs text-slate-300 hover:bg-slate-700"
+              className="h-8 flex-1 border-slate-200 bg-white text-xs text-slate-700 hover:bg-slate-100"
               onClick={loadRecentOrders}
               disabled={recentLoading}
             >
@@ -921,16 +896,16 @@ export default function PosOrderPage() {
           </div>
         </div>
         {recentOrders.length > 0 && (
-          <div className="shrink-0 overflow-x-auto border-b border-slate-800 px-3 py-2">
+          <div className="shrink-0 overflow-x-auto border-b border-slate-200 bg-slate-50 px-3 py-2">
             <div className="flex gap-2">
               {recentOrders.map((o) => (
                 <button
                   key={o.id}
                   onClick={() => reorderFrom(o)}
-                  className="shrink-0 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-left transition hover:border-amber-500/50"
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                 >
-                  <div className="text-[10px] font-bold text-amber-400">{o.orderNo}</div>
-                  <div className="text-[11px] text-slate-300">
+                  <div className="text-[10px] font-bold text-emerald-600">{o.orderNo}</div>
+                  <div className="text-[11px] text-slate-600">
                     {o.total?.toLocaleString()} ฿
                   </div>
                 </button>
@@ -938,7 +913,7 @@ export default function PosOrderPage() {
             </div>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 overflow-y-auto px-4 py-3 bg-slate-50/50">
           {cart.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-500">
               {t("posCartEmpty") || "장바구니가 비어 있습니다."}
@@ -948,27 +923,27 @@ export default function PosOrderPage() {
               {cart.map((it) => (
                 <div
                   key={it.id}
-                  className="flex items-center gap-2 rounded-lg bg-slate-800/60 px-3 py-2"
+                  className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-2"
                 >
-                  <div className="flex-1 truncate text-sm text-white">{it.name}</div>
+                  <div className="flex-1 truncate text-sm text-slate-800">{it.name}</div>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => updateQty(it.id, -1)}
-                      className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
+                      className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
-                    <span className="w-6 text-center text-sm font-medium tabular-nums text-white">
+                    <span className="w-6 text-center text-sm font-medium tabular-nums text-slate-800">
                       {it.qty}
                     </span>
                     <button
                       onClick={() => updateQty(it.id, 1)}
-                      className="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-white"
+                      className="rounded p-1 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <span className="w-16 text-right text-xs font-bold text-amber-400 tabular-nums">
+                  <span className="w-16 text-right text-xs font-bold text-emerald-600 tabular-nums">
                     {(it.price * it.qty).toLocaleString()} ฿
                   </span>
                   <button
@@ -982,26 +957,26 @@ export default function PosOrderPage() {
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t border-slate-800 p-4 space-y-3">
+        <div className="shrink-0 border-t border-slate-200 bg-white p-4 space-y-3">
           <div>
-            <label className="text-xs text-slate-400">{t("posCustomerMemo") || "손님 메모"}</label>
+            <label className="text-xs text-slate-600">{t("posCustomerMemo") || "손님 메모"}</label>
             <Input
               placeholder={t("posCustomerMemoPh") || "알레르기, 맵기 조절 등"}
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              className="mt-1 h-9 border-slate-600 bg-slate-800 text-sm"
+              className="mt-1 h-9 border-slate-200 bg-slate-50 text-sm text-slate-800"
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400">{t("posCoupon") || "쿠폰"}</label>
+            <label className="text-xs text-slate-600">{t("posCoupon") || "쿠폰"}</label>
             {appliedCoupon ? (
-              <div className="mt-1 flex items-center justify-between rounded-lg border border-green-600/50 bg-green-500/10 px-2 py-1.5 text-sm">
-                <span className="text-green-400 truncate">{appliedCoupon.name}</span>
+              <div className="mt-1 flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-sm">
+                <span className="text-emerald-700 truncate">{appliedCoupon.name}</span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                  className="h-6 w-6 p-0 text-slate-600 hover:text-slate-900"
                   onClick={handleClearCoupon}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -1014,13 +989,13 @@ export default function PosOrderPage() {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
-                  className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm uppercase"
+                  className="h-9 flex-1 border-slate-200 bg-slate-50 text-sm uppercase text-slate-800"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9 border-slate-600 bg-slate-800 px-3"
+                  className="h-9 border-slate-200 bg-white px-3 text-slate-700"
                   onClick={handleApplyCoupon}
                   disabled={!couponCode.trim() || couponLoading}
                 >
@@ -1031,16 +1006,16 @@ export default function PosOrderPage() {
             )}
           </div>
           <div>
-            <label className="text-xs text-slate-400">{t("posDiscount") || "할인"}</label>
+            <label className="text-xs text-slate-600">{t("posDiscount") || "할인"}</label>
             <div className={cn("mt-1 flex gap-2", appliedCoupon && "opacity-50")}>
-              <div className="flex rounded-lg border border-slate-600 bg-slate-800 overflow-hidden">
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => !appliedCoupon && setDiscountType("amt")}
                   disabled={!!appliedCoupon}
                   className={cn(
                     "px-2 py-1.5 text-xs",
-                    discountType === "amt" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
+                    discountType === "amt" ? "bg-emerald-100 text-emerald-700" : "text-slate-500"
                   )}
                 >
                   ฿
@@ -1051,7 +1026,7 @@ export default function PosOrderPage() {
                   disabled={!!appliedCoupon}
                   className={cn(
                     "px-2 py-1.5 text-xs",
-                    discountType === "pct" ? "bg-amber-500/30 text-amber-400" : "text-slate-500"
+                    discountType === "pct" ? "bg-emerald-100 text-emerald-700" : "text-slate-500"
                   )}
                 >
                   %
@@ -1063,48 +1038,48 @@ export default function PosOrderPage() {
                 placeholder={discountType === "pct" ? "10" : "0"}
                 value={discountValue}
                 onChange={(e) => setDiscountValue(e.target.value)}
-                className="h-9 w-20 border-slate-600 bg-slate-800 text-sm text-right"
+                className="h-9 w-20 border-slate-200 bg-slate-50 text-sm text-right text-slate-800"
                 disabled={!!appliedCoupon}
               />
               <Input
                 placeholder={t("posDiscountReasonPh") || "사유"}
                 value={discountReason}
                 onChange={(e) => setDiscountReason(e.target.value)}
-                className="h-9 flex-1 border-slate-600 bg-slate-800 text-sm"
+                className="h-9 flex-1 border-slate-200 bg-slate-50 text-sm text-slate-800"
                 disabled={!!appliedCoupon}
               />
             </div>
           </div>
           <div className="space-y-1">
-            <div className="flex justify-between text-sm text-slate-400">
+            <div className="flex justify-between text-sm text-slate-600">
               <span>{t("posSubtotal") || "소계"}</span>
-              <span className="tabular-nums text-white">{subtotal.toLocaleString()} ฿</span>
+              <span className="tabular-nums text-slate-800">{subtotal.toLocaleString()} ฿</span>
             </div>
             {discountAmt > 0 && (
-              <div className="flex justify-between text-sm text-green-400">
+              <div className="flex justify-between text-sm text-emerald-600">
                 <span>{t("posDiscount") || "할인"}</span>
                 <span className="tabular-nums">-{discountAmt.toLocaleString()} ฿</span>
               </div>
             )}
             {deliveryFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-400">
+              <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                <span className="tabular-nums">+{deliveryFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">+{deliveryFeeAmt.toLocaleString()} ฿</span>
               </div>
             )}
             {packagingFeeAmt > 0 && (
-              <div className="flex justify-between text-sm text-slate-400">
+              <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                <span className="tabular-nums">+{packagingFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">+{packagingFeeAmt.toLocaleString()} ฿</span>
               </div>
             )}
-            <div className="flex justify-between text-sm font-bold text-white border-t border-slate-700 pt-2">
+            <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-2">
               <span>{t("posInputTotal") || "합계"}</span>
               <span className="tabular-nums">{total.toLocaleString()} ฿</span>
             </div>
           </div>
           <Button
-            className="w-full bg-amber-500 font-bold text-slate-900 hover:bg-amber-400"
+            className="w-full bg-emerald-500 font-bold text-white hover:bg-emerald-600"
             disabled={cart.length === 0 || submitting}
             onClick={openPaymentModal}
           >
@@ -1198,7 +1173,7 @@ export default function PosOrderPage() {
               </Button>
               <Button
                 size="sm"
-                className="flex-1 bg-amber-500 font-bold text-slate-900 hover:bg-amber-400"
+                className="flex-1 bg-emerald-500 font-bold text-white hover:bg-emerald-600"
                 disabled={submitting}
                 onClick={() => handleCheckout({
                   cash: parseFloat(payCash) || 0,
@@ -1245,7 +1220,7 @@ export default function PosOrderPage() {
                     {first ? (t("posBanbanSecondHalf") || "2번째 맛") : (t("posBanbanFirstHalf") || "1번째 맛")}
                   </p>
                   {first && (
-                    <p className="text-xs font-medium text-amber-400">
+                    <p className="text-xs font-medium text-amber-600">
                       {t("posBanbanFirstSelected") || "1번째"}: {first.name}
                     </p>
                   )}
@@ -1264,10 +1239,10 @@ export default function PosOrderPage() {
                               setOptionPickerBanbanFirst(menu)
                             }
                           }}
-                          className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
+                          className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
-                          <span className="block font-medium">{menu.name}</span>
-                          <span className="text-xs text-amber-400">{getMenuPrice(menu).toLocaleString()} ฿</span>
+                          <span className="block font-medium text-slate-800">{menu.name}</span>
+                          <span className="text-xs text-emerald-600">{getMenuPrice(menu).toLocaleString()} ฿</span>
                         </button>
                       ))}
                     </div>
@@ -1294,10 +1269,10 @@ export default function PosOrderPage() {
               <button
                 type="button"
                 onClick={() => addToCartWithOption(optionPickerMenu, null, "S 순살")}
-                className="mb-3 flex w-full justify-between rounded-lg border border-amber-600/60 bg-amber-950/40 px-4 py-3 text-left transition hover:border-amber-500 hover:bg-amber-900/30"
+                className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
-                <span className="font-medium">{t("posOptionDefault") || "기본 (S 순살)"}</span>
-                <span className="font-bold text-amber-400">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
+                <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S 순살)"}</span>
+                <span className="font-bold text-amber-600">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
               </button>
             )
             if (useMultiStep) {
@@ -1329,7 +1304,7 @@ export default function PosOrderPage() {
                       <button
                         key={val}
                         onClick={() => handleStepSelect(val)}
-                        className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 transition hover:border-amber-500/50 hover:bg-slate-700"
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
                       >
                         {val}
                       </button>
@@ -1355,10 +1330,10 @@ export default function PosOrderPage() {
                   <button
                     key={opt.id}
                     onClick={() => addToCartWithOption(optionPickerMenu, opt)}
-                    className="flex justify-between rounded-lg border border-slate-600 bg-slate-800 px-4 py-3 text-left transition hover:border-amber-500/50 hover:bg-slate-700"
+                    className="flex justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
-                    <span>{opt.name}</span>
-                    <span className="font-bold text-amber-400">
+                    <span className="text-slate-800">{opt.name}</span>
+                    <span className="font-bold text-emerald-600">
                       {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
                     </span>
                   </button>

@@ -4,6 +4,7 @@ import { Wallet } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
 import { AdminPayrollRecords } from "@/components/admin/admin-payroll-records"
+import { AdminPayrollSalaryHistory } from "@/components/admin/admin-payroll-salary-history"
 import { AdminPayrollHolidays } from "@/components/admin/admin-payroll-holidays"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
@@ -39,12 +40,15 @@ export default function Page() {
           </div>
         </div>
         <Tabs defaultValue="calc" className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4 mb-4">
+          <TabsList className="grid w-full max-w-3xl grid-cols-5 mb-4">
             <TabsTrigger value="calc" className="text-sm font-medium">
               {t("pay_tab_calc")}
             </TabsTrigger>
             <TabsTrigger value="records" className="text-sm font-medium">
               {t("pay_tab_records")}
+            </TabsTrigger>
+            <TabsTrigger value="salary_history" className="text-sm font-medium">
+              {t("pay_tab_salary_history")}
             </TabsTrigger>
             <TabsTrigger value="holidays" className="text-sm font-medium">
               {t("pay_tab_holidays")}
@@ -58,6 +62,9 @@ export default function Page() {
           </TabsContent>
           <TabsContent value="records">
             <AdminPayrollRecords />
+          </TabsContent>
+          <TabsContent value="salary_history">
+            <AdminPayrollSalaryHistory />
           </TabsContent>
           <TabsContent value="holidays">
             <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />

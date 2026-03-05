@@ -34,8 +34,8 @@ export default function PosLayout({
 
   if (!initialized || !auth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
       </div>
     )
   }
@@ -44,29 +44,29 @@ export default function PosLayout({
   const isMain = pathname === "/pos" || pathname === "/pos/"
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-slate-950">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4">
-        <div className="flex items-center gap-1">
-          {!isMain && (
+    <div className="fixed inset-0 flex flex-col bg-slate-50">
+      {!isMain && (
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
+          <div className="flex items-center gap-1">
             <Link
               href="/pos"
-              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             >
               <Home className="h-4 w-4" />
               홈
             </Link>
-          )}
-          <Link
-            href="/admin"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Admin
-          </Link>
-        </div>
-        <span className="text-sm font-bold text-white">POS</span>
-        <div className="w-16" />
-      </header>
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Admin
+            </Link>
+          </div>
+          <span className="text-sm font-bold text-slate-800">POS</span>
+          <div className="w-16" />
+        </header>
+      )}
       <main className="flex-1 overflow-hidden">{children}</main>
     </div>
   )

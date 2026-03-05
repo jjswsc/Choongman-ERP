@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
 
-
 function toDateStr(val: unknown): string | null {
   if (!val) return null
   if (typeof val === 'string') {
@@ -69,6 +68,7 @@ export async function POST(req: Request) {
     const rowId = Number(d.row)
     const newStore = String(d.store || '').trim()
     const newName = String(d.name || '').trim()
+    const userName = String(body.userName || body.user_name || '').trim()
 
     if (rowId === 0) {
       payload.password = passwordValue || ''
@@ -76,14 +76,60 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: '✅ 신규 직원이 등록되었습니다.' }, { headers })
     }
 
-    // 직원 수정 시: 이름·매장 변경이면 attendance_logs 등 관련 테이블도 함께 갱신 → 재출근 불필요
-    const existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, { limit: 1 })) as { store?: string; name?: string }[]
-    const oldStore = existing?.[0] ? String(existing[0].store || '').trim() : ''
-    const oldName = existing?.[0] ? String(existing[0].name || '').trim() : ''
+    // 직원 수정 시: 기존 데이터 조회 (급여 변경 이력·attendance 갱신용)
+    const existing = (await supabaseSelectFilter('employees', `id=eq.${rowId}`, {
+      limit: 1,
+      select: 'store,name,sal_type,sal_amt,position_allowance,haz_allow',
+    })) as {
+      store?: string
+      name?: string
+      sal_type?: string
+      sal_amt?: number
+      position_allowance?: number
+      haz_allow?: number
+    }[]
+    const old = existing?.[0]
+    const oldStore = old ? String(old.store || '').trim() : ''
+    const oldName = old ? String(old.name || '').trim() : ''
     const nameOrStoreChanged = (oldName !== newName || oldStore !== newStore) && (oldName || oldStore)
+
+    const oldSalType = old ? String(old.sal_type || '').trim() : ''
+    const oldSalAmt = old ? Number(old.sal_amt) || 0 : 0
+    const oldPosAllow = old ? Number(old.position_allowance) || 0 : 0
+    const oldHazAllow = old ? Number(old.haz_allow) || 0 : 0
+    const newSalType = String(d.salType || 'Monthly').trim()
+    const newSalAmt = Number(d.salAmt) || 0
+    const newPosAllow = d.positionAllowance != null ? Number(d.positionAllowance) : 0
+    const newHazAllow = d.riskAllowance != null ? Number(d.riskAllowance) : 0
+    const salaryChanged =
+      oldSalType !== newSalType ||
+      oldSalAmt !== newSalAmt ||
+      oldPosAllow !== newPosAllow ||
+      oldHazAllow !== newHazAllow
 
     if (passwordValue) payload.password = passwordValue
     await supabaseUpdate('employees', rowId, payload)
+
+    if (salaryChanged) {
+      try {
+        await supabaseInsert('employee_salary_history', {
+          employee_id: rowId,
+          store: newStore,
+          name: newName,
+          old_sal_type: oldSalType || null,
+          new_sal_type: newSalType,
+          old_sal_amt: oldSalAmt,
+          new_sal_amt: newSalAmt,
+          old_position_allowance: oldPosAllow,
+          new_position_allowance: newPosAllow,
+          old_haz_allow: oldHazAllow,
+          new_haz_allow: newHazAllow,
+          changed_by: userName,
+        })
+      } catch (_) {
+        // 이력 저장 실패해도 직원 저장은 완료됨
+      }
+    }
 
     if (nameOrStoreChanged) {
       try {

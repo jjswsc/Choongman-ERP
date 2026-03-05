@@ -68,26 +68,24 @@ export function AdminTab() {
   const [attStart, setAttStart] = useState(todayStr)
   const [attEnd, setAttEnd] = useState(todayStr)
   const [attStoreFilter, setAttStoreFilter] = useState("All")
+  const [attStores, setAttStores] = useState<string[]>(["All"])
   const [attStatusFilter, setAttStatusFilter] = useState("all")
-  const [attStores, setAttStores] = useState<string[]>([])
   const [recordList, setRecordList] = useState<AttendanceDailyRow[]>([])
   const [noRecordList, setNoRecordList] = useState<AttendanceNoRecordRow[]>([])
   const [attLoading, setAttLoading] = useState(false)
   const [attHasSearched, setAttHasSearched] = useState(false)
   const [otMinutesByRow, setOtMinutesByRow] = useState<Record<number | string, string>>({})
-  const adjustInputRef = useRef<Record<string, string>>({})
-  const adjustInputElRef = useRef<Record<string, HTMLInputElement | null>>({})
 
   const { stores: storeList } = useStoreList()
   const isOffice = auth?.role && ["director", "officer", "ceo", "hr"].some((r) => String(auth?.role || "").toLowerCase().includes(r))
 
   useEffect(() => {
     if (!auth) return
+    const list = (storeList || []).filter((s) => s && String(s).trim())
     if (isOffice) {
-      setAttStores(["All", ...storeList.filter((s) => s !== "All")])
+      setAttStores(["All", ...list.filter((s) => s !== "All")])
     } else if (auth.store) {
-      setAttStores([auth.store])
-      setAttStoreFilter(auth.store)
+      setAttStores(["All", auth.store])
     }
   }, [auth, isOffice, storeList])
 
@@ -149,7 +147,6 @@ export function AdminTab() {
       userRole: auth.role || "",
     })
     if (res.success) {
-      delete adjustInputRef.current[String(id)]
       setOtMinutesByRow((p) => { const next = { ...p }; delete next[id]; return next })
       if (!skipReload) loadAttendance()
     } else {
@@ -252,11 +249,14 @@ export function AdminTab() {
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground block mb-0.5">{t("stockFilterStore")}</label>
-            <Select value={attStoreFilter} onValueChange={setAttStoreFilter}>
+            <Select
+              value={attStores.includes(attStoreFilter) ? attStoreFilter : "All"}
+              onValueChange={(v) => setAttStoreFilter(v)}
+            >
               <SelectTrigger className="h-9 w-full text-xs">
                 <SelectValue placeholder={t("all")} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent position="popper">
                 {attStores.map((st) => (
                   <SelectItem key={st} value={st}>{st === "All" ? t("noticeFilterAll") : st}</SelectItem>
                 ))}
@@ -308,6 +308,7 @@ export function AdminTab() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border bg-card -mx-1">
+              <form id="att-adjust-form" onSubmit={(e) => e.preventDefault()} className="contents">
               <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="border-b bg-muted/50">
@@ -379,6 +380,7 @@ export function AdminTab() {
                         <td className="px-2 py-2 text-center">
                           {showAdjustInput ? (
                             <Input
+                              key={String(adjustKey)}
                               ref={(el) => {
                                 const k = String(adjustKey)
                                 adjustInputElRef.current[k] = el ? (el as HTMLInputElement) : null
@@ -387,13 +389,9 @@ export function AdminTab() {
                               min={isLateOrPendingIn ? 1 : 0}
                               max={999}
                               placeholder={isLateOrPendingIn ? "1" : "0"}
-                              value={otMinutesByRow[adjustKey] ?? defaultVal}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                const k = String(adjustKey)
-                                adjustInputRef.current[k] = v
-                                setOtMinutesByRow((p) => ({ ...p, [adjustKey]: v }))
-                              }}
+                              defaultValue={defaultVal}
+                              onChange={(e) => { adjustInputRef.current[String(adjustKey)] = e.target.value }}
+                              onBlur={(e) => { adjustInputRef.current[String(adjustKey)] = e.target.value }}
                               data-adjust-key={String(adjustKey)}
                               className="h-7 min-w-[3rem] w-14 text-xs text-center tabular-nums mx-auto"
                             />
@@ -432,16 +430,18 @@ export function AdminTab() {
                           {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                             <div className="flex items-center gap-1 justify-center flex-wrap">
                               <Button
+                                type="button"
                                 size="sm"
                                 variant="default"
                                 className="h-6 px-1.5 text-[10px]"
                                 onClick={async (e) => {
+                                  e.preventDefault()
                                   const outId = pendingOut ?? row.pendingId!
-                                  const tr = (e.currentTarget as HTMLElement).closest("tr")
                                   const keyForInput = String(pendingOut ?? row.pendingId ?? adjustKey)
-                                  const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${keyForInput}"]`)
-                                  const fromInput = inputEl?.value?.trim()
-                                  const otVal = fromInput ?? adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? defaultVal
+                                  const form = (e.currentTarget as HTMLButtonElement).form
+                                  const input = form?.elements.namedItem(`adj_${keyForInput}`) as HTMLInputElement | null
+                                  const fromInput = input?.value?.trim()
+                                  const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : defaultVal
                                   const n = parseInt(otVal, 10)
                                   const num = !isNaN(n) && n >= 0 ? n : undefined
                                   if (row.diffMin < 0) {
@@ -458,19 +458,20 @@ export function AdminTab() {
                               >
                                 {t("att_btn_approve")}
                               </Button>
-                              <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
+                              <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => handleReject(pendingOut ?? row.pendingId!)}>{t("att_btn_reject")}</Button>
                             </div>
                           ) : !hasPendingOut && row.outLogId != null && row.approval === "승인완료" && (row.diffMin < 0 || (row.earlyMin ?? 0) > 0 || (row.diffMin > 0 && (row.otMin ?? 0) >= 30) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")) || (row.status && String(row.status).includes("정상(승인)"))) ? (
                             <Button
+                              type="button"
                               size="sm"
                               variant="outline"
                               className="h-6 px-1.5 text-[10px]"
                                 onClick={(e) => {
+                                e.preventDefault()
                                 const outId = row.outLogId!
-                                const adjustKey = row.outLogId!
-                                const tr = (e.currentTarget as HTMLElement).closest("tr")
-                                const inputEl = tr?.querySelector<HTMLInputElement>(`input[data-adjust-key="${adjustKey}"]`)
-                                const fromInput = inputEl?.value?.trim()
+                                const form = (e.currentTarget as HTMLButtonElement).form
+                                const input = form?.elements.namedItem(`adj_${outId}`) as HTMLInputElement | null
+                                const fromInput = input?.value?.trim()
                                 const isOvertimeRow = row.diffMin > 0 && (row.otMin ?? 0) >= 30
                                 const defaultVal =
                                   row.plannedWorkHrs > 0 && row.diffMin < 0
@@ -480,14 +481,10 @@ export function AdminTab() {
                                       : row.lateMin > 0
                                         ? Math.max(1, row.lateMin)
                                         : 0
-                                const otVal = (fromInput !== undefined && fromInput !== "") ? fromInput : (adjustInputRef.current[String(adjustKey)] ?? adjustInputRef.current[String(outId)] ?? otMinutesByRow[adjustKey] ?? otMinutesByRow[outId] ?? String(defaultVal))
+                                const otVal = fromInput !== undefined && fromInput !== "" ? fromInput : String(defaultVal)
                                 const n = parseInt(otVal, 10)
-                                let num = !isNaN(n) && n >= 0 ? n : 0
-                                const currentOvertime = row.diffMin > 0 ? (row.otMin ?? row.diffMin) : 0
-                                const noUserInput = (fromInput === undefined || fromInput === "") && adjustInputRef.current[String(adjustKey)] == null && otMinutesByRow[adjustKey] == null
-                                if (row.diffMin > 0 && (row.otMin ?? 0) >= 30 && num === 0 && currentOvertime > 0 && noUserInput) {
-                                  num = Math.min(9999, Math.round(Number(currentOvertime)))
-                                }
+                                const num = !isNaN(n) && n >= 0 ? n : 0
+                                // 사용자가 0을 입력한 경우 절대 덮어쓰지 않음. 기존 noUserInput 시 currentOvertime으로 덮어쓰던 로직 제거.
                                 const isLateOnly = row.lateMin > 0 && row.diffMin === 0 && (row.earlyMin ?? 0) === 0 && (row.otMin ?? 0) < 30
                                 if (isLateOnly) {
                                   handleApprove(outId, undefined, undefined)
@@ -501,7 +498,7 @@ export function AdminTab() {
                               {t("att_apply_adjust")}
                             </Button>
                           ) : row.status === "퇴근미기록" || !row.outTimeStr || row.outTimeStr === "-" ? (
-                            <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px] text-amber-600" onClick={() => handleApproveNoClockOut(row)}>
+                            <Button type="button" size="sm" variant="outline" className="h-6 px-1.5 text-[10px] text-amber-600" onClick={() => handleApproveNoClockOut(row)}>
                               {t("att_approve_forced_out")}
                             </Button>
                           ) : (
@@ -538,6 +535,7 @@ export function AdminTab() {
                   ))}
                 </tbody>
               </table>
+              </form>
             </div>
           )}
         </CardContent>

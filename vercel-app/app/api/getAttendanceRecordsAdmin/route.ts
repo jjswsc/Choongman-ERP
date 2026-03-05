@@ -90,9 +90,12 @@ export interface AttendanceDailyRow {
   isPartTime?: boolean
 }
 
+export const dynamic = 'force-dynamic' // 조정 반영 후 최신 데이터 조회를 위해 캐시 비활성화
+
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'no-store, max-age=0')
   const { searchParams } = new URL(request.url)
   const startDate = String(searchParams.get('startDate') || searchParams.get('start') || '').trim()
   const endDate = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
@@ -197,7 +200,7 @@ export async function GET(request: NextRequest) {
         breakMin: number
         lateMin: number
         earlyMin: number
-        otMin: number
+        otMin: number | null // null = DB에 미설정, 계산값 사용
         status: string
         approval: string
         inId: number | null
@@ -233,7 +236,7 @@ export async function GET(request: NextRequest) {
           breakMin: 0,
           lateMin: 0,
           earlyMin: 0,
-          otMin: 0,
+          otMin: null,
           status: '',
           approval: '대기',
           inId: null,
@@ -268,7 +271,7 @@ export async function GET(request: NextRequest) {
         if (isOvernightOut && prevRec?.inTime && !prevRec.outTime) {
           prevRec.outTime = logAt
           prevRec.earlyMin = Number(r.early_min) || 0
-          prevRec.otMin = Number(r.ot_min) || 0
+          prevRec.otMin = r.ot_min != null && r.ot_min !== '' ? Number(r.ot_min) : null
           prevRec.status = st || prevRec.status
           prevRec.outApproved = approved || ''
           if (needsOutApproval) prevRec.outId = r.id ?? null
@@ -276,7 +279,7 @@ export async function GET(request: NextRequest) {
         } else if (!isOvernightOut && (!rec.outTime || logAt > (rec.outTime || ''))) {
           rec.outTime = logAt
           rec.earlyMin = Number(r.early_min) || 0
-          rec.otMin = Number(r.ot_min) || 0
+          rec.otMin = r.ot_min != null && r.ot_min !== '' ? Number(r.ot_min) : null
           rec.status = st || rec.status
           rec.outApproved = approved || ''
           if (needsOutApproval) rec.outId = r.id ?? null
@@ -365,15 +368,15 @@ export async function GET(request: NextRequest) {
       const effectiveLateMin = actualWorkMin <= 0 ? 0 : lateMinForRow
       // 계획 시간이 0(스케줄 없음)이면 연장으로 보지 않음 → 일반 근무로만 계산
       const otCap = plannedWorkMin <= 0 ? 0 : Math.max(0, diffMin + lateMinForRow)
-      // DB에 저장된 연장(조정 반영값)이 있으면 그대로 표시해 지각/연장 열에 반영
+      // DB에 저장된 연장(조정 반영값)이 있으면 그대로 사용. 0도 명시적 조정값이므로 반영
       const effectiveOtMin =
         actualWorkMin <= 0 || plannedWorkMin <= 0
           ? 0
-          : otMinForRow > 0
+          : otMinForRow != null
             ? otMinForRow
             : Math.min(Math.max(0, diffMin), otCap)
-      // 지각/연장 열 표시: 연장 30분 미만이면 0으로 표시
-      const displayOtMin = effectiveOtMin >= 30 ? effectiveOtMin : 0
+      // DB에 저장된 조정값이 있으면 그대로 표시. 계산값만 30분 미만이면 0으로 표시
+      const displayOtMin = otMinForRow != null ? effectiveOtMin : (effectiveOtMin >= 30 ? effectiveOtMin : 0)
 
       if (pendingOnly && !isPending) continue
 

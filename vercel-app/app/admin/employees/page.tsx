@@ -278,6 +278,7 @@ export default function EmployeesPage() {
         d: form,
         userStore,
         userRole,
+        userName: auth?.user || userStore,
       })
       if (res.success) {
         alert(translateApiMessage(res.message, t) || t("msg_saved"))

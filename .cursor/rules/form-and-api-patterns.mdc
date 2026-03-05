@@ -1,0 +1,65 @@
+---
+description: form 내 버튼 및 API 호출 패턴 (근태 조정 반영 등)
+globs: vercel-app/**/*.tsx vercel-app/**/*.ts
+alwaysApply: false
+---
+
+# Form 내 버튼 및 API 호출 패턴
+
+## 1. Form 내부 버튼에 반드시 type="button" 지정
+
+Form 안의 `<button>`은 기본이 `type="submit"`이다. 클릭 시 폼 제출 → 페이지 리로드가 발생하며, `onClick`의 API 호출이 완료되기 전에 페이지가 새로고침되어 아무 반응이 없게 된다.
+
+```tsx
+// ❌ BAD: 클릭 시 form submit → 리로드 → API 호출 누락
+<form onSubmit={(e) => e.preventDefault()}>
+  <Button onClick={() => handleSave()}>저장</Button>
+</form>
+
+// ✅ GOOD: type="button"으로 form submit 방지
+<form onSubmit={(e) => e.preventDefault()}>
+  <Button type="button" onClick={(e) => { e.preventDefault(); handleSave(); }}>저장</Button>
+</form>
+```
+
+**규칙**: Form 내부의 "저장", "조회", "조정 반영", "승인" 등 **API를 호출하는 버튼**에는 항상 `type="button"`을 명시하고, 필요 시 `e.preventDefault()`를 함께 사용한다.
+
+## 2. Form에서 Input 값 읽는 신뢰할 수 있는 방법
+
+ref/querySelector는 React 렌더 타이밍에 따라 값을 못 읽을 수 있다. **form + name + elements.namedItem** 이 가장 안정적이다.
+
+```tsx
+// ✅ 권장: form.elements.namedItem으로 DOM에서 직접 값 읽기
+<form id="my-form">
+  <Input name={`adj_${rowId}`} defaultValue={defaultVal} />
+  <Button type="button" onClick={(e) => {
+    const form = (e.currentTarget as HTMLButtonElement).form
+    const input = form?.elements.namedItem(`adj_${rowId}`) as HTMLInputElement | null
+    const value = input?.value?.trim()
+    handleSubmit(value)
+  }}>
+    조정 반영
+  </Button>
+</form>
+```
+
+## 3. 사용자 액션 후 갱신되는 GET API는 캐시 비활성화
+
+Next.js App Router는 GET 라우트를 기본 캐시한다. "저장 후 목록 새로고침"처럼 **사용자 액션 직후 최신 데이터**가 필요한 API에는 캐시를 끈다.
+
+```ts
+// route.ts 상단
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: NextRequest) {
+  const headers = new Headers()
+  headers.set('Cache-Control', 'no-store, max-age=0')
+  // ...
+}
+```
+
+## 적용 사례: 근태 조정 반영 (2025-03)
+
+- **증상**: 조정란 입력 후 "조정 반영" 클릭 시 콘솔/터미널에 아무 반응 없음, POST 요청 자체가 발생하지 않음
+- **원인**: form 내 Button이 type="submit"으로 동작 → 폼 제출/리로드로 onClick API 호출이 실행되지 않음
+- **해결**: 조정 반영·승인·반려 버튼에 `type="button"` + `e.preventDefault()` 적용

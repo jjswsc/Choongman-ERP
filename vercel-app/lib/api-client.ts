@@ -693,8 +693,8 @@ export async function getAttendancePendingList(params: {
 
 export async function processAttendanceApproval(params: { id: number; decision: string; optOtMinutes?: number | null; optEarlyMinutes?: number | null; waiveLate?: boolean; userStore?: string; userRole?: string }) {
   const body: Record<string, unknown> = { id: params.id, decision: params.decision }
-  if (params.optOtMinutes != null) body.optOtMinutes = params.optOtMinutes
-  if (params.optEarlyMinutes != null) body.optEarlyMinutes = params.optEarlyMinutes
+  if (params.optOtMinutes != null) body.optOtMinutes = Number(params.optOtMinutes)
+  if (params.optEarlyMinutes != null) body.optEarlyMinutes = Number(params.optEarlyMinutes)
   if (params.waiveLate) body.waiveLate = true
   if (params.userStore) body.userStore = params.userStore
   if (params.userRole) body.userRole = params.userRole
@@ -3002,6 +3002,10 @@ export interface PosTableItem {
   y: number
   w: number
   h: number
+  /** rect | square - 테이블 형태 */
+  shape?: string
+  /** 좌석 수 (몇 명 앉는 테이블) */
+  seats?: number
 }
 
 export async function getPosTableLayout(params: { storeCode: string }) {
@@ -3575,6 +3579,7 @@ export async function saveAdminEmployee(params: {
   d: Partial<AdminEmployeeItem> & { row: number }
   userStore: string
   userRole: string
+  userName?: string
 }) {
   const res = await apiFetch('/api/saveAdminEmployee', {
     method: 'POST',

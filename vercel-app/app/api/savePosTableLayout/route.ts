@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
         y: Number(t.y) ?? 0,
         w: Number(t.w) ?? 80,
         h: Number(t.h) ?? 60,
+        shape: String(t.shape ?? 'rect'),
+        seats: Number(t.seats ?? 0) || 0,
       }))
 
     const existing = (await supabaseSelectFilter(
