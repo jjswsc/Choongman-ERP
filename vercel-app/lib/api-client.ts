@@ -3224,6 +3224,7 @@ export async function saveVendor(params: {
   tax_no?: string
   type?: string
   memo?: string
+  direct_settlement?: boolean
   editingCode?: string
 }) {
   const res = await apiFetch('/api/saveVendor', {
