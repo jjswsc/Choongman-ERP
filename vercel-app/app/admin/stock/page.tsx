@@ -16,6 +16,7 @@ import {
   getAppData,
   adjustStock,
   saveSafetyStock,
+  updateItemOrderDisabled,
   type StockStatusItem,
 } from "@/lib/api-client"
 import { OFFICE_STORES } from "@/lib/permissions"
@@ -101,6 +102,7 @@ export default function StockPage() {
         cost: i.cost ?? i.price ?? 0,
         category: i.category,
         purchaseSource: i.purchaseSource ?? 'hq',
+        orderDisabled: i.orderDisabled === true,
         stockBaseUnit: i.stockBaseUnit,
         stockUnitOptions: i.stockUnitOptions,
         standardUnits: i.standardUnits,
@@ -167,6 +169,18 @@ export default function StockPage() {
     fetchStock()
   }
 
+  const handleToggleOrderDisabled = async (item: StockStatusItem) => {
+    const nextDisabled = !item.orderDisabled
+    const res = await updateItemOrderDisabled({ code: item.code, disabled: nextDisabled })
+    if (!res.success) {
+      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      return
+    }
+    setList((prev) =>
+      prev.map((r) => (r.code === item.code ? { ...r, orderDisabled: nextDisabled } : r))
+    )
+  }
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -210,6 +224,7 @@ export default function StockPage() {
               canAdjust={canAdjust}
               onAdjust={handleAdjust}
               onSaveSafeQty={handleSaveSafeQty}
+              onToggleOrderDisabled={handleToggleOrderDisabled}
             />
           </TabsContent>
           <TabsContent value="history">

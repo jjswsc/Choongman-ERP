@@ -14,6 +14,7 @@ export interface AppItem {
   image: string
   description?: string
   purchaseSource?: 'hq' | 'store'
+  orderDisabled?: boolean
   /** 재고 기본 단위. 비어 있으면 unit 사용 (하위 호환) */
   stockBaseUnit?: string
   /** 조정/조사 시 선택 단위 (하위 호환) */
@@ -118,6 +119,7 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
       image: String(row.image || ''),
       description: row.description ? String(row.description).trim() : undefined,
       purchaseSource: ps === 'store' ? 'store' : 'hq',
+      orderDisabled: row.order_disabled === true,
       ...(useStockUnits && row
         ? (() => {
             const parsed = parseStandardUnits((row as Row).standard_units)

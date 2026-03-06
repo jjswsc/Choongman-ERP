@@ -81,9 +81,15 @@ const emptyForm = {
 export default function PosMenusPage() {
   const { lang } = useLang()
   const t = useT(lang)
-  /** 옵션 부위명(순살/윙/봉) 표시 시 현재 언어로 번역 */
-  const optionPartLabel = (name: string) =>
-    name === "순살" ? t("posOptionPartBoneless") : name === "윙" ? t("posOptionPartWing") : name === "봉" ? t("posOptionPartDrumstick") : name
+  /** 옵션 부위명(순살/윙/봉) 표시 시 현재 언어로 번역. "M - 순살" 등 포함 형태도 처리 */
+  const optionPartLabel = (name: string) => {
+    if (!name?.trim()) return name ?? ""
+    let s = String(name)
+    if (s.includes("순살")) s = s.replace(/순살/g, t("posOptionPartBoneless"))
+    if (s.includes("윙")) s = s.replace(/윙/g, t("posOptionPartWing"))
+    if (s.includes("봉")) s = s.replace(/봉/g, t("posOptionPartDrumstick"))
+    return s
+  }
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allCategories, setAllCategories] = React.useState<string[]>([])
   const [allMainCategories, setAllMainCategories] = React.useState<string[]>([])

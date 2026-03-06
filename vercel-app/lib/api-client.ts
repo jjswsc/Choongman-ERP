@@ -101,6 +101,7 @@ export interface AppItem {
   image?: string
   description?: string
   purchaseSource?: 'hq' | 'store'
+  orderDisabled?: boolean
   stockBaseUnit?: string
   stockUnitOptions?: { unit: string; factor: number }[]
   /** 표준 단위 목록. (totalQuantity) [unit] = 1 규격 */
@@ -134,6 +135,8 @@ export interface StockStatusItem {
   cost?: number
   category?: string
   purchaseSource?: 'hq' | 'store'
+  /** true이면 품목 일시중지(발주 중지). 메뉴 관리와 연동 */
+  orderDisabled?: boolean
   /** 재고 기본 단위. 비어 있으면 단위 선택 없음 (하위 호환) */
   stockBaseUnit?: string
   /** 조정/조사 시 선택 단위 옵션 (하위 호환) */

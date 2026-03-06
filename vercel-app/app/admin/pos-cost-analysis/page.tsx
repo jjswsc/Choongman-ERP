@@ -415,7 +415,15 @@ export default function PosCostAnalysisPage() {
                   const costDMise = withMise(r.costDelivery ?? 0)
                   const costRatioH = priceH > 0 ? (costHMise / priceH) * 100 : 0
                   const costRatioD = priceD > 0 ? (costDMise / priceD) * 100 : 0
-                  const menuLabel = (r.menuName ?? "—") + (r.optionName ? ` (${r.optionName})` : "")
+                  const optionPartLabel = (n: string) => {
+                    if (!n?.trim()) return n ?? ""
+                    let s = String(n)
+                    if (s.includes("순살")) s = s.replace(/순살/g, t("posOptionPartBoneless"))
+                    if (s.includes("윙")) s = s.replace(/윙/g, t("posOptionPartWing"))
+                    if (s.includes("봉")) s = s.replace(/봉/g, t("posOptionPartDrumstick"))
+                    return s
+                  }
+                  const menuLabel = (r.menuName ?? "—") + (r.optionName ? ` (${optionPartLabel(r.optionName)})` : "")
                   return (
                     <React.Fragment key={key}>
                       <tr

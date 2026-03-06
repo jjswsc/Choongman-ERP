@@ -8,6 +8,8 @@ import {
   Edit3,
   Printer,
   FileSpreadsheet,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +45,8 @@ export interface StockTableProps {
   canAdjust: boolean
   onAdjust: (item: StockStatusItem) => void
   onSaveSafeQty?: (item: StockStatusItem, newSafeQty: number) => Promise<void>
+  /** 품목 일시중지(발주 중지) 토글. 메뉴 관리와 연동 */
+  onToggleOrderDisabled?: (item: StockStatusItem) => void
 }
 
 export function StockTable({
@@ -65,6 +69,7 @@ export function StockTable({
   canAdjust,
   onAdjust,
   onSaveSafeQty,
+  onToggleOrderDisabled,
 }: StockTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -150,7 +155,7 @@ ${filteredList.map((r) => {
     URL.revokeObjectURL(url)
   }
 
-  const colCount = 7 + (canAdjust ? 1 : 0)
+  const colCount = 7 + (canAdjust || onToggleOrderDisabled ? 1 : 0)
 
   return (
     <div id="stock-print-area" className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -271,7 +276,7 @@ ${filteredList.map((r) => {
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColSafeQty")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColAmount")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColStatus")}</th>
-              {canAdjust && (
+              {(canAdjust || onToggleOrderDisabled) && (
                 <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColAction")}</th>
               )}
             </tr>
@@ -380,18 +385,40 @@ ${filteredList.map((r) => {
                         <span className="text-[10px] text-muted-foreground">-</span>
                       )}
                     </td>
-                    {canAdjust && (
+                    {(canAdjust || onToggleOrderDisabled) && (
                       <td className="px-5 py-3">
-                        <div className="flex justify-center">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 px-2 text-[10px] font-semibold"
-                            onClick={() => onAdjust(row)}
-                          >
-                            <Edit3 className="mr-1 h-2.5 w-2.5" />
-                            {t("stockBtnAdjust")}
-                          </Button>
+                        <div className="flex justify-center items-center gap-1">
+                          {onToggleOrderDisabled != null && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className={cn(
+                                "h-7 w-7",
+                                row.orderDisabled
+                                  ? "text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                                  : "text-amber-600 border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                              )}
+                              onClick={() => onToggleOrderDisabled(row)}
+                              title={row.orderDisabled ? (t("itemsOrderResume") || "재개") : (t("itemsOrderDisabled") || "발주 중지")}
+                            >
+                              {row.orderDisabled ? (
+                                <PlayCircle className="h-3.5 w-3.5" />
+                              ) : (
+                                <PauseCircle className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
+                          {canAdjust && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] font-semibold"
+                              onClick={() => onAdjust(row)}
+                            >
+                              <Edit3 className="mr-1 h-2.5 w-2.5" />
+                              {t("stockBtnAdjust")}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     )}
@@ -406,7 +433,7 @@ ${filteredList.map((r) => {
                 <td colSpan={4} className="px-5 py-3 text-right">{t("stockTotalAmount")}</td>
                 <td className="px-5 py-3"></td>
                 <td className="px-5 py-3 text-right tabular-nums">{totalAmount.toLocaleString()}</td>
-                <td colSpan={canAdjust ? 2 : 1}></td>
+                <td colSpan={(canAdjust || onToggleOrderDisabled) ? 2 : 1}></td>
               </tr>
             </tfoot>
           )}
