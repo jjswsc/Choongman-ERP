@@ -153,7 +153,12 @@ export async function sendFcmToRecipients(params: {
         notification: { title: finalTitle, body: finalBody },
         webpush: {
           headers: { TTL: '3600' },
-          notification: { title: finalTitle, body: finalBody },
+          notification: {
+            title: finalTitle,
+            body: finalBody,
+            silent: false,
+            requireInteraction: false,
+          },
         },
       }
       try {

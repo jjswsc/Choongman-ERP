@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const storedPw = String(row.password || '').trim()
     const oldOk = await verifyPassword(oldPw, storedPw)
     if (!oldOk) {
-      return NextResponse.json({ success: false, message: '현재 비밀번호가 일치하지 않습니다.' }, { headers })
+      return NextResponse.json({ success: false, message: '현재 비밀번호가 일치하지 않습니다. 비밀번호 분실 시 슈퍼바이저팀에 문의해 주세요.' }, { headers })
     }
 
     if (row.id == null) {

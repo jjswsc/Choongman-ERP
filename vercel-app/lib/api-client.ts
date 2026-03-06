@@ -3006,6 +3006,8 @@ export interface PosTableItem {
   shape?: string
   /** 좌석 수 (몇 명 앉는 테이블) */
   seats?: number
+  /** 테이블 회전 각도 (0, 90, 180, 270) */
+  rotation?: number
 }
 
 export async function getPosTableLayout(params: { storeCode: string }) {

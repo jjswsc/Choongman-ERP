@@ -49,6 +49,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
 
   // 비밀번호
   "비밀번호가 변경되었습니다. 다시 로그인해 주세요.": "pw_success",
+  "현재 비밀번호가 일치하지 않습니다. 비밀번호 분실 시 슈퍼바이저팀에 문의해 주세요.": "msg_pw_current_wrong_contact_supervisor",
 
   // 직원
   "✅ 신규 직원이 등록되었습니다.": "emp_registered",

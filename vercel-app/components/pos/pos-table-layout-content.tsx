@@ -7,6 +7,7 @@ import {
   Save,
   Trash2,
   RotateCcw,
+  RotateCw,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -56,34 +57,23 @@ const SEAT_OPTIONS = [2, 3, 4, 5, 6, 8, 10]
 const SEAT_R = 6
 const SEAT_OFFSET = 2
 
-/** 테이블 둘레에 좌석 원 배치 - 4인은 상/하/좌/우, 그 외는 균등 분배 */
+/** 테이블 위·아래에만 좌석 원 배치 (위쪽 절반, 아래쪽 절반) */
 function getSeatPositions(w: number, h: number, n: number): { x: number; y: number }[] {
   if (n <= 0) return []
   const r = SEAT_R
   const off = SEAT_OFFSET
-  if (n === 4) {
-    return [
-      { x: w / 2, y: -r - off },
-      { x: w + r + off, y: h / 2 },
-      { x: w / 2, y: h + r + off },
-      { x: -r - off, y: h / 2 },
-    ]
-  }
+  const nTop = Math.ceil(n / 2)
+  const nBottom = n - nTop
   const positions: { x: number; y: number }[] = []
-  const perimeter = 2 * (w + h)
-  const step = perimeter / n
-  let traveled = step / 2
-  for (let i = 0; i < n; i++) {
-    if (traveled < w) {
-      positions.push({ x: traveled, y: -r - off })
-    } else if (traveled < w + h) {
-      positions.push({ x: w + r + off, y: traveled - w })
-    } else if (traveled < 2 * w + h) {
-      positions.push({ x: 2 * w + h - traveled, y: h + r + off })
-    } else {
-      positions.push({ x: -r - off, y: 2 * (w + h) - traveled })
-    }
-    traveled += step
+  // 위쪽 행
+  for (let i = 0; i < nTop; i++) {
+    const t = nTop === 1 ? 0.5 : i / (nTop - 1)
+    positions.push({ x: w * t, y: -r - off })
+  }
+  // 아래쪽 행
+  for (let i = 0; i < nBottom; i++) {
+    const t = nBottom === 1 ? 0.5 : i / (nBottom - 1)
+    positions.push({ x: w * t, y: h + r + off })
   }
   return positions
 }
@@ -159,6 +149,7 @@ export function PosTableLayoutContent() {
       h: preset.h,
       shape: preset.shape,
       seats: preset.defaultSeats,
+      rotation: 0,
     }
     setLayout((prev) => [...prev, newTable])
     setSelectedId(newTable.id)
@@ -196,6 +187,17 @@ export function PosTableLayoutContent() {
   const handleUpdateSeats = (id: string, seats: number) => {
     setLayout((prev) =>
       prev.map((t) => (t.id === id ? { ...t, seats } : t))
+    )
+  }
+
+  const handleRotateTable = (id: string) => {
+    setLayout((prev) =>
+      prev.map((t) => {
+        if (t.id !== id) return t
+        const current = t.rotation ?? 0
+        const next = (current + 90) % 360
+        return { ...t, rotation: next }
+      })
     )
   }
 
@@ -481,6 +483,18 @@ export function PosTableLayoutContent() {
             <AlignEndVertical className="h-4 w-4" />
           </Button>
         </div>
+        <div className="h-6 w-px bg-slate-200" />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1"
+          onClick={() => selectedId && handleRotateTable(selectedId)}
+          disabled={!selectedId}
+          title={t("posTableRotate") || "테이블 90° 회전"}
+        >
+          <RotateCw className="h-4 w-4" />
+          {t("posTableRotate") || "회전"}
+        </Button>
       </div>
 
       {/* 바닥 캔버스 */}
@@ -525,6 +539,8 @@ export function PosTableLayoutContent() {
               top: item.y,
               width: item.w,
               height: item.h,
+              transform: `rotate(${item.rotation ?? 0}deg)`,
+              transformOrigin: "center center",
               boxShadow: !isSquare ? "inset 0 1px 2px rgba(255,255,255,0.3)" : undefined,
             }}
             onMouseDown={(e) => handleMouseDown(e, item.id)}

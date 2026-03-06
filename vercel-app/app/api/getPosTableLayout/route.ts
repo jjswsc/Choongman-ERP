@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
           h: Number(t.h) ?? 60,
           shape: String(t.shape ?? 'rect'),
           seats: Number(t.seats ?? 0) || 0,
+          rotation: Number(t.rotation ?? 0) || 0,
         }))
         .filter((t) => t.id)
     }

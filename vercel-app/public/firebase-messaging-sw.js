@@ -26,6 +26,9 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
       badge: "/icon-192.png",
       tag: payload.data?.tag || "cm-erp-notice",
       data: payload.data || {},
+      silent: false,
+      vibrate: [200, 100, 200],
+      requireInteraction: false,
     });
   });
 }
