@@ -66,7 +66,7 @@ export function AdminNoticeHistory() {
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
-  const [searchType, setSearchType] = React.useState<"notice" | "order">("notice")
+  const [searchType, setSearchType] = React.useState<"all" | "notice" | "order">("all")
   const [searchKeyword, setSearchKeyword] = React.useState("")
 
   /** 주문승인/반려/보류/강제출고/발주 관련 공지 여부 */
@@ -82,7 +82,16 @@ export function AdminNoticeHistory() {
   const filteredNotices = React.useMemo(() => {
     let list = notices
     const q = searchKeyword.trim().toLowerCase()
-    if (searchType === "notice") {
+    if (searchType === "all") {
+      if (q) {
+        list = list.filter(
+          (n) =>
+            (n.title || "").toLowerCase().includes(q) ||
+            ((n.content || n.preview) || "").toLowerCase().includes(q)
+        )
+      }
+    } else if (searchType === "notice") {
+      list = list.filter((n) => !isOrderRelated(n))
       if (q) {
         list = list.filter(
           (n) =>
@@ -91,12 +100,13 @@ export function AdminNoticeHistory() {
         )
       }
     } else {
-      list = list.filter((n) => {
-        if (!isOrderRelated(n)) return false
-        if (!q) return true
-        const text = ((n.title || "") + " " + (n.content || n.preview || "")).toLowerCase()
-        return text.includes(q)
-      })
+      list = list.filter((n) => isOrderRelated(n))
+      if (q) {
+        list = list.filter((n) => {
+          const text = ((n.title || "") + " " + (n.content || n.preview || "")).toLowerCase()
+          return text.includes(q)
+        })
+      }
     }
     return list
   }, [notices, searchType, searchKeyword, isOrderRelated])
@@ -205,20 +215,23 @@ export function AdminNoticeHistory() {
       {/* 2행: 내 발송분 + 기간 */}
       <div className="border-b px-6 py-4 space-y-3 bg-muted/20">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={searchType} onValueChange={(v) => setSearchType(v as "notice" | "order")}>
+          <Select value={searchType} onValueChange={(v) => setSearchType(v as "all" | "notice" | "order")}>
             <SelectTrigger className="h-9 w-[100px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">{t("noticeSearchTypeAll")}</SelectItem>
               <SelectItem value="notice">{t("noticeSearchTypeNotice")}</SelectItem>
               <SelectItem value="order">{t("noticeSearchTypeOrder")}</SelectItem>
             </SelectContent>
           </Select>
           <Input
             placeholder={
-              searchType === "notice"
+              searchType === "all"
                 ? t("noticeSearchNoticePh")
-                : t("noticeSearchOrderApprovalPh")
+                : searchType === "notice"
+                  ? t("noticeSearchNoticePh")
+                  : t("noticeSearchOrderApprovalPh")
             }
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}

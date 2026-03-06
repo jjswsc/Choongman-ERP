@@ -28,6 +28,7 @@ import {
   getStockStores,
   forceOutboundBatch,
   getCombinedOutboundHistory,
+  getOrderReceivePhoto,
   getMyUsageHistory,
   getInvoiceData,
   getInvoiceSettings,
@@ -73,6 +74,8 @@ function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => st
           imgClassName="max-w-full max-h-[70vh] object-contain rounded"
           rotateLeftLabel={t("imageRotateLeft") || "반시계"}
           rotateRightLabel={t("imageRotateRight") || "시계"}
+          zoomInLabel={t("att_zoom_in") || "확대"}
+          zoomOutLabel={t("att_zoom_out") || "축소"}
         />
       </div>
       {urls.length > 1 && (
@@ -155,7 +158,9 @@ export default function OutboundPage() {
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
   const [itemSearch, setItemSearch] = React.useState("")
   const [selectedForPrint, setSelectedForPrint] = React.useState<Set<number>>(new Set())
+  const [photoModalOpen, setPhotoModalOpen] = React.useState(false)
   const [photoModalUrls, setPhotoModalUrls] = React.useState<string[]>([])
+  const [photoModalLoading, setPhotoModalLoading] = React.useState(false)
 
   const [whStart, setWhStart] = React.useState("")
   const [whEnd, setWhEnd] = React.useState("")
@@ -739,7 +744,7 @@ export default function OutboundPage() {
         g.items.length === 1
           ? `${first?.name || ""}${first?.spec ? ` (${first.spec})` : ""}`
           : `${g.items[0]?.name || ""} ${t("inEtcCount")} ${g.items.length - 1}`
-      return {
+        return {
         id: `g-${i}-${g.date}-${g.target}`,
         orderDate,
         deliveryDate: deliveryDate.slice(0, 10) || deliveryDate || "-",
@@ -747,6 +752,7 @@ export default function OutboundPage() {
         target: g.target || "-",
         type: g.type || "Force",
         deliveryStatus,
+        orderRowId: first?.orderRowId,
         items: g.items.map((it) => ({
           name: it.name || "",
           code: it.code || "",
@@ -1566,7 +1572,19 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 selectedIndices={selectedForPrint}
                 onToggleSelect={togglePrintSelect}
                 onToggleSelectAll={togglePrintSelectAll}
-                onPhotoClick={(urls) => setPhotoModalUrls(urls)}
+                onPhotoClick={async (orderId) => {
+                  setPhotoModalOpen(true)
+                  setPhotoModalLoading(true)
+                  setPhotoModalUrls([])
+                  try {
+                    const { urls } = await getOrderReceivePhoto(orderId)
+                    setPhotoModalUrls(urls)
+                  } catch {
+                    setPhotoModalUrls([])
+                  } finally {
+                    setPhotoModalLoading(false)
+                  }
+                }}
                 usageRows={usageTableRows}
               />
             </div>
@@ -1580,13 +1598,19 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           onSelect={handleItemSelect}
         />
 
-        {photoModalUrls.length > 0 && (
-          <Dialog open onOpenChange={(o) => !o && setPhotoModalUrls([])}>
+        {photoModalOpen && (
+          <Dialog open onOpenChange={(o) => !o && setPhotoModalOpen(false)}>
             <DialogContent className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden">
               <DialogHeader className="sr-only">
                 <DialogTitle>{t("outPhotoView")}</DialogTitle>
               </DialogHeader>
-              <ReceivePhotoGallery urls={photoModalUrls} t={t} />
+              {photoModalLoading ? (
+                <div className="flex items-center justify-center py-16 text-muted-foreground">{t("loading")}</div>
+              ) : photoModalUrls.length > 0 ? (
+                <ReceivePhotoGallery urls={photoModalUrls} t={t} />
+              ) : (
+                <div className="flex items-center justify-center py-16 text-muted-foreground">{t("noImage")}</div>
+              )}
             </DialogContent>
           </Dialog>
         )}

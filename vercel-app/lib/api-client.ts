@@ -3429,6 +3429,13 @@ export async function getCombinedOutboundHistory(params: {
   return res.json() as Promise<OutboundHistoryItem[]>
 }
 
+/** 주문 수령 사진 온디맨드 조회 (출고 내역에서 사진 클릭 시) */
+export async function getOrderReceivePhoto(orderId: string) {
+  const res = await apiFetch(`/api/getOrderReceivePhoto?orderId=${encodeURIComponent(orderId)}`)
+  const data = (await res.json()) as { urls?: string[] }
+  return { urls: data.urls ?? [] }
+}
+
 /** e-Tax 인보이스 XML 생성 */
 export interface EtaxGroupInput {
   date: string
@@ -3547,6 +3554,8 @@ export interface AdminEmployeeItem {
   email: string
   idNumber: string
   idCardPhoto: string
+  taxId: string
+  ssoNumber: string
   address: string
   bankName: string
   accountNumber: string

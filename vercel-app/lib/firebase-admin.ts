@@ -112,7 +112,10 @@ export async function sendFcmToRecipients(params: {
     unique.push(t)
   }
 
-  if (unique.length === 0) return { sent: 0, failed: 0 }
+  if (unique.length === 0) {
+    if (recipients.length > 0) console.warn('FCM: 수신자', recipients.length, '명 중 push_tokens 등록된 토큰 없음')
+    return { sent: 0, failed: 0 }
+  }
 
   // lang별로 그룹화
   const byLang = new Map<string, string[]>()
@@ -129,7 +132,7 @@ export async function sendFcmToRecipients(params: {
 
   for (const [lang, tokens] of byLang) {
     let finalTitle = title.startsWith('[') ? title : `[${appName}] ${title}`
-    let finalBody = body
+    let finalBody = body.slice(0, 100)
 
     if (lang !== 'ko') {
       try {
@@ -146,12 +149,22 @@ export async function sendFcmToRecipients(params: {
       const chunk = tokens.slice(i, i + batchSize)
       const message: admin.messaging.MulticastMessage = {
         tokens: chunk,
-        data: { title: finalTitle, body: finalBody.slice(0, 100) },
+        data: { title: finalTitle, body: finalBody },
+        notification: { title: finalTitle, body: finalBody },
+        webpush: {
+          headers: { TTL: '3600' },
+          notification: { title: finalTitle, body: finalBody },
+        },
       }
       try {
         const res = await messaging.sendEachForMulticast(message)
         sent += res.successCount
         failed += res.failureCount
+        if (res.failureCount > 0 && res.responses) {
+          res.responses.forEach((r, idx) => {
+            if (!r.success && r.error) console.warn('FCM 실패:', r.error.code, r.error.message)
+          })
+        }
       } catch (e) {
         console.error('FCM sendEachForMulticast:', e)
         failed += chunk.length

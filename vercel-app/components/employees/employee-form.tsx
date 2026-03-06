@@ -12,9 +12,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
+import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 
 const SAL_TYPE_OPTIONS = ["Monthly", "Hourly"]
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
@@ -38,6 +45,8 @@ export interface EmployeeFormData {
   role: string
   idNumber: string
   idCardPhoto: string
+  taxId: string
+  ssoNumber: string
   address: string
   bankName: string
   accountNumber: string
@@ -65,6 +74,8 @@ const emptyForm: EmployeeFormData = {
   role: "Staff",
   idNumber: "",
   idCardPhoto: "",
+  taxId: "",
+  ssoNumber: "",
   address: "",
   bankName: "",
   accountNumber: "",
@@ -102,6 +113,7 @@ export function EmployeeForm({
   const { lang } = useLang()
   const t = useT(lang)
   const idCardInputRef = React.useRef<HTMLInputElement>(null)
+  const photoInputRef = React.useRef<HTMLInputElement>(null)
   const update = (k: keyof EmployeeFormData, v: string | number) => {
     onChange({ ...form, [k]: v })
   }
@@ -115,6 +127,13 @@ export function EmployeeForm({
         </Button>
       </div>
 
+      <Accordion type="multiple" defaultValue={["basic", "id", "accounting"]} className="space-y-1">
+        {/* 기본 정보 */}
+        <AccordionItem value="basic" className="border rounded-lg px-3 data-[state=open]:border-primary/30">
+          <AccordionTrigger className="text-xs font-semibold hover:no-underline py-3">
+            {t("emp_section_basic")}
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
       <div className="grid grid-cols-2 gap-3">
         {/* 매장, 이름, 닉네임 + 오른쪽 사진 */}
         <div className="col-span-2 flex gap-4">
@@ -166,15 +185,49 @@ export function EmployeeForm({
                   onError={(e) => (e.currentTarget.style.display = "none")}
                 />
               ) : (
-                <span className="text-[10px] text-muted-foreground">{t("emp_photo_url_ph")}</span>
+                <span className="text-[10px] text-muted-foreground">—</span>
               )}
             </div>
-            <Input
-              value={form.photo}
-              onChange={(e) => update("photo", e.target.value)}
-              className="h-7 mt-1.5 text-[10px]"
-              placeholder={t("emp_photo_url_ph")}
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ""
+                if (!file) return
+                try {
+                  const dataUrl = await compressImageForUpload(file, 800, 0.7)
+                  update("photo", dataUrl)
+                } catch {
+                  alert(t("msg_upload_fail"))
+                }
+              }}
             />
+            <div className="flex gap-1 mt-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 flex-1 text-[10px] px-1.5"
+                onClick={() => photoInputRef.current?.click()}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                {t("emp_id_card_upload")}
+              </Button>
+              {form.photo && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-1.5 text-[10px] text-destructive"
+                  onClick={() => update("photo", "")}
+                >
+                  {t("delete")}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
         <div>
@@ -243,28 +296,6 @@ export function EmployeeForm({
           />
         </div>
         <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_sal_type")}</label>
-          <Select value={form.salType} onValueChange={(v) => update("salType", v)}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SAL_TYPE_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_label_amount")}</label>
-          <Input
-            type="number"
-            value={form.salAmt || ""}
-            onChange={(e) => update("salAmt", e.target.value ? Number(e.target.value) : 0)}
-            className="h-8 text-xs"
-          />
-        </div>
-        <div>
           <label className="text-xs font-semibold block mb-1">PIN</label>
           <Input
             type="password"
@@ -287,63 +318,87 @@ export function EmployeeForm({
             </SelectContent>
           </Select>
         </div>
-        <div className="col-span-2">
-          <label className="text-xs font-semibold block mb-1">{t("emp_id_card")}</label>
-          <div className="flex gap-3 items-start">
-            <div className="flex-shrink-0 w-28 rounded border border-input bg-muted overflow-hidden">
-              {form.idCardPhoto ? (
-                <div className="relative group">
-                  <img
-                    src={form.idCardPhoto}
-                    alt="ID Card"
-                    className="w-full h-24 object-contain bg-muted cursor-pointer"
-                    onClick={() => window.open(form.idCardPhoto, "_blank")}
-                  />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 px-2 text-[10px]"
+        <div>
+          <label className="text-xs font-semibold block mb-1">{t("emp_grade")}</label>
+          <Select value={form.grade || "__none__"} onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="-" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">-</SelectItem>
+              {GRADE_OPTIONS.filter(Boolean).map((g) => (
+                <SelectItem key={g} value={g}>{g}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+          </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* ID·신분증 */}
+        <AccordionItem value="id" className="border rounded-lg px-3 data-[state=open]:border-primary/30">
+          <AccordionTrigger className="text-xs font-semibold hover:no-underline py-3">
+            {t("emp_section_id_card")}
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+      <div className="flex gap-4 items-start">
+            {/* 왼쪽: ID 카드 사진 + 업로드 버튼 */}
+            <div className="flex-shrink-0 flex flex-col items-center">
+              <label className="text-xs font-semibold block mb-1 self-start">{t("emp_id_card")}</label>
+              <div className="w-28 rounded border border-input bg-muted overflow-hidden">
+                {form.idCardPhoto ? (
+                  <div className="relative group">
+                    <img
+                      src={form.idCardPhoto}
+                      alt="ID Card"
+                      className="w-full h-24 object-contain bg-muted cursor-pointer"
                       onClick={() => window.open(form.idCardPhoto, "_blank")}
-                    >
-                      <Image className="h-3 w-3 mr-1" />
-                      {t("emp_id_card_view")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 px-2 text-[10px]"
-                      onClick={() => {
-                        if (form.idCardPhoto.startsWith("data:")) {
-                          fetch(form.idCardPhoto)
-                            .then((r) => r.blob())
-                            .then((blob) => {
-                              const url = URL.createObjectURL(blob)
-                              const a = document.createElement("a")
-                              a.href = url
-                              a.download = `id_card_${(form.name || "photo").replace(/[/\\?*:"|]/g, "_")}.png`
-                              a.click()
-                              URL.revokeObjectURL(url)
-                            })
-                        } else {
-                          window.open(form.idCardPhoto, "_blank")
-                        }
-                      }}
-                    >
-                      <Download className="h-3 w-3 mr-1" />
-                      {t("emp_id_card_download")}
-                    </Button>
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-2 text-[10px]"
+                        onClick={() => window.open(form.idCardPhoto, "_blank")}
+                      >
+                        <Image className="h-3 w-3 mr-1" />
+                        {t("emp_id_card_view")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 px-2 text-[10px]"
+                        onClick={() => {
+                          if (form.idCardPhoto.startsWith("data:")) {
+                            fetch(form.idCardPhoto)
+                              .then((r) => r.blob())
+                              .then((blob) => {
+                                const url = URL.createObjectURL(blob)
+                                const a = document.createElement("a")
+                                a.href = url
+                                a.download = `id_card_${(form.name || "photo").replace(/[/\\?*:"|]/g, "_")}.png`
+                                a.click()
+                                URL.revokeObjectURL(url)
+                              })
+                          } else {
+                            window.open(form.idCardPhoto, "_blank")
+                          }
+                        }}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        {t("emp_id_card_download")}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="w-full h-24 flex items-center justify-center text-muted-foreground text-[10px]">
-                  —
-                </div>
-              )}
-            </div>
-            <div className="flex-1 space-y-1.5 min-w-0">
+                ) : (
+                  <div className="w-full h-24 flex items-center justify-center text-muted-foreground text-[10px]">
+                    —
+                  </div>
+                )}
+              </div>
               <input
                 ref={idCardInputRef}
                 type="file"
@@ -361,57 +416,118 @@ export function EmployeeForm({
                   }
                 }}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => idCardInputRef.current?.click()}
-              >
-                <Upload className="h-3.5 w-3.5 mr-1" />
-                {t("emp_id_card_upload")}
-              </Button>
-              {form.idCardPhoto && (
+              <div className="flex gap-1 mt-1.5 w-full justify-center">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-7 text-[10px] text-destructive hover:text-destructive"
-                  onClick={() => update("idCardPhoto", "")}
+                  className="h-7 text-[10px] px-2"
+                  onClick={() => idCardInputRef.current?.click()}
                 >
-                  {t("delete")}
+                  <Upload className="h-3 w-3 mr-1" />
+                  {t("emp_id_card_upload")}
                 </Button>
-              )}
-              <Input
-                value={form.idNumber}
-                onChange={(e) => update("idNumber", e.target.value)}
-                className="h-8 text-xs mt-1"
-                placeholder={t("emp_id_number")}
-              />
+                {form.idCardPhoto && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[10px] text-destructive px-2"
+                    onClick={() => update("idCardPhoto", "")}
+                  >
+                    {t("delete")}
+                  </Button>
+                )}
+              </div>
+            </div>
+            {/* 오른쪽: ID번호, Tax ID, SSO 한 줄 정렬 */}
+            <div className="flex-1 min-w-0 flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold block mb-1">{t("emp_id_number")}</label>
+                <Input
+                  value={form.idNumber}
+                  onChange={(e) => update("idNumber", e.target.value)}
+                  className="h-8 text-xs"
+                  placeholder={t("emp_id_number")}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold block mb-1">{t("emp_tax_id")}</label>
+                <Input
+                  value={form.taxId}
+                  onChange={(e) => update("taxId", e.target.value)}
+                  className="h-8 text-xs"
+                  placeholder={t("emp_tax_id")}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold block mb-1">{t("emp_sso_number")}</label>
+                <Input
+                  value={form.ssoNumber}
+                  onChange={(e) => update("ssoNumber", e.target.value)}
+                  className="h-8 text-xs"
+                  placeholder={t("emp_sso_number")}
+                />
+              </div>
             </div>
           </div>
-        </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* 회계·급여 */}
+        <AccordionItem value="accounting" className="border rounded-lg px-3 data-[state=open]:border-primary/30">
+          <AccordionTrigger className="text-xs font-semibold hover:no-underline py-3">
+            {t("emp_section_accounting")}
+          </AccordionTrigger>
+          <AccordionContent className="pb-3">
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_grade")}</label>
-          <Select value={form.grade || "__none__"} onValueChange={(v) => update("grade", v === "__none__" ? "" : v)}>
+          <label className="text-xs font-semibold block mb-1">{t("emp_label_sal_type")}</label>
+          <Select value={form.salType} onValueChange={(v) => update("salType", v)}>
             <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="-" />
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">-</SelectItem>
-              {GRADE_OPTIONS.filter(Boolean).map((g) => (
-                <SelectItem key={g} value={g}>{g}</SelectItem>
+              {SAL_TYPE_OPTIONS.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div>
-          <label className="text-xs font-semibold block mb-1">{t("emp_bank_name")}</label>
+          <label className="text-xs font-semibold block mb-1">{t("emp_label_sal_amt")}</label>
           <Input
-            value={form.bankName}
-            onChange={(e) => update("bankName", e.target.value)}
+            type="number"
+            value={form.salAmt || ""}
+            onChange={(e) => update("salAmt", e.target.value ? Number(e.target.value) : 0)}
             className="h-8 text-xs"
           />
+        </div>
+        <div>
+          <label className="text-xs font-semibold block mb-1">{t("emp_bank_name")}</label>
+          <Select
+            value={BANK_OPTIONS.includes(form.bankName) ? form.bankName : (form.bankName ? BANK_OTHER : "__none__")}
+            onValueChange={(v) => update("bankName", v === BANK_OTHER || v === "__none__" ? "" : v)}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder={t("emp_bank_name")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">-</SelectItem>
+              {BANK_OPTIONS.map((b) => (
+                <SelectItem key={b} value={b}>{b}</SelectItem>
+              ))}
+              <SelectItem value={BANK_OTHER}>{t("emp_bank_other")}</SelectItem>
+            </SelectContent>
+          </Select>
+          {!BANK_OPTIONS.includes(form.bankName) && (
+            <Input
+              value={form.bankName}
+              onChange={(e) => update("bankName", e.target.value)}
+              className="h-8 text-xs mt-1.5"
+              placeholder={t("emp_bank_name")}
+            />
+          )}
         </div>
         <div>
           <label className="text-xs font-semibold block mb-1">{t("emp_account_number")}</label>
@@ -451,7 +567,10 @@ export function EmployeeForm({
           />
           <p className="text-[10px] text-muted-foreground mt-0.5">{t("emp_risk_allowance_hint")}</p>
         </div>
-      </div>
+          </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <Button className="w-full mt-4" onClick={onSave} disabled={saving || !form.name}>
         {saving ? t("loading") : "💾 " + t("emp_save")}

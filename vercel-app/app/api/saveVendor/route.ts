@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { clearDirectSettlementCache } from '@/lib/direct-settlement-server'
 
 function mapTypeToDb(type: string): string {
   const t = String(type || '').toLowerCase()
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
       type?: string
       memo?: string
       editingCode?: string
+      direct_settlement?: boolean
     }
 
     const code = String(body.code || '').trim()
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
       addr: String(body.address || '').trim(),
       tax_id: String(body.tax_no || '').trim() || null,
       memo: String(body.memo || '').trim(),
+      direct_settlement: Boolean(body.direct_settlement),
     }
 
     const filterCode = editingCode || code
@@ -55,10 +58,12 @@ export async function POST(request: NextRequest) {
 
     if (existing && existing.length > 0) {
       await supabaseUpdateByFilter('vendors', `code=eq.${encodeURIComponent(filterCode)}`, row)
+      clearDirectSettlementCache()
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
     }
 
     await supabaseInsert('vendors', row)
+    clearDirectSettlementCache()
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {
     console.error('saveVendor:', e)

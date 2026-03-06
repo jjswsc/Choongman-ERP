@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 
 export interface VendorFormData {
   code: string
@@ -37,6 +38,7 @@ export interface VendorFormData {
   tax_no: string
   type: "purchase" | "sales" | "both"
   memo: string
+  direct_settlement: boolean
 }
 
 export interface VendorFormProps {
@@ -195,6 +197,22 @@ export function VendorForm({ formData, setFormData, isEditing, onSave, onReset, 
               <SelectItem value="both">{t("vendorTypeBoth")}</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="direct_settlement"
+            checked={formData.direct_settlement}
+            onCheckedChange={(checked) =>
+              setFormData((prev) => ({ ...prev, direct_settlement: checked === true }))
+            }
+          />
+          <label
+            htmlFor="direct_settlement"
+            className="text-xs font-semibold text-foreground cursor-pointer"
+          >
+            {t("vendorDirectSettlement")}
+          </label>
         </div>
 
         <div className="flex flex-col gap-2">

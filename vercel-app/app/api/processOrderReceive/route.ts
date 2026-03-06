@@ -6,6 +6,7 @@ import {
 } from '@/lib/supabase-server'
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 import { sendNoticeToRecipients, getLogisticRecipients } from '@/lib/send-notice-util'
+import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 
 const TZ = 'Asia/Bangkok'
 
@@ -119,18 +120,24 @@ export async function POST(request: NextRequest) {
       log_type: 'Inbound',
     }))
 
-    // 본사: 체크된 품목만 Outbound (본사 재고 차감)
-    const hqOutboundRows = itemsToInbound.map((item) => ({
-      location: '본사',
-      item_code: item.code,
-      item_name: item.name || '',
-      spec: item.spec || '-',
-      qty: -(Number(item.qty) || 0),
-      log_date: today,
-      vendor_target: store,
-      log_type: 'Outbound',
-      order_id: orderId,
-    }))
+    // 직접정산 품목: 본사 재고에 기록 없음 (지두방 등 매장-거래처 직접 거래)
+    const itemCodes = itemsToInbound.map((it) => String(it.code || '').trim()).filter(Boolean)
+    const directMap = itemCodes.length > 0 ? await getDirectSettlementMap(itemCodes) : {}
+
+    // 본사: 체크된 품목만 Outbound (본사 재고 차감) - 직접정산 품목 제외
+    const hqOutboundRows = itemsToInbound
+      .filter((item) => !directMap[String(item.code || '').trim()])
+      .map((item) => ({
+        location: '본사',
+        item_code: item.code,
+        item_name: item.name || '',
+        spec: item.spec || '-',
+        qty: -(Number(item.qty) || 0),
+        log_date: today,
+        vendor_target: store,
+        log_type: 'Outbound',
+        order_id: orderId,
+      }))
 
     if (inboundRows.length) {
       await supabaseInsertMany('stock_logs', inboundRows)
@@ -150,6 +157,7 @@ export async function POST(request: NextRequest) {
     } else if (imageUrl) {
       patch.image_url = imageUrl
     }
+    let newCart: { code?: string; name?: string; price?: number; qty: number; spec?: string }[] = []
     if (hasQtyAdjustments && receivedQtysRaw) {
       const qtyMap: Record<string, number> = {}
       const originalQtyMap: Record<string, number> = {}
@@ -164,7 +172,7 @@ export async function POST(request: NextRequest) {
       if (Object.keys(originalQtyMap).length > 0) {
         patch.original_order_qty_json = JSON.stringify(originalQtyMap)
       }
-      const newCart = cart.map((item, idx) => ({
+      newCart = cart.map((item, idx) => ({
         ...item,
         qty: getQtyForIdx(idx),
       }))
@@ -193,12 +201,20 @@ export async function POST(request: NextRequest) {
       console.error('processOrderReceive notice:', noticeErr)
     }
 
-    if (hasQtyAdjustments && receivedQtysRaw) {
-      const newTotal = Number(patch.total ?? 0)
-      const storeName = String(o.store_name || '').trim()
-      const transDate = today
-      if (storeName && newTotal > 0) {
-        await upsertReceivableFromOrder({ orderId, storeName, total: newTotal, transDate })
+    // 미수금: 직접정산 품목 제외한 금액만 반영 (본사 정산분만)
+    const storeName = String(o.store_name || '').trim()
+    const transDate = today
+    if (storeName) {
+      const cartForReceivable = newCart.length > 0 ? newCart : cart.map((item, idx) => ({ ...item, qty: getQtyForIdx(idx) }))
+      let subtotalHQ = 0
+      cartForReceivable.forEach((it) => {
+        if (!directMap[String(it.code || '').trim()]) {
+          subtotalHQ += Number(it.price || 0) * Number(it.qty || 0)
+        }
+      })
+      const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
+      if (totalHQ > 0) {
+        await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
       }
     }
 

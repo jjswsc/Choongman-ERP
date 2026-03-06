@@ -56,6 +56,8 @@ export async function POST(req: Request) {
       annual_leave_days: 6,
       id_number: d.idNumber != null ? String(d.idNumber).trim() : '',
       id_card_photo: d.idCardPhoto != null && String(d.idCardPhoto).trim() ? String(d.idCardPhoto).trim() : null,
+      tax_id: d.taxId != null ? String(d.taxId).trim() : '',
+      sso_number: d.ssoNumber != null ? String(d.ssoNumber).trim() : '',
       address: d.address != null ? String(d.address).trim() : '',
       bank_name: d.bankName != null ? String(d.bankName).trim() : '',
       account_number: d.accountNumber != null ? String(d.accountNumber).trim() : '',

@@ -109,7 +109,12 @@ export async function POST(request: NextRequest) {
           title,
           body: content.slice(0, 100),
           recipients: fcmRecipients,
-        }).catch((e) => console.error('sendNotice FCM:', e))
+        })
+          .then((r) => {
+            if (r.sent === 0 && r.failed === 0) console.warn('sendNotice FCM: 수신자', fcmRecipients.length, '명, push_tokens 없음')
+            else console.info('sendNotice FCM:', r.sent, 'sent,', r.failed, 'failed')
+          })
+          .catch((e) => console.error('sendNotice FCM:', e))
       }
     }
 

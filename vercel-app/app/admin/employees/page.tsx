@@ -99,6 +99,8 @@ function toFormData(e: AdminEmployeeItem): EmployeeFormData {
     role: e.role || "Staff",
     idNumber: e.idNumber || "",
     idCardPhoto: e.idCardPhoto || "",
+    taxId: e.taxId || "",
+    ssoNumber: e.ssoNumber || "",
     address: e.address || "",
     bankName: e.bankName || "",
     accountNumber: e.accountNumber || "",

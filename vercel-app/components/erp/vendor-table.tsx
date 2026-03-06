@@ -33,6 +33,7 @@ export interface Vendor {
   tax_no?: string
   type: "purchase" | "sales" | "both"
   memo: string
+  direct_settlement?: boolean
 }
 
 export type VendorTypeFilter = "all" | "purchase" | "sales"
@@ -109,6 +110,7 @@ export function VendorTable({
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 min-w-[92px]">{t("vendorColType")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[140px]">{t("vendorColName")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("vendorDirectSettlement")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-32 min-w-[130px]">{t("vendorColPhone")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("vendorColAction")}</th>
             </tr>
@@ -116,13 +118,13 @@ export function VendorTable({
           <tbody>
             {!hasSearched ? (
               <tr>
-                <td colSpan={5} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorSearchHint")}
                 </td>
               </tr>
             ) : vendors.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={6} className="px-5 py-12 text-center text-sm text-muted-foreground">
                   {t("vendorNoResults")}
                 </td>
               </tr>
@@ -162,6 +164,15 @@ export function VendorTable({
                         ? vendor.gps_name
                         : vendor.name}
                     </span>
+                  </td>
+                  <td className="px-5 py-3 text-center">
+                    {vendor.direct_settlement ? (
+                      <span className="inline-flex items-center rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                        {t("vendorDirectSettlement")}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </td>
                   <td className="px-5 py-3 w-32 min-w-[130px] whitespace-nowrap">
                     <span className="text-xs text-muted-foreground">{vendor.phone || "-"}</span>

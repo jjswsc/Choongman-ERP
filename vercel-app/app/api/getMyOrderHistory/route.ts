@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 
 export interface OrderHistoryItem {
   id: number
@@ -12,7 +13,7 @@ export interface OrderHistoryItem {
   total: number
   status: string
   deliveryStatus: string
-  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number; code?: string; outboundLocation?: string; index?: number }[]
+  items: { name?: string; qty?: number; price?: number; receivedQty?: number; originalQty?: number; code?: string; outboundLocation?: string; index?: number; isDirectSettlement?: boolean }[]
   receivedIndices?: number[]
   userName?: string
   userNick?: string

@@ -21,6 +21,7 @@ const emptyForm: VendorFormData = {
   tax_no: "",
   type: "purchase",
   memo: "",
+  direct_settlement: false,
 }
 
 export default function VendorsPage() {
@@ -61,6 +62,7 @@ export default function VendorsPage() {
           tax_no: v.tax_no ?? "",
           type: v.type,
           memo: v.memo,
+          direct_settlement: v.direct_settlement ?? false,
         })
       }
     } else {
@@ -90,6 +92,7 @@ export default function VendorsPage() {
       tax_no: formData.tax_no.trim() || undefined,
       type: formData.type,
       memo: formData.memo.trim(),
+      direct_settlement: formData.direct_settlement,
       editingCode: editingCode || undefined,
     })
     if (!res.success) {
@@ -107,6 +110,7 @@ export default function VendorsPage() {
       tax_no: formData.tax_no.trim() || undefined,
       type: formData.type,
       memo: formData.memo.trim(),
+      direct_settlement: formData.direct_settlement,
     }
     if (editingCode) {
       setVendors((prev) => prev.map((v) => (v.code === editingCode ? newVendor : v)))
@@ -131,6 +135,7 @@ export default function VendorsPage() {
       tax_no: vendor.tax_no ?? "",
       type: vendor.type,
       memo: vendor.memo,
+      direct_settlement: vendor.direct_settlement ?? false,
     })
     setEditingCode(vendor.code)
   }

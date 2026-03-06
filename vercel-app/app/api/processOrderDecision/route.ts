@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
+import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
@@ -180,11 +181,26 @@ export async function POST(request: NextRequest) {
 
     if (decision === 'Approved') {
       const updated = patch as { total?: number; delivery_date?: string; cart_json?: string }
-      const total = Number(updated.total ?? 0)
       const storeName = String((orders[0] as { store_name?: string }).store_name || '').trim()
       const transDate = String(updated.delivery_date || (orders[0] as { order_date?: string }).order_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
-      if (storeName && total > 0) {
-        await upsertReceivableFromOrder({ orderId, storeName, total, transDate })
+      if (storeName) {
+        let cartForReceivable: { code?: string; price?: number; qty?: number }[] = []
+        try {
+          cartForReceivable = JSON.parse(updated.cart_json || '[]')
+        } catch {}
+        const directMap = cartForReceivable.length > 0
+          ? await getDirectSettlementMap(cartForReceivable.map((it) => it.code || '').filter(Boolean))
+          : {}
+        let subtotalHQ = 0
+        cartForReceivable.forEach((it) => {
+          if (!directMap[it.code || '']) {
+            subtotalHQ += Number(it.price || 0) * Number(it.qty || 0)
+          }
+        })
+        const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
+        if (totalHQ > 0) {
+          await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
+        }
       }
     }
     return NextResponse.json({ success: true, message: '처리되었습니다.' }, { headers })

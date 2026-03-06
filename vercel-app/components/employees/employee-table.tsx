@@ -1,5 +1,6 @@
 "use client"
 
+import { Pencil, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { displayLabelShort } from "@/lib/utils"
@@ -107,20 +108,22 @@ export function EmployeeTable({ rows, loading, onEdit, onDelete, t, statusFilter
                     {Number(e.salAmt).toLocaleString()}
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => onEdit(idx)}
-                        className="h-7 rounded bg-primary px-2 text-[10px] font-medium text-primary-foreground hover:opacity-90"
+                        title={t("emp_edit")}
+                        className="rounded p-1.5 text-primary hover:bg-primary/10 transition-colors"
                       >
-                        {t("emp_edit")}
+                        <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => onDelete(e.row)}
-                        className="h-7 rounded bg-destructive px-2 text-[10px] font-medium text-destructive-foreground hover:opacity-90"
+                        title={t("delete")}
+                        className="rounded p-1.5 text-destructive hover:bg-destructive/10 transition-colors"
                       >
-                        {t("delete")}
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </td>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react"
+import { ChevronDown, ChevronRight, Image, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -27,6 +27,8 @@ export interface ShipmentTableRow {
   target: string
   type: string
   deliveryStatus?: string
+  /** 주문 출고 행일 때 수령 사진 온디맨드 로드용 */
+  orderRowId?: string
   items: { name: string; code?: string; spec: string; qty: number; amount: number; originalOrderQty?: number; qtyStages?: number[]; outboundLocation?: string; deliveryDate?: string; isUnreceived?: boolean }[]
   itemsSummary: string
   totalQty: number
@@ -43,7 +45,8 @@ interface ShipmentTableProps {
   selectedIndices: Set<number>
   onToggleSelect: (idx: number) => void
   onToggleSelectAll: () => void
-  onPhotoClick?: (urls: string[]) => void
+  /** orderRowId로 수령 사진 온디맨드 조회 후 모달 표시 */
+  onPhotoClick?: (orderId: string) => void
   /** 비본사용: 단순 { date, item, qty, amount } */
   usageRows?: { date: string; item: string; qty: number; amount: number }[]
 }
@@ -199,7 +202,7 @@ function TableRow({
   isSelected: boolean
   onToggleExpand: () => void
   onToggleSelect: () => void
-  onPhotoClick?: (urls: string[]) => void
+  onPhotoClick?: (orderId: string) => void
   getOrderTypeBadge: (type: string) => StatusBadgeKey | null
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
@@ -260,18 +263,16 @@ function TableRow({
         </td>
         <td className="px-3 py-2.5 text-center">
           <div className="flex items-center justify-center gap-1.5">
-            {(() => {
-              const urls = (row.receiveImageUrls?.length ? row.receiveImageUrls : row.receiveImageUrl ? [row.receiveImageUrl] : []) as string[]
-              return urls.length > 0 ? (
+            {row.orderRowId && row.type === "Outbound" ? (
               <button
                 type="button"
-                onClick={() => onPhotoClick?.(urls)}
-                className="inline-block w-9 h-9 rounded overflow-hidden border border-border hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary"
+                onClick={() => onPhotoClick?.(row.orderRowId!)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded border border-border hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
+                title={t("outPhotoView")}
               >
-                <img src={urls[0]} alt={t("outPhotoView")} className="w-full h-full object-cover" />
+                <Image className="h-4 w-4 text-primary" />
               </button>
-              ) : null
-            })() ?? (
+            ) : (
               <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
             )}
           </div>

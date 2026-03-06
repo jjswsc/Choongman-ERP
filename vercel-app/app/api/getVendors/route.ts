@@ -25,6 +25,7 @@ export async function GET() {
       tax_id?: string
       memo?: string
       gps_name?: string
+      direct_settlement?: boolean
     }[] | null
 
     const list = (rows || [])
@@ -44,6 +45,7 @@ export async function GET() {
           tax_no: String((row as { tax_id?: string }).tax_id || '').trim() || undefined,
           type: t,
           memo: String(row.memo || ''),
+          direct_settlement: Boolean(row.direct_settlement),
         }
       })
 

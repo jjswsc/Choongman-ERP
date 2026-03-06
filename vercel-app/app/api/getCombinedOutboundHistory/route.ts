@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 
 export interface OutboundHistoryItem {
   date: string
@@ -29,23 +30,6 @@ export interface OutboundHistoryItem {
   outboundLocation?: string
   /** 미수령 품목 여부 (부분 배송 시 누락 품목 표시용) */
   isUnreceived?: boolean
-}
-
-function parseImageUrls(imageUrl: unknown): string[] {
-  if (!imageUrl || typeof imageUrl !== 'string') return []
-  const s = String(imageUrl).trim()
-  if (!s) return []
-  if (s.startsWith('[')) {
-    try {
-      const arr = JSON.parse(s) as unknown[]
-      return (Array.isArray(arr) ? arr : [])
-        .filter((u): u is string => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image')))
-    } catch {
-      return []
-    }
-  }
-  if (s.indexOf('http') === 0 || s.indexOf('data:image') === 0) return [s]
-  return []
 }
 
 export async function GET(request: NextRequest) {
@@ -179,7 +163,6 @@ export async function GET(request: NextRequest) {
       const orderMap: Record<string, {
         store_name?: string
         delivery_status?: string
-        image_url?: string
         delivery_date?: string
         delivery_dates_by_outbound?: Record<string, string>
         order_date?: string
@@ -190,66 +173,71 @@ export async function GET(request: NextRequest) {
         cart?: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[]
       }> = {}
 
-      for (const oid of orderRowIds) {
-        const ords = (await supabaseSelectFilter('orders', `id=eq.${oid}`)) as {
-          delivery_status?: string
-          image_url?: string
-          delivery_date?: string
-          delivery_dates_by_outbound?: string
-          order_date?: string
-          received_indices?: string | number[]
-          received_qty_json?: string
-          original_order_qty_json?: string
-          approved_original_qty_json?: string
-          cart_json?: string
-        }[]
-        if (ords && ords.length > 0) {
-          const o = ords[0]
-          let recIdx: number[] = []
-          try {
-            if (o.received_indices) {
-              recIdx = Array.isArray(o.received_indices)
-                ? o.received_indices
-                : JSON.parse(String(o.received_indices))
-            }
-          } catch {}
-          let recQtyMap: Record<string, number> = {}
-          try {
-            if (o.received_qty_json) recQtyMap = JSON.parse(String(o.received_qty_json)) || {}
-          } catch {}
-          let origQtyMap: Record<string, number> = {}
-          try {
-            if (o.original_order_qty_json) origQtyMap = JSON.parse(String(o.original_order_qty_json)) || {}
-          } catch {}
-          let approvedOrigQtyMap: Record<string, number> = {}
-          try {
-            if (o.approved_original_qty_json) approvedOrigQtyMap = JSON.parse(String(o.approved_original_qty_json)) || {}
-          } catch {}
-          let cart: { code?: string; name?: string; qty?: number }[] = []
-          try {
-            if (o.cart_json) cart = JSON.parse(o.cart_json) || []
-          } catch {}
-          let deliveryDatesByOutbound: Record<string, string> | undefined
-          try {
-            const raw = (o as { delivery_dates_by_outbound?: string }).delivery_dates_by_outbound
-            if (raw && typeof raw === 'string') {
-              const parsed = JSON.parse(raw) as Record<string, string>
-              if (parsed && typeof parsed === 'object') deliveryDatesByOutbound = parsed
-            }
-          } catch {}
-          orderMap[String(oid)] = {
-            store_name: (o as { store_name?: string }).store_name,
-            delivery_status: o.delivery_status,
-            image_url: o.image_url,
-            delivery_date: o.delivery_date,
-            delivery_dates_by_outbound: deliveryDatesByOutbound,
-            order_date: o.order_date,
-            received_indices: recIdx,
-            received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
-            original_order_qty_json: Object.keys(origQtyMap).length > 0 ? origQtyMap : undefined,
-            approved_original_qty_json: Object.keys(approvedOrigQtyMap).length > 0 ? approvedOrigQtyMap : undefined,
-            cart,
+      // image_url 제외하여 대용량 수령 사진 전송 방지, 일괄 조회로 N+1 해소
+      const idsFilter = `id=in.(${orderRowIds.join(',')})`
+      const selectCols = 'id,store_name,delivery_status,delivery_date,delivery_dates_by_outbound,order_date,received_indices,received_qty_json,original_order_qty_json,approved_original_qty_json,cart_json'
+      const ordsAll = (await supabaseSelectFilter('orders', idsFilter, {
+        select: selectCols,
+        limit: orderRowIds.length + 10,
+      })) as {
+        id?: number
+        delivery_status?: string
+        delivery_date?: string
+        delivery_dates_by_outbound?: string
+        order_date?: string
+        received_indices?: string | number[]
+        received_qty_json?: string
+        original_order_qty_json?: string
+        approved_original_qty_json?: string
+        cart_json?: string
+      }[]
+
+      for (const o of ordsAll || []) {
+        const oid = String(o.id ?? '')
+        if (!oid) continue
+        let recIdx: number[] = []
+        try {
+          if (o.received_indices) {
+            recIdx = Array.isArray(o.received_indices)
+              ? o.received_indices
+              : JSON.parse(String(o.received_indices))
           }
+        } catch {}
+        let recQtyMap: Record<string, number> = {}
+        try {
+          if (o.received_qty_json) recQtyMap = JSON.parse(String(o.received_qty_json)) || {}
+        } catch {}
+        let origQtyMap: Record<string, number> = {}
+        try {
+          if (o.original_order_qty_json) origQtyMap = JSON.parse(String(o.original_order_qty_json)) || {}
+        } catch {}
+        let approvedOrigQtyMap: Record<string, number> = {}
+        try {
+          if (o.approved_original_qty_json) approvedOrigQtyMap = JSON.parse(String(o.approved_original_qty_json)) || {}
+        } catch {}
+        let cart: { code?: string; name?: string; qty?: number }[] = []
+        try {
+          if (o.cart_json) cart = JSON.parse(o.cart_json) || []
+        } catch {}
+        let deliveryDatesByOutbound: Record<string, string> | undefined
+        try {
+          const raw = (o as { delivery_dates_by_outbound?: string }).delivery_dates_by_outbound
+          if (raw && typeof raw === 'string') {
+            const parsed = JSON.parse(raw) as Record<string, string>
+            if (parsed && typeof parsed === 'object') deliveryDatesByOutbound = parsed
+          }
+        } catch {}
+        orderMap[oid] = {
+          store_name: (o as { store_name?: string }).store_name,
+          delivery_status: o.delivery_status,
+          delivery_date: o.delivery_date,
+          delivery_dates_by_outbound: deliveryDatesByOutbound,
+          order_date: o.order_date,
+          received_indices: recIdx,
+          received_qty_json: Object.keys(recQtyMap).length > 0 ? recQtyMap : undefined,
+          original_order_qty_json: Object.keys(origQtyMap).length > 0 ? origQtyMap : undefined,
+          approved_original_qty_json: Object.keys(approvedOrigQtyMap).length > 0 ? approvedOrigQtyMap : undefined,
+          cart,
         }
       }
 
@@ -261,11 +249,7 @@ export async function GET(request: NextRequest) {
         if (o.delivery_status === '배송완료' || o.delivery_status === '일부배송완료' || o.delivery_status === '일부 배송 완료') {
           r.deliveryStatus = o.delivery_status === '일부 배송 완료' ? '일부배송완료' : o.delivery_status
         }
-        const urls = parseImageUrls(o.image_url)
-        if (urls.length > 0) {
-          r.receiveImageUrls = urls
-          r.receiveImageUrl = urls[0]
-        }
+        // receiveImageUrls는 클릭 시 getOrderReceivePhoto에서 별도 로드
         const outboundLoc = r.outboundLocation || '(미지정)'
         const perOutbound = o.delivery_dates_by_outbound?.[outboundLoc]
         if (perOutbound) r.deliveryDate = perOutbound.slice(0, 16)
@@ -368,10 +352,6 @@ export async function GET(request: NextRequest) {
             deliveryDate: o.delivery_date?.slice(0, 16),
             orderDate: o.order_date?.slice(0, 10),
             invoiceNo: baseInvoiceNo,
-            ...(() => {
-              const urls = parseImageUrls(o.image_url)
-              return { receiveImageUrl: urls[0], receiveImageUrls: urls }
-            })(),
             outboundLocation: info.outboundLocation,
             originalOrderQty: qty,
             isUnreceived: true,
@@ -379,7 +359,21 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // 직접정산(지두방) 품목: 인보이스 금액에서 제외 (가격 0 처리)
+      const codes = [...new Set(filteredList.map((r) => r.code).filter(Boolean))]
+      const directMap = codes.length ? await getDirectSettlementMap(codes) : {}
+      for (const r of filteredList) {
+        if (r.code && directMap[r.code]) r.amount = 0
+      }
+
       return NextResponse.json(filteredList, { headers })
+    }
+
+    // 직접정산(지두방) 품목: 인보이스 금액에서 제외 (가격 0 처리)
+    const codes = [...new Set(list.map((r) => r.code).filter(Boolean))]
+    const directMap = codes.length ? await getDirectSettlementMap(codes) : {}
+    for (const r of list) {
+      if (r.code && directMap[r.code]) r.amount = 0
     }
 
     return NextResponse.json(list, { headers })
