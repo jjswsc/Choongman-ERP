@@ -2325,6 +2325,7 @@ export async function savePosMenuCategoriesConfig(params: {
     mainCategories: string[]
     categoriesByMain: Record<string, string[]>
     menusUpdated?: number
+    message?: string
   }>
 }
 

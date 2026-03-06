@@ -91,7 +91,7 @@ export function PosMenuCategorySettingsDialog({
         setFormMain("")
         onSaved?.()
       } else {
-        alert(res?.message || t("msg_save_fail_detail"))
+        alert((res as { message?: string })?.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
@@ -117,7 +117,7 @@ export function PosMenuCategorySettingsDialog({
         setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
         onSaved?.()
       } else {
-        alert(res?.message || t("msg_delete_fail_detail"))
+        alert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
@@ -157,7 +157,7 @@ export function PosMenuCategorySettingsDialog({
         setFormSub({ main: "", name: "" })
         onSaved?.()
       } else {
-        alert(res?.message || t("msg_save_fail_detail"))
+        alert((res as { message?: string })?.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
@@ -185,7 +185,7 @@ export function PosMenuCategorySettingsDialog({
         setConfig({ ...config, categoriesByMain: newCategoriesByMain })
         onSaved?.()
       } else {
-        alert(res?.message || t("msg_delete_fail_detail"))
+        alert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
