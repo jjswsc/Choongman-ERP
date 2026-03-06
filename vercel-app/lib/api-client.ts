@@ -587,6 +587,7 @@ export async function getSentNotices(params: {
   endDate: string
   userStore?: string
   userRole?: string
+  searchType?: 'all' | 'notice' | 'order'
 }) {
   const q = new URLSearchParams({
     sender: params.sender,
@@ -595,6 +596,7 @@ export async function getSentNotices(params: {
   })
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
+  if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
   const res = await apiFetch(`/api/getSentNotices?${q}`)
   return res.json() as Promise<SentNoticeItem[]>
 }
@@ -4023,6 +4025,8 @@ export interface VendorForPurchase {
   code: string
   name: string
   address: string
+  taxId?: string
+  phone?: string
 }
 
 export interface ItemByVendor {

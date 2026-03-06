@@ -48,7 +48,7 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
       data: payload.data || {},
       silent: false,
       vibrate: [200, 100, 200],
-      requireInteraction: false,
+      renotify: true,
     });
   });
 }

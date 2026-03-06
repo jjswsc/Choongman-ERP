@@ -69,12 +69,13 @@ export function AdminNoticeHistory() {
   const [searchType, setSearchType] = React.useState<"all" | "notice" | "order">("all")
   const [searchKeyword, setSearchKeyword] = React.useState("")
 
-  /** 주문승인/반려/보류/강제출고/발주 관련 공지 여부 */
+  /** 물류관리 관련 (주문승인/반려/보류/강제출고/발주/입고/재고/배송/매장 수령 완료 등) 공지 여부 */
   const isOrderRelated = React.useCallback((n: SentNoticeItem) => {
     const title = (n.title || "").toLowerCase()
     const content = ((n.content || n.preview) || "").toLowerCase()
+    const text = title + " " + content
     if (/주문.*(승인|반려|보류)/.test(title) || /주문\s*#\d+/.test(title)) return true
-    if (/강제|출고|발주/.test(title) || /강제|출고|발주/.test(content)) return true
+    if (/강제|출고|발주|입고|재고|배송|물류|수령/.test(text)) return true
     if (/주문.*확인|승인.*화면/.test(content)) return true
     return false
   }, [])
@@ -121,11 +122,12 @@ export function AdminNoticeHistory() {
       endDate,
       userStore: auth.store,
       userRole: auth.role,
+      searchType,
     })
       .then(setNotices)
       .catch(() => setNotices([]))
       .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter])
+  }, [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter, searchType])
 
   const loadSenders = React.useCallback(() => {
     getNoticeSenders({ startDate, endDate })

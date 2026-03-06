@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { isFirebaseConfigured, requestNotificationPermission, getFcmToken } from '@/lib/firebase-client'
+import { isFirebaseConfigured, requestNotificationPermission, getFcmToken, setupForegroundHandler } from '@/lib/firebase-client'
 import { useLang } from '@/lib/lang-context'
 
 export function PushNotificationRegister(props: { store: string; name: string }) {
@@ -45,6 +45,7 @@ export function PushNotificationRegister(props: { store: string; name: string })
         if (res.ok) {
           registered.current = true
           setShowBanner(false)
+          setupForegroundHandler()
         } else {
           setShowBanner(true)
         }
@@ -106,6 +107,7 @@ export function PushNotificationRegister(props: { store: string; name: string })
         registered.current = true
         setMessage('푸시 알림 설정이 완료되었습니다.')
         setShowBanner(false)
+        setupForegroundHandler() // 포그라운드 알림 수신 설정
         setTimeout(() => setMessage(null), 3000)
       } else {
         const err = await res.json().catch(() => ({}))

@@ -11,6 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -19,8 +25,6 @@ import {
   getPosMenuCategories,
   getPosMenuCategoriesConfig,
   getNextPosMenuCode,
-  savePosMenuCategoriesConfig,
-  applyPosMenuCategoryPresets,
   type PosMenuCategoriesConfig,
   getPosMenuOptions,
   getPosMenuIngredients,
@@ -38,8 +42,8 @@ import {
   type PosMenuIngredient,
 } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D 접두사) */
@@ -71,242 +75,6 @@ const emptyForm = {
   vatIncluded: true,
   isActive: true,
   isBanban: false,
-}
-
-const defaultCategoriesConfig: PosMenuCategoriesConfig = {
-  mainCategories: [...POS_MAIN_CATEGORIES],
-  categoriesByMain: Object.fromEntries(
-    Object.entries(POS_CATEGORIES_BY_MAIN).map(([k, v]) => [k, [...v]])
-  ) as Record<string, string[]>,
-}
-
-function CategoriesTab({
-  config,
-  onSave,
-  onApplyPresets,
-  saving,
-  t,
-}: {
-  config: PosMenuCategoriesConfig | null
-  onSave: (next: PosMenuCategoriesConfig, applyToMenus: boolean) => Promise<void>
-  onApplyPresets?: () => Promise<{ updated: number }>
-  saving: boolean
-  t: (k: string) => string
-}) {
-  const [local, setLocal] = React.useState<PosMenuCategoriesConfig>(() => config || defaultCategoriesConfig)
-  const [applyToMenus, setApplyToMenus] = React.useState(true)
-  const [applyingPresets, setApplyingPresets] = React.useState(false)
-  const [newMain, setNewMain] = React.useState("")
-  const [newSubByMain, setNewSubByMain] = React.useState<Record<string, string>>({})
-  const [editingSub, setEditingSub] = React.useState<{ main: string; idx: number } | null>(null)
-  const [editingSubValue, setEditingSubValue] = React.useState("")
-
-  React.useEffect(() => {
-    setLocal(config || defaultCategoriesConfig)
-  }, [config])
-
-  const addMain = () => {
-    const v = newMain.trim()
-    if (!v || local.mainCategories.includes(v)) return
-    setLocal((p) => ({
-      mainCategories: [...p.mainCategories, v].sort(),
-      categoriesByMain: { ...p.categoriesByMain, [v]: p.categoriesByMain[v] || [] },
-    }))
-    setNewMain("")
-  }
-
-  const removeMain = (main: string) => {
-    setLocal((p) => {
-      const { [main]: _, ...rest } = p.categoriesByMain
-      return {
-        mainCategories: p.mainCategories.filter((m) => m !== main),
-        categoriesByMain: rest,
-      }
-    })
-  }
-
-  const addSub = (main: string) => {
-    const v = (newSubByMain[main] ?? "").trim()
-    if (!v) return
-    const existing = local.categoriesByMain[main] || []
-    if (existing.includes(v)) return
-    setLocal((p) => ({
-      ...p,
-      categoriesByMain: {
-        ...p.categoriesByMain,
-        [main]: [...(p.categoriesByMain[main] || []), v].sort(),
-      },
-    }))
-    setNewSubByMain((prev) => ({ ...prev, [main]: "" }))
-  }
-
-  const updateSub = (main: string, idx: number, value: string) => {
-    const v = value.trim()
-    if (!v) return
-    setLocal((p) => {
-      const arr = [...(p.categoriesByMain[main] || [])]
-      arr[idx] = v
-      return { ...p, categoriesByMain: { ...p.categoriesByMain, [main]: arr } }
-    })
-    setEditingSub(null)
-    setEditingSubValue("")
-  }
-
-  const removeSub = (main: string, idx: number) => {
-    setLocal((p) => {
-      const arr = (p.categoriesByMain[main] || []).filter((_, i) => i !== idx)
-      return { ...p, categoriesByMain: { ...p.categoriesByMain, [main]: arr } }
-    })
-    setEditingSub(null)
-  }
-
-  return (
-    <div className="rounded-xl border bg-card p-6">
-      <p className="mb-4 text-sm text-muted-foreground">{t("posMenuTabCategoriesDesc")}</p>
-      <div className="space-y-6">
-        <div>
-          <h4 className="mb-2 text-xs font-semibold">{t("posMenuCategoryMain") || "대분류"}</h4>
-          <div className="flex flex-wrap gap-2">
-            {local.mainCategories.map((m) => (
-              <span
-                key={m}
-                className="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs"
-              >
-                {m}
-                <button
-                  type="button"
-                  className="rounded p-0.5 hover:bg-destructive/20"
-                  onClick={() => removeMain(m)}
-                  aria-label="삭제"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-            <div className="flex gap-1">
-              <Input
-                placeholder="대분류 추가"
-                className="h-8 w-32 text-xs"
-                value={newMain}
-                onChange={(e) => setNewMain(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addMain())}
-              />
-              <Button size="sm" className="h-8 gap-1 px-2 text-xs" onClick={addMain}>
-                <Plus className="h-3 w-3" />
-                {t("itemsBtnAdd") || "추가"}
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h4 className="mb-3 text-xs font-semibold">{t("posMenuCategory") || "소분류"}</h4>
-          <div className="space-y-3">
-            {local.mainCategories.map((main) => (
-              <div key={main} className="rounded-lg border p-3">
-                <div className="mb-2 text-xs font-medium text-muted-foreground">{main}</div>
-                <div className="flex flex-wrap gap-2">
-                  {(local.categoriesByMain[main] || []).map((sub, idx) => (
-                    <span
-                      key={`${main}-${idx}-${sub}`}
-                      className="inline-flex items-center gap-1 rounded-md border bg-muted/30 px-2 py-1 text-xs"
-                    >
-                      {editingSub?.main === main && editingSub.idx === idx ? (
-                        <Input
-                          autoFocus
-                          className="h-6 w-24 text-xs"
-                          value={editingSubValue}
-                          onChange={(e) => setEditingSubValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") updateSub(main, idx, editingSubValue)
-                            if (e.key === "Escape") setEditingSub(null)
-                          }}
-                        />
-                      ) : (
-                        sub
-                      )}
-                      {editingSub?.main === main && editingSub.idx === idx ? (
-                        <Button size="sm" className="h-6 px-1.5 text-[10px]" onClick={() => updateSub(main, idx, editingSubValue)}>
-                          ✓
-                        </Button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="rounded p-0.5 hover:bg-muted"
-                          onClick={() => {
-                            setEditingSub({ main, idx })
-                            setEditingSubValue(sub)
-                          }}
-                          aria-label="수정"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="rounded p-0.5 hover:bg-destructive/20"
-                        onClick={() => removeSub(main, idx)}
-                        aria-label="삭제"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <div className="flex gap-1">
-                    <Input
-                      placeholder="소분류 추가"
-                      className="h-8 w-28 text-xs"
-                      value={newSubByMain[main] ?? ""}
-                      onChange={(e) => setNewSubByMain((p) => ({ ...p, [main]: e.target.value }))}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSub(main))}
-                    />
-                    <Button size="sm" className="h-8 gap-1 px-2 text-xs" onClick={() => addSub(main)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs">
-            <Checkbox
-              checked={applyToMenus}
-              onCheckedChange={(v) => setApplyToMenus(v === true)}
-            />
-            {t("posMenuCategoriesApplyToMenus") || "기존 메뉴에 적용"}
-          </label>
-          <Button onClick={() => onSave(local, applyToMenus)} disabled={saving} className="gap-2">
-            <Save className="h-4 w-4" />
-            {saving ? t("loading") : t("itemsBtnSave") || "저장"}
-          </Button>
-          {onApplyPresets && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                setApplyingPresets(true)
-                try {
-                  const res = await onApplyPresets()
-                  if (res?.updated !== undefined && res.updated > 0) {
-                    alert((t("posMenuCategoriesPresetsApplied") || "기존 메뉴 {n}건을 대분류·소분류에 맞게 변경했습니다.").replace("{n}", String(res.updated)))
-                  } else {
-                    alert(t("posMenuCategoriesPresetsNoChange") || "변경된 메뉴가 없습니다.")
-                  }
-                } finally {
-                  setApplyingPresets(false)
-                }
-              }}
-              disabled={applyingPresets}
-              className="gap-2"
-            >
-              <RefreshCw className={cn("h-4 w-4", applyingPresets && "animate-spin")} />
-              {applyingPresets ? t("loading") : (t("posMenuCategoriesApplyPresets") || "기존 메뉴를 대분류·소분류에 맞게 변경")}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default function PosMenusPage() {
@@ -348,7 +116,7 @@ export default function PosMenusPage() {
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
-  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "categories" | "menuBoard">("screen")
+  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "menuBoard">("screen")
   const [menuBoardView, setMenuBoardView] = React.useState<"pos" | "tablet" | "kiosk">("pos")
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
@@ -356,7 +124,9 @@ export default function PosMenusPage() {
   const [optionsConfigSearchTerm, setOptionsConfigSearchTerm] = React.useState("")
   const [optionsConfigCategoryFilter, setOptionsConfigCategoryFilter] = React.useState("all")
   const [categoriesConfig, setCategoriesConfig] = React.useState<PosMenuCategoriesConfig | null>(null)
-  const [categoriesConfigSaving, setCategoriesConfigSaving] = React.useState(false)
+  const [categorySettingsOpen, setCategorySettingsOpen] = React.useState(false)
+  const [categoryMainOpen, setCategoryMainOpen] = React.useState(false)
+  const [categoryOpen, setCategoryOpen] = React.useState(false)
   const [newOptionSize, setNewOptionSize] = React.useState("")
   const [newOptionPart, setNewOptionPart] = React.useState("")
   const [newOptionModifierPackaging, setNewOptionModifierPackaging] = React.useState("")
@@ -388,6 +158,10 @@ export default function PosMenusPage() {
   }, [t])
 
   // 메뉴 목록은 조회 버튼을 눌렀을 때만 불러옴 (초기 자동 로드 없음)
+  // 카테고리 설정은 페이지 로드 시 미리 로드 (메뉴 폼에서 대분류·카테고리 선택 가능)
+  React.useEffect(() => {
+    getPosMenuCategoriesConfig().then(setCategoriesConfig).catch(() => setCategoriesConfig(null))
+  }, [])
 
   const effectiveOptionIdForIngredients = selectedIngredientOptionId === "" || selectedIngredientOptionId === "null" ? undefined : selectedIngredientOptionId
 
@@ -480,10 +254,11 @@ export default function PosMenusPage() {
       const m = menus.find((x) => x.id === editingId)
       if (m) {
         setFormData({
+          ...emptyForm,
           code: m.code,
           name: m.name,
           categoryMain: m.categoryMain ?? "",
-          category: m.category,
+          category: m.category ?? "",
           price: String(m.price),
           priceDelivery: m.priceDelivery != null ? String(m.priceDelivery) : "",
           imageUrl: m.imageUrl,
@@ -508,13 +283,15 @@ export default function PosMenusPage() {
       alert(t("itemsAlertCodeExists"))
       return
     }
+    const effectiveCategoryMain = formData.categoryMain.trim()
+    const effectiveCategory = formData.category.trim()
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
     const res = await savePosMenu({
       id: editingId || undefined,
       code,
       name,
-      categoryMain: formData.categoryMain.trim(),
-      category: formData.category.trim(),
+      categoryMain: effectiveCategoryMain,
+      category: effectiveCategory,
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
@@ -530,8 +307,8 @@ export default function PosMenusPage() {
       id: editingId || "",
       code,
       name,
-      categoryMain: formData.categoryMain.trim(),
-      category: formData.category.trim(),
+      categoryMain: effectiveCategoryMain,
+      category: effectiveCategory,
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== "" ? Number(formData.priceDelivery) : null,
       imageUrl: formData.imageUrl.trim(),
@@ -548,11 +325,11 @@ export default function PosMenusPage() {
       getPosMenus().then(setMenus)
       alert(t("itemsAlertSaved"))
     }
-    const newCat = formData.category.trim()
+    const newCat = effectiveCategory
     if (newCat && !allCategories.includes(newCat)) {
       setAllCategories((prev) => [...prev, newCat].sort())
     }
-    const newMainCat = formData.categoryMain.trim()
+    const newMainCat = effectiveCategoryMain
     if (newMainCat && !allMainCategories.includes(newMainCat)) {
       setAllMainCategories((prev) => [...prev, newMainCat].sort())
     }
@@ -565,7 +342,7 @@ export default function PosMenusPage() {
       code: menu.code,
       name: menu.name,
       categoryMain: menu.categoryMain ?? "",
-      category: menu.category,
+      category: menu.category ?? "",
       price: String(menu.price),
       priceDelivery: menu.priceDelivery != null ? String(menu.priceDelivery) : "",
       imageUrl: menu.imageUrl,
@@ -1143,15 +920,35 @@ export default function PosMenusPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <UtensilsCrossed className="h-5 w-5 text-primary" />
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <UtensilsCrossed className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">{t("posMenuMgmt")}</h1>
+              <p className="text-xs text-muted-foreground">{t("posMenuMgmtSub")}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("posMenuMgmt")}</h1>
-            <p className="text-xs text-muted-foreground">{t("posMenuMgmtSub")}</p>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5 px-3 text-xs"
+            onClick={() => setCategorySettingsOpen(true)}
+          >
+            <FolderTree className="h-3.5 w-3.5" />
+            {(t("posMenuCategorySettings") === "posMenuCategorySettings" ? "카테고리 설정" : t("posMenuCategorySettings"))}
+          </Button>
         </div>
+
+        <PosMenuCategorySettingsDialog
+          open={categorySettingsOpen}
+          onOpenChange={setCategorySettingsOpen}
+          onSaved={async () => {
+            const config = await getPosMenuCategoriesConfig()
+            setCategoriesConfig(config ?? null)
+          }}
+        />
 
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
@@ -1162,7 +959,6 @@ export default function PosMenusPage() {
           <TabsList className="mb-4 h-9">
             <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid className="h-3.5 w-3.5" />{t("posMenuTabScreen")}</TabsTrigger>
             <TabsTrigger value="optionsConfig" className="gap-1.5 text-xs"><Layers className="h-3.5 w-3.5" />{t("posMenuTabOptionsConfig")}</TabsTrigger>
-            <TabsTrigger value="categories" className="gap-1.5 text-xs"><FolderTree className="h-3.5 w-3.5" />{t("posMenuTabCategories")}</TabsTrigger>
             <TabsTrigger value="topping" className="gap-1.5 text-xs"><Pizza className="h-3.5 w-3.5" />{t("posMenuTabTopping")}</TabsTrigger>
             <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
             <TabsTrigger value="menuBoard" className="gap-1.5 text-xs"><Settings2 className="h-3.5 w-3.5" />{t("posMenuTabMenuBoard")}</TabsTrigger>
@@ -1203,27 +999,91 @@ export default function PosMenusPage() {
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
-                      <Select value={formData.categoryMain || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, categoryMain: v === "_" ? "" : v }))}>
-                        <SelectTrigger className="mt-1 h-10">
-                          <SelectValue placeholder={t("posMenuCategoryMain")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_">-</SelectItem>
-                          {mainCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <DropdownMenu open={categoryMainOpen} onOpenChange={setCategoryMainOpen}>
+                        <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
+                          <Input
+                            placeholder={t("posMenuCategoryMain")}
+                            className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            value={formData.categoryMain}
+                            onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value }))}
+                            onFocus={() => setCategoryMainOpen(true)}
+                          />
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </div>
+                        <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
+                          {mainCategories.map((c) => (
+                            <DropdownMenuItem
+                              key={c}
+                              onClick={() => {
+                                setFormData((p) => ({ ...p, categoryMain: c, category: "" }))
+                                setCategoryMainOpen(false)
+                              }}
+                            >
+                              {c}
+                            </DropdownMenuItem>
+                          ))}
+                          {formData.categoryMain.trim() &&
+                            !mainCategories.some((c) => c.toLowerCase() === formData.categoryMain.trim().toLowerCase()) && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setFormData((p) => ({ ...p, categoryMain: formData.categoryMain.trim() }))
+                                setCategoryMainOpen(false)
+                              }}
+                              className="text-primary font-medium"
+                            >
+                              + {t("itemsCategoryNew") || "신규 대분류"}: {formData.categoryMain.trim()}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
-                      <Select value={formData.category || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, category: v === "_" ? "" : v }))}>
-                        <SelectTrigger className="mt-1 h-10">
-                          <SelectValue placeholder={t("itemsCategoryPh")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_">-</SelectItem>
-                          {categoriesByMain.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <DropdownMenu open={categoryOpen} onOpenChange={setCategoryOpen}>
+                        <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
+                          <Input
+                            placeholder={t("itemsCategoryPh")}
+                            className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                            value={formData.category}
+                            onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
+                            onFocus={() => setCategoryOpen(true)}
+                          />
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
+                              <ChevronDown className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                        </div>
+                        <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
+                          {categoriesByMain.map((c) => (
+                            <DropdownMenuItem
+                              key={c}
+                              onClick={() => {
+                                setFormData((p) => ({ ...p, category: c }))
+                                setCategoryOpen(false)
+                              }}
+                            >
+                              {c}
+                            </DropdownMenuItem>
+                          ))}
+                          {formData.category.trim() &&
+                            !categoriesByMain.some((c) => c.toLowerCase() === formData.category.trim().toLowerCase()) && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setFormData((p) => ({ ...p, category: formData.category.trim() }))
+                                setCategoryOpen(false)
+                              }}
+                              className="text-primary font-medium"
+                            >
+                              + {t("itemsCategoryNew") || "신규 카테고리"}: {formData.category.trim()}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -1463,26 +1323,51 @@ export default function PosMenusPage() {
                 <>
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
-                    <Select
-                      value={formData.categoryMain || "_"}
-                      onValueChange={async (v) => {
-                        const main = v === "_" ? "" : v
-                        let code = ""
-                        if (main && (CODE_AUTO_MAINS as readonly string[]).includes(main)) {
-                          const { code: next } = await getNextPosMenuCode(main)
-                          code = next ?? ""
-                        }
-                        setFormData((p) => ({ ...p, categoryMain: main, category: "", code }))
-                      }}
-                    >
-                      <SelectTrigger className="mt-1 h-10">
-                        <SelectValue placeholder={t("posMenuCategoryMain")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_">-</SelectItem>
-                        {mainCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <DropdownMenu open={categoryMainOpen} onOpenChange={setCategoryMainOpen}>
+                      <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
+                        <Input
+                          placeholder={t("posMenuCategoryMain")}
+                          className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                          value={formData.categoryMain}
+                          onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value, category: "" }))}
+                          onFocus={() => setCategoryMainOpen(true)}
+                        />
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </div>
+                      <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
+                        {mainCategories.map((c) => (
+                          <DropdownMenuItem
+                            key={c}
+                            onClick={async () => {
+                              setFormData((p) => ({ ...p, categoryMain: c, category: "" }))
+                              setCategoryMainOpen(false)
+                              if ((CODE_AUTO_MAINS as readonly string[]).includes(c)) {
+                                const { code: next } = await getNextPosMenuCode(c)
+                                if (next) setFormData((p) => ({ ...p, categoryMain: c, category: "", code: next }))
+                              }
+                            }}
+                          >
+                            {c}
+                          </DropdownMenuItem>
+                        ))}
+                        {formData.categoryMain.trim() &&
+                          !mainCategories.some((m) => m.toLowerCase() === formData.categoryMain.trim().toLowerCase()) && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setFormData((p) => ({ ...p, categoryMain: formData.categoryMain.trim() }))
+                              setCategoryMainOpen(false)
+                            }}
+                            className="text-primary font-medium"
+                          >
+                            + {t("itemsCategoryNew") || "신규 대분류"}: {formData.categoryMain.trim()}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCode")}</label>
@@ -1501,15 +1386,47 @@ export default function PosMenusPage() {
                   </div>
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCategory")}</label>
-                    <Select value={formData.category || "_"} onValueChange={(v) => setFormData((p) => ({ ...p, category: v === "_" ? "" : v }))}>
-                      <SelectTrigger className="mt-1 h-10">
-                        <SelectValue placeholder={t("itemsCategoryPh")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="_">-</SelectItem>
-                        {categoriesByMain.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <DropdownMenu open={categoryOpen} onOpenChange={setCategoryOpen}>
+                      <div className="flex h-10 rounded-md border border-input bg-background overflow-hidden mt-1">
+                        <Input
+                          placeholder={t("itemsCategoryPh")}
+                          className="h-10 flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                          value={formData.category}
+                          onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
+                          onFocus={() => setCategoryOpen(true)}
+                        />
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </div>
+                      <DropdownMenuContent align="start" className="max-h-60 min-w-[200px]">
+                        {categoriesByMain.map((c) => (
+                          <DropdownMenuItem
+                            key={c}
+                            onClick={() => {
+                              setFormData((p) => ({ ...p, category: c }))
+                              setCategoryOpen(false)
+                            }}
+                          >
+                            {c}
+                          </DropdownMenuItem>
+                        ))}
+                        {formData.category.trim() &&
+                          !categoriesByMain.some((c) => c.toLowerCase() === formData.category.trim().toLowerCase()) && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setFormData((p) => ({ ...p, category: formData.category.trim() }))
+                              setCategoryOpen(false)
+                            }}
+                            className="text-primary font-medium"
+                          >
+                            + {t("itemsCategoryNew") || "신규 카테고리"}: {formData.category.trim()}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -2031,36 +1948,6 @@ export default function PosMenusPage() {
                 )}
               </div>
             </div>
-          </TabsContent>
-          <TabsContent value="categories" className="mt-0">
-            <CategoriesTab
-              config={categoriesConfig}
-              onApplyPresets={async () => {
-                const res = await applyPosMenuCategoryPresets()
-                if (res?.success && (res.updated ?? 0) > 0) {
-                  const list = await getPosMenus()
-                  setMenus(list || [])
-                }
-                return { updated: res?.updated ?? 0 }
-              }}
-              onSave={async (next, applyToMenus) => {
-                setCategoriesConfigSaving(true)
-                try {
-                  const res = await savePosMenuCategoriesConfig({ ...next, applyToMenus })
-                  if (res?.success) {
-                    setCategoriesConfig({ mainCategories: res.mainCategories, categoriesByMain: res.categoriesByMain })
-                    if ((res.menusUpdated ?? 0) > 0) {
-                      const list = await getPosMenus()
-                      setMenus(list || [])
-                    }
-                  }
-                } finally {
-                  setCategoriesConfigSaving(false)
-                }
-              }}
-              saving={categoriesConfigSaving}
-              t={t}
-            />
           </TabsContent>
           <TabsContent value="topping" className="mt-0">
             <div className="rounded-xl border bg-card p-6">

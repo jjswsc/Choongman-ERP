@@ -1,7 +1,7 @@
 "use client"
 
 import { getApps, initializeApp, getApp, type FirebaseApp } from "firebase/app"
-import { getMessaging, getToken, isSupported, type Messaging } from "firebase/messaging"
+import { getMessaging, getToken, isSupported, onMessage, type Messaging } from "firebase/messaging"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -48,6 +48,34 @@ export function preRegisterServiceWorker(): void {
   if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
   if (!isFirebaseConfigured()) return
   navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" }).catch(() => {})
+}
+
+/** 앱이 포그라운드(열려 있을 때)일 때 FCM 메시지 수신 → 알림 표시. 백그라운드는 Service Worker가 처리 */
+export function setupForegroundHandler(): void {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return
+  if (!isFirebaseConfigured()) return
+  if (Notification.permission !== "granted") return
+
+  const app = getFirebaseApp()
+  if (!app) return
+
+  try {
+    const messaging = getMessaging(app)
+    onMessage(messaging, (payload) => {
+      const title = payload.data?.title || (payload as { notification?: { title?: string } }).notification?.title || "CM ERP"
+      const body = payload.data?.body || (payload as { notification?: { body?: string } }).notification?.body || ""
+      new Notification(title, {
+        body,
+        icon: "/icon-192.png",
+        tag: payload.data?.tag || "cm-erp-notice",
+        silent: false,
+        vibrate: [200, 100, 200],
+        renotify: true,
+      })
+    })
+  } catch {
+    // getMessaging 실패 시 (SSR 등) 무시
+  }
 }
 
 /** 기존 Service Worker 전부 해제 (캐시된 이전 SW로 인한 실패 시, 해제 후 페이지 새로고침 필요) */

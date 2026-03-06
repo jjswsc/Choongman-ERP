@@ -33,7 +33,7 @@ import {
   type ItemByVendor,
 } from "@/lib/api-client"
 import { useOrderCreate } from "@/lib/order-create-context"
-import { Minus, Plus, Search, ShoppingCart, Trash2, Package } from "lucide-react"
+import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown } from "lucide-react"
 
 interface CartItem {
   code: string
@@ -66,6 +66,30 @@ export function AdminPurchaseOrder() {
   const [cart, setCart] = React.useState<CartItem[]>([])
   const [submitting, setSubmitting] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
+  const [vendorSearchQuery, setVendorSearchQuery] = React.useState("")
+  const [vendorDropdownOpen, setVendorDropdownOpen] = React.useState(false)
+  const vendorInputRef = React.useRef<HTMLInputElement>(null)
+  const vendorContainerRef = React.useRef<HTMLDivElement>(null)
+
+  const filteredVendors = React.useMemo(() => {
+    const q = vendorSearchQuery.trim().toLowerCase()
+    if (!q) return vendors
+    return vendors.filter(
+      (v) =>
+        (v.code || "").toLowerCase().includes(q) ||
+        (v.name || "").toLowerCase().includes(q)
+    )
+  }, [vendors, vendorSearchQuery])
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (vendorContainerRef.current && !vendorContainerRef.current.contains(e.target as Node)) {
+        setVendorDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   const categories = React.useMemo(() => {
     const cats = new Map<string, ItemByVendor[]>()
@@ -252,7 +276,6 @@ export function AdminPurchaseOrder() {
               onValueChange={(v) => {
                 const loc = locations.find((l) => l.location_code === v)
                 setLocationSelect(loc || null)
-                setHasSearched(false)
               }}
             >
               <SelectTrigger className="w-full">
@@ -274,35 +297,115 @@ export function AdminPurchaseOrder() {
             <CardTitle className="text-sm font-semibold">{t("purchaseOrderVendor")}</CardTitle>
           </CardHeader>
           <CardContent>
-            <Select
-              value={vendorSelect?.code ?? ""}
-              onValueChange={(v) => {
-                const ven = vendors.find((x) => x.code === v)
-                setVendorSelect(ven || null)
-                setHasSearched(false)
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("purchaseOrderSelectVendor")} />
-              </SelectTrigger>
-              <SelectContent>
-                {vendors.map((v) => (
-                  <SelectItem key={v.code} value={v.code}>
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div ref={vendorContainerRef} className="relative">
+              <div className="flex rounded-md border border-input bg-background">
+                <Input
+                  ref={vendorInputRef}
+                  type="text"
+                  placeholder={t("vendorSearchPh") || "거래처 검색 또는 직접 입력 (코드, 이름)"}
+                  value={vendorDropdownOpen ? vendorSearchQuery : (vendorSelect?.name ?? vendorSearchQuery)}
+                  onChange={(e) => {
+                    setVendorSearchQuery(e.target.value)
+                    setVendorDropdownOpen(true)
+                    if (!e.target.value.trim()) setVendorSelect(null)
+                  }}
+                  onFocus={() => setVendorDropdownOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const q = vendorSearchQuery.trim()
+                      if (q) {
+                        const matched = vendors.find(
+                          (v) =>
+                            (v.code || "").toLowerCase() === q.toLowerCase() ||
+                            (v.name || "").toLowerCase() === q.toLowerCase()
+                        )
+                        if (matched) {
+                          setVendorSelect(matched)
+                          setVendorSearchQuery("")
+                          setHasSearched(true)
+                        } else {
+                          setVendorSelect({ code: q, name: q, address: "" })
+                          setVendorSearchQuery("")
+                          setHasSearched(true)
+                        }
+                        setVendorDropdownOpen(false)
+                      }
+                    }
+                  }}
+                  className="flex-1 rounded-r-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => setVendorDropdownOpen((o) => !o)}
+                  className="flex items-center px-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+              {vendorDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-auto rounded-md border border-border bg-popover shadow-md">
+                  {filteredVendors.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      {vendorSearchQuery.trim()
+                        ? (t("vendorSearchHint") || "조회 버튼으로 직접 검색")
+                        : t("purchaseOrderSelectVendor")}
+                    </div>
+                  ) : (
+                    filteredVendors.map((v) => (
+                      <button
+                        key={v.code}
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => {
+                          setVendorSelect(v)
+                          setVendorSearchQuery("")
+                          setVendorDropdownOpen(false)
+                          setHasSearched(true)
+                        }}
+                      >
+                        <span className="font-medium">{v.name}</span>
+                        {v.code && v.code !== v.name && (
+                          <span className="ml-1.5 text-xs text-muted-foreground">({v.code})</span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {locationSelect && vendorSelect && (
+      {locationSelect && (vendorSelect || vendorSearchQuery.trim()) && (
         <div className="flex justify-end">
           <Button
             size="sm"
             variant="default"
-            onClick={() => setHasSearched(true)}
+            onClick={() => {
+              const q = vendorSearchQuery.trim()
+              if (q) {
+                const exactMatch = vendors.find(
+                  (v) =>
+                    (v.code || "").toLowerCase() === q.toLowerCase() ||
+                    (v.name || "").toLowerCase() === q.toLowerCase()
+                )
+                const partialMatch = exactMatch ?? vendors.find(
+                  (v) =>
+                    (v.code || "").toLowerCase().includes(q.toLowerCase()) ||
+                    (v.name || "").toLowerCase().includes(q.toLowerCase())
+                )
+                const matched = exactMatch ?? partialMatch
+                setVendorSelect(matched ?? { code: q, name: q, address: "" })
+                if (!matched) {
+                  setVendors((prev) =>
+                    prev.some((x) => x.code === q || x.name === q) ? prev : [...prev, { code: q, name: q, address: "" }]
+                  )
+                }
+                setVendorSearchQuery("")
+              }
+              setHasSearched(true)
+            }}
             disabled={loading}
             className="h-9 gap-1.5"
           >

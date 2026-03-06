@@ -12,6 +12,8 @@ export async function GET() {
       name?: string
       type?: string
       addr?: string
+      tax_id?: string
+      phone?: string
     }[] | null
 
     const list = (rows || [])
@@ -25,6 +27,8 @@ export async function GET() {
         code: String(row.code),
         name: String(row.name || '').trim(),
         address: String(row.addr || ''),
+        taxId: String((row as { tax_id?: string }).tax_id || '').trim(),
+        phone: String((row as { phone?: string }).phone || '').trim(),
       }))
 
     return NextResponse.json(list, { headers })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { isFirebaseConfigured, preRegisterServiceWorker, requestNotificationPermission, getFcmToken, unregisterServiceWorkers } from '@/lib/firebase-client'
+import { isFirebaseConfigured, preRegisterServiceWorker, requestNotificationPermission, getFcmToken, unregisterServiceWorkers, setupForegroundHandler } from '@/lib/firebase-client'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { Bell } from 'lucide-react'
@@ -109,6 +109,7 @@ export function PushNotificationSetup({ store, name }: Props) {
       if (res.ok) {
         setMessage(t('pushDone'))
         setDone(true) // DB에 저장됨 - 새로고침 시 checkPushToken에서 확인
+        setupForegroundHandler() // 포그라운드 알림 수신 설정
         setTimeout(() => setMessage(null), 3000)
       } else {
         const err = await res.json().catch(() => ({}))

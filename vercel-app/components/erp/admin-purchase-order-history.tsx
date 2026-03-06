@@ -24,7 +24,7 @@ export function AdminPurchaseOrderHistory() {
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
-  const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
+  const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
   const [startDate, setStartDate] = React.useState(() => {
     const d = new Date()
     d.setMonth(d.getMonth() - 1)
@@ -35,7 +35,7 @@ export function AdminPurchaseOrderHistory() {
 
   React.useEffect(() => {
     getVendorsForPurchase()
-      .then((rows) => setVendors((rows || []).map((v) => ({ code: v.code, name: v.name }))))
+      .then((rows) => setVendors((rows || []).map((v) => ({ code: v.code, name: v.name, address: v.address, taxId: v.taxId, phone: v.phone }))))
       .catch(() => setVendors([]))
   }, [])
 
@@ -177,90 +177,39 @@ ${allRows.map((row, ri) => {
       ? new Date(po.created_at).toLocaleDateString(locale)
       : new Date().toLocaleDateString(locale)
 
-    const hasStore = cart.some((c) => c.store && String(c.store).trim())
-    let tbodyHtml: string
-    if (hasStore) {
-      const byStore = groupCartByStore(cart)
-      tbodyHtml = Array.from(byStore.entries())
-        .map(([storeName, items]) => {
-          const rows = items
-            .map(
-              (c, i) =>
-                `<tr><td>${i + 1}</td><td>${(c.name || "-").replace(/</g, "&lt;")}</td><td>-</td><td class="num">${c.price ?? 0}</td><td class="num">${c.qty ?? 0}</td><td class="num">${((c.price ?? 0) * (c.qty ?? 0))}</td></tr>`
-            )
-            .join("")
-          return `<tr class="store-header"><td colspan="6" style="background:#e8e8e8;font-weight:bold;padding:8px">${t("orderColStore")}: ${storeName.replace(/</g, "&lt;")}</td></tr>${rows}`
-        })
-        .join("")
-    } else {
-      tbodyHtml = cart
-        .map(
-          (c, i) =>
-            `<tr><td>${i + 1}</td><td>${(c.name || "-").replace(/</g, "&lt;")}</td><td>-</td><td class="num">${c.price ?? 0}</td><td class="num">${c.qty ?? 0}</td><td class="num">${((c.price ?? 0) * (c.qty ?? 0))}</td></tr>`
-        )
-        .join("")
-    }
+    const vendor = vendors.find(
+      (v) => v.code === po.vendor_code || v.name === po.vendor_name
+    )
 
-    const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>${t("poTitle")} - ${poNo}</title>
-<style>
-*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:Arial,sans-serif;max-width:800px;margin:24px auto;padding:16px}
-h1{font-size:20px;margin-bottom:24px;border-bottom:2px solid #333;padding-bottom:8px}
-table{width:100%;border-collapse:collapse;margin:16px 0}
-th,td{border:1px solid #ddd;padding:8px;text-align:left}
-th{background:#f5f5f5}
-.num{text-align:right}
-.tot{font-weight:bold}
-@media print{
-  @page{margin:12mm;size:A4}
-  body{margin:0 auto;padding:16px;max-width:800px}
-  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  table,th,td{border:1px solid #ddd!important}
-  th{background:#f5f5f5!important}
-  .store-header td{background:#e8e8e8!important}
-}
-</style>
-</head>
-<body>
-<h1>${t("poTitle")}</h1>
-<p><strong>${t("poNo")}:</strong> ${poNo}</p>
-<p><strong>${t("poDate")}:</strong> ${dateStr}</p>
-<hr/>
-<h3>${t("poShipTo")}</h3>
-<p><strong>${(po.location_name || "-").replace(/</g, "&lt;")}</strong></p>
-<p>${(po.location_address || "-").replace(/</g, "&lt;")}</p>
-<hr/>
-<h3>${t("poVendor")}</h3>
-<p><strong>${(po.vendor_name || "-").replace(/</g, "&lt;")}</strong></p>
-<hr/>
-<table>
-<thead><tr><th>No</th><th>${t("item")}</th><th>${t("orderItemSpec")}</th><th class="num">${t("orderItemUnitPrice")}</th><th class="num">${t("orderItemQty")}</th><th class="num">${t("orderItemTotal")}</th></tr></thead>
-<tbody>${tbodyHtml}</tbody>
-<tfoot>
-<tr><td colspan="4" class="num">${t("subtotal")}</td><td class="num"></td><td class="num">${po.subtotal ?? 0}</td></tr>
-<tr><td colspan="4" class="num">${t("vat")} (7%)</td><td class="num"></td><td class="num">${po.vat ?? 0}</td></tr>
-<tr class="tot"><td colspan="4" class="num">${t("total")}</td><td class="num"></td><td class="num">${po.total ?? 0}</td></tr>
-</tfoot>
-</table>
-<div style="margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end;">
-  <p style="font-size:12px;color:#666;margin:0">${t("poPreparedBy")}: ${(po.user_name || "-").replace(/</g, "&lt;")}</p>
-  ${po.status === "Approved" ? '<img src="/company-stamp.png" alt="S&amp;J GLOBAL" style="width:108px;height:108px;object-fit:contain;opacity:0.95;" onerror="this.style.display=\'none\'" />' : ""}
-</div>
-</body>
-</html>
-`
-    const w = window.open("", "_blank")
-    if (w) {
-      w.document.write(html)
-      w.document.close()
-      w.focus()
-      setTimeout(() => {
-        w.print()
-        w.close()
-      }, 300)
+    const poPrintData = {
+      poNo,
+      createdAt: dateStr,
+      vendorName: po.vendor_name || vendor?.name || "-",
+      vendorAddress: vendor?.address || undefined,
+      vendorTaxId: vendor?.taxId || undefined,
+      vendorPhone: vendor?.phone || undefined,
+      locationName: po.location_name || "-",
+      locationAddress: po.location_address || "-",
+      cart: cart.map((c) => ({
+        name: c.name || "-",
+        code: (c as { code?: string }).code,
+        price: c.price ?? 0,
+        qty: c.qty ?? 0,
+        store: c.store,
+      })),
+      subtotal: po.subtotal ?? 0,
+      vat: po.vat ?? 0,
+      total: po.total ?? 0,
+      userName: po.user_name || "-",
+      status: po.status,
+      withholdingTaxAmount: po.withholding_tax_amount,
+    }
+    sessionStorage.setItem("po-print-data", JSON.stringify(poPrintData))
+    const printWindow = window.open("/admin/po-print", "_blank")
+    if (printWindow) {
+      printWindow.focus()
+    } else {
+      alert(t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요.")
     }
   }
 

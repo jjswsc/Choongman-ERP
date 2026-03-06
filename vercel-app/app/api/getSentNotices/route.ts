@@ -19,8 +19,20 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endDate') || searchParams.get('end') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = (searchParams.get('userRole') || '').toLowerCase()
+  const searchType = String(searchParams.get('searchType') || 'all').toLowerCase() as 'all' | 'notice' | 'order'
 
   const isAllSenders = sender === '' || sender.toLowerCase() === 'all' || sender === '전체'
+
+  /** 물류관리 관련 (주문승인/반려/보류/강제출고/발주/입고/재고/배송/매장 수령 완료 등) 공지 여부 (admin-notice-history와 동일) */
+  const isOrderRelated = (title: string, content: string) => {
+    const t = (title || '').toLowerCase()
+    const c = (content || '').toLowerCase()
+    const text = t + ' ' + c
+    if (/주문.*(승인|반려|보류)/.test(t) || /주문\s*#\d+/.test(t)) return true
+    if (/강제|출고|발주|입고|재고|배송|물류|수령/.test(text)) return true
+    if (/주문.*확인|승인.*화면/.test(c)) return true
+    return false
+  }
 
   try {
     let filter = isAllSenders ? '' : `sender=ilike.${encodeURIComponent(sender)}`
@@ -79,6 +91,13 @@ export async function GET(request: NextRequest) {
     }[] = []
 
     for (const row of rows || []) {
+      // searchType 필터: 물류관리/공지사항
+      if (searchType === 'order') {
+        if (!isOrderRelated(row.title || '', row.content || '')) continue
+      } else if (searchType === 'notice') {
+        if (isOrderRelated(row.title || '', row.content || '')) continue
+      }
+
       const targetStores = String(row.target_store || '전체').trim()
       const targetRoles = String(row.target_role || '전체').trim()
       let targetRecipientsList: string[] = []

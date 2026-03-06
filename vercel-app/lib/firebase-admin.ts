@@ -147,18 +147,14 @@ export async function sendFcmToRecipients(params: {
     const batchSize = 500
     for (let i = 0; i < tokens.length; i += batchSize) {
       const chunk = tokens.slice(i, i + batchSize)
+      // data-only 페이로드: notification 제거 시 브라우저 자동 표시(무음) 대신
+      // Service Worker onBackgroundMessage가 항상 호출되어 vibrate/silent:false 적용 가능
       const message: admin.messaging.MulticastMessage = {
         tokens: chunk,
         data: { title: finalTitle, body: finalBody },
-        notification: { title: finalTitle, body: finalBody },
         webpush: {
           headers: { TTL: '3600' },
-          notification: {
-            title: finalTitle,
-            body: finalBody,
-            silent: false,
-            requireInteraction: false,
-          },
+          fcmOptions: { link: '/' },
         },
       }
       try {
