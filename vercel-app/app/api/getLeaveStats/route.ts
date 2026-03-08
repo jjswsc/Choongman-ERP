@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-/** 연차일 수: Hourly는 0. 직원관리 직접 입력 우선. null/미입력이면 기본 6일 (입사일 무관) */
-function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
-  if (!emp) return 0
-  const salType = String(emp.sal_type ?? emp.salType ?? '').trim()
-  if (salType.toLowerCase() === 'hourly') return 0
-  const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
-  if (directVal != null && directVal !== '' && Number(directVal) >= 0) {
-    const direct = Number(directVal)
-    if (!Number.isNaN(direct)) return direct
-  }
-  return 6
 }
 
 /** 휴가 유형별 일수 (반차=0.5, 그 외=1) */
@@ -95,8 +83,9 @@ export async function GET(request: NextRequest) {
       let usedTotalLakij = 0
 
       for (const l of leaveRows || []) {
+        const lStore = String(l.store || '').trim()
         const lName = String(l.name || '').trim()
-        if (lName !== empName) continue
+        if (lStore !== empStore || lName !== empName) continue
 
         const lStatus = String(l.status || '').trim()
         if (lStatus !== '승인' && lStatus !== 'Approved') continue
@@ -106,8 +95,10 @@ export async function GET(request: NextRequest) {
         if (!dateStr) continue
         const lDate = new Date(dateStr + 'T12:00:00')
         const days = getLeaveDays(lType)
+        const isAnnualType = lType.indexOf('연차') !== -1 || lType.indexOf('반차') !== -1 || lType.toLowerCase().indexOf('annual') !== -1 || lType.toLowerCase().indexOf('half') !== -1
+        const underOneYear = isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
 
-        if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1) {
+        if (lType.indexOf('무급휴가') !== -1 || lType.toLowerCase().indexOf('unpaid') !== -1 || underOneYear) {
           usedTotalUnpaid += days
           if (lDate >= start && lDate <= end) usedPeriodUnpaid += days
         } else if (lType.indexOf('ลากิจ') !== -1 || lType.toLowerCase().indexOf('lakij') !== -1) {

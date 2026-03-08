@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { parseOr400, requestLeaveSchema } from '@/lib/api-validate'
+import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -23,10 +24,25 @@ export async function POST(request: NextRequest) {
     if (validated.errorResponse) return validated.errorResponse
     const { store, name, type, date: leaveDate, reason } = validated.parsed
 
+    let effectiveType = type.trim()
+    const isAnnualType = effectiveType.indexOf('연차') !== -1 || effectiveType.toLowerCase().indexOf('annual') !== -1
+
+    if (isAnnualType) {
+      const empRows = (await supabaseSelectFilter(
+        'employees',
+        `store=ilike.${encodeURIComponent(store)}&name=ilike.${encodeURIComponent(name)}`,
+        { limit: 1, select: 'join_date' }
+      )) as { join_date?: string | null }[]
+      const emp = empRows?.[0] ?? null
+      if (!hasOneYearTenureAsOf(emp, leaveDate)) {
+        effectiveType = '무급휴가'
+      }
+    }
+
     await supabaseInsert('leave_requests', {
       store,
       name,
-      type: type.trim(),
+      type: effectiveType,
       leave_date: leaveDate,
       reason: String(reason || '').trim(),
       status: '대기',

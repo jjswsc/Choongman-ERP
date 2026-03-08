@@ -56,6 +56,14 @@ export async function POST(request: NextRequest) {
     const isSick = rowType.indexOf('병가') !== -1 || rowType.toLowerCase().indexOf('sick') !== -1
     const isLakij = rowType.indexOf('ลากิจ') !== -1 || rowType.toLowerCase().indexOf('lakij') !== -1
     const isReject = decision === '반려' || decision === 'Rejected'
+    const rejectReason = body?.rejectReason != null ? String(body.rejectReason).trim() : ''
+
+    if (isReject && !rejectReason) {
+      return NextResponse.json(
+        { success: false, message: '반려 사유를 입력해 주세요.' },
+        { headers }
+      )
+    }
 
     let status = decision === '승인' || decision === 'Approved' ? '승인' : '반려'
     let type: string | undefined
@@ -64,7 +72,9 @@ export async function POST(request: NextRequest) {
       status = '승인'
     }
 
-    await supabaseUpdate('leave_requests', id, type != null ? { type, status } : { status })
+    const updatePayload: Record<string, unknown> = type != null ? { type, status } : { status }
+    if (isReject) updatePayload.reject_reason = rejectReason
+    await supabaseUpdate('leave_requests', id, updatePayload)
 
     return NextResponse.json(
       { success: true, message: '처리되었습니다.' },

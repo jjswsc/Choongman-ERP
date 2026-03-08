@@ -96,7 +96,7 @@ export function HrTab() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [leaveStats, setLeaveStats] = useState({ usedAnn: 0, usedSick: 0, usedUnpaid: 0, usedLakij: 0, remain: 15, remainLakij: 3, annualTotal: 6, lakijTotal: 3 })
-  const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string }[]>([])
+  const [leaveHistory, setLeaveHistory] = useState<{ id?: number; date: string; type: string; reason: string; status: string; certificateUrl?: string; rejectReason?: string }[]>([])
   const [leaveType, setLeaveType] = useState("연차")
   const [leaveDate, setLeaveDate] = useState(() => todayStrBangkok())
   const [leaveReason, setLeaveReason] = useState("")
@@ -682,6 +682,11 @@ th{background:#f8fafc;font-weight:600;} td.num{text-align:right;}
                         {translateLeaveStatus(h.status, t)}
                       </Badge>
                     </div>
+                    {(h.status === "반려" || h.status === "Rejected") && h.rejectReason && (
+                      <p className="text-xs text-destructive/90 mt-1.5 border-l-2 border-destructive/50 pl-2">
+                        {t("leaveRejectReasonLabel") || "반려 사유"}: {h.rejectReason}
+                      </p>
+                    )}
                   </div>
                 )
               })}

@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { getAnnualLeaveDays, hasOneYearTenureAsOf } from '@/lib/annual-leave'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   if (typeof val === 'string') return val.slice(0, 10)
   const d = new Date(val)
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-
-/** 연차일 수: Hourly는 0. 직원관리 직접 입력 우선. null/미입력이면 기본 6일 (입사일 무관) */
-function getAnnualLeaveDays(emp: Record<string, unknown> | null): number {
-  if (!emp) return 0
-  const salType = String(emp.sal_type ?? emp.salType ?? '').trim()
-  if (salType.toLowerCase() === 'hourly') return 0
-  const directVal = emp.annual_leave_days ?? emp.annualLeaveDays
-  if (directVal != null && directVal !== '' && Number(directVal) >= 0) {
-    const direct = Number(directVal)
-    if (!Number.isNaN(direct)) return direct
-  }
-  return 6
 }
 
 /** ลากิจ(태국 개인사유휴가): 연 3일 고정 */
@@ -50,25 +38,29 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'leave_requests',
       filter,
-      { order: 'leave_date.desc', limit: 100, select: 'id,leave_date,status,type,reason,certificate_url' }
-    )) as { id?: number; leave_date?: string; status?: string; type?: string; reason?: string; certificate_url?: string }[]
+      { order: 'leave_date.desc', limit: 100, select: 'id,leave_date,status,type,reason,certificate_url,reject_reason' }
+    )) as { id?: number; leave_date?: string; status?: string; type?: string; reason?: string; certificate_url?: string; reject_reason?: string }[]
 
     const thisYear = new Date().getFullYear()
     let usedAnn = 0,
       usedSick = 0,
       usedUnpaid = 0,
       usedLakij = 0
+    const emp = empRows?.[0] ?? null
     const history = (rows || []).map((r) => {
       const dateStr = toDateStr(r.leave_date)
       const status = String(r.status || '').trim()
-      const type = String(r.type || '').trim()
+      let type = String(r.type || '').trim()
+      const isAnnualType = type.indexOf('연차') !== -1 || type.indexOf('반차') !== -1 || type.toLowerCase().indexOf('annual') !== -1 || type.toLowerCase().indexOf('half') !== -1
+      const underOneYear = dateStr && isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
+
       if (
         (status === '승인' || status === 'Approved') &&
         dateStr &&
         parseInt(dateStr.slice(0, 4), 10) === thisYear
       ) {
         const val = type.indexOf('반차') !== -1 ? 0.5 : 1.0
-        if (type.indexOf('무급휴가') !== -1 || type.toLowerCase().indexOf('unpaid') !== -1) {
+        if (type.indexOf('무급휴가') !== -1 || type.toLowerCase().indexOf('unpaid') !== -1 || underOneYear) {
           usedUnpaid += val
         } else if (type.indexOf('ลากิจ') !== -1 || type.toLowerCase().indexOf('lakij') !== -1) {
           usedLakij += val
@@ -77,7 +69,8 @@ export async function GET(request: NextRequest) {
           else usedAnn += val
         }
       }
-      return { id: r.id, date: dateStr, type, reason: r.reason || '', status, certificateUrl: r.certificate_url || '' }
+      const displayType = underOneYear && isAnnualType ? (type.indexOf('반차') !== -1 ? '무급휴가(반차)' : '무급휴가') : type
+      return { id: r.id, date: dateStr, type: displayType, reason: r.reason || '', status, certificateUrl: r.certificate_url || '', rejectReason: (r.reject_reason ?? '').trim() || undefined }
     })
 
     const remain = Math.max(0, annualTotal - usedAnn)

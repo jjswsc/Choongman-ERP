@@ -512,6 +512,8 @@ export interface LeaveHistoryItem {
   reason: string
   status: string
   certificateUrl?: string
+  /** 반려 시 관리자가 입력한 사유 (모바일에서 확인 가능) */
+  rejectReason?: string
 }
 
 export async function getMyLeaveInfo(params: { store: string; name: string }) {
@@ -670,7 +672,7 @@ export async function getLeaveStats(params: {
   return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>
 }
 
-export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string }) {
+export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string; rejectReason?: string }) {
   const res = await apiFetch('/api/processLeaveApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

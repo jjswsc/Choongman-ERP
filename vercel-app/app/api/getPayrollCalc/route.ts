@@ -5,6 +5,7 @@ import {
 } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { getSSOLimitsByYear } from '@/lib/payroll-utils'
+import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
 const OT_MULTIPLIER = 1.5
@@ -272,6 +273,12 @@ export async function GET(request: NextRequest) {
     const year = firstDay.getFullYear()
 
     // 휴가 집계: 무급휴가 일수, 유급휴가(연차/병가) 일수 (store_name별)
+    const empMap: Record<string, { join_date?: string }> = {}
+    for (const e of empRows || []) {
+      const s = String(e.store || '').trim()
+      const n = String(e.name || '').trim()
+      if (s && n) empMap[s + '_' + n] = e
+    }
     const unpaidLeaveDaysMap: Record<string, number> = {}
     const paidLeaveDaysMap: Record<string, number> = {}
     for (const lr of leaveRows || []) {
@@ -282,10 +289,15 @@ export async function GET(request: NextRequest) {
       const dateStr = toDateStr(lr.leave_date)
       if (!store || !name || !dateStr || dateStr < startStr || dateStr > endStr) continue
       const key = store + '_' + name
-      if (/무급|unpaid/i.test(type)) {
-        unpaidLeaveDaysMap[key] = (unpaidLeaveDaysMap[key] || 0) + 1
-      } else if (/연차|병가|annual|sick|ลากิจ|lakij/i.test(type)) {
-        paidLeaveDaysMap[key] = (paidLeaveDaysMap[key] || 0) + 1
+      const days = /반차|half/i.test(type) ? 0.5 : 1
+      const emp = empMap[key] ?? null
+      const isAnnualType = /연차|반차|annual|half/i.test(type)
+      const underOneYear = isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
+
+      if (/무급|unpaid/i.test(type) || underOneYear) {
+        unpaidLeaveDaysMap[key] = (unpaidLeaveDaysMap[key] || 0) + days
+      } else if (/연차|반차|병가|annual|half|sick|ลากิจ|lakij/i.test(type)) {
+        paidLeaveDaysMap[key] = (paidLeaveDaysMap[key] || 0) + days
       }
     }
 

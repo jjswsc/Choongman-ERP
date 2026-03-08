@@ -41,6 +41,8 @@ export function AdminLeaveApproval() {
   const [leaveList, setLeaveList] = useState<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>([])
   const [leaveLoading, setLeaveLoading] = useState(false)
   const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
+  const [rejectDialog, setRejectDialog] = useState<{ id: number } | null>(null)
+  const [rejectReason, setRejectReason] = useState("")
 
   const { stores: storeList } = useStoreList()
   useEffect(() => {
@@ -80,14 +82,37 @@ export function AdminLeaveApproval() {
       .finally(() => setLeaveLoading(false))
   }
 
-  const handleLeaveApprove = async (id: number, decision: string) => {
+  const handleLeaveApprove = async (id: number, decision: string, rejectReasonArg?: string) => {
     if (!auth?.store) return
-    const res = await processLeaveApproval({ id, decision, userStore: auth.store, userRole: auth.role })
+    const res = await processLeaveApproval({
+      id,
+      decision,
+      userStore: auth.store,
+      userRole: auth.role,
+      ...(rejectReasonArg != null && { rejectReason: rejectReasonArg }),
+    })
     if (res.success) {
+      setRejectDialog(null)
+      setRejectReason("")
       loadLeaveList()
     } else {
       alert(translateApiMessage(res.message) || t("processFail"))
     }
+  }
+
+  const handleRejectClick = (id: number) => {
+    setRejectReason("")
+    setRejectDialog({ id })
+  }
+
+  const handleRejectConfirm = () => {
+    if (!rejectDialog) return
+    const reason = rejectReason.trim()
+    if (!reason) {
+      alert(t("leaveRejectReasonRequired") || "반려 사유를 입력해 주세요.")
+      return
+    }
+    handleLeaveApprove(rejectDialog.id, "반려", reason)
   }
 
   return (
@@ -194,12 +219,15 @@ export function AdminLeaveApproval() {
                       {item.status === "대기" ? (
                         <div className="flex items-center justify-center gap-1.5">
                           <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "반려")}>{t("adminRejected")}</Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-center gap-1.5">
-                          <Badge variant={item.status === "승인" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                          <Badge variant={item.status === "승인" || item.status === "Approved" ? "default" : "outline"} className="text-xs">{t(statusLabelMap[item.status] || item.status)}</Badge>
+                          {(item.status === "승인" || item.status === "Approved") && (
+                            <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
+                          )}
                           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       )}
@@ -212,6 +240,27 @@ export function AdminLeaveApproval() {
         </div>
       </CardContent>
     </Card>
+
+    <Dialog open={!!rejectDialog} onOpenChange={(open) => !open && setRejectDialog(null)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("leaveRejectTitle") || "반려 사유"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{t("leaveRejectPrompt") || "반려 사유를 입력하세요. 신청자에게 표시됩니다."}</p>
+          <Input
+            placeholder={t("leaveRejectReasonPh") || "반려 사유 입력"}
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            className="h-10"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setRejectDialog(null)}>{t("cancel") || "취소"}</Button>
+            <Button variant="destructive" size="sm" onClick={handleRejectConfirm}>{t("adminRejected")}</Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={!!certPreviewUrl} onOpenChange={(open) => !open && setCertPreviewUrl(null)}>
       <DialogContent className="max-w-2xl">

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       sal_amt: Number(d.salAmt) || 0,
       role: String(d.role || 'Staff').trim(),
       email: String(d.email || '').trim(),
-      annual_leave_days: 6,
+      annual_leave_days: d.annualLeaveDays != null && d.annualLeaveDays !== '' ? Number(d.annualLeaveDays) : null,
       id_number: d.idNumber != null ? String(d.idNumber).trim() : '',
       id_card_photo: d.idCardPhoto != null && String(d.idCardPhoto).trim() ? String(d.idCardPhoto).trim() : null,
       tax_id: d.taxId != null ? String(d.taxId).trim() : '',
