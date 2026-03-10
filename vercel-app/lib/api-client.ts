@@ -2469,7 +2469,11 @@ export interface SauceRow {
 
 export async function getSauces() {
   const res = await apiFetch('/api/sauces')
-  return res.json() as Promise<SauceRow[]>
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new Error((data as { message?: string })?.message || `소스 목록 조회 실패 (${res.status})`)
+  }
+  return Array.isArray(data) ? data : []
 }
 
 export async function saveSauce(params: {
@@ -2486,7 +2490,11 @@ export async function saveSauce(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+  const data = await res.json().catch(() => ({})) as { success?: boolean; id?: number; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `저장 실패 (${res.status})`)
+  }
+  return data
 }
 
 export async function deleteSauce(params: { id: number }) {
@@ -2495,12 +2503,20 @@ export async function deleteSauce(params: { id: number }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const data = await res.json().catch(() => ({})) as { success?: boolean; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `삭제 실패 (${res.status})`)
+  }
+  return data
 }
 
 export async function recalculateSauces() {
   const res = await apiFetch('/api/sauces/recalculate', { method: 'POST' })
-  return res.json() as Promise<{ success: boolean; count?: number; message?: string }>
+  const data = await res.json().catch(() => ({})) as { success?: boolean; count?: number; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `재계산 실패 (${res.status})`)
+  }
+  return data
 }
 
 export async function getNotificationSettings() {
@@ -2522,7 +2538,14 @@ export async function updateNotificationSettings(params: {
 
 export async function getCostSettings() {
   const res = await apiFetch('/api/costSettings')
-  return res.json() as Promise<{ defaultOverheadPercent: number; globalOverheadPercent: number }>
+  const data = await res.json().catch(() => ({})) as { defaultOverheadPercent?: number; globalOverheadPercent?: number; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `OH 설정 조회 실패 (${res.status})`)
+  }
+  return {
+    defaultOverheadPercent: data?.defaultOverheadPercent ?? 5,
+    globalOverheadPercent: data?.globalOverheadPercent ?? 5,
+  }
 }
 
 export async function updateCostSettings(params: { globalOverheadPercent?: number; defaultOverheadPercent?: number }) {
@@ -2531,7 +2554,11 @@ export async function updateCostSettings(params: { globalOverheadPercent?: numbe
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean }>
+  const data = await res.json().catch(() => ({})) as { success?: boolean; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `OH 설정 저장 실패 (${res.status})`)
+  }
+  return data
 }
 
 export async function deletePosMenuIngredient(params: { id: string }) {

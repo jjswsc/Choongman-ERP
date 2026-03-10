@@ -39,7 +39,10 @@ export function SauceCostTab() {
   const [sauces, setSauces] = React.useState<SauceRow[]>([])
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
   const [recalcLoading, setRecalcLoading] = React.useState(false)
+  const [saveLoading, setSaveLoading] = React.useState(false)
+  const [settingsLoading, setSettingsLoading] = React.useState(false)
   const [overheadPercent, setOverheadPercent] = React.useState(5)
   const [overheadPercentStr, setOverheadPercentStr] = React.useState("5")
   const [settingsOpen, setSettingsOpen] = React.useState(false)
@@ -54,6 +57,7 @@ export function SauceCostTab() {
   const [formFoodItems, setFormFoodItems] = React.useState<RecipeItem[]>([])
 
   const load = React.useCallback(async () => {
+    setLoadError(null)
     try {
       const [sauceList, itemList, settings] = await Promise.all([
         getSauces(),
@@ -65,9 +69,10 @@ export function SauceCostTab() {
       const oh = settings?.globalOverheadPercent ?? 5
       setOverheadPercent(oh)
       setOverheadPercentStr(String(oh))
-    } catch {
+    } catch (e) {
       setSauces([])
       setItems([])
+      setLoadError(String(e))
     } finally {
       setLoading(false)
     }
@@ -100,17 +105,16 @@ export function SauceCostTab() {
   const handleSaveSettings = async () => {
     const ohNum = parseFloat(overheadPercentStr)
     const val = !isNaN(ohNum) && ohNum >= 0 && ohNum <= 50 ? ohNum : 5
+    setSettingsLoading(true)
     try {
-      const result = await updateCostSettings({ globalOverheadPercent: val })
-      if (result && 'success' in result && !result.success) {
-        alert((result as { message?: string }).message || 'OH 설정 저장에 실패했습니다.')
-        return
-      }
+      await updateCostSettings({ globalOverheadPercent: val })
       setOverheadPercent(val)
       setOverheadPercentStr(String(val))
       setSettingsOpen(false)
     } catch (e) {
       alert(String(e))
+    } finally {
+      setSettingsLoading(false)
     }
   }
 
@@ -162,8 +166,9 @@ export function SauceCostTab() {
     }).filter((i) => i.itemCode.trim())
     const ohNum = parseFloat(formOhStr)
     const overheadVal = !isNaN(ohNum) && ohNum >= 0 && ohNum <= 50 ? ohNum : 5
+    setSaveLoading(true)
     try {
-      const result = await saveSauce({
+      await saveSauce({
         id: editing?.id,
         code,
         name,
@@ -172,15 +177,13 @@ export function SauceCostTab() {
         totalQuantity: formTotalQuantity > 0 ? formTotalQuantity : undefined,
         ingredients,
       })
-      if (result && !result.success) {
-        alert(result.message || "소스 저장에 실패했습니다.")
-        return
-      }
       await recalculateSauces()
       setEditOpen(false)
       await load()
     } catch (e) {
       alert(String(e))
+    } finally {
+      setSaveLoading(false)
     }
   }
 
@@ -223,6 +226,12 @@ export function SauceCostTab() {
       {loading ? (
         <div className="rounded-lg border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
           {t("loading")}
+        </div>
+      ) : loadError ? (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-8 text-center">
+          <p className="text-sm text-destructive font-medium mb-2">{t("loadError") || "데이터를 불러오지 못했습니다."}</p>
+          <p className="text-xs text-muted-foreground mb-3">{loadError}</p>
+          <Button variant="outline" size="sm" onClick={load}>{t("retry") || "다시 시도"}</Button>
         </div>
       ) : (
         <div className="rounded-xl border bg-card overflow-hidden">
@@ -289,7 +298,7 @@ export function SauceCostTab() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={handleSaveSettings}>{t("save") || "저장"}</Button>
+            <Button onClick={handleSaveSettings} disabled={settingsLoading}>{settingsLoading ? (t("loading") || "저장 중...") : (t("save") || "저장")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -363,10 +372,10 @@ export function SauceCostTab() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saveLoading}>
               {t("cancel")}
             </Button>
-            <Button onClick={handleSave}>{t("save") || "저장"}</Button>
+            <Button onClick={handleSave} disabled={saveLoading}>{saveLoading ? (t("loading") || "저장 중...") : (t("save") || "저장")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
