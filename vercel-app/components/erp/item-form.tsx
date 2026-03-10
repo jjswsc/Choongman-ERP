@@ -600,12 +600,24 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             )}
           </div>
         </div>
-        {formData.unit && parseFloat(formData.totalQuantity) > 0 && parseFloat(formData.price) >= 0 && (() => {
-          const price = parseFloat(formData.price)
-          const totalQty = parseFloat(formData.totalQuantity)
-          const costPerStdUnit = price / totalQty
+        {formData.unit && (() => {
           const u = formData.unit.toLowerCase().trim()
+          const price = parseFloat(formData.price) || 0
+          const cost = parseFloat(formData.cost) || 0
+          const totalQty = parseFloat(formData.totalQuantity) || 0
+
           const isPackaging = /포장|packaging|박스|용기|봉지|pack|pouch|box|bag/.test((formData.category || "").toLowerCase())
+
+          let costPerStdUnit: number | null = null
+          if (totalQty > 0 && (price >= 0 || cost >= 0)) {
+            const baseVal = price > 0 ? price : cost
+            costPerStdUnit = baseVal / totalQty
+          } else if ((u === "g" || u === "ml") && cost >= 0) {
+            costPerStdUnit = cost
+          }
+
+          if (costPerStdUnit == null) return null
+
           let costPerBaseUnit: number | null = null
           let baseUnitLabel = ""
           if (!isPackaging) {
@@ -616,8 +628,12 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
             } else if (u === "l") {
               costPerBaseUnit = costPerStdUnit / 1000
               baseUnitLabel = "ml"
+            } else if (u === "g" || u === "ml") {
+              costPerBaseUnit = costPerStdUnit
+              baseUnitLabel = u
             }
           }
+
           return (
             <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2 space-y-1">
               <div>
@@ -629,7 +645,7 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
                   {costPerStdUnit.toFixed(4)} ฿
                 </span>
               </div>
-              {costPerBaseUnit != null && baseUnitLabel && (
+              {costPerBaseUnit != null && baseUnitLabel && u !== baseUnitLabel && (
                 <div className="text-xs text-muted-foreground">
                   {t("itemsCostPerUnitConverted") || "→ 1"}{baseUnitLabel}{t("itemsCostPerUnitPreview2") || "당 원가"}:
                   <span className="ml-2 font-semibold tabular-nums text-primary">

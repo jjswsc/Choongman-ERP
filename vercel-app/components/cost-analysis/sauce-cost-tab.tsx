@@ -41,6 +41,7 @@ export function SauceCostTab() {
   const [loading, setLoading] = React.useState(true)
   const [recalcLoading, setRecalcLoading] = React.useState(false)
   const [overheadPercent, setOverheadPercent] = React.useState(5)
+  const [overheadPercentStr, setOverheadPercentStr] = React.useState("5")
   const [settingsOpen, setSettingsOpen] = React.useState(false)
   const [editOpen, setEditOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<SauceRow | null>(null)
@@ -48,6 +49,7 @@ export function SauceCostTab() {
   const [formName, setFormName] = React.useState("")
   const [formUnit, setFormUnit] = React.useState("g")
   const [formOh, setFormOh] = React.useState(5)
+  const [formOhStr, setFormOhStr] = React.useState("5")
   const [formTotalQuantity, setFormTotalQuantity] = React.useState<number>(0)
   const [formFoodItems, setFormFoodItems] = React.useState<RecipeItem[]>([])
 
@@ -60,7 +62,9 @@ export function SauceCostTab() {
       ])
       setSauces(sauceList || [])
       setItems(itemList || [])
-      setOverheadPercent(settings?.globalOverheadPercent ?? 5)
+      const oh = settings?.globalOverheadPercent ?? 5
+      setOverheadPercent(oh)
+      setOverheadPercentStr(String(oh))
     } catch {
       setSauces([])
       setItems([])
@@ -94,8 +98,16 @@ export function SauceCostTab() {
   }
 
   const handleSaveSettings = async () => {
+    const ohNum = parseFloat(overheadPercentStr)
+    const val = !isNaN(ohNum) && ohNum >= 0 && ohNum <= 50 ? ohNum : 5
     try {
-      await updateCostSettings({ globalOverheadPercent: overheadPercent })
+      const result = await updateCostSettings({ globalOverheadPercent: val })
+      if (result && 'success' in result && !result.success) {
+        alert((result as { message?: string }).message || 'OH 설정 저장에 실패했습니다.')
+        return
+      }
+      setOverheadPercent(val)
+      setOverheadPercentStr(String(val))
       setSettingsOpen(false)
     } catch (e) {
       alert(String(e))
@@ -108,6 +120,7 @@ export function SauceCostTab() {
     setFormName("")
     setFormUnit("g")
     setFormOh(overheadPercent)
+    setFormOhStr(String(overheadPercent))
     setFormTotalQuantity(0)
     setFormFoodItems([])
     setRuntimeApiItems(items)
@@ -121,6 +134,7 @@ export function SauceCostTab() {
     setFormName(s.name)
     setFormUnit(s.unit || "g")
     setFormOh(s.overheadPercent)
+    setFormOhStr(String(s.overheadPercent))
     setFormTotalQuantity(s.totalQuantity ?? s.ingredients.reduce((sum, i) => sum + i.quantity, 0))
     setRuntimeApiItems(items)
     setRuntimeSauces(sauces.filter((sa) => sa.code !== s.code))
@@ -146,16 +160,22 @@ export function SauceCostTab() {
       const itemCode = getIngredientItemCode(r.ingredientCode)
       return { itemCode: itemCode ?? "", quantity: r.quantity, lossRate: r.misePercent ?? MISE_DEFAULT }
     }).filter((i) => i.itemCode.trim())
+    const ohNum = parseFloat(formOhStr)
+    const overheadVal = !isNaN(ohNum) && ohNum >= 0 && ohNum <= 50 ? ohNum : 5
     try {
-      await saveSauce({
+      const result = await saveSauce({
         id: editing?.id,
         code,
         name,
         unit: formUnit,
-        overheadPercent: formOh,
+        overheadPercent: overheadVal,
         totalQuantity: formTotalQuantity > 0 ? formTotalQuantity : undefined,
         ingredients,
       })
+      if (result && !result.success) {
+        alert(result.message || "소스 저장에 실패했습니다.")
+        return
+      }
       await recalculateSauces()
       setEditOpen(false)
       await load()
@@ -249,7 +269,10 @@ export function SauceCostTab() {
         </div>
       )}
 
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+      <Dialog open={settingsOpen} onOpenChange={(open) => {
+        setSettingsOpen(open)
+        if (open) setOverheadPercentStr(String(overheadPercent))
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("posCostSauceOhSetting") || "OH (오버헤드) 설정"}</DialogTitle>
@@ -261,8 +284,8 @@ export function SauceCostTab() {
               min={0}
               max={50}
               step={0.5}
-              value={overheadPercent}
-              onChange={(e) => setOverheadPercent(Number(e.target.value) || 0)}
+              value={overheadPercentStr}
+              onChange={(e) => setOverheadPercentStr(e.target.value)}
             />
           </div>
           <DialogFooter>
@@ -301,7 +324,20 @@ export function SauceCostTab() {
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-muted-foreground">{t("posCostSauceOh") || "OH %"}</label>
-                <Input type="number" min={0} max={50} step={0.5} value={formOh} onChange={(e) => setFormOh(Number(e.target.value) || 0)} className="h-8 text-sm bg-secondary/50" />
+                <Input
+                  type="number"
+                  min={0}
+                  max={50}
+                  step={0.5}
+                  value={formOhStr}
+                  onChange={(e) => setFormOhStr(e.target.value)}
+                  onBlur={() => {
+                    const n = parseFloat(formOhStr)
+                    if (!isNaN(n) && n >= 0 && n <= 50) setFormOh(n)
+                    else setFormOhStr(String(formOh))
+                  }}
+                  className="h-8 text-sm bg-secondary/50"
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-muted-foreground">{t("posCostSauceTotalCapacity") || "총 용량"} (g)</label>

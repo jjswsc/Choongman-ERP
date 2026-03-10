@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
 
-/** GET: 원가 관련 설정 (OH% 등) */
+const COST_KEYS = ['global_overhead_percent', 'default_overhead_percent'] as const
+
+/** GET: 원가 관련 설정 (OH% 등) - system_settings 사용 */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelectFilter('cost_settings', 'or=(key.eq.default_overhead_percent,key.eq.global_overhead_percent)', {
+    const orFilter = `or=(${COST_KEYS.map((k) => `key.eq.${k}`).join(',')})`
+    const rows = (await supabaseSelectFilter('system_settings', orFilter, {
       limit: 10,
-    })) as { key?: string; value_json?: number }[] | null
+    })) as { key?: string; value_json?: unknown }[] | null
 
     const map: Record<string, number> = {}
     for (const r of rows || []) {
       const k = r.key ?? ''
       const v = r.value_json
-      map[k] = typeof v === 'number' ? v : 5
+      const num = typeof v === 'number' ? v : (typeof v === 'string' ? parseFloat(v) : NaN)
+      map[k] = !isNaN(num) ? num : 5
     }
     return NextResponse.json(
       {
@@ -30,7 +34,7 @@ export async function GET() {
   }
 }
 
-/** POST: 설정 업데이트 */
+/** POST: 설정 업데이트 - system_settings upsert */
 export async function POST(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -41,14 +45,22 @@ export async function POST(request: NextRequest) {
     const defaultOverheadPercent = body.defaultOverheadPercent != null ? Number(body.defaultOverheadPercent) : undefined
 
     const rows: Record<string, unknown>[] = []
-    if (globalOverheadPercent != null) {
-      rows.push({ key: 'global_overhead_percent', value_json: globalOverheadPercent, updated_at: new Date().toISOString() })
+    if (globalOverheadPercent != null && !isNaN(globalOverheadPercent)) {
+      rows.push({
+        key: 'global_overhead_percent',
+        value_json: globalOverheadPercent,
+        updated_at: new Date().toISOString(),
+      })
     }
-    if (defaultOverheadPercent != null) {
-      rows.push({ key: 'default_overhead_percent', value_json: defaultOverheadPercent, updated_at: new Date().toISOString() })
+    if (defaultOverheadPercent != null && !isNaN(defaultOverheadPercent)) {
+      rows.push({
+        key: 'default_overhead_percent',
+        value_json: defaultOverheadPercent,
+        updated_at: new Date().toISOString(),
+      })
     }
     if (rows.length > 0) {
-      await supabaseUpsert('cost_settings', rows, 'key')
+      await supabaseUpsert('system_settings', rows, 'key')
     }
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

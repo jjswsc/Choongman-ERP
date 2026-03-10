@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
@@ -89,6 +91,7 @@ export default function InboundPage() {
   const [selectedItem, setSelectedItem] = React.useState<AdminItem | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [inVendorSearch, setInVendorSearch] = React.useState("")
+  const [inStoreSearch, setInStoreSearch] = React.useState("")
 
   const [histStart, setHistStart] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
@@ -109,6 +112,47 @@ export default function InboundPage() {
   const purchaseVendors = React.useMemo(() => {
     return vendors.filter((v) => v.type === "purchase" || v.type === "both")
   }, [vendors])
+
+  /** 판매처 (입고 목적지로 선택 가능) - 매장 외 거래처 납품용 */
+  const salesVendors = React.useMemo(() => {
+    return vendors
+      .filter((v) => v.type === "sales" || v.type === "both")
+      .map((v) => ({ code: v.code, name: (v.gps_name?.trim() || v.name || "").trim() }))
+      .filter((v) => v.name)
+  }, [vendors])
+
+  const storeOptions = React.useMemo(() => {
+    const stores = (storeList || []).filter((s) => s && s !== "All")
+    return { stores, salesVendors }
+  }, [storeList, salesVendors])
+
+  /** 입고 내역 필터용: 매장 + 판매처 (중복 제거) */
+  const histStoreOptions = React.useMemo(() => {
+    const base = (storeList || []).filter((s) => s && s !== "All")
+    const salesNames = salesVendors.map((v) => v.name).filter(Boolean)
+    const seen = new Set(base)
+    const out = [...base]
+    for (const n of salesNames) {
+      if (!seen.has(n)) {
+        seen.add(n)
+        out.push(n)
+      }
+    }
+    return out
+  }, [storeList, salesVendors])
+
+  const filteredStoreOptions = React.useMemo(() => {
+    const q = inStoreSearch.trim().toLowerCase()
+    const filteredStores = !q
+      ? storeOptions.stores
+      : storeOptions.stores.filter((s) => s.toLowerCase().includes(q))
+    const filteredSales = !q
+      ? storeOptions.salesVendors
+      : storeOptions.salesVendors.filter(
+          (v) => (v.name || v.code || "").toLowerCase().includes(q)
+        )
+    return { stores: filteredStores, salesVendors: filteredSales }
+  }, [storeOptions, inStoreSearch])
 
   /** 거래처 선택 시 해당 거래처에 등록된 품목 (items.vendor + item_vendors 매핑) */
   const itemsForPicker = React.useMemo(() => {
@@ -290,9 +334,17 @@ export default function InboundPage() {
         qty: c.qty,
         cost: c.cost ? parseFloat(String(c.cost).replace(/,/g, "")) : undefined,
       }))
-      const storeName = isOffice
-        ? (inStore && inStore !== "입고등록" ? inStore.trim() : undefined)
-        : (auth?.store?.trim() || undefined)
+      let storeName: string | undefined
+      if (!isOffice) {
+        storeName = auth?.store?.trim() || undefined
+      } else if (!inStore || inStore === "입고등록") {
+        storeName = undefined
+      } else if (inStore.startsWith("sales:")) {
+        const code = inStore.slice(6)
+        storeName = salesVendors.find((v) => v.code === code)?.name ?? inStore
+      } else {
+        storeName = inStore.trim()
+      }
       const vendorCode = purchaseVendors.find((v) => v.name === cart[0]?.vendor)?.code
       const res = await registerInboundBatch(list, storeName, {
         vendorCode,
@@ -567,15 +619,34 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
                       <div>
                         <label className="text-xs font-semibold">{t("store")}</label>
                         {isOffice ? (
-                          <Select value={inStore || "입고등록"} onValueChange={(v) => setInStore(v)}>
+                          <Select value={inStore || "입고등록"} onValueChange={(v) => setInStore(v)} onOpenChange={(open) => !open && setInStoreSearch("")}>
                             <SelectTrigger className="mt-1 h-9">
-                              <SelectValue />
+                              <SelectValue placeholder={t("store")} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
-                              {(storeList || []).filter((s) => s && s !== "All").map((s) => (
-                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                              ))}
+                              <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                <Input
+                                  placeholder={t("search") || "검색"}
+                                  value={inStoreSearch}
+                                  onChange={(e) => setInStoreSearch(e.target.value)}
+                                  className="h-7 text-xs"
+                                />
+                              </div>
+                              <SelectGroup>
+                                <SelectLabel className="text-muted-foreground font-medium">{t("store")}</SelectLabel>
+                                <SelectItem value="입고등록">{t("inLocationHQ")}</SelectItem>
+                                {filteredStoreOptions.stores.map((s) => (
+                                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectGroup>
+                              {filteredStoreOptions.salesVendors.length > 0 && (
+                                <SelectGroup>
+                                  <SelectLabel className="text-muted-foreground font-medium">{t("vendorTypeSales")}</SelectLabel>
+                                  {filteredStoreOptions.salesVendors.map((v) => (
+                                    <SelectItem key={v.code} value={`sales:${v.code}`}>{v.name}</SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              )}
                             </SelectContent>
                           </Select>
                         ) : (
@@ -745,7 +816,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
               totalAmount={periodTotalFormatted}
               isOffice={isOffice}
               histStore={histStore}
-              stores={storeList}
+              stores={histStoreOptions}
               onHistStoreChange={setHistStore}
               histStart={histStart}
               histEnd={histEnd}
