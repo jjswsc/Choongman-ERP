@@ -174,7 +174,7 @@ export function SauceCostTab() {
         name,
         unit: formUnit,
         overheadPercent: overheadVal,
-        totalQuantity: formTotalQuantity > 0 ? formTotalQuantity : undefined,
+        totalQuantity: formTotalQuantity >= 0 ? formTotalQuantity : undefined,
         ingredients,
       })
       await recalculateSauces()

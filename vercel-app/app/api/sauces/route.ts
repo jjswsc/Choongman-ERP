@@ -166,7 +166,8 @@ export async function POST(request: NextRequest) {
     const code = String(body.code ?? '').trim()
     const name = String(body.name ?? '').trim()
     const unit = String(body.unit ?? 'g').trim() || 'g'
-    const overheadPercent = Number(body.overheadPercent) || 5
+    const rawOh = Number(body.overheadPercent)
+    const overheadPercent = (body.overheadPercent != null && !isNaN(rawOh) && rawOh >= 0 && rawOh <= 50) ? rawOh : 5
     const totalQuantity = body.totalQuantity != null ? Number(body.totalQuantity) : null
     const ingredients: { itemCode: string; quantity: number; lossRate?: number }[] = Array.isArray(body.ingredients) ? body.ingredients : []
 
