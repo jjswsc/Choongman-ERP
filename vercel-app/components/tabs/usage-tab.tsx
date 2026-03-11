@@ -514,7 +514,7 @@ export function UsageTab() {
                   />
                 </div>
                 <Button size="sm" className="h-9 font-medium" onClick={loadHistory} disabled={historyLoading}>
-                  {historyLoading ? t('loading') : t('search') || '조회'}
+                  {historyLoading ? t('loading') : t('search') || '검색'}
                 </Button>
               </div>
             </CardHeader>

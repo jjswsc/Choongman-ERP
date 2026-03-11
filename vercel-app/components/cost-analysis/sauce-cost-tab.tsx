@@ -97,6 +97,8 @@ export function SauceCostTab() {
     try {
       await recalculateSauces()
       await load()
+    } catch (e) {
+      alert(String(e))
     } finally {
       setRecalcLoading(false)
     }

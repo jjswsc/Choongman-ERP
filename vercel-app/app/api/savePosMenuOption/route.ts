@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { recordPriceChanges } from '@/lib/price-history'
+
+async function getMenuCategories(menuId: number): Promise<{ categoryMain: string; category: string }> {
+  try {
+    const menus = (await supabaseSelectFilter('pos_menus', `id=eq.${menuId}`, { limit: 1 })) as { category_main?: string; category?: string }[] | null
+    if (menus && menus.length > 0) {
+      const m = menus[0]
+      return {
+        categoryMain: (m.category_main || '').trim(),
+        category: (m.category || '').trim(),
+      }
+    }
+  } catch { /* ignore */ }
+  return { categoryMain: '', category: '' }
+}
 
 /** POS 메뉴 옵션 저장 */
 export async function POST(req: NextRequest) {
@@ -50,11 +65,61 @@ export async function POST(req: NextRequest) {
       sort_order: sortOrder,
     }
 
-    const doSave = async (row: Record<string, unknown>) => {
+    const doSave = async (row: Record<string, unknown>): Promise<void> => {
       if (id) {
+        const existing = (await supabaseSelectFilter(
+          'pos_menu_options',
+          `id=eq.${id}`,
+          { limit: 1 }
+        )) as { name?: string; price_modifier?: number; price_modifier_delivery?: number | null; price_modifier_packaging?: number | null }[] | null
+        if (existing && existing.length > 0) {
+          const prev = existing[0]
+          const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+          if (Number(prev.price_modifier) !== priceModifier) {
+            changes.push({ fieldName: 'price_modifier', oldValue: prev.price_modifier ?? null, newValue: priceModifier })
+          }
+          if ((prev.price_modifier_delivery ?? null) !== priceModifierDelivery) {
+            changes.push({ fieldName: 'price_modifier_delivery', oldValue: prev.price_modifier_delivery ?? null, newValue: priceModifierDelivery })
+          }
+          if ((prev.price_modifier_packaging ?? null) !== priceModifierPackaging) {
+            changes.push({ fieldName: 'price_modifier_packaging', oldValue: prev.price_modifier_packaging ?? null, newValue: priceModifierPackaging })
+          }
+          if (changes.length > 0) {
+            const { categoryMain, category } = await getMenuCategories(menuId)
+            recordPriceChanges({
+              entityType: 'pos_menu_option',
+              entityId: String(id),
+              entityDisplayName: prev.name ?? name,
+              changes,
+              category: category || undefined,
+              categoryMain: categoryMain || undefined,
+              parentEntityId: String(menuId),
+            }).catch(() => {})
+          }
+        }
         await supabaseUpdateByFilter('pos_menu_options', `id=eq.${id}`, row)
       } else {
-        await supabaseInsert('pos_menu_options', { menu_id: menuId, ...row })
+        const inserted = (await supabaseInsert('pos_menu_options', { menu_id: menuId, ...row })) as { id?: number }[] | { id?: number }
+        const newRow = Array.isArray(inserted) ? inserted[0] : inserted
+        const newId = newRow?.id != null ? String(newRow.id) : null
+        if (newId) {
+          const { categoryMain, category } = await getMenuCategories(menuId)
+          const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+          initChanges.push({ fieldName: 'price_modifier', oldValue: null, newValue: priceModifier })
+          if (priceModifierDelivery != null) initChanges.push({ fieldName: 'price_modifier_delivery', oldValue: null, newValue: priceModifierDelivery })
+          if (priceModifierPackaging != null) initChanges.push({ fieldName: 'price_modifier_packaging', oldValue: null, newValue: priceModifierPackaging })
+          if (initChanges.length > 0) {
+            recordPriceChanges({
+              entityType: 'pos_menu_option',
+              entityId: newId,
+              entityDisplayName: name,
+              changes: initChanges,
+              category: category || undefined,
+              categoryMain: categoryMain || undefined,
+              parentEntityId: String(menuId),
+            }).catch(() => {})
+          }
+        }
       }
     }
 

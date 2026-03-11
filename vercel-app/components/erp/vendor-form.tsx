@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Map,
   FileText,
+  Store,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,6 +32,7 @@ export interface VendorFormData {
   code: string
   name: string
   gps_name: string
+  sales_outlet: string
   contact: string
   phone: string
   email: string
@@ -172,17 +174,33 @@ export function VendorForm({ formData, setFormData, isEditing, onSave, onReset, 
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
-            <Map className="h-3.5 w-3.5 text-muted-foreground" />
-            {t("vendorGpsName")}
-          </label>
-          <Input
-            placeholder={t("vendorGpsNamePh")}
-            className="h-10 text-sm"
-            value={formData.gps_name}
-            onChange={(e) => update("gps_name", e.target.value)}
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Map className="h-3.5 w-3.5 text-muted-foreground" />
+              {t("vendorGpsName")}
+            </label>
+            <Input
+              placeholder={t("vendorGpsNamePh")}
+              className="h-10 text-sm"
+              value={formData.gps_name}
+              onChange={(e) => update("gps_name", e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">{t("vendorGpsNameHint")}</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Store className="h-3.5 w-3.5 text-muted-foreground" />
+              {t("vendorSalesOutlet")}
+            </label>
+            <Input
+              placeholder={t("vendorSalesOutletPh")}
+              className="h-10 text-sm"
+              value={formData.sales_outlet}
+              onChange={(e) => update("sales_outlet", e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">{t("vendorSalesOutletHint")}</p>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">

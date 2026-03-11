@@ -20,8 +20,12 @@ interface ShipmentFilterBarProps {
   // Type & Store (histType: "" | "Order" | "Force" - Order=주문승인, Force=강제출고)
   histType: string
   histDeliveryStatus: string
+  histTargetType: "" | "store" | "sales"
   histStore: string
   outboundTargets: string[]
+  storeTargets: string[]
+  salesTargets: string[]
+  onHistTargetTypeChange: (v: "" | "store" | "sales") => void
   onHistTypeChange: (v: string) => void
   onHistDeliveryStatusChange: (v: string) => void
   onHistStoreChange: (v: string) => void
@@ -52,8 +56,12 @@ export function ShipmentFilterBar({
   onMonthClick,
   histType,
   histDeliveryStatus = "",
+  histTargetType = "",
   histStore,
   outboundTargets,
+  storeTargets = [],
+  salesTargets = [],
+  onHistTargetTypeChange,
   onHistTypeChange,
   onHistDeliveryStatusChange,
   onHistStoreChange,
@@ -74,11 +82,17 @@ export function ShipmentFilterBar({
   const storeInputRef = React.useRef<HTMLInputElement>(null)
   const storeDropdownRef = React.useRef<HTMLDivElement>(null)
 
+  const targetOptions = React.useMemo(() => {
+    if (histTargetType === "store") return storeTargets
+    if (histTargetType === "sales") return salesTargets
+    return outboundTargets
+  }, [histTargetType, storeTargets, salesTargets, outboundTargets])
+
   const filteredStores = React.useMemo(() => {
     const q = storeSearchQuery.trim().toLowerCase()
-    if (!q) return outboundTargets
-    return outboundTargets.filter((s) => s.toLowerCase().includes(q))
-  }, [outboundTargets, storeSearchQuery])
+    if (!q) return targetOptions
+    return targetOptions.filter((s) => s.toLowerCase().includes(q))
+  }, [targetOptions, storeSearchQuery])
 
   const displayStoreValue = histStore || ""
 
@@ -179,6 +193,17 @@ export function ShipmentFilterBar({
               <option value="배송완료">{t("outDeliveryDelivered")}</option>
               <option value="일부배송완료">{t("outDeliveryPartial")}</option>
               <option value="배송중">{t("outDeliveryTransit")}</option>
+            </select>
+
+            {/* 수령처 유형: 전체 / 매장 / 판매처 */}
+            <select
+              value={histTargetType || "__all__"}
+              onChange={(e) => onHistTargetTypeChange((e.target.value === "__all__" ? "" : e.target.value) as "" | "store" | "sales")}
+              className="h-8 w-[110px] rounded border border-input bg-card px-2 pr-6 text-xs text-card-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
+            >
+              <option value="__all__">{t("outFilterTargetType")}: {t("outTypeAll")}</option>
+              <option value="store">{t("outTargetTypeStore")}</option>
+              <option value="sales">{t("outTargetTypeSales")}</option>
             </select>
 
             {/* 매장 검색 (출고처 선택) - 검색 가능한 드롭다운 */}

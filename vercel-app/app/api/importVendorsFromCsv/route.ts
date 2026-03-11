@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
       balance: idx('balance'),
       memo: idx('memo'),
       gpsName: idx('gps_name'),
+      salesOutlet: idx('sales_outlet'),
       lat: idx('lat'),
       lng: idx('lng'),
     }
@@ -128,7 +129,8 @@ export async function POST(request: NextRequest) {
       if (mail && !memo.includes(mail)) memo = memo ? `${memo}\n${mail}` : mail
 
       let gpsName = col.gpsName >= 0 ? String(r[col.gpsName] ?? '').trim() : ''
-      if (!gpsName && col.name >= 0 && type === 'sales') {
+      const salesOutlet = col.salesOutlet >= 0 ? String(r[col.salesOutlet] ?? '').trim() : ''
+      if (!gpsName && col.name >= 0 && type === 'sales' && !salesOutlet) {
         const shortName = String(r[col.name] ?? '').trim()
         if (shortName && !/^\d+$/.test(shortName)) gpsName = shortName
       }
@@ -163,6 +165,7 @@ export async function POST(request: NextRequest) {
         balance,
         memo,
         gps_name: gpsName || null,
+        sales_outlet: salesOutlet || null,
         lat,
         lng,
       })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { recordPriceChanges } from '@/lib/price-history'
 
 function taxTypeToDb(taxType: string): string {
   if (taxType === 'exempt') return '면세'
@@ -79,13 +80,46 @@ export async function POST(request: NextRequest) {
     const existing = (await supabaseSelectFilter(
       'items',
       `code=eq.${encodeURIComponent(filterCode)}`
-    )) as { id?: number }[] | null
+    )) as { id?: number; price?: number; cost?: number; name?: string }[] | null
+
+    if (existing && existing.length > 0) {
+      const prev = existing[0] as { price?: number; cost?: number; name?: string; category?: string }
+      const cat = (prev.category || row.category || '').trim()
+      const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+      if (Number(prev.price) !== row.price) {
+        changes.push({ fieldName: 'price', oldValue: prev.price ?? null, newValue: row.price as number })
+      }
+      if (Number(prev.cost) !== row.cost) {
+        changes.push({ fieldName: 'cost', oldValue: prev.cost ?? null, newValue: row.cost as number })
+      }
+      if (changes.length > 0) {
+        recordPriceChanges({
+          entityType: 'item',
+          entityId: filterCode,
+          entityDisplayName: prev.name ?? name,
+          changes,
+          category: cat || undefined,
+        }).catch(() => {})
+      }
+    }
 
     const tryWrite = async (payload: Record<string, unknown>) => {
       if (existing && existing.length > 0) {
         await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(filterCode)}`, payload)
       } else {
         await supabaseInsert('items', payload)
+        const price = Number(row.price) || 0
+        const cost = Number(row.cost) || 0
+        recordPriceChanges({
+          entityType: 'item',
+          entityId: filterCode,
+          entityDisplayName: name,
+          changes: [
+            { fieldName: 'price', oldValue: null, newValue: price },
+            { fieldName: 'cost', oldValue: null, newValue: cost },
+          ],
+          category: (row.category as string || '').trim() || undefined,
+        }).catch(() => {})
       }
     }
     try {

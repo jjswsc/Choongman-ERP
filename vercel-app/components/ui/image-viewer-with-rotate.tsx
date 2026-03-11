@@ -44,11 +44,14 @@ export function ImageViewerWithRotate({
   const handleZoomIn = () => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))
   const handleZoomOut = () => setZoomIdx((i) => Math.max(0, i - 1))
 
+  const isZoomed = scale > 1
   return (
     <div className={`flex flex-col ${className || "relative"}`}>
-      {/* 이미지 영역: 고정 높이 + overflow로 확대 시 스크롤만 되고 버튼은 항상 보임 */}
-      <div className="flex min-h-[120px] max-h-[55vh] flex-1 items-center justify-center overflow-auto">
-        <div style={{ zoom: scale }} className="inline-block">
+      {/* 확대 시 items-start로 상단부터 보이게 하여 위아래 스크롤 모두 가능. 1x일 때는 items-center로 중앙 배치 */}
+      <div
+        className={`flex min-h-[120px] max-h-[55vh] flex-1 justify-center overflow-auto overflow-x-auto ${isZoomed ? "items-start" : "items-center"}`}
+      >
+        <div style={{ zoom: scale }} className="inline-block shrink-0">
           <img
             src={src}
             alt={alt}

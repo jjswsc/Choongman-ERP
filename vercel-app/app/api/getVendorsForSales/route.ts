@@ -19,6 +19,7 @@ export async function GET() {
       name?: string
       type?: string
       gps_name?: string
+      sales_outlet?: string
     }[] | null
 
     const list = (rows || [])
@@ -28,10 +29,11 @@ export async function GET() {
         return t === 'sales' || t === 'both'
       })
       .map((row) => {
+        const salesOutlet = String((row as { sales_outlet?: string }).sales_outlet || '').trim()
         const gpsName = String(row.gps_name || '').trim()
         const fullName = String(row.name || '').trim()
         return {
-          name: gpsName || fullName || String(row.code),
+          name: salesOutlet || gpsName || fullName || String(row.code),
         }
       })
 

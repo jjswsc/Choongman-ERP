@@ -544,7 +544,7 @@ ${rows.map((row, ri) => {
                 </label>
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadList} disabled={listLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
-                  {listLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
+                  {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
                 </Button>
               </div>
               <div className="rounded-lg border border-border/60 max-h-[240px] overflow-x-auto overflow-y-auto">
@@ -802,7 +802,7 @@ ${rows.map((row, ri) => {
                 </label>
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadMonthly} disabled={monthlyLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
-                  {monthlyLoading ? (t("loading") || "조회중") : (t("search") || "조회")}
+                  {monthlyLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={downloadMonthlyExcel} disabled={filteredMonthlyData.length === 0} title={t("pettyExcelHint") || ""}>
                   <Download className="mr-1 h-3.5 w-3.5" />

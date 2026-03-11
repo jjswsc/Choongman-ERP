@@ -91,19 +91,21 @@ export function NoticeHistory() {
       .catch(() => setSenders([]))
   }, [startDate, endDate])
 
-  React.useEffect(() => {
-    if (auth?.store && auth?.user) loadNotices()
-  }, [auth?.store, auth?.user, loadNotices])
+  const [hasSearched, setHasSearched] = React.useState(false)
 
-  React.useEffect(() => {
+  const handleSearch = React.useCallback(() => {
+    setHasSearched(true)
     loadSenders()
-  }, [loadSenders])
+    loadNotices()
+  }, [loadSenders, loadNotices])
 
   React.useEffect(() => {
-    const onSent = () => loadNotices()
+    const onSent = () => {
+      if (hasSearched) loadNotices()
+    }
     window.addEventListener("notice-sent", onSent)
     return () => window.removeEventListener("notice-sent", onSent)
-  }, [loadNotices])
+  }, [loadNotices, hasSearched])
 
   React.useEffect(() => {
     const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
@@ -204,7 +206,7 @@ export function NoticeHistory() {
         <Button
           size="sm"
           className="h-9 shrink-0 rounded-lg px-3 text-xs font-semibold"
-          onClick={loadNotices}
+          onClick={handleSearch}
           disabled={loading}
         >
           <Search className="mr-1 h-3.5 w-3.5" />
@@ -221,7 +223,11 @@ export function NoticeHistory() {
       </div>
 
       <div className="flex flex-col">
-        {notices.length === 0 ? (
+        {!hasSearched ? (
+          <div className="py-8 px-4 text-center text-sm text-muted-foreground">
+            {t("msg_click_query") || "검색 버튼을 눌러 주세요."}
+          </div>
+        ) : notices.length === 0 ? (
           <div className="py-8 px-4 text-center text-sm text-muted-foreground">
             {t("adminNoNoticesFound")}
           </div>

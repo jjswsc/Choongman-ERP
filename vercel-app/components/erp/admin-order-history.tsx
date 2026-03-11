@@ -18,6 +18,7 @@ import {
   getOrderFilterOptions,
   getVendorsForPurchase,
   getWarehouseLocations,
+  updateOrderDeliveryStatus,
   type AdminOrderItem,
   useStoreList,
 } from "@/lib/api-client"
@@ -36,7 +37,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Printer, FileSpreadsheet, Search, ArrowRightCircle, ChevronDown } from "lucide-react"
+import { Printer, FileSpreadsheet, Search, ArrowRightCircle, ChevronDown, PackageCheck } from "lucide-react"
 import { useOrderCreate } from "@/lib/order-create-context"
 
 const HQ_STORES = ["본사", "Office", "오피스", "본점"]
@@ -60,6 +61,7 @@ interface ItemRow {
   orderId: number
   date: string
   deliveryDate: string
+  deliveryStatus: string
   store: string
   userName: string
   userNick: string
@@ -72,6 +74,8 @@ interface ItemRow {
   price: number
   status: string
   taxType?: string
+  /** 해당 주문의 첫 번째 품목 행인지 (배송 완료 버튼 표시용) */
+  isFirstRowOfOrder: boolean
 }
 
 export function AdminOrderHistory() {
@@ -107,6 +111,7 @@ export function AdminOrderHistory() {
   const [hasSearched, setHasSearched] = React.useState(false)
   const [transferGroupDialog, setTransferGroupDialog] = React.useState<string | null>(null)
   const [transferOutboundLocation, setTransferOutboundLocation] = React.useState<string>("")
+  const [deliveryCompleteOrderId, setDeliveryCompleteOrderId] = React.useState<number | null>(null)
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -277,7 +282,9 @@ export function AdminOrderHistory() {
 
   const itemRows: ItemRow[] = React.useMemo(() => {
     const rows: ItemRow[] = []
+    const seenOrderIds = new Set<number>()
     for (const o of filteredOrders) {
+      const deliveryStatus = String(o.deliveryStatus || "").trim() || (o.status === "Approved" ? "배송중" : "")
       for (let itemIdx = 0; itemIdx < (o.items || []).length; itemIdx++) {
         const it = o.items![itemIdx]
         const qty = it.originalQty ?? it.qty ?? 0
@@ -288,11 +295,14 @@ export function AdminOrderHistory() {
         if (vendorFilter && vendorFilter !== "All" && vendorStr !== vendorFilter) continue
         if (categoryFilter && categoryFilter !== "All" && categoryStr !== categoryFilter) continue
         if (outboundFilter && outboundFilter !== "All" && outboundStr !== outboundFilter) continue
+        const isFirst = !seenOrderIds.has(o.orderId)
+        if (isFirst) seenOrderIds.add(o.orderId)
         rows.push({
           id: `${o.orderId}-${itemIdx}`,
           orderId: o.orderId,
           date: o.date,
           deliveryDate: o.deliveryDate || "",
+          deliveryStatus,
           store: o.store || "",
           userName: o.userName || "",
           userNick: o.userNick || o.userName || "",
@@ -305,6 +315,7 @@ export function AdminOrderHistory() {
           price,
           status: o.status || "Pending",
           taxType: (it as { taxType?: string }).taxType,
+          isFirstRowOfOrder: isFirst,
         })
       }
     }
@@ -421,6 +432,23 @@ export function AdminOrderHistory() {
 
   const handleTransferVendorClick = (vendorStr: string) => {
     setTransferGroupDialog(vendorStr)
+  }
+
+  const handleDeliveryComplete = async (orderId: number) => {
+    if (!confirm(t("statusDelivered") || "배송 완료로 변경하시겠습니까? 모바일 수령 없이 직접 완료 처리됩니다.")) return
+    setDeliveryCompleteOrderId(orderId)
+    try {
+      const res = await updateOrderDeliveryStatus({ orderId, deliveryStatus: "배송완료" })
+      if (res.success) {
+        await load()
+      } else {
+        alert(res.message || "변경에 실패했습니다.")
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setDeliveryCompleteOrderId(null)
+    }
   }
 
   const handlePrint = () => {
@@ -664,21 +692,30 @@ ${rowsToPrint.map((r) => {
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemQty")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemUnitPrice")}</th>
                 <th className="px-2 py-2 text-center font-medium whitespace-nowrap">{t("orderItemTotal")}</th>
+                {isHQ && (
+                  <th className="px-2 py-2 text-center font-medium whitespace-nowrap w-[90px]">{t("deliveryStatus")}</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
+                <tr><td colSpan={isHQ ? 15 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("loading")}</td></tr>
               ) : !hasSearched ? (
-                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderSearchHint") || "조회 버튼을 눌러 주세요."}</td></tr>
+                <tr><td colSpan={isHQ ? 15 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderSearchHint") || "조회 버튼을 눌러 주세요."}</td></tr>
               ) : list.length === 0 ? (
-                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
+                <tr><td colSpan={isHQ ? 15 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("orderNoData")}</td></tr>
               ) : itemRows.length === 0 ? (
-                <tr><td colSpan={isHQ ? 14 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
+                <tr><td colSpan={isHQ ? 15 : 13} className="px-4 py-8 text-center text-muted-foreground">{t("mgr_no_match") || "조건에 맞는 내역이 없습니다."}</td></tr>
               ) : (
                 itemRows.map((r) => {
                   const statusBg = r.status === "Pending" ? "bg-warning/10 text-warning" : r.status === "Approved" ? "bg-success/10 text-success" : r.status === "Rejected" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
                   const statusLabel = r.status === "Pending" ? t("orderStatusPending") : r.status === "Approved" ? t("orderStatusApproved") : r.status === "Rejected" ? t("orderStatusRejected") : r.status === "Hold" ? t("orderStatusHold") : r.status || ""
+                  const isTransit = r.deliveryStatus === "배송중" || r.deliveryStatus === "배송 중" || !r.deliveryStatus
+                  const isDelivered = r.deliveryStatus === "배송완료" || r.deliveryStatus === "배송 완료"
+                  const isPartial = r.deliveryStatus === "일부배송완료" || r.deliveryStatus === "일부 배송 완료"
+                  const dsLabel = isDelivered ? (t("statusDelivered") || "배송완료") : isPartial ? (t("statusPartialDelivered") || "일부") : isTransit ? (t("statusInTransit") || "배송중") : r.deliveryStatus || "-"
+                  const canMarkDelivered = isHQ && r.status === "Approved" && isTransit && r.isFirstRowOfOrder
+                  const isUpdating = deliveryCompleteOrderId === r.orderId
                   return (
                     <tr key={r.id} className="border-t hover:bg-muted/30">
                       {isHQ && (
@@ -705,6 +742,26 @@ ${rowsToPrint.map((r) => {
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{r.qty}</td>
                       <td className="px-2 py-1.5 text-center whitespace-nowrap">{(r.price || 0).toLocaleString()}</td>
                       <td className="px-2 py-1.5 text-center font-medium whitespace-nowrap">{(r.price * r.qty).toLocaleString()}</td>
+                      {isHQ && (
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-col items-center gap-1">
+                            {r.isFirstRowOfOrder && <span className="text-xs text-muted-foreground">{dsLabel}</span>}
+                            {canMarkDelivered && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs shrink-0"
+                                disabled={isUpdating}
+                                onClick={() => handleDeliveryComplete(r.orderId)}
+                                title={t("statusDelivered") || "배송 완료"}
+                              >
+                                <PackageCheck className="h-3.5 w-3.5" />
+                                {isUpdating ? t("loading") : (t("statusDelivered") || "배송 완료")}
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )
                 })

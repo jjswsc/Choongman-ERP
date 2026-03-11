@@ -87,6 +87,83 @@ export async function GET(request: NextRequest) {
     endDate.setHours(23, 59, 59, 999)
 
     const list: OutboundHistoryItem[] = []
+
+    // 승인된 주문 중 아직 수령 전인 건도 목록에 포함 (주문 직후 인보이스 인쇄 가능)
+    const typeFilterOkForOrder =
+      !typeFilter || typeFilter === 'All' || typeFilter === 'Order'
+    if (typeFilterOkForOrder) {
+      const orderDateFilter = `status=eq.Approved&order_date=gte.${startStr}&order_date=lte.${endStr}T23:59:59.999`
+      const deliveryDateFilter = `status=eq.Approved&delivery_date=gte.${startStr}&delivery_date=lte.${endStr}`
+      const [ordersByOrderDate, ordersByDeliveryDate] = await Promise.all([
+        supabaseSelectFilter('orders', orderDateFilter, { limit: 200 }),
+        supabaseSelectFilter('orders', deliveryDateFilter, { limit: 200 }),
+      ])
+      const seenOrderIds = new Set<number>()
+      const approvedOrders = [
+        ...(ordersByOrderDate || []),
+        ...(ordersByDeliveryDate || []),
+      ] as {
+        id?: number
+        store_name?: string
+        order_date?: string
+        delivery_date?: string
+        cart_json?: string
+        received_indices?: string | number[] | null
+      }[]
+      for (const o of approvedOrders) {
+        const oid = o.id
+        if (!oid || seenOrderIds.has(oid)) continue
+        const recIdx = o.received_indices
+        const hasReceived =
+          recIdx != null &&
+          (Array.isArray(recIdx) ? recIdx.length > 0 : (() => {
+            try {
+              const parsed = typeof recIdx === 'string' ? JSON.parse(recIdx) : recIdx
+              return Array.isArray(parsed) && parsed.length > 0
+            } catch {
+              return false
+            }
+          })())
+        if (hasReceived) continue
+        seenOrderIds.add(oid)
+
+        const target = String(o.store_name || '').trim()
+        if (vendorFilter && vendorFilter !== 'All' && vendorFilter !== '전체 매출처' && target !== vendorFilter) continue
+
+        let cart: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
+        try {
+          if (o.cart_json) cart = JSON.parse(o.cart_json) || []
+        } catch {}
+        const orderDateStr = (o.order_date || '').slice(0, 10)
+        const deliveryDateStr = (o.delivery_date || '').slice(0, 16)
+        for (const p of cart) {
+          const code = String(p.code || '').trim()
+          const name = String(p.name || '').trim()
+          if (!code || !name) continue
+          const qty = Math.abs(Number(p.qty) || 0)
+          if (qty <= 0) continue
+          const info = itemMap[code] || { spec: '-', price: 0, outboundLocation: '(미지정)' }
+          const price = Number(p.price) ?? info.price
+          const amount = price * qty
+          list.push({
+            date: orderDateStr,
+            target,
+            type: 'Outbound',
+            name,
+            code,
+            spec: String(p.spec || info.spec || '').trim() || '-',
+            qty,
+            amount,
+            orderRowId: String(oid),
+            deliveryStatus: '배송중',
+            deliveryDate: deliveryDateStr || undefined,
+            orderDate: orderDateStr || undefined,
+            outboundLocation: info.outboundLocation,
+          })
+        }
+      }
+    }
+
     for (const row of allLogs || []) {
       const type = String(row.log_type || '')
       if (type !== 'Outbound' && type !== 'ForceOutbound') continue
@@ -142,6 +219,15 @@ export async function GET(request: NextRequest) {
       })
       if (list.length >= 500) break
     }
+
+    list.sort((a, b) => {
+      const da = a.orderDate || a.date
+      const db = b.orderDate || b.date
+      if (da !== db) return db.localeCompare(da)
+      const ta = (a.target || '').localeCompare(b.target || '')
+      if (ta !== 0) return ta
+      return (b.orderRowId || '').localeCompare(a.orderRowId || '')
+    })
 
     const keyToInv: Record<string, string> = {}
     for (const r of list) {

@@ -14,6 +14,7 @@ const emptyForm: VendorFormData = {
   code: "",
   name: "",
   gps_name: "",
+  sales_outlet: "",
   contact: "",
   phone: "",
   email: "",
@@ -55,6 +56,7 @@ export default function VendorsPage() {
           code: v.code,
           name: v.name,
           gps_name: v.gps_name ?? "",
+          sales_outlet: v.sales_outlet ?? "",
           contact: v.contact,
           phone: v.phone,
           email: v.email,
@@ -85,6 +87,7 @@ export default function VendorsPage() {
       code,
       name,
       gps_name: formData.gps_name.trim() || undefined,
+      sales_outlet: formData.sales_outlet.trim() || undefined,
       contact: formData.contact.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
@@ -103,6 +106,7 @@ export default function VendorsPage() {
       code,
       name,
       gps_name: formData.gps_name.trim() || undefined,
+      sales_outlet: formData.sales_outlet.trim() || undefined,
       contact: formData.contact.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
@@ -128,6 +132,7 @@ export default function VendorsPage() {
       code: vendor.code,
       name: vendor.name,
       gps_name: vendor.gps_name ?? "",
+      sales_outlet: vendor.sales_outlet ?? "",
       contact: vendor.contact,
       phone: vendor.phone,
       email: vendor.email,
@@ -141,7 +146,9 @@ export default function VendorsPage() {
   }
 
   const handleDelete = async (vendor: Vendor) => {
-    const displayName = (vendor.type === "sales" || vendor.type === "both") && vendor.gps_name?.trim() ? vendor.gps_name : vendor.name
+    const displayName = (vendor.type === "sales" || vendor.type === "both") && (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
+      ? vendor.gps_name || vendor.sales_outlet || vendor.name
+      : vendor.name
     if (!confirm(`"${displayName}" ${t("vendorConfirmDelete")}`)) return
     const res = await deleteVendor({ code: vendor.code })
     if (!res.success) {
@@ -167,11 +174,14 @@ export default function VendorsPage() {
         typeFilter === "all" ||
         (typeFilter === "purchase" && (v.type === "purchase" || v.type === "both")) ||
         (typeFilter === "sales" && (v.type === "sales" || v.type === "both"))
-      const displayName = (v.type === "sales" || v.type === "both") && v.gps_name?.trim() ? v.gps_name : v.name
+      const displayName = (v.type === "sales" || v.type === "both") && (v.gps_name?.trim() || v.sales_outlet?.trim())
+        ? v.gps_name || v.sales_outlet || v.name
+        : v.name
       const matchTerm =
         !searchTerm ||
         v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (v.gps_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (v.sales_outlet || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.code.toLowerCase().includes(searchTerm.toLowerCase())
       return matchType && matchTerm
     })

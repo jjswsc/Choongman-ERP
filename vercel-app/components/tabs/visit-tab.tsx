@@ -102,7 +102,11 @@ export function VisitTab() {
       if (navigator.geolocation) {
         try {
           const pos = await new Promise<GeolocationPosition>((res, rej) => {
-            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
+            navigator.geolocation.getCurrentPosition(res, rej, {
+              enableHighAccuracy: true,
+              timeout: 15000,
+              maximumAge: 0,
+            })
           })
           lat = String(pos.coords.latitude)
           lng = String(pos.coords.longitude)

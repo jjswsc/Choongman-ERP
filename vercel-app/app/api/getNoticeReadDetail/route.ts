@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
 
+const TZ = 'Asia/Bangkok'
+
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
-  if (typeof val === 'string') return val.slice(0, 16).replace('T', ' ')
-  const d = new Date(val)
-  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 16).replace('T', ' ')
+  const d = typeof val === 'string' ? new Date(val) : val
+  if (isNaN(d.getTime())) return ''
+  const datePart = d.toLocaleDateString('en-CA', { timeZone: TZ })
+  const timePart = d.toLocaleTimeString('en-GB', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return `${datePart} ${timePart}`
 }
 
 /** 공지별 수신자 개별 수신 확인 현황 (매장, 이름, 확인일시, 상태) */

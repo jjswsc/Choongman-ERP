@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, Settings2, X, PauseCircle, PlayCircle, FolderTree } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, Settings2, X, PauseCircle, PlayCircle, FolderTree, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -45,6 +45,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
+import { PriceHistoryTab } from "@/components/erp/price-history-tab"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D 접두사) */
@@ -123,7 +124,7 @@ export default function PosMenusPage() {
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
-  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "menuBoard">("screen")
+  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "menuBoard" | "priceHistory">("screen")
   const [menuBoardView, setMenuBoardView] = React.useState<"pos" | "tablet" | "kiosk">("pos")
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
@@ -969,6 +970,7 @@ export default function PosMenusPage() {
             <TabsTrigger value="topping" className="gap-1.5 text-xs"><Pizza className="h-3.5 w-3.5" />{t("posMenuTabTopping")}</TabsTrigger>
             <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
             <TabsTrigger value="menuBoard" className="gap-1.5 text-xs"><Settings2 className="h-3.5 w-3.5" />{t("posMenuTabMenuBoard")}</TabsTrigger>
+            <TabsTrigger value="priceHistory" className="gap-1.5 text-xs"><History className="h-3.5 w-3.5" />{t("posMenuTabPriceHistory") || "메뉴 가격이력"}</TabsTrigger>
           </TabsList>
           <TabsContent value="screen" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
@@ -1969,6 +1971,11 @@ export default function PosMenusPage() {
           <TabsContent value="menuBoard" className="mt-0">
             <div className="rounded-xl border bg-card p-6">
               <p className="text-sm text-muted-foreground">{t("posMenuBoardPlaceholder") || "메뉴판 미리보기 (준비 중)"}</p>
+            </div>
+          </TabsContent>
+          <TabsContent value="priceHistory" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
             </div>
           </TabsContent>
         </Tabs>

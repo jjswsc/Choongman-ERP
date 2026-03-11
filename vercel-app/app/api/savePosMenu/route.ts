@@ -4,6 +4,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { recordPriceChanges } from '@/lib/price-history'
 
 /** POS 메뉴 저장 (등록/수정) */
 export async function POST(req: NextRequest) {
@@ -69,8 +70,30 @@ export async function POST(req: NextRequest) {
           'pos_menus',
           `id=eq.${editingId}`,
           { limit: 1 }
-        )) as { id?: number }[] | null
+        )) as { id?: number; price?: number; price_delivery?: number | null; name?: string; category_main?: string; category?: string }[] | null
         if (existing && existing.length > 0) {
+          const prev = existing[0]
+          const catMain = (prev.category_main || '').trim()
+          const cat = (prev.category || '').trim()
+          const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+          const newPrice = Number(row.price ?? prev.price ?? 0)
+          const newPriceDelivery = row.price_delivery != null ? Number(row.price_delivery) : null
+          if (Number(prev.price) !== newPrice) {
+            changes.push({ fieldName: 'price', oldValue: prev.price ?? null, newValue: newPrice })
+          }
+          if ((prev.price_delivery ?? null) !== newPriceDelivery) {
+            changes.push({ fieldName: 'price_delivery', oldValue: prev.price_delivery ?? null, newValue: newPriceDelivery })
+          }
+          if (changes.length > 0) {
+            recordPriceChanges({
+              entityType: 'pos_menu',
+              entityId: editingId,
+              entityDisplayName: prev.name ?? code,
+              changes,
+              category: cat || undefined,
+              categoryMain: catMain || undefined,
+            }).catch(() => {})
+          }
           try {
             await supabaseUpdateByFilter('pos_menus', `id=eq.${editingId}`, row)
           } catch (colErr: unknown) {
@@ -98,6 +121,23 @@ export async function POST(req: NextRequest) {
         const inserted = (await supabaseInsert('pos_menus', row)) as { id?: number }[] | { id?: number }
         const newRow = Array.isArray(inserted) ? inserted[0] : inserted
         const newId = newRow?.id != null ? String(newRow.id) : undefined
+        if (newId && (baseRow.price != null || body.price != null)) {
+          const catMain = (baseRow.category_main as string || '').trim()
+          const cat = (baseRow.category as string || '').trim()
+          const initChanges: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []
+          const price = Number(baseRow.price ?? body.price ?? 0)
+          const priceDelivery = baseRow.price_delivery != null ? Number(baseRow.price_delivery) : (body.priceDelivery != null ? Number(body.priceDelivery) : null)
+          initChanges.push({ fieldName: 'price', oldValue: null, newValue: price })
+          if (priceDelivery != null) initChanges.push({ fieldName: 'price_delivery', oldValue: null, newValue: priceDelivery })
+          recordPriceChanges({
+            entityType: 'pos_menu',
+            entityId: newId,
+            entityDisplayName: name,
+            changes: initChanges,
+            category: cat || undefined,
+            categoryMain: catMain || undefined,
+          }).catch(() => {})
+        }
         return { success: true, message: '저장되었습니다.', newId }
       } catch (insErr: unknown) {
         if (String(insErr).includes('category_main') || String(insErr).includes('42703')) {
@@ -105,6 +145,17 @@ export async function POST(req: NextRequest) {
           const inserted = (await supabaseInsert('pos_menus', rowWithout)) as { id?: number }[] | { id?: number }
           const newRow = Array.isArray(inserted) ? inserted[0] : inserted
           const newId = newRow?.id != null ? String(newRow.id) : undefined
+          if (newId && (baseRow.price != null || body.price != null)) {
+            const cat = (baseRow.category as string || '').trim()
+            const price = Number(baseRow.price ?? body.price ?? 0)
+            recordPriceChanges({
+              entityType: 'pos_menu',
+              entityId: newId,
+              entityDisplayName: name,
+              changes: [{ fieldName: 'price', oldValue: null, newValue: price }],
+              category: cat || undefined,
+            }).catch(() => {})
+          }
           return { success: true, message: '저장되었습니다.', newId }
         }
         throw insErr

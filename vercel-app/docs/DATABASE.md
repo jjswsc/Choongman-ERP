@@ -33,7 +33,13 @@ Supabase (PostgreSQL) 사용. 다른 개발자가 수정·확장 시 참고용 �
 | 테이블 | 설명 |
 |--------|------|
 | `items` | 품목. code(유니크), outbound_location(출고지) |
-| `vendors` | 거래처. code(유니크), type(sales/both 등), gps_name(매장명) |
+| `vendors` | 거래처. code(유니크), type(sales/both 등), gps_name(매장명), sales_outlet(판매처) |
+
+### 가격 이력
+
+| 테이블 | 설명 |
+|--------|------|
+| `price_history` | 메뉴·품목 가격 변경 이력. entity_type(pos_menu, pos_menu_option, item), entity_id, field_name, old_value, new_value |
 
 ### POS
 
@@ -100,6 +106,7 @@ purchase_orders.location_code   → warehouse_locations.location_code
 | `supabase_items_outbound_location.sql` | items.outbound_location 관련 |
 | `scripts/items_outbound_location_updates.sql` | 품목 출고지 CSV 반영 |
 | `scripts/import_pos_menus_grab.sql` | POS 메뉴 시드 (Grab 메뉴) |
+| `supabase_price_history.sql` | 가격 이력 테이블 (메뉴/품목 가격 변경 추적) |
 
 ## 5. 유니크 제약 (중요)
 

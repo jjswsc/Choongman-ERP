@@ -58,6 +58,7 @@ export async function GET() {
       tax_id?: string
       phone?: string
       gps_name?: string
+      sales_outlet?: string
     }[] | null
     if (!clientRows || clientRows.length === 0) {
       clientRows = (await supabaseSelectFilter('vendors', 'type=eq.sales', { limit: 500 })) as typeof clientRows
@@ -68,14 +69,16 @@ export async function GET() {
     for (const r of clientRows || []) {
       const companyName = String(r.name || '').trim()
       const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
-      if (!companyName && !gpsName) continue
+      const salesOutlet = String((r as { sales_outlet?: string }).sales_outlet || '').trim()
+      const displayName = salesOutlet || gpsName || companyName
+      if (!companyName && !gpsName && !salesOutlet) continue
       const entry = {
-        companyName: companyName || gpsName,
+        companyName: companyName || displayName,
         address: String(r.addr || '').trim() || '-',
         taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
         phone: String(r.phone || '').trim() || '-',
       }
-      const keysToAdd = [companyName, gpsName].filter(Boolean)
+      const keysToAdd = [companyName, gpsName, salesOutlet].filter(Boolean)
       if (gpsName && gpsName.match(/^CM\s+/i)) keysToAdd.push(gpsName.replace(/^CM\s+/i, ''))
       const seen = new Set<string>()
       for (const k of keysToAdd) {

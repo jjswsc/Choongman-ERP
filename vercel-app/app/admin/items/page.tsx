@@ -1,12 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Tags, Settings, FileSpreadsheet } from "lucide-react"
+import { Tags, Settings, FileSpreadsheet, History } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ItemForm, type ItemFormData } from "@/components/erp/item-form"
 import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
 import { ItemCategorySettingsDialog } from "@/components/erp/item-category-settings-dialog"
+import { PriceHistoryTab } from "@/components/erp/price-history-tab"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -52,6 +54,7 @@ export default function ItemsPage() {
   const [outboundSettingsOpen, setOutboundSettingsOpen] = React.useState(false)
   const [categorySettingsOpen, setCategorySettingsOpen] = React.useState(false)
   const [excelImporting, setExcelImporting] = React.useState(false)
+  const [itemsTab, setItemsTab] = React.useState<"list" | "priceHistory">("list")
   const excelInputRef = React.useRef<HTMLInputElement>(null)
 
   const loadOutboundLocations = React.useCallback(async () => {
@@ -392,6 +395,18 @@ export default function ItemsPage() {
             {t("loading")}
           </div>
         )}
+        <Tabs value={itemsTab} onValueChange={(v) => setItemsTab(v as "list" | "priceHistory")} className="w-full">
+          <TabsList className="mb-4 h-9">
+            <TabsTrigger value="list" className="gap-1.5 text-xs">
+              <Tags className="h-3.5 w-3.5" />
+              {t("itemsList") || "품목 목록"}
+            </TabsTrigger>
+            <TabsTrigger value="priceHistory" className="gap-1.5 text-xs">
+              <History className="h-3.5 w-3.5" />
+              {t("itemsTabPriceHistory") || "품목 가격이력"}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="list" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <ItemForm
             formData={formData}
@@ -420,6 +435,13 @@ export default function ItemsPage() {
             onToggleOrderDisabled={handleToggleOrderDisabled}
           />
         </div>
+          </TabsContent>
+          <TabsContent value="priceHistory" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <PriceHistoryTab entityTypes={["item"]} mode="item" />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

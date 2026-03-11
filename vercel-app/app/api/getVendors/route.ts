@@ -25,6 +25,7 @@ export async function GET() {
       tax_id?: string
       memo?: string
       gps_name?: string
+      sales_outlet?: string
       direct_settlement?: boolean
     }[] | null
 
@@ -33,11 +34,13 @@ export async function GET() {
       .map((row) => {
         const t = mapVendorType(row.type || '')
         const gpsName = String(row.gps_name || '').trim()
+        const salesOutlet = String((row as { sales_outlet?: string }).sales_outlet || '').trim() || undefined
         const fullName = String(row.name || '').trim()
         return {
           code: String(row.code),
           name: fullName,
           gps_name: gpsName,
+          sales_outlet: salesOutlet,
           contact: String(row.manager || ''),
           phone: String(row.phone || ''),
           email: '',

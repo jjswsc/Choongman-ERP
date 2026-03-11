@@ -66,14 +66,16 @@ async function getInvoiceData(): Promise<{
   for (const r of clientRows || []) {
     const companyName = String(r.name || '').trim()
     const gpsName = String((r as { gps_name?: string }).gps_name || '').trim()
-    if (!companyName && !gpsName) continue
+    const salesOutlet = String((r as { sales_outlet?: string }).sales_outlet || '').trim()
+    const displayName = salesOutlet || gpsName || companyName
+    if (!companyName && !gpsName && !salesOutlet) continue
     const entry: InvoiceDataClient = {
-      companyName: companyName || gpsName,
+      companyName: companyName || displayName,
       address: String(r.addr || '').trim() || '-',
       taxId: String((r as { tax_id?: string }).tax_id || '').trim() || '-',
       phone: String(r.phone || '').trim() || '-',
     }
-    const keysToAdd = [companyName, gpsName].filter(Boolean)
+    const keysToAdd = [companyName, gpsName, salesOutlet].filter(Boolean)
     if (gpsName && gpsName.match(/^CM\s+/i)) keysToAdd.push(gpsName.replace(/^CM\s+/i, ''))
     for (const k of keysToAdd) {
       if (k) {

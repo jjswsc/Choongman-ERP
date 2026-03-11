@@ -125,12 +125,6 @@ export default function StockPage() {
     }
   }, [isManager, userStore])
 
-  React.useEffect(() => {
-    if (isManager && userStore && storeFilter === userStore) {
-      fetchStock()
-    }
-  }, [isManager, userStore, storeFilter, fetchStock])
-
   const handleAdjust = (item: StockStatusItem) => {
     setAdjustItem(item)
     setAdjustOpen(true)

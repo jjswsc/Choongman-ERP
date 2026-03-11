@@ -169,6 +169,13 @@ export function AdminNoticeCompose() {
     return list.sort((a, b) => (a.nick || "").localeCompare(b.nick || ""))
   })()
 
+  // 매장/권한그룹/부서 선택 시 해당 직원을 모두 체크(선택) 상태로. 필요 없는 직원만 체크 해제하면 됨
+  const employeeKeysStr = employeeList.map((e) => `${e.store}|${e.name}`).sort().join(",")
+  React.useEffect(() => {
+    const keys = employeeList.map((e) => `${e.store}|${e.name}`)
+    setSelectedRecipients(keys)
+  }, [employeeKeysStr])
+
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id))
   }

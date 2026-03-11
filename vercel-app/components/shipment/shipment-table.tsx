@@ -49,6 +49,10 @@ interface ShipmentTableProps {
   onPhotoClick?: (orderId: string) => void
   /** 비본사용: 단순 { date, item, qty, amount } */
   usageRows?: { date: string; item: string; qty: number; amount: number }[]
+  /** 매장명 목록 - 수령처 유형(매장/판매처) 배지 표시용 */
+  storeTargets?: string[]
+  /** 강제출고 수령 완료 콜백 */
+  onForceReceived?: (date: string, target: string) => void | Promise<void>
 }
 
 export function ShipmentTable({
@@ -60,6 +64,8 @@ export function ShipmentTable({
   onToggleSelectAll,
   onPhotoClick,
   usageRows = [],
+  storeTargets = [],
+  onForceReceived,
 }: ShipmentTableProps) {
   const { lang } = useLang()
   const t = useT(lang)
@@ -83,7 +89,7 @@ export function ShipmentTable({
     const s = String(deliveryStatus)
     if (s.includes("일부") || s.includes("Partial")) return "statusPartialDelivered"
     if (s.includes("배송중") || s.includes("Transit")) return "statusInTransit"
-    if (s.includes("배송완료") || s.includes("Delivered")) return "statusDelivered"
+    if (s.includes("배송완료") || s.includes("Delivered") || s.includes("수령완료") || s.includes("수령")) return "statusDelivered"
     return null
   }
 
@@ -172,6 +178,8 @@ export function ShipmentTable({
                 onToggleExpand={() => toggleExpand(idx)}
                 onToggleSelect={() => onToggleSelect(idx)}
                 onPhotoClick={onPhotoClick}
+                onForceReceived={onForceReceived}
+                storeTargetsSet={new Set(storeTargets)}
                 getOrderTypeBadge={getOrderTypeBadge}
                 getOutboundTypeBadge={getOutboundTypeBadge}
                 t={t}
@@ -192,6 +200,8 @@ function TableRow({
   onToggleExpand,
   onToggleSelect,
   onPhotoClick,
+  onForceReceived,
+  storeTargetsSet,
   getOrderTypeBadge,
   getOutboundTypeBadge,
   t,
@@ -203,6 +213,8 @@ function TableRow({
   onToggleExpand: () => void
   onToggleSelect: () => void
   onPhotoClick?: (orderId: string) => void
+  onForceReceived?: (date: string, target: string) => void | Promise<void>
+  storeTargetsSet: Set<string>
   getOrderTypeBadge: (type: string) => StatusBadgeKey | null
   getOutboundTypeBadge: (deliveryStatus?: string) => StatusBadgeKey | null
   t: (k: string) => string
@@ -277,7 +289,36 @@ function TableRow({
             )}
           </div>
         </td>
-        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">{row.target}</td>
+        <td className="px-3 py-2.5 text-center text-card-foreground whitespace-nowrap font-medium">
+          <div className="flex flex-col items-center gap-1">
+            <span>{row.target}</span>
+            {storeTargetsSet.size > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  storeTargetsSet.has(row.target)
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                    : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                )}
+              >
+                {storeTargetsSet.has(row.target) ? t("outTargetTypeStore") : t("outTargetTypeSales")}
+              </span>
+            )}
+            {row.type === "Force" &&
+              onForceReceived &&
+              !String(row.deliveryStatus || "").includes("수령") &&
+              !String(row.deliveryStatus || "").includes("배송완료") &&
+              !String(row.deliveryStatus || "").includes("Delivered") && (
+                <button
+                  type="button"
+                  onClick={() => onForceReceived(row.orderDate, row.target)}
+                  className="mt-1 inline-flex items-center rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary hover:bg-primary/20"
+                >
+                  {t("outForceReceived")}
+                </button>
+              )}
+          </div>
+        </td>
         <td className="px-3 py-2.5 text-white">
           <div className="flex items-center gap-1.5">
             {hasDetails && (

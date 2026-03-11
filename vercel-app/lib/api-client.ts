@@ -423,7 +423,11 @@ export async function updateOrderDeliveryStatus(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const data = await res.json().catch(() => ({})) as { success?: boolean; message?: string }
+  if (!res.ok) {
+    throw new Error(data?.message || `배송 상태 변경 실패 (${res.status})`)
+  }
+  return data
 }
 
 export async function updateOrderCart(params: {
@@ -2082,6 +2086,7 @@ export interface AdminVendor {
   code: string
   name: string
   gps_name?: string
+  sales_outlet?: string
   contact: string
   phone: string
   email: string
@@ -2215,6 +2220,59 @@ export async function deleteItem(params: { code: string }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** 가격 이력 조회 */
+export interface PriceHistoryRow {
+  id: number
+  entity_type: string
+  entity_id: string
+  entity_display_name: string | null
+  field_name: string
+  old_value: number | null
+  new_value: number | null
+  changed_at: string
+  changed_by: string | null
+}
+
+export async function getPriceHistory(params: {
+  entityType?: 'pos_menu' | 'pos_menu_option' | 'item'
+  entityId?: string
+  menuId?: string
+  categoryMain?: string
+  category?: string
+  from?: string
+  to?: string
+  search?: string
+  limit?: number
+}) {
+  const searchParams = new URLSearchParams()
+  if (params.entityType) searchParams.set('entityType', params.entityType)
+  if (params.entityId) searchParams.set('entityId', params.entityId)
+  if (params.menuId) searchParams.set('menuId', params.menuId)
+  if (params.categoryMain) searchParams.set('categoryMain', params.categoryMain)
+  if (params.category) searchParams.set('category', params.category)
+  if (params.from) searchParams.set('from', params.from)
+  if (params.to) searchParams.set('to', params.to)
+  if (params.search) searchParams.set('search', params.search)
+  if (params.limit != null) searchParams.set('limit', String(params.limit))
+  const q = searchParams.toString()
+  const res = await apiFetch(`/api/getPriceHistory${q ? '?' + q : ''}`)
+  const data = await res.json()
+  if (!res.ok || (data && typeof data === 'object' && 'error' in data)) {
+    console.warn('getPriceHistory:', data?.error || res.status)
+    return []
+  }
+  return Array.isArray(data) ? data : []
+}
+
+export async function backfillPriceHistory() {
+  const res = await apiFetch('/api/backfillPriceHistory', { method: 'POST' })
+  const data = await res.json() as { success?: boolean; inserted?: number; error?: string }
+  if (!res.ok || !data?.success) {
+    return { success: false as const, error: data?.error || '실패', inserted: 0 }
+  }
+  return { success: true as const, inserted: data.inserted ?? 0, message: `${data.inserted ?? 0}건 등록됨` }
 }
 
 export async function updateItemOrderDisabled(params: { code: string; disabled: boolean }) {
@@ -3254,6 +3312,7 @@ export async function saveVendor(params: {
   code: string
   name: string
   gps_name?: string
+  sales_outlet?: string
   contact?: string
   phone?: string
   email?: string
@@ -3447,6 +3506,16 @@ export async function forceOutboundBatch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** 강제출고 수령 완료 처리 */
+export async function updateForceOutboundReceived(params: { date: string; vendorTarget: string }) {
+  const res = await apiFetch('/api/updateForceOutboundReceived', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: params.date, vendorTarget: params.vendorTarget }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

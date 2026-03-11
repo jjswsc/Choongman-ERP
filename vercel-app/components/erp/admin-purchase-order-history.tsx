@@ -22,7 +22,8 @@ export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
   const t = useT(lang)
   const [list, setList] = React.useState<PurchaseOrderRow[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
+  const [hasSearched, setHasSearched] = React.useState(false)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
   const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
   const [startDate, setStartDate] = React.useState(() => {
@@ -72,7 +73,8 @@ export function AdminPurchaseOrderHistory() {
     [load, t]
   )
 
-  React.useEffect(() => {
+  const handleSearch = React.useCallback(() => {
+    setHasSearched(true)
     load()
   }, [load])
 
@@ -252,13 +254,15 @@ ${allRows.map((row, ri) => {
               ))}
             </SelectContent>
           </Select>
-          <Button size="sm" onClick={load} disabled={loading}>
+          <Button size="sm" onClick={handleSearch} disabled={loading}>
             <Search className="mr-1.5 h-4 w-4" />
-            {t("orderBtnSearch") || "조회"}
+            {t("orderBtnSearch") || "검색"}
           </Button>
         </div>
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+        ) : !hasSearched ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
         ) : list.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t("poHistoryEmpty")}</p>
         ) : (

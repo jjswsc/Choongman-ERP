@@ -33,6 +33,10 @@ function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number): n
   return R * c
 }
 
+/**
+ * 계획 시각(planVal, 예: "18:00", "02:00")을 dateStr 날짜와 합쳐 방콕 기준 Date 생성.
+ * 서버가 UTC라도 plan은 방콕 시각으로 해석해 비교 시 정확한 earlyMin/otMin 산출.
+ */
 function parsePlanTimeToDate(
   dateStr: string,
   planVal: string | unknown
@@ -43,12 +47,20 @@ function parsePlanTimeToDate(
   if (!s) return null
   const m = s.match(/(\d{1,2})\s*:\s*(\d{1,2})(?:\s*:\s*(\d{1,2}))?/)
   if (!m) return null
-  const h = parseInt(m[1], 10)
+  let h = parseInt(m[1], 10)
   const mn = parseInt(m[2], 10)
   const sec = m[3] ? parseInt(m[3], 10) : 0
-  const d = new Date(dateStr + 'T12:00:00')
-  if (isNaN(d.getTime())) return null
-  d.setHours(h, mn, sec, 0)
+  let useDateStr = dateStr.trim().slice(0, 10)
+  if (h >= 24) {
+    const d = new Date(useDateStr + 'T12:00:00Z')
+    if (isNaN(d.getTime())) return null
+    d.setUTCDate(d.getUTCDate() + 1)
+    useDateStr = d.toISOString().slice(0, 10)
+    h = h % 24
+  }
+  // 방콕(UTC+7) 시각으로 해석: "YYYY-MM-DDTHH:mm:ss+07:00"
+  const iso = `${useDateStr}T${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}:${String(sec).padStart(2, '0')}+07:00`
+  const d = new Date(iso)
   return isNaN(d.getTime()) ? null : d
 }
 
@@ -256,15 +268,17 @@ export async function POST(request: NextRequest) {
       const prevDayFilter = `schedule_date=eq.${tomorrow}&plan_in_prev_day=eq.true&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
       schRows = (await supabaseSelectFilter('schedules', prevDayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
     }
+    let usedYesterdaySchedule = false
     // 퇴근: 당일 스케줄 없으면 전날(자정 넘는 근무) 스케줄 확인
     if ((!schRows || schRows.length === 0) && logType === '퇴근') {
       const yesterday = (() => {
-        const d = new Date(todayStrVal + 'T12:00:00')
-        d.setDate(d.getDate() - 1)
+        const d = new Date(todayStrVal + 'T12:00:00Z')
+        d.setUTCDate(d.getUTCDate() - 1)
         return d.toISOString().slice(0, 10)
       })()
       const yesterdayFilter = `schedule_date=eq.${yesterday}&store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`
       schRows = (await supabaseSelectFilter('schedules', yesterdayFilter, { limit: 5 })) as { plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }[]
+      usedYesterdaySchedule = !!(schRows && schRows.length > 0)
     }
     if (schRows && schRows.length > 0) {
       planIn = String(schRows[0].plan_in || '').trim()
@@ -288,7 +302,16 @@ export async function POST(request: NextRequest) {
       }
     } else if (logType === '퇴근' && planOut) {
       planTime = planOut
-      const pOutDate = parsePlanTimeToDate(todayStrVal, planOut)
+      // 전날 스케줄 사용 시: plan_in_prev_day면 익일 퇴근(오늘날짜), 아니면 당일 퇴근(전날날짜)
+      const pOutDateStr =
+        usedYesterdaySchedule && !schRows?.[0]?.plan_in_prev_day
+          ? (() => {
+              const d = new Date(todayStrVal + 'T12:00:00Z')
+              d.setUTCDate(d.getUTCDate() - 1)
+              return d.toISOString().slice(0, 10)
+            })()
+          : todayStrVal
+      const pOutDate = parsePlanTimeToDate(pOutDateStr, planOut)
       if (pOutDate) {
         if (nowTime < pOutDate) {
           earlyMin = safeMinutes(

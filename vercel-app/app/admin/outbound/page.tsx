@@ -29,6 +29,7 @@ import {
   forceOutboundBatch,
   getCombinedOutboundHistory,
   getOrderReceivePhoto,
+  updateForceOutboundReceived,
   getMyUsageHistory,
   getInvoiceData,
   getInvoiceSettings,
@@ -135,6 +136,8 @@ export default function OutboundPage() {
   const { auth } = useAuth()
   const [items, setItems] = React.useState<AdminItem[]>([])
   const [outboundTargets, setOutboundTargets] = React.useState<string[]>([])
+  const [storeTargets, setStoreTargets] = React.useState<string[]>([])
+  const [salesTargets, setSalesTargets] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(true)
   const [historyLoading, setHistoryLoading] = React.useState(false)
   const [historyList, setHistoryList] = React.useState<OutboundHistoryItem[]>([])
@@ -153,6 +156,7 @@ export default function OutboundPage() {
   const [histEnd, setHistEnd] = React.useState(() => new Date().toISOString().slice(0, 10))
   const [histMonth, setHistMonth] = React.useState("")
   const [histStore, setHistStore] = React.useState("")
+  const [histTargetType, setHistTargetType] = React.useState<"" | "store" | "sales">("")
   const [histType, setHistType] = React.useState("")
   const [histDeliveryStatus, setHistDeliveryStatus] = React.useState("")
   const [invoiceSearch, setInvoiceSearch] = React.useState("")
@@ -206,13 +210,20 @@ export default function OutboundPage() {
       .then(([itemList, vendorList, storeList, whLocs]) => {
         setItems(Array.isArray(itemList) ? itemList : [])
         const vendors = Array.isArray(vendorList) ? vendorList : []
-        const salesNames = vendors
-          .filter((v: AdminVendor) => v.type === "sales" || v.type === "both")
-          .map((v: AdminVendor) => (v.gps_name?.trim() || v.name).trim())
-        const stores = (Array.isArray(storeList) ? storeList : []).filter(
+        const fromStockLogs = (Array.isArray(storeList) ? storeList : []).filter(
           (s: string) => !OFFICE_STORES.some((o) => s.toLowerCase().includes(o.toLowerCase()))
         )
-        const merged = [...new Set([...salesNames, ...stores])].filter(Boolean).sort()
+        const vendorStoreNames = vendors
+          .filter((v: AdminVendor) => (v.type === "sales" || v.type === "both") && (v.gps_name?.trim() || ""))
+          .map((v: AdminVendor) => (v.gps_name || "").trim())
+        const vendorSalesNames = vendors
+          .filter((v: AdminVendor) => (v.type === "sales" || v.type === "both") && (v.sales_outlet?.trim() || ""))
+          .map((v: AdminVendor) => (v.sales_outlet || "").trim())
+        const storeArr = [...new Set([...fromStockLogs, ...vendorStoreNames])].filter(Boolean).sort()
+        const salesArr = [...new Set(vendorSalesNames)].filter(Boolean).sort()
+        const merged = [...new Set([...storeArr, ...salesArr])].filter(Boolean).sort()
+        setStoreTargets(storeArr)
+        setSalesTargets(salesArr)
         setOutboundTargets(merged)
         const whNames = (whLocs || []).map((l: { name?: string }) => (l.name || "").trim()).filter(Boolean)
         setWhWarehouseOptions(whNames)
@@ -220,6 +231,8 @@ export default function OutboundPage() {
       .catch(() => {
         setItems([])
         setOutboundTargets([])
+        setStoreTargets([])
+        setSalesTargets([])
         setWhWarehouseOptions([])
       })
       .finally(() => setLoading(false))
@@ -665,7 +678,7 @@ export default function OutboundPage() {
   const normalizedDeliveryStatus = (s: string) => {
     const v = String(s || "").trim()
     if (v.includes("일부") || v.includes("Partial")) return "일부배송완료"
-    if (v.includes("배송완료") || v.includes("Delivered")) return "배송완료"
+    if (v.includes("배송완료") || v.includes("Delivered") || v.includes("수령완료") || v.includes("수령")) return "배송완료"
     if (v.includes("배송중") || v.includes("Transit")) return "배송중"
     return v || ""
   }
@@ -707,6 +720,13 @@ export default function OutboundPage() {
   const filteredGroupedHistory = React.useMemo(() => {
     if (!isOffice) return groupedHistory
     let result = groupedHistory
+    if (histTargetType && !histStore) {
+      if (histTargetType === "store") {
+        result = result.filter((g) => storeTargets.includes(g.target))
+      } else if (histTargetType === "sales") {
+        result = result.filter((g) => salesTargets.includes(g.target))
+      }
+    }
     if (histDeliveryStatus) {
       result = result.filter((g) => {
         const first = g.items[0]
@@ -732,7 +752,7 @@ export default function OutboundPage() {
       )
     }
     return result
-  }, [groupedHistory, histDeliveryStatus, invoiceSearch, itemSearch, isOffice])
+  }, [groupedHistory, histTargetType, histStore, storeTargets, salesTargets, histDeliveryStatus, invoiceSearch, itemSearch, isOffice])
 
   const shipmentTableRows = React.useMemo((): ShipmentTableRow[] => {
     return filteredGroupedHistory.map((g, i) => {
@@ -1549,8 +1569,12 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
               }}
               histType={histType}
               histDeliveryStatus={histDeliveryStatus}
+              histTargetType={histTargetType}
               histStore={histStore}
               outboundTargets={outboundTargets}
+              storeTargets={storeTargets}
+              salesTargets={salesTargets}
+              onHistTargetTypeChange={setHistTargetType}
               onHistTypeChange={setHistType}
               onHistDeliveryStatusChange={setHistDeliveryStatus}
               onHistStoreChange={setHistStore}
@@ -1572,6 +1596,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                 selectedIndices={selectedForPrint}
                 onToggleSelect={togglePrintSelect}
                 onToggleSelectAll={togglePrintSelectAll}
+                storeTargets={storeTargets}
                 onPhotoClick={async (orderId) => {
                   setPhotoModalOpen(true)
                   setPhotoModalLoading(true)
@@ -1583,6 +1608,20 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                     setPhotoModalUrls([])
                   } finally {
                     setPhotoModalLoading(false)
+                  }
+                }}
+                onForceReceived={async (date, target) => {
+                  if (!confirm(t("outForceReceivedConfirm"))) return
+                  try {
+                    const res = await updateForceOutboundReceived({ date, vendorTarget: target })
+                    if (res.success) {
+                      alert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
+                      fetchHistory()
+                    } else {
+                      alert(translateApiMessage(res.message, t) || t("outSaveFailed"))
+                    }
+                  } catch (e) {
+                    alert(String(e))
                   }
                 }}
                 usageRows={usageTableRows}

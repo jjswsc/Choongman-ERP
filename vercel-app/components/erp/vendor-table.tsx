@@ -26,6 +26,7 @@ export interface Vendor {
   code: string
   name: string
   gps_name?: string
+  sales_outlet?: string
   contact: string
   phone: string
   email: string
@@ -160,8 +161,9 @@ export function VendorTable({
                   </td>
                   <td className="px-5 py-3 min-w-[140px]">
                     <span className="text-sm font-medium text-foreground">
-                      {(vendor.type === "sales" || vendor.type === "both") && vendor.gps_name?.trim()
-                        ? vendor.gps_name
+                      {(vendor.type === "sales" || vendor.type === "both") &&
+                      (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
+                        ? vendor.gps_name?.trim() || vendor.sales_outlet
                         : vendor.name}
                     </span>
                   </td>

@@ -33,21 +33,23 @@ function loadDirectSettlementCache(): Promise<void> {
   return supabaseSelectFilter(
     'vendors',
     'direct_settlement=eq.true',
-    { select: 'code,name,gps_name', limit: 500 }
+    { select: 'code,name,gps_name,sales_outlet', limit: 500 }
   )
     .then((rows) => {
       const codes = new Set<string>()
       const identifiers = new Set<string>()
-      for (const r of (rows || []) as { code?: string; name?: string; gps_name?: string }[]) {
+      for (const r of (rows || []) as { code?: string; name?: string; gps_name?: string; sales_outlet?: string }[]) {
         const c = String(r.code || '').trim()
         const n = String(r.name || '').trim()
         const g = String(r.gps_name || '').trim()
+        const s = String(r.sales_outlet || '').trim()
         if (c) {
           codes.add(c)
           identifiers.add(c)
         }
         if (n) identifiers.add(n)
         if (g) identifiers.add(g)
+        if (s) identifiers.add(s)
       }
       cachedCodes = codes
       cachedIdentifiers = identifiers

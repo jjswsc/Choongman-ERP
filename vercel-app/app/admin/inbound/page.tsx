@@ -113,11 +113,14 @@ export default function InboundPage() {
     return vendors.filter((v) => v.type === "purchase" || v.type === "both")
   }, [vendors])
 
-  /** 판매처 (입고 목적지로 선택 가능) - 매장 외 거래처 납품용 */
+  /** 판매처 (입고 목적지로 선택 가능) - 매장 아닌 외부 판매처. sales_outlet 우선 */
   const salesVendors = React.useMemo(() => {
     return vendors
       .filter((v) => v.type === "sales" || v.type === "both")
-      .map((v) => ({ code: v.code, name: (v.gps_name?.trim() || v.name || "").trim() }))
+      .map((v) => ({
+        code: v.code,
+        name: (v.sales_outlet?.trim() || v.gps_name?.trim() || v.name || "").trim(),
+      }))
       .filter((v) => v.name)
   }, [vendors])
 

@@ -113,7 +113,11 @@ export function ReceivablePayableTab() {
       .finally(() => setLoading(false))
   }, [tab, storeFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
 
-  React.useEffect(() => {
+  const [hasSearchedList, setHasSearchedList] = React.useState(false)
+  const [hasSearchedSummary, setHasSearchedSummary] = React.useState(false)
+
+  const handleLoadList = React.useCallback(() => {
+    setHasSearchedList(true)
     loadList()
   }, [loadList])
 
@@ -129,9 +133,15 @@ export function ReceivablePayableTab() {
       .finally(() => setSummaryLoading(false))
   }, [tab, auth?.store, auth?.role])
 
+  const handleLoadSummary = React.useCallback(() => {
+    setHasSearchedSummary(true)
+    loadSummary()
+  }, [loadSummary])
+
   React.useEffect(() => {
-    if (subTab === "summary") loadSummary()
-  }, [subTab, loadSummary])
+    setHasSearchedList(false)
+    setHasSearchedSummary(false)
+  }, [tab])
 
   const handleViewDetail = (entityKey: string) => {
     if (tab === "receivable") setStoreFilter(entityKey)
@@ -367,8 +377,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                 </TabsList>
 
                 <TabsContent value="summary" className="mt-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <Button size="sm" onClick={handleLoadSummary} disabled={summaryLoading}>
+                      <Search className="h-4 w-4 mr-1" />
+                      {t("btn_query")}
+                    </Button>
+                  </div>
                   {summaryLoading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+                  ) : !hasSearchedSummary ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : summaryData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
                   ) : (
@@ -446,7 +464,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     </Select>
                     <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
                     <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
-                    <Button size="sm" onClick={loadList} disabled={loading}>
+                    <Button size="sm" onClick={handleLoadList} disabled={loading}>
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
@@ -461,6 +479,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   </div>
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+                  ) : !hasSearchedList ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
                   ) : (
@@ -517,8 +537,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                 </TabsList>
 
                 <TabsContent value="summary" className="mt-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <Button size="sm" onClick={handleLoadSummary} disabled={summaryLoading}>
+                      <Search className="h-4 w-4 mr-1" />
+                      {t("btn_query")}
+                    </Button>
+                  </div>
                   {summaryLoading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+                  ) : !hasSearchedSummary ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : summaryData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
                   ) : (
@@ -591,7 +619,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     </Select>
                     <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
                     <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
-                    <Button size="sm" onClick={loadList} disabled={loading}>
+                    <Button size="sm" onClick={handleLoadList} disabled={loading}>
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
@@ -606,6 +634,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   </div>
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
+                  ) : !hasSearchedList ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
                   ) : (
