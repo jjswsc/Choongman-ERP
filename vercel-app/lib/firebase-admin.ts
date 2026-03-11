@@ -4,7 +4,7 @@
  * 수신자별 lang에 맞게 자동 번역 후 발송
  */
 import * as admin from 'firebase-admin'
-import { supabaseSelect, supabaseSelectFilter } from './supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseDeleteByFilter } from './supabase-server'
 import { translateTextsServer } from './translate-server'
 
 let initialized = false
@@ -86,8 +86,8 @@ export async function sendFcmToRecipients(params: {
   }
   if (!recipients?.length) return { sent: 0, failed: 0 }
 
-  // token + lang 조회 (lang 없으면 ko로 처리)
-  const tokenLangList: { token: string; lang: string }[] = []
+  // token + lang + store/name 조회 (lang 없으면 ko로 처리)
+  const tokenLangList: { token: string; lang: string; store: string; name: string }[] = []
   for (const r of recipients) {
     if (!r.store?.trim() || !r.name?.trim()) continue
     const rows = (await supabaseSelectFilter(
@@ -99,17 +99,19 @@ export async function sendFcmToRecipients(params: {
     if (row?.token) {
       const lang = String(row.lang || 'ko').toLowerCase().slice(0, 2)
       const normalized = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang
-      tokenLangList.push({ token: row.token, lang: normalized || 'ko' })
+      tokenLangList.push({ token: row.token, lang: normalized || 'ko', store: r.store.trim(), name: r.name.trim() })
     }
   }
 
-  // 토큰 중복 제거 (동일 토큰이면 첫 lang 사용)
+  // 토큰 중복 제거 (동일 토큰이면 첫 lang 사용), token → store/name 매핑 유지
   const seen = new Set<string>()
   const unique: { token: string; lang: string }[] = []
+  const tokenToRecipient = new Map<string, { store: string; name: string }>()
   for (const t of tokenLangList) {
     if (!t.token || seen.has(t.token)) continue
     seen.add(t.token)
-    unique.push(t)
+    unique.push({ token: t.token, lang: t.lang })
+    tokenToRecipient.set(t.token, { store: t.store, name: t.name })
   }
 
   if (unique.length === 0) {
@@ -163,7 +165,21 @@ export async function sendFcmToRecipients(params: {
         failed += res.failureCount
         if (res.failureCount > 0 && res.responses) {
           res.responses.forEach((r, idx) => {
-            if (!r.success && r.error) console.warn('FCM 실패:', r.error.code, r.error.message)
+            if (!r.success && r.error) {
+              console.warn('FCM 실패:', r.error.code, r.error.message)
+              // 만료/미등록 토큰이면 push_tokens에서 삭제 → 다음 앱 접속 시 "푸시 받기" 재등록 유도
+              const code = String(r.error?.code || '')
+              if (code === 'messaging/registration-token-not-registered' || code.includes('not-found')) {
+                const token = chunk[idx]
+                const rec = tokenToRecipient.get(token)
+                if (rec?.store && rec?.name) {
+                  supabaseDeleteByFilter(
+                    'push_tokens',
+                    `store=eq.${encodeURIComponent(rec.store)}&name=eq.${encodeURIComponent(rec.name)}`
+                  ).then(() => console.info('FCM: 만료 토큰 삭제', rec.store, rec.name)).catch((e) => console.warn('FCM 토큰 삭제 실패:', e))
+                }
+              }
+            }
           })
         }
       } catch (e) {
