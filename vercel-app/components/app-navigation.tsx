@@ -36,12 +36,18 @@ export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
   const { auth } = useAuth()
   const t = useT(lang)
 
-  const isOffice =
+  const isOfficeStore =
     auth?.store &&
     (auth.store.toLowerCase() === "office" ||
       auth.store === "본사" ||
       auth.store === "CM Office" ||
       auth.store.toLowerCase().includes("office"))
+  const isOfficeRole =
+    auth?.role &&
+    ["director", "officer", "ceo", "hr"].some((r) =>
+      String(auth.role || "").toLowerCase().includes(r)
+    )
+  const isOffice = isOfficeStore || isOfficeRole
   const isAdmin =
     auth?.role &&
     ["director", "officer", "ceo", "hr", "manager"].some((r) =>
