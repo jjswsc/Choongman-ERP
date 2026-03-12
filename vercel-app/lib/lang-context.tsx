@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
-export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la'
+export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms'
 
 function loadLang(): LangCode {
   if (typeof window === 'undefined') return 'ko'
   try {
     const s = sessionStorage.getItem('cm_lang')
-    if (s && ['ko', 'en', 'th', 'mm', 'la'].includes(s)) return s as LangCode
+    if (s && ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms'].includes(s)) return s as LangCode
   } catch {}
   return 'ko'
 }

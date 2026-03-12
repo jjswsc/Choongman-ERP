@@ -55,12 +55,19 @@ export function VisitTab() {
       (s) => !exclude.includes(s) && s.toLowerCase() !== "office"
     )
     // 본사(CM Office 등) 로그인 시 CM Office를 방문 대상 목록에 포함 (API에 없을 수 있음)
-    const isOffice = auth?.store === "CM Office" || auth?.store === "Office" || auth?.store === "본사" || auth?.store?.toLowerCase() === "office"
-    if (isOffice && !stores.includes("CM Office")) {
+    const role = String(auth?.role || "").toLowerCase()
+    const isOfficeRole = ["director", "officer", "ceo", "hr"].some((r) => role.includes(r))
+    const isOfficeStore =
+      auth?.store === "CM Office" ||
+      auth?.store === "Office" ||
+      auth?.store === "본사" ||
+      auth?.store?.toLowerCase() === "office"
+    const canAccessVisit = isOfficeStore || isOfficeRole
+    if (canAccessVisit && !stores.includes("CM Office")) {
       stores = ["CM Office", ...stores].filter(Boolean)
     }
     setStoreList(stores.length > 0 ? stores : all)
-  }, [storeListRaw, auth?.store])
+  }, [storeListRaw, auth?.store, auth?.role])
 
   useEffect(() => {
     if (storeList.length > 0 && !selectedStore && !activeVisit) {
@@ -167,13 +174,16 @@ export function VisitTab() {
     )
   }
 
-  const isOffice =
+  const role = String(auth.role || "").toLowerCase()
+  const isOfficeRole = ["director", "officer", "ceo", "hr"].some((r) => role.includes(r))
+  const isOfficeStore =
     auth.store?.toLowerCase() === "office" ||
     auth.store === "본사" ||
     auth.store === "Office" ||
     auth.store === "CM Office"
+  const canAccessVisit = isOfficeStore || isOfficeRole
 
-  if (!isOffice) {
+  if (!canAccessVisit) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 p-8">
         <MapPin className="h-12 w-12 text-muted-foreground/50" />

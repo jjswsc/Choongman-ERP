@@ -6,6 +6,7 @@ import {
   BarChart3,
   Package,
   Edit3,
+  ImageIcon,
   Printer,
   FileSpreadsheet,
   PauseCircle,
@@ -24,6 +25,21 @@ import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { StockStatusItem } from "@/lib/api-client"
+import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+
+function hasValidImage(url: string | undefined): boolean {
+  if (!url || typeof url !== "string") return false
+  const s = url.trim()
+  return s.length > 10 && (s.startsWith("http") || s.startsWith("data:image"))
+}
+
+function toImageUrl(url: string): string {
+  const s = String(url || "").trim()
+  if (!s) return s
+  if (s.startsWith("data:image")) return s
+  if (s.startsWith("http")) return `/api/imageProxy?url=${encodeURIComponent(s)}`
+  return s
+}
 
 export interface StockTableProps {
   list: StockStatusItem[]
@@ -76,6 +92,8 @@ export function StockTable({
   const [editingSafe, setEditingSafe] = React.useState<string | null>(null)
   const [safeInput, setSafeInput] = React.useState("")
   const [savingSafe, setSavingSafe] = React.useState(false)
+  const [imagePreview, setImagePreview] = React.useState<{ url: string; name: string } | null>(null)
+  const [imageLoadError, setImageLoadError] = React.useState(false)
   const tableRef = React.useRef<HTMLTableElement>(null)
 
   const filteredList = React.useMemo(() => {
@@ -155,7 +173,7 @@ ${filteredList.map((r) => {
     URL.revokeObjectURL(url)
   }
 
-  const colCount = 7 + (canAdjust || onToggleOrderDisabled ? 1 : 0)
+  const colCount = 8 + (canAdjust || onToggleOrderDisabled ? 1 : 0)
 
   return (
     <div id="stock-print-area" className="rounded-xl border bg-card shadow-sm overflow-hidden">
@@ -270,6 +288,7 @@ ${filteredList.map((r) => {
           <thead>
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20 text-center">{t("stockColCode")}</th>
+              <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-10 text-center">{t("itemsColImage") || (t("photo") || "사진")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground min-w-[120px] text-center">{t("stockColName")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-40 min-w-[5rem] text-center">{t("stockColSpec")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 text-center">{t("stockColQty")}</th>
@@ -313,6 +332,24 @@ ${filteredList.map((r) => {
                       <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-primary">
                         {row.code}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      {hasValidImage(row.image) ? (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => {
+                            setImageLoadError(false)
+                            setImagePreview({ url: toImageUrl(row.image || ""), name: row.name })
+                          }}
+                          title={t("photo")}
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                        </Button>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">-</span>
+                      )}
                     </td>
                     <td className="px-5 py-3 min-w-[120px]">
                       <span className="text-sm font-medium text-foreground">{row.name}</span>
@@ -430,7 +467,7 @@ ${filteredList.map((r) => {
           {!loading && filteredList.length > 0 && (
             <tfoot>
               <tr className="border-t-2 bg-muted/20 font-bold">
-                <td colSpan={4} className="px-5 py-3 text-right">{t("stockTotalAmount")}</td>
+                <td colSpan={5} className="px-5 py-3 text-right">{t("stockTotalAmount")}</td>
                 <td className="px-5 py-3"></td>
                 <td className="px-5 py-3 text-right tabular-nums">{totalAmount.toLocaleString()}</td>
                 <td colSpan={(canAdjust || onToggleOrderDisabled) ? 2 : 1}></td>
@@ -439,6 +476,44 @@ ${filteredList.map((r) => {
           )}
         </table>
       </div>
+
+      {imagePreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => { setImagePreview(null); setImageLoadError(false) }}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-[90vw] rounded-xl bg-card p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">{imagePreview.name}</p>
+            {imageLoadError ? (
+              <div className="flex min-h-[120px] items-center justify-center rounded-lg bg-muted/80 px-6 py-8">
+                <p className="text-center text-sm text-muted-foreground">{t("imageLoadError")}</p>
+              </div>
+            ) : (
+              <ImageViewerWithRotate
+                src={imagePreview.url}
+                alt={imagePreview.name}
+                imgClassName="max-h-[70vh] max-w-full rounded-lg object-contain"
+                referrerPolicy="no-referrer"
+                onError={() => setImageLoadError(true)}
+                onLoad={() => setImageLoadError(false)}
+                rotateLeftLabel={t("imageRotateLeft") || "반시계"}
+                rotateRightLabel={t("imageRotateRight") || "시계"}
+              />
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3 w-full"
+              onClick={() => { setImagePreview(null); setImageLoadError(false) }}
+            >
+              {t("itemsBtnClose")}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between border-t bg-muted/10 px-6 py-3">
         <span className="text-[11px] text-muted-foreground">

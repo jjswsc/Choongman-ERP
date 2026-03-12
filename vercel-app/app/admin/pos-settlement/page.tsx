@@ -42,12 +42,20 @@ export default function PosSettlementPage() {
   const [systemVat, setSystemVat] = React.useState(0)
 
   const [cashActual, setCashActual] = React.useState<string>("")
+  const [cashAmt, setCashAmt] = React.useState<string>("")
   const [cardAmt, setCardAmt] = React.useState<string>("")
   const [qrAmt, setQrAmt] = React.useState<string>("")
   const [deliveryAppAmt, setDeliveryAppAmt] = React.useState<string>("")
   const [otherAmt, setOtherAmt] = React.useState<string>("")
+  const [cardBreakdown, setCardBreakdown] = React.useState<Record<string, string>>({})
+  const [qrBreakdown, setQrBreakdown] = React.useState<Record<string, string>>({})
+  const [deliveryAppBreakdown, setDeliveryAppBreakdown] = React.useState<Record<string, string>>({})
   const [memo, setMemo] = React.useState("")
   const [closed, setClosed] = React.useState(false)
+
+  const CARD_KEYS = ['Visa', 'Master', 'Amex', 'JCB', 'Other'] as const
+  const QR_KEYS = ['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'] as const
+  const DELIVERY_KEYS = ['Grab', 'Line Man', 'Shopee', 'Other'] as const
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const canUnclose = canAccessSettings(auth?.role || "")
@@ -68,10 +76,20 @@ export default function PosSettlementPage() {
         if (single) {
           setSettlement(single)
           setCashActual(single.cashActual != null ? String(single.cashActual) : "")
+          setCashAmt(String(single.cashAmt ?? 0))
           setCardAmt(String(single.cardAmt ?? 0))
           setQrAmt(String(single.qrAmt ?? 0))
           setDeliveryAppAmt(String(single.deliveryAppAmt ?? 0))
           setOtherAmt(String(single.otherAmt ?? 0))
+          const cb: Record<string, string> = {}
+          CARD_KEYS.forEach((k) => { cb[k] = String((single.cardBreakdown ?? {})[k] ?? '') })
+          setCardBreakdown(cb)
+          const qb: Record<string, string> = {}
+          QR_KEYS.forEach((k) => { qb[k] = String((single.qrBreakdown ?? {})[k] ?? '') })
+          setQrBreakdown(qb)
+          const db: Record<string, string> = {}
+          DELIVERY_KEYS.forEach((k) => { db[k] = String((single.deliveryAppBreakdown ?? {})[k] ?? '') })
+          setDeliveryAppBreakdown(db)
           setMemo(single.memo ?? "")
           setClosed(single.closed ?? false)
         } else {
@@ -79,10 +97,14 @@ export default function PosSettlementPage() {
           setSystemSubtotal(0)
           setSystemVat(0)
           setCashActual("")
+          setCashAmt("")
           setCardAmt("0")
           setQrAmt("0")
           setDeliveryAppAmt("0")
           setOtherAmt("0")
+          setCardBreakdown(Object.fromEntries(CARD_KEYS.map((k) => [k, ""])))
+          setQrBreakdown(Object.fromEntries(QR_KEYS.map((k) => [k, ""])))
+          setDeliveryAppBreakdown(Object.fromEntries(DELIVERY_KEYS.map((k) => [k, ""])))
           setMemo("")
           setClosed(false)
         }
@@ -109,12 +131,14 @@ export default function PosSettlementPage() {
   }, [loadData])
 
   const cashActualNum = parseFloat(cashActual) || 0
-  const cardNum = parseFloat(cardAmt) || 0
-  const qrNum = parseFloat(qrAmt) || 0
-  const deliveryNum = parseFloat(deliveryAppAmt) || 0
+  const cashAmtNum = parseFloat(cashAmt) || 0
+  const cardNum = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0) || parseFloat(cardAmt) || 0
+  const qrNum = QR_KEYS.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0) || parseFloat(qrAmt) || 0
+  const deliveryNum = DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(deliveryAppBreakdown[k]) || 0), 0) || parseFloat(deliveryAppAmt) || 0
   const otherNum = parseFloat(otherAmt) || 0
-  const totalInput = cashActualNum + cardNum + qrNum + deliveryNum + otherNum
+  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + otherNum
   const diff = totalInput - systemTotal
+  const currencySuffix = " ฿"
 
   const handleSave = async () => {
     if (!effectiveStore) {
@@ -127,9 +151,19 @@ export default function PosSettlementPage() {
         storeCode: effectiveStore,
         settleDate,
         cashActual: cashActual ? cashActualNum : null,
+        cashAmt: cashAmtNum,
         cardAmt: cardNum,
+        cardBreakdown: Object.fromEntries(
+          CARD_KEYS.map((k) => [k, parseFloat(cardBreakdown[k]) || 0])
+        ) as Record<string, number>,
         qrAmt: qrNum,
+        qrBreakdown: Object.fromEntries(
+          QR_KEYS.map((k) => [k, parseFloat(qrBreakdown[k]) || 0])
+        ) as Record<string, number>,
         deliveryAppAmt: deliveryNum,
+        deliveryAppBreakdown: Object.fromEntries(
+          DELIVERY_KEYS.map((k) => [k, parseFloat(deliveryAppBreakdown[k]) || 0])
+        ) as Record<string, number>,
         otherAmt: otherNum,
         memo,
         closed,
@@ -275,69 +309,133 @@ export default function PosSettlementPage() {
             <div className="space-y-3">
               <label className="flex items-center justify-between text-sm">
                 <span>{t("posCashActual") || "돈통 시제"}</span>
-                <Input
-                  type="number"
-                  placeholder="실제 현금"
-                  className="ml-2 h-9 w-32 text-right"
-                  value={cashActual}
-                  onChange={(e) => setCashActual(e.target.value)}
-                  disabled={closed}
-                />
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0"
+                    className="ml-2 h-9 w-32 text-right"
+                    value={cashActual}
+                    onChange={(e) => setCashActual(e.target.value)}
+                    disabled={closed}
+                  />
+                  <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                </div>
               </label>
               <label className="flex items-center justify-between text-sm">
-                <span>{t("posCard") || "카드"}</span>
-                <Input
-                  type="number"
-                  className="ml-2 h-9 w-32 text-right"
-                  value={cardAmt}
-                  onChange={(e) => setCardAmt(e.target.value)}
-                  disabled={closed}
-                />
+                <span>{t("posCash") || "현금"}</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="ml-2 h-9 w-32 text-right"
+                    value={cashAmt}
+                    onChange={(e) => setCashAmt(e.target.value)}
+                    disabled={closed}
+                  />
+                  <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                </div>
               </label>
-              <label className="flex items-center justify-between text-sm">
-                <span>{t("posQr") || "QR/모바일"}</span>
-                <Input
-                  type="number"
-                  className="ml-2 h-9 w-32 text-right"
-                  value={qrAmt}
-                  onChange={(e) => setQrAmt(e.target.value)}
-                  disabled={closed}
-                />
-              </label>
-              <label className="flex items-center justify-between text-sm">
-                <span>{t("posDeliveryApp") || "배달앱"}</span>
-                <Input
-                  type="number"
-                  className="ml-2 h-9 w-32 text-right"
-                  value={deliveryAppAmt}
-                  onChange={(e) => setDeliveryAppAmt(e.target.value)}
-                  disabled={closed}
-                />
-              </label>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span>{t("posCard") || "카드"}</span>
+                  <span className="tabular-nums text-muted-foreground">{cardNum.toLocaleString()}{currencySuffix}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pl-2">
+                  {CARD_KEYS.map((k) => (
+                    <label key={k} className="flex items-center gap-2 text-xs">
+                      <span className="w-16 shrink-0">{k}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="h-8 text-right"
+                        value={cardBreakdown[k] ?? ""}
+                        onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                        disabled={closed}
+                      />
+                      <span className="text-muted-foreground w-5">฿</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span>{t("posQr") || "QR/모바일결제"}</span>
+                  <span className="tabular-nums text-muted-foreground">{qrNum.toLocaleString()}{currencySuffix}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pl-2">
+                  {QR_KEYS.map((k) => (
+                    <label key={k} className="flex items-center gap-2 text-xs">
+                      <span className="w-16 shrink-0">{k}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="h-8 text-right"
+                        value={qrBreakdown[k] ?? ""}
+                        onChange={(e) => setQrBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                        disabled={closed}
+                      />
+                      <span className="text-muted-foreground w-5">฿</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span>{t("posDeliveryApp") || "배달앱"}</span>
+                  <span className="tabular-nums text-muted-foreground">{deliveryNum.toLocaleString()}{currencySuffix}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pl-2">
+                  {DELIVERY_KEYS.map((k) => (
+                    <label key={k} className="flex items-center gap-2 text-xs">
+                      <span className="w-16 shrink-0">{k}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="h-8 text-right"
+                        value={deliveryAppBreakdown[k] ?? ""}
+                        onChange={(e) => setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                        disabled={closed}
+                      />
+                      <span className="text-muted-foreground w-5">฿</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <label className="flex items-center justify-between text-sm">
                 <span>{t("posOther") || "기타"}</span>
-                <Input
-                  type="number"
-                  className="ml-2 h-9 w-32 text-right"
-                  value={otherAmt}
-                  onChange={(e) => setOtherAmt(e.target.value)}
-                  disabled={closed}
-                />
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="ml-2 h-9 w-32 text-right"
+                    value={otherAmt}
+                    onChange={(e) => setOtherAmt(e.target.value)}
+                    disabled={closed}
+                  />
+                  <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                </div>
               </label>
             </div>
 
             <div className="space-y-1 rounded-lg border px-4 py-2 text-sm">
               <div className="flex justify-between text-muted-foreground">
-                <span>{t("posCashActual") || "현금"}</span>
-                <span className="tabular-nums">{cashActualNum.toLocaleString()} ฿</span>
+                <span>{t("posCashActual") || "돈통 시제"}</span>
+                <span className="tabular-nums">{cashActualNum.toLocaleString()}{currencySuffix}</span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>{t("posCard") || "카드"} + {t("posQr") || "QR"} + {t("posDeliveryApp") || "배달앱"} + {t("posOther") || "기타"}</span>
-                <span className="tabular-nums">{(cardNum + qrNum + deliveryNum + otherNum).toLocaleString()} ฿</span>
+                <span>{t("posCash") || "현금"} + {t("posCard") || "카드"} + {t("posQr") || "QR"} + {t("posDeliveryApp") || "배달앱"} + {t("posOther") || "기타"}</span>
+                <span className="tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
               </div>
               <div className="flex justify-between items-center pt-1 border-t font-medium">
                 <span>{t("posInputTotal") || "입력 합계"}</span>
-                <span className="font-bold tabular-nums">{totalInput.toLocaleString()} ฿</span>
+                <span className="font-bold tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
               </div>
             </div>
 

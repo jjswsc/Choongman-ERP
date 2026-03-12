@@ -2,7 +2,7 @@
  * 서버 전용 번역 유틸 (FCM 알림 등)
  * translate API와 동일한 Google Translate 사용
  */
-const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', my: 'my', lo: 'lo', mm: 'my', la: 'lo' }
+const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', my: 'my', lo: 'lo', mm: 'my', la: 'lo', kh: 'km', vi: 'vi', ms: 'ms' }
 const UA = 'Mozilla/5.0 (compatible; ChoongmanERP/1.0)'
 
 async function translateOne(text: string, targetLang: string): Promise<string> {

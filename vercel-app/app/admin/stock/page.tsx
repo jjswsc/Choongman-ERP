@@ -94,6 +94,7 @@ export default function StockPage() {
       const mapped: StockStatusItem[] = items.map((i) => ({
         code: i.code,
         name: i.name,
+        image: i.image,
         spec: i.spec,
         qty: stock[i.code] ?? 0,
         safeQty: i.safeQty ?? 0,

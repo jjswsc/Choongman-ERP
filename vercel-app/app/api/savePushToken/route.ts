@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
       user_agent: userAgent,
       updated_at: new Date().toISOString(),
     }
-    if (['ko', 'en', 'th', 'my', 'lo', 'mm', 'la'].includes(lang)) {
-      row.lang = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang
+    if (['ko', 'en', 'th', 'my', 'lo', 'mm', 'la', 'kh', 'vi', 'ms'].includes(lang)) {
+      row.lang = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang === 'kh' ? 'km' : lang
     }
     await supabaseUpsert('push_tokens', [row], 'store,name')
 

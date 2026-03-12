@@ -11,9 +11,13 @@ export async function POST(req: NextRequest) {
     const storeCode = String(body.storeCode ?? '').trim()
     const settleDate = String(body.settleDate ?? '').trim()
     const cashActual = body.cashActual != null ? Number(body.cashActual) : null
+    const cashAmt = Number(body.cashAmt) ?? 0
     const cardAmt = Number(body.cardAmt) ?? 0
+    const cardBreakdown = body.cardBreakdown && typeof body.cardBreakdown === 'object' ? body.cardBreakdown : {}
     const qrAmt = Number(body.qrAmt) ?? 0
+    const qrBreakdown = body.qrBreakdown && typeof body.qrBreakdown === 'object' ? body.qrBreakdown : {}
     const deliveryAppAmt = Number(body.deliveryAppAmt) ?? 0
+    const deliveryAppBreakdown = body.deliveryAppBreakdown && typeof body.deliveryAppBreakdown === 'object' ? body.deliveryAppBreakdown : {}
     const otherAmt = Number(body.otherAmt) ?? 0
     const memo = String(body.memo ?? '').trim()
     const closed = !!body.closed
@@ -26,9 +30,13 @@ export async function POST(req: NextRequest) {
       store_code: storeCode,
       settle_date: settleDate,
       cash_actual: cashActual,
+      cash_amt: cashAmt,
       card_amt: cardAmt,
+      card_breakdown: cardBreakdown,
       qr_amt: qrAmt,
+      qr_breakdown: qrBreakdown,
       delivery_app_amt: deliveryAppAmt,
+      delivery_app_breakdown: deliveryAppBreakdown,
       other_amt: otherAmt,
       memo,
       closed,

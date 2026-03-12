@@ -51,13 +51,21 @@ export type POSTileType =
   | "dine-in"
   | "takeout"
   | "delivery"
-  | "open"
-  | "close"
   | "receipt"
   | "attendance"
-  | "expense"
+  | "sales"
+  | "members"
+  | "business"
+  | "cash"
+  | "operations"
+  | "open"
+  | "close"
+  | "cash-deposit"
+  | "cash-withdrawal"
+  | "cash-drawer"
   | "settings"
   | "refresh"
+  | "logout"
 
 export type TileVariant = "primary" | "accent" | "default"
 
@@ -69,6 +77,8 @@ export interface POSTile {
   label: string
   labelEn?: string
   sublabel?: string
+  /** i18n key for label (use t(labelKey) when present) */
+  labelKey?: string
   icon: string
   variant: TileVariant
   size: "large" | "medium" | "small"
@@ -77,15 +87,39 @@ export interface POSTile {
   group?: TileGroup
 }
 
+/** 세부 메뉴: 메인 타일 클릭 시 다이얼로그에 표시되는 항목 (type + labelKey) */
+export interface POSSubMenuItem {
+  type: POSTileType
+  labelKey: string
+}
+
+export const POS_SUBMENUS: Record<"business" | "cash" | "operations", POSSubMenuItem[]> = {
+  business: [
+    { type: "open", labelKey: "posBusinessOpen" },
+    { type: "close", labelKey: "posBusinessClose" },
+  ],
+  cash: [
+    { type: "cash-deposit", labelKey: "posCashDeposit" },
+    { type: "cash-withdrawal", labelKey: "posCashWithdrawal" },
+    { type: "cash-drawer", labelKey: "posCashDrawer" },
+  ],
+  operations: [
+    { type: "refresh", labelKey: "posRefresh" },
+    { type: "logout", labelKey: "posLogout" },
+    { type: "settings", labelKey: "posSettings" },
+  ],
+}
+
+/** 주문: 매장/포장/배달 → 터미널. 관리: 매출→영수증→근태→영업관리(세부: 영업시작/마감)→시재관리(입금/출금/돈통)→운영관리(새로고침/로그아웃/설정) */
 export const DEFAULT_TILES: POSTile[] = [
-  { id: "1", type: "dine-in", label: "매장 주문", labelEn: "Dine In", sublabel: "Dine-in", icon: "utensils", variant: "primary", size: "large", enabled: true, order: 1, group: "order" },
-  { id: "2", type: "takeout", label: "포장", labelEn: "Takeout", sublabel: "Takeout", icon: "package", variant: "primary", size: "medium", enabled: true, order: 2, group: "order" },
-  { id: "3", type: "delivery", label: "배달", labelEn: "Delivery", sublabel: "Delivery", icon: "truck", variant: "accent", size: "medium", enabled: true, order: 3, group: "order" },
-  { id: "4", type: "open", label: "영업시작", labelEn: "Open", sublabel: "Open", icon: "folder-open", variant: "default", size: "medium", enabled: true, order: 4, group: "other" },
-  { id: "5", type: "close", label: "영업 마감", labelEn: "Closing", sublabel: "Close", icon: "folder-closed", variant: "default", size: "medium", enabled: true, order: 5, group: "other" },
-  { id: "6", type: "receipt", label: "영수증 관리", labelEn: "Receipts", sublabel: "Receipts", icon: "receipt", variant: "default", size: "medium", enabled: true, order: 6, group: "other" },
-  { id: "7", type: "expense", label: "경비", labelEn: "Expense", sublabel: "Expense", icon: "wallet", variant: "default", size: "small", enabled: true, order: 7, group: "other" },
-  { id: "8", type: "attendance", label: "근태 관리", labelEn: "Attendance", sublabel: "Attendance", icon: "clock", variant: "default", size: "small", enabled: true, order: 8, group: "other" },
-  { id: "9", type: "settings", label: "운영 관리", labelEn: "Settings", sublabel: "Settings", icon: "settings", variant: "default", size: "small", enabled: true, order: 9, group: "other" },
-  { id: "10", type: "refresh", label: "새로고침", labelEn: "Refresh", sublabel: "Refresh", icon: "refresh-cw", variant: "default", size: "small", enabled: true, order: 10, group: "other" },
+  { id: "1", type: "dine-in", label: "매장 주문", labelEn: "Dine In", labelKey: "posOrderTypeDineIn", icon: "utensils", variant: "primary", size: "large", enabled: true, order: 1, group: "order" },
+  { id: "2", type: "takeout", label: "포장", labelEn: "Takeout", labelKey: "posOrderTypeTakeout", icon: "package", variant: "primary", size: "medium", enabled: true, order: 2, group: "order" },
+  { id: "3", type: "delivery", label: "배달", labelEn: "Delivery", labelKey: "posOrderTypeDelivery", icon: "truck", variant: "accent", size: "medium", enabled: true, order: 3, group: "order" },
+  { id: "m1", type: "sales", label: "매출 관리", labelEn: "Sales", labelKey: "posSalesManage", icon: "bar-chart", variant: "default", size: "medium", enabled: true, order: 10, group: "other" },
+  { id: "m2", type: "receipt", label: "영수증 관리", labelEn: "Receipts", labelKey: "posReceiptManage", icon: "receipt", variant: "default", size: "medium", enabled: true, order: 11, group: "other" },
+  { id: "m3", type: "attendance", label: "근태 관리", labelEn: "Attendance", labelKey: "posAttendanceManage", icon: "clock", variant: "default", size: "medium", enabled: true, order: 12, group: "other" },
+  { id: "m3b", type: "members", label: "회원 관리", labelEn: "Members", labelKey: "posMemberManage", icon: "users", variant: "default", size: "medium", enabled: true, order: 12.5, group: "other" },
+  { id: "m4", type: "business", label: "영업 관리", labelEn: "Business", labelKey: "posBusinessManage", icon: "folder-open", variant: "default", size: "medium", enabled: true, order: 13, group: "other" },
+  { id: "m5", type: "cash", label: "시재 관리", labelEn: "Cash", labelKey: "posCashManage", icon: "wallet", variant: "default", size: "medium", enabled: true, order: 14, group: "other" },
+  { id: "m6", type: "operations", label: "운영 관리", labelEn: "Operations", labelKey: "posOperationsManage", icon: "settings", variant: "default", size: "medium", enabled: true, order: 15, group: "other" },
 ]

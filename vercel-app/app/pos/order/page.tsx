@@ -473,6 +473,7 @@ export default function PosOrderPage() {
     try {
       const res = await savePosOrderWithOffline({
         storeCode: storeCode || "ST01",
+        createdBy: auth?.user ?? "",
         orderType,
         tableName: orderType === "dine_in" ? tableName : "",
         memo: memo.trim() || undefined,

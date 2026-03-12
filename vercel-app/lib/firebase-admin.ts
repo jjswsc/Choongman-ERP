@@ -98,7 +98,7 @@ export async function sendFcmToRecipients(params: {
     const row = rows?.[0]
     if (row?.token) {
       const lang = String(row.lang || 'ko').toLowerCase().slice(0, 2)
-      const normalized = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang
+      const normalized = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang === 'kh' ? 'km' : lang
       tokenLangList.push({ token: row.token, lang: normalized || 'ko', store: r.store.trim(), name: r.name.trim() })
     }
   }
@@ -122,7 +122,7 @@ export async function sendFcmToRecipients(params: {
   // lang별로 그룹화
   const byLang = new Map<string, string[]>()
   for (const { token, lang } of unique) {
-    const key = ['ko', 'en', 'th', 'my', 'lo'].includes(lang) ? lang : 'ko'
+        const key = ['ko', 'en', 'th', 'my', 'lo', 'km', 'vi', 'ms'].includes(lang) ? lang : 'ko'
     if (!byLang.has(key)) byLang.set(key, [])
     byLang.get(key)!.push(token)
   }

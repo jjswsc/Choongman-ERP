@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
     const memo = String(body?.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body?.discountAmt ?? 0))
     const discountReason = String(body?.discountReason ?? '').trim()
+    const paymentCash = Math.max(0, Number(body?.paymentCash ?? 0))
+    const paymentCard = Math.max(0, Number(body?.paymentCard ?? 0))
+    const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
+    const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
 
     if (!id || items.length === 0) {
       return NextResponse.json(
@@ -57,6 +61,10 @@ export async function POST(req: NextRequest) {
       memo,
       discount_amt: discountAmt,
       discount_reason: discountReason,
+      payment_cash: paymentCash,
+      payment_card: paymentCard,
+      payment_qr: paymentQr,
+      payment_other: paymentOther,
       items_json: JSON.stringify(items),
       subtotal,
       vat,

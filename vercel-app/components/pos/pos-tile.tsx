@@ -13,7 +13,11 @@ import {
   Settings,
   RefreshCw,
   Wallet,
-  Banknote,
+  BarChart2,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  LogOut,
+  Users,
 } from "lucide-react"
 
 const iconMap = {
@@ -27,7 +31,11 @@ const iconMap = {
   settings: Settings,
   "refresh-cw": RefreshCw,
   wallet: Wallet,
-  banknote: Banknote,
+  "bar-chart": BarChart2,
+  "arrow-down-circle": ArrowDownCircle,
+  "arrow-up-circle": ArrowUpCircle,
+  "log-out": LogOut,
+  users: Users,
 } as const
 
 interface POSTileProps {
@@ -48,13 +56,15 @@ export function POSTile({ tile, onClick, label }: POSTileProps) {
       onClick={onClick}
       disabled={!tile.enabled}
       className={cn(
-        "group relative flex flex-col items-center justify-center overflow-hidden",
+        "group relative flex overflow-hidden",
         "rounded-2xl border transition-all duration-300 ease-out",
         "touch-manipulation select-none",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
         "active:scale-[0.98]",
-        isLarge && "col-span-2 row-span-2",
-        "min-h-[100px] min-[1025px]:min-h-[120px]",
+        isLarge && "flex-col items-center justify-center col-span-2 row-span-2",
+        !isLarge && "flex-row items-center justify-center gap-3 px-3",
+        "h-full min-h-[88px] min-[1025px]:min-h-[96px]",
+        isLarge && "min-h-[72px] min-[1025px]:min-h-[80px]",
         variant === "primary" && [
           "bg-gradient-to-br from-emerald-500 to-emerald-600",
           "border-emerald-600/80 text-white shadow-md",
@@ -85,15 +95,15 @@ export function POSTile({ tile, onClick, label }: POSTileProps) {
 
       <div
         className={cn(
-          "relative z-10 flex items-center justify-center",
-          "transition-all duration-300 group-hover:scale-110",
-          isLarge ? "mb-4" : isMedium ? "mb-3" : "mb-2"
+          "relative z-10 flex items-center justify-center shrink-0",
+          "transition-all duration-300 group-hover:scale-105",
+          isLarge && "mb-3 min-[1025px]:mb-4"
         )}
       >
         <Icon
           className={cn(
             "transition-colors duration-300",
-            isLarge ? "w-12 h-12 min-[1025px]:w-14 min-[1025px]:h-14" : isMedium ? "w-8 h-8 min-[1025px]:w-9 min-[1025px]:h-9" : "w-6 h-6 min-[1025px]:w-7 min-[1025px]:h-7",
+            isLarge ? "w-12 h-12 min-[1025px]:w-14 min-[1025px]:h-14" : isMedium ? "w-8 h-8 min-[1025px]:w-9 min-[1025px]:h-9" : "w-7 h-7 min-[1025px]:w-8 min-[1025px]:h-8",
             variant === "primary" && "text-white",
             variant === "accent" && "text-white",
             variant === "default" && "text-slate-600 group-hover:text-slate-800"
@@ -102,31 +112,32 @@ export function POSTile({ tile, onClick, label }: POSTileProps) {
         />
       </div>
 
-      <span
-        className={cn(
-          "relative z-10 font-medium tracking-tight text-center transition-colors duration-300",
-          isLarge ? "text-lg min-[1025px]:text-xl" : isMedium ? "text-sm min-[1025px]:text-base" : "text-xs min-[1025px]:text-sm",
-          variant === "primary" && "text-white",
-          variant === "accent" && "text-white",
-          variant === "default" && "text-slate-700 group-hover:text-slate-900"
-        )}
-      >
-        {label ?? tile.label}
-      </span>
-
-      {tile.sublabel && (
+      <div className={cn("relative z-10 flex flex-col items-center min-w-0", !isLarge && "items-start")}>
         <span
           className={cn(
-            "relative z-10 font-mono uppercase tracking-widest mt-1 transition-colors duration-300",
-            isLarge ? "text-[10px]" : "text-[9px]",
-            variant === "primary" || variant === "accent"
-              ? "text-white/80"
-              : "text-slate-500 group-hover:text-slate-600"
+            "relative z-10 font-medium tracking-tight transition-colors duration-300",
+            isLarge ? "text-center text-lg min-[1025px]:text-xl" : "text-left text-sm min-[1025px]:text-base",
+            variant === "primary" && "text-white",
+            variant === "accent" && "text-white",
+            variant === "default" && "text-slate-700 group-hover:text-slate-900"
           )}
         >
-          {tile.sublabel}
+          {label ?? tile.label}
         </span>
-      )}
+        {tile.sublabel && (
+          <span
+            className={cn(
+              "relative z-10 font-mono uppercase tracking-widest transition-colors duration-300",
+              isLarge ? "text-[10px] mt-1" : "text-[9px]",
+              variant === "primary" || variant === "accent"
+                ? "text-white/80"
+                : "text-slate-500 group-hover:text-slate-600"
+            )}
+          >
+            {tile.sublabel}
+          </span>
+        )}
+      </div>
     </button>
   )
 }

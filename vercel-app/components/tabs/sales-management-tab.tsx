@@ -287,12 +287,15 @@ export function SalesManagementTab() {
               </SelectContent>
             </Select>
             {posOptions.length > 0 && (
-              <Select value={posFilter} onValueChange={setPosFilter}>
+              <Select
+                value={posFilter === '' ? '__all__' : posFilter}
+                onValueChange={(v) => setPosFilter(v === '__all__' ? '' : v)}
+              >
                 <SelectTrigger className="w-[140px] h-9">
                   <SelectValue placeholder="매장(전체)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">전체</SelectItem>
+                  <SelectItem value="__all__">전체</SelectItem>
                   {posOptions.map((p) => (
                     <SelectItem key={p} value={p}>
                       {p}

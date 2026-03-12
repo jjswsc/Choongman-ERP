@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 
-const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', mm: 'my', la: 'lo' }
+const LANG_MAP: Record<string, string> = { ko: 'ko', en: 'en', th: 'th', mm: 'my', la: 'lo', kh: 'km', vi: 'vi', ms: 'ms' }
 const UA = 'Mozilla/5.0 (compatible; ChoongmanERP/1.0)'
 
 async function translateOne(text: string, targetLang: string): Promise<string> {

@@ -52,9 +52,13 @@ export async function GET(request: NextRequest) {
       store_code?: string
       settle_date?: string
       cash_actual?: number
+      cash_amt?: number
       card_amt?: number
+      card_breakdown?: Record<string, number>
       qr_amt?: number
+      qr_breakdown?: Record<string, number>
       delivery_app_amt?: number
+      delivery_app_breakdown?: Record<string, number>
       other_amt?: number
       memo?: string
       closed?: boolean
@@ -65,9 +69,13 @@ export async function GET(request: NextRequest) {
       storeCode: String(s.store_code ?? ''),
       settleDate: String(s.settle_date ?? ''),
       cashActual: s.cash_actual != null ? Number(s.cash_actual) : null,
+      cashAmt: Number(s.cash_amt) ?? 0,
       cardAmt: Number(s.card_amt) ?? 0,
+      cardBreakdown: (s.card_breakdown && typeof s.card_breakdown === 'object') ? s.card_breakdown : {},
       qrAmt: Number(s.qr_amt) ?? 0,
+      qrBreakdown: (s.qr_breakdown && typeof s.qr_breakdown === 'object') ? s.qr_breakdown : {},
       deliveryAppAmt: Number(s.delivery_app_amt) ?? 0,
+      deliveryAppBreakdown: (s.delivery_app_breakdown && typeof s.delivery_app_breakdown === 'object') ? s.delivery_app_breakdown : {},
       otherAmt: Number(s.other_amt) ?? 0,
       memo: String(s.memo ?? ''),
       closed: !!s.closed,

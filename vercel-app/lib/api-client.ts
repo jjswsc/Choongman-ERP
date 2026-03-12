@@ -127,6 +127,7 @@ export async function getAppData(
 export interface StockStatusItem {
   code: string
   name: string
+  image?: string
   spec: string
   qty: number
   safeQty: number
@@ -3217,9 +3218,13 @@ export interface PosSettlement {
   storeCode: string
   settleDate: string
   cashActual: number | null
+  cashAmt?: number
   cardAmt: number
+  cardBreakdown?: Record<string, number>
   qrAmt: number
+  qrBreakdown?: Record<string, number>
   deliveryAppAmt: number
+  deliveryAppBreakdown?: Record<string, number>
   otherAmt: number
   memo: string
   closed: boolean
@@ -3245,9 +3250,13 @@ export async function savePosSettlement(params: {
   storeCode?: string
   settleDate: string
   cashActual?: number | null
+  cashAmt?: number
   cardAmt?: number
+  cardBreakdown?: Record<string, number>
   qrAmt?: number
+  qrBreakdown?: Record<string, number>
   deliveryAppAmt?: number
+  deliveryAppBreakdown?: Record<string, number>
   otherAmt?: number
   memo?: string
   closed?: boolean
@@ -3267,6 +3276,10 @@ export async function updatePosOrder(params: {
   memo?: string
   discountAmt?: number
   discountReason?: string
+  paymentCash?: number
+  paymentCard?: number
+  paymentQr?: number
+  paymentOther?: number
 }) {
   const res = await apiFetch('/api/updatePosOrder', {
     method: 'POST',
@@ -3287,6 +3300,8 @@ export async function updatePosOrderStatus(params: { id: number; status: string 
 
 export async function savePosOrder(params: {
   storeCode?: string
+  /** 주문 접수·결제한 담당자(담당자별 조회용) */
+  createdBy?: string
   orderType?: string
   tableName?: string
   memo?: string

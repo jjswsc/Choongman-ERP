@@ -21,6 +21,9 @@ const langOptions: { value: LangCode; label: string }[] = [
   { value: "th", label: "ไทย" },
   { value: "mm", label: "မြန်မာ" },
   { value: "la", label: "ລາວ" },
+  { value: "kh", label: "ខ្មែរ" },
+  { value: "vi", label: "Tiếng Việt" },
+  { value: "ms", label: "Bahasa Melayu" },
 ]
 
 export function AppHeader() {
