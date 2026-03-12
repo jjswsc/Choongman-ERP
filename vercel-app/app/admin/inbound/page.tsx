@@ -526,7 +526,16 @@ export default function InboundPage() {
 
   const printInbound = React.useCallback(
     (row: InboundTableRow) => {
-      const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
+      const locale = {
+        ko: "ko-KR",
+        en: "en-US",
+        th: "th-TH",
+        mm: "my-MM",
+        la: "lo-LA",
+        kh: "km-KH",
+        vi: "vi-VN",
+        ms: "ms-MY",
+      }[lang] || "en-US"
       const inboundDateStr = row.date ? new Date(row.date).toLocaleDateString(locale) : ""
       const poDateStr = row.poDate ? new Date(row.poDate).toLocaleDateString(locale) : ""
       const tbodyHtml = row.items

@@ -81,7 +81,16 @@ export function AdminPurchaseOrderHistory() {
   const exportPoExcel = (po: PurchaseOrderRow) => {
     const cart = parseCart(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
+    const locale = {
+      ko: "ko-KR",
+      en: "en-US",
+      th: "th-TH",
+      mm: "my-MM",
+      la: "lo-LA",
+      kh: "km-KH",
+      vi: "vi-VN",
+      ms: "ms-MY",
+    }[lang] || "en-US"
     const dateStr = po.created_at ? new Date(po.created_at).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
@@ -174,7 +183,16 @@ ${allRows.map((row, ri) => {
   const printPo = (po: PurchaseOrderRow) => {
     const cart = parseCart(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
-    const locale = { ko: "ko-KR", en: "en-US", th: "th-TH", mm: "my-MM", la: "lo-LA" }[lang] || "en-US"
+    const locale = {
+      ko: "ko-KR",
+      en: "en-US",
+      th: "th-TH",
+      mm: "my-MM",
+      la: "lo-LA",
+      kh: "km-KH",
+      vi: "vi-VN",
+      ms: "ms-MY",
+    }[lang] || "en-US"
     const dateStr = po.created_at
       ? new Date(po.created_at).toLocaleDateString(locale)
       : new Date().toLocaleDateString(locale)
