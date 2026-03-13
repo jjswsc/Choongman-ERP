@@ -293,7 +293,7 @@ export default function PosTerminalPage() {
       const typedName = takeoutMemberName.trim()
       if (typedName) {
         const matched = takeoutOrders.find((o) => String(o.customerName || '').trim() === typedName)
-        const visual = matched ? getOrderVisual(matched) : { status: null as const, createdAt: undefined, targetMin: 0 }
+        const visual = matched ? getOrderVisual(matched) : { status: null, createdAt: undefined, targetMin: 0 }
         return [{
           id: `takeout-member-${typedName}`,
           label: typedName,
@@ -307,7 +307,7 @@ export default function PosTerminalPage() {
       const names = Array.from(new Set(filteredTakeoutMembers.filter(Boolean))).slice(0, 7)
       return names.map((name) => {
         const matched = takeoutOrders.find((o) => String(o.customerName || '').trim() === name)
-        const visual = matched ? getOrderVisual(matched) : { status: null as const, createdAt: undefined, targetMin: 0 }
+        const visual = matched ? getOrderVisual(matched) : { status: null, createdAt: undefined, targetMin: 0 }
         return {
           id: `takeout-member-${name}`,
           label: name,
@@ -326,7 +326,7 @@ export default function PosTerminalPage() {
         const m = raw.match(/(\d+)/)
         return m ? Number(m[1]) === slotNo : raw === slotLabel
       })
-      const visual = matched ? getOrderVisual(matched) : { status: null as const, createdAt: undefined, targetMin: 0 }
+      const visual = matched ? getOrderVisual(matched) : { status: null, createdAt: undefined, targetMin: 0 }
       return {
         id: `takeout-slot-${slotNo}`,
         label: slotLabel,

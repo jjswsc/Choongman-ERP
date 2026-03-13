@@ -3519,6 +3519,9 @@ export interface Member {
   lineLinked: boolean
   lineUserId?: string
   lineDisplayName?: string
+  tierCode?: string
+  pointBalance?: number
+  lifetimeAmount?: number
   createdAt?: string
   updatedAt?: string
 }
