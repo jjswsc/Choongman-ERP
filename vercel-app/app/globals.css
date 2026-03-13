@@ -29,10 +29,10 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
-  --color-success: hsl(var(--success));
-  --color-success-foreground: hsl(var(--success-foreground));
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-info: hsl(var(--info));
   --color-info-foreground: hsl(var(--info-foreground));
   --radius-sm: calc(var(--radius) - 4px);
@@ -137,10 +137,10 @@ body {
     --sidebar-border: 220 20% 26%;
     --sidebar-ring: 220 70% 50%;
     --sidebar-section: 220 15% 55%;
-    --success: 152 60% 42%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    --success: oklch(0.55 0.18 165);
+    --success-foreground: oklch(1 0 0);
+    --warning: oklch(0.75 0.15 60);
+    --warning-foreground: oklch(0.25 0.05 60);
     --info: 214 80% 52%;
     --info-foreground: 0 0% 100%;
   }

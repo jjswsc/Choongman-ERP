@@ -527,6 +527,22 @@ export default function PosOrderPage() {
     }
   }
 
+  const POS_PAPER_WIDTH_MM = 80
+  const POS_PAPER_SIDE_PADDING_MM = 3
+  const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
+    @page { size: ${POS_PAPER_WIDTH_MM}mm auto; margin: 0; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      width: ${POS_PAPER_WIDTH_MM}mm;
+      box-sizing: border-box;
+      font-family: ${fontFamily};
+      font-size: ${fontSizePx}px;
+      padding: ${POS_PAPER_SIDE_PADDING_MM}mm;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  `
+
   const handlePrintReceipt = () => {
     if (!receiptRef.current) return
     const printContent = receiptRef.current.innerHTML
@@ -541,7 +557,7 @@ export default function PosOrderPage() {
         <head>
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
-            body { font-family: 'Courier New', monospace; font-size: 12px; padding: 16px; max-width: 280px; }
+            ${getPosPaperBaseCss("'Courier New', monospace", 12)}
             .receipt-content { }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
             .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
@@ -605,7 +621,7 @@ export default function PosOrderPage() {
           <!DOCTYPE html>
           <html><head><title>${escapeHtml(slip.label)}</title>
           <style>
-            body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
+            ${getPosPaperBaseCss("sans-serif", 18)}
             .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
             .k-row { margin: 6px 0; font-size: 18px; }
             .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }

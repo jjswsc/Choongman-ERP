@@ -34,6 +34,8 @@ export interface PosTerminalMenuScreenProps {
   selectedTableName: string
   /** 테이블 선택 화면으로 돌아가기 */
   onBack: () => void
+  /** 뒤로가기 버튼 라벨 (기본: 테이블 선택) */
+  backButtonLabel?: string
   /** 메뉴/옵션 선택 후 장바구니에 추가할 때 (이름·가격은 옵션 반영된 최종값) */
   onAddItem: (item: { id: string; name: string; price: number }) => void
   className?: string
@@ -42,6 +44,7 @@ export interface PosTerminalMenuScreenProps {
 export function PosTerminalMenuScreen({
   selectedTableName,
   onBack,
+  backButtonLabel,
   onAddItem,
   className,
 }: PosTerminalMenuScreenProps) {
@@ -201,7 +204,7 @@ export function PosTerminalMenuScreen({
       <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
         <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
-          {t('posBackToTableSelect') || '테이블 선택'}
+          {backButtonLabel || t('posBackToTableSelect') || '테이블 선택'}
         </Button>
         <span className="text-sm font-medium text-muted-foreground">
           {t('posTableLabel')}: <span className="text-foreground font-semibold">{selectedTableName}</span>

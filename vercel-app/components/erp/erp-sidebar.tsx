@@ -81,6 +81,17 @@ const mainItems: MenuItem[] = [
 
 const menuSections: MenuSection[] = [
   {
+    titleKey: "posMemberManage",
+    items: [
+      { titleKey: "memberList", icon: Users, href: "/admin/members" },
+      { titleKey: "lineMembers", icon: MessageSquareWarning, href: "/admin/members/line" },
+      { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
+      { titleKey: "memberCoupons", icon: Tag, href: "/admin/members/coupons" },
+      { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
+      { titleKey: "memberTiers", icon: TrendingUp, href: "/admin/members/tiers" },
+    ],
+  },
+  {
     titleKey: "adminSectionSales",
     items: [
       { titleKey: "adminSalesManagement", icon: BarChart3, href: "/admin/sales-management" },

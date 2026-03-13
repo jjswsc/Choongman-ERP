@@ -3197,6 +3197,12 @@ export interface PosOrder {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  memberId?: number
+  memberNo?: string
+  couponCode?: string
+  couponDiscountAmt?: number
+  pointUsed?: number
+  pointEarned?: number
   items: PosOrderItem[]
   subtotal: number
   vat: number
@@ -3298,6 +3304,12 @@ export async function updatePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  memberId?: number
+  memberNo?: string
+  couponCode?: string
+  couponDiscountAmt?: number
+  pointUsed?: number
+  pointEarned?: number
 }) {
   const res = await apiFetch('/api/updatePosOrder', {
     method: 'POST',
@@ -3345,6 +3357,12 @@ export async function savePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  memberId?: number
+  memberNo?: string
+  couponCode?: string
+  couponDiscountAmt?: number
+  pointUsed?: number
+  pointEarned?: number
   items: PosOrderItem[]
 }) {
   const res = await apiFetch('/api/savePosOrder', {
@@ -3353,6 +3371,220 @@ export async function savePosOrder(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; orderId?: number; orderNo?: string; message?: string }>
+}
+
+export async function getLineMembers(params?: { q?: string; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.q) q.set('q', params.q)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetch('/api/members/line' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<Array<{
+    member: Member
+    identity: {
+      id: number
+      providerUserId: string
+      displayName: string
+      pictureUrl: string
+      status: string
+      linkedAt: string
+      lastSeenAt: string
+    }
+  }>>
+}
+
+export async function linkMemberLine(params: {
+  memberId: number
+  lineUserId: string
+  displayName?: string
+  pictureUrl?: string
+}) {
+  const res = await apiFetch(`/api/members/${params.memberId}/link-line`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function unlinkMemberLine(params: { memberId: number; lineUserId?: string }) {
+  const res = await apiFetch(`/api/members/${params.memberId}/unlink-line`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getMemberPoints(params?: { memberId?: number; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.memberId) q.set('memberId', String(params.memberId))
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetch('/api/member-points?' + q.toString())
+  return res.json() as Promise<Array<{
+    id: number
+    memberId: number
+    orderId: number | null
+    kind: string
+    points: number
+    amount: number
+    note: string
+    createdAt: string
+  }>>
+}
+
+export async function adjustMemberPoints(params: { memberId: number; points: number; note?: string }) {
+  const res = await apiFetch('/api/member-points/adjust', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getMemberTiers() {
+  const res = await apiFetch('/api/member-tiers')
+  return res.json() as Promise<Array<{ code: string; name: string; min_amount: number; point_rate: number }>>
+}
+
+export async function saveMemberTier(params: { code: string; name: string; minAmount: number; pointRate: number }) {
+  const res = await apiFetch('/api/member-tiers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function recalculateMemberTier(params?: { memberId?: number }) {
+  const res = await apiFetch('/api/member-tiers/recalculate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params || {}),
+  })
+  return res.json() as Promise<{ success: boolean; updated?: number; message?: string }>
+}
+
+export async function getMemberVisits(params?: { memberId?: number; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.memberId) q.set('memberId', String(params.memberId))
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetch('/api/member-visits' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<Array<{
+    orderId: number
+    memberId: number
+    memberNo: string
+    storeCode: string
+    orderNo: string
+    total: number
+    visitedAt: string
+  }>>
+}
+
+export async function getMemberCoupons(params?: { memberId?: number; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.memberId) q.set('memberId', String(params.memberId))
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetch('/api/member-coupons' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<Array<{
+    id: number
+    memberId: number
+    couponCode: string
+    issuedAt: string
+    usedAt: string
+    orderId: number | null
+    status: string
+  }>>
+}
+
+export async function issueMemberCoupon(params: { memberId: number; couponCode: string }) {
+  const res = await apiFetch('/api/member-coupons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface Member {
+  id: number
+  memberNo: string
+  name: string
+  phone: string
+  email: string
+  source: string
+  status: string
+  lineLinked: boolean
+  lineUserId?: string
+  lineDisplayName?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function getMembers(params?: { q?: string; limit?: number }) {
+  const q = new URLSearchParams()
+  if (params?.q) q.set('q', params.q)
+  if (params?.limit != null) q.set('limit', String(params.limit))
+  const suffix = q.toString()
+  const res = await apiFetch('/api/members' + (suffix ? `?${suffix}` : ''))
+  const json = await res.json().catch(() => [])
+  if (!Array.isArray(json)) return []
+  return json as Member[]
+}
+
+export async function createMember(params: {
+  name: string
+  phone?: string
+  email?: string
+  source?: string
+  lineUserId?: string
+  lineDisplayName?: string
+  linePictureUrl?: string
+}) {
+  const res = await apiFetch('/api/members', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; member?: Member }>
+}
+
+export async function updateMember(params: {
+  id: number
+  name?: string
+  phone?: string
+  email?: string
+  status?: string
+}) {
+  const res = await apiFetch(`/api/members/${params.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: params.name,
+      phone: params.phone,
+      email: params.email,
+      status: params.status,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; member?: Member }>
+}
+
+export async function registerLineMember(params: {
+  lineUserId: string
+  displayName?: string
+  pictureUrl?: string
+  phone?: string
+  email?: string
+  name?: string
+}) {
+  const res = await apiFetch('/api/members/line-register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; member?: Member }>
 }
 
 export async function saveVendor(params: {

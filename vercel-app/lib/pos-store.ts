@@ -14,14 +14,26 @@ const FLOOR_H = 480
 const DEFAULT_GRID_COLS = Math.round(FLOOR_W / GRID_SIZE)
 const DEFAULT_GRID_ROWS = Math.round(FLOOR_H / GRID_SIZE)
 
+function mapOrderType(orderType: string): Order['type'] {
+  const v = String(orderType || '').toLowerCase()
+  if (v === 'delivery') return 'delivery'
+  if (v === 'takeout') return 'takeout'
+  return 'dine-in'
+}
+
+function mapOrderStatus(status: string): Order['status'] {
+  const v = String(status || '').toLowerCase()
+  if (v === 'completed') return 'completed'
+  if (v === 'ready') return 'ready'
+  if (v === 'pending') return 'pending'
+  return 'preparing'
+}
+
 function posOrderToOrder(po: PosOrder): Order {
-  const status = String(po.status ?? 'pending').toLowerCase()
-  const orderStatus: Order['status'] =
-    status === 'completed' ? 'completed' : 'preparing'
   return {
     id: String(po.id),
     tableId: undefined,
-    type: 'dine-in',
+    type: mapOrderType(po.orderType),
     items: (po.items || []).map((it) => ({
       id: String(it.id ?? ''),
       name: String(it.name ?? ''),
@@ -31,8 +43,10 @@ function posOrderToOrder(po: PosOrder): Order {
       servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
     })),
     total: Number(po.total ?? 0) || 0,
-    status: orderStatus,
+    status: mapOrderStatus(po.status),
     createdAt: new Date(po.createdAt || Date.now()),
+    customerName: String(po.tableName || '').trim() || undefined,
+    memo: String(po.memo || '').trim() || undefined,
   }
 }
 
@@ -81,57 +95,6 @@ function layoutToTables(
   })
 }
 
-const DEFAULT_ORDERS: Order[] = [
-  {
-    id: 'o1',
-    type: 'delivery',
-    items: [{ id: 'i1', name: '후라이드 치킨', quantity: 2, price: 18000 }],
-    total: 36000,
-    status: 'preparing',
-    createdAt: new Date(Date.now() - 15 * 60000),
-    customerName: '김민수',
-    customerPhone: '010-1234-5678',
-    address: '서울시 강남구 테헤란로 123',
-  },
-  {
-    id: 'o2',
-    type: 'delivery',
-    items: [
-      { id: 'i2', name: '양념 치킨', quantity: 1, price: 19000 },
-      { id: 'i3', name: '콜라 1.5L', quantity: 1, price: 3000 },
-    ],
-    total: 22000,
-    status: 'pending',
-    createdAt: new Date(Date.now() - 5 * 60000),
-    customerName: '이지영',
-    customerPhone: '010-9876-5432',
-    address: '서울시 서초구 서초대로 456',
-  },
-  {
-    id: 'o3',
-    type: 'takeout',
-    items: [{ id: 'i4', name: '반반 치킨', quantity: 1, price: 20000 }],
-    total: 20000,
-    status: 'ready',
-    createdAt: new Date(Date.now() - 25 * 60000),
-    customerName: '박철수',
-    customerPhone: '010-5555-1234',
-  },
-  {
-    id: 'o4',
-    type: 'takeout',
-    items: [
-      { id: 'i5', name: '간장 치킨', quantity: 1, price: 19000 },
-      { id: 'i6', name: '치즈볼', quantity: 2, price: 4000 },
-    ],
-    total: 27000,
-    status: 'preparing',
-    createdAt: new Date(Date.now() - 10 * 60000),
-    customerName: '최영희',
-    customerPhone: '010-7777-8888',
-  },
-]
-
 export function usePosStore() {
   const { stores: storeCodes } = useStoreList()
   const { auth } = useAuth()
@@ -139,7 +102,7 @@ export function usePosStore() {
   const [stores, setStores] = useState<Store[]>([])
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
   const [currentStoreId, setCurrentStoreId] = useState<string>('')
-  const [orders, setOrders] = useState<Order[]>(DEFAULT_ORDERS)
+  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
@@ -162,14 +125,17 @@ export function usePosStore() {
           }).catch(() => []),
         ])
         const layout = layoutRes.layout || []
-        const dineInOrders = (ordersRes || []).filter(
+        const activeOrders = (ordersRes || []).filter(
+          (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+        )
+        const dineInOrders = activeOrders.filter(
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
             !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
-        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout }
+        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
       })
     )
       .then((results) => {
@@ -178,6 +144,10 @@ export function usePosStore() {
         results.forEach((r) => { layouts[r.storeCode] = r.layout })
         setStores(storeList)
         setLayoutByStoreId(layouts)
+        const mergedOrders = results
+          .flatMap((r) => r.activeOrders || [])
+          .map(posOrderToOrder)
+        setOrders(mergedOrders)
         setCurrentStoreId((prev) => {
           const next = auth?.store && storeCodes.includes(auth.store) ? auth.store : storeCodes[0]
           return storeList.some((s) => s.id === prev) ? prev : next ?? storeCodes[0] ?? ''
@@ -256,14 +226,17 @@ export function usePosStore() {
           getPosOrders({ storeCode, startStr: businessDate, endStr: businessDate }).catch(() => []),
         ])
         const layout = layoutRes.layout || []
-        const dineInOrders = (ordersRes || []).filter(
+        const activeOrders = (ordersRes || []).filter(
+          (o) => !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+        )
+        const dineInOrders = activeOrders.filter(
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
             !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
-        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout }
+        return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
       })
     )
       .then((results) => {
@@ -272,6 +245,10 @@ export function usePosStore() {
         results.forEach((r) => { layouts[r.storeCode] = r.layout })
         setStores(storeList)
         setLayoutByStoreId(layouts)
+        const mergedOrders = results
+          .flatMap((r) => r.activeOrders || [])
+          .map(posOrderToOrder)
+        setOrders(mergedOrders)
       })
       .catch(() => {})
       .finally(() => setLoading(false))

@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
       payment_card?: number
       payment_qr?: number
       payment_other?: number
+      member_id?: number
+      member_no?: string
+      coupon_code?: string
+      coupon_discount_amt?: number
+      point_used?: number
+      point_earned?: number
       items_json?: string
       subtotal?: number
       vat?: number
@@ -49,13 +55,13 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 500,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -85,6 +91,12 @@ export async function GET(request: NextRequest) {
         paymentCard: Number(r.payment_card) ?? 0,
         paymentQr: Number(r.payment_qr) ?? 0,
         paymentOther: Number(r.payment_other) ?? 0,
+        memberId: Number(r.member_id) || 0,
+        memberNo: String(r.member_no ?? ''),
+        couponCode: String(r.coupon_code ?? ''),
+        couponDiscountAmt: Number(r.coupon_discount_amt) ?? 0,
+        pointUsed: Number(r.point_used) ?? 0,
+        pointEarned: Number(r.point_earned) ?? 0,
         items: (() => {
           try {
             const arr = JSON.parse(r.items_json || '[]')
