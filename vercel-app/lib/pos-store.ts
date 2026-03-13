@@ -5,6 +5,7 @@ import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
 import { getPosTableLayout, getPosOrders, type PosTableItem, type PosOrder } from '@/lib/api-client'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 
 /** 관리자 테이블 배치와 동일한 픽셀 그리드 (pos-table-layout-content 기준) */
 const GRID_SIZE = 24
@@ -26,6 +27,8 @@ function posOrderToOrder(po: PosOrder): Order {
       name: String(it.name ?? ''),
       quantity: Number(it.qty ?? 0) || 0,
       price: Number(it.price ?? 0) || 0,
+      servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
+      servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
     })),
     total: Number(po.total ?? 0) || 0,
     status: orderStatus,
@@ -147,15 +150,15 @@ export function usePosStore() {
       return
     }
     setLoading(true)
-    const today = new Date().toISOString().slice(0, 10)
+    const businessDate = getPosBusinessDateStr()
     Promise.all(
       storeCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
           getPosOrders({
             storeCode,
-            startStr: today,
-            endStr: today,
+            startStr: businessDate,
+            endStr: businessDate,
           }).catch(() => []),
         ])
         const layout = layoutRes.layout || []
@@ -245,13 +248,12 @@ export function usePosStore() {
   const refetchStores = useCallback(() => {
     if (!storeCodes?.length) return Promise.resolve()
     setLoading(true)
-    const now = new Date()
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const businessDate = getPosBusinessDateStr()
     return Promise.all(
       storeCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
-          getPosOrders({ storeCode, startStr: today, endStr: today }).catch(() => []),
+          getPosOrders({ storeCode, startStr: businessDate, endStr: businessDate }).catch(() => []),
         ])
         const layout = layoutRes.layout || []
         const dineInOrders = (ordersRes || []).filter(

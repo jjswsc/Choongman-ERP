@@ -2,10 +2,10 @@
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import dynamic from "next/dynamic"
-import { LayoutGrid, Monitor, CreditCard, Truck } from "lucide-react"
+import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosTableLayoutContent } from "@/components/pos/pos-table-layout-content"
+import { PosCookingRulesContent } from "@/components/pos/pos-cooking-rules-content"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
@@ -16,12 +16,12 @@ export default function PosScreenConfigPage() {
   const t = useT(lang)
   const tabParam = searchParams.get("tab") || "tables"
   const [activeTab, setActiveTab] = React.useState(
-    ["tables", "menus", "payment", "delivery"].includes(tabParam) ? tabParam : "tables"
+    ["tables", "cook-timer", "menus", "payment", "delivery"].includes(tabParam) ? tabParam : "tables"
   )
 
   React.useEffect(() => {
     const t = searchParams.get("tab")
-    if (t && ["tables", "menus", "payment", "delivery"].includes(t)) setActiveTab(t)
+    if (t && ["tables", "cook-timer", "menus", "payment", "delivery"].includes(t)) setActiveTab(t)
   }, [searchParams])
 
   return (
@@ -51,6 +51,10 @@ export default function PosScreenConfigPage() {
               <Monitor className="h-3.5 w-3.5" />
               {t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
             </TabsTrigger>
+            <TabsTrigger value="cook-timer" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+              <TimerReset className="h-3.5 w-3.5" />
+              {t("posScreenConfigTabCookTimer") || "조리시간/색상"}
+            </TabsTrigger>
             <TabsTrigger value="payment" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
               <CreditCard className="h-3.5 w-3.5" />
               {t("posScreenConfigTabPayment") || "결제 기능"}
@@ -72,6 +76,16 @@ export default function PosScreenConfigPage() {
           <TabsContent value="menus" className="mt-0">
             <div className="min-h-[600px] rounded-xl border bg-card overflow-hidden">
               <iframe src="/admin/pos-menus" className="w-full border-0" style={{ minHeight: "calc(100vh - 280px)" }} title={t("posScreenConfigTabMenus") || "메뉴 화면 구성"} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="cook-timer" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabCookTimer") || "조리시간/색상"}</h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                {t("posScreenConfigTabCookTimerDesc") || "테이블 색상 전환 시간 및 레시피 대비 색상 기준을 설정합니다."}
+              </p>
+              <PosCookingRulesContent />
             </div>
           </TabsContent>
 

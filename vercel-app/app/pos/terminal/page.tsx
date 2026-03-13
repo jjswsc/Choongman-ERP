@@ -8,17 +8,17 @@ import { TableOrderPanel } from '@/components/pos/table-order-panel'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
 import { OrderList } from '@/components/pos/order-list'
 import { CartPanel, type CartPanelHandle } from '@/components/pos/cart-panel'
+import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { LayoutGrid, Bike, Package } from 'lucide-react'
-import { getPosTodaySales, savePosOrder, updatePosOrder } from '@/lib/api-client'
+import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
+import { getPosMenus, getPosPrinterSettings, getPosTodaySales, savePosOrder, updatePosOrder, type PosMenu } from '@/lib/api-client'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { canAccessAdmin, isOfficeRole } from '@/lib/permissions'
-import { cn } from '@/lib/utils'
 
 export type DeliveryApp = 'grab' | 'lineman' | 'shopee'
 type PendingPayRequest = {
@@ -60,10 +60,34 @@ export default function PosTerminalPage() {
   const [activeTab, setActiveTab] = useState<'tables' | 'delivery' | 'takeout'>('tables')
   const [pendingDineInOrderId, setPendingDineInOrderId] = useState<number | null>(null)
   const [pendingPayRequest, setPendingPayRequest] = useState<PendingPayRequest>(null)
+  const [liveSearchOpen, setLiveSearchOpen] = useState(false)
   const [todaySales, setTodaySales] = useState<{
     completedCount: number
     completedTotal: number
   } | null>(null)
+  const [cookingRules, setCookingRules] = useState<{
+    freshMaxMin: number
+    warningMaxMin: number
+    mode: 'elapsed' | 'recipe_diff'
+    recipeWarnDiff: number
+    recipeUrgentDiff: number
+    delayBadgeEnabled: boolean
+    delaySoundEnabled: boolean
+    delayAlertOverMin: number
+  }>({
+    freshMaxMin: 10,
+    warningMaxMin: 15,
+    mode: 'elapsed',
+    recipeWarnDiff: 0,
+    recipeUrgentDiff: 5,
+    delayBadgeEnabled: true,
+    delaySoundEnabled: false,
+    delayAlertOverMin: 0,
+  })
+  const [menuTargets, setMenuTargets] = useState<{ byId: Map<string, number>; byName: Map<string, number> }>({
+    byId: new Map(),
+    byName: new Map(),
+  })
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -76,6 +100,54 @@ export default function PosTerminalPage() {
       .then(s => setTodaySales({ completedCount: s.completedCount, completedTotal: s.completedTotal }))
       .catch(() => setTodaySales(null))
   }, [auth?.store])
+
+  useEffect(() => {
+    if (!currentStoreId) return
+    getPosPrinterSettings({ storeCode: currentStoreId })
+      .then((s) => {
+        const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
+        const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
+        const warnDiff = Math.max(0, Number(s.cookingRecipeWarningDiffMin ?? 0))
+        const urgentDiff = Math.max(warnDiff + 1, Number(s.cookingRecipeUrgentDiffMin ?? 5))
+        setCookingRules({
+          freshMaxMin: fresh,
+          warningMaxMin: warning,
+          mode: s.cookingRuleMode === 'recipe_diff' ? 'recipe_diff' : 'elapsed',
+          recipeWarnDiff: warnDiff,
+          recipeUrgentDiff: urgentDiff,
+          delayBadgeEnabled: s.cookingDelayBadgeEnabled !== false,
+          delaySoundEnabled: Boolean(s.cookingDelaySoundEnabled),
+          delayAlertOverMin: Math.max(0, Number(s.cookingDelayAlertOverMin ?? 0)),
+        })
+      })
+      .catch(() => {
+        setCookingRules({
+          freshMaxMin: 10,
+          warningMaxMin: 15,
+          mode: 'elapsed',
+          recipeWarnDiff: 0,
+          recipeUrgentDiff: 5,
+          delayBadgeEnabled: true,
+          delaySoundEnabled: false,
+          delayAlertOverMin: 0,
+        })
+      })
+    getPosMenus()
+      .then((list) => {
+        const byId = new Map<string, number>()
+        const byName = new Map<string, number>()
+        ;(list || []).forEach((m: PosMenu) => {
+          const min = Number(m.cookingTimeMin ?? 0)
+          if (!Number.isFinite(min) || min <= 0) return
+          const id = String(m.id || '').trim()
+          const name = String(m.name || '').trim()
+          if (id) byId.set(id, min)
+          if (name) byName.set(name, min)
+        })
+        setMenuTargets({ byId, byName })
+      })
+      .catch(() => setMenuTargets({ byId: new Map(), byName: new Map() }))
+  }, [currentStoreId])
 
   useEffect(() => {
     if (!pendingPayRequest) return
@@ -123,9 +195,9 @@ export default function PosTerminalPage() {
         canChangeStore={isOfficeRole(auth?.role || '')}
         canAccessAdmin={canAccessAdmin(auth?.role || '')}
       />
-      <div className="flex-1 flex min-h-0">
-        <div className="flex-1 flex flex-col min-h-0">
-          <Tabs value={activeTab} onValueChange={v => setActiveTab(v as 'tables' | 'delivery' | 'takeout')} className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex min-h-0 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col min-h-0">
+          <Tabs value={activeTab} onValueChange={v => setActiveTab(v as 'tables' | 'delivery' | 'takeout')} className="flex-1 min-w-0 flex flex-col min-h-0">
             {orderType === 'delivery' && activeTab === 'delivery' && (
               <div className="px-4 py-2 border-b border-border bg-card flex items-center gap-3 flex-wrap shrink-0">
                 <span className="text-sm font-medium text-muted-foreground">{t('posSelectDeliveryApp')}</span>
@@ -151,24 +223,30 @@ export default function PosTerminalPage() {
               </div>
             )}
             <div className="border-b border-border bg-card px-4 shrink-0">
-              <TabsList className="h-10 bg-transparent">
-                <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
-                  <LayoutGrid className="w-4 h-4" />
-                  {t('posTableStatus')}
-                </TabsTrigger>
-                <TabsTrigger value="delivery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
-                  <Bike className="w-4 h-4" />
-                  {t('posOrderTypeDelivery') || '배달'}
-                </TabsTrigger>
-                <TabsTrigger value="takeout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
-                  <Package className="w-4 h-4" />
-                  {t('posOrderTypeTakeout') || '포장'}
-                </TabsTrigger>
-              </TabsList>
+              <div className="flex h-10 items-center justify-between gap-2">
+                <TabsList className="h-10 bg-transparent">
+                  <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                    <LayoutGrid className="w-4 h-4" />
+                    {t('posTableStatus')}
+                  </TabsTrigger>
+                  <TabsTrigger value="delivery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                    <Bike className="w-4 h-4" />
+                    {t('posOrderTypeDelivery') || '배달'}
+                  </TabsTrigger>
+                  <TabsTrigger value="takeout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2">
+                    <Package className="w-4 h-4" />
+                    {t('posOrderTypeTakeout') || '포장'}
+                  </TabsTrigger>
+                </TabsList>
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLiveSearchOpen(true)}>
+                  <Search className="h-3.5 w-3.5" />
+                  {t('posLiveMenuSearch') || '실시간 메뉴 검색'}
+                </Button>
+              </div>
             </div>
 
             {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 전체 메뉴 화면(대분류/카테고리/옵션) */}
-            <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 flex flex-col">
+            <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 min-w-0 flex flex-col">
               {selectedTableId ? (
                 <div className="flex-1 min-h-0">
                   <PosTerminalMenuScreen
@@ -186,24 +264,57 @@ export default function PosTerminalPage() {
                     </div>
                   )}
                   {!loadingTables && currentLayout.length > 0 && (
-                    <TableFloorView
-                      layout={currentLayout}
-                      getTableStatus={(id, name) => {
-                        const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
-                        if (!tbl?.order) return null
-                        const status = tbl.order.status === 'completed' ? 'completed' : 'preparing'
-                        const createdAt = tbl.order.createdAt
-                          ? (tbl.order.createdAt instanceof Date
-                              ? tbl.order.createdAt.toISOString()
-                              : String(tbl.order.createdAt))
-                          : undefined
-                        return { status, createdAt }
-                      }}
-                      selectedTableId={selectedTableId ?? servingTableId}
-                      onTableSelect={handleTableSelect}
-                      t={t}
-                      className="h-full min-h-[320px]"
-                    />
+                    <div className="h-full min-h-[320px] min-w-0">
+                      <TableFloorView
+                        layout={currentLayout}
+                        getTableStatus={(id, name) => {
+                          const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
+                          if (!tbl?.order) return null
+                          const items = Array.isArray(tbl.order.items) ? tbl.order.items : []
+                          const servedCount = items.filter((item) => Boolean(item.servedAt)).length
+                          const status: 'preparing' | 'partial_served' | 'completed' =
+                            tbl.order.status === 'completed'
+                              ? 'completed'
+                              : servedCount > 0
+                                ? 'partial_served'
+                                : 'preparing'
+                          const getItemTarget = (item: { id?: string; name?: string }) => {
+                            const rawId = String(item.id || '').trim()
+                            const rawName = String(item.name || '').trim()
+                            const normalizedId = rawId.replace(/^cart-existing-\d+-/, '')
+                            const idKey = normalizedId.split('-')[0]
+                            if (idKey && menuTargets.byId.has(idKey)) return menuTargets.byId.get(idKey) || 0
+                            const mainName = rawName.replace(/\s*\(.+\)\s*$/, '').trim()
+                            if (mainName && menuTargets.byName.has(mainName)) return menuTargets.byName.get(mainName) || 0
+                            return 0
+                          }
+                          const targetMin = status === 'preparing'
+                            ? Math.max(
+                                0,
+                                ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') }))
+                              )
+                            : 0
+                          const createdAt = tbl.order.createdAt
+                            ? (tbl.order.createdAt instanceof Date
+                                ? tbl.order.createdAt.toISOString()
+                                : String(tbl.order.createdAt))
+                            : undefined
+                          return { status, createdAt, targetMin }
+                        }}
+                        selectedTableId={selectedTableId ?? servingTableId}
+                        onTableSelect={handleTableSelect}
+                        t={t}
+                        className="h-full min-h-[320px]"
+                        freshMaxMin={cookingRules.freshMaxMin}
+                        warningMaxMin={cookingRules.warningMaxMin}
+                        ruleMode={cookingRules.mode}
+                        recipeWarningDiffMin={cookingRules.recipeWarnDiff}
+                        recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
+                        delayBadgeEnabled={cookingRules.delayBadgeEnabled}
+                        delaySoundEnabled={cookingRules.delaySoundEnabled}
+                        delayAlertOverMin={cookingRules.delayAlertOverMin}
+                      />
+                    </div>
                   )}
                   {!loadingTables && currentLayout.length === 0 && currentStore && (
                     <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
@@ -299,7 +410,7 @@ export default function PosTerminalPage() {
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
                 })
                 if (!res.success) {
-                  const msg = (res as { message?: string }).message || '주문 저장에 실패했습니다.'
+                  const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
                   alert(msg)
                   return
                 }
@@ -353,6 +464,12 @@ export default function PosTerminalPage() {
           )}
         </div>
       </div>
+      <LiveMenuSearchDialog
+        open={liveSearchOpen}
+        onOpenChange={setLiveSearchOpen}
+        storeCode={currentStoreId}
+        t={t}
+      />
     </div>
   )
 }

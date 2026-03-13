@@ -38,6 +38,8 @@ export interface OrderItem {
   quantity: number
   price: number
   options?: string[]
+  servedAt?: string | null
+  servedBy?: string | null
 }
 
 export interface Store {

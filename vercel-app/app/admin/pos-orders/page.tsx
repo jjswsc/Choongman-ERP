@@ -33,6 +33,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const orderTypeLabels: Record<string, string> = {
   dine_in: "매장",
@@ -47,6 +48,81 @@ const statusLabels: Record<string, string> = {
   ready: "준비완료",
   completed: "완료",
   cancelled: "취소",
+}
+
+function formatBangkokDateTime(value: string | null | undefined) {
+  if (!value) return "-"
+  const dt = new Date(value)
+  if (Number.isNaN(dt.getTime())) return "-"
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(dt)
+}
+
+function getTargetCookingTimeMin(
+  item: { id?: string; name?: string },
+  menuById: Map<string, PosMenu>,
+  menuByName: Map<string, PosMenu>
+): number | null {
+  const rawId = String(item.id || "").trim()
+  const rawName = String(item.name || "").trim()
+  const menuIds = Array.from(menuById.keys()).sort((a, b) => b.length - a.length)
+
+  const fromMenu = (m?: PosMenu) =>
+    m && m.cookingTimeMin != null && Number(m.cookingTimeMin) > 0
+      ? Number(m.cookingTimeMin)
+      : null
+
+  const resolveByIdPrefix = (id: string): number | null => {
+    if (!id) return null
+    const exact = fromMenu(menuById.get(id))
+    if (exact != null) return exact
+    for (const menuId of menuIds) {
+      if (id.startsWith(`${menuId}-`)) {
+        const v = fromMenu(menuById.get(menuId))
+        if (v != null) return v
+      }
+    }
+    return null
+  }
+
+  let target = resolveByIdPrefix(rawId)
+  if (target != null) return target
+
+  if (rawId.startsWith("cart-existing-")) {
+    const stripped = rawId.replace(/^cart-existing-\d+-/, "")
+    target = resolveByIdPrefix(stripped)
+    if (target != null) return target
+  }
+
+  if (rawId.startsWith("promo-")) {
+    const promoId = rawId.slice("promo-".length)
+    target = fromMenu(menuById.get(promoId))
+    if (target != null) return target
+  }
+
+  if (rawId.startsWith("banban-")) {
+    const m = rawName.match(/\((.+?)\s*\/\s*(.+?)\)/)
+    if (m) {
+      const left = fromMenu(menuByName.get(m[1].trim())) ?? 0
+      const right = fromMenu(menuByName.get(m[2].trim())) ?? 0
+      const v = Math.max(left, right)
+      if (v > 0) return v
+    }
+  }
+
+  const mainName = rawName.replace(/\s*\(.+\)\s*$/, "").trim()
+  target = fromMenu(menuByName.get(mainName))
+  if (target != null) return target
+
+  return null
 }
 
 export default function PosOrdersPage() {
@@ -65,6 +141,7 @@ export default function PosOrdersPage() {
   const [storeFilter, setStoreFilter] = React.useState("All")
   const [statusFilter, setStatusFilter] = React.useState("all")
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
+  const [activeTab, setActiveTab] = React.useState<"orders" | "cookTime">("orders")
   const [updatingId, setUpdatingId] = React.useState<number | null>(null)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [editOrder, setEditOrder] = React.useState<PosOrder | null>(null)
@@ -326,6 +403,83 @@ export default function PosOrdersPage() {
     }
   }, [isToday, orders, statusFilter])
 
+  const cookingRows = React.useMemo(() => {
+    const menuById = new Map(menus.map((m) => [String(m.id), m]))
+    const menuByName = new Map(menus.map((m) => [String(m.name).trim(), m]))
+    const rows: Array<{
+      orderId: number
+      orderNo: string
+      storeCode: string
+      tableName: string
+      orderCreatedAt: string
+      itemId: string
+      itemName: string
+      qty: number
+      servedAt: string
+      elapsedMin: number
+      targetMin: number | null
+      diffMin: number | null
+      compareLabel: string
+    }> = []
+
+    for (const o of filteredOrders) {
+      const orderTs = new Date(o.createdAt || "")
+      if (Number.isNaN(orderTs.getTime())) continue
+      for (const it of o.items || []) {
+        const servedAt = String((it as { servedAt?: string | null })?.servedAt || "").trim()
+        if (!servedAt) continue
+        const servedTs = new Date(servedAt)
+        if (Number.isNaN(servedTs.getTime())) continue
+        const elapsedMin = Math.max(0, Math.round((servedTs.getTime() - orderTs.getTime()) / 60000))
+        const itemId = String((it as { id?: string })?.id || "")
+        const itemName = String((it as { name?: string })?.name || "-")
+        const targetMin = getTargetCookingTimeMin(
+          { id: itemId, name: itemName },
+          menuById,
+          menuByName
+        )
+        const diffMin = targetMin != null ? elapsedMin - targetMin : null
+        const compareLabel =
+          targetMin == null
+            ? "미설정"
+            : (elapsedMin - targetMin) <= 0
+              ? "정상"
+              : (elapsedMin - targetMin) <= 5
+                ? "주의"
+                : "지연"
+        rows.push({
+          orderId: o.id,
+          orderNo: o.orderNo,
+          storeCode: o.storeCode,
+          tableName: o.tableName || "-",
+          orderCreatedAt: o.createdAt,
+          itemId,
+          itemName,
+          qty: Number((it as { qty?: number })?.qty ?? 1) || 1,
+          servedAt,
+          elapsedMin,
+          targetMin,
+          diffMin,
+          compareLabel,
+        })
+      }
+    }
+
+    rows.sort((a, b) => b.servedAt.localeCompare(a.servedAt))
+    return rows
+  }, [filteredOrders, menus])
+
+  const cookSummary = React.useMemo(() => {
+    if (cookingRows.length === 0) return { avgMin: 0, maxMin: 0, minMin: 0 }
+    const mins = cookingRows.map((r) => r.elapsedMin)
+    const sum = mins.reduce((s, n) => s + n, 0)
+    return {
+      avgMin: Math.round(sum / mins.length),
+      maxMin: Math.max(...mins),
+      minMin: Math.min(...mins),
+    }
+  }, [cookingRows])
+
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -445,214 +599,325 @@ export default function PosOrdersPage() {
           </div>
         )}
 
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
-                    {t("posOrderNo") || "주문번호"}
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
-                    매장
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
-                    {t("posOrderType") || "유형"}
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-16">
-                    {t("posTable") || "테이블"}
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
-                    합계
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
-                    {t("posStatus") || "상태"}
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-36">
-                    주문일시
-                  </th>
-                  <th className="px-5 py-3 text-[11px] font-bold text-center w-12" />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-5 py-12 text-center text-muted-foreground"
-                    >
-                      {t("itemsNoResults") || "조회된 내역이 없습니다."}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredOrders.map((o) => (
-                    <React.Fragment key={o.id}>
-                      <tr
-                        className={cn(
-                          "border-b cursor-pointer hover:bg-muted/20",
-                          expandedId === o.id && "bg-muted/20"
-                        )}
-                        onClick={() =>
-                          setExpandedId((prev) => (prev === o.id ? null : o.id))
-                        }
-                      >
-                        <td className="px-5 py-3">
-                          <button
-                            type="button"
-                            onClick={(e) => copyOrderNo(o.orderNo, e)}
-                            className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition"
-                            title={t("posCopyOrderNo") || "복사"}
-                          >
-                            {o.orderNo}
-                          </button>
-                        </td>
-                        <td className="px-5 py-3 text-center">{o.storeCode || "-"}</td>
-                        <td className="px-5 py-3 text-center">
-                          {orderTypeLabels[o.orderType] || o.orderType}
-                        </td>
-                        <td className="px-5 py-3 text-center text-muted-foreground">
-                          {o.orderType === "dine_in" && o.tableName ? o.tableName : "-"}
-                        </td>
-                        <td className="px-5 py-3 text-right font-bold tabular-nums">
-                          {o.total?.toLocaleString()} ฿
-                        </td>
-                        <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            value={o.status}
-                            onValueChange={(v) => handleStatusChange(o.id, v)}
-                            disabled={updatingId === o.id}
-                          >
-                            <SelectTrigger
-                              className={cn(
-                                "h-8 w-full max-w-[110px] border-0 shadow-none focus:ring-0",
-                                o.status === "completed" && "text-green-600",
-                                o.status === "cancelled" && "text-muted-foreground"
-                              )}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(statusLabels).map(([k, v]) => (
-                                <SelectItem key={k} value={k}>
-                                  {v}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="px-5 py-3 text-center text-muted-foreground">
-                          {o.createdAt
-                            ? new Date(o.createdAt).toLocaleString("ko-KR")
-                            : "-"}
-                        </td>
-                        <td className="px-5 py-3">
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition",
-                              expandedId === o.id && "rotate-180"
-                            )}
-                          />
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="orders">{t("posOrderList") || "POS 주문 내역"}</TabsTrigger>
+            <TabsTrigger value="cookTime">조리 시간 분석</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="orders" className="mt-0">
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
+                        {t("posOrderNo") || "주문번호"}
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
+                        매장
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
+                        {t("posOrderType") || "유형"}
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-16">
+                        {t("posTable") || "테이블"}
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
+                        합계
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
+                        {t("posStatus") || "상태"}
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-36">
+                        주문일시
+                      </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-12" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-5 py-12 text-center text-muted-foreground"
+                        >
+                          {t("itemsNoResults") || "조회된 내역이 없습니다."}
                         </td>
                       </tr>
-                      {expandedId === o.id && (
-                        <tr className="border-b bg-muted/10">
-                          <td colSpan={8} className="px-5 py-4">
-                            <div className="space-y-2 text-xs">
-                              {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0) || (o.deliveryFee ?? 0) > 0 || (o.packagingFee ?? 0) > 0 || ((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0) && (
-                                <div className="mb-2 pb-2 border-b">
-                                  {o.tableName && (
-                                    <div className="text-muted-foreground">
-                                      {t("posTable") || "테이블"}: {o.tableName}
-                                    </div>
+                    ) : (
+                      filteredOrders.map((o) => (
+                        <React.Fragment key={o.id}>
+                          <tr
+                            className={cn(
+                              "border-b cursor-pointer hover:bg-muted/20",
+                              expandedId === o.id && "bg-muted/20"
+                            )}
+                            onClick={() =>
+                              setExpandedId((prev) => (prev === o.id ? null : o.id))
+                            }
+                          >
+                            <td className="px-5 py-3">
+                              <button
+                                type="button"
+                                onClick={(e) => copyOrderNo(o.orderNo, e)}
+                                className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition"
+                                title={t("posCopyOrderNo") || "복사"}
+                              >
+                                {o.orderNo}
+                              </button>
+                            </td>
+                            <td className="px-5 py-3 text-center">{o.storeCode || "-"}</td>
+                            <td className="px-5 py-3 text-center">
+                              {orderTypeLabels[o.orderType] || o.orderType}
+                            </td>
+                            <td className="px-5 py-3 text-center text-muted-foreground">
+                              {o.orderType === "dine_in" && o.tableName ? o.tableName : "-"}
+                            </td>
+                            <td className="px-5 py-3 text-right font-bold tabular-nums">
+                              {o.total?.toLocaleString()} ฿
+                            </td>
+                            <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
+                              <Select
+                                value={o.status}
+                                onValueChange={(v) => handleStatusChange(o.id, v)}
+                                disabled={updatingId === o.id}
+                              >
+                                <SelectTrigger
+                                  className={cn(
+                                    "h-8 w-full max-w-[110px] border-0 shadow-none focus:ring-0",
+                                    o.status === "completed" && "text-green-600",
+                                    o.status === "cancelled" && "text-muted-foreground"
                                   )}
-                                  {o.memo && (
-                                    <div className="text-muted-foreground mt-0.5">
-                                      {t("posCustomerMemo") || "메모"}: {o.memo}
-                                    </div>
-                                  )}
-                                  {o.discountAmt && o.discountAmt > 0 && (
-                                    <div className="text-green-600 mt-0.5">
-                                      {t("posDiscount") || "할인"}: -{o.discountAmt.toLocaleString()} ฿
-                                      {o.discountReason && ` (${o.discountReason})`}
-                                    </div>
-                                  )}
-                                  {(o.deliveryFee ?? 0) > 0 && (
-                                    <div className="text-muted-foreground mt-0.5">
-                                      {t("posDeliveryFee") || "배달 수수료"}: +{(o.deliveryFee ?? 0).toLocaleString()} ฿
-                                    </div>
-                                  )}
-                                  {(o.packagingFee ?? 0) > 0 && (
-                                    <div className="text-muted-foreground mt-0.5">
-                                      {t("posPackagingFee") || "포장 수수료"}: +{(o.packagingFee ?? 0).toLocaleString()} ฿
-                                    </div>
-                                  )}
-                                  {((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0 && (
-                                    <div className="mt-1 pt-1 border-t border-dashed text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-                                      {(o.paymentCash ?? 0) > 0 && <span>{t("posPaymentCash") || "현금"}: {(o.paymentCash ?? 0).toLocaleString()} ฿</span>}
-                                      {(o.paymentCard ?? 0) > 0 && <span>{t("posPaymentCard") || "카드"}: {(o.paymentCard ?? 0).toLocaleString()} ฿</span>}
-                                      {(o.paymentQr ?? 0) > 0 && <span>{t("posPaymentQr") || "QR"}: {(o.paymentQr ?? 0).toLocaleString()} ฿</span>}
-                                      {(o.paymentOther ?? 0) > 0 && <span>{t("posPaymentOther") || "기타"}: {(o.paymentOther ?? 0).toLocaleString()} ฿</span>}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {o.items?.length ? (
-                                o.items.map((it: { name?: string; price?: number; qty?: number }, idx: number) => (
-                                  <div
-                                    key={idx}
-                                    className="flex justify-between text-muted-foreground"
-                                  >
-                                    <span>
-                                      {it.name} × {it.qty ?? 1}
-                                    </span>
-                                    <span className="tabular-nums">
-                                      {((it.price ?? 0) * (it.qty ?? 1)).toLocaleString()}{" "}
-                                      ฿
-                                    </span>
-                                  </div>
-                                ))
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
-                              <div className="pt-2 flex flex-wrap gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 px-2 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handlePrintKitchenSlip(o)
-                                  }}
                                 >
-                                  <Printer className="h-3 w-3" />
-                                  {t("posKitchenSlip") || "주방 주문서"}
-                                </Button>
-                                {EDITABLE_STATUSES.includes(o.status) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-7 gap-1 px-2 text-xs"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleOpenEdit(o)
-                                    }}
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                    {t("posOrderEdit") || "수정"}
-                                  </Button>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(statusLabels).map(([k, v]) => (
+                                    <SelectItem key={k} value={k}>
+                                      {v}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-5 py-3 text-center text-muted-foreground">
+                              {o.createdAt
+                                ? new Date(o.createdAt).toLocaleString("ko-KR")
+                                : "-"}
+                            </td>
+                            <td className="px-5 py-3">
+                              <ChevronDown
+                                className={cn(
+                                  "h-4 w-4 transition",
+                                  expandedId === o.id && "rotate-180"
                                 )}
-                              </div>
-                            </div>
+                              />
+                            </td>
+                          </tr>
+                          {expandedId === o.id && (
+                            <tr className="border-b bg-muted/10">
+                              <td colSpan={8} className="px-5 py-4">
+                                <div className="space-y-2 text-xs">
+                                  {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0) || (o.deliveryFee ?? 0) > 0 || (o.packagingFee ?? 0) > 0 || ((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0) && (
+                                    <div className="mb-2 pb-2 border-b">
+                                      {o.tableName && (
+                                        <div className="text-muted-foreground">
+                                          {t("posTable") || "테이블"}: {o.tableName}
+                                        </div>
+                                      )}
+                                      {o.memo && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {t("posCustomerMemo") || "메모"}: {o.memo}
+                                        </div>
+                                      )}
+                                      {o.discountAmt && o.discountAmt > 0 && (
+                                        <div className="text-green-600 mt-0.5">
+                                          {t("posDiscount") || "할인"}: -{o.discountAmt.toLocaleString()} ฿
+                                          {o.discountReason && ` (${o.discountReason})`}
+                                        </div>
+                                      )}
+                                      {(o.deliveryFee ?? 0) > 0 && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {t("posDeliveryFee") || "배달 수수료"}: +{(o.deliveryFee ?? 0).toLocaleString()} ฿
+                                        </div>
+                                      )}
+                                      {(o.packagingFee ?? 0) > 0 && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {t("posPackagingFee") || "포장 수수료"}: +{(o.packagingFee ?? 0).toLocaleString()} ฿
+                                        </div>
+                                      )}
+                                      {((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0 && (
+                                        <div className="mt-1 pt-1 border-t border-dashed text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                                          {(o.paymentCash ?? 0) > 0 && <span>{t("posPaymentCash") || "현금"}: {(o.paymentCash ?? 0).toLocaleString()} ฿</span>}
+                                          {(o.paymentCard ?? 0) > 0 && <span>{t("posPaymentCard") || "카드"}: {(o.paymentCard ?? 0).toLocaleString()} ฿</span>}
+                                          {(o.paymentQr ?? 0) > 0 && <span>{t("posPaymentQr") || "QR"}: {(o.paymentQr ?? 0).toLocaleString()} ฿</span>}
+                                          {(o.paymentOther ?? 0) > 0 && <span>{t("posPaymentOther") || "기타"}: {(o.paymentOther ?? 0).toLocaleString()} ฿</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {o.items?.length ? (
+                                    <>
+                                      <div className="mb-1 text-[11px] text-muted-foreground">
+                                        {(() => {
+                                          const servedCount = o.items.filter((it: { servedAt?: string | null }) => Boolean(it.servedAt)).length
+                                          return `${t("posTableStatusServed") || "서빙 완료"}: ${servedCount}/${o.items.length}`
+                                        })()}
+                                      </div>
+                                      {o.items.map((it: { name?: string; price?: number; qty?: number; servedAt?: string | null }, idx: number) => (
+                                        <div
+                                          key={idx}
+                                          className="flex items-center justify-between gap-2 text-muted-foreground"
+                                        >
+                                          <span className="min-w-0 truncate">
+                                            {it.name} × {it.qty ?? 1}
+                                          </span>
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            {it.servedAt ? (
+                                              <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                                                {t("posTableStatusServed") || "서빙 완료"} {formatBangkokDateTime(it.servedAt)}
+                                              </span>
+                                            ) : (
+                                              <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                                미서빙
+                                              </span>
+                                            )}
+                                            <span className="tabular-nums">
+                                              {((it.price ?? 0) * (it.qty ?? 1)).toLocaleString()}{" "}
+                                              ฿
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                  <div className="pt-2 flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 px-2 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handlePrintKitchenSlip(o)
+                                      }}
+                                    >
+                                      <Printer className="h-3 w-3" />
+                                      {t("posKitchenSlip") || "주방 주문서"}
+                                    </Button>
+                                    {EDITABLE_STATUSES.includes(o.status) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 px-2 text-xs"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleOpenEdit(o)
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                        {t("posOrderEdit") || "수정"}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="cookTime" className="mt-0">
+            <div className="mb-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded bg-muted px-2 py-1">완료 라인: {cookingRows.length}건</span>
+              <span className="rounded bg-muted px-2 py-1">평균 소요: {cookSummary.avgMin}분</span>
+              <span className="rounded bg-muted px-2 py-1">최소: {cookSummary.minMin}분</span>
+              <span className="rounded bg-muted px-2 py-1">최대: {cookSummary.maxMin}분</span>
+              <span className="rounded bg-muted px-2 py-1">기준 미설정: {cookingRows.filter((r) => r.targetMin == null).length}건</span>
+            </div>
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">서빙시각</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">매장</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posOrderNo") || "주문번호"}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-16">{t("posTable") || "테이블"}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[220px]">메뉴</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-12">{t("qty") || "수량"}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">실제 소요</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">기준 조리시간</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">차이</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-16">판정</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cookingRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">
+                          조회 조건에 맞는 서빙 완료 데이터가 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      cookingRows.map((r) => (
+                        <tr key={`${r.orderId}-${r.itemId}-${r.itemName}-${r.servedAt}`} className="border-b">
+                          <td className="px-4 py-3 text-center text-muted-foreground">{formatBangkokDateTime(r.servedAt)}</td>
+                          <td className="px-4 py-3 text-center">{r.storeCode || "-"}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={(e) => copyOrderNo(r.orderNo, e)}
+                              className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/20 transition"
+                              title={t("posCopyOrderNo") || "복사"}
+                            >
+                              {r.orderNo}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-center text-muted-foreground">{r.tableName || "-"}</td>
+                          <td className="px-4 py-3">{r.itemName}</td>
+                          <td className="px-4 py-3 text-center tabular-nums">{r.qty}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              {r.elapsedMin}분
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center tabular-nums">
+                            {r.targetMin != null ? `${r.targetMin}분` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-center tabular-nums">
+                            {r.diffMin != null ? `${r.diffMin > 0 ? "+" : ""}${r.diffMin}분` : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={cn(
+                                "rounded px-2 py-0.5 text-xs",
+                                r.compareLabel === "정상" && "bg-emerald-50 text-emerald-700",
+                                r.compareLabel === "주의" && "bg-amber-50 text-amber-700",
+                                r.compareLabel === "지연" && "bg-rose-50 text-rose-700",
+                                r.compareLabel === "미설정" && "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {r.compareLabel}
+                            </span>
                           </td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* 주문 수정 모달 */}

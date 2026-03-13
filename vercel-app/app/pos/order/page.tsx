@@ -20,6 +20,7 @@ import {
   type PosPromoWithItems,
 } from "@/lib/api-client"
 import { savePosOrderWithOffline } from "@/lib/offline"
+import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -219,7 +220,7 @@ export default function PosOrderPage() {
 
   /** 반반용: 코드 c로 시작하는 치킨 메뉴 (기본가=S 순살, 옵션 없이 맛 2개 선택) */
   const chickenMenusForBanban = React.useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getBangkokDateStr()
     return menus.filter(
       (m) =>
         m.isActive &&
@@ -229,7 +230,7 @@ export default function PosOrderPage() {
     )
   }, [menus])
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = getBangkokDateStr()
   /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
@@ -372,7 +373,7 @@ export default function PosOrderPage() {
   const clearCart = () => setCart([])
 
   const loadRecentOrders = React.useCallback(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getPosBusinessDateStr()
     setRecentLoading(true)
     getPosOrders({
       startStr: today,

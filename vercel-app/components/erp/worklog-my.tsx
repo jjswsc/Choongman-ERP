@@ -66,6 +66,19 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const [selectedContinueIds, setSelectedContinueIds] = React.useState<Set<string>>(new Set())
   const [contentTransMap, setContentTransMap] = React.useState<Record<string, string>>({})
   const [hasSearched, setHasSearched] = React.useState(false)
+  const unfinishedCount = React.useMemo(() => {
+    const continueCount = localContinue.filter((it) => {
+      const hasContent = Boolean((it.content || "").trim())
+      const progress = Number(it.progress) || 0
+      return hasContent && progress < 100
+    }).length
+    const todayCount = localToday.filter((it) => {
+      const hasContent = Boolean((it.content || "").trim())
+      const progress = Number(it.progress) || 0
+      return hasContent && progress < 100
+    }).length
+    return continueCount + todayCount
+  }, [localContinue, localToday])
 
   React.useEffect(() => {
     if (userName) setSelectedStaff(userName)
@@ -284,6 +297,15 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const handleSaveProgress = async () => {
     if (!selectedStaff) return
+    if (unfinishedCount > 0) {
+      const proceed = confirm(
+        `미완료 업무가 ${unfinishedCount}건 있습니다.\n` +
+        `Save Progress만 하면 Continue가 생성되지 않습니다.\n` +
+        `익일 Continue 생성을 원하면 Daily Close를 눌러주세요.\n\n` +
+        `그래도 Save Progress를 진행할까요?`
+      )
+      if (!proceed) return
+    }
     setSaving(true)
     try {
       const allLogs: WorkLogItem[] = [

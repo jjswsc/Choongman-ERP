@@ -13,10 +13,16 @@ import {
 } from "@/components/ui/select"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { getPurchaseOrders, getVendorsForPurchase, processPurchaseOrderApproval, type PurchaseOrderRow } from "@/lib/api-client"
+import {
+  getPurchaseOrders,
+  getVendorsForPurchase,
+  processPurchaseOrderApproval,
+  processPurchaseOrderCancel,
+  type PurchaseOrderRow,
+} from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
-import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search } from "lucide-react"
+import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search, XCircle } from "lucide-react"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -25,6 +31,7 @@ export function AdminPurchaseOrderHistory() {
   const [loading, setLoading] = React.useState(false)
   const [hasSearched, setHasSearched] = React.useState(false)
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
+  const [cancellingId, setCancellingId] = React.useState<number | null>(null)
   const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
   const [startDate, setStartDate] = React.useState(() => {
     const d = new Date()
@@ -77,6 +84,30 @@ export function AdminPurchaseOrderHistory() {
     setHasSearched(true)
     load()
   }, [load])
+
+  const handleCancel = React.useCallback(
+    async (po: PurchaseOrderRow) => {
+      const id = po.id
+      if (!id) return
+      const ok = window.confirm(t("posCancelConfirm") || t("cancel") || "취소하시겠습니까?")
+      if (!ok) return
+
+      setCancellingId(id)
+      try {
+        const res = await processPurchaseOrderCancel({ poId: id })
+        if (res.success) {
+          load()
+        } else {
+          alert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+        }
+      } catch (e) {
+        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setCancellingId(null)
+      }
+    },
+    [load, t]
+  )
 
   const exportPoExcel = (po: PurchaseOrderRow) => {
     const cart = parseCart(po.cart_json)
@@ -350,6 +381,18 @@ ${allRows.map((row, ri) => {
                               title={t("adminApproved")}
                             >
                               <CheckCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {po.status !== "Approved" && po.status !== "Cancelled" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                              onClick={() => handleCancel(po)}
+                              disabled={cancellingId === po.id}
+                              title={t("cancel") || "취소"}
+                            >
+                              <XCircle className="h-4 w-4" />
                             </Button>
                           )}
                           <Button

@@ -3119,6 +3119,14 @@ export interface PosPrinterSettings {
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
+  cookingFreshMaxMin?: number
+  cookingWarningMaxMin?: number
+  cookingRuleMode?: 'elapsed' | 'recipe_diff'
+  cookingRecipeWarningDiffMin?: number
+  cookingRecipeUrgentDiffMin?: number
+  cookingDelayBadgeEnabled?: boolean
+  cookingDelaySoundEnabled?: boolean
+  cookingDelayAlertOverMin?: number
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -3136,6 +3144,14 @@ export async function savePosPrinterSettings(params: {
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
+  cookingFreshMaxMin?: number
+  cookingWarningMaxMin?: number
+  cookingRuleMode?: 'elapsed' | 'recipe_diff'
+  cookingRecipeWarningDiffMin?: number
+  cookingRecipeUrgentDiffMin?: number
+  cookingDelayBadgeEnabled?: boolean
+  cookingDelaySoundEnabled?: boolean
+  cookingDelayAlertOverMin?: number
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
     method: 'POST',
@@ -3162,6 +3178,8 @@ export interface PosOrderItem {
   name: string
   price: number
   qty: number
+  servedAt?: string | null
+  servedBy?: string | null
 }
 
 export interface PosOrder {
@@ -3296,6 +3314,20 @@ export async function updatePosOrderStatus(params: { id: number; status: string 
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function markPosOrderItemServed(params: {
+  id: number
+  itemId: string
+  served: boolean
+  servedBy?: string
+}) {
+  const res = await apiFetch('/api/markPosOrderItemServed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; servedCount?: number; totalCount?: number }>
 }
 
 export async function savePosOrder(params: {
@@ -4291,6 +4323,15 @@ export async function updatePurchaseOrderInvoice(params: {
 
 export async function processPurchaseOrderApproval(params: { poId: number }) {
   const res = await apiFetch('/api/processPurchaseOrderApproval', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function processPurchaseOrderCancel(params: { poId: number }) {
+  const res = await apiFetch('/api/processPurchaseOrderCancel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

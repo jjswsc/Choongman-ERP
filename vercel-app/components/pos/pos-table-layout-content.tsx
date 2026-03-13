@@ -93,14 +93,19 @@ export function PosTableLayoutContent() {
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [draggingId, setDraggingId] = React.useState<string | null>(null)
+  const [selectBox, setSelectBox] = React.useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
   const [editingNameId, setEditingNameId] = React.useState<string | null>(null)
   const [showGrid, setShowGrid] = React.useState(true)
   const [gridCols, setGridCols] = React.useState(6)
   const [gridRows, setGridRows] = React.useState(5)
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
-  const dragStartRef = React.useRef<{ id: string; startX: number; startY: number; mouseX: number; mouseY: number } | null>(null)
+  const dragStartRef = React.useRef<{ id: string; startX: number; startY: number; mouseX: number; mouseY: number; scaleX: number; scaleY: number } | null>(null)
+  const selectStartRef = React.useRef<{ startX: number; startY: number; additive: boolean } | null>(null)
+  const skipNextFloorClickRef = React.useRef(false)
+  const floorRef = React.useRef<HTMLDivElement | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
 
@@ -136,6 +141,14 @@ export function PosTableLayoutContent() {
     }
   }, [selectedId, layout])
 
+  React.useEffect(() => {
+    const idSet = new Set(layout.map((x) => x.id))
+    setSelectedIds((prev) => prev.filter((id) => idSet.has(id)))
+    if (selectedId && !idSet.has(selectedId)) {
+      setSelectedId(null)
+    }
+  }, [layout, selectedId])
+
   const addTable = (preset: (typeof SHAPE_PRESETS)[0]) => {
     const maxY = layout.length ? Math.max(...layout.map((t) => t.y + t.h)) : 0
     const y = maxY + 20 > FLOOR_H - preset.h ? 20 : maxY + 20
@@ -153,6 +166,7 @@ export function PosTableLayoutContent() {
     }
     setLayout((prev) => [...prev, newTable])
     setSelectedId(newTable.id)
+    setSelectedIds([newTable.id])
     setEditingNameId(newTable.id)
   }
 
@@ -160,6 +174,7 @@ export function PosTableLayoutContent() {
     if (!confirm(t("posTableDeleteConfirm") || "이 테이블을 삭제하시겠습니까?")) return
     setLayout((prev) => prev.filter((t) => t.id !== id))
     if (selectedId === id) setSelectedId(null)
+    setSelectedIds((prev) => prev.filter((v) => v !== id))
   }
 
   const snapToGrid = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE
@@ -203,10 +218,28 @@ export function PosTableLayoutContent() {
 
   const handleMouseDown = (e: React.MouseEvent, id: string) => {
     if ((e.target as HTMLElement).closest("input, button")) return
+    const multiSelect = e.shiftKey || e.ctrlKey || e.metaKey
+    if (multiSelect) {
+      e.preventDefault()
+      setSelectedIds((prev) => {
+        const has = prev.includes(id)
+        const next = has ? prev.filter((v) => v !== id) : [...prev, id]
+        if (!has) setSelectedId(id)
+        else if (selectedId === id) setSelectedId(next[0] ?? null)
+        return next
+      })
+      setDraggingId(null)
+      dragStartRef.current = null
+      return
+    }
     e.preventDefault()
     const item = layout.find((x) => x.id === id)
     if (!item) return
+    const rect = floorRef.current?.getBoundingClientRect()
+    const scaleX = rect && rect.width > 0 ? FLOOR_W / rect.width : 1
+    const scaleY = rect && rect.height > 0 ? FLOOR_H / rect.height : 1
     setSelectedId(id)
+    setSelectedIds([id])
     setDraggingId(id)
     dragStartRef.current = {
       id,
@@ -214,19 +247,48 @@ export function PosTableLayoutContent() {
       startY: item.y,
       mouseX: e.clientX,
       mouseY: e.clientY,
+      scaleX,
+      scaleY,
     }
   }
 
+  const handleFloorMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("[data-table-id]")) return
+    if ((e.target as HTMLElement).closest("button, input")) return
+    if (!floorRef.current) return
+    const rect = floorRef.current.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const scaleX = FLOOR_W / rect.width
+    const scaleY = FLOOR_H / rect.height
+    const x = Math.max(0, Math.min(FLOOR_W, (e.clientX - rect.left) * scaleX))
+    const y = Math.max(0, Math.min(FLOOR_H, (e.clientY - rect.top) * scaleY))
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey
+    selectStartRef.current = { startX: x, startY: y, additive }
+    setSelectBox({ x1: x, y1: y, x2: x, y2: y })
+    if (!additive) {
+      setSelectedId(null)
+      setSelectedIds([])
+    }
+    skipNextFloorClickRef.current = true
+  }
+
   const handleFloorClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).id === "pos-floor") setSelectedId(null)
+    if (skipNextFloorClickRef.current) {
+      skipNextFloorClickRef.current = false
+      return
+    }
+    if ((e.target as HTMLElement).id === "pos-floor") {
+      setSelectedId(null)
+      setSelectedIds([])
+    }
   }
 
   React.useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = dragStartRef.current
       if (!d) return
-      const dx = e.clientX - d.mouseX
-      const dy = e.clientY - d.mouseY
+      const dx = (e.clientX - d.mouseX) * d.scaleX
+      const dy = (e.clientY - d.mouseY) * d.scaleY
       setLayout((prev) =>
         prev.map((t) => {
           if (t.id !== d.id) return t
@@ -252,10 +314,70 @@ export function PosTableLayoutContent() {
     }
   }, [draggingId])
 
+  React.useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const s = selectStartRef.current
+      if (!s || !floorRef.current) return
+      const rect = floorRef.current.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+      const scaleX = FLOOR_W / rect.width
+      const scaleY = FLOOR_H / rect.height
+      const x = Math.max(0, Math.min(FLOOR_W, (e.clientX - rect.left) * scaleX))
+      const y = Math.max(0, Math.min(FLOOR_H, (e.clientY - rect.top) * scaleY))
+      setSelectBox({ x1: s.startX, y1: s.startY, x2: x, y2: y })
+    }
+    const onUp = () => {
+      const s = selectStartRef.current
+      const box = selectBox
+      if (!s || !box) {
+        selectStartRef.current = null
+        setSelectBox(null)
+        return
+      }
+      const minX = Math.min(box.x1, box.x2)
+      const maxX = Math.max(box.x1, box.x2)
+      const minY = Math.min(box.y1, box.y2)
+      const maxY = Math.max(box.y1, box.y2)
+      const w = maxX - minX
+      const h = maxY - minY
+      const isClickLike = w < 3 && h < 3
+      if (!isClickLike) {
+        const hitIds = layout
+          .filter((t) => {
+            const tx1 = t.x
+            const ty1 = t.y
+            const tx2 = t.x + t.w
+            const ty2 = t.y + t.h
+            return tx1 < maxX && tx2 > minX && ty1 < maxY && ty2 > minY
+          })
+          .map((t) => t.id)
+        setSelectedIds((prev) => {
+          const next = s.additive ? Array.from(new Set([...prev, ...hitIds])) : hitIds
+          setSelectedId(next[0] ?? null)
+          return next
+        })
+      }
+      selectStartRef.current = null
+      setSelectBox(null)
+      setTimeout(() => {
+        skipNextFloorClickRef.current = false
+      }, 0)
+    }
+    if (selectStartRef.current) {
+      document.addEventListener("mousemove", onMove)
+      document.addEventListener("mouseup", onUp)
+    }
+    return () => {
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+    }
+  }, [layout, selectBox])
+
   const handleReset = () => {
     if (!confirm(t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?")) return
     setLayout([])
     setSelectedId(null)
+    setSelectedIds([])
   }
 
   const handleAutoName = () => {
@@ -273,7 +395,7 @@ export function PosTableLayoutContent() {
   }
 
   const alignTables = (align: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
-    const ids = selectedId ? [selectedId] : layout.map((t) => t.id)
+    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : layout.map((t) => t.id)
     if (ids.length === 0) return
     const items = layout.filter((t) => ids.includes(t.id))
     if (items.length === 0) return
@@ -284,7 +406,6 @@ export function PosTableLayoutContent() {
     const maxY = Math.max(...items.map((t) => t.y + t.h))
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
-
     setLayout((prev) =>
       prev.map((t) => {
         if (!ids.includes(t.id)) return t
@@ -309,6 +430,87 @@ export function PosTableLayoutContent() {
     )
   }
 
+  const distributeTablesBoth = () => {
+    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []
+    if (ids.length < 3) return
+    const items = layout.filter((t) => ids.includes(t.id))
+    if (items.length < 3) return
+
+    const byX = [...items].sort((a, b) => a.x - b.x)
+    const byY = [...items].sort((a, b) => a.y - b.y)
+
+    const xPatch: Record<string, number> = {}
+    const yPatch: Record<string, number> = {}
+
+    const firstX = byX[0]
+    const lastX = byX[byX.length - 1]
+    const spanX = (lastX.x + lastX.w) - firstX.x
+    const innerW = byX.slice(1, -1).reduce((s, t) => s + t.w, 0)
+    const gapX = (spanX - firstX.w - lastX.w - innerW) / (byX.length - 1)
+    let cursorX = firstX.x + firstX.w + gapX
+    for (let i = 1; i < byX.length - 1; i++) {
+      xPatch[byX[i].id] = Math.max(0, Math.min(FLOOR_W - byX[i].w, snapToGrid(cursorX)))
+      cursorX += byX[i].w + gapX
+    }
+
+    const firstY = byY[0]
+    const lastY = byY[byY.length - 1]
+    const spanY = (lastY.y + lastY.h) - firstY.y
+    const innerH = byY.slice(1, -1).reduce((s, t) => s + t.h, 0)
+    const gapY = (spanY - firstY.h - lastY.h - innerH) / (byY.length - 1)
+    let cursorY = firstY.y + firstY.h + gapY
+    for (let i = 1; i < byY.length - 1; i++) {
+      yPatch[byY[i].id] = Math.max(0, Math.min(FLOOR_H - byY[i].h, snapToGrid(cursorY)))
+      cursorY += byY[i].h + gapY
+    }
+
+    setLayout((prev) =>
+      prev.map((t) => ({
+        ...t,
+        ...(xPatch[t.id] != null ? { x: xPatch[t.id] } : {}),
+        ...(yPatch[t.id] != null ? { y: yPatch[t.id] } : {}),
+      }))
+    )
+  }
+
+  const distributeTables = (dir: "horizontal" | "vertical") => {
+    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []
+    if (ids.length < 3) return
+    const items = layout.filter((t) => ids.includes(t.id))
+    if (items.length < 3) return
+
+    if (dir === "horizontal") {
+      const sorted = [...items].sort((a, b) => a.x - b.x)
+      const first = sorted[0]
+      const last = sorted[sorted.length - 1]
+      const span = (last.x + last.w) - first.x
+      const innerWidths = sorted.slice(1, -1).reduce((s, t) => s + t.w, 0)
+      const gap = (span - first.w - last.w - innerWidths) / (sorted.length - 1)
+      let cursor = first.x + first.w + gap
+      const patch: Record<string, number> = {}
+      for (let i = 1; i < sorted.length - 1; i++) {
+        patch[sorted[i].id] = Math.max(0, Math.min(FLOOR_W - sorted[i].w, snapToGrid(cursor)))
+        cursor += sorted[i].w + gap
+      }
+      setLayout((prev) => prev.map((t) => (patch[t.id] != null ? { ...t, x: patch[t.id] } : t)))
+      return
+    }
+
+    const sorted = [...items].sort((a, b) => a.y - b.y)
+    const first = sorted[0]
+    const last = sorted[sorted.length - 1]
+    const span = (last.y + last.h) - first.y
+    const innerHeights = sorted.slice(1, -1).reduce((s, t) => s + t.h, 0)
+    const gap = (span - first.h - last.h - innerHeights) / (sorted.length - 1)
+    let cursor = first.y + first.h + gap
+    const patch: Record<string, number> = {}
+    for (let i = 1; i < sorted.length - 1; i++) {
+      patch[sorted[i].id] = Math.max(0, Math.min(FLOOR_H - sorted[i].h, snapToGrid(cursor)))
+      cursor += sorted[i].h + gap
+    }
+    setLayout((prev) => prev.map((t) => (patch[t.id] != null ? { ...t, y: patch[t.id] } : t)))
+  }
+
   const handleSave = async () => {
     if (!storeCode) {
       alert(t("store") || "매장을 선택하세요.")
@@ -329,6 +531,8 @@ export function PosTableLayoutContent() {
       setSaving(false)
     }
   }
+
+  const selectedCount = selectedIds.length > 0 ? selectedIds.length : selectedId ? 1 : 0
 
   return (
     <div className="space-y-4">
@@ -463,6 +667,10 @@ export function PosTableLayoutContent() {
           </SelectContent>
         </Select>
         <div className="h-6 w-px bg-slate-200" />
+        <span className="text-[11px] text-slate-500">
+          Shift/Ctrl+Click 또는 드래그: 다중 선택
+        </span>
+        <div className="h-6 w-px bg-slate-200" />
         <div className="flex gap-1">
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("left")} disabled={layout.length === 0} title={t("posAlignLeft") || "왼쪽 정렬"}>
             <AlignLeft className="h-4 w-4" />
@@ -473,13 +681,13 @@ export function PosTableLayoutContent() {
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("right")} disabled={layout.length === 0} title={t("posAlignRight") || "오른쪽 정렬"}>
             <AlignRight className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("top")} disabled={layout.length === 0} title={t("posAlignTop") || "위 정렬"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => distributeTables("horizontal")} disabled={selectedCount < 3} title="가로 균등 간격">
             <AlignStartVertical className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("middle")} disabled={layout.length === 0} title={t("posAlignMiddle") || "세로 중앙"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => distributeTables("vertical")} disabled={selectedCount < 3} title="세로 균등 간격">
             <AlignCenterVertical className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("bottom")} disabled={layout.length === 0} title={t("posAlignBottom") || "아래 정렬"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={distributeTablesBoth} disabled={selectedCount < 3} title="가로/세로 균등 간격">
             <AlignEndVertical className="h-4 w-4" />
           </Button>
         </div>
@@ -500,8 +708,10 @@ export function PosTableLayoutContent() {
       {/* 바닥 캔버스 */}
       <div
         id="pos-floor"
+        ref={floorRef}
         className="relative rounded-xl border-2 border-slate-200 bg-slate-100 overflow-visible cursor-crosshair"
-        style={{ width: FLOOR_W, height: FLOOR_H }}
+        style={{ width: '100%', maxWidth: `${FLOOR_W}px`, aspectRatio: `${FLOOR_W} / ${FLOOR_H}` }}
+        onMouseDown={handleFloorMouseDown}
         onClick={handleFloorClick}
       >
         {showGrid && (
@@ -512,7 +722,7 @@ export function PosTableLayoutContent() {
                 linear-gradient(to right, #94a3b8 1px, transparent 1px),
                 linear-gradient(to bottom, #94a3b8 1px, transparent 1px)
               `,
-              backgroundSize: `${FLOOR_W / gridCols}px ${FLOOR_H / gridRows}px`,
+              backgroundSize: `${100 / gridCols}% ${100 / gridRows}%`,
             }}
           />
         )}
@@ -523,6 +733,7 @@ export function PosTableLayoutContent() {
           return (
           <div
             key={item.id}
+            data-table-id={item.id}
             className={cn(
               "absolute flex flex-col items-center justify-center cursor-move select-none transition-all overflow-visible",
               "rounded-xl shadow-sm",
@@ -532,13 +743,14 @@ export function PosTableLayoutContent() {
                 : "bg-[#d4a574] border-amber-800/40 text-stone-800",
               "hover:shadow-md",
               selectedId === item.id && "ring-2 ring-emerald-500 ring-offset-2 border-solid border-amber-700/60 z-10",
+              selectedIds.includes(item.id) && "ring-2 ring-sky-500 ring-offset-2 border-solid border-sky-700/80 z-10 bg-sky-200/35",
               draggingId === item.id && "z-20 shadow-lg scale-[1.02]"
             )}
             style={{
-              left: item.x,
-              top: item.y,
-              width: item.w,
-              height: item.h,
+              left: `${(item.x / FLOOR_W) * 100}%`,
+              top: `${(item.y / FLOOR_H) * 100}%`,
+              width: `${(item.w / FLOOR_W) * 100}%`,
+              height: `${(item.h / FLOOR_H) * 100}%`,
               transform: `rotate(${item.rotation ?? 0}deg)`,
               transformOrigin: "center center",
               boxShadow: !isSquare ? "inset 0 1px 2px rgba(255,255,255,0.3)" : undefined,
@@ -555,8 +767,8 @@ export function PosTableLayoutContent() {
                     : "bg-[#c9a86c] border border-amber-800/50"
                 )}
                 style={{
-                  left: pos.x - SEAT_R,
-                  top: pos.y - SEAT_R,
+                  left: `calc(${(pos.x / Math.max(item.w, 1)) * 100}% - ${SEAT_R}px)`,
+                  top: `calc(${(pos.y / Math.max(item.h, 1)) * 100}% - ${SEAT_R}px)`,
                   width: SEAT_R * 2,
                   height: SEAT_R * 2,
                 }}
@@ -591,6 +803,17 @@ export function PosTableLayoutContent() {
             </button>
           </div>
         )})}
+        {selectBox && (
+          <div
+            className="absolute border border-emerald-500 bg-emerald-400/20 pointer-events-none z-30"
+            style={{
+              left: `${(Math.min(selectBox.x1, selectBox.x2) / FLOOR_W) * 100}%`,
+              top: `${(Math.min(selectBox.y1, selectBox.y2) / FLOOR_H) * 100}%`,
+              width: `${(Math.abs(selectBox.x2 - selectBox.x1) / FLOOR_W) * 100}%`,
+              height: `${(Math.abs(selectBox.y2 - selectBox.y1) / FLOOR_H) * 100}%`,
+            }}
+          />
+        )}
         {layout.length === 0 && !loading && (
           <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
             {t("posTableEmpty") || "테이블 추가 버튼으로 테이블을 배치하세요."}

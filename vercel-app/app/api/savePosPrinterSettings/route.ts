@@ -19,6 +19,14 @@ export async function POST(req: NextRequest) {
     const autoStockDeduction = Boolean(body?.autoStockDeduction)
     const deliveryFee = Math.max(0, Number(body?.deliveryFee ?? 0))
     const packagingFee = Math.max(0, Number(body?.packagingFee ?? 0))
+    const cookingFreshMaxMin = Math.max(1, Number(body?.cookingFreshMaxMin ?? 10))
+    const cookingWarningMaxMin = Math.max(cookingFreshMaxMin + 1, Number(body?.cookingWarningMaxMin ?? 15))
+    const cookingRuleMode = String(body?.cookingRuleMode || 'elapsed') === 'recipe_diff' ? 'recipe_diff' : 'elapsed'
+    const cookingRecipeWarningDiffMin = Math.max(0, Number(body?.cookingRecipeWarningDiffMin ?? 0))
+    const cookingRecipeUrgentDiffMin = Math.max(cookingRecipeWarningDiffMin + 1, Number(body?.cookingRecipeUrgentDiffMin ?? 5))
+    const cookingDelayBadgeEnabled = body?.cookingDelayBadgeEnabled !== false
+    const cookingDelaySoundEnabled = Boolean(body?.cookingDelaySoundEnabled)
+    const cookingDelayAlertOverMin = Math.max(0, Number(body?.cookingDelayAlertOverMin ?? 0))
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
@@ -37,6 +45,14 @@ export async function POST(req: NextRequest) {
       auto_stock_deduction: autoStockDeduction,
       delivery_fee: deliveryFee,
       packaging_fee: packagingFee,
+      cooking_fresh_max_min: cookingFreshMaxMin,
+      cooking_warning_max_min: cookingWarningMaxMin,
+      cooking_rule_mode: cookingRuleMode,
+      cooking_recipe_warning_diff_min: cookingRecipeWarningDiffMin,
+      cooking_recipe_urgent_diff_min: cookingRecipeUrgentDiffMin,
+      cooking_delay_badge_enabled: cookingDelayBadgeEnabled,
+      cooking_delay_sound_enabled: cookingDelaySoundEnabled,
+      cooking_delay_alert_over_min: cookingDelayAlertOverMin,
       updated_at: new Date().toISOString(),
     }
 

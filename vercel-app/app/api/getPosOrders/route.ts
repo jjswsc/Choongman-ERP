@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { toDateStrBangkok } from '@/lib/attendance-utils'
 
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -58,15 +59,15 @@ export async function GET(request: NextRequest) {
       })) as typeof rows
     }
 
-    const startD = startStr ? new Date(startStr + 'T00:00:00') : null
-    const endD = endStr ? new Date(endStr + 'T23:59:59') : null
+    const startDate = startStr ? startStr.slice(0, 10) : ''
+    const endDate = endStr ? endStr.slice(0, 10) : ''
 
     const list = (rows || [])
       .filter((r) => {
-        const dt = r.created_at ? String(r.created_at).slice(0, 19) : ''
-        if (!dt) return false
-        if (startD && new Date(dt) < startD) return false
-        if (endD && new Date(dt) > endD) return false
+        const rowDate = toDateStrBangkok(r.created_at)
+        if (!rowDate) return false
+        if (startDate && rowDate < startDate) return false
+        if (endDate && rowDate > endDate) return false
         return true
       })
       .map((r) => ({

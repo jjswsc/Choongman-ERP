@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Order } from '@/lib/pos-types'
-import { updatePosOrderStatus } from '@/lib/api-client'
+import { markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock } from 'lucide-react'
 
@@ -39,6 +39,7 @@ export function TableOrderPanel({
   const isCompleted = order?.status === 'completed'
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [savingItemId, setSavingItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!order?.items?.length) {
@@ -49,15 +50,36 @@ export function TableOrderPanel({
       setItemServed((prev) => {
         const next = { ...prev }
         order.items.forEach((it) => {
-          if (next[it.id] === undefined) next[it.id] = false
+          next[it.id] = Boolean(it.servedAt)
         })
         return next
       })
     }
   }, [order?.id, order?.items])
 
-  const toggleItemServed = (itemId: string) => {
-    setItemServed((prev) => ({ ...prev, [itemId]: !prev[itemId] }))
+  const toggleItemServed = async (itemId: string) => {
+    if (!order) return
+    const id = Number(order.id)
+    if (Number.isNaN(id)) return
+    const nextServed = !itemServed[itemId]
+    setSavingItemId(itemId)
+    try {
+      const res = await markPosOrderItemServed({
+        id,
+        itemId,
+        served: nextServed,
+      })
+      if (!res.success) {
+        alert(res.message || (t('processFail') || '처리 실패'))
+        return
+      }
+      setItemServed((prev) => ({ ...prev, [itemId]: nextServed }))
+      onServed?.()
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setSavingItemId(null)
+    }
   }
 
   const servedCount = order?.items?.filter((it) => itemServed[it.id]).length ?? 0
@@ -153,7 +175,8 @@ export function TableOrderPanel({
                           size="sm"
                           variant={served ? 'default' : 'outline'}
                           className="shrink-0 h-8 w-8 p-0 self-center"
-                          onClick={() => toggleItemServed(item.id)}
+                          onClick={() => { void toggleItemServed(item.id) }}
+                          disabled={savingItemId === item.id}
                           aria-label={
                             served
                               ? (t('cancel') || '취소')

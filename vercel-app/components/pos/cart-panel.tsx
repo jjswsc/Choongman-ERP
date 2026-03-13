@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, forwardRef, useImperativeHandle } from 'react'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -95,7 +95,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [takeoutMemberName, setTakeoutMemberName] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
   const [memberOptions] = useState<{ value: string; label: string }[]>([]) // TODO: 연동 시 회원 목록 API
-  const [guestCount, setGuestCount] = useState(1)
+  const [guestCount, setGuestCount] = useState(0)
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
   const [customerMemo, setCustomerMemo] = useState('')
@@ -113,9 +113,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
-  const [showOtherPayments, setShowOtherPayments] = useState(true)
+  const [showOtherPayments, setShowOtherPayments] = useState(false)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
+  const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discount = discountType === 'percent'
@@ -155,6 +156,20 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     (parseFloat(payShopeePay) || 0) +
     (parseFloat(payOther) || 0)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
+  const DISCOUNT_PRESETS = [5, 10, 15, 20, 30, 50]
+
+  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr') => {
+    const amount = Math.max(0, total)
+    setPayCash(target === 'cash' ? String(amount) : '0')
+    setPayCard(target === 'card' ? String(amount) : '0')
+    setPayPromptPay(target === 'qr' ? String(amount) : '0')
+    setPayTrueMoney('0')
+    setPayWeChat('0')
+    setPayAlipay('0')
+    setPayLinePay('0')
+    setPayShopeePay('0')
+    setPayOther('0')
+  }
 
   const addItem = (item: { id: string; name: string; price: number }) => {
     const lineId = `cart-${Date.now()}-${item.id}`
@@ -190,6 +205,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const handleClearCart = () => {
     setCartItems([])
+    setGuestCount(0)
     setCustomerMemo('')
     setCouponCode('')
     setDiscountValue(0)
@@ -210,6 +226,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         .filter((item): item is CartItem => item != null)
     )
   }
+
+  useEffect(() => {
+    if (orderType !== 'dine-in') {
+      prevSelectedTableIdRef.current = selectedTable?.id ?? null
+      return
+    }
+
+    const nextTableId = selectedTable?.id ?? null
+    const prevTableId = prevSelectedTableIdRef.current
+
+    // 테이블을 다른 것으로 바꿨을 때만 장바구니/입력값 초기화
+    if (prevTableId && nextTableId && prevTableId !== nextTableId) {
+      handleClearCart()
+    }
+
+    prevSelectedTableIdRef.current = nextTableId
+  }, [orderType, selectedTable?.id])
 
   return (
     <>
@@ -354,9 +387,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div className="flex items-center gap-2">
               <Label className="text-sm flex-shrink-0">{t('posGuestCount') || '손님'}</Label>
               <Select
-                value={guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
+                value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
                 onValueChange={(v) => {
-                  if (v === '__direct__') {
+                  if (v === '__zero__') {
+                    setGuestCount(0)
+                  } else if (v === '__direct__') {
                     setGuestDirectValue(String(guestCount > 9 ? guestCount : 10))
                     setGuestDirectOpen(true)
                   } else {
@@ -368,6 +403,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <span className="tabular-nums">{guestCount}</span>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__zero__">0</SelectItem>
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                     <SelectItem key={n} value={String(n)}>
                       {n}
@@ -510,9 +546,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           {orderType === 'dine-in' && selectedTable && (
             <Button
               className="w-full h-12 text-base font-semibold bg-amber-600 hover:bg-amber-700"
-              disabled={total <= 0 || cartItems.length === 0}
+              disabled={total <= 0 || cartItems.length === 0 || guestCount <= 0}
               onClick={() => {
-                if (total <= 0 || !selectedTable || cartItems.length === 0) return
+                if (total <= 0 || !selectedTable || cartItems.length === 0 || guestCount <= 0) return
                 onOrderSubmit?.({
                   items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
                   tableName: selectedTable.name,
@@ -528,7 +564,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           {orderType !== 'dine-in' && (
             <Button
               className="w-full h-12 text-lg font-semibold bg-primary hover:bg-primary/90"
-              disabled={total <= 0}
+              disabled={total <= 0 || guestCount <= 0}
               onClick={openPaymentModal}
             >
               {t('posPayButton')}
@@ -595,7 +631,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </div>
 
-            {/* 쿠폰 · 할인 (결제 페이지에서 입력/수정) */}
+            {/* 쿠폰 · 할인 (터치 우선: 퍼센트 버튼) */}
             <div className="space-y-3 border rounded-lg p-3 bg-background">
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">{t('posCoupon')}</Label>
@@ -615,54 +651,63 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <div>
                 <Label className="text-xs text-muted-foreground mb-1 block">{t('posDiscount')}</Label>
                 <div className="flex gap-2 flex-wrap">
-                  <div className="flex border rounded-md overflow-hidden shrink-0">
-                    <button
+                  {DISCOUNT_PRESETS.map((pct) => (
+                    <Button
+                      key={pct}
                       type="button"
-                      className={cn(
-                        'px-2 py-1 text-xs transition-colors',
-                        discountType === 'fixed' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                      )}
-                      onClick={() => setDiscountType('fixed')}
+                      size="sm"
+                      variant={discountType === 'percent' && discountValue === pct ? 'default' : 'outline'}
+                      className="h-8 px-2 min-w-[3rem]"
+                      onClick={() => {
+                        setDiscountType('percent')
+                        setDiscountValue(pct)
+                      }}
                     >
-                      W
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        'px-2 py-1 text-xs transition-colors',
-                        discountType === 'percent' ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                      )}
-                      onClick={() => setDiscountType('percent')}
-                    >
-                      %
-                    </button>
-                  </div>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={discountValue}
-                    onChange={e => setDiscountValue(Number(e.target.value))}
-                    className="h-8 text-sm w-20"
-                  />
+                      {pct}%
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => {
+                      setDiscountType('percent')
+                      setDiscountValue(0)
+                    }}
+                  >
+                    {t('reset') || '초기화'}
+                  </Button>
                   <Input
                     placeholder={t('posDiscountReasonPh')}
                     value={discountReason}
                     onChange={e => setDiscountReason(e.target.value)}
-                    className="h-8 text-sm flex-1 min-w-0"
+                    className="h-8 text-sm flex-1 min-w-[9rem]"
                   />
                 </div>
               </div>
             </div>
 
-            {/* 결제 수단: 현금 / 카드 / 프롬프트페이 / 기타(태국 앱) */}
+            {/* 결제 수단: 버튼 우선(현금/카드/QR 코드) + 기타 접힘 */}
             <div className="grid gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <Button type="button" variant="outline" className="h-10 text-sm" onClick={() => moveAllAmountTo('cash')}>
+                  {t('posPaymentCash') || '현금'}
+                </Button>
+                <Button type="button" variant="outline" className="h-10 text-sm" onClick={() => moveAllAmountTo('card')}>
+                  {t('posPaymentCard') || '카드'}
+                </Button>
+                <Button type="button" variant="outline" className="h-10 text-sm" onClick={() => moveAllAmountTo('qr')}>
+                  {t('posPaymentQr') || 'QR'} 코드
+                </Button>
+              </div>
               {[
-                { value: payCash, set: setPayCash, labelKey: 'posPaymentCash' },
-                { value: payCard, set: setPayCard, labelKey: 'posPaymentCard' },
-                { value: payPromptPay, set: setPayPromptPay, labelKey: 'posPaymentPromptPay' },
-              ].map(({ value, set, labelKey }) => (
-                <div key={labelKey} className="flex items-center gap-2">
-                  <label className="w-24 text-sm shrink-0">{t(labelKey)}</label>
+                { key: 'cash', value: payCash, set: setPayCash, label: t('posPaymentCash') || '현금' },
+                { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드' },
+                { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: `${t('posPaymentQr') || 'QR'} 코드` },
+              ].map(({ key, value, set, label }) => (
+                <div key={key} className="flex items-center gap-2">
+                  <label className="w-24 text-sm shrink-0">{label}</label>
                   <Input
                     type="number"
                     min={0}
@@ -677,7 +722,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
               <Collapsible open={showOtherPayments} onOpenChange={setShowOtherPayments}>
                 <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-full justify-between h-9 px-2 text-sm font-medium">
+                  <Button variant="outline" size="sm" className="w-full justify-between h-9 px-2 text-sm font-medium">
                     <span>{t('posPaymentOther') || '기타'}</span>
                     {showOtherPayments ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </Button>
