@@ -4,7 +4,6 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { MemberSubnav } from "@/components/erp/member-subnav"
 import { getMemberVisits } from "@/lib/api-client"
 
 export default function MemberVisitsPage() {
@@ -32,7 +31,6 @@ export default function MemberVisitsPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <MemberSubnav />
         <Card className="mb-4">
           <CardHeader><CardTitle>회원 방문 기록 조회</CardTitle></CardHeader>
           <CardContent className="flex gap-2">

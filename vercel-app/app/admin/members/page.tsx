@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MemberSubnav } from "@/components/erp/member-subnav"
 import { createMember, getMembers, updateMember, type Member } from "@/lib/api-client"
 
 type MemberForm = {
@@ -96,7 +95,6 @@ export default function MembersPage() {
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <MemberSubnav />
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
             <Users className="h-5 w-5 text-primary" />
