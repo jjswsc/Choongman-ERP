@@ -9,6 +9,7 @@ import {
   getPosPromosWithItems,
   getPosMenuScreenConfig,
   savePosMenuScreenConfig,
+  savePosMenu,
   type PosMenu,
   type PosMenuOption,
   type PosPromoWithItems,
@@ -24,7 +25,7 @@ import {
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Save } from 'lucide-react'
 import {
   DEFAULT_POS_MENU_SCREEN_CONFIG,
   normalizePosMenuScreenConfig,
@@ -85,31 +86,66 @@ export function PosTerminalMenuScreen({
   const [configSaving, setConfigSaving] = React.useState(false)
   const [configMessage, setConfigMessage] = React.useState<string>('')
   const isAdminMode = mode === 'admin-config'
+  const [menuEditOpen, setMenuEditOpen] = React.useState(false)
+  const [menuEditSaving, setMenuEditSaving] = React.useState(false)
+  const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
+  const [menuEditTab, setMenuEditTab] = React.useState<'menu' | 'general' | 'item'>('menu')
+  const [menuEditForm, setMenuEditForm] = React.useState<{
+    code: string
+    name: string
+    categoryMain: string
+    category: string
+    price: string
+    priceDelivery: string
+    imageUrl: string
+    kitchenPrinter: 'none' | '1' | '2'
+    cookingTimeMin: string
+    optionSelectionGroupsText: string
+    isActive: boolean
+    vatIncluded: boolean
+    isBanban: boolean
+  }>({
+    code: '',
+    name: '',
+    categoryMain: '',
+    category: '',
+    price: '',
+    priceDelivery: '',
+    imageUrl: '',
+    kitchenPrinter: 'none',
+    cookingTimeMin: '',
+    optionSelectionGroupsText: '',
+    isActive: true,
+    vatIncluded: true,
+    isBanban: false,
+  })
 
-  React.useEffect(() => {
-    setLoading(true)
-    Promise.all([
+  const loadMenuData = React.useCallback(async () => {
+    const [list, catRes, opts, promoList] = await Promise.all([
       getPosMenus(),
       getPosMenuCategories(),
       getPosMenuOptions(),
       getPosPromosWithItems(),
     ])
-      .then(([list, catRes, opts, promoList]) => {
-        setMenus(list || [])
-        setPromos(promoList || [])
-        setAllOptions(opts || [])
-        const mains = catRes.mainCategories ?? []
-        setMainCategories(mains)
-        setSelectedMainCategory(mains[0] ?? '')
-        setSelectedCategory('')
-      })
+    setMenus(list || [])
+    setPromos(promoList || [])
+    setAllOptions(opts || [])
+    const mains = catRes.mainCategories ?? []
+    setMainCategories(mains)
+    setSelectedMainCategory(mains[0] ?? '')
+    setSelectedCategory('')
+  }, [])
+
+  React.useEffect(() => {
+    setLoading(true)
+    loadMenuData()
       .catch(() => {
         setMenus([])
         setPromos([])
         setAllOptions([])
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [loadMenuData])
 
   React.useEffect(() => {
     setConfigLoading(true)
@@ -287,6 +323,96 @@ export function PosTerminalMenuScreen({
     setScreenConfig(next)
   }
 
+  const openMenuEdit = (menu: PosMenu) => {
+    if (!isAdminMode) return
+    setMenuEditTab('menu')
+    setMenuEditTargetId(menu.id)
+    setMenuEditForm({
+      code: menu.code || '',
+      name: menu.name || '',
+      categoryMain: menu.categoryMain || '',
+      category: menu.category || '',
+      price: String(menu.price ?? ''),
+      priceDelivery: menu.priceDelivery == null ? '' : String(menu.priceDelivery),
+      imageUrl: menu.imageUrl || '',
+      kitchenPrinter: menu.kitchenPrinter === 1 ? '1' : menu.kitchenPrinter === 2 ? '2' : 'none',
+      cookingTimeMin: menu.cookingTimeMin == null ? '' : String(menu.cookingTimeMin),
+      optionSelectionGroupsText: Array.isArray(menu.optionSelectionGroups) ? menu.optionSelectionGroups.join(', ') : '',
+      isActive: menu.isActive !== false,
+      vatIncluded: menu.vatIncluded !== false,
+      isBanban: menu.isBanban === true,
+    })
+    setMenuEditOpen(true)
+  }
+
+  const saveMenuEdit = async () => {
+    if (!menuEditTargetId) return
+    const name = menuEditForm.name.trim()
+    const code = menuEditForm.code.trim()
+    if (!name || !code) {
+      alert((t('msg_fill_required') || '필수 항목을 입력해 주세요.'))
+      return
+    }
+    setMenuEditSaving(true)
+    try {
+      const optionSelectionGroups = menuEditForm.optionSelectionGroupsText
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean)
+      const res = await savePosMenu({
+        id: menuEditTargetId,
+        code,
+        name,
+        categoryMain: menuEditForm.categoryMain.trim(),
+        category: menuEditForm.category.trim(),
+        price: Number(menuEditForm.price || 0),
+        priceDelivery: menuEditForm.priceDelivery.trim() === '' ? null : Number(menuEditForm.priceDelivery),
+        imageUrl: menuEditForm.imageUrl.trim(),
+        vatIncluded: menuEditForm.vatIncluded,
+        isActive: menuEditForm.isActive,
+        kitchenPrinter: menuEditForm.kitchenPrinter === 'none' ? null : Number(menuEditForm.kitchenPrinter) as 1 | 2,
+        cookingTimeMin: menuEditForm.cookingTimeMin.trim() === '' ? null : Number(menuEditForm.cookingTimeMin),
+        optionSelectionGroups: optionSelectionGroups.length > 0 ? Array.from(new Set(optionSelectionGroups)) : [],
+        isBanban: menuEditForm.isBanban,
+      })
+      if (!res?.success) {
+        alert(res?.message || (t('posSaveFail') || '저장 실패'))
+        return
+      }
+      await loadMenuData()
+      setMenuEditOpen(false)
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setMenuEditSaving(false)
+    }
+  }
+
+  const parseOptionGroups = React.useCallback((raw: string) => {
+    return raw
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean)
+  }, [])
+
+  const selectedOptionGroups = React.useMemo(() => {
+    return parseOptionGroups(menuEditForm.optionSelectionGroupsText)
+  }, [menuEditForm.optionSelectionGroupsText, parseOptionGroups])
+
+  const setSelectedOptionGroups = (next: string[]) => {
+    const deduped = Array.from(new Set(next.map((v) => v.trim()).filter(Boolean)))
+    setMenuEditForm((p) => ({ ...p, optionSelectionGroupsText: deduped.join(', ') }))
+  }
+
+  const moveOptionGroup = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
+    if (fromIdx >= selectedOptionGroups.length || toIdx >= selectedOptionGroups.length) return
+    const copy = [...selectedOptionGroups]
+    const [moved] = copy.splice(fromIdx, 1)
+    copy.splice(toIdx, 0, moved)
+    setSelectedOptionGroups(copy)
+  }
+
   if (loading) {
     return (
       <div className={cn('flex h-full items-center justify-center rounded-lg border bg-card text-muted-foreground text-sm', className)}>
@@ -352,12 +478,14 @@ export function PosTerminalMenuScreen({
         </section>
 
         <section className="min-h-0 overflow-y-auto p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              {selectedMainCategory || '-'} / {selectedCategory || '-'}
+          {isAdminMode && (
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {selectedMainCategory || '-'} / {selectedCategory || '-'}
+              </div>
+              <div className="text-xs text-muted-foreground">{filteredMenus.length + filteredPromos.length} items</div>
             </div>
-            <div className="text-xs text-muted-foreground">{filteredMenus.length + filteredPromos.length} items</div>
-          </div>
+          )}
           <div
             className="grid gap-2"
             style={{ gridTemplateColumns: `repeat(${Math.max(2, screenConfig.menuTileCols)}, minmax(0, 1fr))` }}
@@ -392,6 +520,20 @@ export function PosTerminalMenuScreen({
                 )}
               >
                 <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                  {isAdminMode && (
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1 z-10 rounded bg-background/90 p-1 text-slate-700 shadow border hover:bg-background"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        openMenuEdit(m)
+                      }}
+                      title={t('itemsBtnEdit') || '수정'}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
                   {m.imageUrl ? (
                     <Image
                       src={m.imageUrl}
@@ -483,7 +625,7 @@ export function PosTerminalMenuScreen({
         </section>
       </div>
 
-      {showConfigBar && (
+      {showConfigBar && isAdminMode && (
         <div className="shrink-0 border-t bg-muted/15 px-3 py-2">
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-[11px] text-muted-foreground">
@@ -702,6 +844,297 @@ export function PosTerminalMenuScreen({
               </div>
             )
           })()}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={menuEditOpen} onOpenChange={setMenuEditOpen}>
+        <DialogContent className="max-w-5xl p-0">
+          <DialogHeader>
+            <DialogTitle className="border-b px-6 py-4 text-sky-600">{t('itemsBtnEdit') || 'POS 메뉴 관리'}</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            <div className="mb-4 mt-2 flex items-end gap-1 border-b">
+              <button
+                type="button"
+                className={cn(
+                  'rounded-t-md border border-b-0 px-4 py-2 text-sm font-medium',
+                  menuEditTab === 'menu' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-sky-600 border-sky-200'
+                )}
+                onClick={() => setMenuEditTab('menu')}
+              >
+                메뉴 정보
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'rounded-t-md border border-b-0 px-4 py-2 text-sm font-medium',
+                  menuEditTab === 'general' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-sky-600 border-sky-200'
+                )}
+                onClick={() => setMenuEditTab('general')}
+              >
+                일반 메뉴
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'rounded-t-md border border-b-0 px-4 py-2 text-sm font-medium',
+                  menuEditTab === 'item' ? 'bg-sky-500 text-white border-sky-500' : 'bg-white text-sky-600 border-sky-200'
+                )}
+                onClick={() => setMenuEditTab('item')}
+              >
+                아이템
+              </button>
+            </div>
+
+            {menuEditTab === 'menu' ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuCategoryMain') || '카테고리'}</label>
+                    <Input className="h-9" value={menuEditForm.categoryMain} onChange={(e) => setMenuEditForm((p) => ({ ...p, categoryMain: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuName') || '메뉴'}</label>
+                    <Input className="h-9" value={menuEditForm.name} onChange={(e) => setMenuEditForm((p) => ({ ...p, name: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posMenuCategory') || '주방명칭'}</label>
+                    <Input className="h-9" value={menuEditForm.category} onChange={(e) => setMenuEditForm((p) => ({ ...p, category: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posMenuCode') || '바코드'}</label>
+                    <Input className="h-9" value={menuEditForm.code} onChange={(e) => setMenuEditForm((p) => ({ ...p, code: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuPriceHall') || '가격'}</label>
+                    <Input type="number" className="h-9 text-right" value={menuEditForm.price} onChange={(e) => setMenuEditForm((p) => ({ ...p, price: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuPriceDelivery') || '배달 가격'}</label>
+                    <Input className="h-9 text-right" value={menuEditForm.priceDelivery} onChange={(e) => setMenuEditForm((p) => ({ ...p, priceDelivery: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">버튼 컬러</label>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-7 w-7 rounded border bg-white" />
+                      <span className="inline-block h-7 w-7 rounded border bg-slate-300" />
+                      <span className="inline-block h-7 w-7 rounded border bg-sky-500" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">폰트 컬러</label>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-7 w-7 rounded border bg-black" />
+                      <span className="inline-block h-7 w-7 rounded border bg-white" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-start gap-2">
+                    <label className="pt-2 text-sm font-semibold">기본 이미지</label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative h-20 w-28 overflow-hidden rounded border bg-slate-100">
+                        {menuEditForm.imageUrl ? (
+                          <Image src={menuEditForm.imageUrl} alt="menu-preview" fill className="object-cover" unoptimized />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">미리보기</div>
+                        )}
+                      </div>
+                      <Input className="h-9" placeholder="이미지 URL" value={menuEditForm.imageUrl} onChange={(e) => setMenuEditForm((p) => ({ ...p, imageUrl: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posCookingTimeMin') || '조리 시간'}</label>
+                    <Input type="number" className="h-9" value={menuEditForm.cookingTimeMin} onChange={(e) => setMenuEditForm((p) => ({ ...p, cookingTimeMin: e.target.value }))} />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">토핑 메뉴</label>
+                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">탭: 아이템에서 설정</div>
+                  </div>
+                </div>
+              </div>
+            ) : menuEditTab === 'general' ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">재고관리 여부</label>
+                    <div className="grid grid-cols-2 overflow-hidden rounded-md border">
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm', menuEditForm.isActive ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, isActive: true }))}
+                      >
+                        예
+                      </button>
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm border-l', !menuEditForm.isActive ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, isActive: false }))}
+                      >
+                        아니요
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">세금 포함</label>
+                    <div className="grid grid-cols-2 overflow-hidden rounded-md border">
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm', menuEditForm.vatIncluded ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, vatIncluded: true }))}
+                      >
+                        포함
+                      </button>
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm border-l', !menuEditForm.vatIncluded ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, vatIncluded: false }))}
+                      >
+                        미포함
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posMenuKitchenPrinter') || '주방 프린터'}</label>
+                    <select
+                      className="h-9 w-full rounded-md border px-2 text-sm bg-background"
+                      value={menuEditForm.kitchenPrinter}
+                      onChange={(e) => setMenuEditForm((p) => ({ ...p, kitchenPrinter: e.target.value as 'none' | '1' | '2' }))}
+                    >
+                      <option value="none">{t('posMenuKitchenPrinterAuto') || '자동(카테고리 기준)'}</option>
+                      <option value="1">{t('posKitchen1') || '주방1'}</option>
+                      <option value="2">{t('posKitchen2') || '주방2'}</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">{t('posCookingTimeMin') || '조리 시간'}</label>
+                    <Input type="number" className="h-9" value={menuEditForm.cookingTimeMin} onChange={(e) => setMenuEditForm((p) => ({ ...p, cookingTimeMin: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold">반반 메뉴</label>
+                    <div className="grid grid-cols-2 overflow-hidden rounded-md border">
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm', menuEditForm.isBanban ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, isBanban: true }))}
+                      >
+                        사용
+                      </button>
+                      <button
+                        type="button"
+                        className={cn('h-9 text-sm border-l', !menuEditForm.isBanban ? 'bg-sky-500 text-white' : 'bg-white')}
+                        onClick={() => setMenuEditForm((p) => ({ ...p, isBanban: false }))}
+                      >
+                        미사용
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-[120px_1fr] items-start gap-2">
+                    <label className="pt-2 text-sm font-semibold">옵션 단계</label>
+                    <div className="space-y-2">
+                      <Input
+                        className="h-9"
+                        placeholder="예: size, bone, topping"
+                        value={menuEditForm.optionSelectionGroupsText}
+                        onChange={(e) => setMenuEditForm((p) => ({ ...p, optionSelectionGroupsText: e.target.value }))}
+                      />
+                      {selectedOptionGroups.length > 0 && (
+                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                          {selectedOptionGroups.map((group, idx) => (
+                            <div
+                              key={`${group}-${idx}`}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', String(idx))
+                              }}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => {
+                                const from = Number(e.dataTransfer.getData('text/plain'))
+                                if (Number.isFinite(from)) moveOptionGroup(from, idx)
+                              }}
+                              className="flex items-center justify-between rounded border bg-white px-2 py-1.5 text-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="font-medium">{group}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  className="rounded border p-1 hover:bg-muted disabled:opacity-40"
+                                  disabled={idx === 0}
+                                  onClick={() => moveOptionGroup(idx, idx - 1)}
+                                  title="위로"
+                                >
+                                  <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded border p-1 hover:bg-muted disabled:opacity-40"
+                                  disabled={idx === selectedOptionGroups.length - 1}
+                                  onClick={() => moveOptionGroup(idx, idx + 1)}
+                                  title="아래로"
+                                >
+                                  <ArrowDown className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-rose-50 hover:text-rose-600"
+                                  onClick={() => setSelectedOptionGroups(selectedOptionGroups.filter((_, i) => i !== idx))}
+                                  title="삭제"
+                                >
+                                  삭제
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {['size', 'part', 'topping', 'bone', 'type'].map((key) => {
+                          const on = selectedOptionGroups.includes(key)
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className={cn('rounded border px-2 py-1 text-xs', on ? 'border-sky-500 bg-sky-500 text-white' : 'border-slate-200')}
+                              onClick={() => {
+                                const next = on
+                                  ? selectedOptionGroups.filter((v) => v !== key)
+                                  : [...selectedOptionGroups, key]
+                                setSelectedOptionGroups(next)
+                              }}
+                            >
+                              {key}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setMenuEditOpen(false)}>
+                {t('cancel') || '취소'}
+              </Button>
+              <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={saveMenuEdit} disabled={menuEditSaving}>
+                {menuEditSaving ? (t('saving') || '저장중') : (t('save') || '저장')}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
