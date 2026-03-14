@@ -6,12 +6,17 @@ import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset } from "lucide-react
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosTableLayoutContent } from "@/components/pos/pos-table-layout-content"
 import { PosCookingRulesContent } from "@/components/pos/pos-cooking-rules-content"
+import { PosDeliveryAppsContent } from "@/components/pos/pos-delivery-apps-content"
+import { PosPaymentSettingsContent } from "@/components/pos/pos-payment-settings-content"
+import { PosTerminalMenuScreen } from "@/components/pos/pos-terminal-menu-screen"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { useAuth } from "@/lib/auth-context"
 
 
 export default function PosScreenConfigPage() {
   const searchParams = useSearchParams()
+  const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const tabParam = searchParams.get("tab") || "tables"
@@ -74,8 +79,14 @@ export default function PosScreenConfigPage() {
           </TabsContent>
 
           <TabsContent value="menus" className="mt-0">
-            <div className="min-h-[600px] rounded-xl border bg-card overflow-hidden">
-              <iframe src="/admin/pos-menus" className="w-full border-0" style={{ minHeight: "calc(100vh - 280px)" }} title={t("posScreenConfigTabMenus") || "메뉴 화면 구성"} />
+            <div className="rounded-xl border bg-card p-3 min-h-[640px]">
+              <PosTerminalMenuScreen
+                mode="admin-config"
+                storeCode={auth?.store || null}
+                selectedTableName={t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
+                onBack={() => setActiveTab("tables")}
+                backButtonLabel={t("posScreenConfigTabTables") || "테이블 구성"}
+              />
             </div>
           </TabsContent>
 
@@ -90,26 +101,22 @@ export default function PosScreenConfigPage() {
           </TabsContent>
 
           <TabsContent value="payment" className="mt-0">
-            <div className="rounded-xl border bg-card p-8">
+            <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabPayment") || "결제 기능"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {t("posScreenConfigTabPaymentDesc") || "POS 결제 수단, 할인, 현금/카드 설정 등 결제 관련 기능을 설정합니다."}
+                {t("posScreenConfigTabPaymentDesc") || "결산 시 사용할 카드·QR 수단 breakdown 키를 설정합니다."}
               </p>
-              <div className="rounded-lg border border-dashed bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-                {t("posScreenConfigComingSoon") || "준비 중입니다."}
-              </div>
+              <PosPaymentSettingsContent />
             </div>
           </TabsContent>
 
           <TabsContent value="delivery" className="mt-0">
-            <div className="rounded-xl border bg-card p-8">
+            <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabDelivery") || "배달앱 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {t("posScreenConfigTabDeliveryDesc") || "그랩, 푸드팟 등 배달앱 연동 및 메뉴/가격 동기화를 관리합니다."}
+                {t("posScreenConfigTabDeliveryDesc") || "배달앱 추가·수정·순서 변경, dine out 지원 여부를 설정합니다."}
               </p>
-              <div className="rounded-lg border border-dashed bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
-                {t("posScreenConfigComingSoon") || "준비 중입니다."}
-              </div>
+              <PosDeliveryAppsContent />
             </div>
           </TabsContent>
         </Tabs>

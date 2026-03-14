@@ -1343,59 +1343,35 @@ export async function addBalanceTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-// ─── 매출 관리 (POS 엑셀 업로드) ───
-export interface PosSalesImport {
-  id: string
-  file_name?: string
-  year_month?: string
-  row_count?: number
-  total_sales?: number
-  created_at?: string
+// ─── 매출 관리 (pos_orders 기반) ───
+export async function getPosSalesByStore(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  if (params.pos) q.set('pos', params.pos)
+  const res = await apiFetch(`/api/posSalesByStore?${q}`)
+  return res.json() as Promise<
+    { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
+  >
 }
 
-export async function getPosSalesImports(params?: { yearMonth?: string }) {
-  const q = new URLSearchParams()
-  if (params?.yearMonth) q.set('yearMonth', params.yearMonth)
-  const res = await apiFetch(`/api/posSalesImports?${q}`)
-  return res.json() as Promise<PosSalesImport[]>
-}
-
-export async function deletePosSalesImport(id: string) {
-  const res = await apiFetch(`/api/posSalesImports?id=${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
-  return res.json() as Promise<{ success: boolean; message?: string }>
-}
-
-export async function importPosSalesExcel(file: File) {
-  const form = new FormData()
-  form.set('file', file)
-  const res = await apiFetch('/api/importPosSalesExcel', {
-    method: 'POST',
-    body: form,
-  })
-  return res.json() as Promise<{
-    success: boolean
-    message?: string
-    importId?: string
-    yearMonth?: string
-    rowCount?: number
-    totalSales?: number
-  }>
-}
-
-export async function getPosSalesFilterOptions(importId: string) {
-  const res = await apiFetch(`/api/posSalesFilterOptions?importId=${encodeURIComponent(importId)}`)
+export async function getPosSalesFilterOptions(params: { startStr: string; endStr: string }) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
+  const res = await apiFetch(`/api/posSalesFilterOptions?${q}`)
   return res.json() as Promise<{ posOptions: string[] }>
 }
 
 export async function getPosSalesByPeriod(params: {
-  importId: string
+  startStr: string
+  endStr: string
   groupBy: 'month' | 'week' | 'day' | 'dow'
   pos?: string
 }) {
   const q = new URLSearchParams({
-    importId: params.importId,
+    startStr: params.startStr,
+    endStr: params.endStr,
     groupBy: params.groupBy,
   })
   if (params.pos) q.set('pos', params.pos)
@@ -1403,34 +1379,47 @@ export async function getPosSalesByPeriod(params: {
   return res.json() as Promise<{ label: string; key: string; sales: number }[]>
 }
 
-export async function getPosSalesByDeliveryApp(params: { importId: string; pos?: string }) {
-  const q = new URLSearchParams({ importId: params.importId })
+export async function getPosSalesByDeliveryApp(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   const res = await apiFetch(`/api/posSalesByDeliveryApp?${q}`)
   return res.json() as Promise<{ items: { label: string; sales: number; pct: number }[]; total: number }>
 }
 
-export async function getPosSalesByChannel(params: { importId: string; pos?: string }) {
-  const q = new URLSearchParams({ importId: params.importId })
+export async function getPosSalesByChannel(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   const res = await apiFetch(`/api/posSalesByChannel?${q}`)
   return res.json() as Promise<{ label: string; sales: number }[]>
 }
 
 export async function getPosSalesByMenu(params: {
-  importId: string
+  startStr: string
+  endStr: string
   pos?: string
   search?: string
 }) {
-  const q = new URLSearchParams({ importId: params.importId })
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   if (params.search) q.set('search', params.search)
   const res = await apiFetch(`/api/posSalesByMenu?${q}`)
   return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
 }
 
-export async function getPosSalesByPayment(params: { importId: string; pos?: string }) {
-  const q = new URLSearchParams({ importId: params.importId })
+export async function getPosSalesByPayment(params: {
+  startStr: string
+  endStr: string
+  pos?: string
+}) {
+  const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   const res = await apiFetch(`/api/posSalesByPayment?${q}`)
   return res.json() as Promise<{ label: string; sales: number }[]>
@@ -2876,11 +2865,8 @@ export async function getMarketingCampaignCosts(campaignId: string) {
   }>
 }
 
-export async function getMarketingCampaignResults(params: { campaignId: string; importId: string }) {
-  const q = new URLSearchParams({
-    campaignId: params.campaignId,
-    importId: params.importId,
-  })
+export async function getMarketingCampaignResults(params: { campaignId: string }) {
+  const q = new URLSearchParams({ campaignId: params.campaignId })
   const res = await apiFetch(`/api/marketingCampaignResults?${q}`)
   return res.json() as Promise<{
     success: boolean
@@ -3127,6 +3113,22 @@ export interface PosPrinterSettings {
   cookingDelayBadgeEnabled?: boolean
   cookingDelaySoundEnabled?: boolean
   cookingDelayAlertOverMin?: number
+  cardAutoOpen?: boolean
+  checkAutoOpen?: boolean
+  drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
+  logoPrint?: boolean
+  receiptPrintTiming?: 'per_payment' | 'final_payment'
+  customerReceiptOrderDetails?: boolean
+  merchantReceiptOrderDetails?: boolean
+  cashPaymentReceipt?: boolean
+  signatureLine?: boolean
+  receiptBarcode?: boolean
+  itemBarcode?: boolean
+  qrCodeOption?: 'yes' | 'no' | 'return_points'
+  discountSeparatePrint?: boolean
+  merchantReceiptPrint?: boolean
+  actualOrderDetails?: boolean
+  toppingOptionsPrint?: boolean
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -3152,6 +3154,22 @@ export async function savePosPrinterSettings(params: {
   cookingDelayBadgeEnabled?: boolean
   cookingDelaySoundEnabled?: boolean
   cookingDelayAlertOverMin?: number
+  cardAutoOpen?: boolean
+  checkAutoOpen?: boolean
+  drawerOpenOption?: 'password_and_reason' | 'reason_only' | 'force'
+  logoPrint?: boolean
+  receiptPrintTiming?: 'per_payment' | 'final_payment'
+  customerReceiptOrderDetails?: boolean
+  merchantReceiptOrderDetails?: boolean
+  cashPaymentReceipt?: boolean
+  signatureLine?: boolean
+  receiptBarcode?: boolean
+  itemBarcode?: boolean
+  qrCodeOption?: 'yes' | 'no' | 'return_points'
+  discountSeparatePrint?: boolean
+  merchantReceiptPrint?: boolean
+  actualOrderDetails?: boolean
+  toppingOptionsPrint?: boolean
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
     method: 'POST',
@@ -3166,6 +3184,135 @@ export async function savePosTableLayout(params: {
   layout: PosTableItem[]
 }) {
   const res = await apiFetch('/api/savePosTableLayout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface PosDeliveryApp {
+  id: number
+  code: string
+  name: string
+  matchKeywords: string[]
+  displayOrder: number
+  enabled: boolean
+  dineOutEnabled: boolean
+  accentColor: string | null
+  storeCode: string | null
+}
+
+export async function getPosDeliveryApps(params?: { storeCode?: string; includeDisabled?: boolean }) {
+  const q = new URLSearchParams()
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.includeDisabled) q.set('includeDisabled', 'true')
+  const res = await apiFetch('/api/getPosDeliveryApps?' + q.toString())
+  return res.json() as Promise<PosDeliveryApp[]>
+}
+
+export async function savePosDeliveryApps(params: {
+  storeCode?: string
+  items: Array<{
+    id?: number
+    code: string
+    name: string
+    matchKeywords?: string[]
+    displayOrder?: number
+    enabled?: boolean
+    dineOutEnabled?: boolean
+    accentColor?: string | null
+  }>
+}) {
+  const res = await apiFetch('/api/savePosDeliveryApps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface PosMenuScreenConfig {
+  storeCode: string | null
+  mainCategoryFontSize: number
+  categoryFontSize: number
+  menuTileFontSize: number
+  menuTileCols: number
+  menuListFontSize: number
+  menuListPageSize: number
+  kioskGroupFontSize: number
+  updatedAt?: string | null
+}
+
+export async function getPosMenuScreenConfig(params?: { storeCode?: string }) {
+  const q = new URLSearchParams()
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  const res = await apiFetch('/api/getPosMenuScreenConfig?' + q.toString())
+  return res.json() as Promise<PosMenuScreenConfig>
+}
+
+export async function savePosMenuScreenConfig(params: {
+  storeCode?: string | null
+  mainCategoryFontSize: number
+  categoryFontSize: number
+  menuTileFontSize: number
+  menuTileCols: number
+  menuListFontSize: number
+  menuListPageSize: number
+  kioskGroupFontSize: number
+}) {
+  const res = await apiFetch('/api/savePosMenuScreenConfig', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getPosPaymentSettings(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', params.storeCode)
+  const res = await apiFetch('/api/getPosPaymentSettings?' + q.toString())
+  return res.json() as Promise<{ storeCode: string; cardKeys: string[]; qrKeys: string[] }>
+}
+
+export interface PosPaymentMethodItem {
+  id: string
+  storeCode: string | null
+  category: 'card' | 'qr' | 'delivery' | 'other'
+  name: string
+  hidden: boolean
+  sortOrder: number
+}
+
+export async function getPosPaymentMethodItems(params: { storeCode?: string }) {
+  const q = new URLSearchParams()
+  if (params.storeCode?.trim()) q.set('storeCode', params.storeCode.trim())
+  const res = await apiFetch('/api/getPosPaymentMethodItems?' + q.toString())
+  return res.json() as Promise<PosPaymentMethodItem[]>
+}
+
+export async function savePosPaymentMethodItem(params: {
+  id?: string
+  storeCode?: string | null
+  category: 'card' | 'qr' | 'delivery' | 'other'
+  name: string
+  hidden?: boolean
+}) {
+  const res = await apiFetch('/api/savePosPaymentMethodItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: string; message?: string }>
+}
+
+export async function savePosPaymentSettings(params: {
+  storeCode: string
+  cardKeys: string[]
+  qrKeys: string[]
+}) {
+  const res = await apiFetch('/api/savePosPaymentSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3416,6 +3563,42 @@ export async function unlinkMemberLine(params: { memberId: number; lineUserId?: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function syncLineMembers(params?: { limit?: number }) {
+  const res = await apiFetch('/api/members/line-sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ limit: params?.limit ?? 2000 }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    scanned?: number
+    synced?: number
+    failed?: number
+    hasNextCursor?: boolean
+    nextCursor?: string
+    errors?: string[]
+  }>
+}
+
+export async function importLineCrmFile(params: { file: File }) {
+  const form = new FormData()
+  form.set('file', params.file)
+  const res = await apiFetch('/api/members/line-import', {
+    method: 'POST',
+    body: form,
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    jobId?: string
+    reportType?: 'customer' | 'point' | 'coupon'
+    rowCount?: number
+    successCount?: number
+    failedCount?: number
+  }>
+}
+
 export async function getMemberPoints(params?: { memberId?: number; limit?: number }) {
   const q = new URLSearchParams()
   if (params?.memberId) q.set('memberId', String(params.memberId))
@@ -3512,8 +3695,14 @@ export interface Member {
   id: number
   memberNo: string
   name: string
+  fullName?: string
+  birthDate?: string
+  gender?: string
   phone: string
   email: string
+  consentMarketing?: boolean
+  consentPrivacy?: boolean
+  consentAt?: string
   source: string
   status: string
   lineLinked: boolean
@@ -3522,6 +3711,9 @@ export interface Member {
   tierCode?: string
   pointBalance?: number
   lifetimeAmount?: number
+  lastLineEventType?: string
+  lastLineEventAt?: string
+  lastUpdateReason?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -3557,8 +3749,15 @@ export async function createMember(params: {
 export async function updateMember(params: {
   id: number
   name?: string
+  fullName?: string
+  lineDisplayName?: string
+  birthDate?: string
+  gender?: string
   phone?: string
   email?: string
+  consentMarketing?: boolean
+  consentPrivacy?: boolean
+  consentAt?: string
   status?: string
 }) {
   const res = await apiFetch(`/api/members/${params.id}`, {
@@ -3566,8 +3765,15 @@ export async function updateMember(params: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: params.name,
+      fullName: params.fullName,
+      lineDisplayName: params.lineDisplayName,
+      birthDate: params.birthDate,
+      gender: params.gender,
       phone: params.phone,
       email: params.email,
+      consentMarketing: params.consentMarketing,
+      consentPrivacy: params.consentPrivacy,
+      consentAt: params.consentAt,
       status: params.status,
     }),
   })
