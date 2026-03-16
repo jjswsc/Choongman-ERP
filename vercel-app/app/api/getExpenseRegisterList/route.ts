@@ -83,8 +83,8 @@ export async function GET(request: NextRequest) {
         accrualPettySet.add(accrualId)
       }
     }
-    const inboundSet = new Set<number>((inboundLinks || []).map((r) => Number(r.bank_transaction_id || 0)).filter(Boolean))
-    const cardSet = new Set<number>((cardLinks || []).map((r) => Number(r.bank_transaction_id || 0)).filter(Boolean))
+    const inboundSet = new Set<number>((inboundLinks || []).map((r: { bank_transaction_id?: number }) => Number(r.bank_transaction_id || 0)).filter(Boolean))
+    const cardSet = new Set<number>((cardLinks || []).map((r: { bank_transaction_id?: number }) => Number(r.bank_transaction_id || 0)).filter(Boolean))
 
     const mapped = (rows || []).map((r) => {
       const note = String(r.note || '')

@@ -207,7 +207,7 @@ export function ReceivablePayableTab() {
     return name === vendorCode ? name : `${name} (${vendorCode})`
   }
 
-  const filterItemsByUnpaid = (items: { ref_type?: string }[] | undefined, isRec: boolean) => {
+  const filterItemsByUnpaid = <T extends { ref_type?: string }>(items: T[] | undefined, isRec: boolean): T[] => {
     if (!filterUnpaidOnly || !items?.length) return items ?? []
     if (isRec) return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "Order")
     return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
@@ -235,6 +235,9 @@ export function ReceivablePayableTab() {
 
   const handleExcel = () => {
     if (listData.length === 0) return
+    // #region agent log
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H3',location:'receivable-payable-tab.tsx:239',message:'handleExcel start',data:{tab,listCount:listData.length,filterUnpaidOnly},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const isRec = tab === "receivable"
     const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
     const typeOrder = isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")
@@ -249,14 +252,22 @@ export function ReceivablePayableTab() {
     const rows: string[][] = [header]
     for (const item of listData) {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
+      // #region agent log
+      fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H1',location:'receivable-payable-tab.tsx:254',message:'filtered displayItems',data:{isRec,itemCount:item.items?.length||0,displayCount:displayItems.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (displayItems.length === 0) continue
       const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
       const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
       for (const row of displayItems) {
         const orderOrInv = isRec && row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "")) : ""
+        if (isRec && row.ref_type === "Order") {
+          // #region agent log
+          fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H2',location:'receivable-payable-tab.tsx:260',message:'order row invoice candidate',data:{invoiceNo:row.invoice_no||'',refId:row.ref_id||0,transDate:row.trans_date||''},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
         rows.push(
           isRec
-            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderId, statusRec(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
+            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
             : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), statusPay(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
         )
       }

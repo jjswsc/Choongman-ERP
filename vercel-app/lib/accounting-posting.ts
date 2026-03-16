@@ -354,6 +354,8 @@ export async function postWithdrawalJournal(params: {
   transferToAccountId?: number | null
   /** 이체 시 패티캐쉬 대상 매장(통장→패티) */
   transferToPettyStore?: string | null
+  /** 이체 시 카드 계정(통장→카드충전) */
+  transferToCardAccountId?: number | null
   /** 이체 시 입금 계좌(패티→통장) */
   transferFromPettyToAccountId?: number | null
   /** 외부 이체 시 받는 사람 (통장→외부) */

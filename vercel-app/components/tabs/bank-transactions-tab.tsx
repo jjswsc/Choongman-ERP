@@ -72,7 +72,14 @@ export function BankTransactionsTab() {
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
-  const [accounts, setAccounts] = React.useState<{ id: number; name: string; store: string; bankName?: string }[]>([])
+  const [accounts, setAccounts] = React.useState<{
+    id: number
+    name: string
+    store: string
+    bankName?: string
+    openingBalance?: number
+    openingBalanceDate?: string | null
+  }[]>([])
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
