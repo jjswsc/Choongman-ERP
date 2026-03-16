@@ -64,7 +64,7 @@ export default function PosScreenConfigPage() {
             </TabsTrigger>
             <TabsTrigger value="payment" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
               <CreditCard className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabPayment") || "결제 기능"}
+              {t("posScreenConfigTabPayment") || "결제 관리"}
             </TabsTrigger>
             <TabsTrigger value="delivery" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
               <Truck className="h-3.5 w-3.5" />
@@ -115,7 +115,7 @@ export default function PosScreenConfigPage() {
 
           <TabsContent value="payment" className="mt-0">
             <div className="rounded-xl border bg-card p-6">
-              <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabPayment") || "결제 기능"}</h3>
+              <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabPayment") || "결제 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
                 {t("posScreenConfigTabPaymentDesc") || "결산 시 사용할 카드·QR 수단 breakdown 키를 설정합니다."}
               </p>

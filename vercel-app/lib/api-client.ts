@@ -3696,6 +3696,8 @@ export interface PosTableItem {
   y: number
   w: number
   h: number
+  /** 층 (1~3) */
+  floor?: number
   /** rect | square - 테이블 형태 */
   shape?: string
   /** 좌석 수 (몇 명 앉는 테이블) */
@@ -3743,6 +3745,30 @@ export interface PosPrinterSettings {
   merchantReceiptPrint?: boolean
   actualOrderDetails?: boolean
   toppingOptionsPrint?: boolean
+  autoPrintReceiptOnOrder?: boolean
+  autoPrintReceiptOnAddOrder?: boolean
+  autoPrintReceiptOnPayment?: boolean
+  autoPrintKitchenSlipOnOrder?: boolean
+  receiptBizName?: string
+  receiptBizTaxId?: string
+  receiptBizOwner?: string
+  receiptBizAddress?: string
+  receiptBizPhone?: string
+  receiptDesignStyle?: 'badge' | 'simple'
+  receiptLogoSize?: 'sm' | 'md' | 'lg'
+  receiptShowTitle?: boolean
+  receiptShowPaidStamp?: boolean
+  receiptShowThankYou?: boolean
+  receiptShowCustomerCopy?: boolean
+  vatRate?: number
+  vatMode?: 'included' | 'separate'
+  serviceRate?: number
+  serviceMode?: 'included' | 'separate'
+  cardRate?: number
+  cardMode?: 'included' | 'separate'
+  cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
+  otherRate?: number
+  otherMode?: 'included' | 'separate'
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -3784,6 +3810,30 @@ export async function savePosPrinterSettings(params: {
   merchantReceiptPrint?: boolean
   actualOrderDetails?: boolean
   toppingOptionsPrint?: boolean
+  autoPrintReceiptOnOrder?: boolean
+  autoPrintReceiptOnAddOrder?: boolean
+  autoPrintReceiptOnPayment?: boolean
+  autoPrintKitchenSlipOnOrder?: boolean
+  receiptBizName?: string
+  receiptBizTaxId?: string
+  receiptBizOwner?: string
+  receiptBizAddress?: string
+  receiptBizPhone?: string
+  receiptDesignStyle?: 'badge' | 'simple'
+  receiptLogoSize?: 'sm' | 'md' | 'lg'
+  receiptShowTitle?: boolean
+  receiptShowPaidStamp?: boolean
+  receiptShowThankYou?: boolean
+  receiptShowCustomerCopy?: boolean
+  vatRate?: number
+  vatMode?: 'included' | 'separate'
+  serviceRate?: number
+  serviceMode?: 'included' | 'separate'
+  cardRate?: number
+  cardMode?: 'included' | 'separate'
+  cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
+  otherRate?: number
+  otherMode?: 'included' | 'separate'
 }) {
   const res = await apiFetch('/api/savePosPrinterSettings', {
     method: 'POST',
@@ -4132,6 +4182,17 @@ export async function updatePosOrder(params: {
   couponDiscountAmt?: number
   pointUsed?: number
   pointEarned?: number
+  pricingAdjustments?: {
+    vatRate?: number
+    vatMode?: 'included' | 'separate'
+    serviceRate?: number
+    serviceMode?: 'included' | 'separate'
+    cardRate?: number
+    cardMode?: 'included' | 'separate'
+    cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
+    otherRate?: number
+    otherMode?: 'included' | 'separate'
+  }
 }) {
   const res = await apiFetch('/api/updatePosOrder', {
     method: 'POST',
@@ -4185,6 +4246,17 @@ export async function savePosOrder(params: {
   couponDiscountAmt?: number
   pointUsed?: number
   pointEarned?: number
+  pricingAdjustments?: {
+    vatRate?: number
+    vatMode?: 'included' | 'separate'
+    serviceRate?: number
+    serviceMode?: 'included' | 'separate'
+    cardRate?: number
+    cardMode?: 'included' | 'separate'
+    cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
+    otherRate?: number
+    otherMode?: 'included' | 'separate'
+  }
   items: PosOrderItem[]
 }) {
   const res = await apiFetch('/api/savePosOrder', {

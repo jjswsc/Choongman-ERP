@@ -162,7 +162,7 @@ export function PosPaymentSettingsContent() {
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-semibold mb-4">
           <CreditCard className="h-4 w-4" />
-          {t('posScreenConfigTabPayment') || '결제 기능'} — 카드수기입력 항목관리
+          {t('posScreenConfigTabPayment') || '결제 관리'} — 카드수기입력 항목관리
         </div>
 
         {loading ? (

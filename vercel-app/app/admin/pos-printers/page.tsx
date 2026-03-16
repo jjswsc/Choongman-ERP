@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Printer, Save, RotateCw, Wallet, Receipt } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Calculator } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -35,9 +35,10 @@ type PreviewKind = "receipt" | "kitchen"
 
 const POS_PAPER_WIDTH_MM = 80
 const POS_PAPER_SIDE_PADDING_MM = 3
+const POS_PAPER_HEIGHT_MM = 200
 
 const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
-  @page { size: ${POS_PAPER_WIDTH_MM}mm auto; margin: 0; }
+  @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
   html, body { margin: 0; padding: 0; }
   body {
     width: ${POS_PAPER_WIDTH_MM}mm;
@@ -142,6 +143,30 @@ export default function PosPrintersPage() {
   const [merchantReceiptPrint, setMerchantReceiptPrint] = React.useState(true)
   const [actualOrderDetails, setActualOrderDetails] = React.useState(true)
   const [toppingOptionsPrint, setToppingOptionsPrint] = React.useState(false)
+  const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = React.useState(false)
+  const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = React.useState(false)
+  const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
+  const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
+  const [receiptBizName, setReceiptBizName] = React.useState("")
+  const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
+  const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
+  const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
+  const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
+  const [receiptDesignStyle, setReceiptDesignStyle] = React.useState<'badge' | 'simple'>('badge')
+  const [receiptLogoSize, setReceiptLogoSize] = React.useState<'sm' | 'md' | 'lg'>('md')
+  const [receiptShowTitle, setReceiptShowTitle] = React.useState(true)
+  const [receiptShowPaidStamp, setReceiptShowPaidStamp] = React.useState(true)
+  const [receiptShowThankYou, setReceiptShowThankYou] = React.useState(true)
+  const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = React.useState(true)
+  const [vatRate, setVatRate] = React.useState("7")
+  const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
+  const [serviceRate, setServiceRate] = React.useState("0")
+  const [serviceMode, setServiceMode] = React.useState<'included' | 'separate'>('separate')
+  const [cardRate, setCardRate] = React.useState("0")
+  const [cardMode, setCardMode] = React.useState<'included' | 'separate'>('separate')
+  const [cardBaseMode, setCardBaseMode] = React.useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
+  const [otherRate, setOtherRate] = React.useState("0")
+  const [otherMode, setOtherMode] = React.useState<'included' | 'separate'>('separate')
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
@@ -177,6 +202,42 @@ export default function PosPrintersPage() {
         setMerchantReceiptPrint(settings.merchantReceiptPrint !== false)
         setActualOrderDetails(settings.actualOrderDetails !== false)
         setToppingOptionsPrint(Boolean(settings.toppingOptionsPrint))
+        setAutoPrintReceiptOnOrder(Boolean(settings.autoPrintReceiptOnOrder))
+        setAutoPrintReceiptOnAddOrder(Boolean(settings.autoPrintReceiptOnAddOrder))
+        setAutoPrintReceiptOnPayment(Boolean(settings.autoPrintReceiptOnPayment ?? settings.autoPrintReceiptOnOrder))
+        setAutoPrintKitchenSlipOnOrder(Boolean(settings.autoPrintKitchenSlipOnOrder))
+        setReceiptBizName(String(settings.receiptBizName || ""))
+        setReceiptBizTaxId(String(settings.receiptBizTaxId || ""))
+        setReceiptBizOwner(String(settings.receiptBizOwner || ""))
+        setReceiptBizAddress(String(settings.receiptBizAddress || ""))
+        setReceiptBizPhone(String(settings.receiptBizPhone || ""))
+        setReceiptDesignStyle(settings.receiptDesignStyle === 'simple' ? 'simple' : 'badge')
+        setReceiptLogoSize(
+          settings.receiptLogoSize === 'sm'
+            ? 'sm'
+            : settings.receiptLogoSize === 'lg'
+              ? 'lg'
+              : 'md'
+        )
+        setReceiptShowTitle(settings.receiptShowTitle !== false)
+        setReceiptShowPaidStamp(settings.receiptShowPaidStamp !== false)
+        setReceiptShowThankYou(settings.receiptShowThankYou !== false)
+        setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
+        setVatRate(String(settings.vatRate ?? 7))
+        setVatMode(settings.vatMode === 'separate' ? 'separate' : 'included')
+        setServiceRate(String(settings.serviceRate ?? 0))
+        setServiceMode(settings.serviceMode === 'included' ? 'included' : 'separate')
+        setCardRate(String(settings.cardRate ?? 0))
+        setCardMode(settings.cardMode === 'included' ? 'included' : 'separate')
+        setCardBaseMode(
+          settings.cardBaseMode === 'card_plus_vat'
+            ? 'card_plus_vat'
+            : settings.cardBaseMode === 'card_plus_vat_service'
+              ? 'card_plus_vat_service'
+              : 'card_only'
+        )
+        setOtherRate(String(settings.otherRate ?? 0))
+        setOtherMode(settings.otherMode === 'included' ? 'included' : 'separate')
       })
       .catch(() => {
         setCategories([])
@@ -245,6 +306,30 @@ export default function PosPrintersPage() {
         merchantReceiptPrint,
         actualOrderDetails,
         toppingOptionsPrint,
+        autoPrintReceiptOnOrder,
+        autoPrintReceiptOnAddOrder,
+        autoPrintReceiptOnPayment,
+        autoPrintKitchenSlipOnOrder,
+        receiptBizName,
+        receiptBizTaxId,
+        receiptBizOwner,
+        receiptBizAddress,
+        receiptBizPhone,
+        receiptDesignStyle,
+        receiptLogoSize,
+        receiptShowTitle,
+        receiptShowPaidStamp,
+        receiptShowThankYou,
+        receiptShowCustomerCopy,
+        vatRate: Number(vatRate) || 0,
+        vatMode,
+        serviceRate: Number(serviceRate) || 0,
+        serviceMode,
+        cardRate: Number(cardRate) || 0,
+        cardMode,
+        cardBaseMode,
+        otherRate: Number(otherRate) || 0,
+        otherMode,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -286,12 +371,13 @@ export default function PosPrintersPage() {
   }, [deliveryFee, packagingFee, effectiveStore, t])
 
   const buildReceiptHtml = React.useCallback(() => {
+    const logoUrl = `${window.location.origin}/company-stamp.png`
     const lines = previewData.items
       .map(
         (it) =>
-          `<div class="receipt-row"><span>${escapeHtml(it.name)} x${it.qty}</span><span>${(
+          `<div class="receipt-row"><span>${it.qty}x ${escapeHtml(it.name)}</span><span>${(
             it.qty * it.price
-          ).toLocaleString()} ฿</span></div>`
+          ).toLocaleString()}</span></div>`
       )
       .join("")
     return `
@@ -301,29 +387,80 @@ export default function PosPrintersPage() {
           <title>${escapeHtml(t("posReceipt") || "영수증")}</title>
           <style>
             ${getPosPaperBaseCss("'Courier New', monospace", 12)}
-            .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+            body { font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; color: #000; }
+            .receipt-content { width: 72mm; max-width: 72mm; margin: 0 auto; }
+            .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
+            .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
+            .receipt-brand-logo.sm { width: 84px; }
+            .receipt-brand-logo.md { width: 108px; }
+            .receipt-brand-logo.lg { width: 132px; }
+            .brand { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; }
+            .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; }
+            .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
+            .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
             .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
+            .receipt-item-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; padding-bottom: 4px; border-bottom: 1px solid #111; }
+            .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
+            .receipt-muted { color: #000; }
+            .paid-stamp-wrap { text-align: center; margin: 10px 0; }
+            .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
+            .footer-strong { color: #111; font-weight: 600; }
+            .biz-line { margin: 2px 0; font-size: 11px; }
+            .biz-strong { color: #111; font-weight: 600; }
+            .text-center { text-align: center; }
+            .text-xs { font-size: 11px; }
           </style>
         </head>
         <body>
-          <div class="receipt-header">
-            <div><strong>${escapeHtml(previewData.storeCode)}</strong></div>
-            <div>${escapeHtml(previewData.orderNo)}</div>
-            <div>${escapeHtml(previewData.now)}</div>
+          <div class="receipt-content">
+          <div class="text-center">
+            <img class="receipt-brand-logo ${receiptLogoSize}" src="${escapeHtml(logoUrl)}" alt="Company logo" />
+            <div class="receipt-muted">${escapeHtml(previewData.storeCode)}</div>
           </div>
+          <div class="receipt-divider"></div>
+          ${
+            receiptShowTitle
+              ? `<div><div class="receipt-section-title">RECEIPT</div><div class="receipt-sub-title">Tax Invoice (ABB)</div></div>`
+              : ""
+          }
+          <div class="text-xs">
+            <div class="receipt-row"><span class="receipt-muted">Order #</span><span>${escapeHtml(previewData.orderNo)}</span></div>
+            <div class="receipt-row"><span class="receipt-muted">${escapeHtml(t("posTable") || "테이블")}</span><span>${escapeHtml(previewData.tableName)}</span></div>
+            <div class="receipt-row"><span class="receipt-muted">${escapeHtml(t("date") || "Date")}</span><span>${escapeHtml(previewData.now)}</span></div>
+            <div class="receipt-row"><span class="receipt-muted">${escapeHtml(t("posOrderType") || "Order Type")}</span><span>${escapeHtml(previewData.orderType)}</span></div>
+          </div>
+          <div class="receipt-divider"></div>
+          ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ""}
+          ${receiptBizName ? `<div class="biz-line biz-strong">${escapeHtml(receiptBizName)}</div>` : ""}
+          ${receiptBizTaxId ? `<div class="biz-line">Tax ID: ${escapeHtml(receiptBizTaxId)}</div>` : ""}
+          ${receiptBizOwner ? `<div class="biz-line">${escapeHtml(t("posOwner") || "대표")}: ${escapeHtml(receiptBizOwner)}</div>` : ""}
+          ${receiptBizAddress ? `<div class="biz-line">${escapeHtml(receiptBizAddress)}</div>` : ""}
+          ${receiptBizPhone ? `<div class="biz-line">TEL: ${escapeHtml(receiptBizPhone)}</div>` : ""}
+          ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? "</div>" : ""}
+          <div class="receipt-divider-strong"></div>
+          <div class="receipt-item-head"><span>ITEM</span><span>AMOUNT</span></div>
           ${lines}
+          <div class="receipt-divider"></div>
           <div class="receipt-row"><span>${escapeHtml(t("posSubtotal") || "소계")}</span><span>${previewData.subtotal.toLocaleString()} ฿</span></div>
           <div class="receipt-row"><span>${escapeHtml(t("posDiscount") || "할인")}</span><span>-${previewData.discount.toLocaleString()} ฿</span></div>
           <div class="receipt-row"><span>${escapeHtml(t("posDeliveryFee") || "배달 수수료")}</span><span>+${previewData.delivery.toLocaleString()} ฿</span></div>
           <div class="receipt-row"><span>${escapeHtml(t("posPackagingFee") || "포장 수수료")}</span><span>+${previewData.packaging.toLocaleString()} ฿</span></div>
+          <div class="receipt-divider-strong"></div>
           <div class="receipt-total">
             <div class="receipt-row"><span>${escapeHtml(t("posTotal") || "합계")}</span><span>${previewData.total.toLocaleString()} ฿</span></div>
+          </div>
+          <div class="receipt-divider"></div>
+          ${receiptShowPaidStamp ? '<div class="paid-stamp-wrap"><span class="paid-stamp">PAID</span></div>' : ""}
+          ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ""}
+          ${receiptShowThankYou ? '<div class="footer-strong">Thank you!</div>' : ""}
+          ${receiptShowCustomerCopy ? '<div>Customer Copy</div>' : ""}
+          ${(receiptShowThankYou || receiptShowCustomerCopy) ? "</div>" : ""}
           </div>
         </body>
       </html>
     `
-  }, [previewData, t])
+  }, [previewData, t, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptShowThankYou, receiptShowCustomerCopy, receiptBizName, receiptBizTaxId, receiptBizOwner, receiptBizAddress, receiptBizPhone])
 
   const buildKitchenHtml = React.useCallback(() => {
     const lines = previewData.items
@@ -445,6 +582,22 @@ export default function PosPrintersPage() {
                 <Receipt className="h-4 w-4" />
                 {t("posReceiptTab") || "영수증"}
               </TabsTrigger>
+              <TabsTrigger value="receipt-design" className="gap-1.5">
+                <Receipt className="h-4 w-4" />
+                {t("posReceiptDesignTab") || "영수증 디자인"}
+              </TabsTrigger>
+              <TabsTrigger value="kitchen" className="gap-1.5">
+                <Printer className="h-4 w-4" />
+                {t("posKitchenSlip") || "주방 인쇄"}
+              </TabsTrigger>
+              <TabsTrigger value="business" className="gap-1.5">
+                <Building2 className="h-4 w-4" />
+                {t("posBizInfoTab") || "사업자 정보"}
+              </TabsTrigger>
+              <TabsTrigger value="pricing" className="gap-1.5">
+                <Calculator className="h-4 w-4" />
+                {t("posPricingTab") || "최종가격"}
+              </TabsTrigger>
               <TabsTrigger value="drawer" className="gap-1.5">
                 <Wallet className="h-4 w-4" />
                 {t("posDrawerTab") || "돈통"}
@@ -452,82 +605,6 @@ export default function PosPrintersPage() {
             </TabsList>
 
             <TabsContent value="printer" className="mt-0 p-6 space-y-6">
-            <div>
-              <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
-              <Select
-                value={String(kitchenMode)}
-                onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2)}
-              >
-                <SelectTrigger className="mt-1 h-10">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">{t("posKitchenMode1") || "1대 (통합)"}</SelectItem>
-                  <SelectItem value="2">{t("posKitchenMode2") || "2대 (카테고리별)"}</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
-              </p>
-            </div>
-
-            {kitchenMode === 2 && categories.length > 0 && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border p-4">
-                  <h3 className="mb-2 text-sm font-semibold">
-                    {t("posKitchen1") || "주방 1"}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat) => (
-                      <label
-                        key={cat}
-                        className={cn(
-                          "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                          kitchen1Categories.includes(cat)
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-muted bg-muted/30 text-muted-foreground"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={kitchen1Categories.includes(cat)}
-                          onChange={() => toggleKitchen1(cat)}
-                          className="mr-1.5"
-                        />
-                        {cat}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <h3 className="mb-2 text-sm font-semibold">
-                    {t("posKitchen2") || "주방 2"}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat) => (
-                      <label
-                        key={cat}
-                        className={cn(
-                          "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                          kitchen2Categories.includes(cat)
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-muted bg-muted/30 text-muted-foreground"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={kitchen2Categories.includes(cat)}
-                          onChange={() => toggleKitchen2(cat)}
-                          className="mr-1.5"
-                        />
-                        {cat}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">{t("posDeliveryFee") || "배달 수수료"} (฿)</label>
@@ -570,19 +647,107 @@ export default function PosPrintersPage() {
 
             <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
               {t("posPrinterNote") ||
-                "※ 손님 영수증·주방 주문서는 결제 완료 후 영수증 모달에서 인쇄 버튼으로 출력합니다."}
+                "※ 손님 영수증·주방 주문서는 결제 완료 후 모달에서 수동 인쇄하거나, 각 탭에서 자동 인쇄를 설정할 수 있습니다."}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-1">
               <Button variant="outline" onClick={() => handleOpenPreview("receipt")}>
                 <Printer className="mr-2 h-4 w-4" />
                 {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
               </Button>
-              <Button variant="outline" onClick={() => handleOpenPreview("kitchen")}>
-                <Printer className="mr-2 h-4 w-4" />
-                {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
-              </Button>
             </div>
+            </TabsContent>
+
+            <TabsContent value="kitchen" className="mt-0 p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("posKitchenOptionsHint") || "주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다."}
+              </p>
+              <div>
+                <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
+                <Select
+                  value={String(kitchenMode)}
+                  onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2)}
+                >
+                  <SelectTrigger className="mt-1 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">{t("posKitchenMode1") || "1대 (통합)"}</SelectItem>
+                    <SelectItem value="2">{t("posKitchenMode2") || "2대 (카테고리별)"}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
+                </p>
+              </div>
+
+              {kitchenMode === 2 && categories.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <h3 className="mb-2 text-sm font-semibold">
+                      {t("posKitchen1") || "주방 1"}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat) => (
+                        <label
+                          key={cat}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                            kitchen1Categories.includes(cat)
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-muted bg-muted/30 text-muted-foreground"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={kitchen1Categories.includes(cat)}
+                            onChange={() => toggleKitchen1(cat)}
+                            className="mr-1.5"
+                          />
+                          {cat}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <h3 className="mb-2 text-sm font-semibold">
+                      {t("posKitchen2") || "주방 2"}
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat) => (
+                        <label
+                          key={cat}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                            kitchen2Categories.includes(cat)
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-muted bg-muted/30 text-muted-foreground"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={kitchen2Categories.includes(cat)}
+                            onChange={() => toggleKitchen2(cat)}
+                            className="mr-1.5"
+                          />
+                          {cat}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <ToggleRow label={t("posKitchenAutoPrintOnOrder") || "주문 완료 시 주방 주문서 자동 인쇄"} value={autoPrintKitchenSlipOnOrder} onChange={setAutoPrintKitchenSlipOnOrder} t={t} />
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-1">
+                <Button variant="outline" onClick={() => handleOpenPreview("kitchen")}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                </Button>
+              </div>
             </TabsContent>
 
             <TabsContent value="receipt" className="mt-0 p-6 space-y-4">
@@ -591,23 +756,8 @@ export default function PosPrintersPage() {
               </p>
               <div className="space-y-3">
                 <ToggleRow label={t("posLogoPrint") || "로고 인쇄"} value={logoPrint} onChange={setLogoPrint} t={t} />
-                <div>
-                  <label className="text-sm font-medium">{t("posReceiptPrintTiming") || "영수증 출력 시점"}</label>
-                  <div className="mt-1 flex gap-2">
-                    {(['per_payment', 'final_payment'] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setReceiptPrintTiming(v)}
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-sm",
-                          receiptPrintTiming === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                        )}
-                      >
-                        {v === 'per_payment' ? (t("posReceiptPerPayment") || "결제시마다") : (t("posReceiptFinalPayment") || "최종결제시")}
-                      </button>
-                    ))}
-                  </div>
+                <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
+                  {t("posReceiptPrintTiming") || "영수증 출력 시점"}: {t("posOrderButton") || "주문"} / {t("posReorder") || "추가 주문"} / {t("posPayButton") || "결제"}
                 </div>
                 <ToggleRow label={t("posCustomerReceiptOrderDetails") || "고객영수증 주문내역"} value={customerReceiptOrderDetails} onChange={setCustomerReceiptOrderDetails} t={t} />
                 <ToggleRow label={t("posMerchantReceiptOrderDetails") || "가맹점영수증 주문내역"} value={merchantReceiptOrderDetails} onChange={setMerchantReceiptOrderDetails} t={t} />
@@ -637,6 +787,214 @@ export default function PosPrintersPage() {
                 <ToggleRow label={t("posMerchantReceiptPrint") || "가맹점 영수증 출력"} value={merchantReceiptPrint} onChange={setMerchantReceiptPrint} t={t} />
                 <ToggleRow label={t("posActualOrderDetails") || "실 주문 내역 출력"} value={actualOrderDetails} onChange={setActualOrderDetails} t={t} />
                 <ToggleRow label={t("posToppingOptionsPrint") || "토핑메뉴 추가옵션"} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
+                <ToggleRow label="주문시 영수증 자동 인쇄" value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
+                <ToggleRow label="추가 주문시 영수증 자동 인쇄" value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
+                <ToggleRow label="결제시 영수증 자동 인쇄" value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="receipt-design" className="mt-0 p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("posReceiptDesignHint") || "손님 영수증 레이아웃 표시 항목을 설정합니다."}
+              </p>
+              <div className="rounded-lg border p-4 space-y-3">
+                <div>
+                  <label className="text-sm font-medium">{t("posReceiptDesignStyleLabel") || "헤더 스타일"}</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReceiptDesignStyle('badge')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        receiptDesignStyle === 'badge' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posReceiptDesignStyleBadge") || "배지형"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptDesignStyle('simple')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        receiptDesignStyle === 'simple' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posReceiptDesignStyleSimple") || "기본형"}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">{t("posReceiptLogoSizeLabel") || "로고 크기"}</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReceiptLogoSize('sm')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        receiptLogoSize === 'sm' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posReceiptLogoSizeSm") || "작게"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptLogoSize('md')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        receiptLogoSize === 'md' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posReceiptLogoSizeMd") || "중간"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiptLogoSize('lg')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        receiptLogoSize === 'lg' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posReceiptLogoSizeLg") || "크게"}
+                    </button>
+                  </div>
+                </div>
+                <ToggleRow label={t("posReceiptShowTitle") || "영수증 제목 표시"} value={receiptShowTitle} onChange={setReceiptShowTitle} t={t} />
+                <ToggleRow label={t("posReceiptShowPaidStamp") || "PAID 스탬프 표시"} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
+                <ToggleRow label={t("posReceiptShowThankYou") || "하단 Thank you 표시"} value={receiptShowThankYou} onChange={setReceiptShowThankYou} t={t} />
+                <ToggleRow label={t("posReceiptShowCustomerCopy") || "하단 Customer Copy 표시"} value={receiptShowCustomerCopy} onChange={setReceiptShowCustomerCopy} t={t} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="business" className="mt-0 p-6 space-y-4">
+              <div className="rounded-lg border p-4 space-y-3">
+                <p className="text-sm font-medium">{t("posBizInfoTab") || "사업자 정보"}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("posBizNameLabel") || "상호명"}</label>
+                    <Input value={receiptBizName} onChange={(e) => setReceiptBizName(e.target.value)} className="mt-1 h-9" placeholder={t("posBizNamePh") || "예: 청만 아속점"} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("posBizTaxIdLabel") || "사업자등록번호"}</label>
+                    <Input value={receiptBizTaxId} onChange={(e) => setReceiptBizTaxId(e.target.value)} className="mt-1 h-9" placeholder={t("posBizTaxIdPh") || "예: 0105566137147"} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("posBizOwnerLabel") || "대표자명"}</label>
+                    <Input value={receiptBizOwner} onChange={(e) => setReceiptBizOwner(e.target.value)} className="mt-1 h-9" placeholder={t("posBizOwnerPh") || "예: 홍길동"} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">{t("posBizPhoneLabel") || "연락처"}</label>
+                    <Input value={receiptBizPhone} onChange={(e) => setReceiptBizPhone(e.target.value)} className="mt-1 h-9" placeholder={t("posBizPhonePh") || "예: 02-123-4567"} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">{t("posBizAddressLabel") || "사업장 주소"}</label>
+                  <Input value={receiptBizAddress} onChange={(e) => setReceiptBizAddress(e.target.value)} className="mt-1 h-9" placeholder={t("posBizAddressPh") || "예: Bangkok ... "} />
+                </div>
+                <p className="text-[11px] text-muted-foreground">{t("posBizInfoHint") || "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다."}</p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="pricing" className="mt-0 p-6 space-y-4">
+              <div className="rounded-lg border p-4 space-y-3">
+                <p className="text-sm font-medium">{t("posPricingTab") || "최종가격"}</p>
+                <p className="text-[11px] text-muted-foreground">{t("posPricingAdjustmentsHint") || "각 항목은 % 기준입니다. 포함: 최종금액에 이미 포함, 별도: 최종금액에 추가됩니다."}</p>
+                <div className="grid gap-3">
+                  {[
+                    { key: 'vat', label: t("posVatLabel") || '부가세', rate: vatRate, setRate: setVatRate, mode: vatMode, setMode: setVatMode },
+                    { key: 'service', label: t("posServiceFeeLabel") || '서비스비', rate: serviceRate, setRate: setServiceRate, mode: serviceMode, setMode: setServiceMode },
+                    { key: 'card', label: t("posCardFeeLabel") || '카드비', rate: cardRate, setRate: setCardRate, mode: cardMode, setMode: setCardMode },
+                    { key: 'other', label: t("posOtherFeeLabel") || '기타', rate: otherRate, setRate: setOtherRate, mode: otherMode, setMode: setOtherMode },
+                  ].map((it) => (
+                    <div key={it.key} className="space-y-1.5">
+                      <div className="grid gap-2 sm:grid-cols-[120px_1fr_220px] sm:items-center">
+                        <label className="text-sm font-medium">{it.label}</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={it.rate}
+                          onChange={(e) => it.setRate(e.target.value)}
+                          className="h-9"
+                          placeholder="0"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => it.setMode('included')}
+                            className={cn(
+                              "rounded-md border px-3 py-1.5 text-sm",
+                              it.mode === 'included' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                            )}
+                          >
+                            {t("posFeeModeIncluded") || "포함"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => it.setMode('separate')}
+                            className={cn(
+                              "rounded-md border px-3 py-1.5 text-sm",
+                              it.mode === 'separate' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                            )}
+                          >
+                            {t("posFeeModeSeparate") || "별도"}
+                          </button>
+                        </div>
+                      </div>
+                      {it.key !== 'card' && (
+                        <p className="text-[11px] text-muted-foreground sm:pl-[120px]">
+                          {it.mode === 'included'
+                            ? (t("posFeeFormulaIncluded") || '예시) {fee}액 = 기준금액 x ({fee}율 / (100 + {fee}율))').replaceAll('{fee}', it.label)
+                            : (t("posFeeFormulaSeparate") || '예시) {fee}액 = 기준금액 x ({fee}율 / 100)').replaceAll('{fee}', it.label)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <label className="text-sm font-medium">{t("posCardFeeBaseTitle") || "카드비 계산 기준"}</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCardBaseMode('card_only')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        cardBaseMode === 'card_only' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posCardFeeBaseCardOnly") || "카드 결제액 기준"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardBaseMode('card_plus_vat')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        cardBaseMode === 'card_plus_vat' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posCardFeeBaseCardPlusVat") || "카드 결제액+부가세 기준"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCardBaseMode('card_plus_vat_service')}
+                      className={cn(
+                        "rounded-md border px-3 py-1.5 text-sm",
+                        cardBaseMode === 'card_plus_vat_service' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                      )}
+                    >
+                      {t("posCardFeeBaseCardPlusVatService") || "카드 결제액+부가세+서비스비 기준"}
+                    </button>
+                  </div>
+                  <div className="mt-2 rounded-md border border-dashed bg-background/70 p-2 text-xs text-muted-foreground">
+                    <p>
+                      {cardBaseMode === 'card_only' && (t("posCardFeeBaseExampleCardOnly") || '예시) 카드비 기준금액 = 카드결제액')}
+                      {cardBaseMode === 'card_plus_vat' && (t("posCardFeeBaseExampleCardPlusVat") || '예시) 카드비 기준금액 = 카드결제액 + 카드결제액 기준 부가세분')}
+                      {cardBaseMode === 'card_plus_vat_service' && (t("posCardFeeBaseExampleCardPlusVatService") || '예시) 카드비 기준금액 = 카드결제액 + 카드결제액 기준 부가세분 + 카드결제액 기준 서비스비분')}
+                    </p>
+                    <p className="mt-1">
+                      {t("posCardFeeFinalFormula") || '카드비 최종금액 = 카드비 기준금액 x 카드비율(%)'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </TabsContent>
 
@@ -703,39 +1061,72 @@ export default function PosPrintersPage() {
             <div className="mx-auto w-full max-w-[320px] rounded-md border bg-white p-3 text-black">
               {previewKind === "receipt" ? (
                 <div className="font-mono text-xs">
-                  <div className="mb-2 border-b border-dashed border-black pb-2 text-center">
-                    <div className="font-bold">{previewData.storeCode}</div>
-                    <div>{previewData.orderNo}</div>
-                    <div>{previewData.now}</div>
+                  <div className="text-center">
+                    <img
+                      src="/company-stamp.png"
+                      alt="Company logo"
+                      className={cn(
+                        "mx-auto h-auto object-contain",
+                        receiptLogoSize === "sm" ? "w-20" : receiptLogoSize === "lg" ? "w-32" : "w-24"
+                      )}
+                    />
+                    <div className="mt-1 text-black">{previewData.storeCode}</div>
+                  </div>
+                  <div className="my-2 border-t border-dashed border-black" />
+                  {receiptShowTitle && (
+                    <div>
+                      <div className="text-center text-sm font-semibold tracking-wide">RECEIPT</div>
+                      <div className="text-center text-xs text-black">Tax Invoice (ABB)</div>
+                    </div>
+                  )}
+                  <div className="mt-1">
+                    <div className="my-1 flex items-center justify-between"><span>Order #</span><span>{previewData.orderNo}</span></div>
+                    <div className="my-1 flex items-center justify-between"><span>{t("posTable") || "테이블"}</span><span>{previewData.tableName}</span></div>
+                    <div className="my-1 flex items-center justify-between"><span>{t("date") || "Date"}</span><span>{previewData.now}</span></div>
+                    <div className="my-1 flex items-center justify-between"><span>{t("posOrderType") || "Order Type"}</span><span>{previewData.orderType}</span></div>
+                  </div>
+                  <div className="my-2 border-t border-dashed border-black" />
+                  {(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
+                    <div className="space-y-0.5 text-black">
+                      {receiptBizName && <div className="font-semibold">{receiptBizName}</div>}
+                      {receiptBizTaxId && <div>Tax ID: {receiptBizTaxId}</div>}
+                      {receiptBizOwner && <div>{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
+                      {receiptBizAddress && <div>{receiptBizAddress}</div>}
+                      {receiptBizPhone && <div>TEL: {receiptBizPhone}</div>}
+                    </div>
+                  )}
+                  <div className="my-2 border-t-2 border-black" />
+                  <div className="mb-1 flex items-center justify-between border-b border-black pb-1 text-[11px] font-semibold">
+                    <span>ITEM</span>
+                    <span>AMOUNT</span>
                   </div>
                   {previewData.items.map((it) => (
                     <div key={it.name} className="my-1 flex items-center justify-between">
-                      <span>{it.name} x{it.qty}</span>
-                      <span>{(it.qty * it.price).toLocaleString()} ฿</span>
+                      <span>{it.qty}x {it.name}</span>
+                      <span>{(it.qty * it.price).toLocaleString()}</span>
                     </div>
                   ))}
-                  <div className="mt-2 flex items-center justify-between">
-                    <span>{t("posSubtotal") || "소계"}</span>
-                    <span>{previewData.subtotal.toLocaleString()} ฿</span>
+                  <div className="my-2 border-t border-dashed border-black" />
+                  <div className="my-1 flex items-center justify-between"><span>{t("posSubtotal") || "소계"}</span><span>{previewData.subtotal.toLocaleString()} ฿</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posDiscount") || "할인"}</span><span>-{previewData.discount.toLocaleString()} ฿</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posDeliveryFee") || "배달 수수료"}</span><span>+{previewData.delivery.toLocaleString()} ฿</span></div>
+                  <div className="my-1 flex items-center justify-between"><span>{t("posPackagingFee") || "포장 수수료"}</span><span>+{previewData.packaging.toLocaleString()} ฿</span></div>
+                  <div className="my-2 border-t-2 border-black" />
+                  <div className="font-bold">
+                    <div className="flex items-center justify-between"><span>{t("posTotal") || "합계"}</span><span>{previewData.total.toLocaleString()} ฿</span></div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>{t("posDiscount") || "할인"}</span>
-                    <span>-{previewData.discount.toLocaleString()} ฿</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                    <span>+{previewData.delivery.toLocaleString()} ฿</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                    <span>+{previewData.packaging.toLocaleString()} ฿</span>
-                  </div>
-                  <div className="mt-2 border-t border-dashed border-black pt-2 font-bold">
-                    <div className="flex items-center justify-between">
-                      <span>{t("posTotal") || "합계"}</span>
-                      <span>{previewData.total.toLocaleString()} ฿</span>
+                  <div className="my-2 border-t border-dashed border-black" />
+                  {receiptShowPaidStamp && (
+                    <div className="my-2 text-center">
+                      <span className="inline-block border border-black px-3 py-0.5 text-xs font-semibold tracking-widest">PAID</span>
                     </div>
-                  </div>
+                  )}
+                  {(receiptShowThankYou || receiptShowCustomerCopy) && (
+                    <div className="text-center text-black">
+                      {receiptShowThankYou && <div className="font-semibold">Thank you!</div>}
+                      {receiptShowCustomerCopy && <div>Customer Copy</div>}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-base">

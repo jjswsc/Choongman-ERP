@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     )) as { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }[] | null
 
     const raw = rows?.[0]
-    let layout: { id: string; name: string; x: number; y: number; w: number; h: number }[] = []
+    let layout: { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number }[] = []
     if (raw?.layout_json) {
       const arr = Array.isArray(raw.layout_json) ? raw.layout_json : []
       layout = arr
@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
           y: Number(t.y) ?? 0,
           w: Number(t.w) ?? 80,
           h: Number(t.h) ?? 60,
+          floor: Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)),
           shape: String(t.shape ?? 'rect'),
           seats: Number(t.seats ?? 0) || 0,
           rotation: Number(t.rotation ?? 0) || 0,

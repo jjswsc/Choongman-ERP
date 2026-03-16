@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils"
 const FLOOR_W = 720
 const FLOOR_H = 480
 const GRID_SIZE = 24
+const FLOOR_PREF_KEY = "pos-table-layout-floor:"
 
 type TableShape = "rect" | "rect-wide" | "square"
 
@@ -55,25 +56,27 @@ const SHAPE_PRESETS: { shape: TableShape; w: number; h: number; label: string; d
 const SEAT_OPTIONS = [2, 3, 4, 5, 6, 8, 10]
 
 const SEAT_R = 6
-const SEAT_OFFSET = 2
+const SEAT_INSET = 6
 
 /** 테이블 위·아래에만 좌석 원 배치 (위쪽 절반, 아래쪽 절반) */
 function getSeatPositions(w: number, h: number, n: number): { x: number; y: number }[] {
   if (n <= 0) return []
   const r = SEAT_R
-  const off = SEAT_OFFSET
+  const inset = SEAT_INSET
   const nTop = Math.ceil(n / 2)
   const nBottom = n - nTop
+  const minX = r + inset
+  const maxX = Math.max(minX, w - r - inset)
   const positions: { x: number; y: number }[] = []
   // 위쪽 행
   for (let i = 0; i < nTop; i++) {
     const t = nTop === 1 ? 0.5 : i / (nTop - 1)
-    positions.push({ x: w * t, y: -r - off })
+    positions.push({ x: minX + (maxX - minX) * t, y: r + inset })
   }
   // 아래쪽 행
   for (let i = 0; i < nBottom; i++) {
     const t = nBottom === 1 ? 0.5 : i / (nBottom - 1)
-    positions.push({ x: w * t, y: h + r + off })
+    positions.push({ x: minX + (maxX - minX) * t, y: h - r - inset })
   }
   return positions
 }
@@ -100,6 +103,7 @@ export function PosTableLayoutContent() {
   const [showGrid, setShowGrid] = React.useState(true)
   const [gridCols, setGridCols] = React.useState(6)
   const [gridRows, setGridRows] = React.useState(5)
+  const [activeFloor, setActiveFloor] = React.useState<1 | 2 | 3>(1)
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
   const dragStartRef = React.useRef<{ id: string; startX: number; startY: number; mouseX: number; mouseY: number; scaleX: number; scaleY: number } | null>(null)
@@ -108,6 +112,11 @@ export function PosTableLayoutContent() {
   const floorRef = React.useRef<HTMLDivElement | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const currentFloorLayout = React.useMemo(
+    () => layout.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) === activeFloor),
+    [layout, activeFloor]
+  )
+  const currentFloorIdSet = React.useMemo(() => new Set(currentFloorLayout.map((t) => t.id)), [currentFloorLayout])
 
   React.useEffect(() => {
     if (canSearchAll && stores.length && !storeCode) {
@@ -116,6 +125,26 @@ export function PosTableLayoutContent() {
       setStoreCode(auth.store)
     }
   }, [canSearchAll, stores, auth?.store, storeCode])
+
+  React.useEffect(() => {
+    if (!storeCode) return
+    try {
+      const raw = window.localStorage.getItem(`${FLOOR_PREF_KEY}${storeCode}`)
+      const floor = Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
+      setActiveFloor(floor)
+    } catch {
+      setActiveFloor(1)
+    }
+  }, [storeCode])
+
+  React.useEffect(() => {
+    if (!storeCode) return
+    try {
+      window.localStorage.setItem(`${FLOOR_PREF_KEY}${storeCode}`, String(activeFloor))
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [storeCode, activeFloor])
 
   const loadLayout = React.useCallback(() => {
     if (!storeCode) return
@@ -135,6 +164,8 @@ export function PosTableLayoutContent() {
       const item = layout.find((x) => x.id === selectedId)
       setTableNameInput(item?.name ?? "")
       setTableSeatsInput(item?.seats ?? 0)
+      const floor = Math.min(3, Math.max(1, Number(item?.floor ?? 1) || 1)) as 1 | 2 | 3
+      setActiveFloor(floor)
     } else {
       setTableNameInput("")
       setTableSeatsInput(0)
@@ -149,17 +180,35 @@ export function PosTableLayoutContent() {
     }
   }, [layout, selectedId])
 
+  React.useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => currentFloorIdSet.has(id)))
+    if (selectedId && !currentFloorIdSet.has(selectedId)) {
+      setSelectedId(null)
+    }
+  }, [activeFloor, currentFloorIdSet, selectedId])
+
+  React.useEffect(() => {
+    if (currentFloorLayout.length > 0 || layout.length === 0) return
+    const floors = Array.from(
+      new Set(layout.map((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as 1 | 2 | 3))
+    ).sort((a, b) => a - b)
+    if (floors[0] && floors[0] !== activeFloor) {
+      setActiveFloor(floors[0])
+    }
+  }, [layout, currentFloorLayout.length, activeFloor])
+
   const addTable = (preset: (typeof SHAPE_PRESETS)[0]) => {
-    const maxY = layout.length ? Math.max(...layout.map((t) => t.y + t.h)) : 0
+    const maxY = currentFloorLayout.length ? Math.max(...currentFloorLayout.map((t) => t.y + t.h)) : 0
     const y = maxY + 20 > FLOOR_H - preset.h ? 20 : maxY + 20
-    const x = (layout.length % 3) * 90 + 24
+    const x = (currentFloorLayout.length % 3) * 90 + 24
     const newTable: PosTableItem = {
       id: generateId(),
-      name: `${layout.length + 1}번`,
+      name: `${activeFloor}F-${currentFloorLayout.length + 1}번`,
       x,
       y,
       w: preset.w,
       h: preset.h,
+      floor: activeFloor,
       shape: preset.shape,
       seats: preset.defaultSeats,
       rotation: 0,
@@ -342,7 +391,7 @@ export function PosTableLayoutContent() {
       const h = maxY - minY
       const isClickLike = w < 3 && h < 3
       if (!isClickLike) {
-        const hitIds = layout
+        const hitIds = currentFloorLayout
           .filter((t) => {
             const tx1 = t.x
             const ty1 = t.y
@@ -371,33 +420,34 @@ export function PosTableLayoutContent() {
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
     }
-  }, [layout, selectBox])
+  }, [currentFloorLayout, selectBox])
 
   const handleReset = () => {
-    if (!confirm(t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?")) return
-    setLayout([])
+    if (!confirm((t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?") + ` (${activeFloor}F)`)) return
+    setLayout((prev) => prev.filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) !== activeFloor))
     setSelectedId(null)
     setSelectedIds([])
   }
 
   const handleAutoName = () => {
-    setLayout((prev) =>
-      prev
+    setLayout((prev) => {
+      const floorItems = prev
+        .filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor)
         .slice()
         .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
-        .map((t, i) => ({ ...t, name: `${i + 1}번` }))
-        .sort((a, b) => {
-          const ia = prev.findIndex((p) => p.id === a.id)
-          const ib = prev.findIndex((p) => p.id === b.id)
-          return ia - ib
-        })
-    )
+      const patch = new Map(floorItems.map((tbl, i) => [tbl.id, `${activeFloor}F-${i + 1}번`]))
+      return prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl))
+    })
   }
 
   const alignTables = (align: "left" | "center" | "right" | "top" | "middle" | "bottom") => {
-    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : layout.map((t) => t.id)
+    const ids = selectedIds.length > 0
+      ? selectedIds.filter((id) => currentFloorIdSet.has(id))
+      : selectedId && currentFloorIdSet.has(selectedId)
+        ? [selectedId]
+        : currentFloorLayout.map((t) => t.id)
     if (ids.length === 0) return
-    const items = layout.filter((t) => ids.includes(t.id))
+    const items = currentFloorLayout.filter((t) => ids.includes(t.id))
     if (items.length === 0) return
 
     const minX = Math.min(...items.map((t) => t.x))
@@ -431,9 +481,13 @@ export function PosTableLayoutContent() {
   }
 
   const distributeTablesBoth = () => {
-    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []
+    const ids = selectedIds.length > 0
+      ? selectedIds.filter((id) => currentFloorIdSet.has(id))
+      : selectedId && currentFloorIdSet.has(selectedId)
+        ? [selectedId]
+        : []
     if (ids.length < 3) return
-    const items = layout.filter((t) => ids.includes(t.id))
+    const items = currentFloorLayout.filter((t) => ids.includes(t.id))
     if (items.length < 3) return
 
     const byX = [...items].sort((a, b) => a.x - b.x)
@@ -474,9 +528,13 @@ export function PosTableLayoutContent() {
   }
 
   const distributeTables = (dir: "horizontal" | "vertical") => {
-    const ids = selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : []
+    const ids = selectedIds.length > 0
+      ? selectedIds.filter((id) => currentFloorIdSet.has(id))
+      : selectedId && currentFloorIdSet.has(selectedId)
+        ? [selectedId]
+        : []
     if (ids.length < 3) return
-    const items = layout.filter((t) => ids.includes(t.id))
+    const items = currentFloorLayout.filter((t) => ids.includes(t.id))
     if (items.length < 3) return
 
     if (dir === "horizontal") {
@@ -532,7 +590,11 @@ export function PosTableLayoutContent() {
     }
   }
 
-  const selectedCount = selectedIds.length > 0 ? selectedIds.length : selectedId ? 1 : 0
+  const selectedCount = selectedIds.filter((id) => currentFloorIdSet.has(id)).length > 0
+    ? selectedIds.filter((id) => currentFloorIdSet.has(id)).length
+    : selectedId && currentFloorIdSet.has(selectedId)
+      ? 1
+      : 0
 
   return (
     <div className="space-y-4">
@@ -569,6 +631,20 @@ export function PosTableLayoutContent() {
 
       {/* 그리드 설정 & 테이블 생성 */}
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 p-1">
+          {[1, 2, 3].map((floor) => (
+            <Button
+              key={floor}
+              type="button"
+              size="sm"
+              variant={activeFloor === floor ? "default" : "ghost"}
+              className="h-7 px-2 text-xs"
+              onClick={() => setActiveFloor(floor as 1 | 2 | 3)}
+            >
+              {(t("posFloorLabel") || "{n}F").replaceAll("{n}", String(floor))}
+            </Button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-slate-600">{t("posTableGrid") || "가로"}</span>
           <Select value={String(gridCols)} onValueChange={(v) => setGridCols(Number(v))}>
@@ -672,13 +748,13 @@ export function PosTableLayoutContent() {
         </span>
         <div className="h-6 w-px bg-slate-200" />
         <div className="flex gap-1">
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("left")} disabled={layout.length === 0} title={t("posAlignLeft") || "왼쪽 정렬"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("left")} disabled={currentFloorLayout.length === 0} title={t("posAlignLeft") || "왼쪽 정렬"}>
             <AlignLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("center")} disabled={layout.length === 0} title={t("posAlignCenter") || "가운데 정렬"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("center")} disabled={currentFloorLayout.length === 0} title={t("posAlignCenter") || "가운데 정렬"}>
             <AlignCenter className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("right")} disabled={layout.length === 0} title={t("posAlignRight") || "오른쪽 정렬"}>
+          <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => alignTables("right")} disabled={currentFloorLayout.length === 0} title={t("posAlignRight") || "오른쪽 정렬"}>
             <AlignRight className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={() => distributeTables("horizontal")} disabled={selectedCount < 3} title="가로 균등 간격">
@@ -726,7 +802,7 @@ export function PosTableLayoutContent() {
             }}
           />
         )}
-        {layout.map((item) => {
+        {currentFloorLayout.map((item) => {
           const isSquare = item.shape === "square"
           const hasSeats = (item.seats ?? 0) > 0
           const seatPositions = getSeatPositions(item.w, item.h, item.seats ?? 0)
@@ -814,7 +890,7 @@ export function PosTableLayoutContent() {
             }}
           />
         )}
-        {layout.length === 0 && !loading && (
+        {currentFloorLayout.length === 0 && !loading && (
           <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">
             {t("posTableEmpty") || "테이블 추가 버튼으로 테이블을 배치하세요."}
           </div>

@@ -466,7 +466,12 @@ export function PosTerminalMenuScreen({
           {t('posTableLabel')}: <span className="text-foreground font-semibold">{selectedTableName}</span>
         </span>
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 min-[980px]:grid-cols-[220px_1fr_320px]">
+      <div
+        className={cn(
+          'flex-1 min-h-0 grid grid-cols-1',
+          isAdminMode ? 'min-[980px]:grid-cols-[220px_1fr_320px]' : 'min-[980px]:grid-cols-[220px_1fr]'
+        )}
+      >
         <section className="min-h-0 border-r bg-muted/20 px-3 py-3">
           <p className="mb-2 text-xs font-semibold text-muted-foreground">{t('posMainCategory') || '대분류'}</p>
           <div className="grid gap-1.5">
@@ -601,70 +606,72 @@ export function PosTerminalMenuScreen({
           </div>
         </section>
 
-        <section className="min-h-0 border-l bg-card p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <Input
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder={t('search') || '검색'}
-              className="h-8 text-xs"
-            />
-            <span className="text-xs text-muted-foreground">{safePage + 1}/{totalPages}</span>
-          </div>
-          <div className="h-[calc(100%-76px)] overflow-auto rounded-md border">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-muted">
-                <tr>
-                  <th className="px-2 py-1 text-left">{t('menu') || '메뉴'}</th>
-                  <th className="px-2 py-1 text-right">{t('price') || '단가'}</th>
-                  <th className="px-2 py-1 text-center">{t('add') || '추가'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedRows.map((row) => (
-                  <tr key={row.id} className="border-t">
-                    <td className="px-2 py-1.5">
-                      <span style={{ fontSize: `${screenConfig.menuListFontSize}px` }}>
-                        {row.rowType === 'promo' ? `[Promo] ${row.name}` : row.name}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{row.price.toLocaleString()}</td>
-                    <td className="px-2 py-1.5 text-center">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        disabled={!interactive}
-                        onClick={() => {
-                          if (!interactive) return
-                          if (row.rowType === 'promo' && row.promo) addPromo(row.promo)
-                          if (row.rowType === 'menu' && row.menu) openMenuPicker(row.menu)
-                        }}
-                      >
-                        +
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {pagedRows.length === 0 && (
+        {isAdminMode && (
+          <section className="min-h-0 border-l bg-card p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Input
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder={t('search') || '검색'}
+                className="h-8 text-xs"
+              />
+              <span className="text-xs text-muted-foreground">{safePage + 1}/{totalPages}</span>
+            </div>
+            <div className="h-[calc(100%-76px)] overflow-auto rounded-md border">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-muted">
                   <tr>
-                    <td colSpan={3} className="px-2 py-6 text-center text-muted-foreground">
-                      {t('posNoMenus') || '등록된 메뉴가 없습니다.'}
-                    </td>
+                    <th className="px-2 py-1 text-left">{t('menu') || '메뉴'}</th>
+                    <th className="px-2 py-1 text-right">{t('price') || '단가'}</th>
+                    <th className="px-2 py-1 text-center">{t('add') || '추가'}</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-2 flex items-center justify-between">
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage <= 0} onClick={() => setListPage((p) => Math.max(0, p - 1))}>
-              {t('prev') || '이전'}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage >= totalPages - 1} onClick={() => setListPage((p) => Math.min(totalPages - 1, p + 1))}>
-              {t('next') || '다음'}
-            </Button>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {pagedRows.map((row) => (
+                    <tr key={row.id} className="border-t">
+                      <td className="px-2 py-1.5">
+                        <span style={{ fontSize: `${screenConfig.menuListFontSize}px` }}>
+                          {row.rowType === 'promo' ? `[Promo] ${row.name}` : row.name}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">{row.price.toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          disabled={!interactive}
+                          onClick={() => {
+                            if (!interactive) return
+                            if (row.rowType === 'promo' && row.promo) addPromo(row.promo)
+                            if (row.rowType === 'menu' && row.menu) openMenuPicker(row.menu)
+                          }}
+                        >
+                          +
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {pagedRows.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-2 py-6 text-center text-muted-foreground">
+                        {t('posNoMenus') || '등록된 메뉴가 없습니다.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage <= 0} onClick={() => setListPage((p) => Math.max(0, p - 1))}>
+                {t('prev') || '이전'}
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage >= totalPages - 1} onClick={() => setListPage((p) => Math.min(totalPages - 1, p + 1))}>
+                {t('next') || '다음'}
+              </Button>
+            </div>
+          </section>
+        )}
       </div>
 
       {showConfigBar && isAdminMode && (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
+import { computePosPricing } from '@/lib/pos-pricing'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
@@ -27,6 +28,7 @@ export async function POST(req: NextRequest) {
     const couponDiscountAmt = Math.max(0, Number(body?.couponDiscountAmt ?? 0))
     const pointUsed = Math.max(0, Math.trunc(Number(body?.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
+    const pricingAdjustments = body?.pricingAdjustments || {}
 
     if (!id || items.length === 0) {
       return NextResponse.json(
@@ -59,9 +61,16 @@ export async function POST(req: NextRequest) {
       const qty = Number(it.qty ?? 1)
       subtotal += price * qty
     }
-    const afterDiscount = Math.max(0, subtotal - discountAmt)
-    const vat = Math.round(afterDiscount * (7 / 107) * 100) / 100
-    const total = afterDiscount
+    const pricing = computePosPricing({
+      subtotal,
+      discountAmt,
+      deliveryFee: 0,
+      packagingFee: 0,
+      cardPaymentAmount: paymentCard,
+      adjustments: pricingAdjustments,
+    })
+    const vat = pricing.vatFeeAmt
+    const total = pricing.finalTotal
 
     const patch: Record<string, unknown> = {
       table_name: tableName,

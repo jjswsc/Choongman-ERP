@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { getMembers, validatePosCoupon } from '@/lib/api-client'
+import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
 export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
@@ -154,6 +155,8 @@ interface CartPanelProps {
   }) => void
   /** 주문 버튼으로 이미 전송된 주문 ID (결제 시 해당 주문에 결제 반영용) */
   pendingOrderId?: number | null
+  /** 최종 가격 반영 옵션(부가세/서비스비/카드비/기타) */
+  pricingAdjustments?: PosPricingAdjustments
 }
 
 interface CartItem extends OrderItem {
@@ -178,6 +181,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onDineInOrderComplete,
   onNonDineOrderComplete,
   pendingOrderId,
+  pricingAdjustments,
 }, ref) {
   const { lang } = useLang()
   const tDefault = useT(lang)
@@ -257,7 +261,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     ? Math.floor((subtotal * discountValue) / 100)
     : discountValue
   const pointUsedNum = Math.max(0, Math.trunc(Number(pointUsed || 0)))
-  const total = Math.max(0, subtotal - discount - pointUsedNum)
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt: discount + pointUsedNum,
+    cardPaymentAmount: parseFloat(payCard) || 0,
+    adjustments: pricingAdjustments,
+  })
+  const total = pricing.finalTotal
   const dutchUnitAmount = Math.max(0, Math.round((total / Math.max(1, splitCount)) * 100) / 100)
   const dutchRemainingPeople = Math.max(0, splitCount - splitPaidSteps)
 
@@ -549,10 +559,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!showPaymentModal || total <= 0 || showSplit) return
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
-    const newTotal = Math.max(0, st - dc - pointUsedNum)
+    const newTotal = computePosPricing({
+      subtotal: st,
+      discountAmt: dc + pointUsedNum,
+      adjustments: pricingAdjustments,
+    }).finalTotal
     resetPaymentInputs()
     setPayCash(String(newTotal))
-  }, [showPaymentModal, total, discountValue, discountType, pointUsed, showSplit])
+  }, [showPaymentModal, total, discountValue, discountType, pointUsedNum, showSplit, cartItems, pricingAdjustments])
 
   const buildOrderMemo = (baseMemo: string) => {
     if (!needTaxInvoice) return baseMemo
@@ -1170,6 +1184,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <span>-{discount.toLocaleString()} ฿</span>
             </div>
           )}
+          {pricing.vatFeeAmt > 0 && (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+              <span>{pricing.vatFeeMode === 'separate' ? '+' : ''}{pricing.vatFeeAmt.toLocaleString()} ฿</span>
+            </div>
+          )}
+          {pricing.serviceFeeAmt > 0 && (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+              <span>{pricing.serviceFeeMode === 'separate' ? '+' : ''}{pricing.serviceFeeAmt.toLocaleString()} ฿</span>
+            </div>
+          )}
+          {pricing.cardFeeAmt > 0 && (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+              <span>{pricing.cardFeeMode === 'separate' ? '+' : ''}{pricing.cardFeeAmt.toLocaleString()} ฿</span>
+            </div>
+          )}
+          {pricing.otherFeeAmt > 0 && (
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+              <span>{pricing.otherFeeMode === 'separate' ? '+' : ''}{pricing.otherFeeAmt.toLocaleString()} ฿</span>
+            </div>
+          )}
           <div className="flex justify-between text-base font-bold">
             <span>{t('posInputTotal')}</span>
             <span>{total.toLocaleString()} ฿</span>
@@ -1254,6 +1292,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <span className="tabular-nums">-{discount.toLocaleString()} ฿</span>
                 </div>
               )}
+              {pricing.vatFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{pricing.vatFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.serviceFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{pricing.serviceFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.cardFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.cardFeeMode === 'separate' ? '+' : ''}{pricing.cardFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.otherFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.otherFeeMode === 'separate' ? '+' : ''}{pricing.otherFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base pt-1 border-t">
                 <span>{t('posInputTotal') || '결제 금액'}</span>
                 <span className="tabular-nums">{total.toLocaleString()} ฿</span>
@@ -1286,6 +1348,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <div className="flex justify-between text-muted-foreground">
                   <span>{t('posDiscount')}</span>
                   <span className="tabular-nums">-{discount.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.vatFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posVatLabel') || '부가세'} ({pricing.vatFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.vatFeeMode === 'separate' ? '+' : ''}{pricing.vatFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.serviceFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posServiceFee') || '서비스비'} ({pricing.serviceFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{pricing.serviceFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.cardFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posCardFee') || '카드비'} ({pricing.cardFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.cardFeeMode === 'separate' ? '+' : ''}{pricing.cardFeeAmt.toLocaleString()} ฿</span>
+                </div>
+              )}
+              {pricing.otherFeeAmt > 0 && (
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posOtherFee') || '기타'} ({pricing.otherFeeMode === 'included' ? (t('posFeeModeIncluded') || '포함') : (t('posFeeModeSeparate') || '별도')})</span>
+                  <span className="tabular-nums">{pricing.otherFeeMode === 'separate' ? '+' : ''}{pricing.otherFeeAmt.toLocaleString()} ฿</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base pt-1 border-t">

@@ -7,7 +7,7 @@ import type { PosTableItem } from '@/lib/api-client'
 const FLOOR_W = 720
 const FLOOR_H = 480
 const SEAT_R = 6
-const SEAT_OFFSET = 2
+const SEAT_INSET = 6
 
 /** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강 */
 export type TableStatus = 'preparing' | 'partial_served' | 'completed' | null
@@ -21,17 +21,19 @@ export type TableStatusResult =
 function getSeatPositions(w: number, h: number, n: number): { x: number; y: number }[] {
   if (n <= 0) return []
   const r = SEAT_R
-  const off = SEAT_OFFSET
+  const inset = SEAT_INSET
   const nTop = Math.ceil(n / 2)
   const nBottom = n - nTop
+  const minX = r + inset
+  const maxX = Math.max(minX, w - r - inset)
   const positions: { x: number; y: number }[] = []
   for (let i = 0; i < nTop; i++) {
     const t = nTop === 1 ? 0.5 : i / (nTop - 1)
-    positions.push({ x: w * t, y: -r - off })
+    positions.push({ x: minX + (maxX - minX) * t, y: r + inset })
   }
   for (let i = 0; i < nBottom; i++) {
     const t = nBottom === 1 ? 0.5 : i / (nBottom - 1)
-    positions.push({ x: w * t, y: h + r + off })
+    positions.push({ x: minX + (maxX - minX) * t, y: h - r - inset })
   }
   return positions
 }
@@ -56,6 +58,8 @@ export interface TableFloorViewProps {
   delayBadgeEnabled?: boolean
   delaySoundEnabled?: boolean
   delayAlertOverMin?: number
+  activeFloor?: 1 | 2 | 3
+  onFloorChange?: (floor: 1 | 2 | 3) => void
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -130,15 +134,26 @@ export function TableFloorView({
   delayBadgeEnabled = true,
   delaySoundEnabled = false,
   delayAlertOverMin = 0,
+  activeFloor = 1,
+  onFloorChange,
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
+  const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
+    const floors = Array.from(
+      new Set(layout.map((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) as 1 | 2 | 3))
+    ).sort((a, b) => a - b)
+    return floors.length > 0 ? floors : [1]
+  }, [layout])
+
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
 
   const tableStyles = useMemo(() => {
-    return layout.map((item) => ({
+    return layout
+      .filter((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) === activeFloor)
+      .map((item) => ({
       id: item.id,
       name: String(item.name ?? '').trim() || item.id,
       leftPct: ((Number(item.x ?? 0) || 0) / FLOOR_W) * 100,
@@ -151,7 +166,7 @@ export function TableFloorView({
       shape: String(item.shape ?? 'rect'),
       seats: Number(item.seats ?? 0) || 0,
     }))
-  }, [layout])
+  }, [layout, activeFloor])
 
   const delayedCount = (() => {
     return tableStyles.reduce((acc, tab) => {
@@ -212,6 +227,26 @@ export function TableFloorView({
       )}
       style={{ aspectRatio: `${FLOOR_W} / ${FLOOR_H}` }}
     >
+      {!!onFloorChange && (
+        <div className="absolute left-2 top-2 z-20 flex items-center gap-1 rounded-md border border-slate-300 bg-white/90 p-1 shadow-sm">
+          {availableFloors.map((floor) => (
+            <button
+              key={floor}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onFloorChange(floor as 1 | 2 | 3)
+              }}
+              className={cn(
+                'rounded px-2 py-1 text-[11px] font-medium',
+                activeFloor === floor ? 'bg-primary text-primary-foreground' : 'text-slate-700 hover:bg-slate-100'
+              )}
+            >
+              {(t('posFloorLabel') || 'Floor {n}').replaceAll('{n}', String(floor))}
+            </button>
+          ))}
+        </div>
+      )}
       {/* 그리드 배경 (관리자와 유사) */}
       <div
         className="absolute inset-0 opacity-30 pointer-events-none"

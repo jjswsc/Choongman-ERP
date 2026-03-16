@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn, escapeHtml } from "@/lib/utils"
+import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
 import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -115,6 +116,23 @@ export default function PosOrderPage() {
     pendingCount: number
   } | null>(null)
   const [storeFees, setStoreFees] = React.useState({ deliveryFee: 0, packagingFee: 0 })
+  const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = React.useState(false)
+  const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = React.useState(false)
+  const [receiptBizName, setReceiptBizName] = React.useState("")
+  const [receiptBizTaxId, setReceiptBizTaxId] = React.useState("")
+  const [receiptBizOwner, setReceiptBizOwner] = React.useState("")
+  const [receiptBizAddress, setReceiptBizAddress] = React.useState("")
+  const [receiptBizPhone, setReceiptBizPhone] = React.useState("")
+  const [receiptLogoSize, setReceiptLogoSize] = React.useState<'sm' | 'md' | 'lg'>('md')
+  const [vatRate, setVatRate] = React.useState(7)
+  const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
+  const [serviceRate, setServiceRate] = React.useState(0)
+  const [serviceMode, setServiceMode] = React.useState<'included' | 'separate'>('separate')
+  const [cardRate, setCardRate] = React.useState(0)
+  const [cardMode, setCardMode] = React.useState<'included' | 'separate'>('separate')
+  const [cardBaseMode, setCardBaseMode] = React.useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
+  const [otherRate, setOtherRate] = React.useState(0)
+  const [otherMode, setOtherMode] = React.useState<'included' | 'separate'>('separate')
   const [showPaymentModal, setShowPaymentModal] = React.useState(false)
   const [payCash, setPayCash] = React.useState("")
   const [payCard, setPayCard] = React.useState("")
@@ -133,8 +151,17 @@ export default function PosOrderPage() {
     tableName: string
     memo: string
     discountReason: string
+    vatFeeAmt?: number
+    vatFeeMode?: 'included' | 'separate'
+    serviceFeeAmt?: number
+    serviceFeeMode?: 'included' | 'separate'
+    cardFeeAmt?: number
+    cardFeeMode?: 'included' | 'separate'
+    otherFeeAmt?: number
+    otherFeeMode?: 'included' | 'separate'
   } | null>(null)
   const receiptRef = React.useRef<HTMLDivElement>(null)
+  const autoPrintedKeyRef = React.useRef<string>("")
 
   React.useEffect(() => {
     const def = auth?.store || stores[0] || "ST01"
@@ -170,8 +197,58 @@ export default function PosOrderPage() {
   const loadStoreFees = React.useCallback(() => {
     if (!storeCode) return
     getPosPrinterSettings({ storeCode })
-      .then((s) => setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 }))
-      .catch(() => setStoreFees({ deliveryFee: 0, packagingFee: 0 }))
+      .then((s) => {
+        setStoreFees({ deliveryFee: s.deliveryFee ?? 0, packagingFee: s.packagingFee ?? 0 })
+        setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
+        setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
+        setReceiptBizName(String(s.receiptBizName || ""))
+        setReceiptBizTaxId(String(s.receiptBizTaxId || ""))
+        setReceiptBizOwner(String(s.receiptBizOwner || ""))
+        setReceiptBizAddress(String(s.receiptBizAddress || ""))
+        setReceiptBizPhone(String(s.receiptBizPhone || ""))
+        setReceiptLogoSize(
+          s.receiptLogoSize === 'sm'
+            ? 'sm'
+            : s.receiptLogoSize === 'lg'
+              ? 'lg'
+              : 'md'
+        )
+        setVatRate(Math.max(0, Number(s.vatRate ?? 7)))
+        setVatMode(s.vatMode === 'separate' ? 'separate' : 'included')
+        setServiceRate(Math.max(0, Number(s.serviceRate ?? 0)))
+        setServiceMode(s.serviceMode === 'included' ? 'included' : 'separate')
+        setCardRate(Math.max(0, Number(s.cardRate ?? 0)))
+        setCardMode(s.cardMode === 'included' ? 'included' : 'separate')
+        setCardBaseMode(
+          s.cardBaseMode === 'card_plus_vat'
+            ? 'card_plus_vat'
+            : s.cardBaseMode === 'card_plus_vat_service'
+              ? 'card_plus_vat_service'
+              : 'card_only'
+        )
+        setOtherRate(Math.max(0, Number(s.otherRate ?? 0)))
+        setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
+      })
+      .catch(() => {
+        setStoreFees({ deliveryFee: 0, packagingFee: 0 })
+        setAutoPrintReceiptOnPayment(false)
+        setAutoPrintKitchenSlipOnOrder(false)
+        setReceiptBizName("")
+        setReceiptBizTaxId("")
+        setReceiptBizOwner("")
+        setReceiptBizAddress("")
+        setReceiptBizPhone("")
+        setReceiptLogoSize('md')
+        setVatRate(7)
+        setVatMode('included')
+        setServiceRate(0)
+        setServiceMode('separate')
+        setCardRate(0)
+        setCardMode('separate')
+        setCardBaseMode('card_only')
+        setOtherRate(0)
+        setOtherMode('separate')
+      })
   }, [storeCode])
 
   React.useEffect(() => {
@@ -416,7 +493,36 @@ export default function PosOrderPage() {
   const effectiveDiscountReason = appliedCoupon ? appliedCoupon.discountReason : discountReason.trim()
   const deliveryFeeAmt = orderType === "delivery" ? storeFees.deliveryFee : 0
   const packagingFeeAmt = orderType === "takeout" ? storeFees.packagingFee : 0
-  const total = Math.max(0, subtotal - discountAmt + deliveryFeeAmt + packagingFeeAmt)
+  const pricingAdjustments: PosPricingAdjustments = {
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+    cardRate,
+    cardMode,
+    cardBaseMode,
+    otherRate,
+    otherMode,
+  }
+  const pricing = computePosPricing({
+    subtotal,
+    discountAmt,
+    deliveryFee: deliveryFeeAmt,
+    packagingFee: packagingFeeAmt,
+    adjustments: pricingAdjustments,
+  })
+  const total = pricing.finalTotal
+  const paymentPreview = computePosPricing({
+    subtotal,
+    discountAmt,
+    deliveryFee: deliveryFeeAmt,
+    packagingFee: packagingFeeAmt,
+    cardPaymentAmount: Number(payCard) || 0,
+    adjustments: pricingAdjustments,
+  })
+  const paymentPreviewTotal = paymentPreview.finalTotal
+  const paymentInputSum = (Number(payCash) || 0) + (Number(payCard) || 0) + (Number(payQr) || 0) + (Number(payOther) || 0)
+  const paymentInputMatch = Math.abs(paymentInputSum - paymentPreviewTotal) < 0.01
 
   const handleApplyCoupon = async () => {
     const code = couponCode.trim().toUpperCase()
@@ -465,8 +571,17 @@ export default function PosOrderPage() {
 
   const handleCheckout = async (payment: { cash: number; card: number; qr: number; other: number }) => {
     if (cart.length === 0) return
+    const checkoutPricing = computePosPricing({
+      subtotal,
+      discountAmt,
+      deliveryFee: deliveryFeeAmt,
+      packagingFee: packagingFeeAmt,
+      cardPaymentAmount: payment.card,
+      adjustments: pricingAdjustments,
+    })
+    const checkoutTotal = checkoutPricing.finalTotal
     const sum = payment.cash + payment.card + payment.qr + payment.other
-    if (Math.abs(sum - total) > 0.01) {
+    if (Math.abs(sum - checkoutTotal) > 0.01) {
       alert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
       return
     }
@@ -486,6 +601,7 @@ export default function PosOrderPage() {
         paymentCard: payment.card || undefined,
         paymentQr: payment.qr || undefined,
         paymentOther: payment.other || undefined,
+        pricingAdjustments,
         items: cart.map((it) => ({
           id: it.id,
           name: it.name,
@@ -504,12 +620,20 @@ export default function PosOrderPage() {
           discountAmt,
           deliveryFee: deliveryFeeAmt,
           packagingFee: packagingFeeAmt,
-          total,
+          total: checkoutTotal,
           storeCode: storeCode || "ST01",
           orderType,
           tableName: orderType === "dine_in" ? tableName : "",
           memo: memo.trim(),
           discountReason: effectiveDiscountReason,
+          vatFeeAmt: checkoutPricing.vatFeeAmt,
+          vatFeeMode: checkoutPricing.vatFeeMode,
+          serviceFeeAmt: checkoutPricing.serviceFeeAmt,
+          serviceFeeMode: checkoutPricing.serviceFeeMode,
+          cardFeeAmt: checkoutPricing.cardFeeAmt,
+          cardFeeMode: checkoutPricing.cardFeeMode,
+          otherFeeAmt: checkoutPricing.otherFeeAmt,
+          otherFeeMode: checkoutPricing.otherFeeMode,
         })
         clearCart()
         setMemo("")
@@ -529,8 +653,9 @@ export default function PosOrderPage() {
 
   const POS_PAPER_WIDTH_MM = 80
   const POS_PAPER_SIDE_PADDING_MM = 3
+  const POS_PAPER_HEIGHT_MM = 200
   const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
-    @page { size: ${POS_PAPER_WIDTH_MM}mm auto; margin: 0; }
+    @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
     html, body { margin: 0; padding: 0; }
     body {
       width: ${POS_PAPER_WIDTH_MM}mm;
@@ -558,10 +683,17 @@ export default function PosOrderPage() {
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
             ${getPosPaperBaseCss("'Courier New', monospace", 12)}
-            .receipt-content { }
+            body { font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; color: #000; }
+            .receipt-content { width: 72mm; max-width: 72mm; margin: 0 auto; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
             .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
             .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
+            .receipt-biz { margin: 2px 0; font-size: 11px; }
+            .receipt-brand-logo { display: inline-block; height: auto; object-fit: contain; }
+            .receipt-brand-logo.sm { width: 84px; }
+            .receipt-brand-logo.md { width: 108px; }
+            .receipt-brand-logo.lg { width: 132px; }
+            .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; }
             .space-y-2 > * + * { margin-top: 8px; }
             .space-y-1 > * + * { margin-top: 4px; }
           </style>
@@ -654,6 +786,27 @@ export default function PosOrderPage() {
       alert(String(e))
     }
   }
+
+  React.useEffect(() => {
+    if (!receiptData) return
+    if (!autoPrintReceiptOnPayment && !autoPrintKitchenSlipOnOrder) return
+    const key = `${receiptData.orderNo}|${receiptData.storeCode}|${receiptData.total}|${receiptData.items.length}`
+    if (autoPrintedKeyRef.current === key) return
+    autoPrintedKeyRef.current = key
+
+    const timers: ReturnType<typeof setTimeout>[] = []
+    if (autoPrintKitchenSlipOnOrder) {
+      timers.push(setTimeout(() => {
+        void handlePrintKitchenSlip()
+      }, 180))
+    }
+    if (autoPrintReceiptOnPayment) {
+      timers.push(setTimeout(() => {
+        handlePrintReceipt()
+      }, autoPrintKitchenSlipOnOrder ? 780 : 180))
+    }
+    return () => timers.forEach((id) => clearTimeout(id))
+  }, [receiptData, autoPrintReceiptOnPayment, autoPrintKitchenSlipOnOrder, handlePrintReceipt, handlePrintKitchenSlip])
 
   const orderTypeLabels: Record<OrderType, string> = {
     dine_in: t("posOrderTypeDineIn") ?? "매장",
@@ -1091,8 +1244,32 @@ export default function PosOrderPage() {
                 <span className="tabular-nums text-slate-800">+{packagingFeeAmt.toLocaleString()} ฿</span>
               </div>
             )}
+            {pricing.vatFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>{t("posVatLabel") || "부가세"}</span>
+                <span className="tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{pricing.vatFeeAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
+            {pricing.serviceFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>{t("posServiceFee") || "서비스비"}</span>
+                <span className="tabular-nums text-slate-800">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{pricing.serviceFeeAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
+            {pricing.cardFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>{t("posCardFee") || "카드비"}</span>
+                <span className="tabular-nums text-slate-800">{pricing.cardFeeMode === 'separate' ? '+' : ''}{pricing.cardFeeAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
+            {pricing.otherFeeAmt > 0 && (
+              <div className="flex justify-between text-sm text-slate-600">
+                <span>{t("posOtherFee") || "기타"}</span>
+                <span className="tabular-nums text-slate-800">{pricing.otherFeeMode === 'separate' ? '+' : ''}{pricing.otherFeeAmt.toLocaleString()} ฿</span>
+              </div>
+            )}
             <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-2">
-              <span>{t("posInputTotal") || "합계"}</span>
+              <span>{t("posTotal") || "합계"}</span>
               <span className="tabular-nums">{total.toLocaleString()} ฿</span>
             </div>
           </div>
@@ -1115,8 +1292,8 @@ export default function PosOrderPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
-              <span className="text-xs text-muted-foreground">{t("posInputTotal") || "합계"}</span>
-              <div className="text-xl font-bold tabular-nums">{total.toLocaleString()} ฿</div>
+              <span className="text-xs text-muted-foreground">{t("posTotal") || "합계"}</span>
+              <div className="text-xl font-bold tabular-nums">{paymentPreviewTotal.toLocaleString()} ฿</div>
             </div>
             <div className="grid gap-2">
               <div className="flex items-center gap-2">
@@ -1168,11 +1345,11 @@ export default function PosOrderPage() {
               <span>{t("posPaymentSum") || "입력 합계"}</span>
               <span className={cn(
                 "tabular-nums font-medium",
-                Math.abs((parseFloat(payCash) || 0) + (parseFloat(payCard) || 0) + (parseFloat(payQr) || 0) + (parseFloat(payOther) || 0) - total) < 0.01
+                paymentInputMatch
                   ? "text-green-600"
                   : "text-amber-600"
               )}>
-                {((parseFloat(payCash) || 0) + (parseFloat(payCard) || 0) + (parseFloat(payQr) || 0) + (parseFloat(payOther) || 0)).toLocaleString()} ฿
+                {paymentInputSum.toLocaleString()} ฿
               </span>
             </div>
             <div className="flex gap-2">
@@ -1181,7 +1358,7 @@ export default function PosOrderPage() {
                 size="sm"
                 className="flex-1"
                 onClick={() => {
-                  setPayCash(String(total))
+                  setPayCash(String(paymentPreviewTotal))
                   setPayCard("0")
                   setPayQr("0")
                   setPayOther("0")
@@ -1376,18 +1553,28 @@ export default function PosOrderPage() {
                 className="receipt-content space-y-2 rounded border p-4 text-sm"
               >
                 <div className="receipt-header">
-                  <div className="font-bold">CHOONGMAN</div>
+                  <img
+                    src="/company-stamp.png"
+                    alt="Company logo"
+                    className={`receipt-brand-logo inline-block ${receiptLogoSize}`}
+                  />
+                  <div className="receipt-store-name">{receiptData.storeCode}</div>
                   <div className="text-xs text-muted-foreground">
                     {receiptData.orderNo}
                   </div>
                   <div className="text-xs">
-                    {receiptData.storeCode} · {orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}
+                    {orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType}
                     {receiptData.tableName && ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}`}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {new Date().toLocaleString("ko-KR")}
                   </div>
                 </div>
+                {receiptBizName && <div className="receipt-biz">{receiptBizName}</div>}
+                {receiptBizTaxId && <div className="receipt-biz">Tax ID: {receiptBizTaxId}</div>}
+                {receiptBizOwner && <div className="receipt-biz">{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
+                {receiptBizAddress && <div className="receipt-biz">{receiptBizAddress}</div>}
+                {receiptBizPhone && <div className="receipt-biz">TEL: {receiptBizPhone}</div>}
                 <div className="space-y-1">
                   {receiptData.items.map((it) => (
                     <div key={it.id} className="receipt-row flex justify-between">
@@ -1422,13 +1609,37 @@ export default function PosOrderPage() {
                     <span className="tabular-nums">+{receiptData.packagingFee?.toLocaleString()} ฿</span>
                   </div>
                 )}
+                {(receiptData.vatFeeAmt ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posVatLabel") || "부가세"}</span>
+                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{receiptData.vatFeeAmt?.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {(receiptData.serviceFeeAmt ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posServiceFee") || "서비스비"}</span>
+                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{receiptData.serviceFeeAmt?.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {(receiptData.cardFeeAmt ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posCardFee") || "카드비"}</span>
+                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{receiptData.cardFeeAmt?.toLocaleString()} ฿</span>
+                  </div>
+                )}
+                {(receiptData.otherFeeAmt ?? 0) > 0 && (
+                  <div className="receipt-row flex justify-between text-xs">
+                    <span>{t("posOtherFee") || "기타"}</span>
+                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{receiptData.otherFeeAmt?.toLocaleString()} ฿</span>
+                  </div>
+                )}
                 {receiptData.memo && (
                   <div className="text-xs text-muted-foreground">
                     {t("posCustomerMemo") || "메모"}: {receiptData.memo}
                   </div>
                 )}
                 <div className="receipt-total flex justify-between">
-                  <span>{t("posInputTotal") || "합계"}</span>
+                  <span>{t("posTotal") || "합계"}</span>
                   <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
                 </div>
               </div>

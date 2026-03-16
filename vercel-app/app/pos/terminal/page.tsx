@@ -33,6 +33,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { canAccessAdmin, isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
+import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
@@ -45,6 +46,8 @@ type PendingPayRequest = {
 } | null
 
 /** 테이블 현황 + 배달/포장 주문 + 장바구니. 테이블 선택 시 메뉴로 주문 추가. */
+const FLOOR_PREF_KEY = 'pos-terminal-floor:'
+
 export default function PosTerminalPage() {
   const searchParams = useSearchParams()
   const typeParam = searchParams.get('type') ?? 'dine_in'
@@ -77,6 +80,7 @@ export default function PosTerminalPage() {
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
+  const [activeFloor, setActiveFloor] = useState<1 | 2 | 3>(1)
   const [deliveryApp, setDeliveryApp] = useState<DeliveryApp | null>(null)
   const [deliveryOrderNo, setDeliveryOrderNo] = useState('')
   const [takeoutMode, setTakeoutMode] = useState<TakeoutMode>('slot')
@@ -104,6 +108,30 @@ export default function PosTerminalPage() {
   const [deliveryAppsFromApi, setDeliveryAppsFromApi] = useState<PosDeliveryApp[]>([])
   const [menus, setMenus] = useState<PosMenu[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
+  const [autoPrintReceiptOnOrder, setAutoPrintReceiptOnOrder] = useState(false)
+  const [autoPrintReceiptOnAddOrder, setAutoPrintReceiptOnAddOrder] = useState(false)
+  const [autoPrintReceiptOnPayment, setAutoPrintReceiptOnPayment] = useState(false)
+  const [autoPrintKitchenSlipOnOrder, setAutoPrintKitchenSlipOnOrder] = useState(false)
+  const [receiptBizName, setReceiptBizName] = useState('')
+  const [receiptBizTaxId, setReceiptBizTaxId] = useState('')
+  const [receiptBizOwner, setReceiptBizOwner] = useState('')
+  const [receiptBizAddress, setReceiptBizAddress] = useState('')
+  const [receiptBizPhone, setReceiptBizPhone] = useState('')
+  const [receiptDesignStyle, setReceiptDesignStyle] = useState<'badge' | 'simple'>('badge')
+  const [receiptLogoSize, setReceiptLogoSize] = useState<'sm' | 'md' | 'lg'>('md')
+  const [receiptShowTitle, setReceiptShowTitle] = useState(true)
+  const [receiptShowPaidStamp, setReceiptShowPaidStamp] = useState(true)
+  const [receiptShowThankYou, setReceiptShowThankYou] = useState(true)
+  const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = useState(true)
+  const [vatRate, setVatRate] = useState(7)
+  const [vatMode, setVatMode] = useState<'included' | 'separate'>('included')
+  const [serviceRate, setServiceRate] = useState(0)
+  const [serviceMode, setServiceMode] = useState<'included' | 'separate'>('separate')
+  const [cardRate, setCardRate] = useState(0)
+  const [cardMode, setCardMode] = useState<'included' | 'separate'>('separate')
+  const [cardBaseMode, setCardBaseMode] = useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
+  const [otherRate, setOtherRate] = useState(0)
+  const [otherMode, setOtherMode] = useState<'included' | 'separate'>('separate')
   /** 기존 주문 결제 시 영수증 orderNo (pendingPayRequest/pendingTakeoutPayRequest에 있던 값) */
   const [pendingReceiptOrderNo, setPendingReceiptOrderNo] = useState<string | null>(null)
   const [todaySales, setTodaySales] = useState<{
@@ -186,6 +214,42 @@ export default function PosTerminalPage() {
           delaySoundEnabled: Boolean(s.cookingDelaySoundEnabled),
           delayAlertOverMin: Math.max(0, Number(s.cookingDelayAlertOverMin ?? 0)),
         })
+        setAutoPrintReceiptOnOrder(Boolean(s.autoPrintReceiptOnOrder))
+        setAutoPrintReceiptOnAddOrder(Boolean(s.autoPrintReceiptOnAddOrder))
+        setAutoPrintReceiptOnPayment(Boolean(s.autoPrintReceiptOnPayment ?? s.autoPrintReceiptOnOrder))
+        setAutoPrintKitchenSlipOnOrder(Boolean(s.autoPrintKitchenSlipOnOrder))
+        setReceiptBizName(String(s.receiptBizName || ''))
+        setReceiptBizTaxId(String(s.receiptBizTaxId || ''))
+        setReceiptBizOwner(String(s.receiptBizOwner || ''))
+        setReceiptBizAddress(String(s.receiptBizAddress || ''))
+        setReceiptBizPhone(String(s.receiptBizPhone || ''))
+        setReceiptDesignStyle(s.receiptDesignStyle === 'simple' ? 'simple' : 'badge')
+        setReceiptLogoSize(
+          s.receiptLogoSize === 'sm'
+            ? 'sm'
+            : s.receiptLogoSize === 'lg'
+              ? 'lg'
+              : 'md'
+        )
+        setReceiptShowTitle(s.receiptShowTitle !== false)
+        setReceiptShowPaidStamp(s.receiptShowPaidStamp !== false)
+        setReceiptShowThankYou(s.receiptShowThankYou !== false)
+        setReceiptShowCustomerCopy(s.receiptShowCustomerCopy !== false)
+        setVatRate(Math.max(0, Number(s.vatRate ?? 7)))
+        setVatMode(s.vatMode === 'separate' ? 'separate' : 'included')
+        setServiceRate(Math.max(0, Number(s.serviceRate ?? 0)))
+        setServiceMode(s.serviceMode === 'included' ? 'included' : 'separate')
+        setCardRate(Math.max(0, Number(s.cardRate ?? 0)))
+        setCardMode(s.cardMode === 'included' ? 'included' : 'separate')
+        setCardBaseMode(
+          s.cardBaseMode === 'card_plus_vat'
+            ? 'card_plus_vat'
+            : s.cardBaseMode === 'card_plus_vat_service'
+              ? 'card_plus_vat_service'
+              : 'card_only'
+        )
+        setOtherRate(Math.max(0, Number(s.otherRate ?? 0)))
+        setOtherMode(s.otherMode === 'included' ? 'included' : 'separate')
       })
       .catch(() => {
         setCookingRules({
@@ -198,6 +262,30 @@ export default function PosTerminalPage() {
           delaySoundEnabled: false,
           delayAlertOverMin: 0,
         })
+        setAutoPrintReceiptOnOrder(false)
+        setAutoPrintReceiptOnAddOrder(false)
+        setAutoPrintReceiptOnPayment(false)
+        setAutoPrintKitchenSlipOnOrder(false)
+        setReceiptBizName('')
+        setReceiptBizTaxId('')
+        setReceiptBizOwner('')
+        setReceiptBizAddress('')
+        setReceiptBizPhone('')
+        setReceiptDesignStyle('badge')
+        setReceiptLogoSize('md')
+        setReceiptShowTitle(true)
+        setReceiptShowPaidStamp(true)
+        setReceiptShowThankYou(true)
+        setReceiptShowCustomerCopy(true)
+        setVatRate(7)
+        setVatMode('included')
+        setServiceRate(0)
+        setServiceMode('separate')
+        setCardRate(0)
+        setCardMode('separate')
+        setCardBaseMode('card_only')
+        setOtherRate(0)
+        setOtherMode('separate')
       })
     getPosMenus()
       .then((list) => {
@@ -248,8 +336,33 @@ export default function PosTerminalPage() {
     setPendingDeliveryPayRequest(null)
   }, [pendingDeliveryPayRequest])
 
+  useEffect(() => {
+    if (!currentStoreId) return
+    try {
+      const raw = window.localStorage.getItem(`${FLOOR_PREF_KEY}${currentStoreId}`)
+      const floor = Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
+      setActiveFloor(floor)
+    } catch {
+      setActiveFloor(1)
+    }
+  }, [currentStoreId])
+
+  useEffect(() => {
+    if (!currentStoreId) return
+    try {
+      window.localStorage.setItem(`${FLOOR_PREF_KEY}${currentStoreId}`, String(activeFloor))
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [currentStoreId, activeFloor])
+
   const todayCompleted = todaySales?.completedCount ?? 0
   const totalSales = todaySales?.completedTotal ?? 0
+  const getTableFloor = (tableId: string | null | undefined): 1 | 2 | 3 => {
+    if (!tableId) return 1
+    const raw = currentLayout.find((tbl) => tbl.id === tableId)?.floor
+    return Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
+  }
   const selectedTable = currentStore?.tables.find(tbl => tbl.id === selectedTableId)
   const servingTable = currentStore?.tables.find(tbl => tbl.id === servingTableId)
   const selectedDeliveryOrderId = selectedDeliveryTargetId?.startsWith('delivery-order-')
@@ -264,6 +377,188 @@ export default function PosTerminalPage() {
   const selectedTakeoutOrder = selectedTakeoutOrderId
     ? [...takeoutOrders, ...packagedTakeoutOrders, ...completedTakeoutOrders].find((o) => String(o.id) === selectedTakeoutOrderId)
     : null
+  const hasPendingPaymentFlow =
+    Boolean(pendingPayRequest) ||
+    Boolean(pendingTakeoutPayRequest) ||
+    Boolean(pendingDeliveryPayRequest) ||
+    Boolean(pendingDineInOrderId) ||
+    Boolean(pendingTakeoutOrderId) ||
+    Boolean(pendingDeliveryOrderId)
+  const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
+
+  useEffect(() => {
+    if (selectedTableId) {
+      setActiveFloor(getTableFloor(selectedTableId))
+    } else if (servingTableId) {
+      setActiveFloor(getTableFloor(servingTableId))
+    }
+  }, [selectedTableId, servingTableId, currentLayout])
+
+  useEffect(() => {
+    if (selectedTableId || servingTableId) return
+    const hasActiveFloorTable = currentLayout.some(
+      (tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor
+    )
+    if (hasActiveFloorTable || currentLayout.length === 0) return
+    const floors = Array.from(
+      new Set(currentLayout.map((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) as 1 | 2 | 3))
+    ).sort((a, b) => a - b)
+    if (floors[0] && floors[0] !== activeFloor) {
+      setActiveFloor(floors[0])
+    }
+  }, [currentLayout, activeFloor, selectedTableId, servingTableId])
+
+  const pricingAdjustments = useMemo<PosPricingAdjustments>(() => ({
+    vatRate,
+    vatMode,
+    serviceRate,
+    serviceMode,
+    cardRate,
+    cardMode,
+    cardBaseMode,
+    otherRate,
+    otherMode,
+  }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
+
+  const printReceiptNow = (payload: {
+    orderNo: string
+    storeCode: string
+    orderType: string
+    tableName?: string
+    memo?: string
+    items: { id: string; name: string; price: number; qty: number }[]
+    subtotal: number
+    discountAmt: number
+    total: number
+    vatFeeAmt?: number
+    vatFeeMode?: 'included' | 'separate'
+    serviceFeeAmt?: number
+    serviceFeeMode?: 'included' | 'separate'
+    cardFeeAmt?: number
+    cardFeeMode?: 'included' | 'separate'
+    otherFeeAmt?: number
+    otherFeeMode?: 'included' | 'separate'
+  }) => {
+    const logoUrl = `${window.location.origin}/company-stamp.png`
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      return
+    }
+    const esc = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+    const timestamp = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(new Date())
+    const printContent = `
+      <div class="receipt-content">
+        <div class="text-center">
+          <img class="receipt-brand-logo ${receiptLogoSize}" src="${esc(logoUrl)}" alt="Company logo" />
+          <div class="receipt-muted store-code">${esc(payload.storeCode)}</div>
+        </div>
+        <div class="receipt-divider"></div>
+        ${
+          receiptShowTitle
+            ? `<div><div class="receipt-section-title">RECEIPT</div><div class="receipt-sub-title">Tax Invoice (ABB)</div></div>`
+            : ''
+        }
+        <div class="text-xs">
+          <div class="receipt-row"><span class="receipt-muted">Order #</span><span>${esc(payload.orderNo)}</span></div>
+          ${
+            payload.tableName
+              ? `<div class="receipt-row"><span class="receipt-muted">${esc(t('posTable') || '테이블')}</span><span>${esc(payload.tableName)}</span></div>`
+              : ''
+          }
+          <div class="receipt-row"><span class="receipt-muted">${esc(t('date') || 'Date')}</span><span>${esc(timestamp)}</span></div>
+          <div class="receipt-row"><span class="receipt-muted">${esc(t('posOrderType') || 'Order Type')}</span><span>${esc(payload.orderType)}</span></div>
+        </div>
+        <div class="receipt-divider"></div>
+        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ''}
+        ${receiptBizName ? `<div class="biz-line biz-strong">${esc(receiptBizName)}</div>` : ''}
+        ${receiptBizTaxId ? `<div class="biz-line">Tax ID: ${esc(receiptBizTaxId)}</div>` : ''}
+        ${receiptBizOwner ? `<div class="biz-line">${esc(t('posOwner') || '대표')}: ${esc(receiptBizOwner)}</div>` : ''}
+        ${receiptBizAddress ? `<div class="biz-line">${esc(receiptBizAddress)}</div>` : ''}
+        ${receiptBizPhone ? `<div class="biz-line">TEL: ${esc(receiptBizPhone)}</div>` : ''}
+        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '</div>' : ''}
+        <div class="receipt-divider-strong"></div>
+        <div class="receipt-item-head"><span>ITEM</span><span>AMOUNT</span></div>
+        ${payload.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${(it.price * it.qty).toLocaleString()}</span></div>`).join('')}
+        <div class="receipt-divider"></div>
+        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${payload.subtotal.toLocaleString()} ฿</span></div>
+        ${payload.discountAmt > 0 ? `<div class="receipt-row discount"><span>${esc(t('posDiscount') || '할인')}</span><span>-${payload.discountAmt.toLocaleString()} ฿</span></div>` : ''}
+        ${(payload.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${payload.vatFeeMode === 'separate' ? '+' : ''}${Number(payload.vatFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        ${(payload.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${payload.serviceFeeMode === 'separate' ? '+' : ''}${Number(payload.serviceFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        ${(payload.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${Number(payload.cardFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        ${(payload.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${Number(payload.otherFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        ${payload.memo ? `<div class="memo">${esc(t('posCustomerMemo') || '메모')}: ${esc(payload.memo)}</div>` : ''}
+        <div class="receipt-divider-strong"></div>
+        <div class="receipt-row receipt-total"><span>${esc(t('posTotal') || '합계')}</span><span>${payload.total.toLocaleString()} ฿</span></div>
+        <div class="receipt-divider"></div>
+        ${receiptShowPaidStamp ? '<div class="paid-stamp-wrap"><span class="paid-stamp">PAID</span></div>' : ''}
+        ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ''}
+        ${receiptShowThankYou ? '<div class="footer-strong">Thank you!</div>' : ''}
+        ${receiptShowCustomerCopy ? '<div>Customer Copy</div>' : ''}
+        ${(receiptShowThankYou || receiptShowCustomerCopy) ? '</div>' : ''}
+      </div>
+    `
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${t('posReceipt') || '영수증'}</title>
+          <style>
+            @page { size: 80mm 200mm; margin: 0; }
+            html, body { margin: 0; padding: 0; }
+            body { width: 80mm; box-sizing: border-box; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; padding: 3mm; color: #000; }
+            .receipt-content { width: 72mm; max-width: 72mm; margin: 0 auto; }
+            .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
+            .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
+            .receipt-brand-logo.sm { width: 84px; }
+            .receipt-brand-logo.md { width: 108px; }
+            .receipt-brand-logo.lg { width: 132px; }
+            .brand { font-size: 14px; font-weight: 700; letter-spacing: 0.06em; }
+            .store-code { margin-top: 4px; }
+            .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; }
+            .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
+            .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
+            .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .receipt-item-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; padding-bottom: 4px; border-bottom: 1px solid #cbd5e1; }
+            .biz-line { margin: 2px 0; font-size: 11px; }
+            .biz-strong { color: #111; font-weight: 600; }
+            .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
+            .discount { color: #166534; }
+            .memo { margin-top: 6px; font-size: 11px; color: #000; }
+            .receipt-muted { color: #000; }
+            .paid-stamp-wrap { text-align: center; margin: 10px 0; }
+            .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
+            .footer-strong { color: #111; font-weight: 600; }
+            .text-center { text-align: center; }
+            .text-xs { font-size: 11px; }
+          </style>
+        </head>
+        <body>${printContent}</body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+      printWindow.close()
+    }, 250)
+  }
   const deliveryApps = deliveryAppsFromApi
     .filter((a) => a.enabled)
     .map((a) => ({ id: a.code, name: a.name }))
@@ -796,6 +1091,8 @@ export default function PosTerminalPage() {
                         }}
                         selectedTableId={selectedTableId ?? servingTableId}
                         onTableSelect={handleTableSelect}
+                        activeFloor={activeFloor}
+                        onFloorChange={setActiveFloor}
                         t={t}
                         className="h-full min-h-[320px]"
                         freshMaxMin={cookingRules.freshMaxMin}
@@ -906,6 +1203,7 @@ export default function PosTerminalPage() {
             </TabsContent>
           </Tabs>
         </div>
+        {showSidePanel && (
         <div className="w-80 border-l border-border flex-shrink-0 min-h-0">
           {activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
@@ -1021,6 +1319,7 @@ export default function PosTerminalPage() {
             deliveryAppName={effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name}
             deliveryOrderNo={deliveryOrderNo}
             takeoutLabel={takeoutLabel}
+            pricingAdjustments={pricingAdjustments}
             pendingOrderId={activeTab === 'tables' ? pendingDineInOrderId : activeTab === 'takeout' ? pendingTakeoutOrderId : activeTab === 'delivery' ? pendingDeliveryOrderId : null}
             onDeliveryOrderComplete={async (payload, existingOrderId) => {
               try {
@@ -1041,23 +1340,32 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment.paymentCard,
                     paymentQr: payload.payment.paymentQr,
                     paymentOther: payload.payment.paymentOther,
+                    pricingAdjustments,
                   })
                   await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const total = Math.max(0, subtotal - discountAmt)
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
                   subtotal,
                   discountAmt,
-                  total,
+                  total: pricing.finalTotal,
                   storeCode: currentStoreId,
                   orderType: 'delivery',
                   tableName: payload.orderLabel,
                   memo: payload.memo,
                   discountReason: payload.discountReason,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
@@ -1089,23 +1397,32 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment.paymentCard,
                     paymentQr: payload.payment.paymentQr,
                     paymentOther: payload.payment.paymentOther,
+                    pricingAdjustments,
                   })
                   await updatePosOrderStatus({ id: existingOrderId, status: 'completed' })
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const total = Math.max(0, subtotal - discountAmt)
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
                   subtotal,
                   discountAmt,
-                  total,
+                  total: pricing.finalTotal,
                   storeCode: currentStoreId,
                   orderType: 'takeout',
                   tableName: payload.orderLabel,
                   memo: payload.memo,
                   discountReason: payload.discountReason,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
@@ -1118,6 +1435,7 @@ export default function PosTerminalPage() {
             }}
             onOrderSubmit={async (payload) => {
               try {
+                const isAddOrder = Boolean(selectedTable?.order)
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   orderType: 'dine_in',
@@ -1134,12 +1452,38 @@ export default function PosTerminalPage() {
                   paymentCard: 0,
                   paymentQr: 0,
                   paymentOther: 0,
+                  pricingAdjustments,
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
                   alert(msg)
                   return
+                }
+                const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
+                if (shouldAutoPrintReceipt) {
+                  const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                  const discountAmt = payload.discountAmt ?? 0
+                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
+                  printReceiptNow({
+                    orderNo: (res as { orderNo?: string }).orderNo ?? '',
+                    storeCode: currentStoreId,
+                    orderType: t('posOrderTypeDineIn') || '매장',
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                    subtotal,
+                    discountAmt,
+                    total: pricing.finalTotal,
+                    vatFeeAmt: pricing.vatFeeAmt,
+                    vatFeeMode: pricing.vatFeeMode,
+                    serviceFeeAmt: pricing.serviceFeeAmt,
+                    serviceFeeMode: pricing.serviceFeeMode,
+                    cardFeeAmt: pricing.cardFeeAmt,
+                    cardFeeMode: pricing.cardFeeMode,
+                    otherFeeAmt: pricing.otherFeeAmt,
+                    otherFeeMode: pricing.otherFeeMode,
+                  })
                 }
                 if (res.orderId != null) setPendingDineInOrderId(res.orderId)
                 setServingTableId(null)
@@ -1170,6 +1514,7 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment.paymentCard,
                     paymentQr: payload.payment.paymentQr,
                     paymentOther: payload.payment.paymentOther,
+                    pricingAdjustments,
                   })
                   orderIdToComplete = existingOrderId
                   orderNo = pendingReceiptOrderNo ?? ''
@@ -1191,6 +1536,7 @@ export default function PosTerminalPage() {
                     paymentCard: payload.payment?.paymentCard ?? 0,
                     paymentQr: payload.payment?.paymentQr ?? 0,
                     paymentOther: payload.payment?.paymentOther ?? 0,
+                    pricingAdjustments,
                   })
                   orderIdToComplete = (res as { orderId?: number }).orderId ?? null
                   orderNo = (res as { orderNo?: string }).orderNo ?? ''
@@ -1204,18 +1550,26 @@ export default function PosTerminalPage() {
                 }
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const total = Math.max(0, subtotal - discountAmt)
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo,
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
                   subtotal,
                   discountAmt,
-                  total,
+                  total: pricing.finalTotal,
                   storeCode: currentStoreId,
                   orderType: 'dine_in',
                   tableName: payload.tableName,
                   memo: payload.memo,
                   discountReason: payload.discountReason,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
@@ -1245,6 +1599,7 @@ export default function PosTerminalPage() {
                   paymentCard: payload.payment?.paymentCard ?? 0,
                   paymentQr: payload.payment?.paymentQr ?? 0,
                   paymentOther: payload.payment?.paymentOther ?? 0,
+                  pricingAdjustments,
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
@@ -1254,18 +1609,26 @@ export default function PosTerminalPage() {
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const total = Math.max(0, subtotal - discountAmt)
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo,
                   items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
                   subtotal,
                   discountAmt,
-                  total,
+                  total: pricing.finalTotal,
                   storeCode: currentStoreId,
                   orderType: payload.orderType,
                   tableName: payload.orderLabel,
                   memo: payload.memo,
                   discountReason: payload.discountReason,
+                  vatFeeAmt: pricing.vatFeeAmt,
+                  vatFeeMode: pricing.vatFeeMode,
+                  serviceFeeAmt: pricing.serviceFeeAmt,
+                  serviceFeeMode: pricing.serviceFeeMode,
+                  cardFeeAmt: pricing.cardFeeAmt,
+                  cardFeeMode: pricing.cardFeeMode,
+                  otherFeeAmt: pricing.otherFeeAmt,
+                  otherFeeMode: pricing.otherFeeMode,
                 })
                 if (payload.orderType === 'delivery') {
                   setSelectedDeliveryTargetId(null)
@@ -1284,6 +1647,7 @@ export default function PosTerminalPage() {
           />
           )}
         </div>
+        )}
       </div>
       <LiveMenuSearchDialog
         open={liveSearchOpen}
@@ -1302,6 +1666,19 @@ export default function PosTerminalPage() {
           delivery: t('posOrderTypeDelivery') ?? '배달',
         }}
         t={t}
+        autoPrintReceiptOnOrder={autoPrintReceiptOnPayment}
+        autoPrintKitchenSlipOnOrder={autoPrintKitchenSlipOnOrder}
+        receiptBizName={receiptBizName}
+        receiptBizTaxId={receiptBizTaxId}
+        receiptBizOwner={receiptBizOwner}
+        receiptBizAddress={receiptBizAddress}
+        receiptBizPhone={receiptBizPhone}
+        receiptDesignStyle={receiptDesignStyle}
+        receiptLogoSize={receiptLogoSize}
+        receiptShowTitle={receiptShowTitle}
+        receiptShowPaidStamp={receiptShowPaidStamp}
+        receiptShowThankYou={receiptShowThankYou}
+        receiptShowCustomerCopy={receiptShowCustomerCopy}
       />
       <Dialog open={deliveryEditOrderNoOpen} onOpenChange={setDeliveryEditOrderNoOpen}>
         <DialogContent className="max-w-sm">
