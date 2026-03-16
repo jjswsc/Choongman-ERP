@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   if (userStore && !isHQ) storeFilter = userStore
   const deliveryStatusFilter = String(searchParams.get('deliveryStatus') || '').trim()
   const statusFilter = String(searchParams.get('status') || searchParams.get('statusFilter') || '').trim()
+  const orderIdFilter = String(searchParams.get('orderId') || searchParams.get('search') || '').trim().replace(/^#/, '')
 
   let s = startStr
   let e = endStr
@@ -55,9 +56,13 @@ export async function GET(request: NextRequest) {
       filter += `&store_name=eq.${encodeURIComponent(storeFilter)}`
     }
     const baseFilter = `order_date=gte.${encodeURIComponent(s)}&order_date=lte.${encodeURIComponent(endIso)}`
-    const [rows, storeRows, empRows] = await Promise.all([
+    const orderIdNum = orderIdFilter ? parseInt(orderIdFilter, 10) : NaN
+    const hasValidOrderId = !Number.isNaN(orderIdNum) && orderIdNum > 0
+
+    const [rows, storeRows, orderByIdRows, empRows] = await Promise.all([
       supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 }),
       supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 500 }),
+      hasValidOrderId ? supabaseSelectFilter('orders', `id=eq.${orderIdNum}`, { limit: 1 }) : Promise.resolve(null),
       supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' }),
     ])
 
@@ -91,7 +96,17 @@ export async function GET(request: NextRequest) {
       reject_reason?: string
     }[]
 
-    const list = (rowsTyped || []).map((o) => {
+    const orderByIdTyped = (orderByIdRows || []) as typeof rowsTyped
+    const existingIds = new Set((rowsTyped || []).map((r) => r.id))
+    const combinedRows = [...(rowsTyped || [])]
+    for (const o of orderByIdTyped) {
+      if (!existingIds.has(o.id)) {
+        combinedRows.unshift(o)
+        existingIds.add(o.id)
+      }
+    }
+
+    const list = combinedRows.map((o) => {
       let items: { code?: string; name?: string; spec?: string; qty?: number; price?: number }[] = []
       try {
         items = JSON.parse(o.cart_json || '[]')

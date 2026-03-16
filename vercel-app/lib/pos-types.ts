@@ -24,12 +24,14 @@ export interface Order {
   type: "dine-in" | "delivery" | "takeout"
   items: OrderItem[]
   total: number
-  status: "pending" | "preparing" | "ready" | "completed"
+  status: "pending" | "preparing" | "ready" | "paid" | "completed"
   createdAt: Date
   customerName?: string
   customerPhone?: string
   address?: string
   memo?: string
+  /** POS 주문 번호 (예: ST01-20250314-093000-ABCD) */
+  orderNo?: string
 }
 
 export interface OrderItem {

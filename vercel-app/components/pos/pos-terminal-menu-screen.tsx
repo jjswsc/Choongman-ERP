@@ -10,12 +10,14 @@ import {
   getPosMenuScreenConfig,
   savePosMenuScreenConfig,
   savePosMenu,
+  uploadPosMenuImage,
   type PosMenu,
   type PosMenuOption,
   type PosPromoWithItems,
 } from '@/lib/api-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -25,7 +27,7 @@ import {
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Save } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Pencil, Save, Upload } from 'lucide-react'
 import {
   DEFAULT_POS_MENU_SCREEN_CONFIG,
   normalizePosMenuScreenConfig,
@@ -90,6 +92,8 @@ export function PosTerminalMenuScreen({
   const [menuEditSaving, setMenuEditSaving] = React.useState(false)
   const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
   const [menuEditTab, setMenuEditTab] = React.useState<'menu' | 'general' | 'item'>('menu')
+  const [imageUploading, setImageUploading] = React.useState(false)
+  const imageInputRef = React.useRef<HTMLInputElement>(null)
   const [menuEditForm, setMenuEditForm] = React.useState<{
     code: string
     name: string
@@ -399,6 +403,36 @@ export function PosTerminalMenuScreen({
     return parseOptionGroups(menuEditForm.optionSelectionGroupsText)
   }, [menuEditForm.optionSelectionGroupsText, parseOptionGroups])
 
+  const categoriesForEditForm = React.useMemo(() => {
+    if (!menuEditForm.categoryMain) return [] as string[]
+    const set = new Set(
+      menus
+        .filter((m) => (m.categoryMain ?? '') === menuEditForm.categoryMain)
+        .map((m) => m.category)
+        .filter(Boolean)
+    )
+    return Array.from(set).sort()
+  }, [menus, menuEditForm.categoryMain])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageUploading(true)
+    try {
+      const res = await uploadPosMenuImage({ file })
+      if (res?.success && res?.url) {
+        setMenuEditForm((p) => ({ ...p, imageUrl: res.url! }))
+      } else {
+        alert(res?.message || t('msg_upload_fail') || '업로드 실패')
+      }
+    } catch (err) {
+      alert(String(err))
+    } finally {
+      setImageUploading(false)
+      e.target.value = ''
+    }
+  }
+
   const setSelectedOptionGroups = (next: string[]) => {
     const deduped = Array.from(new Set(next.map((v) => v.trim()).filter(Boolean)))
     setMenuEditForm((p) => ({ ...p, optionSelectionGroupsText: deduped.join(', ') }))
@@ -521,18 +555,26 @@ export function PosTerminalMenuScreen({
               >
                 <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {isAdminMode && (
-                    <button
-                      type="button"
-                      className="absolute right-1 top-1 z-10 rounded bg-background/90 p-1 text-slate-700 shadow border hover:bg-background"
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="absolute right-1 top-1 z-10 flex cursor-pointer rounded bg-background/90 p-1 text-slate-700 shadow border hover:bg-background"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         openMenuEdit(m)
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          openMenuEdit(m)
+                        }
+                      }}
                       title={t('itemsBtnEdit') || '수정'}
                     >
                       <Pencil className="h-3 w-3" />
-                    </button>
+                    </span>
                   )}
                   {m.imageUrl ? (
                     <Image
@@ -629,31 +671,31 @@ export function PosTerminalMenuScreen({
         <div className="shrink-0 border-t bg-muted/15 px-3 py-2">
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-[11px] text-muted-foreground">
-              POS 메뉴 그룹
+              {t('posScreenConfigMainCategoryFont') || 'POS 메뉴 그룹'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.mainCategoryFontSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('mainCategoryFontSize', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              POS 메뉴
+              {t('posScreenConfigCategoryFont') || 'POS 메뉴'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.categoryFontSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('categoryFontSize', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              메뉴 타일 폰트
+              {t('posScreenConfigMenuTileFont') || '메뉴 타일 폰트'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.menuTileFontSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('menuTileFontSize', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              타일 열 수
+              {t('posScreenConfigMenuTileCols') || '타일 열 수'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.menuTileCols} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('menuTileCols', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              리스트 폰트
+              {t('posScreenConfigMenuListFont') || '리스트 폰트'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.menuListFontSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('menuListFontSize', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              페이지 행 수
+              {t('posScreenConfigMenuListPageSize') || '페이지 행 수'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.menuListPageSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('menuListPageSize', e.target.value)} />
             </label>
             <label className="text-[11px] text-muted-foreground">
-              키오스크 그룹
+              {t('posScreenConfigKioskGroupFont') || '키오스크 그룹'}
               <Input className="mt-1 h-8 w-16 text-xs" type="number" value={screenConfig.kioskGroupFontSize} disabled={configLoading || (!isAdminMode && true)} onChange={(e) => setNumericConfig('kioskGroupFontSize', e.target.value)} />
             </label>
             {isAdminMode ? (
@@ -862,7 +904,7 @@ export function PosTerminalMenuScreen({
                 )}
                 onClick={() => setMenuEditTab('menu')}
               >
-                메뉴 정보
+                {t('posMenuEditTabMenu') || '메뉴 정보'}
               </button>
               <button
                 type="button"
@@ -872,7 +914,7 @@ export function PosTerminalMenuScreen({
                 )}
                 onClick={() => setMenuEditTab('general')}
               >
-                일반 메뉴
+                {t('posMenuEditTabGeneral') || '일반 메뉴'}
               </button>
               <button
                 type="button"
@@ -882,7 +924,7 @@ export function PosTerminalMenuScreen({
                 )}
                 onClick={() => setMenuEditTab('item')}
               >
-                아이템
+                {t('posMenuEditTabItem') || '아이템'}
               </button>
             </div>
 
@@ -890,16 +932,34 @@ export function PosTerminalMenuScreen({
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-3">
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold text-rose-600">{t('posMenuCategoryMain') || '카테고리'}</label>
-                    <Input className="h-9" value={menuEditForm.categoryMain} onChange={(e) => setMenuEditForm((p) => ({ ...p, categoryMain: e.target.value }))} />
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuCategoryMain') || '대분류'}</label>
+                    <Select value={menuEditForm.categoryMain || '__empty__'} onValueChange={(v) => setMenuEditForm((p) => ({ ...p, categoryMain: v === '__empty__' ? '' : v, category: '' }))}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder={t('posMenuCategoryMainSelect') || '선택'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mainCategories.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold text-rose-600">{t('posMenuName') || '메뉴'}</label>
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuCategory') || '소분류(주방명칭)'}</label>
+                    <Select value={menuEditForm.category || '__empty__'} onValueChange={(v) => setMenuEditForm((p) => ({ ...p, category: v === '__empty__' ? '' : v }))}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder={t('posMenuCategoryMainSelect') || '선택'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoriesForEditForm.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuName') || '메뉴명'}</label>
                     <Input className="h-9" value={menuEditForm.name} onChange={(e) => setMenuEditForm((p) => ({ ...p, name: e.target.value }))} />
-                  </div>
-                  <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">{t('posMenuCategory') || '주방명칭'}</label>
-                    <Input className="h-9" value={menuEditForm.category} onChange={(e) => setMenuEditForm((p) => ({ ...p, category: e.target.value }))} />
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
                     <label className="text-sm font-semibold">{t('posMenuCode') || '바코드'}</label>
@@ -917,7 +977,7 @@ export function PosTerminalMenuScreen({
 
                 <div className="space-y-3">
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">버튼 컬러</label>
+                    <label className="text-sm font-semibold">{t('posMenuEditBtnColor') || '버튼 컬러'}</label>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-7 w-7 rounded border bg-white" />
                       <span className="inline-block h-7 w-7 rounded border bg-slate-300" />
@@ -925,32 +985,54 @@ export function PosTerminalMenuScreen({
                     </div>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">폰트 컬러</label>
+                    <label className="text-sm font-semibold">{t('posMenuEditFontColor') || '폰트 컬러'}</label>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-7 w-7 rounded border bg-black" />
                       <span className="inline-block h-7 w-7 rounded border bg-white" />
                     </div>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-start gap-2">
-                    <label className="pt-2 text-sm font-semibold">기본 이미지</label>
-                    <div className="flex items-center gap-2">
-                      <div className="relative h-20 w-28 overflow-hidden rounded border bg-slate-100">
-                        {menuEditForm.imageUrl ? (
-                          <Image src={menuEditForm.imageUrl} alt="menu-preview" fill className="object-cover" unoptimized />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">미리보기</div>
-                        )}
+                    <label className="pt-2 text-sm font-semibold">{t('posMenuImage') || '기본 이미지'}</label>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded border bg-slate-100">
+                          {menuEditForm.imageUrl ? (
+                            <Image src={menuEditForm.imageUrl} alt="menu-preview" fill className="object-cover" unoptimized />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('posMenuImagePreview') || '미리보기'}</div>
+                          )}
+                        </div>
+                        <div className="flex flex-1 flex-col gap-1.5">
+                          <input
+                            ref={imageInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/webp"
+                            className="hidden"
+                            onChange={handleImageUpload}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            disabled={imageUploading}
+                            onClick={() => imageInputRef.current?.click()}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            {imageUploading ? (t('loading') || '업로드 중...') : (t('posMenuImageUpload') || '파일 업로드')}
+                          </Button>
+                          <Input className="h-9 text-xs" placeholder={t('posMenuImageUrlPlaceholder') || '또는 이미지 URL 입력'} value={menuEditForm.imageUrl} onChange={(e) => setMenuEditForm((p) => ({ ...p, imageUrl: e.target.value }))} />
+                        </div>
                       </div>
-                      <Input className="h-9" placeholder="이미지 URL" value={menuEditForm.imageUrl} onChange={(e) => setMenuEditForm((p) => ({ ...p, imageUrl: e.target.value }))} />
                     </div>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">{t('posCookingTimeMin') || '조리 시간'}</label>
+                    <label className="text-sm font-semibold">{t('posMenuCookingTimeMin') || '조리 시간'}</label>
                     <Input type="number" className="h-9" value={menuEditForm.cookingTimeMin} onChange={(e) => setMenuEditForm((p) => ({ ...p, cookingTimeMin: e.target.value }))} />
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">토핑 메뉴</label>
-                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">탭: 아이템에서 설정</div>
+                    <label className="text-sm font-semibold">{t('posMenuEditTopping') || '토핑 메뉴'}</label>
+                    <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">{t('posMenuEditToppingHint') || '탭: 아이템에서 설정'}</div>
                   </div>
                 </div>
               </div>
@@ -958,40 +1040,40 @@ export function PosTerminalMenuScreen({
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-3">
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold text-rose-600">재고관리 여부</label>
+                    <label className="text-sm font-semibold text-rose-600">{t('posMenuEditStockControl') || '재고관리 여부'}</label>
                     <div className="grid grid-cols-2 overflow-hidden rounded-md border">
                       <button
                         type="button"
                         className={cn('h-9 text-sm', menuEditForm.isActive ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, isActive: true }))}
                       >
-                        예
+                        {t('yes') || '예'}
                       </button>
                       <button
                         type="button"
                         className={cn('h-9 text-sm border-l', !menuEditForm.isActive ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, isActive: false }))}
                       >
-                        아니요
+                        {t('no') || '아니요'}
                       </button>
                     </div>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">세금 포함</label>
+                    <label className="text-sm font-semibold">{t('posMenuEditVatLabel') || '세금 포함'}</label>
                     <div className="grid grid-cols-2 overflow-hidden rounded-md border">
                       <button
                         type="button"
                         className={cn('h-9 text-sm', menuEditForm.vatIncluded ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, vatIncluded: true }))}
                       >
-                        포함
+                        {t('posMenuEditVatIncluded') || '포함'}
                       </button>
                       <button
                         type="button"
                         className={cn('h-9 text-sm border-l', !menuEditForm.vatIncluded ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, vatIncluded: false }))}
                       >
-                        미포함
+                        {t('posMenuEditVatExcluded') || '미포함'}
                       </button>
                     </div>
                   </div>
@@ -1010,7 +1092,7 @@ export function PosTerminalMenuScreen({
                     </select>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">{t('posCookingTimeMin') || '조리 시간'}</label>
+                    <label className="text-sm font-semibold">{t('posMenuCookingTimeMin') || '조리 시간'}</label>
                     <Input type="number" className="h-9" value={menuEditForm.cookingTimeMin} onChange={(e) => setMenuEditForm((p) => ({ ...p, cookingTimeMin: e.target.value }))} />
                   </div>
                 </div>
@@ -1019,32 +1101,32 @@ export function PosTerminalMenuScreen({
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-3">
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">
-                    <label className="text-sm font-semibold">반반 메뉴</label>
+                    <label className="text-sm font-semibold">{t('posMenuBanban') || '반반 메뉴'}</label>
                     <div className="grid grid-cols-2 overflow-hidden rounded-md border">
                       <button
                         type="button"
                         className={cn('h-9 text-sm', menuEditForm.isBanban ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, isBanban: true }))}
                       >
-                        사용
+                        {t('posMenuEditUse') || '사용'}
                       </button>
                       <button
                         type="button"
                         className={cn('h-9 text-sm border-l', !menuEditForm.isBanban ? 'bg-sky-500 text-white' : 'bg-white')}
                         onClick={() => setMenuEditForm((p) => ({ ...p, isBanban: false }))}
                       >
-                        미사용
+                        {t('posMenuEditNoUse') || '미사용'}
                       </button>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <div className="grid grid-cols-[120px_1fr] items-start gap-2">
-                    <label className="pt-2 text-sm font-semibold">옵션 단계</label>
+                    <label className="pt-2 text-sm font-semibold">{t('posMenuEditOptionStep') || '옵션 단계'}</label>
                     <div className="space-y-2">
                       <Input
                         className="h-9"
-                        placeholder="예: size, bone, topping"
+                        placeholder={t('posMenuEditOptionStepPlaceholder') || '예: size, bone, topping'}
                         value={menuEditForm.optionSelectionGroupsText}
                         onChange={(e) => setMenuEditForm((p) => ({ ...p, optionSelectionGroupsText: e.target.value }))}
                       />
@@ -1074,7 +1156,7 @@ export function PosTerminalMenuScreen({
                                   className="rounded border p-1 hover:bg-muted disabled:opacity-40"
                                   disabled={idx === 0}
                                   onClick={() => moveOptionGroup(idx, idx - 1)}
-                                  title="위로"
+                                  title={t('posMenuEditMoveUp') || '위로'}
                                 >
                                   <ArrowUp className="h-3 w-3" />
                                 </button>
@@ -1083,7 +1165,7 @@ export function PosTerminalMenuScreen({
                                   className="rounded border p-1 hover:bg-muted disabled:opacity-40"
                                   disabled={idx === selectedOptionGroups.length - 1}
                                   onClick={() => moveOptionGroup(idx, idx + 1)}
-                                  title="아래로"
+                                  title={t('posMenuEditMoveDown') || '아래로'}
                                 >
                                   <ArrowDown className="h-3 w-3" />
                                 </button>
@@ -1091,7 +1173,7 @@ export function PosTerminalMenuScreen({
                                   type="button"
                                   className="rounded border px-1.5 py-0.5 text-[11px] hover:bg-rose-50 hover:text-rose-600"
                                   onClick={() => setSelectedOptionGroups(selectedOptionGroups.filter((_, i) => i !== idx))}
-                                  title="삭제"
+                                  title={t('delete') || '삭제'}
                                 >
                                   삭제
                                 </button>

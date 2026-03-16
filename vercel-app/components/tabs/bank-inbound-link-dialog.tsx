@@ -31,6 +31,8 @@ type BankRow = {
 interface BankInboundLinkDialogProps {
   row: BankRow | null
   vendorOptions: { code: string; name: string }[]
+  /** 선택된 통장 계좌의 매장 - 매장별 입고 배치 필터용 */
+  storeFilter?: string
   onClose: () => void
   onSaved?: () => void
 }
@@ -38,6 +40,7 @@ interface BankInboundLinkDialogProps {
 export function BankInboundLinkDialog({
   row,
   vendorOptions,
+  storeFilter,
   onClose,
   onSaved,
 }: BankInboundLinkDialogProps) {
@@ -66,7 +69,7 @@ export function BankInboundLinkDialog({
     }
     setLoading(true)
     Promise.all([
-      getInboundBatchesForLink({ vendorCode: effectiveVendor }),
+      getInboundBatchesForLink({ vendorCode: effectiveVendor, storeFilter }),
       getBankTransactionInboundLinks(row.id),
     ])
       .then(([batchesRes, links]) => {
@@ -79,7 +82,7 @@ export function BankInboundLinkDialog({
         setAmounts(init)
       })
       .finally(() => setLoading(false))
-  }, [row?.id, effectiveVendor])
+  }, [row?.id, effectiveVendor, storeFilter])
 
   React.useEffect(() => {
     if (row?.vendorCode?.trim()) setVendorCode(row.vendorCode)

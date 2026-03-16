@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 
-const EDITABLE_STATUSES = ['pending', 'paid']
+const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
-/** POS 주문 수정 (항목·메모·할인 등) - pending/paid 상태만 */
+/** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

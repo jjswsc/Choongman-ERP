@@ -1,8 +1,9 @@
 /**
- * 결제(매입 대금 지급) / 수령(매출 대금 수령) 수동 입력
+ * 결제(매입 대금 지급) / 수령(매출 대금 수령) / 기초 이월 수동 입력
  * - type: 'payable' | 'receivable'
  * - vendorCode (payable) | storeName (receivable)
- * - amount: 음수 (지급/수령 시 잔액 감소)
+ * - amount: 수령/지급 시 음수(잔액 감소), 기초 이월 시 양수(잔액 증가)
+ * - isOpening: true면 기초 이월 (ref_type=Opening, 양수)
  * - transDate, memo
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,6 +26,7 @@ export async function POST(request: NextRequest) {
     const amount = Number(body.amount ?? 0)
     const transDate = String(body.transDate || body.trans_date || '').trim().slice(0, 10)
     const memo = String(body.memo || '').trim()
+    const isOpening = Boolean(body.isOpening ?? body.is_opening)
 
     if (type !== 'payable' && type !== 'receivable') {
       return NextResponse.json(
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
-    // 매니저/가맹점주: 미지급금(지급) 입력 불가
+    // 매니저/가맹점주: 미지급금(지급/기초이월) 입력 불가
     const isManager = userRole.includes('manager') || userRole.includes('franchisee')
     if (type === 'payable' && isManager) {
       return NextResponse.json(
@@ -60,15 +62,19 @@ export async function POST(request: NextRequest) {
           { headers }
         )
       }
+      const amt = isOpening ? Math.abs(amount) : -Math.abs(amount)
       await supabaseInsert('payable_transactions', {
         vendor_code: vendorCode,
-        amount: -Math.abs(amount),
-        ref_type: 'Payment',
+        amount: amt,
+        ref_type: isOpening ? 'Opening' : 'Payment',
         ref_id: null,
         trans_date: transDate,
-        memo: memo || '대금 지급',
+        memo: memo || (isOpening ? '기초이월' : '대금 지급'),
       })
-      return NextResponse.json({ success: true, message: '지급 내역이 등록되었습니다.' }, { headers })
+      return NextResponse.json(
+        { success: true, message: isOpening ? '기초 이월이 등록되었습니다.' : '지급 내역이 등록되었습니다.' },
+        { headers }
+      )
     }
 
     if (!storeName) {
@@ -84,15 +90,19 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
+    const amt = isOpening ? Math.abs(amount) : -Math.abs(amount)
     await supabaseInsert('receivable_transactions', {
       store_name: storeName,
-      amount: -Math.abs(amount),
-      ref_type: 'Receive',
+      amount: amt,
+      ref_type: isOpening ? 'Opening' : 'Receive',
       ref_id: null,
       trans_date: transDate,
-      memo: memo || '대금 수령',
+      memo: memo || (isOpening ? '기초이월' : '대금 수령'),
     })
-    return NextResponse.json({ success: true, message: '수령 내역이 등록되었습니다.' }, { headers })
+    return NextResponse.json(
+      { success: true, message: isOpening ? '기초 이월이 등록되었습니다.' : '수령 내역이 등록되었습니다.' },
+      { headers }
+    )
   } catch (e) {
     console.error('addBalanceTransaction:', e)
     return NextResponse.json(

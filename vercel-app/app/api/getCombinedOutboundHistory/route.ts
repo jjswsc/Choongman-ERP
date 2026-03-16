@@ -229,15 +229,12 @@ export async function GET(request: NextRequest) {
       return (b.orderRowId || '').localeCompare(a.orderRowId || '')
     })
 
-    const keyToInv: Record<string, string> = {}
+    // 인보이스 번호: IV{yyyymmdd}-{orderId} (미수금 탭과 동일, 물류·회계 혼동 방지)
     for (const r of list) {
-      const key = r.date + '\t' + r.target + '\t' + r.type + (r.orderRowId ? '\t' + r.orderRowId : '')
-      if (keyToInv[key] === undefined) {
+      if (r.orderRowId) {
         const datePart = r.date.replace(/\D/g, '').slice(0, 8)
-        const seq = Object.keys(keyToInv).filter((k) => k.startsWith(r.date)).length + 1
-        keyToInv[key] = `IV${datePart}-${String(seq).padStart(2, '0')}`
+        r.invoiceNo = `IV${datePart}-${r.orderRowId}`
       }
-      r.invoiceNo = keyToInv[key]
     }
 
     const orderRowIds = list

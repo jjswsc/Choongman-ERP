@@ -78,7 +78,9 @@ for (const lang of langs) {
   const missing = usedPosKeys.filter((k) => !langMap.has(k) && enMap.has(k))
   if (!missing.length) continue
 
-  const closeToken = "\n  } as Record<string, string>,"
+  const closeToken = block.includes("\n  } as Record<string, string>,")
+    ? "\n  } as Record<string, string>,"
+    : "\n  },"
   const closeIdx = block.lastIndexOf(closeToken)
   if (closeIdx < 0) continue
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { processPosStockDeduction } from '@/lib/pos-stock-deduction'
+import { hasJournalForSource, postPosOrderJournal } from '@/lib/accounting-posting'
+import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 
 const ALLOWED_STATUSES = ['pending', 'paid', 'cooking', 'ready', 'completed', 'cancelled']
 
@@ -23,8 +25,8 @@ export async function POST(req: NextRequest) {
 
     const existing = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
       limit: 1,
-      select: 'id,store_code',
-    })) as { id?: number; store_code?: string }[] | null
+      select: 'id,store_code,total',
+    })) as { id?: number; store_code?: string; total?: number }[] | null
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
     }
@@ -46,6 +48,21 @@ export async function POST(req: NextRequest) {
         } catch (e) {
           console.error('processPosStockDeduction:', e)
         }
+      }
+
+      try {
+        const alreadyPosted = await hasJournalForSource('pos_order', id)
+        if (!alreadyPosted) {
+          await postPosOrderJournal({
+            posOrderId: id,
+            salesDate: getBangkokTodayDateString(),
+            total: Number(existing[0]?.total || 0),
+            storeName: storeCode || undefined,
+            memo: 'POS 주문 완료 자동분개',
+          })
+        }
+      } catch (postingErr) {
+        console.error('updatePosOrderStatus posting:', postingErr)
       }
     }
 

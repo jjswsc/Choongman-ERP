@@ -34,6 +34,7 @@ import {
   ChevronRight,
   Tag,
   TrendingUp,
+  Scale,
   Calculator,
   GitCompare,
   Settings2,
@@ -84,7 +85,6 @@ const menuSections: MenuSection[] = [
     titleKey: "posMemberManage",
     items: [
       { titleKey: "memberList", icon: Users, href: "/admin/members" },
-      { titleKey: "lineMembers", icon: MessageSquareWarning, href: "/admin/members/line" },
       { titleKey: "memberPoints", icon: Wallet, href: "/admin/members/points" },
       { titleKey: "memberCoupons", icon: Tag, href: "/admin/members/coupons" },
       { titleKey: "memberVisits", icon: CalendarDays, href: "/admin/members/visits" },
@@ -101,6 +101,7 @@ const menuSections: MenuSection[] = [
     titleKey: "adminSectionMarketing",
     items: [
       { titleKey: "adminMarketingCampaigns", icon: Megaphone, href: "/admin/marketing/campaigns" },
+      { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
       { titleKey: "adminMarketingDashboard", icon: BarChart3, href: "/admin/marketing/dashboard" },
@@ -156,9 +157,12 @@ const menuSections: MenuSection[] = [
     items: [
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
       { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
+      { titleKey: "expenseManagementTitle", icon: Wallet, href: "/admin/expense-management" },
       { titleKey: "adminPettyCash", icon: Receipt, href: "/admin/petty-cash" },
       { titleKey: "adminBankTransactions", icon: Banknote, href: "/admin/bank-transactions" },
+      { titleKey: "adminDepreciation", icon: Calculator, href: "/admin/depreciation" },
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
+      { titleKey: "adminBalanceSheet", icon: Scale, href: "/admin/balance-sheet" },
     ],
   },
   {
@@ -198,6 +202,7 @@ export function ErpSidebar() {
   const isPosStaff = isPosOrderOnlyRole(auth?.role || "") || isPosSettlementOnlyRole(auth?.role || "")
 
   const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
+    posMemberManage: false,
     adminSectionSales: false,
     adminSectionMarketing: false,
     adminSectionPos: false,

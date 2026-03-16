@@ -41,7 +41,7 @@ export function TableOrderModal({
   onServed,
   t = (k) => k,
 }: TableOrderModalProps) {
-  const isCompleted = order?.status === 'completed'
+  const isServedReadyForPayment = order?.status === 'completed' || order?.status === 'ready'
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function TableOrderModal({
     const id = Number(order.id)
     if (Number.isNaN(id)) return
     try {
-      await updatePosOrderStatus({ id, status: 'completed' })
+      await updatePosOrderStatus({ id, status: 'ready' })
       onServed?.()
       onOpenChange(false)
     } catch (e) {
@@ -91,7 +91,7 @@ export function TableOrderModal({
               <Clock className="w-4 h-4 shrink-0" />
               <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
             </div>
-            {isCompleted ? (
+            {isServedReadyForPayment ? (
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
                 <CheckCircle className="w-4 h-4 shrink-0" />
                 <span>{t('posTableStatusServed') || '서빙 완료'}</span>

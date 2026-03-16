@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { postPettyCashJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -15,6 +16,9 @@ export async function POST(request: NextRequest) {
     const memo = String(body.memo || '').trim()
     const receiptUrl = body.receiptUrl || body.receipt_url ? String(body.receiptUrl || body.receipt_url).trim() : ''
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
+    const category = String(body.category || '').toLowerCase()
+    const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
+    const expenseAccrualId = Number(body.expenseAccrualId || body.expense_accrual_id || 0) || null
     const userName = String(body.userName || body.user_name || '').trim()
     const userStore = String(body.userStore || body.user_store || '').trim()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
@@ -50,7 +54,48 @@ export async function POST(request: NextRequest) {
       const asid = Number(accountSubjectId)
       if (!isNaN(asid)) row.account_subject_id = asid
     }
-    await supabaseInsert('petty_cash_transactions', row)
+    const inserted = (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
+    const pettyCashId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
+
+    if (transType === 'expense' && category === 'purchase_payment' && vendorCode) {
+      await supabaseInsert('payable_transactions', {
+        vendor_code: vendorCode,
+        amount: -Math.abs(amount),
+        ref_type: 'Payment',
+        ref_id: null,
+        trans_date: transDate.slice(0, 10),
+        memo: memo ? `패티 지급: ${memo.slice(0, 200)}` : '패티 지급',
+        petty_cash_transaction_id: pettyCashId || null,
+        expense_accrual_id: expenseAccrualId,
+      })
+      try {
+        await postPayableSettlementJournal({
+          sourceType: 'petty_cash',
+          sourceId: pettyCashId,
+          accountingDate: transDate.slice(0, 10),
+          amountAbs: Math.abs(amount),
+          memo: memo || '패티 지급',
+          storeName: store,
+          postedBy: userName || undefined,
+        })
+      } catch (postingErr) {
+        console.error('addPettyCashTransaction payable posting:', postingErr)
+      }
+    } else {
+      try {
+        await postPettyCashJournal({
+          pettyCashId,
+          transDate: transDate.slice(0, 10),
+          transType,
+          amountAbs: Math.abs(amount),
+          memo,
+          storeName: store,
+          postedBy: userName || undefined,
+        })
+      } catch (postingErr) {
+        console.error('addPettyCashTransaction posting:', postingErr)
+      }
+    }
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })
   } catch (e) {

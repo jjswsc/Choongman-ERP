@@ -1,31 +1,20 @@
 /**
  * 캠페인별 POS 실적 집계
- * campaignId, importId 필수.
- * pos_sales_details에서 기간·지점·채널 매칭 후 Dine in / Delivery / Carry out별 주문 수·매출 반환.
+ * campaignId 필수. pos_orders에서 캠페인 기간·지점 매칭 후 매출 반환.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
-function isDeliveryChannel(ch: string): boolean {
-  const c = String(ch || '').trim()
-  return /^(Grab|Lineman|Shopee|Robinhood)/i.test(c)
-}
+const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
-function isDineInChannel(ch: string): boolean {
-  const c = String(ch || '').trim()
-  return /^Table\s/i.test(c)
-}
-
-function isCarryOutChannel(ch: string): boolean {
-  const c = String(ch || '').trim()
-  return /^Packing\s/i.test(c)
-}
-
-function posMatchesBranch(pos: string, branches: string[]): boolean {
+function posMatchesBranch(storeCode: string, branches: string[]): boolean {
   if (!branches?.length) return true
-  const p = String(pos || '').toLowerCase().trim()
+  const p = String(storeCode || '').toLowerCase().trim()
   if (!p) return false
-  return branches.some((b) => String(b || '').toLowerCase().trim() === p || p.includes(String(b).toLowerCase()))
+  return branches.some(
+    (b) => String(b || '').toLowerCase().trim() === p || p.includes(String(b).toLowerCase())
+  )
 }
 
 export async function GET(request: NextRequest) {
@@ -35,11 +24,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const campaignId = searchParams.get('campaignId')?.trim()
-    const importId = searchParams.get('importId')?.trim()
 
-    if (!campaignId || !importId) {
+    if (!campaignId) {
       return NextResponse.json(
-        { success: false, message: 'campaignId, importId 필요' },
+        { success: false, message: 'campaignId 필요' },
         { headers }
       )
     }
@@ -57,14 +45,20 @@ export async function GET(request: NextRequest) {
     const endDate = campaign.end_date ? String(campaign.end_date).slice(0, 10) : null
     const branches = Array.isArray(campaign.branches) ? campaign.branches : []
 
-    let filter = `import_id=eq.${encodeURIComponent(importId)}&payment_amount=gt.0`
-    if (startDate) filter += `&sales_datetime=gte.${startDate}T00:00:00Z`
-    if (endDate) filter += `&sales_datetime=lte.${endDate}T23:59:59Z`
+    if (!startDate || !endDate) {
+      return NextResponse.json(
+        { success: true, campaignId, startDate, endDate, dineInOrders: 0, deliveryOrders: 0, carryOutOrders: 0, totalOrders: 0, dineInSales: 0, deliverySales: 0, carryOutSales: 0, totalSales: 0 },
+        { headers }
+      )
+    }
 
-    const rows = (await supabaseSelectFilter('pos_sales_details', filter, {
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+    const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'channel,pos,payment_amount',
-    })) as { channel?: string; pos?: string; payment_amount?: number }[]
+      select: 'order_type,total,store_code,status',
+    })) as { order_type?: string; total?: number; store_code?: string; status?: string }[]
 
     let dineInOrders = 0
     let deliveryOrders = 0
@@ -74,18 +68,19 @@ export async function GET(request: NextRequest) {
     let carryOutSales = 0
 
     for (const r of rows) {
-      if (!posMatchesBranch(r.pos ?? '', branches)) continue
+      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+      if (!posMatchesBranch(r.store_code ?? '', branches)) continue
 
-      const amt = Number(r.payment_amount) || 0
-      const ch = r.channel ?? ''
+      const amt = Number(r.total) || 0
+      const orderType = String(r.order_type ?? '').toLowerCase()
 
-      if (isDineInChannel(ch)) {
+      if (orderType === 'dine_in') {
         dineInOrders++
         dineInSales += amt
-      } else if (isDeliveryChannel(ch)) {
+      } else if (orderType === 'delivery') {
         deliveryOrders++
         deliverySales += amt
-      } else if (isCarryOutChannel(ch)) {
+      } else if (orderType === 'takeout') {
         carryOutOrders++
         carryOutSales += amt
       }
@@ -98,7 +93,6 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         campaignId,
-        importId,
         startDate,
         endDate,
         dineInOrders,

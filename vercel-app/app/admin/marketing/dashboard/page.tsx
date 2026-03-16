@@ -14,33 +14,23 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { getMarketingCampaigns, getMarketingCampaignResults, getPosSalesImports } from "@/lib/api-client"
+import { getMarketingCampaigns, getMarketingCampaignResults } from "@/lib/api-client"
 
 type ChartRow = { topic: string; target: number; actual: number }
 
 export default function MarketingDashboardPage() {
   const t = useT(useLang().lang)
-  const [imports, setImports] = React.useState<{ id: string; year_month?: string }[]>([])
-  const [selectedImportId, setSelectedImportId] = React.useState("")
   const [chartData, setChartData] = React.useState<ChartRow[]>([])
   const [loading, setLoading] = React.useState(false)
 
   React.useEffect(() => {
-    getPosSalesImports().then(setImports).catch(() => setImports([]))
-  }, [])
-
-  React.useEffect(() => {
-    if (!selectedImportId) {
-      setChartData([])
-      return
-    }
     setLoading(true)
     getMarketingCampaigns()
       .then(async (campaigns) => {
         const rows: ChartRow[] = []
         for (const c of campaigns) {
           if (!c.startDate || !c.endDate || !c.kpiTarget) continue
-          const res = await getMarketingCampaignResults({ campaignId: c.id, importId: selectedImportId })
+          const res = await getMarketingCampaignResults({ campaignId: c.id })
           if (res.success && res.totalOrders != null) {
             rows.push({
               topic: c.topic.length > 20 ? c.topic.slice(0, 20) + "…" : c.topic,
@@ -53,7 +43,7 @@ export default function MarketingDashboardPage() {
       })
       .catch(() => setChartData([]))
       .finally(() => setLoading(false))
-  }, [selectedImportId])
+  }, [])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -67,35 +57,18 @@ export default function MarketingDashboardPage() {
               {t("adminMarketingDashboard") || "실적 대시보드"}
             </h1>
           </div>
-          <select
-            value={selectedImportId}
-            onChange={(e) => setSelectedImportId(e.target.value)}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-          >
-            <option value="">POS 업로드 선택</option>
-            {imports.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.year_month || "?"}
-              </option>
-            ))}
-          </select>
         </div>
         {loading && (
           <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
           </div>
         )}
-        {!selectedImportId && (
-          <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
-            <p className="text-sm">POS 업로드를 선택해 주세요.</p>
-          </div>
-        )}
-        {selectedImportId && !loading && chartData.length === 0 && (
+        {!loading && chartData.length === 0 && (
           <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
             <p className="text-sm">캠페인 기간·KPI가 있는 데이터가 없습니다.</p>
           </div>
         )}
-        {selectedImportId && !loading && chartData.length > 0 && (
+        {!loading && chartData.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-xl border bg-card p-4">
               <h3 className="text-sm font-semibold mb-3">KPI 목표 vs 실적</h3>

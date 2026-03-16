@@ -25,6 +25,7 @@ import {
   type FixedExpenseItem,
   type AccountSubjectItem,
 } from "@/lib/api-client"
+import { translateApiMessage } from "@/lib/translate-api-message"
 
 export function FixedExpensesTab() {
   const { auth } = useAuth()
@@ -127,7 +128,7 @@ export function FixedExpensesTab() {
         resetForm()
         loadData()
       } else {
-        alert(res.message || "저장 실패")
+        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail") || "저장 실패")
       }
     } catch (e) {
       alert(String(e))
@@ -145,7 +146,7 @@ export function FixedExpensesTab() {
         loadData()
         if (editingId === id) resetForm()
       } else {
-        alert(res.message || "삭제 실패")
+        alert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail") || "삭제 실패")
       }
     } catch (e) {
       alert(String(e))

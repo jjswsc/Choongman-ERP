@@ -7,6 +7,7 @@ import {
 import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 import { sendNoticeToRecipients, getLogisticRecipients } from '@/lib/send-notice-util'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
+import { postStorePurchaseJournal } from '@/lib/accounting-posting'
 
 const TZ = 'Asia/Bangkok'
 
@@ -215,6 +216,17 @@ export async function POST(request: NextRequest) {
       const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
       if (totalHQ > 0) {
         await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
+        try {
+          await postStorePurchaseJournal({
+            orderId,
+            transDate,
+            amount: totalHQ,
+            storeName,
+            memo: '주문 수령(본사정산분) 자동분개',
+          })
+        } catch (postingErr) {
+          console.error('processOrderReceive posting:', postingErr)
+        }
       }
     }
 

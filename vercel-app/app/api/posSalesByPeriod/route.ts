@@ -1,10 +1,13 @@
 /**
- * 기간별 매출 (월/주/일/요일별). 결제 금액 기준. pos 필터 지원.
+ * 기간별 매출 (월/주/일/요일별). pos_orders 기반. 결제 금액(total) 기준. pos 필터 지원.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc, toDateStrBangkok, getDayOfWeekBangkok } from '@/lib/attendance-utils'
 
-type Row = { sales_datetime?: string; payment_amount?: number; pos?: string }
+const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+
+type Row = { created_at?: string; total?: number; store_code?: string; status?: string }
 
 function getStartOfWeek(d: Date): Date {
   const x = new Date(d)
@@ -20,33 +23,38 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const importId = searchParams.get('importId')?.trim()
+    const startStr = searchParams.get('startStr')?.trim()
+    const endStr = searchParams.get('endStr')?.trim()
     const groupBy = searchParams.get('groupBy') || 'day'
     const pos = searchParams.get('pos')?.trim()
 
-    if (!importId) {
-      return NextResponse.json({ success: false, message: 'importId 필요' }, { headers })
+    if (!startStr || !endStr) {
+      return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    let filter = `import_id=eq.${encodeURIComponent(importId)}&payment_amount=gt.0`
-    if (pos) filter += `&pos=eq.${encodeURIComponent(pos)}`
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+    if (pos && pos !== 'All') filter += `&store_code=ilike.${encodeURIComponent(pos)}`
 
-    const rows = (await supabaseSelectFilter('pos_sales_details', filter, {
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'sales_datetime,payment_amount',
+      select: 'created_at,total,store_code,status',
     })) as Row[]
 
     const salesByKey: Record<string, number> = {}
 
     for (const r of rows) {
-      const dt = r.sales_datetime
-      const amt = Number(r.payment_amount) || 0
+      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+      const dt = r.created_at
+      const amt = Number(r.total) || 0
       if (!dt) continue
 
       const d = new Date(dt)
+      const bkkDate = toDateStrBangkok(dt)
+      if (!bkkDate) continue
 
       if (groupBy === 'month') {
-        const k = dt.slice(0, 7)
+        const k = bkkDate.slice(0, 7)
         salesByKey[k] = (salesByKey[k] || 0) + amt
       } else if (groupBy === 'week') {
         const start = getStartOfWeek(d)
@@ -55,11 +63,10 @@ export async function GET(request: NextRequest) {
         const k = `${start.toISOString().slice(0, 10)}~${end.toISOString().slice(0, 10)}`
         salesByKey[k] = (salesByKey[k] || 0) + amt
       } else if (groupBy === 'dow') {
-        const dow = d.getUTCDay()
+        const dow = getDayOfWeekBangkok(bkkDate)
         salesByKey[String(dow)] = (salesByKey[String(dow)] || 0) + amt
       } else {
-        const k = dt.slice(0, 10)
-        salesByKey[k] = (salesByKey[k] || 0) + amt
+        salesByKey[bkkDate] = (salesByKey[bkkDate] || 0) + amt
       }
     }
 

@@ -1,0 +1,264 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import type { Order } from '@/lib/pos-types'
+import type { PosDeliveryApp } from '@/lib/api-client'
+import { markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
+import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
+
+export interface DeliveryOrderPanelProps {
+  orderLabel: string
+  order: Order | null
+  deliveryApps?: PosDeliveryApp[]
+  onPackaged?: () => void
+  onPay?: () => void
+  /** 주문 취소 시 */
+  onCancel?: () => void
+  onClose?: () => void
+  t?: (key: string) => string
+}
+
+function formatDateTime(date: Date): string {
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function getDeliveryPlatformAndOrderNo(order: Order, deliveryApps?: PosDeliveryApp[]): { platform: string; orderNo: string } {
+  const text = [order.customerName ?? '', order.orderNo ?? '', order.memo ?? ''].filter(Boolean).join(' ')
+  const raw = text.toLowerCase()
+  let platform = ''
+  if (deliveryApps?.length) {
+    for (const app of deliveryApps) {
+      const keywords = app.matchKeywords || []
+      if (keywords.some((k) => raw.includes(String(k).toLowerCase()))) {
+        platform = app.name
+        break
+      }
+    }
+  }
+  if (!platform) {
+    if (raw.includes('grab') || raw.includes('그랩')) platform = 'Grab'
+    else if (raw.includes('lineman') || raw.includes('line man') || raw.includes('라인맨')) platform = 'Line Man'
+    else if (raw.includes('shopee') || raw.includes('쇼피')) platform = 'Shopee'
+  }
+  const hashMatch = text.match(/#\s*([A-Za-z0-9-]+)/)
+  const orderNo = hashMatch?.[1] ?? order.orderNo ?? ''
+  return { platform, orderNo }
+}
+
+export function DeliveryOrderPanel({
+  orderLabel,
+  order,
+  deliveryApps = [],
+  onPackaged,
+  onPay,
+  onCancel,
+  onClose,
+  t = (k) => k,
+}: DeliveryOrderPanelProps) {
+  const isCompleted = order?.status === 'completed'
+  const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [savingItemId, setSavingItemId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!order?.items?.length) {
+      setItemPackaged({})
+      setExpandedItemId(null)
+    } else {
+      setItemPackaged((prev) => {
+        const next = { ...prev }
+        order.items.forEach((it) => {
+          next[it.id] = Boolean(it.servedAt)
+        })
+        return next
+      })
+    }
+  }, [order?.id, order?.items])
+
+  const toggleItemPackaged = async (itemId: string) => {
+    if (!order) return
+    const id = Number(order.id)
+    if (Number.isNaN(id)) return
+    const nextPackaged = !itemPackaged[itemId]
+    setSavingItemId(itemId)
+    try {
+      const res = await markPosOrderItemServed({
+        id,
+        itemId,
+        served: nextPackaged,
+      })
+      if (!res.success) {
+        alert(res.message || (t('processFail') || '처리 실패'))
+        return
+      }
+      setItemPackaged((prev) => ({ ...prev, [itemId]: nextPackaged }))
+      onPackaged?.()
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setSavingItemId(null)
+    }
+  }
+
+  const packagedCount = order?.items?.filter((it) => itemPackaged[it.id]).length ?? 0
+  const allPackaged = order?.items?.length ? packagedCount >= order.items.length : false
+
+  const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
+  const [cancelling, setCancelling] = useState(false)
+
+  const handleCancelOrder = async () => {
+    if (!order || !confirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
+    setCancelling(true)
+    try {
+      await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
+      onCancel?.()
+      onClose?.()
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  const handlePackComplete = async () => {
+    if (!order || order.status === 'completed' || order.status === 'ready') return
+    const id = Number(order.id)
+    if (Number.isNaN(id)) return
+    try {
+      await updatePosOrderStatus({ id, status: 'ready' })
+      onPackaged?.()
+    } catch (e) {
+      console.error('updatePosOrderStatus:', e)
+    }
+  }
+
+  return (
+    <div className="h-full flex flex-col border-l border-border bg-card">
+      <div className="px-3 py-3 border-b flex items-center justify-between">
+        <h3 className="text-sm font-semibold truncate">
+          {orderLabel} {t('posOrderTypeDelivery') || '배달'}
+        </h3>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onClose}>
+          {t('posBack') || '뒤로가기'}
+        </Button>
+      </div>
+
+      {!order ? (
+        <div className="p-3 text-sm text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
+      ) : (
+        <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-muted-foreground text-sm">
+            <Clock className="w-4 h-4 shrink-0" />
+            <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
+          </div>
+
+          {isCompleted ? (
+            <>
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>{t('posPaymentComplete') || '결제 완료'}</span>
+              </div>
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
+                {t('posTablePayInStore') || '매장 결제'}
+              </Button>
+              {canCancel && (
+                <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
+                  <XCircle className="w-4 h-4 mr-1" />
+                  {t('posOrderCancel') || '주문 취소'}
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
+                <ul className="p-2 space-y-2">
+                  {order.items.map((item) => {
+                    const packaged = itemPackaged[item.id]
+                    const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+                    const mainName = optMatch ? optMatch[1].trim() : item.name
+                    const optionPart = optMatch ? optMatch[2].trim() : null
+                    return (
+                      <li
+                        key={item.id}
+                        className={cn(
+                          'grid grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50',
+                          packaged && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
+                            className="text-sm font-medium truncate text-left w-full hover:underline"
+                            onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
+                            title={item.name}
+                          >
+                            {mainName}
+                          </button>
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {optionPart && <span className="mr-1">{optionPart}</span>}
+                            x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
+                          </p>
+                          {expandedItemId === item.id && (
+                            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">
+                              {item.name}
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant={packaged ? 'default' : 'outline'}
+                          className="shrink-0 h-8 min-w-[80px] self-center"
+                          onClick={() => { void toggleItemPackaged(item.id) }}
+                          disabled={savingItemId === item.id}
+                          aria-label={
+                            packaged
+                              ? (t('cancel') || '취소')
+                              : (t('posDeliveryPackagingComplete') || '포장 완료')
+                          }
+                        >
+                          {packaged ? <Check className="w-4 h-4 mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+                          {packaged ? (t('cancel') || '취소') : (t('posDeliveryPackagingComplete') || '포장 완료')}
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </ScrollArea>
+
+              <div className="flex justify-between text-sm font-medium">
+                <span>{t('posInputTotal') || '합계'}</span>
+                <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
+              </div>
+
+              <Button onClick={handlePackComplete} className="w-full h-11 text-base font-semibold" disabled={!allPackaged}>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                {allPackaged
+                  ? (t('posDeliveryPackagingComplete') || '포장 완료')
+                  : `${t('posDeliveryPackagingComplete') || '포장 완료'} (${packagedCount}/${order.items.length})`}
+              </Button>
+
+              <Button className="h-11 text-base font-semibold w-full" onClick={() => onPay?.()}>
+                {t('posTablePayInStore') || '매장 결제'}
+              </Button>
+              {canCancel && (
+                <Button variant="outline" size="sm" className="w-full text-destructive border-destructive/50 hover:bg-destructive/10" disabled={cancelling} onClick={handleCancelOrder}>
+                  <XCircle className="w-4 h-4 mr-1" />
+                  {t('posOrderCancel') || '주문 취소'}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+    </div>
+  )
+}

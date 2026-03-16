@@ -18,7 +18,6 @@ import {
   getMarketingCampaigns,
   getMarketingCampaignCosts,
   getMarketingCampaignResults,
-  getPosSalesImports,
   type MarketingCampaign,
 } from "@/lib/api-client"
 
@@ -35,21 +34,11 @@ type CompareRow = {
 
 export default function MarketingAbComparePage() {
   const t = useT(useLang().lang)
-  const [imports, setImports] = React.useState<{ id: string; year_month?: string }[]>([])
-  const [selectedImportId, setSelectedImportId] = React.useState("")
   const [rows, setRows] = React.useState<CompareRow[]>([])
   const [loading, setLoading] = React.useState(false)
   const [groupBy, setGroupBy] = React.useState<"format" | "topic" | "none">("topic")
 
   React.useEffect(() => {
-    getPosSalesImports().then(setImports).catch(() => setImports([]))
-  }, [])
-
-  React.useEffect(() => {
-    if (!selectedImportId) {
-      setRows([])
-      return
-    }
     setLoading(true)
     getMarketingCampaigns()
       .then(async (campaigns) => {
@@ -60,7 +49,7 @@ export default function MarketingAbComparePage() {
         for (const c of completed) {
           const [costRes, posRes] = await Promise.all([
             getMarketingCampaignCosts(c.id),
-            getMarketingCampaignResults({ campaignId: c.id, importId: selectedImportId }),
+            getMarketingCampaignResults({ campaignId: c.id }),
           ])
           const costs = costRes.totalCosts ?? 0
           const sales = posRes.totalSales ?? 0
@@ -81,7 +70,7 @@ export default function MarketingAbComparePage() {
       })
       .catch(() => setRows([]))
       .finally(() => setLoading(false))
-  }, [selectedImportId])
+  }, [])
 
   // 그룹별 유사 캠페인 (topic 키워드 기준)
   const groups = React.useMemo(() => {
@@ -133,18 +122,6 @@ export default function MarketingAbComparePage() {
           </div>
           <div className="flex items-center gap-2">
             <select
-              value={selectedImportId}
-              onChange={(e) => setSelectedImportId(e.target.value)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            >
-              <option value="">{t("adminMarketingSelectPosImport") || "POS 업로드 선택"}</option>
-              {imports.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.year_month || "?"}
-                </option>
-              ))}
-            </select>
-            <select
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as "format" | "topic" | "none")}
               className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
@@ -162,13 +139,7 @@ export default function MarketingAbComparePage() {
           </div>
         )}
 
-        {!selectedImportId && !loading && (
-          <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
-            <p className="text-sm">{t("adminMarketingSelectPosImport") || "POS 업로드를 선택해 주세요."}</p>
-          </div>
-        )}
-
-        {selectedImportId && !loading && rows.length > 0 && (
+        {!loading && rows.length > 0 && (
           <div className="space-y-6">
             <div className="rounded-xl border bg-card p-4">
               <h3 className="text-sm font-semibold mb-3">
@@ -225,7 +196,7 @@ export default function MarketingAbComparePage() {
           </div>
         )}
 
-        {selectedImportId && !loading && rows.length === 0 && (
+        {!loading && rows.length === 0 && (
           <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/30 px-6 py-12 text-center text-muted-foreground">
             <p className="text-sm">{t("adminMarketingAbNoData") || "비교할 완료된 캠페인이 없습니다."}</p>
           </div>

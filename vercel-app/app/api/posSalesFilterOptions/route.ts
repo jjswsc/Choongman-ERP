@@ -1,8 +1,9 @@
 /**
- * 매출 필터 옵션 (매장/포스 목록). importId 기준.
+ * 매출 필터 옵션 (매장 목록). pos_orders 기준. startStr~endStr 기간 내 store_code 목록.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -10,21 +11,24 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const importId = searchParams.get('importId')?.trim()
+    const startStr = searchParams.get('startStr')?.trim()
+    const endStr = searchParams.get('endStr')?.trim()
 
-    if (!importId) {
+    if (!startStr || !endStr) {
       return NextResponse.json({ posOptions: [] }, { headers })
     }
 
-    const rows = (await supabaseSelectFilter(
-      'pos_sales_details',
-      `import_id=eq.${encodeURIComponent(importId)}`,
-      { limit: 5000, select: 'pos' }
-    )) as { pos?: string }[]
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+      limit: 5000,
+      select: 'store_code',
+    })) as { store_code?: string }[]
 
     const posSet = new Set<string>()
     for (const r of rows) {
-      const p = String(r.pos || '').trim()
+      const p = String(r.store_code ?? '').trim()
       if (p) posSet.add(p)
     }
     const posOptions = Array.from(posSet).sort()

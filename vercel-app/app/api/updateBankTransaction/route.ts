@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdate, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseUpdate, supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
 export async function POST(request: NextRequest) {
@@ -26,6 +26,10 @@ export async function POST(request: NextRequest) {
       id?: number
       trans_type?: string
       category?: string
+      trans_date?: string
+      amount?: number
+      memo?: string
+      store_name?: string
     }[]
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
@@ -34,6 +38,7 @@ export async function POST(request: NextRequest) {
     const transType = String(existing[0].trans_type || 'withdraw').toLowerCase()
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
+    const prevCategory = String(existing[0].category || '').toLowerCase()
 
     const patch: Record<string, unknown> = {}
 
@@ -57,11 +62,12 @@ export async function POST(request: NextRequest) {
       patch.expense_date = /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : null
     }
     const finalCategory = (patch.category as string) ?? existing[0].category
+    const finalStoreName = storeName !== undefined ? String(storeName || '').trim() || null : (existing[0].store_name ?? null)
     if (finalCategory === 'purchase_payment' && vendorCode !== undefined) {
       patch.vendor_code = String(vendorCode || '').trim() || null
     }
     if (finalCategory === 'receivable_receive' && storeName !== undefined) {
-      patch.store_name = String(storeName || '').trim() || null
+      patch.store_name = finalStoreName
     }
 
     if (Object.keys(patch).length === 0) {
@@ -69,6 +75,36 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('bank_transactions', bankTxId, patch)
+
+    // 매출 수령(미수금) 연동: receivable_transactions 생성/삭제
+    if (transType === 'deposit') {
+      const transDate = String((patch.trans_date as string) ?? existing[0].trans_date ?? '').slice(0, 10)
+      const amount = Math.abs(Number(existing[0].amount) ?? 0)
+      const memo = String(existing[0].memo || '').trim()
+
+      if (prevCategory === 'receivable_receive' && (finalCategory !== 'receivable_receive' || !finalStoreName)) {
+        // 매출 수령 → 다른 용도로 변경, 또는 매장 미선택: 기존 미수금 수령 건 삭제
+        await supabaseDeleteByFilter('receivable_transactions', `bank_transaction_id=eq.${bankTxId}`)
+      }
+      if (finalCategory === 'receivable_receive' && finalStoreName) {
+        // 매출 수령 + 매장 선택: 미수금 수령 건 생성 또는 업데이트
+        const linkedRecv = (await supabaseSelectFilter('receivable_transactions', `bank_transaction_id=eq.${bankTxId}`, { limit: 1 })) as { id?: number }[]
+        const recvRow = {
+          store_name: finalStoreName,
+          amount: -amount,
+          ref_type: 'Receive',
+          ref_id: null,
+          trans_date: transDate,
+          memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
+          bank_transaction_id: bankTxId,
+        }
+        if (linkedRecv?.length) {
+          await supabaseUpdate('receivable_transactions', linkedRecv[0].id!, recvRow)
+        } else {
+          await supabaseInsert('receivable_transactions', recvRow)
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {

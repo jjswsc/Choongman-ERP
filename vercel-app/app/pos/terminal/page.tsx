@@ -34,7 +34,8 @@ import { useT } from '@/lib/i18n'
 import { canAccessAdmin, isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
 
-export type DeliveryApp = 'grab' | 'lineman' | 'shopee'
+/** 배달앱 코드 (API에서 동적 로드 가능) */
+export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
 type PendingPayRequest = {
   tableName: string
@@ -76,7 +77,7 @@ export default function PosTerminalPage() {
 
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null)
   const [servingTableId, setServingTableId] = useState<string | null>(null)
-  const [deliveryApp, setDeliveryApp] = useState<DeliveryApp | null>(orderType === 'delivery' ? null : null)
+  const [deliveryApp, setDeliveryApp] = useState<DeliveryApp | null>(null)
   const [deliveryOrderNo, setDeliveryOrderNo] = useState('')
   const [takeoutMode, setTakeoutMode] = useState<TakeoutMode>('slot')
   const [takeoutSlot, setTakeoutSlot] = useState('1')
@@ -849,8 +850,8 @@ export default function PosTerminalPage() {
                     }
                     setSelectedDeliveryTargetId(id)
                     setSelectedDeliveryTargetLabel(selected.label || (t('posOrderTypeDelivery') || '배달'))
-                    const appId = detectDeliveryApp([selected.label, selected.rightLabel || ''].join(' '))
-                    if (appId) setDeliveryApp(appId)
+                    const app = detectDeliveryApp([selected.label, selected.rightLabel || ''].join(' '))
+                    if (app) setDeliveryApp(app.code)
                     const parsedNo = detectDeliveryOrderNo([selected.label, selected.rightLabel || ''].join(' '))
                     setDeliveryOrderNo(parsedNo)
                   }}

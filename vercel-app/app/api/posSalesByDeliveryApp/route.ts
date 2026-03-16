@@ -1,21 +1,18 @@
 /**
- * 배달앱별 매출 (Grab/Line Man/Shopee/매장/포장 등). 결제 금액 기준. pos 필터 지원.
+ * 채널별 매출 (매장/포장/배달). pos_orders 기반. order_type 기준.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
-function getDeliveryAppCategory(channel: string): string {
-  const c = String(channel || '').trim()
-  if (/^Grab\s/i.test(c)) return 'Grab'
-  if (/^Lineman\s/i.test(c)) return 'Line Man'
-  if (/^Shopee\s/i.test(c)) return 'Shopee'
-  if (/^Robinhood\s/i.test(c)) return 'Robinhood'
-  if (/^Table\s/i.test(c)) return '매장'
-  if (/^Packing\s/i.test(c)) return '포장'
-  return '기타'
+const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+
+const ORDER_LABELS: Record<string, string> = {
+  dine_in: '매장',
+  takeout: '포장',
+  delivery: '배달',
 }
-
-const ORDER = ['Grab', 'Line Man', 'Shopee', 'Robinhood', '매장', '포장', '기타']
+const ORDER = ['매장', '포장', '배달']
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -23,28 +20,30 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const importId = searchParams.get('importId')?.trim()
+    const startStr = searchParams.get('startStr')?.trim()
+    const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
 
-    if (!importId) {
-      return NextResponse.json({ success: false, message: 'importId 필요' }, { headers })
+    if (!startStr || !endStr) {
+      return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    let filter = `import_id=eq.${encodeURIComponent(importId)}&payment_amount=gt.0`
-    if (pos) filter += `&pos=eq.${encodeURIComponent(pos)}`
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+    if (pos && pos !== 'All') filter += `&store_code=ilike.${encodeURIComponent(pos)}`
 
-    const rows = (await supabaseSelectFilter('pos_sales_details', filter, {
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'channel,payment_amount',
-    })) as { channel?: string; payment_amount?: number }[]
+      select: 'order_type,total,status',
+    })) as { order_type?: string; total?: number; status?: string }[]
 
     const byApp: Record<string, number> = {}
     for (const r of rows) {
-      const app = getDeliveryAppCategory(r.channel || '')
-      const amt = Number(r.payment_amount) || 0
-      byApp[app] = (byApp[app] || 0) + amt
+      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+      const label = ORDER_LABELS[String(r.order_type ?? '')] || '기타'
+      const amt = Number(r.total) || 0
+      byApp[label] = (byApp[label] || 0) + amt
     }
-
     const total = Object.values(byApp).reduce((a, b) => a + b, 0)
     const result = ORDER.filter((k) => byApp[k] != null).map((label) => ({
       label,

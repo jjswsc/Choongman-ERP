@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
+import { postBankTransactionJournal } from '@/lib/accounting-posting'
 
 /** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
@@ -103,6 +104,22 @@ export async function POST(request: NextRequest) {
         memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
         bank_transaction_id: bankId,
       })
+    }
+
+    // 복식부기 1차: 통장 거래 자동 분개 (실패해도 원거래는 유지)
+    try {
+      await postBankTransactionJournal({
+        bankTransactionId: bankId,
+        transDate: transDate.slice(0, 10),
+        transType: transType as 'deposit' | 'withdraw',
+        amountAbs: Math.abs(amount),
+        category: validCategory,
+        memo,
+        storeName: store || undefined,
+        postedBy: userName || undefined,
+      })
+    } catch (postingErr) {
+      console.error('addBankTransaction posting:', postingErr)
     }
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })

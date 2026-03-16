@@ -6,13 +6,11 @@
  * - Approved 시 delivery_date, approved_indices(일부 승인), approved_original_qty_json 저장
  * - updatedCart: 프론트에서 수정한 수량. checked=true인 행만 승인. cart_json 덮어씀
  * - manager 권한은 승인 불가 (userRole 검사)
- * - Approved 시 receivable_transactions에 미수금 생성
+ * - 미수금은 주문 승인이 아닌 출고 수령 시점(processOrderReceive)에 생성
  * - 처리 완료 시 발주 직원 + 해당 매장 매니저에게 앱 내 공지 자동 발송
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
-import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
-import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { sendNoticeToRecipients, getManagersByStore } from '@/lib/send-notice-util'
 
 const ALLOWED_DECISIONS = ['Approved', 'Rejected', 'Hold']
@@ -179,30 +177,6 @@ export async function POST(request: NextRequest) {
       console.error('processOrderDecision notice:', noticeErr)
     }
 
-    if (decision === 'Approved') {
-      const updated = patch as { total?: number; delivery_date?: string; cart_json?: string }
-      const storeName = String((orders[0] as { store_name?: string }).store_name || '').trim()
-      const transDate = String(updated.delivery_date || (orders[0] as { order_date?: string }).order_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10)
-      if (storeName) {
-        let cartForReceivable: { code?: string; price?: number; qty?: number }[] = []
-        try {
-          cartForReceivable = JSON.parse(updated.cart_json || '[]')
-        } catch {}
-        const directMap = cartForReceivable.length > 0
-          ? await getDirectSettlementMap(cartForReceivable.map((it) => it.code || '').filter(Boolean))
-          : {}
-        let subtotalHQ = 0
-        cartForReceivable.forEach((it) => {
-          if (!directMap[it.code || '']) {
-            subtotalHQ += Number(it.price || 0) * Number(it.qty || 0)
-          }
-        })
-        const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
-        if (totalHQ > 0) {
-          await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
-        }
-      }
-    }
     return NextResponse.json({ success: true, message: '처리되었습니다.' }, { headers })
   } catch (e) {
     console.error('processOrderDecision:', e)

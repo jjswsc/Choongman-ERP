@@ -64,12 +64,25 @@ async function main() {
     if (shouldSync(filename)) scheduleSync()
   })
 
-  const nextBin = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "next.cmd" : "next")
-  const nextProc = spawn(nextBin, ["dev", ...nextArgs], {
-    cwd: root,
-    stdio: "inherit",
-    shell: false,
-  })
+  const isWin = process.platform === "win32"
+  const nextBin = path.join(root, "node_modules", ".bin", isWin ? "next.cmd" : "next")
+
+  let nextProc
+  if (isWin) {
+    // Node v24 on Windows may throw EINVAL when spawning .cmd directly.
+    // Use shell mode only on Windows for next.cmd compatibility.
+    nextProc = spawn(nextBin, ["dev", ...nextArgs], {
+      cwd: root,
+      stdio: "inherit",
+      shell: true,
+    })
+  } else {
+    nextProc = spawn(nextBin, ["dev", ...nextArgs], {
+      cwd: root,
+      stdio: "inherit",
+      shell: false,
+    })
+  }
 
   const shutdown = () => {
     watcher.close()

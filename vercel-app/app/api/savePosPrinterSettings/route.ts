@@ -27,6 +27,25 @@ export async function POST(req: NextRequest) {
     const cookingDelayBadgeEnabled = body?.cookingDelayBadgeEnabled !== false
     const cookingDelaySoundEnabled = Boolean(body?.cookingDelaySoundEnabled)
     const cookingDelayAlertOverMin = Math.max(0, Number(body?.cookingDelayAlertOverMin ?? 0))
+    const cardAutoOpen = Boolean(body?.cardAutoOpen)
+    const checkAutoOpen = Boolean(body?.checkAutoOpen)
+    const drawerOpt = String(body?.drawerOpenOption || 'reason_only')
+    const drawerOpenOption = ['password_and_reason', 'reason_only', 'force'].includes(drawerOpt) ? drawerOpt : 'reason_only'
+    const logoPrint = Boolean(body?.logoPrint)
+    const receiptTiming = String(body?.receiptPrintTiming || 'per_payment')
+    const receiptPrintTiming = receiptTiming === 'final_payment' ? 'final_payment' : 'per_payment'
+    const customerReceiptOrderDetails = body?.customerReceiptOrderDetails !== false
+    const merchantReceiptOrderDetails = body?.merchantReceiptOrderDetails !== false
+    const cashPaymentReceipt = Boolean(body?.cashPaymentReceipt)
+    const signatureLine = Boolean(body?.signatureLine)
+    const receiptBarcode = body?.receiptBarcode !== false
+    const itemBarcode = body?.itemBarcode !== false
+    const qrOpt = String(body?.qrCodeOption || 'yes')
+    const qrCodeOption = ['yes', 'no', 'return_points'].includes(qrOpt) ? qrOpt : 'yes'
+    const discountSeparatePrint = body?.discountSeparatePrint !== false
+    const merchantReceiptPrint = body?.merchantReceiptPrint !== false
+    const actualOrderDetails = body?.actualOrderDetails !== false
+    const toppingOptionsPrint = Boolean(body?.toppingOptionsPrint)
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
@@ -53,6 +72,22 @@ export async function POST(req: NextRequest) {
       cooking_delay_badge_enabled: cookingDelayBadgeEnabled,
       cooking_delay_sound_enabled: cookingDelaySoundEnabled,
       cooking_delay_alert_over_min: cookingDelayAlertOverMin,
+      card_auto_open: cardAutoOpen,
+      check_auto_open: checkAutoOpen,
+      drawer_open_option: drawerOpenOption,
+      logo_print: logoPrint,
+      receipt_print_timing: receiptPrintTiming,
+      customer_receipt_order_details: customerReceiptOrderDetails,
+      merchant_receipt_order_details: merchantReceiptOrderDetails,
+      cash_payment_receipt: cashPaymentReceipt,
+      signature_line: signatureLine,
+      receipt_barcode: receiptBarcode,
+      item_barcode: itemBarcode,
+      qr_code_option: qrCodeOption,
+      discount_separate_print: discountSeparatePrint,
+      merchant_receipt_print: merchantReceiptPrint,
+      actual_order_details: actualOrderDetails,
+      topping_options_print: toppingOptionsPrint,
       updated_at: new Date().toISOString(),
     }
 

@@ -18,7 +18,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronRight } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -26,13 +27,11 @@ import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerOrFranchiseeRole, isManagerRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
-import { getVendorsForPurchase } from "@/lib/api-client"
+import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
-  getReceivablePayableSummary,
   addBalanceTransaction,
   type ReceivablePayableItem,
-  type ReceivablePayableSummaryItem,
 } from "@/lib/api-client"
 
 function todayStr() {
@@ -42,43 +41,82 @@ function todayStr() {
 export function ReceivablePayableTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const { auth } = useAuth()
   const { stores: storeList } = useStoreList()
-  const [vendors, setVendors] = React.useState<{ code: string; name: string }[]>([])
+  const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
 
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
   const isManagerOnly = isManagerRole(auth?.role || "") // 매장 매니저: 수령 입력 불가
   const managerStore = (auth?.store || "").trim()
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
-  const [storeFilter, setStoreFilter] = React.useState(() =>
+  // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
+  const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
+  const [salesOutletOptions, setSalesOutletOptions] = React.useState<string[]>([])
+  // 미지급금: 매장 선택 + 매입처. 매니저는 자기 매장 고정, 본사는 기본 office
+  const [payableStoreFilter, setPayableStoreFilter] = React.useState(() =>
     isManager && managerStore ? managerStore : "All"
   )
   const [vendorFilter, setVendorFilter] = React.useState("All")
+  // API용: receivable=매출처, payable=매장
+  const recStoreFilter = salesOutletFilter !== "All" ? salesOutletFilter : "All"
+  const payStoreFilter = payableStoreFilter !== "All" ? payableStoreFilter : "All"
+  const storeFilter = tab === "receivable" ? recStoreFilter : payStoreFilter
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [subTab, setSubTab] = React.useState<"summary" | "detail">("summary")
-  const [summaryData, setSummaryData] = React.useState<ReceivablePayableSummaryItem[]>([])
-  const [summaryLoading, setSummaryLoading] = React.useState(false)
+  const [filterUnpaidOnly, setFilterUnpaidOnly] = React.useState(false)
 
   const [addAmount, setAddAmount] = React.useState("")
   const [addDate, setAddDate] = React.useState(todayStr)
   const [addMemo, setAddMemo] = React.useState("")
   const [addEntity, setAddEntity] = React.useState("")
   const [addSaving, setAddSaving] = React.useState(false)
+  const [addIsOpening, setAddIsOpening] = React.useState(false)
 
   React.useEffect(() => {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
   }, [])
 
-  // 매니저: storeFilter를 자기 매장으로 고정
+  // 매출처 목록: 매장 + 판매처(매출 type 거래처)
+  React.useEffect(() => {
+    const load = async () => {
+      const stores = (storeList || []).filter((s) => s && s !== "All")
+      const sales = (await getVendorsForSales()) || []
+      const salesNames = sales.map((v) => v.name).filter(Boolean)
+      const seen = new Set<string>()
+      setSalesOutletOptions([...stores, ...salesNames].filter((n) => {
+        if (!n || seen.has(n)) return false
+        seen.add(n)
+        return true
+      }))
+    }
+    load().catch(() => setSalesOutletOptions([]))
+  }, [storeList])
+
+  // 매니저: 미지급금 매장 선택을 자기 매장으로 고정
   React.useEffect(() => {
     if (isManager && managerStore) {
-      setStoreFilter(managerStore)
+      setPayableStoreFilter(managerStore)
     }
   }, [isManager, managerStore])
+
+  // 본사(비매니저): 미지급금 매장 기본값 office
+  const initPayableStoreRef = React.useRef(false)
+  React.useEffect(() => {
+    if (isManager || initPayableStoreRef.current || !storeList?.length) return
+    const office = (storeList || []).find((s) => s && s.toLowerCase().includes("office"))
+    if (office) {
+      setPayableStoreFilter(office)
+      initPayableStoreRef.current = true
+    }
+  }, [storeList, isManager])
 
   // 매니저 + receivable 탭: 수령 입력 시 자기 매장 자동 선택
   React.useEffect(() => {
@@ -92,16 +130,11 @@ export function ReceivablePayableTab() {
     if (isManager && tab === "payable") setTab("receivable")
   }, [isManager, tab])
 
-  // 미수금/미지급금 탭 전환 시 요약으로
-  React.useEffect(() => {
-    setSubTab("summary")
-  }, [tab])
-
   const loadList = React.useCallback(() => {
     setLoading(true)
     getReceivablePayableList({
       type: tab,
-      storeFilter: tab === "receivable" && storeFilter !== "All" ? storeFilter : undefined,
+      storeFilter: tab === "receivable" && recStoreFilter !== "All" ? recStoreFilter : (tab === "payable" && payStoreFilter !== "All" ? payStoreFilter : undefined),
       vendorFilter: tab === "payable" && vendorFilter !== "All" ? vendorFilter : undefined,
       startStr,
       endStr,
@@ -114,40 +147,15 @@ export function ReceivablePayableTab() {
   }, [tab, storeFilter, vendorFilter, startStr, endStr, auth?.store, auth?.role])
 
   const [hasSearchedList, setHasSearchedList] = React.useState(false)
-  const [hasSearchedSummary, setHasSearchedSummary] = React.useState(false)
 
   const handleLoadList = React.useCallback(() => {
     setHasSearchedList(true)
     loadList()
   }, [loadList])
 
-  const loadSummary = React.useCallback(() => {
-    setSummaryLoading(true)
-    getReceivablePayableSummary({
-      type: tab,
-      userStore: auth?.store || undefined,
-      userRole: auth?.role || undefined,
-    })
-      .then((r) => setSummaryData(r.list || []))
-      .catch(() => setSummaryData([]))
-      .finally(() => setSummaryLoading(false))
-  }, [tab, auth?.store, auth?.role])
-
-  const handleLoadSummary = React.useCallback(() => {
-    setHasSearchedSummary(true)
-    loadSummary()
-  }, [loadSummary])
-
   React.useEffect(() => {
     setHasSearchedList(false)
-    setHasSearchedSummary(false)
   }, [tab])
-
-  const handleViewDetail = (entityKey: string) => {
-    if (tab === "receivable") setStoreFilter(entityKey)
-    else setVendorFilter(entityKey)
-    setSubTab("detail")
-  }
 
   const handleAdd = async () => {
     const amount = Number(addAmount?.replace(/,/g, ""))
@@ -156,7 +164,9 @@ export function ReceivablePayableTab() {
       return
     }
     if (!addEntity?.trim()) {
-      alert(tab === "receivable" ? "매출처를 선택해 주세요." : "매입처를 선택해 주세요.")
+      alert(tab === "receivable"
+        ? tt("receivableSelectCustomer", "매출처를 선택해 주세요.")
+        : tt("payableSelectVendor", "매입처를 선택해 주세요."))
       return
     }
     setAddSaving(true)
@@ -168,6 +178,7 @@ export function ReceivablePayableTab() {
         amount,
         transDate: addDate,
         memo: addMemo || undefined,
+        isOpening: addIsOpening,
         userStore: auth?.store || undefined,
         userRole: auth?.role || undefined,
       })
@@ -189,13 +200,24 @@ export function ReceivablePayableTab() {
     ? (isManager && managerStore ? [managerStore] : (storeList || []))
     : []
 
+  const formatVendorDisplay = (vendorCode?: string) => {
+    if (!vendorCode) return ""
+    const v = vendors.find((x) => x.code === vendorCode)
+    const name = v?.name || vendorCode
+    return name === vendorCode ? name : `${name} (${vendorCode})`
+  }
+
+  const filterItemsByUnpaid = (items: { ref_type?: string }[] | undefined, isRec: boolean) => {
+    if (!filterUnpaidOnly || !items?.length) return items ?? []
+    if (isRec) return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "Order")
+    return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
+  }
+
   const escapeXml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
   const handlePrint = () => {
-    const hasSummary = subTab === "summary" && summaryData.length > 0
-    const hasDetail = subTab === "detail" && listData.length > 0
-    if (!hasSummary && !hasDetail) return
+    if (listData.length === 0) return
     const area = document.getElementById("receivable-payable-print-area")
     if (!area) return
     const style = document.createElement("style")
@@ -211,53 +233,35 @@ export function ReceivablePayableTab() {
     document.getElementById("receivable-payable-print-style")?.remove()
   }
 
-  const handleExcelForSummary = () => {
-    if (summaryData.length === 0) return
-    const isRec = tab === "receivable"
-    const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
-    const rows: string[][] = [[entityCol, t("amount") || "금액", t("receivPayCount") || "건수"]]
-    for (const item of summaryData) {
-      const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
-      rows.push([name, String(item.balance ?? 0), String(item.count ?? 0)])
-    }
-    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="utf-8"/><style>td,th{border:1px solid #333;padding:4px 8px;font-size:11px}th{font-weight:bold;background:#e8e8e8}table{border-collapse:collapse;width:100%}</style></head>
-<body>
-<table>
-<tr>${rows[0].map((c) => `<th>${escapeXml(c)}</th>`).join("")}</tr>
-${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).join("")}</tr>`).join("")}
-</table>
-</body>
-</html>`
-    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${tab}_summary_${todayStr()}.xls`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const handleExcel = () => {
     if (listData.length === 0) return
     const isRec = tab === "receivable"
     const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
-    const typeOrder = isRec ? "주문" : "발주"
-    const typeReceive = isRec ? "수령" : "지급"
-    const rows: string[][] = [[entityCol, t("date") || "날짜", t("type") || "구분", t("amount") || "금액", t("memo") || "메모"]]
+    const typeOrder = isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")
+    const typeReceive = isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급")
+    const typeOpening = t("recTypeOpening") || "기초이월"
+    const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
+    const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")
+    const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")
+    const header = isRec
+      ? [entityCol, t("date") || "날짜", t("type") || "구분", t("recColOrderNo") || "주문번호", t("recColReceiveStatus") || "수령여부", t("amount") || "금액", t("memo") || "메모"]
+      : [entityCol, t("date") || "날짜", t("type") || "구분", t("payColPaymentStatus") || "지급여부", t("amount") || "금액", t("memo") || "메모"]
+    const rows: string[][] = [header]
     for (const item of listData) {
-      const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
-      const typeLabel = (ref: string) => (ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
-      for (const row of item.items || []) {
-        rows.push([
-          name,
-          row.trans_date || "-",
-          typeLabel(row.ref_type || ""),
-          String(row.amount ?? 0),
-          row.memo || "",
-        ])
+      const displayItems = filterItemsByUnpaid(item.items, isRec)
+      if (displayItems.length === 0) continue
+      const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
+      const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
+      for (const row of displayItems) {
+        const orderOrInv = isRec && row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "")) : ""
+        rows.push(
+          isRec
+            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderId, statusRec(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
+            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), statusPay(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
+        )
       }
     }
+    if (rows.length <= 1) return
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/><style>td,th{border:1px solid #333;padding:4px 8px;font-size:11px}th{font-weight:bold;background:#e8e8e8}table{border-collapse:collapse;width:100%}</style></head>
 <body>
@@ -278,70 +282,66 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
 
   const isRec = tab === "receivable"
   const printTitle = isRec ? (t("receivableTab") || "미수금 (매출)") : (t("payableTab") || "미지급금 (매입)")
-  const typeLabel = (ref: string) => (ref === (isRec ? "Order" : "PO") ? (isRec ? "주문" : "발주") : (isRec ? "수령" : "지급"))
+  const typeLabel = (ref: string) =>
+    ref === "Opening" ? (t("recTypeOpening") || "기초이월") : ref === (isRec ? "Order" : "PO") ? (isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")) : (isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급"))
+  const translateMemo = (memo: string | undefined) => {
+    if (!memo) return "-"
+    const orderLabel = t("recTypeOrder") || "주문"
+    const poLabel = t("payTypePO") || "발주"
+    const openingLabel = t("recTypeOpening") || "기초이월"
+    const receiveLabel = t("recTypeReceive") || "수령"
+    const paymentLabel = t("payTypePayment") || "지급"
+    return memo
+      .replace(/^주문\s*#/g, `${orderLabel} #`)
+      .replace(/^주문\s+/g, `${orderLabel} `)
+      .replace(/^발주\s*#/g, `${poLabel} #`)
+      .replace(/^발주\s+/g, `${poLabel} `)
+      .replace(/^기초이월/g, openingLabel)
+      .replace(/^수령/g, receiveLabel)
+      .replace(/^지급/g, paymentLabel)
+  }
 
   return (
     <div className="space-y-4">
       {/* 인쇄용 영역 (화면에는 숨김) */}
       <div id="receivable-payable-print-area" className="hidden print:block p-6">
         <h1 className="text-lg font-bold mb-2">{printTitle}</h1>
-        {subTab === "summary" ? (
-          <p className="text-sm text-muted-foreground mb-4">{(t("receivPaySummary") || "요약")} · {new Date().toISOString().slice(0, 10)}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground mb-4">
-            {startStr} ~ {endStr}
-            {isRec && storeFilter !== "All" && ` · ${t("outColStore")}: ${storeFilter}`}
-            {!isRec && vendorFilter !== "All" && ` · ${t("vendor")}: ${vendorFilter}`}
-          </p>
-        )}
-        {subTab === "summary" && summaryData.length > 0 && (
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left py-2">{isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")}</th>
-                <th className="text-right py-2">{t("amount")}</th>
-                <th className="text-center py-2">{t("receivPayCount")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summaryData.map((item) => {
-                const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
-                const bal = item.balance ?? 0
-                return (
-                  <tr key={name} className="border-b">
-                    <td className="py-2">{name}</td>
-                    <td className="py-2 text-right">฿{bal.toLocaleString()}</td>
-                    <td className="py-2 text-center">{item.count}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-        {subTab === "detail" && listData.length > 0 && (
+        <p className="text-sm text-muted-foreground mb-4">
+          {startStr} ~ {endStr}
+          {isRec && storeFilter !== "All" && ` · ${t("outColStore")}: ${storeFilter}`}
+          {!isRec && vendorFilter !== "All" && ` · ${t("vendor")}: ${vendorFilter}`}
+        </p>
+        {listData.length > 0 && (
           <div className="space-y-6">
-            {listData.map((item) => {
-              const name = isRec ? (item.storeName ?? "") : ((vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode) ?? "")
+            {listData.map((item, idx) => {
+              const displayItems = filterItemsByUnpaid(item.items, isRec)
+              if (displayItems.length === 0) return null
+              const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
+              const key = isRec ? (item.storeName ?? `rec-${idx}`) : (item.vendorCode ?? `pay-${idx}`)
               return (
-                <div key={name} className="break-inside-avoid">
+                <div key={key} className="break-inside-avoid">
                   <h2 className="font-semibold text-sm mb-1">{name}</h2>
                   <p className="text-primary font-bold mb-2">฿{(item.balance ?? 0).toLocaleString()}</p>
-                  <table className="w-full text-xs border-collapse">
+                  <table className="w-full text-xs border-collapse table-fixed">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-1">{t("date")}</th>
-                        <th className="text-left py-1">{t("type")}</th>
-                        <th className="text-right py-1">{t("amount")}</th>
-                        <th className="text-left py-1">{t("memo")}</th>
+                        <th className="text-center py-1 px-2 w-[115px]">{t("date") || "날짜"}</th>
+                        <th className="text-center py-1 px-2 w-[95px]">{t("type") || "구분"}</th>
+                        {isRec && <th className="text-center py-1 px-2 w-[110px]">{t("recColOrderNo") || "주문번호"}</th>}
+                        <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "수령여부") : (t("payColPaymentStatus") || "지급여부")}</th>
+                        <th className="text-center py-1 px-2 w-[135px]">{t("amount") || "금액"}</th>
+                        <th className="text-center py-1 px-2 min-w-[150px]">{t("memo") || "메모"}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(item.items || []).map((row, i) => (
+                      {displayItems.map((row, i) => (
                         <tr key={i} className="border-b border-border/50">
-                          <td className="py-1">{row.trans_date || "-"}</td>
-                          <td className="py-1">{typeLabel(row.ref_type || "")}</td>
-                          <td className="py-1 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
-                          <td className="py-1 text-muted-foreground">{row.memo || "-"}</td>
+                          <td className="py-1 px-2">{row.trans_date || "-"}</td>
+                          <td className="py-1 px-2">{typeLabel(row.ref_type || "")}</td>
+                          {isRec && <td className="py-1 px-2">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>}
+                          <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
+                          <td className="py-1 px-2 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                          <td className="py-1 px-2 text-muted-foreground">{translateMemo(row.memo)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -370,109 +370,42 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         <TabsContent value="receivable" className="space-y-4 mt-4">
           <Card>
             <CardContent className="pt-4">
-              <Tabs value={subTab} onValueChange={(v) => setSubTab(v as "summary" | "detail")} className="w-full">
-                <TabsList className="grid w-full max-w-xs grid-cols-2 mb-4">
-                  <TabsTrigger value="summary">{t("receivPaySummary") || "요약"}</TabsTrigger>
-                  <TabsTrigger value="detail">{t("receivPayDetail") || "내역"}</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="summary" className="mt-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <Button size="sm" onClick={handleLoadSummary} disabled={summaryLoading}>
-                      <Search className="h-4 w-4 mr-1" />
-                      {t("btn_query")}
-                    </Button>
-                  </div>
-                  {summaryLoading ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
-                  ) : !hasSearchedSummary ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
-                  ) : summaryData.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
-                  ) : (
-                    <>
-                    <div className="flex justify-end gap-2 mb-3">
-                      <Button size="sm" variant="outline" onClick={handlePrint} disabled={summaryData.length === 0} title={t("pettyPrintHint")}>
-                        <Printer className="h-4 w-4 mr-1" />
-                        {t("printBtn")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleExcelForSummary()} disabled={summaryData.length === 0} title={t("pettyExcelHint")}>
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        {t("excelBtn")}
-                      </Button>
+              <div className="w-full">
+                  <div className="flex flex-wrap items-end gap-3 mb-4">
+                    {/* 미수금: 매출처만 (전체 매출처 = 매장+판매처) */}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-xs text-muted-foreground">{(t("recFilterSalesOutlet") || "매출처")}</label>
+                      <Select
+                        value={salesOutletFilter}
+                        onValueChange={setSalesOutletFilter}
+                        disabled={isManager && !!managerStore}
+                      >
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder={t("recFilterSalesOutletAll") || "전체 매출처"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">{(t("recFilterSalesOutletAll") || "전체 매출처")}</SelectItem>
+                          {salesOutletOptions.map((s) => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">{t("outColStore") || "매출처"}</th>
-                            <th className="text-right py-2">{t("amount") || "금액"}</th>
-                            <th className="text-center py-2">{t("receivPayCount") || "건수"}</th>
-                            <th className="w-24" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {summaryData.map((item) => {
-                            const bal = item.balance ?? 0
-                            const balanceClass =
-                              bal === 0
-                                ? "text-muted-foreground"
-                                : bal > 0
-                                  ? "text-primary font-bold"
-                                  : "text-blue-600 dark:text-blue-400 font-medium"
-                            return (
-                              <tr key={item.storeName!} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="py-2.5 font-medium">{item.storeName}</td>
-                                <td className={cn("py-2.5 text-right tabular-nums", balanceClass)}>
-                                  {bal >= 0 ? "" : "-"}฿{Math.abs(bal).toLocaleString()}
-                                </td>
-                                <td className="py-2.5 text-center text-muted-foreground">{item.count} {t("receivPayCount") || "건"}</td>
-                                <td className="py-2.5">
-                                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleViewDetail(item.storeName!)}>
-                                    {t("receivPayViewDetail") || "상세보기"}
-                                    <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    </>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="detail" className="mt-0">
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <Select
-                      value={storeFilter}
-                      onValueChange={setStoreFilter}
-                      disabled={isManager && !!managerStore}
-                    >
-                      <SelectTrigger className="w-[160px] h-9">
-                        <SelectValue placeholder={t("outColStore")} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {!(isManager && managerStore) && (
-                          <SelectItem value="All">{t("outFilterStoreAll") || "전체"}</SelectItem>
-                        )}
-                        {(storeList || []).map((s) => (
-                          <SelectItem key={s} value={s}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
                     <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
-                    <Button size="sm" onClick={handleLoadList} disabled={loading}>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm shrink-0 h-9">
+                      <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
+                      {t("recFilterUnpaidOnly") || "미수만"}
+                    </label>
+                    <Button size="sm" onClick={handleLoadList} disabled={loading} className="h-9">
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")}>
+                    <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")} className="h-9">
                       <Printer className="h-4 w-4 mr-1" />
                       {t("printBtn")}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={handleExcel} disabled={loading || listData.length === 0} title={t("pettyExcelHint")}>
+                    <Button size="sm" variant="outline" onClick={handleExcel} disabled={loading || listData.length === 0} title={t("pettyExcelHint")} className="h-9">
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
@@ -484,45 +417,84 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("receivableEmpty") || "조회된 미수금이 없습니다."}</p>
                   ) : (
-                    <Accordion type="multiple" className="w-full">
-                      {listData.map((item) => (
-                        <AccordionItem key={item.storeName!} value={item.storeName!}>
-                          <AccordionTrigger className="hover:no-underline">
-                            <span className="font-semibold">{item.storeName}</span>
-                            <span className="ml-2 text-primary font-bold">
-                              ฿{(item.balance ?? 0).toLocaleString()}
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b">
-                                  <th className="text-left py-2">{t("date") || "날짜"}</th>
-                                  <th className="text-left py-2">{t("type") || "구분"}</th>
-                                  <th className="text-right py-2">{t("amount") || "금액"}</th>
-                                  <th className="text-left py-2">{t("memo") || "메모"}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(item.items || []).map((row) => (
-                                  <tr key={row.id} className="border-b border-border/50">
-                                    <td className="py-1.5">{row.trans_date || "-"}</td>
-                                    <td className="py-1.5">{row.ref_type === "Order" ? "주문" : "수령"}</td>
-                                    <td className="py-1.5 text-right font-medium">
-                                      {Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}
-                                    </td>
-                                    <td className="py-1.5 text-muted-foreground">{row.memo || "-"}</td>
+                    <div className="w-full">
+                      {/* 헤더: 출고처, 매출금액, 수령금액, 남은 미수액 */}
+                      <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-2 border-b bg-muted/50 font-semibold text-sm items-center">
+                        <div className="text-center">{(t("outColStore") || "출고처")}</div>
+                        <div className="text-center tabular-nums">{(t("recColSalesAmount") || "매출금액")}</div>
+                        <div className="text-center tabular-nums">{(t("recColReceiveAmount") || "수령금액")}</div>
+                        <div className="text-center tabular-nums">{(t("recColRemainingReceivable") || "남은 미수액")}</div>
+                      </div>
+                      <Accordion type="multiple" className="w-full">
+                        {listData.map((item) => {
+                          const allItems = item.items ?? []
+                          const displayItems = filterItemsByUnpaid(item.items, true)
+                          const tableItems = displayItems.length > 0 ? displayItems : allItems
+                          if (tableItems.length === 0) return null
+                          // ref_type 고정값에 의존하지 않고 금액 부호 기준으로 집계
+                          const receiveSum = allItems
+                            .reduce((s, r) => s + Math.max(0, -Number(r.amount ?? 0)), 0)
+                          const salesSum = allItems
+                            .reduce((s, r) => s + Math.max(0, Number(r.amount ?? 0)), 0)
+                          return (
+                          <AccordionItem key={item.storeName!} value={item.storeName!}>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
+                              <div className="flex-1 min-w-0">
+                                <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 items-center w-full">
+                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
+                                    <span className="font-semibold truncate">{item.storeName}</span>
+                                    {item.vendorCode && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {t("vendor") || "거래처"}: {item.vendorName === item.vendorCode ? item.vendorCode : `${item.vendorName} (${item.vendorCode})`}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-center tabular-nums">฿{salesSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums">฿{receiveSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary">฿{(item.balance ?? 0).toLocaleString()}</div>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4">
+                              <table className="w-full text-sm border-collapse table-fixed">
+                                <thead>
+                                  <tr className="border-b bg-muted/50">
+                                    <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
+                                    <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
+                                    <th className="text-center py-2 px-4 w-[110px] font-semibold">{t("recColOrderNo") || "주문번호"}</th>
+                                    <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
+                                    <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
+                                    <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
+                                </thead>
+                                <tbody>
+                                  {tableItems.map((row) => (
+                                    <tr key={row.id} className="border-b border-border/50">
+                                      <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
+                                      <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "Order" ? (t("recTypeOrder") || "주문") : (t("recTypeReceive") || "수령")}</td>
+                                      <td className="py-1.5 px-4 w-[110px] text-muted-foreground">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>
+                                      <td className="py-1.5 px-4 w-[95px] text-center">
+                                        <span className={cn(
+                                          "text-xs font-medium px-2 py-0.5 rounded",
+                                          row.ref_type === "Receive" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                        )}>
+                                          {row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")}
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{translateMemo(row.memo)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </AccordionContent>
+                          </AccordionItem>
+                          )
+                        })}
+                      </Accordion>
+                    </div>
                   )}
-                </TabsContent>
-              </Tabs>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -530,104 +502,62 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         <TabsContent value="payable" className="space-y-4 mt-4">
           <Card>
             <CardContent className="pt-4">
-              <Tabs value={subTab} onValueChange={(v) => setSubTab(v as "summary" | "detail")} className="w-full">
-                <TabsList className="grid w-full max-w-xs grid-cols-2 mb-4">
-                  <TabsTrigger value="summary">{t("receivPaySummary") || "요약"}</TabsTrigger>
-                  <TabsTrigger value="detail">{t("receivPayDetail") || "내역"}</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="summary" className="mt-0">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <Button size="sm" onClick={handleLoadSummary} disabled={summaryLoading}>
-                      <Search className="h-4 w-4 mr-1" />
-                      {t("btn_query")}
-                    </Button>
-                  </div>
-                  {summaryLoading ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
-                  ) : !hasSearchedSummary ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
-                  ) : summaryData.length === 0 ? (
-                    <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
-                  ) : (
-                    <>
-                    <div className="flex justify-end gap-2 mb-3">
-                      <Button size="sm" variant="outline" onClick={handlePrint} disabled={summaryData.length === 0} title={t("pettyPrintHint")}>
-                        <Printer className="h-4 w-4 mr-1" />
-                        {t("printBtn")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleExcelForSummary()} disabled={summaryData.length === 0} title={t("pettyExcelHint")}>
-                        <FileSpreadsheet className="h-4 w-4 mr-1" />
-                        {t("excelBtn")}
-                      </Button>
+                  <div className="flex flex-wrap items-end gap-3 mb-4">
+                    {/* 미지급금: 매장 선택 (본사 회계용) + 매입처 */}
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-xs text-muted-foreground">{(t("recFilterStoreSelect") || "매장 선택")}</label>
+                      <Select
+                        value={payableStoreFilter}
+                        onValueChange={setPayableStoreFilter}
+                        disabled={isManager && !!managerStore}
+                      >
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder={t("recFilterStoreSelect") || "매장 선택"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!(isManager && managerStore) && (
+                            <SelectItem value="All">{(t("recFilterStoreAll") || "전체 매장")}</SelectItem>
+                          )}
+                          {(storeList || []).map((s) => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b">
-                            <th className="text-left py-2">{t("vendor") || "매입처"}</th>
-                            <th className="text-right py-2">{t("amount") || "금액"}</th>
-                            <th className="text-center py-2">{t("receivPayCount") || "건수"}</th>
-                            <th className="w-24" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {summaryData.map((item) => {
-                            const bal = item.balance ?? 0
-                            const balanceClass =
-                              bal === 0
-                                ? "text-muted-foreground"
-                                : bal > 0
-                                  ? "text-primary font-bold"
-                                  : "text-blue-600 dark:text-blue-400 font-medium"
-                            const vendorName = vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode
-                            return (
-                              <tr key={item.vendorCode!} className="border-b border-border/50 hover:bg-muted/30">
-                                <td className="py-2.5 font-medium">{vendorName}</td>
-                                <td className={cn("py-2.5 text-right tabular-nums", balanceClass)}>
-                                  {bal >= 0 ? "" : "-"}฿{Math.abs(bal).toLocaleString()}
-                                </td>
-                                <td className="py-2.5 text-center text-muted-foreground">{item.count} {t("receivPayCount") || "건"}</td>
-                                <td className="py-2.5">
-                                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleViewDetail(item.vendorCode!)}>
-                                    {t("receivPayViewDetail") || "상세보기"}
-                                    <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-xs text-muted-foreground">{(t("vendor") || "매입처")}</label>
+                      <Select value={vendorFilter} onValueChange={setVendorFilter}>
+                        <SelectTrigger className="w-[160px] h-9">
+                          <SelectValue placeholder={t("vendor") || "거래처"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">{t("outFilterStoreAll") || "전체"}</SelectItem>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    </>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="detail" className="mt-0">
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <Select value={vendorFilter} onValueChange={setVendorFilter}>
-                      <SelectTrigger className="w-[160px] h-9">
-                        <SelectValue placeholder={t("vendor") || "거래처"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="All">{t("outFilterStoreAll") || "전체"}</SelectItem>
-                        {vendors.map((v) => (
-                          <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {tab === "payable" && vendorFilter && vendorFilter !== "All" && (
+                      <div className="flex items-center text-sm text-muted-foreground h-9">
+                        {t("inv_account_no") || "계좌"}: {vendors.find((v) => v.code === vendorFilter)?.bankAccountNo || "—"}
+                      </div>
+                    )}
                     <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
                     <Input type="date" value={endStr} onChange={(e) => setEndStr(e.target.value)} className="w-[140px] h-9" />
-                    <Button size="sm" onClick={handleLoadList} disabled={loading}>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm shrink-0 h-9">
+                      <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
+                      {t("payFilterUnpaidOnly") || "미지급만"}
+                    </label>
+                    <Button size="sm" onClick={handleLoadList} disabled={loading} className="h-9">
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")}>
+                    <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")} className="h-9">
                       <Printer className="h-4 w-4 mr-1" />
                       {t("printBtn")}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={handleExcel} disabled={loading || listData.length === 0} title={t("pettyExcelHint")}>
+                    <Button size="sm" variant="outline" onClick={handleExcel} disabled={loading || listData.length === 0} title={t("pettyExcelHint")} className="h-9">
                       <FileSpreadsheet className="h-4 w-4 mr-1" />
                       {t("excelBtn")}
                     </Button>
@@ -638,46 +568,79 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("msg_click_query") || "검색 버튼을 눌러 주세요."}</p>
                   ) : listData.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
+                  ) : !listData.some((item) => filterItemsByUnpaid(item.items, false).length > 0) ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">{t("payFilterUnpaidOnlyEmpty") || "미지급만 필터 적용 시 해당하는 내역이 없습니다."}</p>
                   ) : (
-                    <Accordion type="multiple" className="w-full">
-                      {listData.map((item) => (
-                        <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
-                          <AccordionTrigger className="hover:no-underline">
-                            <span className="font-semibold">{vendors.find((v) => v.code === item.vendorCode)?.name || item.vendorCode}</span>
-                            <span className="ml-2 text-primary font-bold">
-                              ฿{(item.balance ?? 0).toLocaleString()}
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b">
-                                  <th className="text-left py-2">{t("date") || "날짜"}</th>
-                                  <th className="text-left py-2">{t("type") || "구분"}</th>
-                                  <th className="text-right py-2">{t("amount") || "금액"}</th>
-                                  <th className="text-left py-2">{t("memo") || "메모"}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(item.items || []).map((row) => (
-                                  <tr key={row.id} className="border-b border-border/50">
-                                    <td className="py-1.5">{row.trans_date || "-"}</td>
-                                    <td className="py-1.5">{row.ref_type === "PO" ? "발주" : "지급"}</td>
-                                    <td className="py-1.5 text-right font-medium">
-                                      {Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}
-                                    </td>
-                                    <td className="py-1.5 text-muted-foreground">{row.memo || "-"}</td>
+                    <div className="w-full">
+                      {/* 헤더: 매입처, 매입금액, 지급금액, 남은 미지급액 */}
+                      <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 px-4 py-2 border-b bg-muted/50 font-semibold text-sm items-center">
+                        <div className="text-center">{(t("vendor") || "매입처")}</div>
+                        <div className="text-center tabular-nums">{(t("payColPurchaseAmount") || "매입금액")}</div>
+                        <div className="text-center tabular-nums">{(t("payColPaymentAmount") || "지급금액")}</div>
+                        <div className="text-center tabular-nums">{(t("payColRemainingPayable") || "남은 미지급액")}</div>
+                      </div>
+                      <Accordion type="multiple" className="w-full">
+                        {listData.map((item) => {
+                          const allItems = item.items ?? []
+                          const displayItems = filterItemsByUnpaid(item.items, false)
+                          const tableItems = displayItems.length > 0 ? displayItems : allItems
+                          if (tableItems.length === 0) return null
+                          // ref_type 고정값에 의존하지 않고 금액 부호 기준으로 집계
+                          const paymentSum = allItems
+                            .reduce((s, r) => s + Math.max(0, -Number(r.amount ?? 0)), 0)
+                          const purchaseSum = allItems
+                            .reduce((s, r) => s + Math.max(0, Number(r.amount ?? 0)), 0)
+                          return (
+                          <AccordionItem key={item.vendorCode!} value={item.vendorCode!}>
+                            <AccordionTrigger className="hover:no-underline px-4 py-3 [&>svg]:shrink-0">
+                              <div className="flex-1 min-w-0">
+                                <div className="grid grid-cols-[1fr_150px_150px_150px] gap-2 items-center w-full">
+                                  <div className="flex flex-col items-start gap-0.5 min-w-0 text-left">
+                                    <span className="font-semibold truncate">{formatVendorDisplay(item.vendorCode)}</span>
+                                  </div>
+                                  <div className="text-center tabular-nums">฿{purchaseSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums">฿{paymentSum.toLocaleString()}</div>
+                                  <div className="text-center tabular-nums font-bold text-primary">฿{(item.balance ?? 0).toLocaleString()}</div>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4">
+                              <table className="w-full text-sm border-collapse table-fixed">
+                                <thead>
+                                  <tr className="border-b bg-muted/50">
+                                    <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
+                                    <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
+                                    <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("payColPaymentStatus") || "지급여부"}</th>
+                                    <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
+                                    <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
+                                </thead>
+                                <tbody>
+                                  {tableItems.map((row) => (
+                                    <tr key={row.id} className="border-b border-border/50">
+                                      <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
+                                      <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
+                                      <td className="py-1.5 px-4 w-[95px] text-center">
+                                        <span className={cn(
+                                          "text-xs font-medium px-2 py-0.5 rounded",
+                                          row.ref_type === "Payment" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                        )}>
+                                          {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
+                                        </span>
+                                      </td>
+                                      <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{translateMemo(row.memo)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </AccordionContent>
+                          </AccordionItem>
+                          )
+                        })}
+                      </Accordion>
+                    </div>
                   )}
-                </TabsContent>
-              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
@@ -686,10 +649,30 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
       {!(tab === "receivable" && isManagerOnly) && (
         <Card>
           <CardContent className="pt-4">
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              {tab === "receivable" ? (t("addReceive") || "수령 입력") : (t("addPayment") || "지급 입력")}
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                {addIsOpening
+                  ? (t("addOpeningBalance") || "기초 이월 입력")
+                  : tab === "receivable"
+                    ? (t("addReceive") || "수령 입력")
+                    : (t("addPayment") || "지급 입력")}
+              </h3>
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <Checkbox
+                  checked={addIsOpening}
+                  onCheckedChange={(v) => setAddIsOpening(!!v)}
+                />
+                {t("addOpeningBalanceShort") || "기초 이월"}
+              </label>
+            </div>
+            {addIsOpening && (
+              <p className="text-xs text-muted-foreground mb-3">
+                {tab === "receivable"
+                  ? "기존 회계에서 이월할 미수금 잔액을 매장별로 입력하세요. (2월 말 기준 권장)"
+                  : "기존 회계에서 이월할 미지급금 잔액을 거래처별로 입력하세요. (2월 말 기준 권장)"}
+              </p>
+            )}
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">

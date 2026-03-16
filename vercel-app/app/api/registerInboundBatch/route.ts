@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseInsertMany } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter } from '@/lib/supabase-server'
 
 /** 입고 등록 저장 - inbound_batches + stock_logs + payable(입고 건별) */
 export async function POST(request: NextRequest) {
@@ -65,11 +65,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // vendor_name → vendor_code 정규화 (vendors 테이블 기준, 통장 연동 매칭용)
+    let effectiveVendorCode = vendorCode
+    if (!vendorCode && vendorName) {
+      try {
+        const vRows = (await supabaseSelectFilter(
+          'vendors',
+          `name=eq.${encodeURIComponent(vendorName)}`,
+          { select: 'code', limit: 1 }
+        )) as { code?: string }[]
+        if (vRows?.[0]?.code) {
+          effectiveVendorCode = String(vRows[0].code).trim()
+        } else {
+          const gRows = (await supabaseSelectFilter(
+            'vendors',
+            `gps_name=eq.${encodeURIComponent(vendorName)}`,
+            { select: 'code', limit: 1 }
+          )) as { code?: string }[]
+          if (gRows?.[0]?.code) effectiveVendorCode = String(gRows[0].code).trim()
+        }
+      } catch (_) {
+        /* vendors 조회 실패 시 그대로 vendorName 사용 */
+      }
+    }
+
     // 1. inbound_batches 생성
     const batchRow: Record<string, unknown> = {
       location,
       vendor_name: vendorName || '-',
-      vendor_code: vendorCode,
+      vendor_code: effectiveVendorCode || vendorCode,
       batch_date: batchDate,
       total_amount: totalAmount,
       purchase_order_id: purchaseOrderId && !isNaN(purchaseOrderId) ? purchaseOrderId : null,
@@ -85,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     // 3. 미지급금 생성 (입고 건별, From HQ 제외)
     if (batchId && totalAmount > 0 && vendorName && vendorName !== 'From HQ') {
-      const payVendorCode = vendorCode || vendorName
+      const payVendorCode = effectiveVendorCode || vendorCode || vendorName
       await supabaseInsert('payable_transactions', {
         vendor_code: payVendorCode,
         amount: totalAmount,

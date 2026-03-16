@@ -42,14 +42,24 @@ export async function upsertPayableFromPO(params: {
   }
 }
 
+/** 인보이스 번호 생성: IV{yyyymmdd}-{orderId} (출고 관리와 동일 형식) */
+export function formatReceivableInvoiceNo(orderId: number, transDate: string): string {
+  const datePart = String(transDate || '').replace(/\D/g, '').slice(0, 8) || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  return `IV${datePart}-${orderId}`
+}
+
 export async function upsertReceivableFromOrder(params: {
   orderId: number
   storeName: string
   total: number
   transDate: string
+  /** 인보이스 번호 (생략 시 IV{date}-{orderId} 자동 생성) */
+  invoiceNo?: string
 }): Promise<void> {
-  const { orderId, storeName, total, transDate } = params
+  const { orderId, storeName, total, transDate, invoiceNo } = params
   if (!storeName || total <= 0) return
+
+  const invNo = invoiceNo || formatReceivableInvoiceNo(orderId, transDate)
 
   const existing = (await supabaseSelectFilter(
     'receivable_transactions',
@@ -62,13 +72,15 @@ export async function upsertReceivableFromOrder(params: {
     ref_type: 'Order',
     ref_id: orderId,
     trans_date: transDate.slice(0, 10),
-    memo: `주문 #${orderId}`,
+    memo: invNo,
+    invoice_no: invNo,
   }
   if (existing?.length) {
     await supabaseUpdate('receivable_transactions', existing[0].id!, {
       amount: total,
       trans_date: row.trans_date,
       memo: row.memo,
+      invoice_no: invNo,
     })
   } else {
     await supabaseInsert('receivable_transactions', row)

@@ -98,14 +98,14 @@ export default function POSMainPage() {
       switch (subType) {
         case 'open':
         case 'close':
-          router.push('/admin/pos-settlement')
+          router.push('/pos/settlement')
           break
         case 'cash-deposit':
         case 'cash-withdrawal':
-          router.push('/admin/petty-cash')
+          router.push('/pos/local/cash')
           break
         case 'cash-drawer':
-          router.push('/admin/pos-settlement')
+          router.push('/pos/settlement')
           break
         case 'refresh':
           window.location.reload()
@@ -150,10 +150,10 @@ export default function POSMainPage() {
           router.push('/pos/terminal?type=delivery')
           break
         case 'sales':
-          router.push('/admin/sales-management')
+          router.push('/pos/local/sales')
           break
         case 'receipt':
-          router.push('/admin/pos-orders')
+          router.push('/pos/local/receipts')
           break
         case 'attendance':
           router.push('/admin/attendance')

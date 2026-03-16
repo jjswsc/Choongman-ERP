@@ -9,7 +9,8 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const q = searchParams.get('q') || ''
-    const limit = Number(searchParams.get('limit') || 100)
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? Math.min(5000, Math.max(1, Number(limitParam))) : 500
     const rows = await listMembers({ q, limit })
     return NextResponse.json(rows, { headers })
   } catch (e) {

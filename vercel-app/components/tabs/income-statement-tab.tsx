@@ -42,12 +42,20 @@ export function IncomeStatementTab() {
     endingInventory?: number
     cogs?: number
     expenses: number
+    expenseBreakdown?: {
+      pettyCash: number
+      bankWithdraw: number
+      fixedExpenses: number
+      total: number
+    }
+    diagnostics?: { warnings: string[] }
     grossProfit: number
     netProfit: number
     yearMonth?: string
     storeFilter?: string
   } | null>(null)
   const [loading, setLoading] = React.useState(false)
+  const [showExpenseDetails, setShowExpenseDetails] = React.useState(false)
 
   // 매니저: storeFilter 고정
   React.useEffect(() => {
@@ -63,11 +71,12 @@ export function IncomeStatementTab() {
       storeFilter: storeFilter !== "All" ? storeFilter : undefined,
       userStore: auth?.store,
       userRole: auth?.role,
+      includeDebug: showExpenseDetails,
     })
       .then((r) => setData(r))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [yearMonth, storeFilter, auth?.store, auth?.role])
+  }, [yearMonth, storeFilter, auth?.store, auth?.role, showExpenseDetails])
 
   const yearMonthOptions = Array.from({ length: 24 }, (_, i) => {
     const d = new Date()
@@ -135,6 +144,13 @@ export function IncomeStatementTab() {
               <Search className="h-4 w-4 mr-1" />
               {t("btn_query")}
             </Button>
+            <Button
+              size="sm"
+              variant={showExpenseDetails ? "default" : "outline"}
+              onClick={() => setShowExpenseDetails((v) => !v)}
+            >
+              {showExpenseDetails ? t("pL_expenseDetailOn") : t("pL_expenseDetailOff")}
+            </Button>
           </div>
 
           {loading ? (
@@ -146,6 +162,11 @@ export function IncomeStatementTab() {
               <div className="text-sm text-muted-foreground mb-2">
                 {data.yearMonth} · {storeLabel}
               </div>
+              {showExpenseDetails && (data.diagnostics?.warnings?.length || 0) > 0 && (
+                <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {data.diagnostics?.warnings?.join(" / ")}
+                </div>
+              )}
               <table className="w-full max-w-md text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground">
@@ -214,6 +235,37 @@ export function IncomeStatementTab() {
                       {formatPct(data.expenses)}
                     </td>
                   </tr>
+                  {showExpenseDetails && (
+                    <>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground pl-4">- 현금시재(Petty Cash)</td>
+                        <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                          {formatBath(data.expenseBreakdown?.pettyCash ?? 0)}
+                        </td>
+                        <td className="py-2 text-right text-muted-foreground">
+                          {formatPct(data.expenseBreakdown?.pettyCash ?? 0)}
+                        </td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground pl-4">- 통장 출금</td>
+                        <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                          {formatBath(data.expenseBreakdown?.bankWithdraw ?? 0)}
+                        </td>
+                        <td className="py-2 text-right text-muted-foreground">
+                          {formatPct(data.expenseBreakdown?.bankWithdraw ?? 0)}
+                        </td>
+                      </tr>
+                      <tr className="border-b">
+                        <td className="py-2 text-muted-foreground pl-4">- 고정비</td>
+                        <td className="py-2 text-right font-mono text-muted-foreground pr-2">
+                          {formatBath(data.expenseBreakdown?.fixedExpenses ?? 0)}
+                        </td>
+                        <td className="py-2 text-right text-muted-foreground">
+                          {formatPct(data.expenseBreakdown?.fixedExpenses ?? 0)}
+                        </td>
+                      </tr>
+                    </>
+                  )}
                   <tr>
                     <td className="py-3 font-bold">{t("pL_netProfit")}</td>
                     <td

@@ -8,26 +8,40 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
 
+  const defaultRes = {
+    kitchenMode: 1,
+    kitchen1Categories: [] as string[],
+    kitchen2Categories: [] as string[],
+    autoStockDeduction: false,
+    deliveryFee: 0,
+    packagingFee: 0,
+    cookingFreshMaxMin: 10,
+    cookingWarningMaxMin: 15,
+    cookingRuleMode: 'elapsed' as const,
+    cookingRecipeWarningDiffMin: 0,
+    cookingRecipeUrgentDiffMin: 5,
+    cookingDelayBadgeEnabled: true,
+    cookingDelaySoundEnabled: false,
+    cookingDelayAlertOverMin: 0,
+    cardAutoOpen: false,
+    checkAutoOpen: false,
+    drawerOpenOption: 'reason_only' as const,
+    logoPrint: false,
+    receiptPrintTiming: 'per_payment' as const,
+    customerReceiptOrderDetails: true,
+    merchantReceiptOrderDetails: true,
+    cashPaymentReceipt: false,
+    signatureLine: false,
+    receiptBarcode: true,
+    itemBarcode: true,
+    qrCodeOption: 'yes' as const,
+    discountSeparatePrint: true,
+    merchantReceiptPrint: true,
+    actualOrderDetails: true,
+    toppingOptionsPrint: false,
+  }
   if (!storeCode) {
-    return NextResponse.json(
-      {
-        kitchenMode: 1,
-        kitchen1Categories: [],
-        kitchen2Categories: [],
-        autoStockDeduction: false,
-        deliveryFee: 0,
-        packagingFee: 0,
-        cookingFreshMaxMin: 10,
-        cookingWarningMaxMin: 15,
-        cookingRuleMode: 'elapsed',
-        cookingRecipeWarningDiffMin: 0,
-        cookingRecipeUrgentDiffMin: 5,
-        cookingDelayBadgeEnabled: true,
-        cookingDelaySoundEnabled: false,
-        cookingDelayAlertOverMin: 0,
-      },
-      { headers }
-    )
+    return NextResponse.json(defaultRes, { headers })
   }
 
   try {
@@ -51,6 +65,22 @@ export async function GET(request: NextRequest) {
       cooking_delay_badge_enabled?: boolean
       cooking_delay_sound_enabled?: boolean
       cooking_delay_alert_over_min?: number
+      card_auto_open?: boolean
+      check_auto_open?: boolean
+      drawer_open_option?: string
+      logo_print?: boolean
+      receipt_print_timing?: string
+      customer_receipt_order_details?: boolean
+      merchant_receipt_order_details?: boolean
+      cash_payment_receipt?: boolean
+      signature_line?: boolean
+      receipt_barcode?: boolean
+      item_barcode?: boolean
+      qr_code_option?: string
+      discount_separate_print?: boolean
+      merchant_receipt_print?: boolean
+      actual_order_details?: boolean
+      topping_options_print?: boolean
     }[] | null
 
     const raw = rows?.[0]
@@ -80,24 +110,6 @@ export async function GET(request: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)
-    return NextResponse.json(
-      {
-        kitchenMode: 1,
-        kitchen1Categories: [],
-        kitchen2Categories: [],
-        autoStockDeduction: false,
-        deliveryFee: 0,
-        packagingFee: 0,
-        cookingFreshMaxMin: 10,
-        cookingWarningMaxMin: 15,
-        cookingRuleMode: 'elapsed',
-        cookingRecipeWarningDiffMin: 0,
-        cookingRecipeUrgentDiffMin: 5,
-        cookingDelayBadgeEnabled: true,
-        cookingDelaySoundEnabled: false,
-        cookingDelayAlertOverMin: 0,
-      },
-      { headers }
-    )
+    return NextResponse.json(defaultRes, { headers })
   }
 }

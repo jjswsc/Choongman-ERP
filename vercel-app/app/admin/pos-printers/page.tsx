@@ -1,9 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Printer, Save, RotateCw } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -49,6 +50,48 @@ const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
   }
 `
 
+function ToggleRow({
+  label,
+  value,
+  onChange,
+  t,
+}: {
+  label: string
+  value: boolean
+  onChange: (v: boolean) => void
+  t: (k: string) => string
+}) {
+  const yesLabel = t("yes") || "예"
+  const noLabel = t("no") || "아니오"
+  return (
+    <div className="flex items-center justify-between rounded-lg border p-3">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={() => onChange(true)}
+          className={cn(
+            "rounded-md border px-3 py-1 text-sm",
+            value ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+          )}
+        >
+          {yesLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          className={cn(
+            "rounded-md border px-3 py-1 text-sm",
+            !value ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+          )}
+        >
+          {noLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function getBangkokNowStr() {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Bangkok",
@@ -80,6 +123,25 @@ export default function PosPrintersPage() {
   const [saving, setSaving] = React.useState(false)
   const [previewKind, setPreviewKind] = React.useState<PreviewKind>("receipt")
   const [previewOpen, setPreviewOpen] = React.useState(false)
+  const [activeTab, setActiveTab] = React.useState("printer")
+
+  const [cardAutoOpen, setCardAutoOpen] = React.useState(false)
+  const [checkAutoOpen, setCheckAutoOpen] = React.useState(false)
+  const [drawerOpenOption, setDrawerOpenOption] = React.useState<'password_and_reason' | 'reason_only' | 'force'>('reason_only')
+
+  const [logoPrint, setLogoPrint] = React.useState(false)
+  const [receiptPrintTiming, setReceiptPrintTiming] = React.useState<'per_payment' | 'final_payment'>('per_payment')
+  const [customerReceiptOrderDetails, setCustomerReceiptOrderDetails] = React.useState(true)
+  const [merchantReceiptOrderDetails, setMerchantReceiptOrderDetails] = React.useState(true)
+  const [cashPaymentReceipt, setCashPaymentReceipt] = React.useState(false)
+  const [signatureLine, setSignatureLine] = React.useState(false)
+  const [receiptBarcode, setReceiptBarcode] = React.useState(true)
+  const [itemBarcode, setItemBarcode] = React.useState(true)
+  const [qrCodeOption, setQrCodeOption] = React.useState<'yes' | 'no' | 'return_points'>('yes')
+  const [discountSeparatePrint, setDiscountSeparatePrint] = React.useState(true)
+  const [merchantReceiptPrint, setMerchantReceiptPrint] = React.useState(true)
+  const [actualOrderDetails, setActualOrderDetails] = React.useState(true)
+  const [toppingOptionsPrint, setToppingOptionsPrint] = React.useState(false)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
@@ -99,6 +161,22 @@ export default function PosPrintersPage() {
         setDeliveryFee(String(settings.deliveryFee ?? 0))
         setPackagingFee(String(settings.packagingFee ?? 0))
         setCategories(cats || [])
+        setCardAutoOpen(Boolean(settings.cardAutoOpen))
+        setCheckAutoOpen(Boolean(settings.checkAutoOpen))
+        setDrawerOpenOption((['password_and_reason', 'reason_only', 'force'].includes(settings.drawerOpenOption || '') ? settings.drawerOpenOption : 'reason_only') as 'password_and_reason' | 'reason_only' | 'force')
+        setLogoPrint(Boolean(settings.logoPrint))
+        setReceiptPrintTiming(settings.receiptPrintTiming === 'final_payment' ? 'final_payment' : 'per_payment')
+        setCustomerReceiptOrderDetails(settings.customerReceiptOrderDetails !== false)
+        setMerchantReceiptOrderDetails(settings.merchantReceiptOrderDetails !== false)
+        setCashPaymentReceipt(Boolean(settings.cashPaymentReceipt))
+        setSignatureLine(Boolean(settings.signatureLine))
+        setReceiptBarcode(settings.receiptBarcode !== false)
+        setItemBarcode(settings.itemBarcode !== false)
+        setQrCodeOption((['yes', 'no', 'return_points'].includes(settings.qrCodeOption || '') ? settings.qrCodeOption : 'yes') as 'yes' | 'no' | 'return_points')
+        setDiscountSeparatePrint(settings.discountSeparatePrint !== false)
+        setMerchantReceiptPrint(settings.merchantReceiptPrint !== false)
+        setActualOrderDetails(settings.actualOrderDetails !== false)
+        setToppingOptionsPrint(Boolean(settings.toppingOptionsPrint))
       })
       .catch(() => {
         setCategories([])
@@ -151,6 +229,22 @@ export default function PosPrintersPage() {
         autoStockDeduction,
         deliveryFee: Number(deliveryFee) || 0,
         packagingFee: Number(packagingFee) || 0,
+        cardAutoOpen,
+        checkAutoOpen,
+        drawerOpenOption,
+        logoPrint,
+        receiptPrintTiming,
+        customerReceiptOrderDetails,
+        merchantReceiptOrderDetails,
+        cashPaymentReceipt,
+        signatureLine,
+        receiptBarcode,
+        itemBarcode,
+        qrCodeOption,
+        discountSeparatePrint,
+        merchantReceiptPrint,
+        actualOrderDetails,
+        toppingOptionsPrint,
       })
       if (res.success) {
         alert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -341,7 +435,23 @@ export default function PosPrintersPage() {
         )}
 
         {effectiveStore && !loading && (
-          <div className="space-y-6 rounded-xl border bg-card p-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="rounded-xl border bg-card">
+            <TabsList className="w-full justify-start rounded-t-xl rounded-b-none border-b px-4 pt-4 gap-2">
+              <TabsTrigger value="printer" className="gap-1.5">
+                <Printer className="h-4 w-4" />
+                {t("posPrinterTab") || "프린터"}
+              </TabsTrigger>
+              <TabsTrigger value="receipt" className="gap-1.5">
+                <Receipt className="h-4 w-4" />
+                {t("posReceiptTab") || "영수증"}
+              </TabsTrigger>
+              <TabsTrigger value="drawer" className="gap-1.5">
+                <Wallet className="h-4 w-4" />
+                {t("posDrawerTab") || "돈통"}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="printer" className="mt-0 p-6 space-y-6">
             <div>
               <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
               <Select
@@ -473,12 +583,110 @@ export default function PosPrintersPage() {
                 {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
               </Button>
             </div>
+            </TabsContent>
 
-            <Button className="w-full" onClick={handleSave} disabled={saving}>
-              <Save className="mr-2 h-4 w-4" />
-              {saving ? "..." : t("itemsBtnSave") || "저장"}
-            </Button>
-          </div>
+            <TabsContent value="receipt" className="mt-0 p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("posReceiptOptionsHint") || "영수증·고객 주문서 출력 시 포함할 항목을 설정합니다."}
+              </p>
+              <div className="space-y-3">
+                <ToggleRow label={t("posLogoPrint") || "로고 인쇄"} value={logoPrint} onChange={setLogoPrint} t={t} />
+                <div>
+                  <label className="text-sm font-medium">{t("posReceiptPrintTiming") || "영수증 출력 시점"}</label>
+                  <div className="mt-1 flex gap-2">
+                    {(['per_payment', 'final_payment'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setReceiptPrintTiming(v)}
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-sm",
+                          receiptPrintTiming === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                        )}
+                      >
+                        {v === 'per_payment' ? (t("posReceiptPerPayment") || "결제시마다") : (t("posReceiptFinalPayment") || "최종결제시")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ToggleRow label={t("posCustomerReceiptOrderDetails") || "고객영수증 주문내역"} value={customerReceiptOrderDetails} onChange={setCustomerReceiptOrderDetails} t={t} />
+                <ToggleRow label={t("posMerchantReceiptOrderDetails") || "가맹점영수증 주문내역"} value={merchantReceiptOrderDetails} onChange={setMerchantReceiptOrderDetails} t={t} />
+                <ToggleRow label={t("posCashPaymentReceipt") || "현금 결제 시 영수증 출력"} value={cashPaymentReceipt} onChange={setCashPaymentReceipt} t={t} />
+                <ToggleRow label={t("posSignatureLine") || "서명란 출력"} value={signatureLine} onChange={setSignatureLine} t={t} />
+                <ToggleRow label={t("posReceiptBarcode") || "영수증 바코드"} value={receiptBarcode} onChange={setReceiptBarcode} t={t} />
+                <ToggleRow label={t("posItemBarcode") || "아이템 바코드"} value={itemBarcode} onChange={setItemBarcode} t={t} />
+                <div>
+                  <label className="text-sm font-medium">{t("posQrCodeOption") || "QR코드 영수증"}</label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {(['yes', 'no', 'return_points'] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setQrCodeOption(v)}
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-sm",
+                          qrCodeOption === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                        )}
+                      >
+                        {v === 'yes' ? t("yes") || "예" : v === 'no' ? t("no") || "아니오" : (t("posQrReturnPoints") || "리턴포인트")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ToggleRow label={t("posDiscountSeparatePrint") || "할인내역 별도출력"} value={discountSeparatePrint} onChange={setDiscountSeparatePrint} t={t} />
+                <ToggleRow label={t("posMerchantReceiptPrint") || "가맹점 영수증 출력"} value={merchantReceiptPrint} onChange={setMerchantReceiptPrint} t={t} />
+                <ToggleRow label={t("posActualOrderDetails") || "실 주문 내역 출력"} value={actualOrderDetails} onChange={setActualOrderDetails} t={t} />
+                <ToggleRow label={t("posToppingOptionsPrint") || "토핑메뉴 추가옵션"} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="drawer" className="mt-0 p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {t("posDrawerHint") || "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다."}
+              </p>
+              <div className="space-y-3">
+                <ToggleRow label={t("posCardAutoOpen") || "카드결제 자동열기"} value={cardAutoOpen} onChange={setCardAutoOpen} t={t} />
+                <ToggleRow label={t("posCheckAutoOpen") || "체크결제 자동열기"} value={checkAutoOpen} onChange={setCheckAutoOpen} t={t} />
+                <div>
+                  <label className="text-sm font-medium">{t("posDrawerOpenOption") || "돈통열기 옵션"}</label>
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {t("posDrawerOpenOptionHint") || "수동으로 돈통을 열 때 필요한 조건"}
+                  </p>
+                  <div className="flex flex-col gap-2 mt-1">
+                    {(['password_and_reason', 'reason_only', 'force'] as const).map((v) => (
+                      <label
+                        key={v}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border p-3 cursor-pointer",
+                          drawerOpenOption === v ? "border-primary bg-primary/5" : "border-muted"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="drawerOpenOption"
+                          checked={drawerOpenOption === v}
+                          onChange={() => setDrawerOpenOption(v)}
+                          className="h-4 w-4"
+                        />
+                        <span className="text-sm">
+                          {v === 'password_and_reason' ? (t("posDrawerPasswordAndReason") || "암호입력 및 사유입력") :
+                           v === 'reason_only' ? (t("posDrawerReasonOnly") || "사유입력") :
+                           (t("posDrawerForceOpen") || "강제열기")}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <div className="border-t px-6 py-4">
+              <Button className="w-full" onClick={handleSave} disabled={saving}>
+                <Save className="mr-2 h-4 w-4" />
+                {saving ? "..." : t("itemsBtnSave") || "저장"}
+              </Button>
+            </div>
+          </Tabs>
         )}
       </div>
 

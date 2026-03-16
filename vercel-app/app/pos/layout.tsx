@@ -31,13 +31,17 @@ export default function PosLayout({
     }
     if (!canAccessPosOrder(auth.role || "")) {
       if (isPosSettlementOnlyRole(auth.role || "")) {
-        router.replace("/admin/pos-settlement")
+        if (pathname !== "/pos/settlement") {
+          router.replace("/pos/settlement")
+          return
+        }
+        // /pos/settlement: 허용, 아래 렌더 진행
       } else {
         router.replace("/pos/login")
+        return
       }
-      return
     }
-  }, [auth, initialized, isPosLoginPage, router])
+  }, [auth, initialized, isPosLoginPage, pathname, router])
 
   if (isPosLoginPage) {
     return <>{children}</>
@@ -52,11 +56,13 @@ export default function PosLayout({
   }
 
   const isFirstScreen = pathname === "/pos" || pathname === "/pos/"
+  const isLocalPage = pathname?.startsWith?.('/pos/local')
   const useViewport = isFirstScreen || pathname === "/pos/terminal"
+  const showPosHeader = !isFirstScreen && !isLocalPage
 
   return (
     <div className="fixed inset-0 flex flex-col bg-slate-50">
-      {!isFirstScreen && (
+      {showPosHeader && (
         <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
           <div className="flex items-center gap-1">
             <Link

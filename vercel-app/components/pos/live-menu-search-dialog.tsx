@@ -47,6 +47,32 @@ interface MatchedTarget {
   isServed: boolean
 }
 
+function detectDeliveryApp(text: string): 'grab' | 'lineman' | 'shopee' | null {
+  const raw = text.toLowerCase()
+  if (raw.includes('grab') || raw.includes('그랩')) return 'grab'
+  if (raw.includes('lineman') || raw.includes('line man') || raw.includes('라인맨')) return 'lineman'
+  if (raw.includes('shopee') || raw.includes('쇼피')) return 'shopee'
+  return null
+}
+
+function detectDeliveryOrderNo(text: string): string {
+  const hashMatch = text.match(/#\s*([A-Za-z0-9-]+)/)
+  if (hashMatch?.[1]) return hashMatch[1]
+  const bracketMatch = text.match(/\(([^)]+)\)/)
+  if (bracketMatch?.[1]) return bracketMatch[1].trim()
+  return ''
+}
+
+function getDeliveryDisplayLabel(tableName: string, fallbackOrderNo: string): string {
+  const app = detectDeliveryApp(tableName)
+  const no = detectDeliveryOrderNo(tableName)
+  const appEn = app === 'grab' ? 'Grab' : app === 'lineman' ? 'Line Man' : app === 'shopee' ? 'Shopee' : null
+  if (appEn && no) return `${appEn} · #${no}`
+  if (appEn) return appEn
+  if (no) return `#${no}`
+  return fallbackOrderNo
+}
+
 function formatBangkokTime(value: string): string {
   const dt = new Date(value)
   if (Number.isNaN(dt.getTime())) return '-'
@@ -278,7 +304,7 @@ export function LiveMenuSearchDialog({
                   <div className="min-w-0">
                     <div className="font-medium truncate">{r.itemName} × {r.qty}</div>
                     <div className="text-xs text-muted-foreground">
-                      {formatBangkokTime(r.createdAt)} · {(t('posOrderNo') || 'Order No')}: {r.orderNo}
+                      {formatBangkokTime(r.createdAt)} · {(t('posOrderNo') || 'Order No')}: {r.orderType === 'delivery' ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo) : r.orderNo}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -304,7 +330,7 @@ export function LiveMenuSearchDialog({
                       </Badge>
                     )}
                     <Badge variant="outline">
-                      {r.isTable ? `${tableLabel} ${r.tableName}` : r.orderNo}
+                      {r.isTable ? `${tableLabel} ${r.tableName}` : r.orderType === 'delivery' ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo) : r.orderNo}
                     </Badge>
                   </div>
                 </div>

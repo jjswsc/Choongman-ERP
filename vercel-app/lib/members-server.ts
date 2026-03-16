@@ -11,8 +11,14 @@ export type MemberSummary = {
   id: number
   memberNo: string
   name: string
+  fullName?: string
+  birthDate?: string
+  gender?: string
   phone: string
   email: string
+  consentMarketing?: boolean
+  consentPrivacy?: boolean
+  consentAt?: string
   source: string
   status: string
   lineLinked: boolean
@@ -21,6 +27,9 @@ export type MemberSummary = {
   tierCode?: string
   pointBalance?: number
   lifetimeAmount?: number
+  lastLineEventType?: string
+  lastLineEventAt?: string
+  lastUpdateReason?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -29,6 +38,13 @@ type MemberRow = {
   id?: number
   member_no?: string | null
   name?: string | null
+  full_name?: string | null
+  birth_date?: string | null
+  gender?: string | null
+  line_display_name?: string | null
+  consent_marketing?: boolean | null
+  consent_privacy?: boolean | null
+  consent_at?: string | null
   phone?: string | null
   email?: string | null
   source?: string | null
@@ -73,6 +89,13 @@ type MemberPointLedgerRow = {
   created_at?: string
 }
 
+type MemberEventRow = {
+  member_id?: number
+  event_type?: string | null
+  processed_at?: string | null
+  status?: string | null
+}
+
 export type CreateMemberInput = {
   name: string
   phone?: string
@@ -86,8 +109,15 @@ export type CreateMemberInput = {
 export type UpdateMemberInput = {
   id: number
   name?: string
+  fullName?: string
+  lineDisplayName?: string
+  birthDate?: string
+  gender?: string
   phone?: string
   email?: string
+  consentMarketing?: boolean
+  consentPrivacy?: boolean
+  consentAt?: string
   status?: string
 }
 
@@ -103,21 +133,46 @@ function normalizeEmail(v: string): string {
   return toText(v).toLowerCase()
 }
 
-function toMemberSummary(member: MemberRow, lineIdentity?: MemberIdentityRow): MemberSummary {
+function deriveLastUpdateReason(params: { source: string; lastLineEventType: string }): string {
+  if (params.lastLineEventType) return `line_webhook:${params.lastLineEventType}`
+  if (params.source === 'line_import') return 'crm_import'
+  if (params.source === 'line') return 'line_sync_or_register'
+  return 'erp_manual'
+}
+
+function toMemberSummary(
+  member: MemberRow,
+  lineIdentity?: MemberIdentityRow,
+  meta?: { lastLineEventType?: string; lastLineEventAt?: string }
+): MemberSummary {
+  const lineDisplayName = toText(member.line_display_name) || toText(lineIdentity?.display_name)
+  const fullName = toText(member.full_name) || toText(member.name)
+  const source = toText(member.source) || 'manual'
+  const lastLineEventType = toText(meta?.lastLineEventType)
+  const lastLineEventAt = toText(meta?.lastLineEventAt)
   return {
     id: Number(member.id || 0),
     memberNo: toText(member.member_no),
     name: toText(member.name),
+    fullName,
+    birthDate: toText(member.birth_date),
+    gender: toText(member.gender),
     phone: toText(member.phone),
     email: toText(member.email),
-    source: toText(member.source) || 'manual',
+    consentMarketing: Boolean(member.consent_marketing),
+    consentPrivacy: Boolean(member.consent_privacy),
+    consentAt: toText(member.consent_at),
+    source,
     status: toText(member.status) || 'active',
     lineLinked: Boolean(lineIdentity?.provider_user_id),
     lineUserId: toText(lineIdentity?.provider_user_id),
-    lineDisplayName: toText(lineIdentity?.display_name),
+    lineDisplayName,
     tierCode: toText(member.tier_code) || 'BRONZE',
     pointBalance: Number(member.point_balance || 0),
     lifetimeAmount: Number(member.lifetime_amount || 0),
+    lastLineEventType,
+    lastLineEventAt,
+    lastUpdateReason: deriveLastUpdateReason({ source, lastLineEventType }),
     createdAt: toText(member.created_at),
     updatedAt: toText(member.updated_at),
   }
@@ -144,22 +199,107 @@ async function getLineIdentities(memberIds: number[]): Promise<Map<number, Membe
   return map
 }
 
+async function getLatestMemberEvents(memberIds: number[]): Promise<Map<number, { eventType: string; processedAt: string }>> {
+  if (!memberIds.length) return new Map()
+  const rows = (await supabaseSelectFilter(
+    'member_events',
+    `member_id=in.(${memberIds.join(',')})&provider=eq.line&status=eq.processed`,
+    {
+      order: 'processed_at.desc',
+      limit: 10000,
+      select: 'member_id,event_type,processed_at,status',
+    }
+  )) as MemberEventRow[]
+  const map = new Map<number, { eventType: string; processedAt: string }>()
+  for (const row of rows || []) {
+    const memberId = Number(row.member_id || 0)
+    if (!memberId || map.has(memberId)) continue
+    map.set(memberId, {
+      eventType: toText(row.event_type),
+      processedAt: toText(row.processed_at),
+    })
+  }
+  return map
+}
+
 export async function listMembers(params?: { q?: string; limit?: number }): Promise<MemberSummary[]> {
   const q = toText(params?.q)
-  const limit = Math.max(1, Math.min(Number(params?.limit || 100), 500))
+  const limit = Math.max(1, Math.min(Number(params?.limit || 100), 5000))
 
   let rows: MemberRow[] = []
   if (!q) {
     rows = (await supabaseSelect('members', { order: 'id.desc', limit })) as MemberRow[]
   } else {
     const escaped = encodeURIComponent(`*${q}*`)
-    const filter = `or=(name.ilike.${escaped},phone.ilike.${escaped},member_no.ilike.${escaped})`
-    rows = (await supabaseSelectFilter('members', filter, { order: 'id.desc', limit })) as MemberRow[]
+    const normalizedDigits = q.replace(/[^\d]/g, '')
+    const normalizedDigitsEscaped = normalizedDigits ? encodeURIComponent(`*${normalizedDigits}*`) : ''
+    const memberOrClauses = [
+      `name.ilike.${escaped}`,
+      `full_name.ilike.${escaped}`,
+      `line_display_name.ilike.${escaped}`,
+      `phone.ilike.${escaped}`,
+      `email.ilike.${escaped}`,
+      `birth_date.ilike.${escaped}`,
+      `member_no.ilike.${escaped}`,
+      `tier_code.ilike.${escaped}`,
+    ]
+    if (normalizedDigits && normalizedDigits !== q) {
+      memberOrClauses.push(`phone.ilike.${normalizedDigitsEscaped}`)
+    }
+    const memberFilter = `or=(${memberOrClauses.join(',')})`
+    const membersByMemberFields = (await supabaseSelectFilter('members', memberFilter, {
+      order: 'id.desc',
+      limit,
+    })) as MemberRow[]
+
+    const identityFilter = `provider=eq.line&or=(provider_user_id.ilike.${escaped},display_name.ilike.${escaped})`
+    const identityMatches = (await supabaseSelectFilter('member_identities', identityFilter, {
+      limit: 5000,
+      select: 'member_id',
+    })) as MemberIdentityRow[]
+    const identityMemberIds = Array.from(
+      new Set(
+        (identityMatches || [])
+          .map((x) => Number(x.member_id || 0))
+          .filter((id) => id > 0)
+      )
+    )
+
+    const membersByIdentity =
+      identityMemberIds.length > 0
+        ? ((await supabaseSelectFilter('members', `id=in.(${identityMemberIds.join(',')})`, {
+            order: 'id.desc',
+            limit: 5000,
+          })) as MemberRow[])
+        : []
+
+    const memberMap = new Map<number, MemberRow>()
+    for (const row of membersByMemberFields || []) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      memberMap.set(id, row)
+    }
+    for (const row of membersByIdentity || []) {
+      const id = Number(row.id || 0)
+      if (!id) continue
+      if (!memberMap.has(id)) memberMap.set(id, row)
+    }
+    rows = Array.from(memberMap.values())
+      .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+      .slice(0, limit)
   }
 
   const memberIds = (rows || []).map((r) => Number(r.id || 0)).filter((id) => id > 0)
   const lineIdentityMap = await getLineIdentities(memberIds)
-  return (rows || []).map((row) => toMemberSummary(row, lineIdentityMap.get(Number(row.id || 0))))
+  const lineEventMap = await getLatestMemberEvents(memberIds)
+  return (rows || []).map((row) => {
+    const id = Number(row.id || 0)
+    const evt = lineEventMap.get(id)
+    return toMemberSummary(row, lineIdentityMap.get(id), {
+      lastLineEventType: evt?.eventType,
+      lastLineEventAt: evt?.processedAt,
+    })
+  })
 }
 
 async function insertMemberBase(input: CreateMemberInput): Promise<MemberRow> {
@@ -200,13 +340,14 @@ async function ensureLineIdentity(params: {
   if (existing && existing.length > 0) {
     const identityId = Number(existing[0].id || 0)
     if (!identityId) return
-    await supabaseUpdateByFilter('member_identities', `id=eq.${identityId}`, {
+    const patch: Record<string, unknown> = {
       member_id: params.memberId,
-      display_name: toText(params.lineDisplayName) || null,
-      picture_url: toText(params.linePictureUrl) || null,
       status: 'active',
       last_seen_at: now,
-    })
+    }
+    if (toText(params.lineDisplayName)) patch.display_name = toText(params.lineDisplayName)
+    if (toText(params.linePictureUrl)) patch.picture_url = toText(params.linePictureUrl)
+    await supabaseUpdateByFilter('member_identities', `id=eq.${identityId}`, patch)
     return
   }
 
@@ -247,8 +388,15 @@ export async function updateMember(input: UpdateMemberInput): Promise<MemberSumm
     updated_at: getBangkokDateTimeString(),
   }
   if (input.name != null) patch.name = toText(input.name)
+  if (input.fullName != null) patch.full_name = toText(input.fullName) || null
+  if (input.lineDisplayName != null) patch.line_display_name = toText(input.lineDisplayName) || null
+  if (input.birthDate != null) patch.birth_date = toText(input.birthDate) || null
+  if (input.gender != null) patch.gender = toText(input.gender) || null
   if (input.phone != null) patch.phone = normalizePhone(input.phone) || null
   if (input.email != null) patch.email = normalizeEmail(input.email) || null
+  if (input.consentMarketing != null) patch.consent_marketing = Boolean(input.consentMarketing)
+  if (input.consentPrivacy != null) patch.consent_privacy = Boolean(input.consentPrivacy)
+  if (input.consentAt != null) patch.consent_at = toText(input.consentAt) || null
   if (input.status != null) patch.status = toText(input.status) || 'active'
   await supabaseUpdateByFilter('members', `id=eq.${id}`, patch)
 
@@ -287,13 +435,15 @@ export async function registerLineMember(input: {
     if (toText(input.phone)) patch.phone = normalizePhone(input.phone || '') || null
     if (toText(input.email)) patch.email = normalizeEmail(input.email || '') || null
     if (toText(input.name)) patch.name = toText(input.name)
+    if (toText(input.displayName)) patch.line_display_name = toText(input.displayName)
     await supabaseUpdateByFilter('members', `id=eq.${memberId}`, patch)
-    await supabaseUpdateByFilter('member_identities', `id=eq.${existingIdentity.id}`, {
-      display_name: toText(input.displayName) || null,
-      picture_url: toText(input.pictureUrl) || null,
+    const identityPatch: Record<string, unknown> = {
       status: 'active',
       last_seen_at: now,
-    })
+    }
+    if (toText(input.displayName)) identityPatch.display_name = toText(input.displayName)
+    if (toText(input.pictureUrl)) identityPatch.picture_url = toText(input.pictureUrl)
+    await supabaseUpdateByFilter('member_identities', `id=eq.${existingIdentity.id}`, identityPatch)
 
     const rows = (await supabaseSelectFilter('members', `id=eq.${memberId}`, { limit: 1 })) as MemberRow[]
     const lineMap = await getLineIdentities([memberId])

@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyLineSignature } from '@/lib/line-signature'
 import { createMemberEvent, registerLineMember, setLineIdentityStatus } from '@/lib/members-server'
+import { getLineUserProfile } from '@/lib/line-messaging-server'
 
 type LineWebhookEvent = {
   type?: string
@@ -40,12 +41,26 @@ async function handleEvent(event: LineWebhookEvent) {
   try {
     let memberId: number | undefined
     if (lineUserId && (eventType === 'follow' || eventType === 'message' || eventType === 'postback')) {
+      let displayName = ''
+      let pictureUrl = ''
+      try {
+        const profile = await getLineUserProfile(lineUserId)
+        displayName = profile.displayName
+        pictureUrl = profile.pictureUrl
+      } catch (profileError) {
+        console.warn('LINE profile fetch failed:', profileError)
+      }
+      if (!displayName) {
+        console.warn('LINE displayName is empty. skip register:', lineUserId)
+      } else {
       const member = await registerLineMember({
         lineUserId,
-        displayName: '',
-        pictureUrl: '',
+        displayName,
+        pictureUrl,
+        name: displayName,
       })
       memberId = member.id
+      }
     } else if (lineUserId && eventType === 'unfollow') {
       await setLineIdentityStatus(lineUserId, 'inactive')
     }

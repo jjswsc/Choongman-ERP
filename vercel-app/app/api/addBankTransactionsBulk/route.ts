@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
+import { postBankTransactionJournal } from '@/lib/accounting-posting'
 
 /** 중복 판별용 키: trans_date | trans_type | amount(절대값) | memo */
 function dupKey(transDate: string, transType: string, amount: number, memo: string): string {
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
       const validCategory = transType === 'deposit'
         ? (depositCategories.includes(category) ? category : 'revenue_delivery')
-        : (withdrawCategories.includes(category) ? category : 'expense')
+        : 'unclassified'
 
       const row: Record<string, unknown> = {
         account_id: accountId,
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
         user_name: userName || null,
         category: validCategory,
       }
-      if (accountSubjectId != null) {
+      if (transType === 'deposit' && accountSubjectId != null) {
         const asid = Number(accountSubjectId)
         if (!isNaN(asid)) row.account_subject_id = asid
       }
@@ -102,24 +103,12 @@ export async function POST(request: NextRequest) {
         const ed = String(expenseDate).slice(0, 10)
         if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
       }
-      if (validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
-      if (validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+      if (transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
 
       const btInserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
       const bankId = Array.isArray(btInserted) && btInserted[0] ? btInserted[0].id : undefined
 
-      if (bankId && validCategory === 'purchase_payment' && vendorCode) {
-        await supabaseInsert('payable_transactions', {
-          vendor_code: vendorCode,
-          amount: -Math.abs(amount),
-          ref_type: 'Payment',
-          ref_id: null,
-          trans_date: transDate,
-          memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
-          bank_transaction_id: bankId,
-        })
-      }
-      if (bankId && validCategory === 'receivable_receive' && storeNameForReceivable) {
+      if (bankId && transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) {
         await supabaseInsert('receivable_transactions', {
           store_name: storeNameForReceivable,
           amount: -Math.abs(amount),
@@ -129,6 +118,24 @@ export async function POST(request: NextRequest) {
           memo: memo ? `통장 수령: ${memo.slice(0, 200)}` : '통장 수령',
           bank_transaction_id: bankId,
         })
+      }
+
+      const skipJournal = transType === 'withdraw'
+      if (!skipJournal) {
+      try {
+        await postBankTransactionJournal({
+          bankTransactionId: bankId,
+          transDate,
+          transType: transType as 'deposit' | 'withdraw',
+          amountAbs: Math.abs(amount),
+          category: validCategory,
+          memo,
+          storeName: store || undefined,
+          postedBy: userName || undefined,
+        })
+      } catch (postingErr) {
+        console.error('addBankTransactionsBulk posting:', postingErr)
+      }
       }
       inserted++
     }

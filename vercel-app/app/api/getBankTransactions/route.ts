@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
+const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
+
 /** 통장 거래 목록 + 잔액 검증용 집계 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -40,9 +42,23 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'id.asc',
       limit: 2000,
-    }    )) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
+    })) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
 
-    const list = (rows || []).map((r) => ({
+    const linkedIds = new Set<number>()
+    const rowIds = (rows || []).map((r) => Number(r.id)).filter((id) => id && !isNaN(id))
+    if (rowIds.length > 0) {
+      const ptRows = (await supabaseSelectFilter('payable_transactions', 'bank_transaction_id=not.is.null', {
+        select: 'bank_transaction_id',
+        limit: 10000,
+      })) as { bank_transaction_id?: number }[]
+      for (const r of ptRows || []) {
+        const bid = Number(r.bank_transaction_id)
+        if (bid && !isNaN(bid) && rowIds.includes(bid)) linkedIds.add(bid)
+      }
+    }
+
+    const visibleRows = (rows || []).filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
+    const list = visibleRows.map((r) => ({
       id: r.id,
       transDate: String(r.trans_date || '').slice(0, 10),
       transType: String(r.trans_type || 'withdraw').toLowerCase(),
@@ -59,6 +75,7 @@ export async function GET(request: NextRequest) {
       invoiceNo: r.invoice_no ? String(r.invoice_no).trim() : undefined,
       invoicePhotoUrl: r.invoice_photo_url ? String(r.invoice_photo_url).trim() : undefined,
       purchaseOrderId: r.purchase_order_id ?? undefined,
+      isLinked: linkedIds.has(Number(r.id || 0)),
     }))
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)
@@ -66,11 +83,12 @@ export async function GET(request: NextRequest) {
 
     const beforeStartFilter = `account_id=eq.${accountId}&trans_date=lt.${startStr}`
     const beforeRows = (await supabaseSelectFilter('bank_transactions', beforeStartFilter, {
-      select: 'trans_type,amount',
+      select: 'trans_type,amount,note',
       limit: 5000,
-    })) as { trans_type?: string; amount?: number }[]
-    const beforeDeposits = (beforeRows || []).filter((r) => (r.trans_type || '').toLowerCase() === 'deposit').reduce((s, r) => s + Number(r.amount || 0), 0)
-    const beforeWithdrawals = (beforeRows || []).filter((r) => (r.trans_type || '').toLowerCase() === 'withdraw').reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0)
+    })) as { trans_type?: string; amount?: number; note?: string }[]
+    const visibleBeforeRows = (beforeRows || []).filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
+    const beforeDeposits = visibleBeforeRows.filter((r) => (r.trans_type || '').toLowerCase() === 'deposit').reduce((s, r) => s + Number(r.amount || 0), 0)
+    const beforeWithdrawals = visibleBeforeRows.filter((r) => (r.trans_type || '').toLowerCase() === 'withdraw').reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0)
 
     const beginningBalance = openingBalance + beforeDeposits - beforeWithdrawals
     const endingBalance = beginningBalance + periodDeposits - periodWithdrawals

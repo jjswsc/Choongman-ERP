@@ -18,3 +18,67 @@ export function getBangkokDateTimeString(base: Date = new Date()): string {
   const ss = pad2(local.getSeconds())
   return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
 }
+
+/** 방콕 기준 오늘 날짜 (YYYY-MM-DD) */
+export function getBangkokTodayDateString(base: Date = new Date()): string {
+  return base.toLocaleDateString('en-CA', { timeZone: BANGKOK_TIMEZONE })
+}
+
+/** 방콕 기준 해당 월의 시작/종료 날짜 (YYYY-MM-DD) */
+export function getBangkokMonthRange(yearMonth?: string, base: Date = new Date()): {
+  yearMonth: string
+  startStr: string
+  endStr: string
+} {
+  if (yearMonth && /^\d{4}-\d{2}$/.test(yearMonth)) {
+    const [y, m] = yearMonth.split('-').map(Number)
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return {
+      yearMonth,
+      startStr: `${y}-${String(m).padStart(2, '0')}-01`,
+      endStr: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+    }
+  }
+
+  const today = getBangkokTodayDateString(base)
+  const y = Number(today.slice(0, 4))
+  const m = Number(today.slice(5, 7))
+  const ym = `${y}-${String(m).padStart(2, '0')}`
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return {
+    yearMonth: ym,
+    startStr: `${y}-${String(m).padStart(2, '0')}-01`,
+    endStr: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function parseYmd(ymd: string): { y: number; m: number; d: number } {
+  return {
+    y: Number(ymd.slice(0, 4)),
+    m: Number(ymd.slice(5, 7)),
+    d: Number(ymd.slice(8, 10)),
+  }
+}
+
+/** 방콕 자정 기준 UTC ISO */
+export function getBangkokStartOfDayUtcIso(ymd: string): string {
+  const { y, m, d } = parseYmd(ymd)
+  return new Date(Date.UTC(y, m - 1, d, -7, 0, 0, 0)).toISOString()
+}
+
+/** 방콕 다음날 자정 기준 UTC ISO (반열린 구간 end 전용) */
+export function getBangkokNextDayStartUtcIso(ymd: string): string {
+  const { y, m, d } = parseYmd(ymd)
+  return new Date(Date.UTC(y, m - 1, d + 1, -7, 0, 0, 0)).toISOString()
+}
+
+/** 방콕 날짜 범위를 UTC 반열린 구간으로 변환 [start, nextDayStart) */
+export function getBangkokDateRangeUtc(startYmd: string, endYmd: string): {
+  dayStartUtcIso: string
+  nextDayStartUtcIso: string
+} {
+  return {
+    dayStartUtcIso: getBangkokStartOfDayUtcIso(startYmd),
+    nextDayStartUtcIso: getBangkokNextDayStartUtcIso(endYmd),
+  }
+}

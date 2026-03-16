@@ -1,0 +1,780 @@
+'use client'
+
+import * as React from 'react'
+import { Wallet, Save, RotateCw, Printer } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  getPosSettlement,
+  getPosDeliveryApps,
+  getPosPaymentSettings,
+  useStoreList,
+  type PosSettlement,
+} from '@/lib/api-client'
+import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
+import { useOnlineStatus } from '@/lib/offline'
+import { savePosSettlementWithOffline } from '@/lib/offline'
+import { useAuth } from '@/lib/auth-context'
+import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
+import { cn } from '@/lib/utils'
+import { OfflineBanner } from '@/components/offline-banner'
+
+function getBangkokDateYmd() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const year = parts.find((p) => p.type === 'year')?.value ?? '1970'
+  const month = parts.find((p) => p.type === 'month')?.value ?? '01'
+  const day = parts.find((p) => p.type === 'day')?.value ?? '01'
+  return `${year}-${month}-${day}`
+}
+
+function shiftYmd(dateYmd: string, deltaDays: number) {
+  const d = new Date(`${dateYmd}T00:00:00.000Z`)
+  d.setUTCDate(d.getUTCDate() + deltaDays)
+  return d.toISOString().slice(0, 10)
+}
+
+export type PosSettlementFormProps = {
+  t: (key: string) => string
+  /** POS 전용 모드 (레이아웃/패딩 최소화) */
+  compact?: boolean
+  /** 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
+  offlineAware?: boolean
+}
+
+export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettlementFormProps) {
+  const { auth } = useAuth()
+  const { stores } = useStoreList()
+  const online = useOnlineStatus()
+
+  const [settleDate, setSettleDate] = React.useState(() => getBangkokDateYmd())
+  const [storeFilter, setStoreFilter] = React.useState('')
+  const [systemTotal, setSystemTotal] = React.useState(0)
+  const [settlement, setSettlement] = React.useState<PosSettlement | null>(null)
+  const [loading, setLoading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [systemSubtotal, setSystemSubtotal] = React.useState(0)
+  const [systemVat, setSystemVat] = React.useState(0)
+  const [activeTab, setActiveTab] = React.useState<'entry' | 'history'>('entry')
+  const [historyRange, setHistoryRange] = React.useState<'7' | '30'>('7')
+  const [historyLoading, setHistoryLoading] = React.useState(false)
+  const [historyRows, setHistoryRows] = React.useState<
+    Array<{
+      date: string
+      systemTotal: number
+      inputTotal: number
+      diff: number
+      closed: boolean
+      hasSettlement: boolean
+    }>
+  >([])
+
+  const [cashActual, setCashActual] = React.useState<string>('')
+  const [cashAmt, setCashAmt] = React.useState<string>('')
+  const [cardAmt, setCardAmt] = React.useState<string>('')
+  const [qrAmt, setQrAmt] = React.useState<string>('')
+  const [deliveryAppAmt, setDeliveryAppAmt] = React.useState<string>('')
+  const [otherAmt, setOtherAmt] = React.useState<string>('')
+  const [cardBreakdown, setCardBreakdown] = React.useState<Record<string, string>>({})
+  const [qrBreakdown, setQrBreakdown] = React.useState<Record<string, string>>({})
+  const [deliveryAppBreakdown, setDeliveryAppBreakdown] = React.useState<Record<string, string>>({})
+  const [memo, setMemo] = React.useState('')
+  const [closed, setClosed] = React.useState(false)
+
+  const [cardKeys, setCardKeys] = React.useState<string[]>(['Visa', 'Master', 'Amex', 'JCB', 'Other'])
+  const [qrKeys, setQrKeys] = React.useState<string[]>(['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'])
+  const [deliveryAppKeys, setDeliveryAppKeys] = React.useState<string[]>(['Grab', 'Line Man', 'Shopee', 'Other'])
+  const CARD_KEYS = cardKeys.length > 0 ? cardKeys : ['Visa', 'Master', 'Amex', 'JCB', 'Other']
+  const QR_KEYS = qrKeys.length > 0 ? qrKeys : ['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other']
+  const DELIVERY_KEYS = deliveryAppKeys.length > 0 ? deliveryAppKeys : ['Grab', 'Line Man', 'Shopee', 'Other']
+
+  const canSearchAll = isOfficeRole(auth?.role || '')
+  const canUnclose = canAccessSettings(auth?.role || '')
+  const effectiveStore = canSearchAll && storeFilter ? storeFilter : auth?.store || ''
+
+  React.useEffect(() => {
+    if (!effectiveStore) return
+    getPosDeliveryApps({ storeCode: effectiveStore })
+      .then((list) => {
+        const names = (list || []).filter((a) => a.enabled).map((a) => a.name)
+        setDeliveryAppKeys(names.length > 0 ? [...names, 'Other'] : ['Grab', 'Line Man', 'Shopee', 'Other'])
+      })
+      .catch(() => setDeliveryAppKeys(['Grab', 'Line Man', 'Shopee', 'Other']))
+  }, [effectiveStore])
+
+  React.useEffect(() => {
+    if (!effectiveStore) return
+    getPosPaymentSettings({ storeCode: effectiveStore })
+      .then(({ cardKeys: ck, qrKeys: qk }) => {
+        setCardKeys(Array.isArray(ck) && ck.length > 0 ? ck : ['Visa', 'Master', 'Amex', 'JCB', 'Other'])
+        setQrKeys(Array.isArray(qk) && qk.length > 0 ? qk : ['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'])
+      })
+      .catch(() => {})
+  }, [effectiveStore])
+
+  const loadData = React.useCallback(() => {
+    if (!effectiveStore) return
+    setLoading(true)
+    const fetcher = offlineAware ? getPosSettlementWithCache : getPosSettlement
+    fetcher({
+      settleDate,
+      storeCode: effectiveStore,
+    })
+      .then(({ systemTotal: st, systemSubtotal: sub, systemVat: vat, settlement: s }) => {
+        setSystemTotal(st)
+        setSystemSubtotal(sub ?? st)
+        setSystemVat(vat ?? 0)
+        const single = Array.isArray(s) ? s[0] : s
+        if (single) {
+          setSettlement(single)
+          setCashActual(single.cashActual != null ? String(single.cashActual) : '')
+          setCashAmt(String(single.cashAmt ?? 0))
+          setCardAmt(String(single.cardAmt ?? 0))
+          setQrAmt(String(single.qrAmt ?? 0))
+          setDeliveryAppAmt(String(single.deliveryAppAmt ?? 0))
+          setOtherAmt(String(single.otherAmt ?? 0))
+          const cb: Record<string, string> = {}
+          CARD_KEYS.forEach((k) => {
+            cb[k] = String((single.cardBreakdown ?? {})[k] ?? '')
+          })
+          setCardBreakdown(cb)
+          const qb: Record<string, string> = {}
+          QR_KEYS.forEach((k) => {
+            qb[k] = String((single.qrBreakdown ?? {})[k] ?? '')
+          })
+          setQrBreakdown(qb)
+          const db: Record<string, string> = {}
+          DELIVERY_KEYS.forEach((k) => {
+            db[k] = String((single.deliveryAppBreakdown ?? {})[k] ?? '')
+          })
+          setDeliveryAppBreakdown(db)
+          setMemo(single.memo ?? '')
+          setClosed(single.closed ?? false)
+        } else {
+          setSettlement(null)
+          setSystemSubtotal(0)
+          setSystemVat(0)
+          setCashActual('')
+          setCashAmt('')
+          setCardAmt('0')
+          setQrAmt('0')
+          setDeliveryAppAmt('0')
+          setOtherAmt('0')
+          setCardBreakdown(Object.fromEntries(CARD_KEYS.map((k) => [k, ''])))
+          setQrBreakdown(Object.fromEntries(QR_KEYS.map((k) => [k, ''])))
+          setDeliveryAppBreakdown(Object.fromEntries(DELIVERY_KEYS.map((k) => [k, ''])))
+          setMemo('')
+          setClosed(false)
+        }
+      })
+      .catch(() => {
+        setSystemTotal(0)
+        setSystemSubtotal(0)
+        setSystemVat(0)
+        setSettlement(null)
+      })
+      .finally(() => setLoading(false))
+  }, [settleDate, effectiveStore, deliveryAppKeys, cardKeys, qrKeys])
+
+  React.useEffect(() => {
+    if (canSearchAll && stores.length && !storeFilter) {
+      setStoreFilter(stores[0])
+    } else if (!canSearchAll && auth?.store) {
+      setStoreFilter(auth.store)
+    }
+  }, [canSearchAll, stores, auth?.store, storeFilter])
+
+  React.useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const prevOnlineRef = React.useRef(online)
+  React.useEffect(() => {
+    if (offlineAware && !prevOnlineRef.current && online) {
+      prevOnlineRef.current = true
+      loadData()
+    }
+    prevOnlineRef.current = online
+  }, [online, offlineAware, loadData])
+
+  const loadHistory = React.useCallback(async () => {
+    if (!effectiveStore) {
+      setHistoryRows([])
+      return
+    }
+    setHistoryLoading(true)
+    try {
+      const days = Number(historyRange)
+      const dates = Array.from({ length: days }, (_, i) => shiftYmd(settleDate, -i))
+      const fetcher = offlineAware ? getPosSettlementWithCache : getPosSettlement
+      const rows = await Promise.all(
+        dates.map(async (date) => {
+          const res = await fetcher({
+            settleDate: date,
+            storeCode: effectiveStore,
+          })
+          const s = Array.isArray(res.settlement) ? res.settlement[0] : res.settlement
+          const inputTotal = s
+            ? Number(s.cashAmt ?? 0) +
+              Number(s.cardAmt ?? 0) +
+              Number(s.qrAmt ?? 0) +
+              Number(s.deliveryAppAmt ?? 0) +
+              Number(s.otherAmt ?? 0)
+            : 0
+          return {
+            date,
+            systemTotal: Number(res.systemTotal ?? 0),
+            inputTotal,
+            diff: inputTotal - Number(res.systemTotal ?? 0),
+            closed: !!s?.closed,
+            hasSettlement: !!s,
+          }
+        })
+      )
+      setHistoryRows(rows)
+    } catch {
+      setHistoryRows([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [effectiveStore, historyRange, settleDate, offlineAware])
+
+  React.useEffect(() => {
+    if (activeTab === 'history') {
+      loadHistory()
+    }
+  }, [activeTab, loadHistory])
+
+  const cashActualNum = parseFloat(cashActual) || 0
+  const cashAmtNum = parseFloat(cashAmt) || 0
+  const cardNum = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0) || parseFloat(cardAmt) || 0
+  const qrNum = QR_KEYS.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0) || parseFloat(qrAmt) || 0
+  const deliveryNum = DELIVERY_KEYS.reduce((s, k) => s + (parseFloat(deliveryAppBreakdown[k]) || 0), 0) || parseFloat(deliveryAppAmt) || 0
+  const otherNum = parseFloat(otherAmt) || 0
+  const totalInput = cashAmtNum + cardNum + qrNum + deliveryNum + otherNum
+  const diff = totalInput - systemTotal
+  const currencySuffix = ' ฿'
+  const savedCash = Number(settlement?.cashAmt ?? 0)
+  const savedCard = Number(settlement?.cardAmt ?? 0)
+  const savedQr = Number(settlement?.qrAmt ?? 0)
+  const savedDelivery = Number(settlement?.deliveryAppAmt ?? 0)
+  const savedOther = Number(settlement?.otherAmt ?? 0)
+  const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedOther
+
+  const handleSave = async () => {
+    if (!effectiveStore) {
+      alert(t('store') || '매장을 선택하세요.')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await savePosSettlementWithOffline({
+        storeCode: effectiveStore,
+        settleDate,
+        cashActual: cashActual ? cashActualNum : null,
+        cashAmt: cashAmtNum,
+        cardAmt: cardNum,
+        cardBreakdown: Object.fromEntries(
+          CARD_KEYS.map((k) => [k, parseFloat(cardBreakdown[k]) || 0])
+        ) as Record<string, number>,
+        qrAmt: qrNum,
+        qrBreakdown: Object.fromEntries(
+          QR_KEYS.map((k) => [k, parseFloat(qrBreakdown[k]) || 0])
+        ) as Record<string, number>,
+        deliveryAppAmt: deliveryNum,
+        deliveryAppBreakdown: Object.fromEntries(
+          DELIVERY_KEYS.map((k) => [k, parseFloat(deliveryAppBreakdown[k]) || 0])
+        ) as Record<string, number>,
+        otherAmt: otherNum,
+        memo,
+        closed,
+      })
+      if (res.success) {
+        alert(t('itemsAlertSaved') || '저장되었습니다.')
+        loadData()
+      } else {
+        alert(res.message || t('msg_save_fail_detail'))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePrint = () => {
+    const w = window.open('', '_blank')
+    if (!w) {
+      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      return
+    }
+    const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore
+    w.document.write(`
+      <!DOCTYPE html>
+      <html><head><title>${t('posSettlementReport') || 'POS 결산 리포트'} - ${storeLabel} - ${settleDate}</title>
+      <style>body{font-family:sans-serif;padding:20px;max-width:400px;margin:0 auto}table{width:100%;border-collapse:collapse}.r{text-align:right}.b{font-weight:bold}.t{border-top:1px solid #333;padding-top:8px;margin-top:8px}</style>
+      </head><body>
+      <h2>${t('posSettlementReport') || 'POS 결산 리포트'}</h2>
+      <p><strong>${t('store') || '매장'}</strong>: ${storeLabel} &nbsp;|&nbsp; <strong>${t('posSettleDate') || '결산일'}</strong>: ${settleDate}</p>
+      <table>
+      <tr><td>${t('posSystemSubtotal') || '공급가액'}</td><td class="r">${systemSubtotal.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posSystemVat') || 'VAT (7%)'}</td><td class="r">${systemVat.toLocaleString()} ฿</td></tr>
+      <tr class="t"><td class="b">${t('posSystemTotal') || '시스템 매출'}</td><td class="r b">${systemTotal.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posCashActual') || '돈통 시제'}</td><td class="r">${cashActualNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posCard') || '카드'}</td><td class="r">${cardNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posQr') || 'QR/모바일'}</td><td class="r">${qrNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posDeliveryApp') || '배달앱'}</td><td class="r">${deliveryNum.toLocaleString()} ฿</td></tr>
+      <tr><td>${t('posOther') || '기타'}</td><td class="r">${otherNum.toLocaleString()} ฿</td></tr>
+      <tr class="t"><td class="b">${t('posInputTotal') || '입력 합계'}</td><td class="r b">${totalInput.toLocaleString()} ฿</td></tr>
+      <tr class="t"><td class="b">${t('posDifference') || '차액'}</td><td class="r b">${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ฿</td></tr>
+      </table>
+      ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
+      ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
+      <p class="t" style="font-size:12px;color:#666">${new Date().toLocaleString('ko-KR')}</p>
+      </body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => {
+      w.print()
+      w.close()
+    }, 250)
+  }
+
+  const paddingClass = compact ? 'px-3 py-4' : 'px-4 py-6 sm:px-6 lg:px-8'
+  const maxWClass = compact ? '' : 'max-w-2xl mx-auto'
+
+  return (
+    <div className={cn('flex-1 overflow-auto', maxWClass)}>
+      <div className={paddingClass}>
+        <OfflineBanner
+          offlineOnly={offlineAware}
+          onSyncComplete={loadData}
+          offlineMsg={t('posSettlementOfflineSaved') || '오프라인 모드 - 결산이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.'}
+          syncingMsg={t('posSyncing') || '동기화 중...'}
+          retryLabel={t('posRetrySync') || '재시도'}
+        />
+        <div className={cn('flex gap-3', compact ? 'mb-4' : 'mb-6')}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Wallet className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className={cn('font-bold tracking-tight text-foreground', compact ? 'text-lg' : 'text-xl')}>
+              {t('posSettlement') || 'POS 결산'}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              {t('posSettlementSub') || '일별 매출·결제수단 입력, 돈통 시제'}
+            </p>
+          </div>
+        </div>
+
+        <div className={cn('flex flex-wrap items-center gap-3', compact ? 'mb-4' : 'mb-6')}>
+          <Input
+            type="date"
+            value={settleDate}
+            onChange={(e) => setSettleDate(e.target.value)}
+            className="h-10 w-40"
+          />
+          {canSearchAll && (
+            <Select value={storeFilter} onValueChange={setStoreFilter}>
+              <SelectTrigger className="h-10 w-36">
+                <SelectValue placeholder={t('store') || '매장'} />
+              </SelectTrigger>
+              <SelectContent>
+                {stores.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
+            <RotateCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            {t('posRefresh') || '새로고침'}
+          </Button>
+          {effectiveStore && (
+            <Button size="sm" variant="outline" className="h-10 gap-1.5" onClick={handlePrint}>
+              <Printer className="h-4 w-4" />
+              {t('printBtn') || '인쇄'}
+            </Button>
+          )}
+        </div>
+
+        {loading && (
+          <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t('loading')}</div>
+        )}
+
+        {effectiveStore && !loading && (
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
+            <TabsList className="mb-4 grid w-full grid-cols-2">
+              <TabsTrigger value="entry">결산 입력</TabsTrigger>
+              <TabsTrigger value="history">결산 조회</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="entry" className="space-y-4">
+              <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{t('posSystemSubtotal') || '공급가액'}</span>
+                  <span className="tabular-nums">{systemSubtotal.toLocaleString()} ฿</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{t('posSystemVat') || 'VAT (7%)'}</span>
+                  <span className="tabular-nums">{systemVat.toLocaleString()} ฿</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-border">
+                  <span className="font-medium">{t('posSystemTotal') || '시스템 매출'}</span>
+                  <span className="text-lg font-bold tabular-nums">{systemTotal.toLocaleString()} ฿</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="flex items-center justify-between text-sm">
+                  <span>{t('posCashActual') || '돈통 시제'}</span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      className="ml-2 h-9 w-32 text-right"
+                      value={cashActual}
+                      onChange={(e) => setCashActual(e.target.value)}
+                      disabled={closed}
+                    />
+                    <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between text-sm">
+                  <span>{t('posCash') || '현금'}</span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="ml-2 h-9 w-32 text-right"
+                      value={cashAmt}
+                      onChange={(e) => setCashAmt(e.target.value)}
+                      disabled={closed}
+                    />
+                    <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                  </div>
+                </label>
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span>{t('posCard') || '카드'}</span>
+                    <span className="tabular-nums text-muted-foreground">{cardNum.toLocaleString()}{currencySuffix}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pl-2">
+                    {CARD_KEYS.map((k) => (
+                      <label key={k} className="flex items-center gap-2 text-xs">
+                        <span className="w-16 shrink-0">{k}</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 text-right"
+                          value={cardBreakdown[k] ?? ''}
+                          onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                          disabled={closed}
+                        />
+                        <span className="text-muted-foreground w-5">฿</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span>{t('posQr') || 'QR/모바일결제'}</span>
+                    <span className="tabular-nums text-muted-foreground">{qrNum.toLocaleString()}{currencySuffix}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pl-2">
+                    {QR_KEYS.map((k) => (
+                      <label key={k} className="flex items-center gap-2 text-xs">
+                        <span className="w-16 shrink-0">{k}</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 text-right"
+                          value={qrBreakdown[k] ?? ''}
+                          onChange={(e) => setQrBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                          disabled={closed}
+                        />
+                        <span className="text-muted-foreground w-5">฿</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span>{t('posDeliveryApp') || '배달앱'}</span>
+                    <span className="tabular-nums text-muted-foreground">{deliveryNum.toLocaleString()}{currencySuffix}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pl-2">
+                    {DELIVERY_KEYS.map((k) => (
+                      <label key={k} className="flex items-center gap-2 text-xs">
+                        <span className="w-16 shrink-0">{k}</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-8 text-right"
+                          value={deliveryAppBreakdown[k] ?? ''}
+                          onChange={(e) => setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
+                          disabled={closed}
+                        />
+                        <span className="text-muted-foreground w-5">฿</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <label className="flex items-center justify-between text-sm">
+                  <span>{t('posOther') || '기타'}</span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="ml-2 h-9 w-32 text-right"
+                      value={otherAmt}
+                      onChange={(e) => setOtherAmt(e.target.value)}
+                      disabled={closed}
+                    />
+                    <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="space-y-1 rounded-lg border px-4 py-2 text-sm">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posCashActual') || '돈통 시제'}</span>
+                  <span className="tabular-nums">{cashActualNum.toLocaleString()}{currencySuffix}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>{t('posCash') || '현금'} + {t('posCard') || '카드'} + {t('posQr') || 'QR'} + {t('posDeliveryApp') || '배달앱'} + {t('posOther') || '기타'}</span>
+                  <span className="tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t font-medium">
+                  <span>{t('posInputTotal') || '입력 합계'}</span>
+                  <span className="font-bold tabular-nums">{totalInput.toLocaleString()}{currencySuffix}</span>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  'flex justify-between items-center rounded-lg px-4 py-3',
+                  diff === 0 ? 'bg-green-500/10 text-green-700' : 'bg-amber-500/10 text-amber-700'
+                )}
+              >
+                <span className="font-medium">{t('posDifference') || '차액'} ({t('posDifferenceHint') || '입력−시스템'})</span>
+                <span className="font-bold tabular-nums">
+                  {diff >= 0 ? '+' : ''}
+                  {diff.toLocaleString()} ฿
+                </span>
+              </div>
+
+              <div>
+                <label className="text-sm">{t('posMemo') || '비고'}</label>
+                <Input
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  placeholder={t('posMemoPh') || '메모'}
+                  className="mt-1"
+                  disabled={closed}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={closed}
+                    onChange={(e) => setClosed(e.target.checked)}
+                    disabled={closed && !canUnclose}
+                  />
+                  {t('posClosed') || '마감'}
+                </label>
+                {closed && !canUnclose && (
+                  <span className="text-xs text-muted-foreground">
+                    {t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.'}
+                  </span>
+                )}
+              </div>
+
+              <Button className="w-full" onClick={handleSave} disabled={saving || closed}>
+                <Save className="mr-2 h-4 w-4" />
+                {saving ? '...' : t('itemsBtnSave') || '저장'}
+              </Button>
+            </TabsContent>
+
+            <TabsContent value="history" className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={historyRange === '7' ? 'default' : 'outline'}
+                  onClick={() => setHistoryRange('7')}
+                >
+                  최근 7일
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={historyRange === '30' ? 'default' : 'outline'}
+                  onClick={() => setHistoryRange('30')}
+                >
+                  최근 30일
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={loadHistory} disabled={historyLoading}>
+                  {historyLoading ? '조회 중...' : '범위 조회'}
+                </Button>
+              </div>
+
+              {!settlement ? (
+                <div className="rounded-lg border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
+                  선택한 일자/매장의 저장된 결산 데이터가 없습니다.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm sm:grid-cols-2">
+                    <div className="flex justify-between sm:block">
+                      <span className="text-muted-foreground">결산일</span>
+                      <p className="font-medium">{settleDate}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-muted-foreground">매장</span>
+                      <p className="font-medium">{effectiveStore}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-muted-foreground">마감 상태</span>
+                      <p className="font-medium">{settlement.closed ? '마감 완료' : '미마감'}</p>
+                    </div>
+                    <div className="flex justify-between sm:block">
+                      <span className="text-muted-foreground">저장 시각</span>
+                      <p className="font-medium">{settleDate}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 rounded-lg border px-4 py-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{t('posSystemTotal') || '시스템 매출'}</span>
+                      <span className="tabular-nums">{systemTotal.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{t('posInputTotal') || '입력 합계'}</span>
+                      <span className="tabular-nums">{savedTotal.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-medium pt-1 border-t">
+                      <span>{t('posDifference') || '차액'}</span>
+                      <span className="tabular-nums">{(savedTotal - systemTotal).toLocaleString()} ฿</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border px-4 py-3 text-sm">
+                    <div className="flex justify-between">
+                      <span>{t('posCashActual') || '돈통 시제'}</span>
+                      <span className="tabular-nums">{Number(settlement.cashActual ?? 0).toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('posCash') || '현금'}</span>
+                      <span className="tabular-nums">{savedCash.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('posCard') || '카드'}</span>
+                      <span className="tabular-nums">{savedCard.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('posQr') || 'QR/모바일결제'}</span>
+                      <span className="tabular-nums">{savedQr.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('posDeliveryApp') || '배달앱'}</span>
+                      <span className="tabular-nums">{savedDelivery.toLocaleString()} ฿</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>{t('posOther') || '기타'}</span>
+                      <span className="tabular-nums">{savedOther.toLocaleString()} ฿</span>
+                    </div>
+                  </div>
+
+                  {!!settlement.memo && (
+                    <div className="rounded-lg border px-4 py-3 text-sm">
+                      <p className="mb-1 text-muted-foreground">{t('posMemo') || '비고'}</p>
+                      <p>{settlement.memo}</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="rounded-lg border">
+                <div className="border-b px-4 py-3 text-sm font-medium">
+                  일자별 결산 히스토리
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="px-4 py-2 text-left">일자</th>
+                        <th className="px-4 py-2 text-right">시스템 매출</th>
+                        <th className="px-4 py-2 text-right">입력 합계</th>
+                        <th className="px-4 py-2 text-right">차액</th>
+                        <th className="px-4 py-2 text-center">마감</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyRows.map((r) => (
+                        <tr
+                          key={r.date}
+                          className={cn(
+                            'border-b last:border-0 cursor-pointer hover:bg-muted/40',
+                            r.date === settleDate && 'bg-muted/30'
+                          )}
+                          onClick={() => setSettleDate(r.date)}
+                          title="클릭하면 해당 일자 상세를 불러옵니다."
+                        >
+                          <td className="px-4 py-2">
+                            {r.date}
+                            {r.date === settleDate && (
+                              <span className="ml-2 text-xs text-primary">(선택됨)</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums">{r.systemTotal.toLocaleString()} ฿</td>
+                          <td className="px-4 py-2 text-right tabular-nums">
+                            {r.hasSettlement ? `${r.inputTotal.toLocaleString()} ฿` : '-'}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums">
+                            {r.hasSettlement ? `${r.diff.toLocaleString()} ฿` : '-'}
+                          </td>
+                          <td className="px-4 py-2 text-center">{r.hasSettlement ? (r.closed ? '완료' : '미마감') : '-'}</td>
+                        </tr>
+                      ))}
+                      {!historyLoading && historyRows.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                            조회할 결산 데이터가 없습니다.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
+    </div>
+  )
+}

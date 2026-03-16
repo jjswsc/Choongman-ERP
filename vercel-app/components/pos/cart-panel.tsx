@@ -31,10 +31,10 @@ import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { createMember, getMembers, validatePosCoupon } from '@/lib/api-client'
+import { getMembers, validatePosCoupon } from '@/lib/api-client'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
-export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee'
+export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'other'
 type TaxSearchField = 'memberNo' | 'phone' | 'name'
 type TaxInvoiceProfile = {
@@ -54,6 +54,14 @@ export interface CartPanelHandle {
     tableName: string
     items: { id: string; name: string; price: number; quantity: number }[]
   }) => void
+  openTakeoutPaymentFromOrder: (payload: {
+    orderLabel: string
+    items: { id: string; name: string; price: number; quantity: number }[]
+  }) => void
+  openDeliveryPaymentFromOrder: (payload: {
+    orderLabel: string
+    items: { id: string; name: string; price: number; quantity: number }[]
+  }) => void
 }
 
 interface CartPanelProps {
@@ -66,6 +74,8 @@ interface CartPanelProps {
   lockOrderType?: boolean
   orderType?: CartOrderType
   deliveryApp?: CartDeliveryApp
+  /** 배달앱 표시명 (설정 기반, 없으면 code로 매핑) */
+  deliveryAppName?: string
   /** 배달 주문 번호 (플랫폼 주문 ID, API 연동 전까지 수동 입력) */
   deliveryOrderNo?: string
   /** 포장 슬롯/회원명 식별값 (예: 포장 1, 홍길동) */
@@ -83,6 +93,34 @@ interface CartPanelProps {
     couponDiscountAmt?: number
     pointUsed?: number
   }) => void
+  /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
+  onDeliveryOrderComplete?: (payload: {
+    items: { id: string; name: string; price: number; quantity: number }[]
+    orderLabel: string
+    memo?: string
+    discountAmt?: number
+    discountReason?: string
+    payment?: Record<string, number>
+    memberId?: number
+    memberNo?: string
+    couponCode?: string
+    couponDiscountAmt?: number
+    pointUsed?: number
+  }, existingOrderId?: number) => void
+  /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
+  onTakeoutOrderComplete?: (payload: {
+    items: { id: string; name: string; price: number; quantity: number }[]
+    orderLabel: string
+    memo?: string
+    discountAmt?: number
+    discountReason?: string
+    payment?: Record<string, number>
+    memberId?: number
+    memberNo?: string
+    couponCode?: string
+    couponDiscountAmt?: number
+    pointUsed?: number
+  }, existingOrderId?: number) => void
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
   onDineInOrderComplete?: (payload: {
     items: { id: string; name: string; price: number; quantity: number }[]
@@ -96,6 +134,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     pointUsed?: number
+    /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
+    isPrepaid?: boolean
   }, existingOrderId?: number) => void
   /** 배달/포장 주문 결제 완료 시 */
   onNonDineOrderComplete?: (payload: {
@@ -129,9 +169,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   lockOrderType,
   orderType: orderTypeProp,
   deliveryApp: deliveryAppProp,
+  deliveryAppName: deliveryAppNameProp,
   deliveryOrderNo: deliveryOrderNoProp,
   takeoutLabel: takeoutLabelProp,
   onOrderSubmit,
+  onTakeoutOrderComplete,
+  onDeliveryOrderComplete,
   onDineInOrderComplete,
   onNonDineOrderComplete,
   pendingOrderId,
@@ -152,14 +195,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [takeoutSlot, setTakeoutSlot] = useState<string>('1')
   const [takeoutMemberName, setTakeoutMemberName] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [memberKeyword, setMemberKeyword] = useState('')
   const [memberOptions, setMemberOptions] = useState<{ value: string; label: string }[]>([])
-  const [memberMap, setMemberMap] = useState<Record<string, { id: number; phone: string; email: string }>>({})
+  const [memberMap, setMemberMap] = useState<Record<string, { id: number; memberNo: string; name: string; phone: string; email: string }>>({})
+  const [recentMemberIds, setRecentMemberIds] = useState<string[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
-  const [memberRegisterOpen, setMemberRegisterOpen] = useState(false)
-  const [newMemberName, setNewMemberName] = useState('')
-  const [newMemberPhone, setNewMemberPhone] = useState('')
-  const [newMemberEmail, setNewMemberEmail] = useState('')
-  const [memberCreateLoading, setMemberCreateLoading] = useState(false)
   const [guestCount, setGuestCount] = useState(0)
   const [guestDirectOpen, setGuestDirectOpen] = useState(false)
   const [guestDirectValue, setGuestDirectValue] = useState('10')
@@ -203,7 +243,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [showSplit, setShowSplit] = useState(false)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
+  const [isPrepaid, setIsPrepaid] = useState(false)
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
+
+  useEffect(() => {
+    if (showPaymentModal && orderType === 'dine-in') {
+      setIsPrepaid(!pendingOrderId)
+    }
+  }, [showPaymentModal, orderType, pendingOrderId])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discount = discountType === 'percent'
@@ -250,10 +297,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const paymentTabs: { id: PaymentMethodTab; label: string; icon: typeof Banknote }[] = [
     { id: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
     { id: 'card', label: t('posPaymentCard') || '카드', icon: CreditCard },
-    { id: 'qr', label: `${t('posPaymentQr') || 'QR'} 코드`, icon: QrCode },
+    { id: 'qr', label: tr('posPaymentQrCode', 'QR Code'), icon: QrCode },
     { id: 'other', label: t('posPaymentOther') || '기타', icon: Wallet },
   ]
   const isMemberOrder = selectedMemberId !== ''
+  const selectedMemberDetail = memberMap[selectedMemberId]
+  const memberSearchEmpty = !membersLoading && memberKeyword.trim().length >= 2 && memberOptions.length === 0
   const normalizedTaxId = taxId.replace(/\D/g, '').slice(0, 13)
   const normalizedTaxBranchNo = taxBranchNo.replace(/\D/g, '').slice(0, 5)
   const normalizedTaxPhone = taxPhone.replace(/\D/g, '').slice(0, 10)
@@ -275,28 +324,35 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
   const taxInvoiceInvalid = needTaxInvoice && taxInvoiceValidationErrors.length > 0
   const deliveryAppLabel =
-    deliveryAppProp === 'grab'
-      ? t('posDeliveryAppGrab')
-      : deliveryAppProp === 'lineman'
-        ? t('posDeliveryAppLineMan')
-        : deliveryAppProp === 'shopee'
-          ? t('posDeliveryAppShopee')
-          : ''
+    deliveryAppNameProp && deliveryAppNameProp.trim()
+      ? deliveryAppNameProp.trim()
+      : deliveryAppProp === 'grab'
+        ? t('posDeliveryAppGrab')
+        : deliveryAppProp === 'lineman'
+          ? t('posDeliveryAppLineMan')
+          : deliveryAppProp === 'shopee'
+            ? t('posDeliveryAppShopee')
+            : deliveryAppProp || ''
 
-  const loadMembers = async () => {
+  const loadMembers = async (keyword?: string) => {
     setMembersLoading(true)
     try {
-      const rows = await getMembers({ limit: 300 })
+      const rawKeyword = String(keyword || '').trim()
+      const normalizedPhoneKeyword = rawKeyword.replace(/[^\d+]/g, '')
+      const q = normalizedPhoneKeyword.length >= 4 ? normalizedPhoneKeyword : rawKeyword
+      const rows = await getMembers({ q, limit: 20 })
       const options = rows
         .filter((row) => row.status !== 'inactive')
         .map((row) => ({
           value: String(row.id),
-          label: `${row.name}${row.memberNo ? ` (${row.memberNo})` : ''}`,
+          label: `${row.name}${row.memberNo ? ` (${row.memberNo})` : ''}${row.phone ? ` · ${row.phone}` : ''}`,
         }))
-      const map: Record<string, { id: number; phone: string; email: string }> = {}
+      const map: Record<string, { id: number; memberNo: string; name: string; phone: string; email: string }> = {}
       for (const row of rows) {
         map[String(row.id)] = {
           id: row.id,
+          memberNo: row.memberNo || '',
+          name: row.name || '',
           phone: row.phone || '',
           email: row.email || '',
         }
@@ -312,20 +368,45 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }
 
+  const handleMemberSearch = () => {
+    loadMembers(memberKeyword)
+  }
+
   useEffect(() => {
-    loadMembers()
+    try {
+      const raw = localStorage.getItem('pos-recent-member-ids')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setRecentMemberIds(parsed.map((x) => String(x || '')).filter(Boolean).slice(0, 6))
+      }
+    } catch {
+      setRecentMemberIds([])
+    }
   }, [])
 
   useEffect(() => {
     if (!selectedMemberId) return
-    if (!taxMemberNo.trim()) setTaxMemberNo(selectedMemberId)
-    const selectedMember = memberOptions.find((m) => m.value === selectedMemberId)
-    if (!selectedMember) return
-    if (!taxName.trim()) setTaxName(selectedMember.label)
-    const detail = memberMap[selectedMemberId]
+    setRecentMemberIds((prev) => {
+      const next = [selectedMemberId, ...prev.filter((x) => x !== selectedMemberId)].slice(0, 6)
+      try {
+        localStorage.setItem('pos-recent-member-ids', JSON.stringify(next))
+      } catch {
+        // ignore storage failures
+      }
+      return next
+    })
+  }, [selectedMemberId])
+
+  useEffect(() => {
+    if (!selectedMemberId) return
+    const detail = selectedMemberDetail
+    if (!detail) return
+    if (!taxMemberNo.trim()) setTaxMemberNo(detail.memberNo || selectedMemberId)
+    if (!taxName.trim()) setTaxName(detail.name || '')
     if (detail?.phone && !taxPhone.trim()) setTaxPhone(detail.phone)
     if (detail?.email && !taxEmail.trim()) setTaxEmail(detail.email)
-  }, [selectedMemberId, memberOptions, memberMap, taxName, taxMemberNo, taxPhone, taxEmail])
+  }, [selectedMemberId, selectedMemberDetail, taxName, taxMemberNo, taxPhone, taxEmail])
 
   useEffect(() => {
     try {
@@ -384,43 +465,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setTaxSearchMessage(`회원번호 ${found[0]} 데이터를 불러왔습니다.`)
   }
 
-  const handleCreateMember = async () => {
-    const name = newMemberName.trim()
-    if (!name) {
-      alert('회원 이름을 입력해 주세요.')
-      return
-    }
-    setMemberCreateLoading(true)
-    try {
-      const res = await createMember({
-        name,
-        phone: newMemberPhone.trim(),
-        email: newMemberEmail.trim(),
-        source: 'pos',
-      })
-      if (!res.success || !res.member) {
-        alert(res.message || '회원 등록에 실패했습니다.')
-        return
-      }
-      await loadMembers()
-      const createdId = String(res.member.id)
-      setSelectedMemberId(createdId)
-      setTaxMemberNo(createdId)
-      setTaxName(res.member.name || '')
-      if (res.member.phone) setTaxPhone(res.member.phone)
-      if (res.member.email) setTaxEmail(res.member.email)
-      setMemberRegisterOpen(false)
-      setNewMemberName('')
-      setNewMemberPhone('')
-      setNewMemberEmail('')
-    } catch (e) {
-      console.error('createMember:', e)
-      alert('회원 등록 중 오류가 발생했습니다.')
-    } finally {
-      setMemberCreateLoading(false)
-    }
-  }
-
   const resetPaymentInputs = () => {
     setPayCash('0')
     setPayCard('0')
@@ -434,7 +478,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
-    const amount = Math.max(0, total)
+    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
+    const amount = Math.max(0, st - dc - pointUsedNum)
     resetPaymentInputs()
     if (target === 'cash') setPayCash(String(amount))
     if (target === 'card') setPayCard(String(amount))
@@ -447,22 +493,43 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'shopeepay') setPayShopeePay(String(amount))
   }
 
-  const addDutchPayUnit = (target: 'cash' | 'card' | 'qr' | 'other') => {
+  type MoveTarget = 'cash' | 'card' | 'qr' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay'
+
+  /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 분할 결제 버튼에서만 증가) */
+  const addDutchAmountOnly = (target: MoveTarget) => {
     const count = Math.max(1, Number(splitCount) || 1)
-    if (splitPaidSteps >= count) return
     const perPerson = dutchUnitAmount
-    const remain = Math.max(0, total - paymentSum)
-    // 마지막 1인은 남은 금액 전체를 결제해 오차 누적 방지
-    const isLastPerson = splitPaidSteps >= count - 1
-    const addAmount = isLastPerson ? remain : Math.min(perPerson, remain)
+    const currentSum =
+      (parseFloat(payCash) || 0) +
+      (parseFloat(payCard) || 0) +
+      (parseFloat(payPromptPay) || 0) +
+      (parseFloat(payTrueMoney) || 0) +
+      (parseFloat(payWeChat) || 0) +
+      (parseFloat(payAlipay) || 0) +
+      (parseFloat(payLinePay) || 0) +
+      (parseFloat(payShopeePay) || 0) +
+      (parseFloat(payOther) || 0)
+    const remain = Math.max(0, total - currentSum)
+    const addAmount = splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain)
     if (addAmount <= 0) return
-    if (target === 'cash') setPayCash(String((parseFloat(payCash) || 0) + addAmount))
-    if (target === 'card') setPayCard(String((parseFloat(payCard) || 0) + addAmount))
-    if (target === 'qr') setPayPromptPay(String((parseFloat(payPromptPay) || 0) + addAmount))
+    if (target === 'cash') setPayCash((p) => String((parseFloat(p || '0') || 0) + addAmount))
+    if (target === 'card') setPayCard((p) => String((parseFloat(p || '0') || 0) + addAmount))
+    if (target === 'qr') setPayPromptPay((p) => String((parseFloat(p || '0') || 0) + addAmount))
     if (target === 'other') {
       setShowOtherPayments(true)
-      setPayOther(String((parseFloat(payOther) || 0) + addAmount))
+      setPayOther((p) => String((parseFloat(p || '0') || 0) + addAmount))
     }
+    if (target === 'truemoney') { setShowOtherPayments(true); setPayTrueMoney((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+    if (target === 'wechat') { setShowOtherPayments(true); setPayWeChat((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+    if (target === 'alipay') { setShowOtherPayments(true); setPayAlipay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+    if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+    if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+  }
+
+  /** 분할 결제 클릭 시: 진행만 누적 (금액은 탭 클릭으로 이미 입력됨) */
+  const confirmSplitStep = () => {
+    const count = Math.max(1, Number(splitCount) || 1)
+    if (splitPaidSteps >= count) return
     setSplitPaidSteps((prev) => Math.min(count, prev + 1))
   }
 
@@ -476,6 +543,16 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setShowOtherPayments(false)
     }
   }, [activePaymentTab])
+
+  // 할인/포인트 변경 시 결제 입력 금액 즉시 반영 (더치페이 모드에서는 건너뜀)
+  useEffect(() => {
+    if (!showPaymentModal || total <= 0 || showSplit) return
+    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
+    const newTotal = Math.max(0, st - dc - pointUsedNum)
+    resetPaymentInputs()
+    setPayCash(String(newTotal))
+  }, [showPaymentModal, total, discountValue, discountType, pointUsed, showSplit])
 
   const buildOrderMemo = (baseMemo: string) => {
     if (!needTaxInvoice) return baseMemo
@@ -508,8 +585,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const deliveryLabel = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
       .filter(Boolean)
       .join(' ')
-    const selectedMember = memberOptions.find((m) => m.value === selectedMemberId)
-    const selectedMemberNo = selectedMember?.label.match(/\(([^)]+)\)$/)?.[1] || ''
+    const selectedMemberNo = memberMap[selectedMemberId]?.memberNo || ''
     onNonDineOrderComplete({
       orderType,
       orderLabel: orderType === 'delivery'
@@ -538,6 +614,103 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentOther: 0,
           },
     })
+  }
+
+  const handlePaymentComplete = () => {
+    const dineInTableName = selectedTable?.name || paymentTableNameOverride
+    const paymentOtherSum =
+      (parseFloat(payTrueMoney) || 0) +
+      (parseFloat(payWeChat) || 0) +
+      (parseFloat(payAlipay) || 0) +
+      (parseFloat(payLinePay) || 0) +
+      (parseFloat(payShopeePay) || 0) +
+      (parseFloat(payOther) || 0)
+    if (needTaxInvoice && taxMemberNo.trim()) {
+      setTaxMemberRegistry((prev) => ({
+        ...prev,
+        [taxMemberNo.trim()]: {
+          type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
+          name: normalizedTaxName,
+          taxId: normalizedTaxId,
+          branchCode: effectiveTaxBranchNo,
+          phone: normalizedTaxPhone,
+          email: normalizedTaxEmail,
+          address: normalizedTaxAddress,
+        },
+      }))
+    }
+    if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
+      onDineInOrderComplete(
+        {
+          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          tableName: dineInTableName,
+          memo: buildOrderMemo(customerMemo),
+          discountAmt: discount,
+          discountReason: discountReason,
+          payment: {
+            paymentCash: parseFloat(payCash) || 0,
+            paymentCard: parseFloat(payCard) || 0,
+            paymentQr: parseFloat(payPromptPay) || 0,
+            paymentOther: paymentOtherSum,
+          },
+          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          couponCode: couponAppliedCode || undefined,
+          couponDiscountAmt: couponAppliedAmt || undefined,
+          pointUsed: pointUsedNum || undefined,
+          isPrepaid,
+        },
+        pendingOrderId ?? undefined
+      )
+    } else if (orderType === 'delivery' && pendingOrderId != null && paymentTableNameOverride && onDeliveryOrderComplete) {
+      onDeliveryOrderComplete(
+        {
+          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          orderLabel: paymentTableNameOverride,
+          memo: buildOrderMemo(customerMemo),
+          discountAmt: discount,
+          discountReason: discountReason,
+          payment: {
+            paymentCash: parseFloat(payCash) || 0,
+            paymentCard: parseFloat(payCard) || 0,
+            paymentQr: parseFloat(payPromptPay) || 0,
+            paymentOther: paymentOtherSum,
+          },
+          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          couponCode: couponAppliedCode || undefined,
+          couponDiscountAmt: couponAppliedAmt || undefined,
+          pointUsed: pointUsedNum || undefined,
+        },
+        pendingOrderId
+      )
+    } else if (orderType === 'takeout' && pendingOrderId != null && paymentTableNameOverride && onTakeoutOrderComplete) {
+      onTakeoutOrderComplete(
+        {
+          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          orderLabel: paymentTableNameOverride,
+          memo: buildOrderMemo(customerMemo),
+          discountAmt: discount,
+          discountReason: discountReason,
+          payment: {
+            paymentCash: parseFloat(payCash) || 0,
+            paymentCard: parseFloat(payCard) || 0,
+            paymentQr: parseFloat(payPromptPay) || 0,
+            paymentOther: paymentOtherSum,
+          },
+          memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
+          memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
+          couponCode: couponAppliedCode || undefined,
+          couponDiscountAmt: couponAppliedAmt || undefined,
+          pointUsed: pointUsedNum || undefined,
+        },
+        pendingOrderId
+      )
+    } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
+      submitNonDineOrder(true)
+    }
+    setShowPaymentModal(false)
+    handleClearCart()
   }
 
   const addItem = (item: { id: string; name: string; price: number }) => {
@@ -597,7 +770,45 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     openPaymentModalWithAmount(amount)
   }
 
-  useImperativeHandle(ref, () => ({ addItem, clearCart: handleClearCart, openDineInPaymentFromOrder }), [])
+  const openTakeoutPaymentFromOrder = (payload: {
+    orderLabel: string
+    items: { id: string; name: string; price: number; quantity: number }[]
+  }) => {
+    const normalized = payload.items.map((i, idx) => ({
+      id: `cart-existing-${idx}-${i.id}`,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+    }))
+    setDiscountType('percent')
+    setDiscountValue(0)
+    setDiscountReason('')
+    setPaymentTableNameOverride(payload.orderLabel)
+    setCartItems(normalized)
+    const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    openPaymentModalWithAmount(amount)
+  }
+
+  const openDeliveryPaymentFromOrder = (payload: {
+    orderLabel: string
+    items: { id: string; name: string; price: number; quantity: number }[]
+  }) => {
+    const normalized = payload.items.map((i, idx) => ({
+      id: `cart-existing-${idx}-${i.id}`,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+    }))
+    setDiscountType('percent')
+    setDiscountValue(0)
+    setDiscountReason('')
+    setPaymentTableNameOverride(payload.orderLabel)
+    setCartItems(normalized)
+    const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
+    openPaymentModalWithAmount(amount)
+  }
+
+  useImperativeHandle(ref, () => ({ addItem, clearCart: handleClearCart, openDineInPaymentFromOrder, openTakeoutPaymentFromOrder, openDeliveryPaymentFromOrder }), [])
 
   const handleClearCart = () => {
     setCartItems([])
@@ -685,9 +896,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col py-3 gap-3 min-h-0 overflow-hidden px-0">
-        {/* 주문 타입 & 테이블 & 회원 (터미널에서는 유형/테이블/배달앱을 장바구니 옆 상단에 표시하므로 lockOrderType일 때는 생략) */}
-        <div className="space-y-2 shrink-0 px-3">
+      <CardContent className="flex-1 flex flex-col py-2 gap-1.5 min-h-0 overflow-hidden px-0">
+        {/* 주문 타입 */}
+        <div className="space-y-1.5 shrink-0 px-3">
           {!lockOrderType && (
             <div className="flex items-center gap-2">
               <Label className="text-sm w-12 flex-shrink-0">{t('posOrderTypeLabel')}</Label>
@@ -710,7 +921,49 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </div>
           )}
-          {!lockOrderType && orderType === 'dine-in' && (
+
+          {/* 1행: 회원검색 + 손님(테이블현황만) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
+              value={memberKeyword}
+              onChange={(e) => setMemberKeyword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleMemberSearch())}
+              className="h-8 flex-1 min-w-[8rem] max-w-[12rem]"
+            />
+            <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={handleMemberSearch} disabled={membersLoading}>
+              {membersLoading ? '...' : (t('posSearch') || '검색')}
+            </Button>
+            {orderType === 'dine-in' && (
+              <div className="flex items-center gap-2">
+                <Label className="text-sm flex-shrink-0">{t('posGuestCount') || '손님'}</Label>
+                <Select
+                  value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
+                  onValueChange={(v) => {
+                    if (v === '__zero__') setGuestCount(0)
+                    else if (v === '__direct__') {
+                      setGuestDirectValue(String(guestCount > 9 ? guestCount : 10))
+                      setGuestDirectOpen(true)
+                    } else setGuestCount(Number(v))
+                  }}
+                >
+                  <SelectTrigger className="w-14 h-8 [&>span]:flex [&>span]:items-center [&>span]:justify-center">
+                    <span className="tabular-nums">{guestCount}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__zero__">0</SelectItem>
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                    <SelectItem value="__direct__">{t('posGuestDirectInput') || '직접 입력'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          {/* 2행: 테이블(테이블현황) / 배달앱+주문번호(배달) / 포장(포장) */}
+          {orderType === 'dine-in' && (
             <div className="flex items-center gap-2">
               <Label className="text-sm w-12 flex-shrink-0">{t('posTableLabel')}</Label>
               <Badge variant="secondary" className="h-7 px-3">
@@ -743,10 +996,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </Badge>
               ) : (
                 <>
-                  <Select
-                    value={takeoutSlot}
-                    onValueChange={(v) => setTakeoutSlot(v)}
-                  >
+                  <Select value={takeoutSlot} onValueChange={(v) => setTakeoutSlot(v)}>
                     <SelectTrigger className="w-28 h-8">
                       <SelectValue />
                     </SelectTrigger>
@@ -772,73 +1022,39 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Label className="text-sm w-12 flex-shrink-0">{t('posMember') || '회원'}</Label>
-              <Select
-                value={selectedMemberId === '' ? '__none__' : selectedMemberId}
-                onValueChange={(v) => setSelectedMemberId(v === '__none__' ? '' : v)}
+          {/* 회원 검색 결과 & 비회원 버튼 */}
+          <div className="flex flex-wrap gap-1 min-h-[26px] items-center">
+            {selectedMemberId && (
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setSelectedMemberId('')}>
+                {t('posMemberNone') || '비회원'}
+              </Button>
+            )}
+            {memberOptions.length > 0 && memberOptions.map((m) => (
+              <Button
+                key={m.value}
+                type="button"
+                size="sm"
+                variant={selectedMemberId === m.value ? 'default' : 'outline'}
+                className="h-7 px-2 text-xs"
+                onClick={() => setSelectedMemberId(m.value)}
               >
-                <SelectTrigger className="flex-1 min-w-0 h-8">
-                  <SelectValue placeholder={membersLoading ? '회원 불러오는 중...' : (t('posMemberNone') || '비회원')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">{t('posMemberNone') || '비회원'}</SelectItem>
-                  {memberOptions.map(m => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 px-2.5 text-xs"
-              onClick={() => setMemberRegisterOpen(true)}
-            >
-              회원등록
-            </Button>
-            {orderType === 'dine-in' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <Label className="text-sm flex-shrink-0">{t('posGuestCount') || '손님'}</Label>
-                  <Select
-                    value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
-                    onValueChange={(v) => {
-                      if (v === '__zero__') {
-                        setGuestCount(0)
-                      } else if (v === '__direct__') {
-                        setGuestDirectValue(String(guestCount > 9 ? guestCount : 10))
-                        setGuestDirectOpen(true)
-                      } else {
-                        setGuestCount(Number(v))
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-14 h-8 [&>span]:flex [&>span]:items-center [&>span]:justify-center">
-                      <span className="tabular-nums">{guestCount}</span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__zero__">0</SelectItem>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-                        <SelectItem key={n} value={String(n)}>
-                          {n}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__direct__">{t('posGuestDirectInput') || '직접 입력'}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Dialog open={guestDirectOpen} onOpenChange={setGuestDirectOpen}>
+                {m.label}
+              </Button>
+            ))}
+          </div>
+          {memberSearchEmpty && (
+            <p className="text-xs text-amber-600">
+              {t('posMemberSearchEmpty') || '검색 결과가 없습니다. ERP 회원관리에서 회원을 먼저 등록해 주세요.'}
+            </p>
+          )}
+
+          <Dialog open={guestDirectOpen} onOpenChange={setGuestDirectOpen}>
                   <DialogContent className="sm:max-w-xs">
                     <DialogHeader>
                       <DialogTitle>{t('posGuestCount') || '손님'} · {t('posGuestDirectInput') || '직접 입력'}</DialogTitle>
                     </DialogHeader>
                     <div className="flex flex-col gap-2 py-2">
-                      <Label className="text-sm text-muted-foreground">{t('posGuestDirectInput') || '몇 명?'}</Label>
+                      <Label className="text-sm text-muted-foreground">{tr('posGuestHowManyPh', '몇 명?')}</Label>
                       <Input
                         type="number"
                         min={1}
@@ -859,9 +1075,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-              </>
-            )}
-          </div>
         </div>
 
         {/* Cart Items - 메뉴 리스트 영역 최대 확보 (좌우 여백 없이 끝까지 사용) */}
@@ -977,7 +1190,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   discountAmt: discount,
                   discountReason: discountReason,
                   memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-                  memberNo: memberOptions.find((m) => m.value === selectedMemberId)?.label.match(/\(([^)]+)\)$/)?.[1] || undefined,
+                  memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
                   couponCode: couponAppliedCode || undefined,
                   couponDiscountAmt: couponAppliedAmt || undefined,
                   pointUsed: pointUsedNum || undefined,
@@ -1011,42 +1224,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
       </CardContent>
     </Card>
-
-    <Dialog open={memberRegisterOpen} onOpenChange={setMemberRegisterOpen}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>POS 회원 등록</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-2 py-1">
-          <Label className="text-sm">이름 *</Label>
-          <Input
-            placeholder="회원 이름"
-            value={newMemberName}
-            onChange={(e) => setNewMemberName(e.target.value)}
-          />
-          <Label className="text-sm">전화번호</Label>
-          <Input
-            placeholder="전화번호"
-            value={newMemberPhone}
-            onChange={(e) => setNewMemberPhone(e.target.value)}
-          />
-          <Label className="text-sm">이메일</Label>
-          <Input
-            placeholder="이메일"
-            value={newMemberEmail}
-            onChange={(e) => setNewMemberEmail(e.target.value)}
-          />
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setMemberRegisterOpen(false)}>
-            취소
-          </Button>
-          <Button type="button" onClick={handleCreateMember} disabled={memberCreateLoading}>
-            {memberCreateLoading ? '저장 중...' : '저장'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
 
     <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
       <DialogContent className="w-[95vw] max-w-lg sm:max-w-xl max-h-[95vh] overflow-y-auto overflow-x-hidden rounded-2xl p-0">
@@ -1166,7 +1343,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         setDiscountValue(0)
                       }}
                     >
-                      {t('reset') || '초기화'}
+                      {tr('reset', '초기화')}
                     </Button>
                     <Select
                       value={discountType}
@@ -1228,12 +1405,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     )}
                     onClick={() => {
                       setActivePaymentTab(tab.id)
-                      if (tab.id === 'cash') moveAllAmountTo('cash')
-                      if (tab.id === 'card') moveAllAmountTo('card')
-                      if (tab.id === 'qr') moveAllAmountTo('qr')
-                      if (tab.id === 'other') {
-                        setShowOtherPayments(true)
-                        moveAllAmountTo('other')
+                      if (showSplit) {
+                        addDutchAmountOnly(tab.id)
+                        if (tab.id === 'other') setShowOtherPayments(true)
+                      } else {
+                        if (tab.id === 'cash') moveAllAmountTo('cash')
+                        if (tab.id === 'card') moveAllAmountTo('card')
+                        if (tab.id === 'qr') moveAllAmountTo('qr')
+                        if (tab.id === 'other') {
+                          setShowOtherPayments(true)
+                          moveAllAmountTo('other')
+                        }
                       }
                     }}
                   >
@@ -1257,7 +1439,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   <button
                     type="button"
                     className="w-24 text-sm shrink-0 text-left hover:underline"
-                    onClick={() => moveAllAmountTo(key as 'cash' | 'card' | 'qr')}
+                    onClick={() => showSplit ? addDutchAmountOnly(key as MoveTarget) : moveAllAmountTo(key as 'cash' | 'card' | 'qr')}
                   >
                     {label}
                   </button>
@@ -1274,11 +1456,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               ))}
 
               {activePaymentTab === 'other' && (
-                <Collapsible open={showOtherPayments} onOpenChange={setShowOtherPayments}>
+                <Collapsible open={showSplit ? true : showOtherPayments} onOpenChange={(v) => { if (!showSplit) setShowOtherPayments(v) }}>
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" className="w-full justify-between h-9 px-2 text-sm font-medium">
+                    <Button variant="outline" size="sm" className="w-full justify-between h-9 px-2 text-sm font-medium" type="button">
                       <span>{t('posPaymentOther') || '기타'}</span>
-                      {showOtherPayments ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {showSplit ? <ChevronUp className="w-4 h-4" /> : (showOtherPayments ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="grid gap-2 pt-1 pl-2 border-l-2 border-muted">
@@ -1294,10 +1476,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         <button
                           type="button"
                           className="w-20 text-xs shrink-0 text-left hover:underline"
-                          onClick={() => moveAllAmountTo(moveKey)}
+                          onClick={() => showSplit ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)}
                         >
                           {t(labelKey)}
                         </button>
+                        {showSplit && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 shrink-0 px-2 text-xs"
+                            onClick={() => addDutchAmountOnly(moveKey)}
+                          >
+                            +{dutchUnitAmount.toLocaleString()} ฿
+                          </Button>
+                        )}
                         <Input
                           type="number"
                           min={0}
@@ -1367,13 +1560,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="memberNo">회원번호</SelectItem>
-                          <SelectItem value="phone">전화번호</SelectItem>
-                          <SelectItem value="name">이름</SelectItem>
+                          <SelectItem value="memberNo">{t('posMemberNo') || '회원번호'}</SelectItem>
+                          <SelectItem value="phone">{t('posPhone') || '전화번호'}</SelectItem>
+                          <SelectItem value="name">{t('posName') || '이름'}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
-                        placeholder={taxSearchField === 'memberNo' ? '회원번호 입력' : taxSearchField === 'phone' ? '전화번호 입력' : '이름 입력'}
+                        placeholder={taxSearchField === 'memberNo' ? (t('posMemberNoInputPh') || '회원번호 입력') : taxSearchField === 'phone' ? (t('posPhoneInputPh') || '전화번호 입력') : (t('posNameInputPh') || '이름 입력')}
                         value={taxSearchKeyword}
                         onChange={(e) => setTaxSearchKeyword(e.target.value)}
                         className="h-12 rounded-xl"
@@ -1385,7 +1578,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                         }}
                       />
                       <Button type="button" size="default" variant="secondary" className="h-12 rounded-xl" onClick={handleTaxProfileSearch}>
-                        검색
+                        {t('posSearch') || '검색'}
                       </Button>
                     </div>
                     {isMemberOrder && (
@@ -1398,7 +1591,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     <p className="text-xs text-muted-foreground">{taxSearchMessage}</p>
                   )}
                   <Input
-                    placeholder="회원번호"
+                    placeholder={t('posMemberNo') || '회원번호'}
                     value={taxMemberNo}
                     onChange={(e) => setTaxMemberNo(e.target.value.trim())}
                     className="h-12 rounded-xl max-w-[10rem]"
@@ -1446,14 +1639,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               </div>
             </Collapsible>
 
-            {/* Dutch Pay */}
+            {/* Dutch Pay - 가로 compact, 터치 44px */}
             <Collapsible open={showSplit} onOpenChange={setShowSplit}>
-              <div className="space-y-2 border rounded-xl p-3 bg-card min-h-[72px]">
+              <div className="border rounded-xl p-2 bg-card w-fit">
                 <CollapsibleTrigger asChild>
                   <Button
                     type="button"
                     variant="ghost"
-                    className="w-full h-12 justify-between rounded-xl px-2"
+                    className="min-h-11 justify-between rounded-lg px-3 shrink-0"
                     onClick={() => {
                       if (!showSplit) {
                         resetPaymentInputs()
@@ -1462,89 +1655,55 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     }}
                   >
                     <span className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-primary" />
-                      <span className="font-medium">{tr('posDutchPayTitle', '더치페이 (분할결제)')}</span>
+                      <Users className="h-5 w-5 text-primary shrink-0" />
+                      <span>{tr('posDutchPayTitle', '더치페이 (분할결제)')}</span>
                     </span>
-                    {showSplit ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                    {showSplit ? <ChevronUp className="h-5 w-5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />}
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-3 pt-1">
-                  <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] items-center gap-2">
+                <CollapsibleContent className="pt-2 flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm text-muted-foreground">{tr('posSplitPeople', '인원')}</span>
                     <Input
                       type="number"
                       min={1}
                       value={splitCount}
                       onChange={(e) => setSplitCount(Math.max(1, Number(e.target.value || 1)))}
-                      className="h-12 rounded-xl"
+                      className="h-11 w-14 rounded-lg text-center text-base shrink-0"
                     />
-                    <span className="text-xs text-muted-foreground tabular-nums sm:text-right">
-                      {tr('posPerPersonAmount', '1인 금액')}: {dutchUnitAmount.toLocaleString()} ฿
-                    </span>
                   </div>
-                  <div className="rounded-xl bg-primary/10 px-3 py-2 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                    <span className="text-muted-foreground">{tr('posProgress', '진행')}</span>
-                    <span className="font-semibold text-primary break-words">
-                      {splitPaidSteps}/{Math.max(1, splitCount)}{tr('posPeopleUnit', '명')} {tr('posDone', '완료')} · {tr('posRemaining', '남은')} {dutchRemainingPeople}{tr('posPeopleUnit', '명')}
-                    </span>
+                  <div className="flex items-center gap-1.5 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5">
+                    <span className="text-sm">{tr('posPerPersonAmount', '1인 금액')}</span>
+                    <span className="font-semibold tabular-nums">{dutchUnitAmount.toLocaleString()}฿</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-11 rounded-xl"
-                      disabled={dutchRemainingPeople <= 0}
-                      onClick={() => addDutchPayUnit('cash')}
-                    >
-                      {tr('posSplitOneCash', '1인 현금')}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-11 rounded-xl"
-                      disabled={dutchRemainingPeople <= 0}
-                      onClick={() => addDutchPayUnit('card')}
-                    >
-                      {tr('posSplitOneCard', '1인 카드')}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-11 rounded-xl"
-                      disabled={dutchRemainingPeople <= 0}
-                      onClick={() => addDutchPayUnit('qr')}
-                    >
-                      {tr('posSplitOneQr', '1인 QR')}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-11 rounded-xl"
-                      disabled={dutchRemainingPeople <= 0}
-                      onClick={() => addDutchPayUnit('other')}
-                    >
-                      {tr('posSplitOneOther', '1인 기타')}
-                    </Button>
+                  <div className="flex items-center gap-2 shrink-0 min-h-11 px-2 rounded-lg bg-primary/5 text-sm">
+                    <span>{tr('posProgress', '진행')} <span className="font-semibold tabular-nums">{splitPaidSteps}/{Math.max(1, splitCount)}{tr('posPeopleUnit', '명')}</span></span>
+                    <span className="font-semibold tabular-nums text-muted-foreground">{paymentSum.toLocaleString()}/{total.toLocaleString()}฿</span>
                   </div>
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-9"
-                      onClick={() => setSplitPaidSteps(0)}
-                    >
-                      {tr('posSplitResetProgress', '분할 진행 초기화')}
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="min-h-11 px-4 font-semibold rounded-lg shrink-0"
+                    disabled={dutchRemainingPeople <= 0}
+                    onClick={confirmSplitStep}
+                  >
+                    {tr('posSplitPayButton', '분할 결제')} +1
+                  </Button>
                 </CollapsibleContent>
               </div>
             </Collapsible>
 
+            {orderType === 'dine-in' && (
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={isPrepaid}
+                  onChange={(e) => setIsPrepaid(e.target.checked)}
+                  className="rounded border-input h-4 w-4"
+                />
+                <span>{tr('posPrepaidKeepTable', '선불 (결제 후 테이블 유지)')}</span>
+              </label>
+            )}
             <div className={cn(
               'rounded-lg px-3 py-2 text-sm flex justify-between',
               paymentSumMatch ? 'bg-green-500/10 text-green-700 dark:bg-green-500/20 dark:text-green-400' : 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
@@ -1566,76 +1725,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               <Button
                 className={cn(
                   'h-14 px-10 rounded-xl font-bold',
-                  !paymentSumMatch || taxInvoiceInvalid
+                  !paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))
                     ? 'bg-muted text-muted-foreground hover:bg-muted'
                     : ''
                 )}
-                disabled={!paymentSumMatch || taxInvoiceInvalid}
-                onClick={() => {
-                  const dineInTableName = selectedTable?.name || paymentTableNameOverride
-                  const paymentOtherSum =
-                    (parseFloat(payTrueMoney) || 0) +
-                    (parseFloat(payWeChat) || 0) +
-                    (parseFloat(payAlipay) || 0) +
-                    (parseFloat(payLinePay) || 0) +
-                    (parseFloat(payShopeePay) || 0) +
-                    (parseFloat(payOther) || 0)
-                  if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
-                    if (needTaxInvoice && taxMemberNo.trim()) {
-                      setTaxMemberRegistry((prev) => ({
-                        ...prev,
-                        [taxMemberNo.trim()]: {
-                          type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
-                          name: normalizedTaxName,
-                          taxId: normalizedTaxId,
-                          branchCode: effectiveTaxBranchNo,
-                          phone: normalizedTaxPhone,
-                          email: normalizedTaxEmail,
-                          address: normalizedTaxAddress,
-                        },
-                      }))
-                    }
-                    onDineInOrderComplete(
-                      {
-                        items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
-                        tableName: dineInTableName,
-                        memo: buildOrderMemo(customerMemo),
-                        discountAmt: discount,
-                        discountReason: discountReason,
-                        payment: {
-                          paymentCash: parseFloat(payCash) || 0,
-                          paymentCard: parseFloat(payCard) || 0,
-                          paymentQr: parseFloat(payPromptPay) || 0,
-                          paymentOther: paymentOtherSum,
-                        },
-                        memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
-                        memberNo: memberOptions.find((m) => m.value === selectedMemberId)?.label.match(/\(([^)]+)\)$/)?.[1] || undefined,
-                        couponCode: couponAppliedCode || undefined,
-                        couponDiscountAmt: couponAppliedAmt || undefined,
-                        pointUsed: pointUsedNum || undefined,
-                      },
-                      pendingOrderId ?? undefined
-                    )
-                  } else if (orderType !== 'dine-in' && onNonDineOrderComplete) {
-                    if (needTaxInvoice && taxMemberNo.trim()) {
-                      setTaxMemberRegistry((prev) => ({
-                        ...prev,
-                        [taxMemberNo.trim()]: {
-                          type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
-                          name: normalizedTaxName,
-                          taxId: normalizedTaxId,
-                          branchCode: effectiveTaxBranchNo,
-                          phone: normalizedTaxPhone,
-                          email: normalizedTaxEmail,
-                          address: normalizedTaxAddress,
-                        },
-                      }))
-                    }
-                    submitNonDineOrder(true)
-                  }
-                  setShowPaymentModal(false)
-                  handleClearCart()
-                }}
+                disabled={!paymentSumMatch || taxInvoiceInvalid || (showSplit && splitPaidSteps < Math.max(1, splitCount))}
+                onClick={handlePaymentComplete}
               >
                 {t('posPayConfirm') || '결제 완료'}
               </Button>

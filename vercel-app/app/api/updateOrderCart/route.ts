@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
-import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
-import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -104,22 +102,6 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('orders', orderId, patch)
-
-    const storeName = String(o.store_name || '').trim()
-    const transDate = String(o.delivery_date || o.order_date || '').slice(0, 10)
-    if (storeName) {
-      const directMap = await getDirectSettlementMap(validCart.map((it) => it.code).filter(Boolean))
-      let subtotalHQ = 0
-      validCart.forEach((it) => {
-        if (!directMap[it.code]) {
-          subtotalHQ += it.price * it.qty
-        }
-      })
-      const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
-      if (totalHQ > 0) {
-        await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
-      }
-    }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })
   } catch (e) {

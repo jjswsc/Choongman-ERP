@@ -126,7 +126,7 @@ export function EmployeeEvalTab({
   }, [employees, evalStore])
 
   const selectedEmp = React.useMemo(
-    () => employeeList.find((e) => e.name === evalEmployee),
+    () => employeeList.find((e) => (e.name || "__unnamed__") === evalEmployee),
     [employeeList, evalEmployee]
   )
 
@@ -620,8 +620,8 @@ export function EmployeeEvalTab({
                 <SelectItem value="__none__">
                   {t("emp_select_employee")}
                 </SelectItem>
-                {employeeList.map((e) => (
-                  <SelectItem key={e.name} value={e.name || ""}>
+                {employeeList.map((e, idx) => (
+                  <SelectItem key={e.name ? e.name : `emp-${idx}`} value={e.name || "__unnamed__"}>
                     {e.name}
                   </SelectItem>
                 ))}

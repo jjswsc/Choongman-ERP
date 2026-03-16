@@ -15,7 +15,6 @@ import {
   importMarketingExcel,
   getMarketingCampaignResults,
   getMarketingCampaignCosts,
-  getPosSalesImports,
   type MarketingCampaign,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
@@ -75,8 +74,6 @@ export default function MarketingCampaignsPage() {
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [form, setForm] = React.useState(defaultForm)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const [imports, setImports] = React.useState<{ id: string; year_month?: string }[]>([])
-  const [posImportId, setPosImportId] = React.useState("")
   const [costResults, setCostResults] = React.useState<{
     bankCosts: number
     pettyCosts: number
@@ -106,14 +103,9 @@ export default function MarketingCampaignsPage() {
   }, [loadList])
 
   React.useEffect(() => {
-    getPosSalesImports().then((list) => setImports(list)).catch(() => setImports([]))
-  }, [])
-
-  React.useEffect(() => {
     if (editingId) {
       setPosResults(null)
       setCostResults(null)
-      setPosImportId("")
       getMarketingCampaign(editingId).then((c) => {
         if (c) {
           setForm({
@@ -259,8 +251,8 @@ export default function MarketingCampaignsPage() {
   }
 
   const handleLoadPosResults = async () => {
-    if (!editingId || !posImportId) return
-    const res = await getMarketingCampaignResults({ campaignId: editingId, importId: posImportId })
+    if (!editingId) return
+    const res = await getMarketingCampaignResults({ campaignId: editingId })
     if (res.success && res.totalOrders != null) {
       setPosResults({
         dineInOrders: res.dineInOrders ?? 0,
@@ -559,20 +551,8 @@ export default function MarketingCampaignsPage() {
                   <div className="sm:col-span-2 rounded-lg border border-dashed p-3">
                     <label className="text-xs font-medium text-muted-foreground">POS 실적</label>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <select
-                        value={posImportId}
-                        onChange={(e) => { setPosImportId(e.target.value); setPosResults(null) }}
-                        className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                      >
-                        <option value="">업로드 선택</option>
-                        {imports.map((i) => (
-                          <option key={i.id} value={i.id}>
-                            {i.year_month || "?"}
-                          </option>
-                        ))}
-                      </select>
-                      <Button variant="outline" size="sm" onClick={handleLoadPosResults} disabled={!posImportId}>
-                        조회
+                      <Button variant="outline" size="sm" onClick={handleLoadPosResults}>
+                        POS 실적 조회
                       </Button>
                     </div>
                     <div className="mt-2">

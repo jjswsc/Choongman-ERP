@@ -1,9 +1,13 @@
 /**
- * 메뉴별 매출 (수량·금액). pos 필터 지원.
- * menu_sale_price = 단가×수량, 모든 행 합산
+ * 메뉴별 매출 (수량·금액). pos_orders 기반. items_json에서 추출.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+
+const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+
+type PosOrderItem = { id?: string; name?: string; price?: number; qty?: number }
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -11,31 +15,44 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const importId = searchParams.get('importId')?.trim()
+    const startStr = searchParams.get('startStr')?.trim()
+    const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
     const search = searchParams.get('search')?.trim().toLowerCase()
 
-    if (!importId) {
-      return NextResponse.json({ success: false, message: 'importId 필요' }, { headers })
+    if (!startStr || !endStr) {
+      return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
     }
 
-    let filter = `import_id=eq.${encodeURIComponent(importId)}`
-    if (pos) filter += `&pos=eq.${encodeURIComponent(pos)}`
+    const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+    let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+    if (pos && pos !== 'All') filter += `&store_code=ilike.${encodeURIComponent(pos)}`
 
-    const rows = (await supabaseSelectFilter('pos_sales_details', filter, {
-      limit: 100000,
-      select: 'menu_name,qty,menu_sale_price',
-    })) as { menu_name?: string; qty?: number; menu_sale_price?: number }[]
+    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+      limit: 10000,
+      select: 'items_json,status',
+    })) as { items_json?: string; status?: string }[]
 
     const byMenu: Record<string, { qty: number; sales: number }> = {}
     for (const r of rows) {
-      const name = String(r.menu_name || '').trim() || '(없음)'
-      if (search && !name.toLowerCase().includes(search)) continue
-      const qty = Math.max(0, Number(r.qty) || 0)
-      const sales = Number(r.menu_sale_price) || 0
-      if (!byMenu[name]) byMenu[name] = { qty: 0, sales: 0 }
-      byMenu[name].qty += qty
-      byMenu[name].sales += sales
+      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+      let items: PosOrderItem[] = []
+      try {
+        const parsed = JSON.parse(r.items_json || '[]')
+        items = Array.isArray(parsed) ? parsed : []
+      } catch {
+        // skip
+      }
+      for (const it of items) {
+        const name = String(it.name ?? '').trim() || '(없음)'
+        if (search && !name.toLowerCase().includes(search)) continue
+        const qty = Math.max(0, Number(it.qty) || 0)
+        const price = Number(it.price) || 0
+        const sales = qty * price
+        if (!byMenu[name]) byMenu[name] = { qty: 0, sales: 0 }
+        byMenu[name].qty += qty
+        byMenu[name].sales += sales
+      }
     }
 
     const result = Object.entries(byMenu)

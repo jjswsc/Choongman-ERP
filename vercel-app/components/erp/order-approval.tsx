@@ -164,6 +164,11 @@ export function OrderApproval() {
   const fetchOrders = React.useCallback(async () => {
     setLoading(true)
     try {
+      const orderIdParam = (() => {
+        const q = searchTerm.replace(/^#/, '').trim()
+        return q && /^\d+$/.test(q) ? q : undefined
+      })()
+
       const { list } = await getAdminOrders({
         startStr: startDate,
         endStr: endDate,
@@ -171,6 +176,7 @@ export function OrderApproval() {
         status: statusFilter === "all" ? undefined : statusFilter,
         userStore: isManager ? userStore : undefined,
         userRole: isManager ? auth?.role : undefined,
+        orderId: orderIdParam,
       })
 
       const storesInList = [...new Set(list.map((o) => o.store).filter(Boolean))]
@@ -219,7 +225,7 @@ export function OrderApproval() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, effectiveStore, statusFilter, isManager, userStore])
+  }, [startDate, endDate, effectiveStore, statusFilter, isManager, userStore, searchTerm, auth?.role])
 
   React.useEffect(() => {
     if (isManager && userStore) setStoreFilter(userStore)
@@ -383,8 +389,8 @@ export function OrderApproval() {
   }, [auth?.role, t])
 
   const filteredOrders = React.useMemo(() => {
-    if (!searchTerm.trim()) return orders
-    const q = searchTerm.toLowerCase()
+    const q = searchTerm.replace(/^#/, '').trim().toLowerCase()
+    if (!q) return orders
     return orders.filter(
       (o) =>
         o.id.toLowerCase().includes(q) ||

@@ -28,15 +28,18 @@ export async function supabaseSelect(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*']
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  if (options.limit != null) query.push(`limit=${Number(options.limit)}`)
-  if (options.offset != null) query.push(`offset=${Number(options.offset)}`)
-  const rangeEnd = options.limit != null ? Number(options.limit) - 1 : 1999
+  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 1000
+  const offset = options.offset != null ? Math.max(0, Number(options.offset)) : 0
+  query.push(`limit=${limit}`)
+  if (offset > 0) query.push(`offset=${offset}`)
+  const rangeEnd = offset + limit - 1
   const res = await fetch(pathStr + '?' + query.join('&'), {
     method: 'GET',
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
-      Range: `0-${rangeEnd}`,
+      Accept: 'application/json',
+      Range: `0-${Math.max(0, rangeEnd)}`,
     },
   })
   if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))
@@ -89,14 +92,16 @@ export async function supabaseSelectFilter(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*', filter]
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  if (options.limit != null) query.push(`limit=${Number(options.limit)}`)
-  const rangeEnd = (options.limit != null ? Number(options.limit) : 2000) - 1
+  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 1000
+  query.push(`limit=${limit}`)
+  const rangeEnd = limit - 1
   const res = await fetch(pathStr + '?' + query.join('&'), {
     method: 'GET',
     headers: {
       apikey: key,
       Authorization: `Bearer ${key}`,
-      Range: `0-${rangeEnd}`,
+      Accept: 'application/json',
+      Range: `0-${Math.max(0, rangeEnd)}`,
     },
   })
   if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))

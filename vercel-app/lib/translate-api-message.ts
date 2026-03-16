@@ -87,6 +87,28 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 출퇴근
   "위치 확인 대기 중입니다.": "attGpsPendingSaved",
   "❌ 위치 확인 실패! GPS를 켜고 매장 근처에서 다시 시도해 주세요. (현재 위치를 확인할 수 없습니다)": "attLocationVerifyFail",
+
+  // 회계/통장/지출 관리
+  "본사 권한만 등록할 수 있습니다.": "officeRoleOnly",
+  "통장 거래 ID가 필요합니다.": "bankTxIdRequired",
+  "통장 거래를 찾을 수 없습니다.": "bankTxNotFound",
+  "출금 거래만 등록할 수 있습니다.": "withdrawOnlyAllowed",
+  "이미 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
+  "이미 지급예정과 연결된 통장 거래입니다.": "bankTxAlreadyLinked",
+  "통장 거래 정보가 올바르지 않습니다.": "bankTxInvalid",
+  "지출 발생 등록에 실패했습니다.": "expenseAccrualCreateFailed",
+  "지출 발생으로 등록되었습니다.": "expenseAccrualRegistered",
+  "매입 대금으로 등록되었습니다.": "purchasePaymentRegistered",
+  "지급 예정 ID가 필요합니다.": "expensePlanIdRequired",
+  "지급 예정 데이터를 찾을 수 없습니다.": "expensePlanNotFound",
+  "승인 전(요청) 상태에서만 수정/삭제할 수 있습니다.": "planEditableOnlyBeforeApproval",
+  "승인되었습니다.": "att_approved",
+  "반려되었습니다.": "att_rejected",
+  "이미 지급 완료된 건입니다.": "alreadyPaid",
+  "이미 지급 완료된 건은 반려할 수 없습니다.": "alreadyPaidCannotReject",
+  "관리자 승인 후 집행할 수 있습니다.": "approvalRequiredBeforeExecution",
+  "반려된 지급 예정은 집행할 수 없습니다.": "rejectedPlanCannotExecute",
+  "지급 처리되었습니다.": "paymentProcessed",
 }
 
 /**
@@ -114,6 +136,16 @@ export function translateApiMessage(
     return t("msg_modify_fail") + trimmed.slice("수정 실패:".length)
   if (trimmed.startsWith("추가 실패:"))
     return t("msg_add_fail") + trimmed.slice("추가 실패:".length)
+  if (trimmed.startsWith("action은 approve 또는 reject 이어야 합니다."))
+    return t("approveRejectActionRequired")
+  if (trimmed.startsWith("승인 권한이 없습니다."))
+    return t("expenseApprovalPermissionDenied")
+  if (trimmed.startsWith("부분 지급은 허용되지 않습니다."))
+    return t("partialPaymentNotAllowed")
+  if (trimmed.startsWith("금액이 일치하지 않습니다."))
+    return t("amountMismatch")
+  if (trimmed.startsWith("날짜가 일치하지 않습니다."))
+    return t("dateMismatch")
   if (/^✅ \d+건 입고 완료!?$/.test(trimmed))
     return t("inSaveSuccess")
   if (/^✅ \d+건의 강제 출고/.test(trimmed))

@@ -17,15 +17,29 @@ export async function PATCH(
     }
     const body = (await req.json()) as {
       name?: string
+      fullName?: string
+      lineDisplayName?: string
+      birthDate?: string
+      gender?: string
       phone?: string
       email?: string
+      consentMarketing?: boolean
+      consentPrivacy?: boolean
+      consentAt?: string
       status?: string
     }
     const member = await updateMember({
       id,
       name: body.name,
+      fullName: body.fullName,
+      lineDisplayName: body.lineDisplayName,
+      birthDate: body.birthDate,
+      gender: body.gender,
       phone: body.phone,
       email: body.email,
+      consentMarketing: body.consentMarketing,
+      consentPrivacy: body.consentPrivacy,
+      consentAt: body.consentAt,
       status: body.status,
     })
     return NextResponse.json({ success: true, member }, { headers })

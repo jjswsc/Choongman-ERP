@@ -19,6 +19,8 @@ interface OfflineBannerProps {
   syncingMsg?: string
   /** i18n: 재시도 버튼 */
   retryLabel?: string
+  /** true: 오프라인일 때만 표시 (매출 관리 등, 주문 대기 건수 무시) */
+  offlineOnly?: boolean
 }
 
 export function OfflineBanner({
@@ -26,6 +28,7 @@ export function OfflineBanner({
   offlineMsg = '오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.',
   syncingMsg = '동기화 중...',
   retryLabel = '재시도',
+  offlineOnly = false,
 }: OfflineBannerProps) {
   const online = useOnlineStatus()
   const [pendingCount, setPendingCount] = React.useState(0)
@@ -57,7 +60,8 @@ export function OfflineBanner({
     })
   }, [onSync, refreshPending])
 
-  if (online && pendingCount === 0) return null
+  if (offlineOnly && online) return null
+  if (!offlineOnly && online && pendingCount === 0) return null
 
   return (
     <div className="mx-4 my-2 flex shrink-0 items-center justify-between gap-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm">

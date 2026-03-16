@@ -436,6 +436,15 @@ export function AdminStoreCheck() {
                   </Button>
                 </div>
 
+                {viewOnlyMode && checkRows.length > 0 && (
+                  <div className="mb-3 p-3 rounded-md bg-amber-500/15 border border-amber-500/40 text-sm text-amber-800 dark:text-amber-200">
+                    {lang === "ko"
+                      ? "읽기 전용입니다. 체크 항목을 수정하려면 점검 이력에서 연필(✏️) 버튼을 클릭하여 수정 모드로 열어주세요."
+                      : lang === "th"
+                        ? "โหมดดูอย่างเดียว หากต้องการแก้ไข กรุณาคลิกปุ่มดินสอ (✏️) ในประวัติการตรวจ"
+                        : "Read-only mode. To edit checks, click the pencil (✏️) button in the check history."}
+                  </div>
+                )}
                 <div className="border rounded-md overflow-auto max-h-[420px]">
                   <table className="w-full text-xs border-collapse">
                     <thead className="sticky top-0 bg-muted z-10">
@@ -462,22 +471,38 @@ export function AdminStoreCheck() {
                             <td className="p-2 text-center">{tr(r.main)}</td>
                             <td className="p-2 text-center">{tr(r.sub)}</td>
                             <td className="p-2 text-center">{tr(r.name)}</td>
-                            <td className="p-2">
-                              <div className="flex gap-1 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant={r.val === "O" ? "default" : "outline"}
-                                  className="h-7 px-2 text-xs"
+                            <td className="p-2 align-middle">
+                              <div className="flex gap-2 justify-center" style={{ touchAction: "manipulation" }}>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "min-h-[44px] min-w-[44px] rounded-md text-sm font-medium transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed",
+                                    r.val === "O"
+                                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                                      : "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
+                                  )}
                                   onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "O")}
                                   disabled={viewOnlyMode}
-                                >O</Button>
-                                <Button
-                                  size="sm"
-                                  variant={r.val === "X" ? "destructive" : "outline"}
-                                  className="h-7 px-2 text-xs"
+                                  aria-pressed={r.val === "O"}
+                                  aria-label={r.val === "O" ? "선택됨 (O)" : "O 선택"}
+                                >
+                                  O
+                                </button>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "min-h-[44px] min-w-[44px] rounded-md text-sm font-medium transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed",
+                                    r.val === "X"
+                                      ? "bg-destructive text-white hover:bg-destructive/90"
+                                      : "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
+                                  )}
                                   onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "X")}
                                   disabled={viewOnlyMode}
-                                >X</Button>
+                                  aria-pressed={r.val === "X"}
+                                  aria-label={r.val === "X" ? "선택됨 (X)" : "X 선택"}
+                                >
+                                  X
+                                </button>
                               </div>
                             </td>
                             <td className="p-2">

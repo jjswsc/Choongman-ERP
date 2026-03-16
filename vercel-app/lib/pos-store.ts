@@ -24,12 +24,13 @@ function mapOrderType(orderType: string): Order['type'] {
 function mapOrderStatus(status: string): Order['status'] {
   const v = String(status || '').toLowerCase()
   if (v === 'completed') return 'completed'
+  if (v === 'paid') return 'paid'
   if (v === 'ready') return 'ready'
   if (v === 'pending') return 'pending'
   return 'preparing'
 }
 
-function posOrderToOrder(po: PosOrder): Order {
+function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
   return {
     id: String(po.id),
     tableId: undefined,
@@ -47,6 +48,7 @@ function posOrderToOrder(po: PosOrder): Order {
     createdAt: new Date(po.createdAt || Date.now()),
     customerName: String(po.tableName || '').trim() || undefined,
     memo: String(po.memo || '').trim() || undefined,
+    orderNo: String(po.orderNo ?? '').trim() || undefined,
   }
 }
 
@@ -132,7 +134,7 @@ export function usePosStore() {
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
@@ -215,6 +217,24 @@ export function usePosStore() {
     )
   }, [])
 
+  /** 결제 완료 시 테이블 주문 즉시 제거 (낙관적 업데이트) */
+  const clearTableOrder = useCallback((storeId: string, tableName: string) => {
+    const name = String(tableName ?? '').trim()
+    if (!name) return
+    setStores((prev) =>
+      prev.map((store) =>
+        store.id === storeId
+          ? {
+              ...store,
+              tables: store.tables.map((t) =>
+                (t.name === name || t.id === name) ? { ...t, order: undefined, isOccupied: false } : t
+              ),
+            }
+          : store
+      )
+    )
+  }, [])
+
   const refetchStores = useCallback(() => {
     if (!storeCodes?.length) return Promise.resolve()
     setLoading(true)
@@ -233,7 +253,7 @@ export function usePosStore() {
           (o) =>
             o.orderType === 'dine_in' &&
             (o.tableName ?? '').trim() !== '' &&
-            !['cancelled', 'refunded'].includes((o.status ?? '').toLowerCase())
+            !['cancelled', 'refunded', 'completed'].includes((o.status ?? '').toLowerCase())
         )
         const tables = layoutToTables(layout, dineInOrders)
         return { storeCode, store: { id: storeCode, name: storeCode, gridCols: DEFAULT_GRID_COLS, gridRows: DEFAULT_GRID_ROWS, tables }, layout, activeOrders }
@@ -254,8 +274,12 @@ export function usePosStore() {
       .finally(() => setLoading(false))
   }, [storeCodes.join(',')])
 
-  const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'completed')
-  const takeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status !== 'completed')
+  const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed')
+  const packagedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'ready')
+  const completedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'completed')
+  const takeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status !== 'ready' && o.status !== 'completed')
+  const packagedTakeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status === 'ready')
+  const completedTakeoutOrders = orders.filter((o) => o.type === 'takeout' && o.status === 'completed')
 
   const updateOrderStatus = useCallback((orderId: string, status: Order['status']) => {
     setOrders((prev) =>
@@ -276,9 +300,14 @@ export function usePosStore() {
     addTable,
     removeTable,
     clearTables,
+    clearTableOrder,
     orders,
     deliveryOrders,
+    packagedDeliveryOrders,
+    completedDeliveryOrders,
     takeoutOrders,
+    packagedTakeoutOrders,
+    completedTakeoutOrders,
     updateOrderStatus,
     loadingTables: loading,
     refetchStores,

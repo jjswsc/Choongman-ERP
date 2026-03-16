@@ -325,6 +325,8 @@ export async function getAdminOrders(params: {
   status?: string
   userStore?: string
   userRole?: string
+  /** 주문번호로 검색 (미수금 #123 등) — 날짜 범위 밖이라도 해당 주문 조회 */
+  orderId?: string | number
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -335,6 +337,8 @@ export async function getAdminOrders(params: {
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.deliveryStatus) q.set('deliveryStatus', params.deliveryStatus)
   if (params.status) q.set('status', params.status)
+  const orderIdVal = params.orderId != null ? String(params.orderId).replace(/^#/, '').trim() : ''
+  if (orderIdVal && /^\d+$/.test(orderIdVal)) q.set('orderId', orderIdVal)
   const res = await apiFetch(`/api/getAdminOrders?${q}`)
   const data = await res.json()
   return {
@@ -1024,7 +1028,7 @@ export async function getTodayAttendanceSummary(params: {
   return res.json() as Promise<TodayAttendanceItem[]>
 }
 
-export interface WeeklyScheduleItem extends TodayScheduleItem {}
+export type WeeklyScheduleItem = TodayScheduleItem
 
 export async function getWeeklySchedule(params: {
   store: string
@@ -1246,13 +1250,15 @@ export async function updatePettyCashTransaction(params: {
 export interface ReceivablePayableItem {
   storeName?: string
   vendorCode?: string
+  vendorName?: string
   balance: number
-  items: { id?: number; trans_date?: string; ref_type?: string; amount?: number; memo?: string }[]
+  items: { id?: number; trans_date?: string; ref_type?: string; ref_id?: number; amount?: number; memo?: string; invoice_no?: string }[]
 }
 
 export interface ReceivablePayableSummaryItem {
   storeName?: string
   vendorCode?: string
+  vendorName?: string
   balance: number
   count: number
 }
@@ -1261,13 +1267,56 @@ export async function getReceivablePayableSummary(params: {
   type: 'receivable' | 'payable'
   userStore?: string
   userRole?: string
+  startStr?: string
+  endStr?: string
+  storeFilter?: string
+  vendorFilter?: string
 }) {
   const q = new URLSearchParams({ type: params.type })
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   const res = await apiFetch(`/api/getReceivablePayableSummary?${q}`)
   const data = await res.json()
-  return data as { type: string; list: ReceivablePayableSummaryItem[] }
+  return data as { type: string; list: ReceivablePayableSummaryItem[]; totalAmount?: number }
+}
+
+export interface ReceivableOrderItem {
+  id?: number
+  orderId?: number
+  storeName: string
+  amount: number
+  transDate: string
+  orderDate: string
+  deliveryDate: string
+  total: number
+  status: string
+  memo: string
+}
+
+export async function getReceivableOrders(params: {
+  storeFilter?: string
+  startStr?: string
+  endStr?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getReceivableOrders?${q}`)
+  const data = await res.json()
+  return data as {
+    type: string
+    list: ReceivableOrderItem[]
+    storeBalances?: Record<string, number>
+  }
 }
 
 export async function getReceivablePayableList(params: {
@@ -1299,12 +1348,23 @@ export interface IncomeStatementData {
   startStr: string
   endStr: string
   storeFilter: string
+  timezone?: string
   sales: number
   purchases: number
   beginningInventory?: number
   endingInventory?: number
   cogs?: number
   expenses: number
+  expenseBreakdown?: {
+    pettyCash: number
+    bankWithdraw: number
+    fixedExpenses: number
+    total: number
+  }
+  diagnostics?: {
+    warnings: string[]
+    limits: Record<string, { fetched: number; limit: number; total?: number }>
+  }
   grossProfit: number
   netProfit: number
   error?: string
@@ -1315,14 +1375,109 @@ export async function getIncomeStatement(params: {
   storeFilter?: string
   userStore?: string
   userRole?: string
+  includeDebug?: boolean
 }) {
   const q = new URLSearchParams()
   if (params.yearMonth) q.set('yearMonth', params.yearMonth)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
+  if (params.includeDebug) q.set('includeDebug', '1')
   const res = await apiFetch(`/api/getIncomeStatement?${q}`)
   return res.json() as Promise<IncomeStatementData>
+}
+
+export interface UnpostedBankTransaction {
+  id: number
+  transDate: string
+  amount: number
+  category: string
+  memo: string | null
+  store: string | null
+}
+
+export interface BalanceSheetData {
+  yearMonth: string
+  startStr?: string
+  endStr: string
+  storeFilter: string
+  timezone: string
+  assets: { cashAndBanks: number; inventory: number; receivables: number; total: number }
+  liabilities: { payables: number; total: number }
+  equity: { openingCapital: number; retainedEarningsYtd: number; currentPeriodProfit: number; total: number }
+  balanceCheckDiff: number
+  unpostedBankWithdrawals?: UnpostedBankTransaction[]
+}
+
+export async function getBalanceSheet(params: {
+  yearMonth?: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getBalanceSheet?${q}`)
+  return res.json() as Promise<BalanceSheetData>
+}
+
+// ─── 감가상각·고정자산 ───
+export async function getFixedAssets(params: { storeFilter?: string; status?: string }) {
+  const q = new URLSearchParams()
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.status) q.set('status', params.status)
+  const res = await apiFetch(`/api/getFixedAssets?${q}`)
+  return res.json() as Promise<{ success: boolean; list: unknown[] }>
+}
+
+export async function saveFixedAsset(params: {
+  id?: number
+  assetCode?: string
+  name: string
+  storeName?: string
+  acquisitionDate: string
+  acquisitionCost: number
+  residualRate?: number
+  usefulLifeMonths?: number
+  depreciationMethod?: string
+  memo?: string
+}) {
+  const res = await apiFetch('/api/saveFixedAsset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getDepreciationEntries(params: { yearMonth: string; storeFilter?: string }) {
+  const q = new URLSearchParams({ yearMonth: params.yearMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetch(`/api/getDepreciationEntries?${q}`)
+  return res.json() as Promise<{ success: boolean; list: unknown[]; totalAmount: number }>
+}
+
+export async function runDepreciationPreview(params: { yearMonth: string; storeFilter?: string }) {
+  const q = new URLSearchParams({ yearMonth: params.yearMonth })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  const res = await apiFetch(`/api/runDepreciation?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    candidates: { id: number; name: string; store_name: string; monthly_amount: number }[]
+    totalAmount: number
+  }>
+}
+
+export async function runDepreciation(params: { yearMonth: string; storeFilter?: string; dryRun?: boolean }) {
+  const res = await apiFetch('/api/runDepreciation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; created?: number; totalAmount?: number; message?: string }>
 }
 
 export async function addBalanceTransaction(params: {
@@ -1332,6 +1487,7 @@ export async function addBalanceTransaction(params: {
   amount: number
   transDate: string
   memo?: string
+  isOpening?: boolean
   userStore?: string
   userRole?: string
 }) {
@@ -1341,6 +1497,410 @@ export async function addBalanceTransaction(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+// ─── 지출 관리 (MVP) ───
+export interface ExpenseAccrualPlanItem {
+  id: number
+  payeeCode: string
+  payeeName: string
+  withdrawalCategory?: string
+  plannedAmount: number
+  paidAmount: number
+  remainingAmount: number
+  expenseDate: string
+  dueDate?: string
+  memo?: string
+  accountSubjectId?: number | null
+  status: 'planned' | 'approved' | 'paid' | 'rejected'
+  approvedBy?: string | null
+  approvedAt?: string | null
+  approvalNote?: string | null
+  rejectedBy?: string | null
+  rejectedAt?: string | null
+  rejectionNote?: string | null
+  storeName?: string
+}
+
+export interface LogisticsPaymentPlanItem {
+  vendorCode: string
+  remainingAmount: number
+  txCount: number
+}
+
+export interface ExpensePaymentPlanResponse {
+  success: boolean
+  expensePlans: ExpenseAccrualPlanItem[]
+  logisticsPlans: LogisticsPaymentPlanItem[]
+  totals: {
+    expensePlanned: number
+    expenseRemaining: number
+    logisticsRemaining: number
+  }
+}
+
+export async function registerExpenseFromBankTransaction(params: {
+  bankTransactionId: number
+  payeeCode: string
+  payeeName?: string
+  accountSubjectId?: number | null
+  memo?: string
+  storeName?: string
+  userName?: string
+  userRole?: string
+  updateExisting?: boolean
+}) {
+  const res = await apiFetch('/api/registerExpenseFromBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
+}
+
+export async function registerPurchaseFromBankTransaction(params: {
+  bankTransactionId: number
+  vendorCode: string
+  userName?: string
+  userRole?: string
+  updateExisting?: boolean
+}) {
+  const res = await apiFetch('/api/registerPurchaseFromBankTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function addExpenseAccrual(params: {
+  payeeCode: string
+  payeeName?: string
+  withdrawalCategory?: string
+  categoryMain?: string
+  categorySub?: string
+  amount: number
+  expenseDate: string
+  dueDate?: string
+  memo?: string
+  accountSubjectId?: number | null
+  storeName?: string
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/addExpenseAccrual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number }>
+}
+
+export async function updateExpenseRegisterItem(params: {
+  bankTransactionId: number
+  accountId: number
+  transDate: string
+  amount: number
+  memo?: string
+  storeName?: string
+  categoryMain: string
+  categorySub?: string
+  vendorCode?: string
+  accountSubjectId?: number | null
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updateExpenseRegisterItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteExpenseRegisterItem(params: {
+  bankTransactionId: number
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updateExpenseRegisterItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...params, action: 'delete' }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function approveExpenseAccrual(params: {
+  expenseAccrualId: number
+  action: 'approve' | 'reject'
+  approvalNote?: string
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/approveExpenseAccrual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateExpenseAccrual(params: {
+  expenseAccrualId: number
+  amount: number
+  expenseDate: string
+  dueDate?: string | null
+  memo?: string
+  payeeCode?: string
+  payeeName?: string
+  accountSubjectId?: number | null
+  storeName?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updateExpenseAccrual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...params, action: 'update' }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteExpenseAccrual(params: {
+  expenseAccrualId: number
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/updateExpenseAccrual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...params, action: 'delete' }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getApprovedExpenseAccrualsForBankTx(params: {
+  bankTransactionId: number
+  userRole?: string
+}) {
+  const q = new URLSearchParams({
+    bankTransactionId: String(params.bankTransactionId),
+  })
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getApprovedExpenseAccrualsForBankTx?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    bankTransaction?: { id: number; amount: number; transDate: string }
+    list: ExpenseAccrualPlanItem[]
+  }>
+}
+
+export async function getExpensePaymentPlan(params: {
+  startStr: string
+  endStr: string
+  payeeFilter?: string
+  vendorFilter?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.payeeFilter) q.set('payeeFilter', params.payeeFilter)
+  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getExpensePaymentPlan?${q}`)
+  return res.json() as Promise<ExpensePaymentPlanResponse>
+}
+
+export async function executeExpensePayment(params: {
+  expenseAccrualId: number
+  paymentMethod: 'bank' | 'petty'
+  amount: number
+  transDate: string
+  memo?: string
+  accountId?: number
+  store?: string
+  bankTransactionId?: number | null
+  userName?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/executeExpensePayment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    bankTransactionId?: number | null
+    pettyCashTransactionId?: number | null
+    remainingAmount?: number
+  }>
+}
+
+export async function getUnlinkedBankWithdrawals(params: {
+  accountId: number
+  startStr: string
+  endStr: string
+  amount?: number
+  transDate?: string
+}) {
+  const q = new URLSearchParams({
+    accountId: String(params.accountId),
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.amount != null && params.amount > 0) q.set('amount', String(params.amount))
+  if (params.transDate) q.set('transDate', params.transDate)
+  const res = await apiFetch(`/api/getUnlinkedBankWithdrawals?${q}`)
+  return res.json() as Promise<{
+    list: { id: number; transDate: string; amount: number; memo: string }[]
+  }>
+}
+
+export interface CardAccount {
+  id?: number
+  name: string
+  store?: string | null
+  memo?: string | null
+  cardNumber?: string | null
+  holderName?: string | null
+  cardCompany?: string | null
+}
+
+export interface CardTransaction {
+  id?: number
+  cardAccountId: number
+  transDate: string
+  transType: 'charge' | 'expense'
+  amount: number
+  memo?: string | null
+  bankTransactionId?: number | null
+  vendorCode?: string | null
+  accountSubjectId?: number | null
+  note?: string | null
+}
+
+export async function getCardAccounts() {
+  const res = await apiFetch('/api/getCardAccounts')
+  return res.json() as Promise<CardAccount[]>
+}
+
+export async function getCardTransactions(params: {
+  cardAccountId?: number
+  startStr?: string
+  endStr?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.cardAccountId) q.set('cardAccountId', String(params.cardAccountId))
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  const res = await apiFetch(`/api/getCardTransactions?${q}`)
+  return res.json() as Promise<{ list: CardTransaction[] }>
+}
+
+export async function saveCardAccount(params: { id?: number; name: string; store?: string; memo?: string; cardNumber?: string; holderName?: string; cardCompany?: string }) {
+  const res = await apiFetch('/api/saveCardAccount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function saveCardTransaction(params: {
+  id?: number
+  cardAccountId: number
+  transDate: string
+  transType: 'charge' | 'expense'
+  amount: number
+  memo?: string
+  bankTransactionId?: number | null
+  vendorCode?: string
+  accountSubjectId?: number | null
+  note?: string
+}) {
+  const res = await apiFetch('/api/saveCardTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; message?: string }>
+}
+
+export async function deleteCardAccount(params: { id: number }) {
+  const res = await apiFetch('/api/deleteCardAccount', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deleteCardTransaction(params: { id: number }) {
+  const res = await apiFetch('/api/deleteCardTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export type WithdrawalCategoryMain =
+  | 'purchase'
+  | 'expense'
+  | 'fixed_asset'
+  | 'transfer'
+  | 'loan_repayment'
+  | 'loan_given'
+  | 'correction'
+  | 'dividend'
+export type WithdrawalCategorySub = 'normal' | 'advance'
+
+export async function executeWithdrawal(params: {
+  paymentMethod: 'bank' | 'petty'
+  amount: number
+  transDate: string
+  memo?: string
+  storeName?: string
+  categoryMain: WithdrawalCategoryMain | string
+  categorySub?: WithdrawalCategorySub | string
+  vendorCode?: string
+  accountSubjectId?: number | null
+  accountSubjectCode?: string
+  accountSubjectName?: string
+  transferToAccountId?: number | null
+  transferToAccountNo?: string | null
+  transferBankAccountNo?: string | null
+  transferBankRecipientName?: string | null
+  transferToPettyStore?: string | null
+  transferToCardAccountId?: number | null
+  accountId?: number
+  assetName?: string
+  assetCode?: string
+  usefulLifeMonths?: number
+  residualRate?: number
+  invoiceReceived?: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  userName?: string
+  userRole?: string
+  userStore?: string
+}) {
+  const res = await apiFetch('/api/executeWithdrawal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    bankTransactionId?: number
+    pettyCashTransactionId?: number
+    fixedAssetId?: number
+  }>
 }
 
 // ─── 매출 관리 (pos_orders 기반) ───
@@ -1451,6 +2011,7 @@ export interface BankTransactionItem {
   invoiceReceived?: boolean
   invoiceNo?: string
   purchaseOrderId?: number
+  isLinked?: boolean
 }
 
 export interface BankTransactionsSummary {
@@ -1487,6 +2048,42 @@ export async function getBankTransactions(params: {
     list: BankTransactionItem[]
     summary: BankTransactionsSummary | null
   }>
+}
+
+export interface ExpenseRegisterItem {
+  id?: number
+  accountId?: number
+  transDate: string
+  transType: string
+  amount: number
+  memo?: string
+  category: string
+  accountSubjectId?: number | null
+  expenseDate?: string
+  vendorCode?: string
+  storeName?: string
+  invoiceReceived: boolean
+  invoiceNo?: string
+  invoicePhotoUrl?: string
+  linkStatus?: 'unlinked' | 'bank' | 'bank_plan' | 'inbound' | 'card'
+  bankLinked?: boolean
+  pettyLinked?: boolean
+}
+
+export async function getExpenseRegisterList(params: {
+  accountId?: string | number
+  startStr: string
+  endStr: string
+  category?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.accountId) q.set('accountId', String(params.accountId))
+  if (params.category) q.set('category', params.category)
+  const res = await apiFetch(`/api/getExpenseRegisterList?${q}`)
+  return res.json() as Promise<{ list: ExpenseRegisterItem[] }>
 }
 
 export async function addBankTransaction(params: {
@@ -1581,10 +2178,15 @@ export interface InboundBatchForLink {
   location?: string
 }
 
-export async function getInboundBatchesForLink(params: { vendorCode?: string; vendorName?: string }) {
+export async function getInboundBatchesForLink(params: {
+  vendorCode?: string
+  vendorName?: string
+  storeFilter?: string
+}) {
   const q = new URLSearchParams()
   if (params.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
   if (params.vendorName?.trim()) q.set('vendorName', params.vendorName.trim())
+  if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
   const res = await apiFetch(`/api/getInboundBatchesForLink?${q}`)
   return res.json() as Promise<InboundBatchForLink[]>
 }
@@ -1686,6 +2288,7 @@ export async function getAccountSubjects(params?: {
   forCost?: boolean
   forTransfer?: boolean
   forRevenue?: boolean
+  forCard?: boolean
 }) {
   const q = new URLSearchParams()
   if (params?.type) q.set('type', params.type)
@@ -1694,6 +2297,7 @@ export async function getAccountSubjects(params?: {
   if (params?.forCost) q.set('forCost', 'true')
   if (params?.forTransfer) q.set('forTransfer', 'true')
   if (params?.forRevenue) q.set('forRevenue', 'true')
+  if (params?.forCard) q.set('forCard', 'true')
   const res = await apiFetch(`/api/getAccountSubjects?${q}`)
   return res.json() as Promise<AccountSubjectItem[]>
 }
@@ -2652,6 +3256,16 @@ export async function savePosMenu(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function uploadPosMenuImage(params: { file: File }) {
+  const formData = new FormData()
+  formData.append('file', params.file)
+  const res = await apiFetch('/api/uploadPosMenuImage', {
+    method: 'POST',
+    body: formData,
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; url?: string }>
+}
+
 export async function deletePosMenu(params: { id: string }) {
   const res = await apiFetch('/api/deletePosMenu', {
     method: 'POST',
@@ -3262,6 +3876,67 @@ export async function savePosMenuScreenConfig(params: {
   kioskGroupFontSize: number
 }) {
   const res = await apiFetch('/api/savePosMenuScreenConfig', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface PosMenuBoardConfig {
+  id: number
+  storeCode: string
+  boardType: 'dine_in' | 'delivery' | 'table_order' | 'tablet' | 'kiosk'
+  boardName: string
+  groupGridCols: number
+  groupGridRows: number
+  menuGridCols: number
+  menuGridRows: number
+  resolutionWidth: number
+  resolutionHeight: number
+  groupCount: number
+  menuCount: number
+  isActive: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export async function getPosMenuBoards(params?: {
+  storeCode?: string
+  boardType?: 'dine_in' | 'delivery' | 'table_order' | 'tablet' | 'kiosk'
+}) {
+  const q = new URLSearchParams()
+  if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.boardType) q.set('boardType', params.boardType)
+  const res = await apiFetch('/api/getPosMenuBoards?' + q.toString())
+  return res.json() as Promise<PosMenuBoardConfig[]>
+}
+
+export async function savePosMenuBoard(params: {
+  id?: number
+  storeCode: string
+  boardType: 'dine_in' | 'delivery' | 'table_order' | 'tablet' | 'kiosk'
+  boardName: string
+  groupGridCols?: number
+  groupGridRows?: number
+  menuGridCols?: number
+  menuGridRows?: number
+  resolutionWidth?: number
+  resolutionHeight?: number
+  groupCount?: number
+  menuCount?: number
+  isActive?: boolean
+}) {
+  const res = await apiFetch('/api/savePosMenuBoard', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function deletePosMenuBoard(params: { id: number }) {
+  const res = await apiFetch('/api/deletePosMenuBoard', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4617,6 +5292,7 @@ export interface VendorForPurchase {
   address: string
   taxId?: string
   phone?: string
+  bankAccountNo?: string | null
 }
 
 export interface ItemByVendor {
