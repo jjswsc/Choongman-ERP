@@ -684,7 +684,7 @@ export default function PosOrderPage() {
           <style>
             ${getPosPaperBaseCss("'Courier New', monospace", 12)}
             body { font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; color: #000; }
-            .receipt-content { width: 72mm; max-width: 72mm; margin: 0 auto; }
+            .receipt-content { width: 69mm; max-width: 69mm; margin: 0 auto; box-sizing: border-box; padding-left: 0.8mm; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
             .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
             .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }

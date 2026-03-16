@@ -118,7 +118,7 @@ export function PosReceiptModal({
           <style>
             ${getPosPaperBaseCss("'Courier New', monospace", 12)}
             body { font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; color: #000; }
-            .receipt-content { width: 72mm; max-width: 72mm; margin: 0 auto; }
+            .receipt-content { width: 69mm; max-width: 69mm; margin: 0 auto; box-sizing: border-box; padding-left: 0.8mm; }
             .receipt-brand-wrap { text-align: center; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
             .receipt-brand-logo.sm { width: 84px; }
