@@ -42,7 +42,10 @@ export async function GET(request: NextRequest) {
   const storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const vendorFilter = String(searchParams.get('vendorFilter') || searchParams.get('vendor') || '').trim()
 
-  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+  const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
+    || userRole.includes('accounting')
+    || userRole.includes('회계')
+  const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
   if (type === 'payable' && isManager) {
     return NextResponse.json({ type: 'payable', list: [] }, { headers })
   }

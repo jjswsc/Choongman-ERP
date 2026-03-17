@@ -3,12 +3,13 @@ import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 
-/** 주문 번호 생성 (POS-YYYYMMDD-HHMMSS-랜덤) */
+/** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
 function generateOrderNo(storeCode: string): string {
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '')
-  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase()
-  return `${storeCode || 'ST'}-${dateStr}-${timeStr}-${rnd}`
+  const now = new Date()
+  const store = (storeCode || 'ST').slice(0, 2).toUpperCase()
+  const mmdd = now.toLocaleDateString('en-CA', { month: '2-digit', day: '2-digit', timeZone: 'Asia/Bangkok' }).replace(/\D/g, '')
+  const rnd = Math.random().toString(36).slice(2, 4).toUpperCase()
+  return `${store}${mmdd}${rnd}`
 }
 
 /** POS 주문 저장 */

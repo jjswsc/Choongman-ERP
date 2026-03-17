@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
+import { isOfficeRole } from '@/lib/permissions'
 import { getPosTableLayout, getPosOrders, type PosTableItem, type PosOrder } from '@/lib/api-client'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 
@@ -100,6 +101,11 @@ function layoutToTables(
 export function usePosStore() {
   const { stores: storeCodes } = useStoreList()
   const { auth } = useAuth()
+  const canSearchAll = isOfficeRole(auth?.role || '')
+  const effectiveStoreCodes = useMemo(() => {
+    if (canSearchAll) return storeCodes
+    return auth?.store ? [auth.store] : storeCodes
+  }, [canSearchAll, auth?.store, storeCodes])
 
   const [stores, setStores] = useState<Store[]>([])
   const [layoutByStoreId, setLayoutByStoreId] = useState<Record<string, PosTableItem[]>>({})
@@ -109,7 +115,7 @@ export function usePosStore() {
 
   // API에서 테이블 배치 + 당일 매장 주문으로 사용 중 테이블 반영
   useEffect(() => {
-    if (!storeCodes?.length) {
+    if (!effectiveStoreCodes?.length) {
       setStores([])
       setLoading(false)
       return
@@ -117,7 +123,7 @@ export function usePosStore() {
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
     Promise.all(
-      storeCodes.map(async (storeCode) => {
+      effectiveStoreCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
           getPosOrders({
@@ -151,20 +157,20 @@ export function usePosStore() {
           .map(posOrderToOrder)
         setOrders(mergedOrders)
         setCurrentStoreId((prev) => {
-          const next = auth?.store && storeCodes.includes(auth.store) ? auth.store : storeCodes[0]
-          return storeList.some((s) => s.id === prev) ? prev : next ?? storeCodes[0] ?? ''
+          const next = auth?.store && effectiveStoreCodes.includes(auth.store) ? auth.store : effectiveStoreCodes[0]
+          return storeList.some((s) => s.id === prev) ? prev : next ?? effectiveStoreCodes[0] ?? ''
         })
       })
       .catch(() => setStores([]))
       .finally(() => setLoading(false))
-  }, [storeCodes.join(','), auth?.store])
+  }, [effectiveStoreCodes.join(','), auth?.store])
 
-  // storeCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
+  // effectiveStoreCodes 변경 시 currentStoreId가 목록에 없으면 첫 매장으로
   useEffect(() => {
-    if (!storeCodes.length || !currentStoreId) return
-    if (storeCodes.includes(currentStoreId)) return
-    setCurrentStoreId(auth?.store && storeCodes.includes(auth.store) ? auth.store : storeCodes[0])
-  }, [storeCodes, currentStoreId, auth?.store])
+    if (!effectiveStoreCodes.length || !currentStoreId) return
+    if (effectiveStoreCodes.includes(currentStoreId)) return
+    setCurrentStoreId(auth?.store && effectiveStoreCodes.includes(auth.store) ? auth.store : effectiveStoreCodes[0])
+  }, [effectiveStoreCodes, currentStoreId, auth?.store])
 
   const currentStore = stores.find((s) => s.id === currentStoreId) || stores[0]
 
@@ -236,11 +242,11 @@ export function usePosStore() {
   }, [])
 
   const refetchStores = useCallback(() => {
-    if (!storeCodes?.length) return Promise.resolve()
+    if (!effectiveStoreCodes?.length) return Promise.resolve()
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
     return Promise.all(
-      storeCodes.map(async (storeCode) => {
+      effectiveStoreCodes.map(async (storeCode) => {
         const [layoutRes, ordersRes] = await Promise.all([
           getPosTableLayout({ storeCode }).catch(() => ({ layout: [], storeCode })),
           getPosOrders({ storeCode, startStr: businessDate, endStr: businessDate }).catch(() => []),
@@ -272,7 +278,7 @@ export function usePosStore() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [storeCodes.join(',')])
+  }, [effectiveStoreCodes.join(',')])
 
   const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed')
   const packagedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'ready')

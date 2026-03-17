@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { isManagerOrFranchiseeRole, isOfficeRole } from "@/lib/permissions"
-import { useStoreList, getBalanceSheet, type BalanceSheetData } from "@/lib/api-client"
+import { useStoreList, getBalanceSheet, translateTexts, type BalanceSheetData } from "@/lib/api-client"
 
 export function BalanceSheetTab() {
   const { lang } = useLang()
@@ -35,6 +35,34 @@ export function BalanceSheetTab() {
   )
   const [loading, setLoading] = React.useState(false)
   const [data, setData] = React.useState<BalanceSheetData | null>(null)
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+
+  const withdrawals = data?.unpostedBankWithdrawals || []
+  React.useEffect(() => {
+    const memos = [...new Set(withdrawals.map((row) => (row.memo || row.store || "").trim()).filter(Boolean))]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [data?.unpostedBankWithdrawals, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined, store?: string) => {
+    const raw = (memo || store || "").trim() || "—"
+    if (raw === "—") return "—"
+    return (memoTransMap[raw] || memoTransMap[store || ""]) || raw
+  }, [memoTransMap])
 
   React.useEffect(() => {
     if (isManager && managerStore) setStoreFilter(managerStore)
@@ -191,7 +219,7 @@ export function BalanceSheetTab() {
                             <td className="py-1 pr-2">{row.transDate}</td>
                             <td className="font-mono text-right py-1 pr-2">{formatBaht(row.amount)}</td>
                             <td className="py-1 pr-2 text-amber-700">{row.category}</td>
-                            <td className="py-1 truncate max-w-[180px]" title={row.memo || row.store || ""}>{row.memo || row.store || "—"}</td>
+                            <td className="py-1 truncate max-w-[180px]" title={row.memo || row.store || ""}>{getMemo(row.memo, row.store)}</td>
                           </tr>
                         ))}
                       </tbody>

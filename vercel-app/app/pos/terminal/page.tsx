@@ -31,7 +31,7 @@ import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-rec
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { canAccessAdmin, isOfficeRole } from '@/lib/permissions'
+import { isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
@@ -918,10 +918,9 @@ export default function PosTerminalPage() {
         onRefresh={refetchStores}
         todayCompleted={todayCompleted}
         totalSales={totalSales}
-        showBackToAdmin={canAccessAdmin(auth?.role || '')}
         showBackButton
         canChangeStore={isOfficeRole(auth?.role || '')}
-        canAccessAdmin={canAccessAdmin(auth?.role || '')}
+        canAccessAdmin={false}
       />
       <OfflineBanner onSyncComplete={refetchStores} />
       <div className="flex-1 flex min-h-0 min-w-0">

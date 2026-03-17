@@ -4,7 +4,119 @@
  * SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY(권장) 또는 SUPABASE_ANON_KEY 환경 변수 필요.
  * service_role은 RLS를 우회하여 안전한 서버 전용 접근. anon은 RLS 적용됨.
  * API 라우트(app/api/*) 내부에서만 import. 클라이언트 번들에 포함되지 않도록.
+ *
+ * UND_ERR_HEADERS_TIMEOUT 방지: Node.js fetch(undici) 대신 https 모듈 사용.
  */
+
+import https from 'node:https'
+import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+// #region agent log
+const _log = (msg: string, data?: Record<string, unknown>) => {
+  try {
+    const logPath = join(process.cwd(), '..', 'debug-e3767f.log')
+    appendFileSync(logPath, JSON.stringify({ sessionId: 'e3767f', location: 'supabase-server.ts', message: msg, data: data ?? {}, timestamp: Date.now() }) + '\n')
+  } catch (_) {}
+}
+// #endregion
+
+function httpsRequest(
+  urlStr: string,
+  options: { method?: string; headers?: Record<string, string>; body?: string | Buffer }
+): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlStr)
+    // #region agent log
+    _log('httpsRequest start', { hostname: url.hostname, path: url.pathname.slice(0, 80), hypothesisId: 'H2' })
+    // #endregion
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
+        method: options.method || 'GET',
+        headers: options.headers,
+        timeout: 15_000,
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (ch) => chunks.push(ch))
+        res.on('end', () => {
+          // #region agent log
+          _log('httpsRequest success', { status: res.statusCode, hypothesisId: 'H2' })
+          // #endregion
+          const headers: Record<string, string> = {}
+          Object.entries(res.headers).forEach(([k, v]) => {
+            headers[k.toLowerCase()] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
+          })
+          resolve({
+            status: res.statusCode || 0,
+            headers,
+            body: Buffer.concat(chunks).toString('utf8'),
+          })
+        })
+      }
+    )
+    req.on('error', (e) => {
+      // #region agent log
+      _log('httpsRequest error', { message: String(e), code: (e as NodeJS.ErrnoException).code, hypothesisId: 'H2' })
+      // #endregion
+      reject(e)
+    })
+    req.on('timeout', () => {
+      // #region agent log
+      _log('httpsRequest timeout', { hypothesisId: 'H2' })
+      // #endregion
+      req.destroy()
+      reject(new Error('Supabase request timeout'))
+    })
+    if (options.body) req.write(options.body)
+    req.end()
+  })
+}
+
+export async function supabaseFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const urlStr =
+    typeof input === 'string'
+      ? input
+      : input instanceof Request
+        ? input.url
+        : input.toString()
+  const reqInit = input instanceof Request ? input : init
+  const method = (reqInit?.method as string) || 'GET'
+  const headers: Record<string, string> = {}
+  const headersSource = input instanceof Request ? input.headers : reqInit?.headers
+  if (headersSource) {
+    const h = headersSource as Headers
+    if (h.forEach) {
+      h.forEach((v, k) => { headers[k] = v })
+    } else if (typeof h === 'object') {
+      Object.entries(h as unknown as Record<string, string>).forEach(([k, v]) => { headers[k] = String(v) })
+    }
+  }
+  const bodyRaw = input instanceof Request ? input.body : reqInit?.body
+  let body: string | Buffer | undefined
+  if (bodyRaw) {
+    if (typeof bodyRaw === 'string') body = bodyRaw
+    else if (bodyRaw instanceof ArrayBuffer || ArrayBuffer.isView(bodyRaw))
+      body = Buffer.from(bodyRaw as ArrayBuffer)
+    else if (typeof (bodyRaw as Blob).arrayBuffer === 'function')
+      body = Buffer.from(await (bodyRaw as Blob).arrayBuffer())
+    else body = Buffer.from(bodyRaw as unknown as ArrayBuffer)
+  }
+  const { status, headers: resHeaders, body: resBody } = await httpsRequest(urlStr, { method, headers, body })
+  const resHeadersObj = new Headers()
+  Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
+  return new Response(resBody, {
+    status,
+    headers: resHeadersObj,
+  })
+}
+
 function getConfig() {
   const url = (process.env.SUPABASE_URL || '').trim()
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -33,7 +145,7 @@ export async function supabaseSelect(
   query.push(`limit=${limit}`)
   if (offset > 0) query.push(`offset=${offset}`)
   const rangeEnd = offset + limit - 1
-  const res = await fetch(pathStr + '?' + query.join('&'), {
+  const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
     method: 'GET',
     headers: {
       apikey: key,
@@ -49,7 +161,7 @@ export async function supabaseSelect(
 export async function supabaseInsert(table: string, row: Record<string, unknown>) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'POST',
     headers: {
       apikey: key,
@@ -71,7 +183,7 @@ export async function supabaseUpdate(
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?id=eq.${encodeURIComponent(String(id))}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'PATCH',
     headers: {
       apikey: key,
@@ -95,7 +207,7 @@ export async function supabaseSelectFilter(
   const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 1000
   query.push(`limit=${limit}`)
   const rangeEnd = limit - 1
-  const res = await fetch(pathStr + '?' + query.join('&'), {
+  const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
     method: 'GET',
     headers: {
       apikey: key,
@@ -115,7 +227,7 @@ export async function supabaseUpdateByFilter(
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?${filter}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'PATCH',
     headers: {
       apikey: key,
@@ -134,7 +246,7 @@ export async function supabaseDeleteByFilter(
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?${filter}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'DELETE',
     headers: {
       apikey: key,
@@ -153,7 +265,7 @@ export async function supabaseDeleteByFilter(
 export async function supabaseCountFilter(table: string, filter: string): Promise<number> {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?select=id&${filter}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'GET',
     headers: {
       apikey: key,
@@ -174,7 +286,7 @@ export async function supabaseCountFilter(table: string, filter: string): Promis
 export async function supabaseInsertMany(table: string, rows: Record<string, unknown>[]) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'POST',
     headers: {
       apikey: key,
@@ -213,7 +325,7 @@ export async function supabaseStorageUpload(
     headers['x-upsert'] = 'true'
   }
 
-  const res = await fetch(apiPath, {
+  const res = await supabaseFetch(apiPath, {
     method: 'POST',
     headers,
     body,
@@ -237,7 +349,7 @@ export async function supabaseStorageDelete(bucket: string, path: string): Promi
   const base = url.replace(/\/$/, '')
   const apiPath = `${base}/storage/v1/object/${encodeURIComponent(bucket)}/${path.split('/').map((p) => encodeURIComponent(p)).join('/')}`
 
-  const res = await fetch(apiPath, {
+  const res = await supabaseFetch(apiPath, {
     method: 'DELETE',
     headers: {
       apikey: key,
@@ -258,7 +370,7 @@ export async function supabaseUpsert(
 ) {
   const { url, key } = getConfig()
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}?on_conflict=${encodeURIComponent(onConflict)}`
-  const res = await fetch(pathStr, {
+  const res = await supabaseFetch(pathStr, {
     method: 'POST',
     headers: {
       apikey: key,

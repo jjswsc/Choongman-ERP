@@ -671,12 +671,12 @@ export function PosTableLayoutContent() {
       {/* 상단: 매장, 새로고침, 저장 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={storeCode} onValueChange={setStoreCode}>
+          <Select value={storeCode} onValueChange={setStoreCode} disabled={!canSearchAll}>
             <SelectTrigger className="h-10 w-40">
               <SelectValue placeholder={t("store") || "매장"} />
             </SelectTrigger>
             <SelectContent>
-              {stores.map((s) => (
+              {(canSearchAll ? stores : auth?.store ? [auth.store] : stores).map((s) => (
                 <SelectItem key={s} value={s}>
                   {s}
                 </SelectItem>

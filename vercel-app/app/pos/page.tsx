@@ -83,6 +83,7 @@ export default function POSMainPage() {
         case 'business':
           return canAccessPosSettlement(auth?.role || '')
         case 'cash':
+        case 'petty-cash':
           return isManagerOrFranchiseeRole(auth?.role || '') || isOfficeRole(auth?.role || '')
         case 'operations':
           return true
@@ -92,19 +93,14 @@ export default function POSMainPage() {
     })
   }, [auth?.role])
 
-  /** 세부 메뉴에서 선택한 항목 실행 (영업/시재/운영 하위) */
+  /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
   const handleSubAction = useCallback(
     (subType: string) => {
       switch (subType) {
         case 'open':
+          router.push('/pos/settlement?mode=open')
+          break
         case 'close':
-          router.push('/pos/settlement')
-          break
-        case 'cash-deposit':
-        case 'cash-withdrawal':
-          router.push('/pos/local/cash')
-          break
-        case 'cash-drawer':
           router.push('/pos/settlement')
           break
         case 'refresh':
@@ -123,7 +119,7 @@ export default function POSMainPage() {
     [router, logout]
   )
 
-  const [submenuParent, setSubmenuParent] = useState<'business' | 'cash' | 'operations' | null>(null)
+  const [submenuParent, setSubmenuParent] = useState<'business' | 'operations' | null>(null)
   const submenuOpen = submenuParent != null
 
   const submenuItems = useMemo((): POSSubMenuItem[] => {
@@ -135,7 +131,7 @@ export default function POSMainPage() {
 
   const handleTileClick = useCallback(
     (tile: POSTile) => {
-      if (tile.type === 'business' || tile.type === 'cash' || tile.type === 'operations') {
+      if (tile.type === 'business' || tile.type === 'operations') {
         setSubmenuParent(tile.type)
         return
       }
@@ -149,17 +145,23 @@ export default function POSMainPage() {
         case 'delivery':
           router.push('/pos/terminal?type=delivery')
           break
-        case 'sales':
-          router.push('/pos/local/sales')
+        case 'cash':
+          router.push('/pos/local/cash')
           break
-        case 'receipt':
-          router.push('/pos/local/receipts')
+        case 'petty-cash':
+          router.push('/pos/local/petty-cash')
           break
         case 'attendance':
           router.push('/admin/attendance')
           break
         case 'members':
           router.push('/admin/employees')
+          break
+        case 'sales':
+          router.push('/pos/sales')
+          break
+        case 'receipt':
+          router.push('/pos/receipts')
           break
         default:
           break
@@ -260,7 +262,7 @@ export default function POSMainPage() {
         <DialogContent className="max-w-xs sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {submenuParent && t(submenuParent === 'business' ? 'posBusinessManage' : submenuParent === 'cash' ? 'posCashManage' : 'posOperationsManage')}
+              {submenuParent && t(submenuParent === 'business' ? 'posBusinessManage' : 'posOperationsManage')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2 py-2">

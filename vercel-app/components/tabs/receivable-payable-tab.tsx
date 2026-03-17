@@ -25,12 +25,13 @@ import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole, isManagerRole } from "@/lib/permissions"
+import { isManagerOrFranchiseeRole, isManagerRole, canManageReceivablePayableAllStores } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
   addBalanceTransaction,
+  translateTexts,
   type ReceivablePayableItem,
 } from "@/lib/api-client"
 
@@ -53,14 +54,16 @@ export function ReceivablePayableTab() {
   const isManager = isManagerOrFranchiseeRole(auth?.role || "")
   const isManagerOnly = isManagerRole(auth?.role || "") // 매장 매니저: 수령 입력 불가
   const managerStore = (auth?.store || "").trim()
+  /** 본사/회계직원: 매장별 선택해서 관리 가능 (별도 로그인 불필요) */
+  const canSelectStores = canManageReceivablePayableAllStores(auth?.role || "")
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
   const [salesOutletFilter, setSalesOutletFilter] = React.useState("All")
   const [salesOutletOptions, setSalesOutletOptions] = React.useState<string[]>([])
-  // 미지급금: 매장 선택 + 매입처. 매니저는 자기 매장 고정, 본사는 기본 office
+  // 미지급금: 매장 선택 + 매입처. 본사/회계직원은 매장 선택, 매니저는 자기 매장 고정
   const [payableStoreFilter, setPayableStoreFilter] = React.useState(() =>
-    isManager && managerStore ? managerStore : "All"
+    !canSelectStores && isManager && managerStore ? managerStore : "All"
   )
   const [vendorFilter, setVendorFilter] = React.useState("All")
   // API용: receivable=매출처, payable=매장
@@ -79,6 +82,29 @@ export function ReceivablePayableTab() {
   const [addEntity, setAddEntity] = React.useState("")
   const [addSaving, setAddSaving] = React.useState(false)
   const [addIsOpening, setAddIsOpening] = React.useState(false)
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    const memos = [...new Set(listData.map((r) => (r.memo || "").trim()).filter(Boolean))]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [listData, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
   React.useEffect(() => {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))
@@ -100,23 +126,23 @@ export function ReceivablePayableTab() {
     load().catch(() => setSalesOutletOptions([]))
   }, [storeList])
 
-  // 매니저: 미지급금 매장 선택을 자기 매장으로 고정
+  // 매니저(회계권한 없을 때): 미지급금 매장 선택을 자기 매장으로 고정
   React.useEffect(() => {
-    if (isManager && managerStore) {
+    if (!canSelectStores && isManager && managerStore) {
       setPayableStoreFilter(managerStore)
     }
-  }, [isManager, managerStore])
+  }, [canSelectStores, isManager, managerStore])
 
-  // 본사(비매니저): 미지급금 매장 기본값 office
+  // 본사/회계직원: 미지급금 매장 기본값 office
   const initPayableStoreRef = React.useRef(false)
   React.useEffect(() => {
-    if (isManager || initPayableStoreRef.current || !storeList?.length) return
+    if (!canSelectStores || initPayableStoreRef.current || !storeList?.length) return
     const office = (storeList || []).find((s) => s && s.toLowerCase().includes("office"))
     if (office) {
       setPayableStoreFilter(office)
       initPayableStoreRef.current = true
     }
-  }, [storeList, isManager])
+  }, [storeList, canSelectStores])
 
   // 매니저 + receivable 탭: 수령 입력 시 자기 매장 자동 선택
   React.useEffect(() => {
@@ -125,10 +151,10 @@ export function ReceivablePayableTab() {
     }
   }, [tab, isManager, managerStore])
 
-  // 매니저: 미지급금 탭 접근 불가 → receivable로 고정
+  // 매니저(회계권한 없을 때): 미지급금 탭 접근 불가 → receivable로 고정
   React.useEffect(() => {
-    if (isManager && tab === "payable") setTab("receivable")
-  }, [isManager, tab])
+    if (!canSelectStores && isManager && tab === "payable") setTab("receivable")
+  }, [canSelectStores, isManager, tab])
 
   const loadList = React.useCallback(() => {
     setLoading(true)
@@ -267,8 +293,8 @@ export function ReceivablePayableTab() {
         }
         rows.push(
           isRec
-            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
-            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), statusPay(row), String(row.amount ?? 0), translateMemo(row.memo) || ""]
+            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
+            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), statusPay(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
         )
       }
     }
@@ -295,22 +321,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
   const printTitle = isRec ? (t("receivableTab") || "미수금 (매출)") : (t("payableTab") || "미지급금 (매입)")
   const typeLabel = (ref: string) =>
     ref === "Opening" ? (t("recTypeOpening") || "기초이월") : ref === (isRec ? "Order" : "PO") ? (isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")) : (isRec ? (t("recTypeReceive") || "수령") : (t("payTypePayment") || "지급"))
-  const translateMemo = (memo: string | undefined) => {
-    if (!memo) return "-"
-    const orderLabel = t("recTypeOrder") || "주문"
-    const poLabel = t("payTypePO") || "발주"
-    const openingLabel = t("recTypeOpening") || "기초이월"
-    const receiveLabel = t("recTypeReceive") || "수령"
-    const paymentLabel = t("payTypePayment") || "지급"
-    return memo
-      .replace(/^주문\s*#/g, `${orderLabel} #`)
-      .replace(/^주문\s+/g, `${orderLabel} `)
-      .replace(/^발주\s*#/g, `${poLabel} #`)
-      .replace(/^발주\s+/g, `${poLabel} `)
-      .replace(/^기초이월/g, openingLabel)
-      .replace(/^수령/g, receiveLabel)
-      .replace(/^지급/g, paymentLabel)
-  }
 
   return (
     <div className="space-y-4">
@@ -352,7 +362,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           {isRec && <td className="py-1 px-2">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
                           <td className="py-1 px-2 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
-                          <td className="py-1 px-2 text-muted-foreground">{translateMemo(row.memo)}</td>
+                          <td className="py-1 px-2 text-muted-foreground">{getMemo(row.memo)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -365,12 +375,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as "receivable" | "payable")}>
-        <TabsList className={cn("grid w-full max-w-md", isManager ? "grid-cols-1" : "grid-cols-2")}>
+        <TabsList className={cn("grid w-full max-w-md", canSelectStores ? "grid-cols-2" : "grid-cols-1")}>
           <TabsTrigger value="receivable" className="flex items-center gap-2">
             <Wallet className="h-4 w-4" />
             {t("receivableTab") || "미수금 (매출)"}
           </TabsTrigger>
-          {!isManager && (
+          {canSelectStores && (
             <TabsTrigger value="payable" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               {t("payableTab") || "미지급금 (매입)"}
@@ -389,7 +399,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Select
                         value={salesOutletFilter}
                         onValueChange={setSalesOutletFilter}
-                        disabled={isManager && !!managerStore}
+                        disabled={!canSelectStores && isManager && !!managerStore}
                       >
                         <SelectTrigger className="w-[160px] h-9">
                           <SelectValue placeholder={t("recFilterSalesOutletAll") || "전체 매출처"} />
@@ -493,7 +503,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </span>
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
-                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{translateMemo(row.memo)}</td>
+                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -520,13 +530,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Select
                         value={payableStoreFilter}
                         onValueChange={setPayableStoreFilter}
-                        disabled={isManager && !!managerStore}
+                        disabled={!canSelectStores && isManager && !!managerStore}
                       >
                         <SelectTrigger className="w-[160px] h-9">
                           <SelectValue placeholder={t("recFilterStoreSelect") || "매장 선택"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {!(isManager && managerStore) && (
+                          {(canSelectStores || !managerStore) && (
                             <SelectItem value="All">{(t("recFilterStoreAll") || "전체 매장")}</SelectItem>
                           )}
                           {(storeList || []).map((s) => (
@@ -640,7 +650,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </span>
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
-                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{translateMemo(row.memo)}</td>
+                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
                                     </tr>
                                   ))}
                                 </tbody>

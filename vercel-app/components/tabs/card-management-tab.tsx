@@ -24,6 +24,7 @@ import {
   deleteCardTransaction,
   getAccountSubjects,
   getVendorsForPurchase,
+  translateTexts,
   useStoreList,
   type CardAccount,
   type CardTransaction,
@@ -87,6 +88,31 @@ export function CardManagementTab() {
   const [transFormNote, setTransFormNote] = React.useState("")
   const [transSaving, setTransSaving] = React.useState(false)
   const [deletingId, setDeletingId] = React.useState<number | null>(null)
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    const accountMemos = cardAccounts.map((a) => (a.memo || "").trim()).filter(Boolean)
+    const transMemos = transactions.map((tx) => (tx.memo || "").trim()).filter(Boolean)
+    const memos = [...new Set([...accountMemos, ...transMemos])]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [cardAccounts, transactions, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
   const loadAccounts = React.useCallback(async () => {
     getCardAccounts()
@@ -290,7 +316,7 @@ export function CardManagementTab() {
                 >
                   <CreditCard className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">{a.name}</span>
-                  {a.memo && <span className="text-xs text-muted-foreground truncate max-w-[120px]">{a.memo}</span>}
+                  {a.memo && <span className="text-xs text-muted-foreground truncate max-w-[120px]">{getMemo(a.memo)}</span>}
                   <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openAccountForm(a)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -401,7 +427,7 @@ export function CardManagementTab() {
                           {tx.transType === "charge" ? "+" : "-"}
                           {fmt(tx.amount)}
                         </td>
-                        <td className="p-2 text-muted-foreground text-xs max-w-[160px] truncate" title={tx.memo || undefined}>{tx.memo || "-"}</td>
+                        <td className="p-2 text-muted-foreground text-xs max-w-[160px] truncate" title={tx.memo || undefined}>{getMemo(tx.memo)}</td>
                         <td className="p-2">
                           <div className="flex gap-1">
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openTransForm(tx)}>

@@ -1216,6 +1216,54 @@ export async function addPettyCashTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** 시재(카운터 현금) 입출금 목록 - pos_till_transactions */
+export interface TillItem {
+  id: number
+  store: string
+  trans_date: string
+  trans_type: string
+  amount: number
+  balance_after: number | null
+  memo: string
+  user_name: string
+}
+
+export async function getTillList(params: {
+  startStr: string
+  endStr: string
+  storeFilter?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const q = new URLSearchParams({
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.userRole) q.set('userRole', params.userRole)
+  const res = await apiFetch(`/api/getTillList?${q}`)
+  return res.json() as Promise<TillItem[]>
+}
+
+export async function addTillTransaction(params: {
+  storeCode: string
+  transDate: string
+  transType: 'deposit' | 'withdrawal'
+  amount: number
+  memo?: string
+  userName?: string
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/addTillTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 /** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
 export async function updatePettyCashTransaction(params: {
   id: number
@@ -4108,13 +4156,20 @@ export interface PosOrder {
   createdAt: string
 }
 
-export async function getPosTodaySales(params?: { storeCode?: string }) {
+export async function getPosTodaySales(params?: {
+  storeCode?: string
+  startStr?: string
+  endStr?: string
+}) {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
+  if (params?.startStr) q.set('startStr', params.startStr)
+  if (params?.endStr) q.set('endStr', params.endStr)
   const res = await apiFetch('/api/getPosTodaySales?' + q.toString())
   return res.json() as Promise<{
     completedCount: number
     completedTotal: number
+    completedCash: number
     pendingCount: number
   }>
 }

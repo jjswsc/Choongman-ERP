@@ -34,8 +34,11 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
-    // 매니저/가맹점주: 미지급금(지급/기초이월) 입력 불가
-    const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+    // 본사/회계직원: 매장별 관리 가능. 매니저/가맹점주: 미지급금 입력 불가
+    const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
+      || userRole.includes('accounting')
+      || userRole.includes('회계')
+    const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
     if (type === 'payable' && isManager) {
       return NextResponse.json(
         { success: false, message: '매입 대금 지급은 본사에서만 등록할 수 있습니다.' },
@@ -83,7 +86,7 @@ export async function POST(request: NextRequest) {
         { headers }
       )
     }
-    // 매니저/가맹점주: 자기 매장만 수령 입력 가능
+    // 매니저(회계권한 없을 때): 자기 매장만 수령 입력 가능
     if (isManager && userStore && storeName !== userStore) {
       return NextResponse.json(
         { success: false, message: '자기 매장만 수령 입력할 수 있습니다.' },

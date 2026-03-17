@@ -4,68 +4,59 @@ import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Wallet, Search, Plus } from 'lucide-react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Banknote, Search, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
-import { getTillList, addTillTransaction, getPettyCashOptions, getPosTodaySales, translateTexts, type TillItem } from '@/lib/api-client'
-import { getPettyCashOptionsWithCache } from '@/lib/offline/cash-offline'
-import { getTillListWithCache } from '@/lib/offline/till-offline'
+import {
+  getPettyCashList,
+  getPettyCashOptions,
+  translateTexts,
+  type PettyCashItem,
+} from '@/lib/api-client'
+import { getPettyCashOptionsWithCache, getPettyCashListWithCache } from '@/lib/offline/cash-offline'
 import { addPettyCashTransactionWithOffline } from '@/lib/offline/petty-cash-sync'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
-import { isOfficeRole } from '@/lib/permissions'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
 
-const tillTypeKeys: Record<string, string> = {
-  deposit: 'posCashDeposit',
-  withdrawal: 'posCashWithdrawal',
+const typeKeys: Record<string, string> = {
+  receive: 'pettyTypeReceive',
+  expense: 'pettyTypeExpense',
+  replenish: 'pettyTypeReplenish',
+  settle: 'pettyTypeSettle',
 }
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export interface CashManagementTabProps {
-  /** POS용: 오프라인 시 캐시 사용 */
-  offlineAware?: boolean
-}
-
-export function CashManagementTab({ offlineAware = false }: CashManagementTabProps = {}) {
+/** POS용 패티캐쉬 - 매장 스코프, 시재와 별도 */
+export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boolean } = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const { stores } = useStoreList()
   const online = useOnlineStatus()
-  const canSearchAll = isOfficeRole(auth?.role || '')
   const storeCode = auth?.store || stores[0] || ''
 
   const [storeOptions, setStoreOptions] = React.useState<string[]>([])
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [storeFilter, setStoreFilter] = React.useState('')
-  const [listData, setListData] = React.useState<TillItem[]>([])
+  const [listData, setListData] = React.useState<PettyCashItem[]>([])
   const [listLoading, setListLoading] = React.useState(false)
-  const [completedCash, setCompletedCash] = React.useState<number | null>(null)
 
   const [addStore, setAddStore] = React.useState('')
-  const [addType, setAddType] = React.useState<'deposit' | 'withdrawal'>('deposit')
+  const [addType, setAddType] = React.useState<'receive' | 'expense' | 'replenish' | 'settle'>('receive')
   const [addDate, setAddDate] = React.useState(todayStr)
   const [addAmount, setAddAmount] = React.useState('')
   const [addMemo, setAddMemo] = React.useState('')
   const [addSaving, setAddSaving] = React.useState(false)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
-  const effectiveStore = canSearchAll ? (storeFilter || storeCode) : storeCode
+  const effectiveStore = storeCode
 
   React.useEffect(() => {
     const memos = [...new Set(listData.map((r) => (r.memo || "").trim()).filter(Boolean))]
@@ -93,50 +84,37 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
     const load = offlineAware ? getPettyCashOptionsWithCache : () => import('@/lib/api-client').then((m) => m.getPettyCashOptions())
     load()
       .then((opts: { stores: string[]; officeDepartments: string[] }) => {
-        const list = canSearchAll
-          ? (opts.stores?.length ? opts.stores : (auth?.store ? [auth.store] : stores))
-          : (auth?.store ? [auth.store] : [])
-        setStoreOptions(list.length ? list : (auth?.store ? [auth.store] : []))
-        const first = auth?.store || list[0] || ''
-        setAddStore(first)
-        if (!storeFilter && canSearchAll) setStoreFilter(list[0] || '')
-      })
-      .catch(() => {
-        const list = auth?.store ? [auth.store] : stores
-        setStoreOptions(canSearchAll ? (list.length ? list : ['']) : (auth?.store ? [auth.store] : []))
+        const list = opts.stores?.filter((s) => s && s !== 'All') || (auth?.store ? [auth.store] : [])
+        setStoreOptions(list.length ? list : auth?.store ? [auth.store] : [])
         setAddStore(auth?.store || list[0] || '')
       })
-  }, [auth?.store, stores, canSearchAll, offlineAware])
+      .catch(() => {
+        const list = auth?.store ? [auth.store] : []
+        setStoreOptions(list)
+        setAddStore(auth?.store || '')
+      })
+  }, [auth?.store, stores, offlineAware])
 
   const loadList = React.useCallback(() => {
     if (!effectiveStore) return
     setListLoading(true)
-    const fetcher = offlineAware ? getTillListWithCache : getTillList
-    const params = {
+    const fetcher = offlineAware ? getPettyCashListWithCache : getPettyCashList
+    fetcher({
       startStr,
       endStr,
-      storeFilter: effectiveStore || undefined,
+      scopeFilter: 'store',
+      storeFilter: effectiveStore,
       userStore: auth?.store,
       userRole: auth?.role,
-    }
-    fetcher(params)
+    })
       .then(setListData)
       .catch(() => setListData([]))
       .finally(() => setListLoading(false))
+  }, [startStr, endStr, effectiveStore, auth?.store, auth?.role, offlineAware])
 
-    // 하루 현금 매출: 조회 시 항상 함께 로드 (오프라인 시 스킵)
-    if (!(offlineAware && !online)) {
-      getPosTodaySales({
-        storeCode: effectiveStore,
-        startStr,
-        endStr,
-      })
-        .then((r) => setCompletedCash(r.completedCash ?? 0))
-        .catch(() => setCompletedCash(null))
-    } else {
-      setCompletedCash(null)
-    }
-  }, [startStr, endStr, effectiveStore, storeCode, canSearchAll, auth?.store, auth?.role, offlineAware, online])
+  React.useEffect(() => {
+    setAddStore(effectiveStore)
+  }, [effectiveStore])
 
   React.useEffect(() => {
     loadList()
@@ -207,36 +185,22 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         retryLabel={t('posRetrySync') || '재시도'}
       />
 
-      {(currentBalance != null || completedCash != null) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {currentBalance != null && (
-            <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                {t('pettyCurrentBalance') || '현재 잔액'}
-              </div>
-              <div className="text-2xl font-bold tabular-nums text-primary">
-                ฿{(currentBalance ?? 0).toLocaleString()}
-              </div>
-            </div>
-          )}
-          {completedCash != null && (
-            <div className="rounded-xl border-2 border-muted bg-muted/30 px-6 py-4 text-center">
-              <div className="text-sm font-medium text-muted-foreground mb-1">
-                {t('pettyTodayCashSales') || '하루 현금 매출'}
-              </div>
-              <div className="text-2xl font-bold tabular-nums">
-                ฿{(completedCash ?? 0).toLocaleString()}
-              </div>
-            </div>
-          )}
+      {currentBalance != null && (
+        <div className="rounded-xl border-2 border-primary/30 bg-primary/5 px-6 py-4 text-center">
+          <div className="text-sm font-medium text-muted-foreground mb-1">
+            {t('pettyCurrentBalance') || '현재 잔액'}
+          </div>
+          <div className="text-2xl font-bold tabular-nums text-primary">
+            ฿{(currentBalance ?? 0).toLocaleString()}
+          </div>
         </div>
       )}
 
       <Card>
         <CardContent className="pt-4">
           <div className="mb-4 flex items-center gap-2">
-            <Wallet className="h-6 w-6 text-primary" />
-            <h2 className="text-lg font-semibold">{t('posCashInputOutput') || '시재 입출금'}</h2>
+            <Banknote className="h-6 w-6 text-primary" />
+            <h2 className="text-lg font-semibold">{t('adminPettyCash') || '패티 캐쉬'}</h2>
           </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -264,23 +228,6 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             >
               {t('posToday') || '오늘'}
             </Button>
-            {canSearchAll && storeOptions.length > 0 && (
-              <Select
-                value={storeFilter || storeOptions[0]}
-                onValueChange={setStoreFilter}
-              >
-                <SelectTrigger className="h-9 w-[140px]">
-                  <SelectValue placeholder={t('store') || '매장'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {storeOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <Button size="sm" onClick={loadList} disabled={listLoading}>
               <Search className="mr-1 h-4 w-4" />
               {listLoading ? t('loading') : t('search') || '조회'}
@@ -298,9 +245,6 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColDate') || '날짜'}</th>
-                  {canSearchAll && (
-                    <th className="px-4 py-3 text-left font-semibold">{t('store') || '매장'}</th>
-                  )}
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColType') || '유형'}</th>
                   <th className="px-4 py-3 text-right font-semibold">{t('pettyColAmount') || '금액'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColMemo') || '내용'}</th>
@@ -310,10 +254,7 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               <tbody>
                 {listData.length === 0 && !listLoading ? (
                   <tr>
-                    <td
-                      colSpan={canSearchAll ? 6 : 5}
-                      className="px-4 py-12 text-center text-muted-foreground"
-                    >
+                    <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
                       {t('pettyNoData') || '데이터가 없습니다.'}
                     </td>
                   </tr>
@@ -321,11 +262,8 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
                   listData.map((r) => (
                     <tr key={r.id} className="border-b hover:bg-muted/10">
                       <td className="px-4 py-3">{r.trans_date}</td>
-                      {canSearchAll && (
-                        <td className="px-4 py-3 truncate">{r.store}</td>
-                      )}
                       <td className="px-4 py-3">
-                        {t(tillTypeKeys[r.trans_type] || r.trans_type) || r.trans_type}
+                        {t(typeKeys[r.trans_type] || r.trans_type) || r.trans_type}
                       </td>
                       <td
                         className={cn(
@@ -355,35 +293,26 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="text-xs text-muted-foreground">{t('store') || '매장'}</label>
-                  <Select value={addStore} onValueChange={setAddStore} disabled={!canSearchAll}>
-                    <SelectTrigger className="h-9 mt-1">
-                      <SelectValue placeholder={t('msg_select_store_name')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    value={addStore}
+                    readOnly
+                    className="h-9 mt-1 bg-muted/50"
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">
                     {t('pettyColType') || '유형'}
                   </label>
-                    <Select
+                  <select
                     value={addType}
-                    onValueChange={(v) => setAddType(v as 'deposit' | 'withdrawal')}
+                    onChange={(e) => setAddType(e.target.value as typeof addType)}
+                    className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
                   >
-                    <SelectTrigger className="h-9 mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="deposit">{t('posCashDeposit') || '입금'}</SelectItem>
-                      <SelectItem value="withdrawal">{t('posCashWithdrawal') || '출금'}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <option value="receive">{t('pettyTypeReceive') || '수령'}</option>
+                    <option value="expense">{t('pettyTypeExpense') || '지출'}</option>
+                    <option value="replenish">{t('pettyTypeReplenish') || '보충'}</option>
+                    <option value="settle">{t('pettyTypeSettle') || '정산'}</option>
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">

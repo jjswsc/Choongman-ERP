@@ -131,6 +131,7 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { auth } = useAuth()
+  const canSearchAll = isOfficeRole(auth?.role || "")
   const today = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
   const monthStart = React.useMemo(() => {
     const d = new Date()
@@ -186,6 +187,15 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
     []
   )
 
+  /** 사용자 선택 직후 URL 반영 전에 Effect 1이 state를 덮어쓰지 않도록 (경쟁 상태 방지) */
+  const userSelectedRef = React.useRef<{
+    subMenu?: string
+    topic?: string
+    pos?: string
+    periodGroup?: string
+    dateRange?: string
+  }>({})
+
   React.useEffect(() => {
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
@@ -193,33 +203,51 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
     const qPos = searchParams.get("pos")
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
-    if (qStart && /^\d{4}-\d{2}-\d{2}$/.test(qStart)) setStartStr(qStart)
-    if (qEnd && /^\d{4}-\d{2}-\d{2}$/.test(qEnd)) setEndStr(qEnd)
+    if (qStart && /^\d{4}-\d{2}-\d{2}$/.test(qStart) && userSelectedRef.current.dateRange !== `${startStr}~${endStr}`) {
+      setStartStr(qStart)
+    }
+    if (qEnd && /^\d{4}-\d{2}-\d{2}$/.test(qEnd) && userSelectedRef.current.dateRange !== `${startStr}~${endStr}`) {
+      setEndStr(qEnd)
+    }
     const menuExists = !!qMenu && SALES_IA.some((m) => m.id === qMenu)
     if (menuExists) {
       const nextMenu = qMenu as string
-      if (nextMenu !== activeSubMenuId) {
+      if (nextMenu !== activeSubMenuId && userSelectedRef.current.subMenu !== activeSubMenuId) {
         setActiveSubMenuId(nextMenu)
       }
 
       const topicSet = validTopicByMenu[nextMenu]
       if (qTopic && topicSet?.has(qTopic)) {
-        setSelectedTopicBySubMenu((prev) => {
-          if (prev[nextMenu] === qTopic) return prev
-          return { ...prev, [nextMenu]: qTopic }
-        })
+        const currentTopic = selectedTopicBySubMenu[nextMenu]
+        if (currentTopic !== qTopic && userSelectedRef.current.topic !== currentTopic) {
+          setSelectedTopicBySubMenu((prev) => {
+            if (prev[nextMenu] === qTopic) return prev
+            return { ...prev, [nextMenu]: qTopic }
+          })
+        }
       }
     }
 
     if (qGroup && PERIOD_GROUP_VALUES.has(qGroup as "month" | "week" | "day" | "dow")) {
-      setPeriodGroup((prev) => (prev === qGroup ? prev : (qGroup as "month" | "week" | "day" | "dow")))
+      if (periodGroup !== qGroup && userSelectedRef.current.periodGroup !== periodGroup) {
+        setPeriodGroup(qGroup as "month" | "week" | "day" | "dow")
+      }
     }
 
     const nextPos = qPos ?? ""
-    if (nextPos !== posFilter) {
+    if (nextPos !== posFilter && userSelectedRef.current.pos !== posFilter) {
       setPosFilter(nextPos)
     }
-  }, [searchParams, activeSubMenuId, posFilter, validTopicByMenu])
+    if (
+      qMenu === activeSubMenuId &&
+      (qPos ?? "") === posFilter &&
+      qGroup === periodGroup &&
+      qStart === startStr &&
+      qEnd === endStr
+    ) {
+      userSelectedRef.current = {}
+    }
+  }, [searchParams, activeSubMenuId, posFilter, periodGroup, startStr, endStr, validTopicByMenu, selectedTopicBySubMenu])
 
   React.useEffect(() => {
     const currentTopic = selectedTopic?.id
@@ -255,15 +283,23 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
 
   const loadPosOptions = React.useCallback(() => {
     if (!startStr || !endStr) return
+    if (!canSearchAll && auth?.store) {
+      setPosOptions([auth.store])
+      return
+    }
     const fetcher = offlineAware ? getPosSalesFilterOptionsWithCache : getPosSalesFilterOptions
     fetcher({ startStr, endStr }).then((r) =>
       setPosOptions(r.posOptions || [])
     )
-  }, [startStr, endStr, offlineAware])
+  }, [startStr, endStr, offlineAware, canSearchAll, auth?.store])
 
   React.useEffect(() => {
     loadPosOptions()
   }, [loadPosOptions])
+
+  React.useEffect(() => {
+    if (!canSearchAll && auth?.store && posFilter !== auth.store) setPosFilter(auth.store)
+  }, [canSearchAll, auth?.store, posFilter])
 
   const loadPeriodData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -345,21 +381,55 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
     loadChannelData()
     loadMenuData()
     loadPaymentData()
+    loadStoreData()
   }, [
     loadPeriodData,
     loadDeliveryAppData,
     loadChannelData,
     loadMenuData,
     loadPaymentData,
+    loadStoreData,
   ])
+
+  /** API 응답 race 방지: 최신 요청 ID와 일치할 때만 setState */
+  const loadIdRef = React.useRef(0)
+  const menuLoadIdRef = React.useRef(0)
 
   React.useEffect(() => {
     if (startStr && endStr) {
-      loadPeriodData()
-      loadDeliveryAppData()
-      loadChannelData()
-      loadPaymentData()
-      loadStoreData()
+      const id = ++loadIdRef.current
+      const guarded =
+        <T>(setter: React.Dispatch<React.SetStateAction<T>>) =>
+        (v: T) => {
+          if (loadIdRef.current === id) setter(v)
+        }
+      const gPeriod = guarded(setPeriodData)
+      const gDelivery = guarded(setDeliveryAppData)
+      const gChannel = guarded(setChannelData)
+      const gPayment = guarded(setPaymentData)
+      const gStore = guarded(setStoreData)
+      setLoading(true)
+      Promise.all([
+        getPosSalesByPeriod({ startStr, endStr, groupBy: periodGroup, pos: posFilter || undefined }).then(gPeriod).catch(() => gPeriod([])),
+        (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
+          startStr,
+          endStr,
+          pos: posFilter || undefined,
+        }).then(gDelivery).catch(() => gDelivery({ items: [], total: 0 })),
+        getPosSalesByChannel({ startStr, endStr, pos: posFilter || undefined }).then(gChannel).catch(() => gChannel([])),
+        (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
+          startStr,
+          endStr,
+          pos: posFilter || undefined,
+        }).then(gPayment).catch(() => gPayment([])),
+        (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
+          startStr,
+          endStr,
+          pos: posFilter || undefined,
+        }).then(gStore).catch(() => gStore([])),
+      ]).finally(() => {
+        if (loadIdRef.current === id) setLoading(false)
+      })
     } else {
       setPeriodData([])
       setDeliveryAppData({ items: [], total: 0 })
@@ -368,11 +438,20 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
       setPaymentData([])
       setStoreData([])
     }
-  }, [startStr, endStr, posFilter, loadPeriodData, loadDeliveryAppData, loadChannelData, loadPaymentData, loadStoreData])
+  }, [startStr, endStr, posFilter, periodGroup, offlineAware])
 
   React.useEffect(() => {
-    if (startStr && endStr) loadMenuData()
-  }, [startStr, endStr, posFilter, menuSearch, loadMenuData])
+    if (!startStr || !endStr) return
+    const id = ++menuLoadIdRef.current
+    const fetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
+    fetcher({ startStr, endStr, pos: posFilter || undefined, search: menuSearch || undefined })
+      .then((data) => {
+        if (menuLoadIdRef.current === id) setMenuData(data)
+      })
+      .catch(() => {
+        if (menuLoadIdRef.current === id) setMenuData([])
+      })
+  }, [startStr, endStr, posFilter, menuSearch, offlineAware])
 
   const online = useOnlineStatus()
   const prevOnlineRef = React.useRef(online)
@@ -392,25 +471,38 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
             <Input
               type="date"
               value={startStr}
-              onChange={(e) => setStartStr(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                userSelectedRef.current.dateRange = `${v}~${endStr}`
+                setStartStr(v)
+              }}
               className="h-9 w-[140px]"
             />
             <span className="text-slate-500">~</span>
             <Input
               type="date"
               value={endStr}
-              onChange={(e) => setEndStr(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                userSelectedRef.current.dateRange = `${startStr}~${v}`
+                setEndStr(v)
+              }}
               className="h-9 w-[140px]"
             />
             <Select
               value={posFilter === "" ? "__all__" : posFilter}
-              onValueChange={(v) => setPosFilter(v === "__all__" ? "" : v)}
+              onValueChange={(v) => {
+                const next = v === "__all__" ? "" : v
+                userSelectedRef.current.pos = next
+                setPosFilter(next)
+              }}
+              disabled={!canSearchAll}
             >
               <SelectTrigger className="h-9 w-[180px]">
                 <SelectValue placeholder={tr("salesSelectStoreAll", "매장(전체)")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">{tr("all", "전체")}</SelectItem>
+                {canSearchAll && <SelectItem value="__all__">{tr("all", "전체")}</SelectItem>}
                 {posOptions.map((p) => (
                   <SelectItem key={p} value={p}>
                     {p}
@@ -429,7 +521,10 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                 key={menu.id}
                 type="button"
                 variant={menu.id === currentSubMenu.id ? "default" : "outline"}
-                onClick={() => setActiveSubMenuId(menu.id)}
+                onClick={() => {
+                  userSelectedRef.current.subMenu = menu.id
+                  setActiveSubMenuId(menu.id)
+                }}
               >
                 {tr(menu.labelKey, menu.fallbackLabel)}
               </Button>
@@ -441,12 +536,13 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
             <div className="flex flex-wrap items-center gap-2">
               <Select
                 value={selectedTopic.id}
-                onValueChange={(topicId) =>
+                onValueChange={(topicId) => {
+                  userSelectedRef.current.topic = topicId
                   setSelectedTopicBySubMenu((prev) => ({
                     ...prev,
                     [currentSubMenu.id]: topicId,
                   }))
-                }
+                }}
               >
                 <SelectTrigger className="w-[260px]">
                   <SelectValue placeholder={tr("salesSelectTopic", "주제 선택")} />
@@ -465,12 +561,13 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                   size="sm"
                   type="button"
                   variant={topic.id === selectedTopic.id ? "default" : "outline"}
-                  onClick={() =>
+                  onClick={() => {
+                    userSelectedRef.current.topic = topic.id
                     setSelectedTopicBySubMenu((prev) => ({
                       ...prev,
                       [currentSubMenu.id]: topic.id,
                     }))
-                  }
+                  }}
                 >
                   {tr(topic.labelKey, topic.labelKey)}
                 </Button>
@@ -496,7 +593,10 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                         key={g.value}
                         size="sm"
                         variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => setPeriodGroup(g.value)}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
                       >
                         {tr(g.labelKey, g.labelKey)}
                       </Button>
@@ -545,6 +645,33 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                   {tr("salesDataNone", "데이터 없음")}
                 </p>
               ) : (
+                <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 <div className="flex flex-wrap gap-6">
                   <div className="h-[280px] w-[280px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -594,6 +721,7 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                     </table>
                   </div>
                 </div>
+                </>
               )
             )}
 
@@ -604,6 +732,32 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                 </p>
               ) : (
                 <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="mb-4 h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={channelData} layout="vertical" margin={{ left: 80 }}>
@@ -644,6 +798,32 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                 </p>
               ) : (
                 <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="mb-4">
                     <Input
                       placeholder="메뉴 검색"
@@ -690,6 +870,32 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                 </p>
               ) : (
                 <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                   <div className="overflow-x-auto rounded-lg border">
                     <table className="w-full min-w-[500px] text-sm">
                       <thead className="bg-slate-100">
@@ -746,6 +952,33 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                   {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
                 </p>
               ) : (
+                <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 <div className="grid gap-6 lg:grid-cols-2">
                   <div>
                     <h3 className="mb-3 text-sm font-semibold">{tr("salesByStore", "매장별")}</h3>
@@ -824,6 +1057,7 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                     </div>
                   </div>
                 </div>
+                </>
               )
             )}
 
@@ -837,6 +1071,33 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                   {tr("salesDataNone", "데이터 없음")}
                 </p>
               ) : (
+                <>
+                  <div className="mb-4 flex gap-2">
+                    {PERIOD_GROUP.map((g) => (
+                      <Button
+                        key={g.value}
+                        size="sm"
+                        variant={periodGroup === g.value ? "default" : "outline"}
+                        onClick={() => {
+                          userSelectedRef.current.periodGroup = g.value
+                          setPeriodGroup(g.value)
+                        }}
+                      >
+                        {tr(g.labelKey, g.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="mb-4 h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={periodData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
+                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 <div className="flex flex-wrap gap-6">
                   <div className="h-[260px] w-[260px]">
                     <ResponsiveContainer width="100%" height="100%">
@@ -877,6 +1138,7 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
                     </tbody>
                   </table>
                 </div>
+                </>
               )
             )}
 

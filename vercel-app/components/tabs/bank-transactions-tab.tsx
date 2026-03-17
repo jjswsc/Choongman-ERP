@@ -167,6 +167,33 @@ export function BankTransactionsTab() {
   const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+
+  const allMemos = React.useMemo(() => {
+    const fromList = list.map((r) => (r.memo || "").trim()).filter(Boolean)
+    const fromImport = (importPreview?.rows || []).map((r) => (r.memo || "").trim()).filter(Boolean)
+    return [...new Set([...fromList, ...fromImport])]
+  }, [list, importPreview?.rows])
+  React.useEffect(() => {
+    if (allMemos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(allMemos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        allMemos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [allMemos, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[(memo || "").trim()]) || memo || "-", [memoTransMap])
   const getAccountSubjectLabel = React.useCallback((a: AccountSubjectItem) => {
     return a.nameEn || (a.id != null ? expenseSubjectEnglishNames[a.id] : undefined) || a.name
   }, [expenseSubjectEnglishNames])
@@ -1509,7 +1536,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
                                 title={r.memo?.trim() ? r.memo : undefined}
                               >
-                                {r.memo || "-"}
+                                {getMemo(r.memo)}
                               </td>
                               <td className="p-2 align-middle">
                                 <Input
@@ -1768,7 +1795,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
                           title={r.memo?.trim() ? r.memo : undefined}
                         >
-                          {r.memo || "-"}
+                          {getMemo(r.memo)}
                         </td>
                         <td className="p-2">
                           <Input
@@ -2386,7 +2413,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           <DialogHeader>
             <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
           </DialogHeader>
-          <p className="whitespace-pre-wrap break-words text-sm py-2">{memoPreviewText || ""}</p>
+          <p className="whitespace-pre-wrap break-words text-sm py-2">{getMemo(memoPreviewText) || memoPreviewText || ""}</p>
         </DialogContent>
       </Dialog>
 

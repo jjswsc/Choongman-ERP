@@ -36,3 +36,14 @@ ALTER TABLE public.invoice_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payable_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_menus ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.item_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.price_history ENABLE ROW LEVEL SECURITY;
+-- Linter CSV 추가 테이블 (없는 테이블은 해당 줄 주석 처리 후 실행)
+ALTER TABLE public.line_import_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.line_import_rows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.member_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.member_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pos_till_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expense_accruals ENABLE ROW LEVEL SECURITY;

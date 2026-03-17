@@ -38,7 +38,7 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import { WithdrawalManagementTab } from "@/components/tabs/withdrawal-management-tab"
 import { ExpenseRegisterSearchTab } from "@/components/tabs/expense-register-search-tab"
 import { CardManagementTab } from "@/components/tabs/card-management-tab"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
@@ -54,6 +54,7 @@ export function ExpenseManagementTab() {
   }, [t])
   const { auth } = useAuth()
   const { stores } = useStoreList()
+  const router = useRouter()
   const searchParams = useSearchParams()
 
   const initialTab = searchParams.get("tab") === "expenseRegister" ? "expenseRegister" : searchParams.get("tab") === "expenseSearch" ? "expenseSearch" : searchParams.get("tab") === "card" ? "card" : "plan"
@@ -105,6 +106,7 @@ export function ExpenseManagementTab() {
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
   const vendorBankMap = React.useMemo(() => {
     const m: Record<string, string> = {}
     for (const v of vendors) {
@@ -145,6 +147,29 @@ export function ExpenseManagementTab() {
   React.useEffect(() => {
     getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).catch(() => []).then(setBankAccounts)
   }, [auth?.role, auth?.store])
+
+  React.useEffect(() => {
+    const items = [...expensePlans, ...purchasePlans, ...unlinkedList]
+    const memos = [...new Set(items.map((r) => (r.memo || "").trim()).filter(Boolean))]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [expensePlans, purchasePlans, unlinkedList, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
   const loadPlans = React.useCallback(async () => {
     setLoading(true)
@@ -407,18 +432,23 @@ export function ExpenseManagementTab() {
     }
   }, [auth?.role, auth?.user, loadPlans, t])
 
-  const openEditPlan = React.useCallback((row: ExpenseAccrualPlanItem) => {
-    const firstStore = (stores || []).filter((s) => s?.trim())[0]
-    setEditingPlanRow(row)
-    setEditPlanAmount(String(row.plannedAmount || 0))
-    setEditPlanExpenseDate(String(row.expenseDate || "").slice(0, 10))
-    setEditPlanDueDate(String(row.dueDate || "").slice(0, 10))
-    setEditPlanMemo(row.memo || "")
-    setEditPlanPayeeCode(row.payeeCode || "")
-    setEditPlanPayeeName(row.payeeName || "")
-    setEditPlanAccountSubjectId(row.accountSubjectId ? String(row.accountSubjectId) : "__none__")
-    setEditPlanStoreName((row.storeName || "").trim() || firstStore || "")
-  }, [stores])
+  const navigateToEditInRegister = React.useCallback(
+    (row: ExpenseAccrualPlanItem) => {
+      const q = new URLSearchParams()
+      q.set("tab", "expenseRegister")
+      q.set("editAccrualId", String(row.id))
+      q.set("amount", String(row.plannedAmount || 0))
+      q.set("transDate", String(row.expenseDate || "").slice(0, 10))
+      q.set("payeeCode", row.payeeCode || "")
+      q.set("payeeName", row.payeeName || "")
+      if (row.accountSubjectId) q.set("accountSubjectId", String(row.accountSubjectId))
+      if (row.withdrawalCategory) q.set("category", row.withdrawalCategory)
+      if ((row.storeName || "").trim()) q.set("storeName", (row.storeName || "").trim())
+      if ((row.memo || "").trim()) q.set("memo", (row.memo || "").trim())
+      router.push(`/admin/expense-management?${q.toString()}`)
+    },
+    [router]
+  )
 
   const handleSavePlanEdit = React.useCallback(async () => {
     if (!editingPlanRow?.id) return
@@ -637,7 +667,7 @@ export function ExpenseManagementTab() {
               <div className="text-lg font-semibold tabular-nums">฿{(totals.expenseRemaining || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">{t("expenseLogisticsPlanTotal") || "물류 지급예정(지출등록분)"}</div>
+              <div className="text-xs text-muted-foreground">{t("expenseLogisticsPlanTotal") || "물류 지출 지급예정"}</div>
               <div className="text-lg font-semibold tabular-nums">฿{(totals.logisticsRemaining || 0).toLocaleString()}</div>
             </div>
             <div className="rounded-lg border p-3 bg-primary/5">
@@ -647,7 +677,7 @@ export function ExpenseManagementTab() {
           </div>
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{t("expenseNonLogisticsSection") || "일반 지출(비물류) 지급예정"}</div>
+              <div className="text-sm font-semibold mb-2">{t("expenseNonLogisticsSection") || "일반 지출 지급예정"}</div>
               {filteredExpensePlans.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 미지급금이 없습니다."}</p>
               ) : (
@@ -701,7 +731,7 @@ export function ExpenseManagementTab() {
                             <td className="py-2 px-2 text-center whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
                             <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
                             <td className="py-2 px-2 text-right tabular-nums font-semibold whitespace-nowrap">฿{(r.remainingAmount || 0).toLocaleString()}</td>
-                            <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{r.memo || "-"}</td>
+                            <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{getMemo(r.memo)}</td>
                             <td className="py-2 px-2 text-center">
                               {r.status === "planned" ? (
                                 <Button
@@ -709,7 +739,7 @@ export function ExpenseManagementTab() {
                                   variant="outline"
                                   className="h-7 w-7"
                                   title={tt("btnEdit", "수정")}
-                                  onClick={() => openEditPlan(r)}
+                                  onClick={() => navigateToEditInRegister(r)}
                                   disabled={payingId === r.id || deletingPlanId === r.id}
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
@@ -820,11 +850,9 @@ export function ExpenseManagementTab() {
                                   <span className="text-xs text-primary">{tt("att_approved", "승인 완료")}</span>
                                 ) : !canApproveByPolicy(r) && r.status === "rejected" ? (
                                   <span className="text-xs text-destructive">{tt("att_rejected", "반려")}</span>
-                                ) : r.status === "planned" && !approvalEditById[r.id] ? (
+                                ) : r.status === "planned" && !approvalEditById[r.id] && !canApproveByPolicy(r) ? (
                                   <span className="text-xs text-muted-foreground">-</span>
-                                ) : (
-                                  (!canApproveByPolicy(r) && <span className="text-xs text-muted-foreground">-</span>)
-                                )}
+                                ) : null}
                               </div>
                             </td>
                           </tr>
@@ -926,9 +954,9 @@ export function ExpenseManagementTab() {
 
           <Card>
             <CardContent className="pt-4">
-              <div className="text-sm font-semibold mb-2">{t("expenseLogisticsPlanSection") || "물류 지급예정(지출 등록분)"}</div>
+              <div className="text-sm font-semibold mb-2">{t("expenseLogisticsPlanSection") || "물류 지출 지급예정"}</div>
               {filteredPurchasePlans.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 물류 지급예정이 없습니다."}</p>
+                <p className="text-sm text-muted-foreground py-6">{t("payableEmpty") || "조회된 물류 지출 지급예정이 없습니다."}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm table-fixed">
@@ -973,7 +1001,7 @@ export function ExpenseManagementTab() {
                                 <td className="py-2 px-2 text-center whitespace-nowrap">{r.dueDate || r.expenseDate || "-"}</td>
                                 <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">฿{(r.plannedAmount || 0).toLocaleString()}</td>
                                 <td className="py-2 px-2 text-right tabular-nums font-semibold whitespace-nowrap">฿{(r.remainingAmount || 0).toLocaleString()}</td>
-                                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{r.memo || "-"}</td>
+                                <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{getMemo(r.memo)}</td>
                                 <td className="py-2 px-2 text-center">
                                   {r.status === "planned" ? (
                                     <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "수정")} onClick={() => openEditPlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
@@ -1193,7 +1221,7 @@ export function ExpenseManagementTab() {
                   onClick={() => handleLinkBank(b.id)}
                 >
                   <span className="text-sm">{b.transDate} · ฿{b.amount.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{b.memo || "-"}</span>
+                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">{getMemo(b.memo)}</span>
                 </div>
               ))}
             </div>

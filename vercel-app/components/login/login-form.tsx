@@ -63,6 +63,13 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       })
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e)
+        // #region agent log
+        fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e3767f' },
+          body: JSON.stringify({ sessionId: 'e3767f', location: 'login-form.tsx', message: 'getLoginData catch', data: { msg, isTimeout: msg.includes('초과') }, timestamp: Date.now() }),
+        }).catch(() => {})
+        // #endregion
         setLoadError(msg)
         setLoginData({})
         setLoading(false)

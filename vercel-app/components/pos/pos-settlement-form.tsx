@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { Wallet, Save, RotateCw, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,15 +47,31 @@ function shiftYmd(dateYmd: string, deltaDays: number) {
   return d.toISOString().slice(0, 10)
 }
 
+/** 태국 바트 지폐·동전 단위 (฿) */
+const CASH_DENOMINATIONS = [
+  { value: 1000, label: '1,000' },
+  { value: 500, label: '500' },
+  { value: 100, label: '100' },
+  { value: 50, label: '50' },
+  { value: 20, label: '20' },
+  { value: 10, label: '10' },
+  { value: 5, label: '5' },
+  { value: 2, label: '2' },
+  { value: 1, label: '1' },
+] as const
+
 export type PosSettlementFormProps = {
   t: (key: string) => string
   /** POS 전용 모드 (레이아웃/패딩 최소화) */
   compact?: boolean
   /** 오프라인 시 캐시 사용, 온라인 시 API 호출 후 캐시 저장 */
   offlineAware?: boolean
+  /** 영업 시작 모드: 현금 시제만 단위별 입력 */
+  openMode?: boolean
 }
 
-export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettlementFormProps) {
+export function PosSettlementForm({ t, compact, offlineAware = false, openMode = false }: PosSettlementFormProps) {
+  const router = useRouter()
   const { auth } = useAuth()
   const { stores } = useStoreList()
   const online = useOnlineStatus()
@@ -92,6 +109,10 @@ export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettl
   const [deliveryAppBreakdown, setDeliveryAppBreakdown] = React.useState<Record<string, string>>({})
   const [memo, setMemo] = React.useState('')
   const [closed, setClosed] = React.useState(false)
+  /** 영업 시작: 단위별 현금 수량 (장/개) */
+  const [denomCounts, setDenomCounts] = React.useState<Record<number, string>>(
+    Object.fromEntries(CASH_DENOMINATIONS.map((d) => [d.value, '']))
+  )
 
   const [cardKeys, setCardKeys] = React.useState<string[]>(['Visa', 'Master', 'Amex', 'JCB', 'Other'])
   const [qrKeys, setQrKeys] = React.useState<string[]>(['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other'])
@@ -257,7 +278,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettl
     }
   }, [activeTab, loadHistory])
 
-  const cashActualNum = parseFloat(cashActual) || 0
+  /** 영업 시작: 단위별 합산 */
+  const denomTotal = CASH_DENOMINATIONS.reduce(
+    (sum, d) => sum + d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0),
+    0
+  )
+  const cashActualNum = openMode ? denomTotal : (parseFloat(cashActual) || 0)
   const cashAmtNum = parseFloat(cashAmt) || 0
   const cardNum = CARD_KEYS.reduce((s, k) => s + (parseFloat(cardBreakdown[k]) || 0), 0) || parseFloat(cardAmt) || 0
   const qrNum = QR_KEYS.reduce((s, k) => s + (parseFloat(qrBreakdown[k]) || 0), 0) || parseFloat(qrAmt) || 0
@@ -352,7 +378,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettl
     }, 250)
   }
 
-  const paddingClass = compact ? 'px-3 py-4' : 'px-4 py-6 sm:px-6 lg:px-8'
+  const paddingClass = 'px-4 py-6 sm:px-6 lg:px-8'
   const maxWClass = compact ? '' : 'max-w-2xl mx-auto'
 
   return (
@@ -371,10 +397,12 @@ export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettl
           </div>
           <div className="min-w-0 flex-1">
             <h1 className={cn('font-bold tracking-tight text-foreground', compact ? 'text-lg' : 'text-xl')}>
-              {t('posSettlement') || 'POS 결산'}
+              {openMode ? (t('posBusinessOpen') || '영업 시작') : (t('posSettlement') || 'POS 결산')}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {t('posSettlementSub') || '일별 매출·결제수단 입력, 돈통 시제'}
+              {openMode
+                ? (t('posOpenCashCountHint') || '현금 시제를 화폐 단위별로 입력하세요.')
+                : (t('posSettlementSub') || '일별 매출·결제수단 입력, 돈통 시제')}
             </p>
           </div>
         </div>
@@ -416,7 +444,57 @@ export function PosSettlementForm({ t, compact, offlineAware = false }: PosSettl
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t('loading')}</div>
         )}
 
-        {effectiveStore && !loading && (
+        {effectiveStore && !loading && openMode && (
+          <div className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
+            <div className="space-y-4">
+              {settlement?.cashActual != null && Number(settlement.cashActual) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t('posSavedCashActual') || '저장된 시제'}: {Number(settlement.cashActual).toLocaleString()} ฿
+                </p>
+              )}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {CASH_DENOMINATIONS.map((d) => (
+                  <div key={d.value} className="flex items-center gap-2">
+                    <span className="w-12 text-sm font-medium tabular-nums">{d.label}฿</span>
+                    <span className="text-muted-foreground text-xs">×</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="0"
+                      className="h-10 w-20 text-right"
+                      value={denomCounts[d.value] ?? ''}
+                      onChange={(e) =>
+                        setDenomCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, '') }))
+                      }
+                      disabled={closed}
+                    />
+                    <span className="text-xs text-muted-foreground w-8 tabular-nums">
+                      ={(d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0)).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-lg bg-primary/10 px-4 py-4 text-center">
+                <div className="text-sm text-muted-foreground mb-1">{t('posCashActual') || '현금 시제 합계'}</div>
+                <div className="text-2xl font-bold tabular-nums">{denomTotal.toLocaleString()} ฿</div>
+              </div>
+              <Button className="w-full" onClick={handleSave} disabled={saving || closed}>
+                <Save className="mr-2 h-4 w-4" />
+                {saving ? '...' : t('itemsBtnSave') || '저장'}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => router.push('/pos/settlement')}
+              >
+                {t('posSettlement') || '전체 결산'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {effectiveStore && !loading && !openMode && (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
             <TabsList className="mb-4 grid w-full grid-cols-2">
               <TabsTrigger value="entry">결산 입력</TabsTrigger>

@@ -23,6 +23,7 @@ import {
   executeWithdrawal,
   registerExpenseFromBankTransaction,
   updateExpenseRegisterItem,
+  updateExpenseAccrual,
   getAccountSubjects,
   getBankAccounts,
   getCardAccounts,
@@ -57,7 +58,6 @@ export function WithdrawalManagementTab() {
   const t = useT(lang)
   const { auth } = useAuth()
   const { stores } = useStoreList()
-  const router = useRouter()
 
   const [paymentMethod, setPaymentMethod] = React.useState<"bank" | "petty" | "card">("bank")
   const [transferToCardAccountId, setTransferToCardAccountId] = React.useState<string>("")
@@ -98,8 +98,11 @@ export function WithdrawalManagementTab() {
   const [employeeList, setEmployeeList] = React.useState<{ store: string; job: string; name: string; accountNumber: string; bankName: string }[]>([])
 
   const searchParams = useSearchParams()
+  const router = useRouter()
   const hasAppliedParams = React.useRef(false)
   const bankTransactionIdParam = searchParams.get("bankTransactionId")
+  const editAccrualIdParam = searchParams.get("editAccrualId")
+  const isEditAccrualMode = !!editAccrualIdParam && !!Number(editAccrualIdParam)
   const isEditMode = searchParams.get("editMode") === "1" && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
   const isBankLinkMode = !isEditMode && !!bankTransactionIdParam && !!Number(bankTransactionIdParam)
   const updateExistingParam = searchParams.get("updateExisting") === "1"
@@ -132,14 +135,34 @@ export function WithdrawalManagementTab() {
     const accountIdParam = searchParams.get("accountId")
     const btIdParam = searchParams.get("bankTransactionId")
     const vendorCodeParam = searchParams.get("vendorCode")
+    const payeeCodeParam = searchParams.get("payeeCode")
+    const payeeNameParam = searchParams.get("payeeName")
     const accountSubjectIdParam = searchParams.get("accountSubjectId")
     const bankNoteParam = searchParams.get("bankNote")
+    const memoParam = searchParams.get("memo")
     const categoryParam = searchParams.get("category")
-    if (amountParam || bankMemoParam || transDateParam || accountIdParam || btIdParam || vendorCodeParam || accountSubjectIdParam || bankNoteParam || categoryParam) {
+    const storeNameParam = searchParams.get("storeName")
+    const editAccrualId = searchParams.get("editAccrualId")
+    const hasAnyParam =
+      amountParam ||
+      bankMemoParam ||
+      transDateParam ||
+      accountIdParam ||
+      btIdParam ||
+      vendorCodeParam ||
+      payeeCodeParam ||
+      payeeNameParam ||
+      accountSubjectIdParam ||
+      bankNoteParam ||
+      memoParam ||
+      categoryParam ||
+      storeNameParam ||
+      editAccrualId
+    if (hasAnyParam) {
       hasAppliedParams.current = true
       if (amountParam && Number(amountParam) > 0) setAmount(String(Number(amountParam)))
       if (bankMemoParam) setBankMemo(bankMemoParam)
-      if (bankNoteParam) setMemo(bankNoteParam)
+      if (bankNoteParam || memoParam) setMemo(memoParam || bankNoteParam || "")
       if (transDateParam && /^\d{4}-\d{2}-\d{2}$/.test(transDateParam)) setTransDate(transDateParam)
       if (accountIdParam) setAccountId(accountIdParam)
       if (btIdParam) {
@@ -155,7 +178,18 @@ export function WithdrawalManagementTab() {
         setPayeeName(vc)
         setPayeeManual(true)
       }
+      if (payeeCodeParam || payeeNameParam) {
+        setPayeeCode(payeeCodeParam || payeeNameParam || "")
+        setPayeeName(payeeNameParam || payeeCodeParam || "")
+        setPayeeManual(true)
+      }
       if (accountSubjectIdParam) setAccountSubjectId(accountSubjectIdParam)
+      if (categoryParam) {
+        const mapped = mapCategoryToMainSub(categoryParam)
+        setCategoryMain(mapped.main)
+        if (mapped.sub) setCategorySub(mapped.sub)
+      }
+      if (storeNameParam) setStoreName(storeNameParam)
     }
   }, [searchParams, mapCategoryToMainSub])
 
@@ -341,30 +375,56 @@ export function WithdrawalManagementTab() {
     }
     setSaving(true)
     try {
-      const res = await addExpenseAccrual({
-        payeeCode: code || name,
-        payeeName: name || code,
-        withdrawalCategory,
-        categoryMain,
-        categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
-        amount: amt,
-        expenseDate: transDate,
-        dueDate: transDate,
-        memo: memo.trim() || undefined,
-        accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
-        storeName: storeName || undefined,
-        userName: auth?.user,
-        userRole: auth?.role,
-      })
-      if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
-        return
+      if (isEditAccrualMode && editAccrualIdParam) {
+        const res = await updateExpenseAccrual({
+          expenseAccrualId: Number(editAccrualIdParam),
+          amount: amt,
+          expenseDate: transDate,
+          dueDate: transDate,
+          memo: memo.trim() || undefined,
+          payeeCode: code || undefined,
+          payeeName: name || undefined,
+          accountSubjectId: accountSubjectId && accountSubjectId !== "__none__" ? Number(accountSubjectId) : null,
+          storeName: storeName || undefined,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        setAmount("")
+        setMemo("")
+        setPayeeCode("")
+        setPayeeName("")
+        hasAppliedParams.current = false
+        router.replace("/admin/expense-management?tab=plan")
+        alert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
+      } else {
+        const res = await addExpenseAccrual({
+          payeeCode: code || name,
+          payeeName: name || code,
+          withdrawalCategory,
+          categoryMain,
+          categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
+          amount: amt,
+          expenseDate: transDate,
+          dueDate: transDate,
+          memo: memo.trim() || undefined,
+          accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+          storeName: storeName || undefined,
+          userName: auth?.user,
+          userRole: auth?.role,
+        })
+        if (!res.success) {
+          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        setAmount("")
+        setMemo("")
+        setPayeeCode("")
+        setPayeeName("")
+        alert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
       }
-      setAmount("")
-      setMemo("")
-      setPayeeCode("")
-      setPayeeName("")
-      alert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
     } finally {
       setSaving(false)
     }
@@ -1109,9 +1169,13 @@ export function WithdrawalManagementTab() {
                 <Label>{t("amount") || "금액"}</Label>
                 <Input
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/[^\d.,]/g, "").replace(/,/g, "")
+                    const parts = v.split(".")
+                    setAmount(parts.length > 2 ? parts[0] + "." + parts[1] : v)
+                  }}
                   type="text"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="0"
                   className={`w-[120px] h-9 mt-1 ${isBankLinkMode ? "bg-muted/50 cursor-default" : ""}`}
                   readOnly={isBankLinkMode}

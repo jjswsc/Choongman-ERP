@@ -58,12 +58,24 @@ export function isManagerOrFranchiseeRole(role: string): boolean {
   return isManagerRole(role) || isFranchiseeRole(role)
 }
 
-/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + POS 직원) */
+/** 회계 권한인지 (미수금·미지급금에서 매장별 선택 관리 가능) */
+export function isAccountingRole(role: string): boolean {
+  const r = String(role || "").toLowerCase().trim()
+  return r.includes("accounting") || r.includes("회계")
+}
+
+/** 미수금·미지급금에서 전체 매장 선택 가능 (본사 + 회계직원) */
+export function canManageReceivablePayableAllStores(role: string): boolean {
+  return isOfficeRole(role) || isAccountingRole(role)
+}
+
+/** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (
     isOfficeRole(role) ||
     isManagerRole(role) ||
     isFranchiseeRole(role) ||
+    isAccountingRole(role) ||
     isPosOrderOnlyRole(role) ||
     isPosSettlementOnlyRole(role)
   )

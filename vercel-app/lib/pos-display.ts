@@ -57,6 +57,7 @@ export type POSTileType =
   | "members"
   | "business"
   | "cash"
+  | "petty-cash"
   | "operations"
   | "open"
   | "close"
@@ -93,15 +94,10 @@ export interface POSSubMenuItem {
   labelKey: string
 }
 
-export const POS_SUBMENUS: Record<"business" | "cash" | "operations", POSSubMenuItem[]> = {
+export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> = {
   business: [
     { type: "open", labelKey: "posBusinessOpen" },
     { type: "close", labelKey: "posBusinessClose" },
-  ],
-  cash: [
-    { type: "cash-deposit", labelKey: "posCashDeposit" },
-    { type: "cash-withdrawal", labelKey: "posCashWithdrawal" },
-    { type: "cash-drawer", labelKey: "posCashDrawer" },
   ],
   operations: [
     { type: "refresh", labelKey: "posRefresh" },
@@ -121,5 +117,6 @@ export const DEFAULT_TILES: POSTile[] = [
   { id: "m3b", type: "members", label: "회원 관리", labelEn: "Members", labelKey: "posMemberManage", icon: "users", variant: "default", size: "medium", enabled: true, order: 12.5, group: "other" },
   { id: "m4", type: "business", label: "영업 관리", labelEn: "Business", labelKey: "posBusinessManage", icon: "folder-open", variant: "default", size: "medium", enabled: true, order: 13, group: "other" },
   { id: "m5", type: "cash", label: "시재 관리", labelEn: "Cash", labelKey: "posCashManage", icon: "wallet", variant: "default", size: "medium", enabled: true, order: 14, group: "other" },
+  { id: "m5b", type: "petty-cash", label: "패티 캐쉬", labelEn: "Petty Cash", labelKey: "adminPettyCash", icon: "banknote", variant: "default", size: "medium", enabled: true, order: 14.5, group: "other" },
   { id: "m6", type: "operations", label: "운영 관리", labelEn: "Operations", labelKey: "posOperationsManage", icon: "settings", variant: "default", size: "medium", enabled: true, order: 15, group: "other" },
 ]

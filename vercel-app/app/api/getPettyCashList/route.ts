@@ -31,43 +31,55 @@ export async function GET(request: NextRequest) {
 
   try {
     let rows: { id: number; store?: string; trans_date?: string; trans_type?: string; amount?: number; balance_after?: number; memo?: string; receipt_url?: string; user_name?: string; account_subject_id?: number }[] = []
+    // 잔액 계산을 위해 날짜순(오래된순) 조회
     if (effectiveStore) {
       if (effectiveStore === 'Office' && !departmentFilter) {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-          { order: 'trans_date.desc,id.desc', limit: 500 }
+          { order: 'trans_date.asc,id.asc', limit: 2000 }
         )) as typeof rows
       } else {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'store=eq.' + encodeURIComponent(effectiveStore),
-          { order: 'trans_date.desc,id.desc', limit: 500 }
+          { order: 'trans_date.asc,id.asc', limit: 2000 }
         )) as typeof rows
       }
     } else {
       rows = (await supabaseSelect('petty_cash_transactions', {
-        order: 'trans_date.desc,id.desc',
-        limit: 500,
+        order: 'trans_date.asc,id.asc',
+        limit: 2000,
       })) as typeof rows
     }
 
     const startD = startStr ? new Date(startStr + 'T00:00:00') : null
     const endD = endStr ? new Date(endStr + 'T23:59:59') : null
 
+    // 날짜순(이미 asc 조회됨)으로 잔액 계산 (DB에 balance_after가 없을 수 있음)
+    const storeBal: Record<string, number> = {}
     const list: { id: number; store: string; trans_date: string; trans_type: string; amount: number; balance_after: number | null; memo: string; receipt_url?: string; user_name: string; account_subject_id?: number | null; accountSubjectId?: number | null }[] = []
+
     for (const r of rows || []) {
       const dt = toDateStr(r.trans_date)
       if (!dt) continue
-      if (startD && new Date(dt + 'T12:00:00') < startD) continue
-      if (endD && new Date(dt + 'T12:00:00') > endD) continue
+      const store = String(r.store || '').trim()
+      if (!store) continue
+      const amt = Number(r.amount) || 0
+      if (!storeBal[store]) storeBal[store] = 0
+      storeBal[store] += amt
+
+      const dtD = new Date(dt + 'T12:00:00')
+      if (startD && dtD < startD) continue
+      if (endD && dtD > endD) continue
+
       list.push({
         id: r.id,
-        store: String(r.store || '').trim(),
+        store,
         trans_date: dt,
         trans_type: String(r.trans_type || 'expense').trim(),
-        amount: Number(r.amount) || 0,
-        balance_after: r.balance_after != null ? Number(r.balance_after) : null,
+        amount: amt,
+        balance_after: storeBal[store],
         memo: String(r.memo || '').trim(),
         receipt_url: r.receipt_url ? String(r.receipt_url).trim() : undefined,
         user_name: String(r.user_name || '').trim(),
@@ -75,6 +87,9 @@ export async function GET(request: NextRequest) {
         accountSubjectId: r.account_subject_id != null ? Number(r.account_subject_id) : null,
       })
     }
+
+    // 최신순으로 정렬 (화면 표시용)
+    list.sort((a, b) => b.trans_date.localeCompare(a.trans_date) || b.id - a.id)
 
     return NextResponse.json(list, { headers })
   } catch (e) {

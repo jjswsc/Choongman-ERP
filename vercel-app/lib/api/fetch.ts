@@ -10,12 +10,21 @@ function getAuthHeaders(): Record<string, string> {
   return {}
 }
 
+/** 절대 URL로 변환 - 상대 경로 시 현재 origin 사용 (배포/프록시 환경에서 요청이 올바른 서버로 가도록) */
+function resolveUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string' && input.startsWith('/') && typeof window !== 'undefined') {
+    return `${window.location.origin}${input}`
+  }
+  return typeof input === 'string' ? input : input.toString()
+}
+
 /** 인증 토큰을 붙인 fetch - 컴포넌트에서 직접 API 호출 시 사용 */
 export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
   const auth = getAuthHeaders()
   Object.entries(auth).forEach(([k, v]) => headers.set(k, v))
-  const res = await fetch(input, { ...init, headers })
+  const url = resolveUrl(input)
+  const res = await fetch(url, { ...init, headers })
   if (res.status === 401 && typeof window !== 'undefined') {
     try {
       sessionStorage.removeItem('cm_token')

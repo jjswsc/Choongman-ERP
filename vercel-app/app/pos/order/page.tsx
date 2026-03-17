@@ -22,6 +22,7 @@ import {
 import { savePosOrderWithOffline } from "@/lib/offline"
 import { getBangkokDateStr, getPosBusinessDateStr } from "@/lib/pos-business-day"
 import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn, escapeHtml } from "@/lib/utils"
@@ -88,6 +89,11 @@ export default function PosOrderPage() {
     // #endregion
   }, [])
   const { stores } = useStoreList()
+  const canSearchAll = isOfficeRole(auth?.role || "")
+  const effectiveStores = React.useMemo(
+    () => (canSearchAll ? stores : auth?.store ? [auth.store] : stores),
+    [canSearchAll, auth?.store, stores]
+  )
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
   const [categories, setCategories] = React.useState<string[]>([])
@@ -179,9 +185,9 @@ export default function PosOrderPage() {
   }, [receiptData])
 
   React.useEffect(() => {
-    const def = auth?.store || stores[0] || "ST01"
+    const def = auth?.store || effectiveStores[0] || "ST01"
     if (!storeCode && def) setStoreCode(def)
-  }, [auth?.store, stores, storeCode])
+  }, [auth?.store, effectiveStores, storeCode])
 
   const loadTodaySales = React.useCallback(() => {
     if (!storeCode) return
@@ -1038,17 +1044,17 @@ export default function PosOrderPage() {
           </Button>
         </div>
         <div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
-          {stores.length > 0 && (
+          {effectiveStores.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="shrink-0 text-xs text-slate-600 w-12">
                 {t("store") || "매장"}
               </span>
-              <Select value={storeCode || stores[0]} onValueChange={setStoreCode}>
+              <Select value={storeCode || effectiveStores[0]} onValueChange={setStoreCode} disabled={!canSearchAll}>
                 <SelectTrigger className="h-8 flex-1 border-slate-200 bg-white text-sm text-slate-800">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {stores.map((s) => (
+                  {effectiveStores.map((s) => (
                     <SelectItem key={s} value={s}>
                       {s}
                     </SelectItem>

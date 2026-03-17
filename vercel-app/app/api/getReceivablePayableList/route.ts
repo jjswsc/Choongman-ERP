@@ -40,8 +40,11 @@ export async function GET(request: NextRequest) {
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
 
-  // 매니저/가맹점주: receivable는 자기 매장만, payable은 조회 불가
-  const isManager = userRole.includes('manager') || userRole.includes('franchisee')
+  // 본사/회계직원: 매장별 선택 가능. 매니저/가맹점주: receivable만 자기 매장, payable 조회 불가
+  const canSelectStores = ['director', 'ceo', 'hr', 'officer'].some((r) => userRole.includes(r))
+    || userRole.includes('accounting')
+    || userRole.includes('회계')
+  const isManager = (userRole.includes('manager') || userRole.includes('franchisee')) && !canSelectStores
   if (type === 'receivable' && isManager && userStore) {
     storeFilter = userStore
   }

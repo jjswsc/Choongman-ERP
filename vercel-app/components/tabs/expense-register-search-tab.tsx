@@ -23,6 +23,7 @@ import {
   getVendorsForPurchase,
   deleteExpenseRegisterItem,
   updateBankTransactionInvoice,
+  translateTexts,
   type BankAccount,
   type ExpenseRegisterItem,
   type AccountSubjectItem,
@@ -88,6 +89,7 @@ export function ExpenseRegisterSearchTab() {
   const [invoicePhotoPreviewUrl, setInvoicePhotoPreviewUrl] = React.useState<string | null>(null)
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
   const [deletingId, setDeletingId] = React.useState<number | null>(null)
+  const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const invoicePhotoTargetRowRef = React.useRef<ExpenseRegisterItem | null>(null)
@@ -103,6 +105,28 @@ export function ExpenseRegisterSearchTab() {
       setVendors(v || [])
     })
   }, [auth?.role, auth?.store])
+
+  React.useEffect(() => {
+    const memos = [...new Set(list.map((r) => (r.memo || "").trim()).filter(Boolean))]
+    if (memos.length === 0) {
+      setMemoTransMap({})
+      return
+    }
+    let cancelled = false
+    translateTexts(memos, lang)
+      .then((translated) => {
+        if (cancelled) return
+        const map: Record<string, string> = {}
+        memos.forEach((m, i) => {
+          map[m] = translated[i] ?? m
+        })
+        setMemoTransMap(map)
+      })
+      .catch(() => setMemoTransMap({}))
+    return () => { cancelled = true }
+  }, [list, lang])
+
+  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
   const loadData = React.useCallback(async () => {
     setLoading(true)
@@ -339,7 +363,7 @@ export function ExpenseRegisterSearchTab() {
                           </div>
                         </td>
                         <td className="p-2 text-muted-foreground text-xs max-w-[180px] truncate" title={r.memo}>
-                          {r.memo || "-"}
+                          {getMemo(r.memo)}
                         </td>
                         <td className="p-2 text-center text-xs text-muted-foreground">
                           {getLinkFlagsLabel(r.bankLinked, r.pettyLinked, t)}

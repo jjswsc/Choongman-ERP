@@ -2,10 +2,11 @@ import { apiFetch } from './fetch'
 
 export async function getLoginData() {
   const res = await apiFetch('/api/getLoginData')
-  const data = (await res.json()) as {
-    users?: Record<string, string[]>
-    vendors?: string[]
-    error?: string
+  let data: { users?: Record<string, string[]>; vendors?: string[]; error?: string }
+  try {
+    data = (await res.json()) as typeof data
+  } catch {
+    throw new Error(res.ok ? '응답 파싱 실패' : `서버 오류 (${res.status})`)
   }
   if (!res.ok && data?.error) throw new Error(data.error)
   if (!res.ok) throw new Error('매장 목록을 불러오지 못했습니다.')

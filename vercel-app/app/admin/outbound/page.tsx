@@ -452,7 +452,8 @@ export default function OutboundPage() {
     const packingListTitle = t("outWhPackingList")
     const periodLabel = t("outWhPeriod")
     const outboundColLabel = t("outWhOutboundCol")
-    const countLabel = t("outWhWarehouseCount")
+    const itemCountLabel = t("outWhItemCountLabel")
+    const totalQtyLabel = t("outWhTotalQtyLabel")
     const checkBoxHtml = '<span style="display:inline-block;width:16px;height:16px;border:2px solid #475569;border-radius:3px;background:#fff;vertical-align:middle;"></span>'
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
@@ -526,18 +527,21 @@ export default function OutboundPage() {
             const countStr = totalForStore > 0
               ? `${items.length}/${totalForStore} ${t("outWhCountSuffix")} (${t("outWhWarehouseAll")})`
               : `${items.length} ${t("outWhCountSuffix")}`
+            const sumQty = items.reduce((s, r) => s + (r.qty || 0), 0)
             const storeHeaderHtml = `<div style="margin-bottom:20px;">
           <h2 style="margin:0 0 12px 0; font-size:1.35rem; font-weight:700; color:#0f172a;">${escape(packingListTitle)} - ${escape(storeName)}</h2>
           <table style="width:100%; border-collapse:collapse; font-size:12px; border:1px solid #e2e8f0; border-radius:6px; overflow:hidden;">
             <thead><tr style="background:linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%); color:#fff;">
               <th style="padding:10px 14px; text-align:center; font-weight:600;">${escape(periodLabel)}</th>
               <th style="padding:10px 14px; text-align:center; font-weight:600;">${escape(outboundColLabel)}</th>
-              <th style="padding:10px 14px; text-align:center; font-weight:600;">${escape(countLabel)}</th>
+              <th style="padding:10px 14px; text-align:center; font-weight:600;">${escape(itemCountLabel)}</th>
+              <th style="padding:10px 14px; text-align:center; font-weight:600;">${escape(totalQtyLabel)}</th>
             </tr></thead>
             <tbody><tr>
               <td style="padding:12px 14px; border-top:1px solid #e2e8f0; background:#f8fafc; text-align:center; font-weight:600;">${escape(date)}</td>
               <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${escape(whDisplayForHeader)}</td>
               <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600;">${escape(countStr)}</td>
+              <td style="padding:12px 14px; border-top:1px solid #e2e8f0; text-align:center; font-weight:600; color:#dc2626;">${sumQty}</td>
             </tr></tbody>
           </table>
         </div>`
@@ -546,11 +550,12 @@ export default function OutboundPage() {
               const style = tdStyle(rowIdx++)
               return `<tr><td style="${style}text-align:center;font-weight:500;">${escape(r.code)}</td><td style="${style}">${escape(r.name)}</td><td style="${style}text-align:center;color:#64748b;">${escape(r.spec)}</td><td style="${style}text-align:center;font-weight:600;">${r.qty}</td><td style="${style}text-align:center;min-width:52px;width:52px;">${checkBoxHtml}</td><td style="${style}text-align:center;white-space:nowrap;min-width:90px;">${escape(r.deliveryDate)}</td></tr>`
             })
+            const totalRowHtml = `<tr style="background:#fef2f2;"><td colspan="3" style="padding:10px 12px;border:1px solid #e2e8f0;text-align:right;font-weight:700;">${escape(t("inv_total") || "Total")}</td><td style="padding:10px 12px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:#dc2626;">${sumQty}</td><td colspan="2" style="padding:10px 12px;border:1px solid #e2e8f0;"></td></tr>`
             const tableHtml = `<div style="margin-bottom:20px;">
             <h4 style="margin:0 0 8px 0; font-size:1rem; font-weight:600; color:#334155;">${whLabel}: ${escape(whDisplay)} — ${escape(label)}</h4>
             <table style="${tableStyle}">
               <thead><tr><th style="${thStyle}">${colCode}</th><th style="${thStyle}">${colItem}</th><th style="${thStyle}">${colSpec}</th><th style="${thStyle}">${colQty}</th><th style="${thStyle} min-width:52px; width:52px; white-space:nowrap;">${colCheck}</th><th style="${thStyle} min-width:90px; white-space:nowrap;">${colDeliveryDate}</th></tr></thead>
-              <tbody>${storeRows.join("")}</tbody>
+              <tbody>${storeRows.join("")}${totalRowHtml}</tbody>
             </table>
           </div>`
             const pageLabel = (t("outWhPrintPageOf") || "페이지 %1/%2")
