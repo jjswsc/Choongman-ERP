@@ -131,6 +131,12 @@ export function PosTableLayoutContent() {
   const floorRef = React.useRef<HTMLDivElement | null>(null)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+  const tableNumberSuffixRaw = t("posTableNumberSuffix")
+  const tableNumberSuffix = tableNumberSuffixRaw !== "posTableNumberSuffix" ? tableNumberSuffixRaw : ""
+  const formatAutoTableName = React.useCallback(
+    (floor: 1 | 2 | 3, number: number) => `${floor}F-${number}${tableNumberSuffix}`,
+    [tableNumberSuffix]
+  )
   const currentFloorLayout = React.useMemo(
     () => layout.filter((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) === activeFloor),
     [layout, activeFloor]
@@ -212,7 +218,7 @@ export function PosTableLayoutContent() {
     const x = (currentFloorLayout.length % 3) * 90 + 24
     const newTable: PosTableItem = {
       id: generateId(),
-      name: `${activeFloor}F-${currentFloorLayout.length + 1}번`,
+      name: formatAutoTableName(activeFloor, currentFloorLayout.length + 1),
       x,
       y,
       w: preset.w,
@@ -499,7 +505,7 @@ export function PosTableLayoutContent() {
         .filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) === activeFloor)
         .slice()
         .sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x))
-      const patch = new Map(floorItems.map((tbl, i) => [tbl.id, `${activeFloor}F-${i + 1}번`]))
+      const patch = new Map(floorItems.map((tbl, i) => [tbl.id, formatAutoTableName(activeFloor, i + 1)]))
       return prev.map((tbl) => (patch.has(tbl.id) ? { ...tbl, name: patch.get(tbl.id) || tbl.name } : tbl))
     })
   }

@@ -134,7 +134,16 @@ export function BankTransactionsTab() {
   const [applyCarryOverSaving, setApplyCarryOverSaving] = React.useState(false)
   const [importVendorSearch, setImportVendorSearch] = React.useState("")
   const [importStoreSearch, setImportStoreSearch] = React.useState("")
-  const [queryRowEdits, setQueryRowEdits] = React.useState<Record<number, Partial<{ category: string; accountSubjectId: string; note: string; salesDate: string; expenseDate: string; vendorCode: string; storeName: string }>>>({})
+  type QueryRowEdit = Partial<{
+    category: string
+    accountSubjectId: string
+    note: string
+    salesDate: string
+    expenseDate: string
+    vendorCode: string
+    storeName: string
+  }>
+  const [queryRowEdits, setQueryRowEdits] = React.useState<Record<number, QueryRowEdit>>({})
   const [queryVendorSearch, setQueryVendorSearch] = React.useState("")
   const [queryStoreSearch, setQueryStoreSearch] = React.useState("")
   const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
@@ -163,9 +172,9 @@ export function BankTransactionsTab() {
     }))
   }
 
-  const handleQueryRowSave = async (r: (typeof list)[0]) => {
+  const handleQueryRowSave = async (r: (typeof list)[0], overrideEdits?: QueryRowEdit) => {
     if (!r.id) return
-    const edits = queryRowEdits[r.id]
+    const edits = overrideEdits ?? queryRowEdits[r.id]
     if (!edits || Object.keys(edits).length === 0) return
     setQuerySavingId(r.id)
     try {
@@ -1227,7 +1236,18 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                     </SelectContent>
                                   </Select>
                                 ) : (
-                                  <Select value={cat} onValueChange={(v) => r.id && setQueryRowEdit(r.id, "category", v)}>
+                                  <Select
+                                    value={cat}
+                                    onValueChange={(v) => {
+                                      if (!r.id) return
+                                      const mergedEdits: QueryRowEdit = { ...(queryRowEdits[r.id] || {}), category: v }
+                                      setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
+                                      const effectiveStoreName = (mergedEdits.storeName ?? r.storeName ?? "").trim()
+                                      if (v === "receivable_receive" && effectiveStoreName) {
+                                        void handleQueryRowSave(r, mergedEdits)
+                                      }
+                                    }}
+                                  >
                                     <SelectTrigger className="h-8 text-xs">
                                       <SelectValue />
                                     </SelectTrigger>
@@ -1270,7 +1290,15 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                 ) : r.transType === "deposit" && cat === "receivable_receive" ? (
                                   <Select
                                     value={(edits?.storeName ?? r.storeName ?? "") || "__none__"}
-                                    onValueChange={(v) => r.id && setQueryRowEdit(r.id, "storeName", v === "__none__" ? "" : v)}
+                                    onValueChange={(v) => {
+                                      if (!r.id) return
+                                      const storeName = v === "__none__" ? "" : v
+                                      const mergedEdits: QueryRowEdit = { ...(queryRowEdits[r.id] || {}), storeName }
+                                      setQueryRowEdits((prev) => ({ ...prev, [r.id!]: mergedEdits }))
+                                      if (storeName) {
+                                        void handleQueryRowSave(r, mergedEdits)
+                                      }
+                                    }}
                                     onOpenChange={(open) => !open && setQueryStoreSearch("")}
                                   >
                                     <SelectTrigger className="h-8 text-xs max-w-[120px]">
@@ -1439,7 +1467,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                               <td
                                 className="p-2 align-middle text-left truncate max-w-[180px] text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
                                 onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
-                                title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                                title={r.memo?.trim() ? r.memo : undefined}
                               >
                                 {r.memo || "-"}
                               </td>
@@ -1698,7 +1726,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         <td
                           className="p-2 min-w-[220px] max-w-[280px] truncate text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
                           onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
-                          title={r.memo ? `${t("bankMemoLabel") || "은행 적요"} (클릭하여 전체 보기)` : undefined}
+                          title={r.memo?.trim() ? r.memo : undefined}
                         >
                           {r.memo || "-"}
                         </td>
