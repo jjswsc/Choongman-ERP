@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { isAccountingRole } from '@/lib/permissions'
 
 /** 직원 삭제 */
 export async function POST(req: Request) {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     }
 
     const rowStore = String(rows[0].store || '').trim()
-    const isTop = ['director', 'officer', 'ceo', 'hr'].some((role) => userRole.includes(role))
+    const isTop = ['director', 'officer', 'ceo', 'hr'].some((role) => userRole.includes(role)) || isAccountingRole(userRole)
     if (!isTop && rowStore !== userStore) {
       return NextResponse.json({ success: false, message: '❌ 해당 매장 직원만 삭제할 수 있습니다.' }, { headers })
     }

@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, isOfficeRole, isOfficeStore } from "@/lib/permissions"
+import { isManagerRole, isOfficeRole, isOfficeStore, isAccountingRole } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -298,7 +298,7 @@ export default function EmployeesPage() {
   }
 
   const isManager = isManagerRole(userRole)
-  const isOffice = isOfficeRole(userRole)
+  const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
 
   const handleNew = () => {
     const base = { ...emptyForm }

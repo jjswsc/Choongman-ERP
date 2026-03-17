@@ -85,7 +85,8 @@ export function ReceivablePayableTab() {
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
   React.useEffect(() => {
-    const memos = [...new Set(listData.map((r) => (r.memo || "").trim()).filter(Boolean))]
+    const rows = listData.flatMap((item) => item.items || [])
+    const memos = [...new Set(rows.map((r) => (r.memo || "").trim()).filter(Boolean))]
     if (memos.length === 0) {
       setMemoTransMap({})
       return

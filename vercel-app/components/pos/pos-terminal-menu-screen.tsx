@@ -40,6 +40,8 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === 'S 순살' || n === 'S - 순살' || n === 'S-순살'
 }
 
+export type PosOrderTypeForPrice = 'dine-in' | 'takeout' | 'delivery'
+
 export interface PosTerminalMenuScreenProps {
   /** 선택된 테이블 이름 (상단에 표시) */
   selectedTableName: string
@@ -53,6 +55,8 @@ export interface PosTerminalMenuScreenProps {
   backButtonLabel?: string
   /** 메뉴/옵션 선택 후 장바구니에 추가할 때 (이름·가격은 옵션 반영된 최종값) */
   onAddItem?: (item: { id: string; name: string; price: number }) => void
+  /** 주문 유형: 홀/포장=홀가격, 배달=배달앱가격 적용 (admin-config 시 무시) */
+  orderType?: PosOrderTypeForPrice
   /** 하단 화면 구성바 표시 */
   showConfigBar?: boolean
   className?: string
@@ -65,6 +69,7 @@ export function PosTerminalMenuScreen({
   onBack,
   backButtonLabel,
   onAddItem,
+  orderType = 'dine-in',
   showConfigBar = true,
   className,
 }: PosTerminalMenuScreenProps) {
@@ -168,15 +173,17 @@ export function PosTerminalMenuScreen({
   }, [storeCode])
 
   const optionsByMenuId = React.useMemo(() => {
+    const sellKey = orderType === 'dine-in' ? 'sellHall' : orderType === 'delivery' ? 'sellDelivery' : 'sellPackaging'
     const m: Record<string, PosMenuOption[]> = {}
     for (const o of allOptions) {
-      if (o.sellHall === false) continue
+      const sell = o[sellKey as keyof PosMenuOption]
+      if (sell === false) continue
       const mid = String(o.menuId)
       if (!m[mid]) m[mid] = []
       m[mid].push(o)
     }
     return m
-  }, [allOptions])
+  }, [allOptions, orderType])
 
   const todayStr = React.useMemo(
     () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
@@ -187,13 +194,16 @@ export function PosTerminalMenuScreen({
   const tileFontPx = isAdminMode ? screenConfig.menuTileFontSize : 13
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
-    const set = new Set(
-      menus
-        .filter((m) => (m.categoryMain ?? '') === selectedMainCategory)
-        .map((m) => m.category)
-        .filter(Boolean)
-    )
-    return Array.from(set).sort()
+    const fromMain = menus
+      .filter((m) => (m.categoryMain ?? '') === selectedMainCategory)
+      .map((m) => m.category)
+      .filter(Boolean)
+    const set = new Set(fromMain)
+    const arr = Array.from(set).sort()
+    if (arr.length > 0) return arr
+    const fromCategory = menus.filter((m) => (m.category ?? '') === selectedMainCategory)
+    if (fromCategory.length > 0) return [selectedMainCategory]
+    return []
   }, [menus, selectedMainCategory])
 
   React.useEffect(() => {
@@ -297,10 +307,12 @@ export function PosTerminalMenuScreen({
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
     if (!selectedMainCategory || !selectedCategory) return []
-    return notSoldOut.filter(
+    const byMainAndSub = notSoldOut.filter(
       (m) =>
         (m.categoryMain ?? '') === selectedMainCategory && m.category === selectedCategory
     )
+    if (byMainAndSub.length > 0) return byMainAndSub
+    return notSoldOut.filter((m) => (m.category ?? '') === selectedCategory)
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
   const filteredPromos = React.useMemo(() => {
@@ -360,9 +372,15 @@ export function PosTerminalMenuScreen({
     }
   }, [debugLog, selectedMainCategory, selectedCategory, filteredMenus.length, filteredPromos.length])
 
-  const getMenuPrice = (menu: PosMenu) => menu.price
-  const getOptionModifier = (opt: PosMenuOption) => opt.priceModifier ?? 0
-  const getPromoPrice = (p: PosPromoWithItems) => p.price ?? 0
+  const getMenuPrice = (menu: PosMenu) =>
+    orderType === 'delivery' && menu.priceDelivery != null ? menu.priceDelivery : menu.price
+  const getOptionModifier = (opt: PosMenuOption) => {
+    if (orderType === 'delivery' && opt.priceModifierDelivery != null) return opt.priceModifierDelivery
+    if (orderType === 'takeout' && opt.priceModifierPackaging != null) return opt.priceModifierPackaging
+    return opt.priceModifier ?? 0
+  }
+  const getPromoPrice = (p: PosPromoWithItems) =>
+    orderType === 'delivery' && p.priceDelivery != null ? p.priceDelivery : (p.price ?? 0)
 
   const chickenMenusForBanban = React.useMemo(() => {
     return menus

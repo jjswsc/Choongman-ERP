@@ -332,17 +332,24 @@ export default function PosOrderPage() {
   /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
-    const set = new Set(menus.filter((m) => (m.categoryMain ?? "") === selectedMainCategory).map((m) => m.category).filter(Boolean))
-    return Array.from(set).sort()
+    const fromMain = menus.filter((m) => (m.categoryMain ?? "") === selectedMainCategory).map((m) => m.category).filter(Boolean)
+    const set = new Set(fromMain)
+    const arr = Array.from(set).sort()
+    if (arr.length > 0) return arr
+    const fromCategory = menus.filter((m) => (m.category ?? "") === selectedMainCategory)
+    if (fromCategory.length > 0) return [selectedMainCategory]
+    return []
   }, [menus, selectedMainCategory])
 
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
     if (!selectedMainCategory || !selectedCategory) return []
-    return notSoldOut.filter(
+    const byMainAndSub = notSoldOut.filter(
       (m) => (m.categoryMain ?? "") === selectedMainCategory && m.category === selectedCategory
     )
+    if (byMainAndSub.length > 0) return byMainAndSub
+    return notSoldOut.filter((m) => (m.category ?? "") === selectedCategory)
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
   const filteredPromos = React.useMemo(() => {

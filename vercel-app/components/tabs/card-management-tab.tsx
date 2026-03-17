@@ -112,7 +112,7 @@ export function CardManagementTab() {
     return () => { cancelled = true }
   }, [cardAccounts, transactions, lang])
 
-  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
+  const getMemo = React.useCallback((memo: string | undefined | null) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
 
   const loadAccounts = React.useCallback(async () => {
     getCardAccounts()

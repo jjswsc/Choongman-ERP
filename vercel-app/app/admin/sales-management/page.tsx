@@ -1,9 +1,12 @@
 "use client"
 
+import * as React from "react"
 import { SalesManagementTab } from "@/components/tabs/sales-management-tab"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { BarChart3 } from "lucide-react"
+
+const SalesTab = SalesManagementTab as React.ComponentType<{ offlineAware?: boolean }>
 
 export default function SalesManagementPage() {
   const t = useT(useLang().lang)
@@ -18,7 +21,7 @@ export default function SalesManagementPage() {
             {t("salesManagementTitle") || "매출 관리"}
           </h1>
         </div>
-        <SalesManagementTab />
+        <SalesTab />
       </div>
     </div>
   )

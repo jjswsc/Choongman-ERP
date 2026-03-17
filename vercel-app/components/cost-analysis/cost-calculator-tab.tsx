@@ -97,7 +97,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       : null
     if (row) {
       const { food, packaging } = breakdownToRecipeItems(row)
-      const price = row.priceDelivery ?? row.priceHall
+      const priceHall = row.priceHall ?? 0
+      const priceDelivery = row.priceDelivery ?? null
       const rowWithCode = row as PosMenuCostAnalysisRow & { displayCode?: string }
       setMenuItem({
         ...emptyMenuItem,
@@ -105,10 +106,10 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         menuName: (row.menuName ?? "") + (row.optionName ? ` (${row.optionName})` : ""),
         category: row.category ?? "",
         categoryMain: row.categoryMain ?? "",
-        inclVat: price,
+        inclVat: priceHall,
         vatIncluded: row.vatIncluded !== false,
-        priceHall: row.priceHall ?? 0,
-        priceDelivery: row.priceDelivery ?? null,
+        priceHall,
+        priceDelivery,
         cookingTimeMin: row.cookingTimeMin ?? null,
       })
       setFoodItems(food)

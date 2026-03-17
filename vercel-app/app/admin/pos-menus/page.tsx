@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -124,7 +124,7 @@ export default function PosMenusPage() {
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
-  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "priceHistory">("screen")
+  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "priceHistory" | "priceApply">("screen")
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
   const [newOptionStepValues, setNewOptionStepValues] = React.useState<Record<string, string>>({})
@@ -969,6 +969,7 @@ export default function PosMenusPage() {
             <TabsTrigger value="topping" className="gap-1.5 text-xs"><Pizza className="h-3.5 w-3.5" />{t("posMenuTabTopping")}</TabsTrigger>
             <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
             <TabsTrigger value="priceHistory" className="gap-1.5 text-xs"><History className="h-3.5 w-3.5" />{t("posMenuTabPriceHistory") || "메뉴 가격이력"}</TabsTrigger>
+            <TabsTrigger value="priceApply" className="gap-1.5 text-xs"><DollarSign className="h-3.5 w-3.5" />{t("posMenuTabPriceApply") || "가격 적용"}</TabsTrigger>
           </TabsList>
           <TabsContent value="screen" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
@@ -1969,6 +1970,34 @@ export default function PosMenusPage() {
           <TabsContent value="priceHistory" className="mt-0">
             <div className="rounded-xl border bg-card p-6">
               <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
+            </div>
+          </TabsContent>
+          <TabsContent value="priceApply" className="mt-0">
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-primary" />
+                {t("posMenuTabPriceApply") || "가격 적용"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {t("posMenuTabPriceApplyDesc") || "POS에서는 주문 유형에 따라 아래와 같이 메뉴 관리의 가격이 자동 적용됩니다."}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeDineIn") || "매장"}</p>
+                  <p className="text-sm font-medium">{t("posMenuPriceApplyHall") || "홀 가격 적용"}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeTakeout") || "포장"}</p>
+                  <p className="text-sm font-medium">{t("posMenuPriceApplyHall") || "홀 가격 적용"}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">{t("posOrderTypeDelivery") || "배달"}</p>
+                  <p className="text-sm font-medium">{t("posMenuPriceApplyDelivery") || "배달앱 가격 적용"}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("posMenuPriceApplyHint") || "메뉴 정보 탭에서 홀·배달앱 가격을 각각 설정할 수 있습니다. 배달앱 가격이 없으면 홀 가격이 적용됩니다."}
+              </p>
             </div>
           </TabsContent>
         </Tabs>

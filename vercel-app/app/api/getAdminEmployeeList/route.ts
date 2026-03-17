@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-import { isOfficeStore, OFFICE_STORES } from '@/lib/permissions'
+import { isOfficeStore, OFFICE_STORES, isAccountingRole } from '@/lib/permissions'
 
 /** userStore와 empStore 매칭 - "CM " 접두사 차이 허용 (Ekkamai ↔ CM Ekkamai) */
 function storeMatches(userStore: string, empStore: string): boolean {
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       if (!r.store && !r.name) continue
       const empStore = String(r.store || '').trim()
       let include = false
-      if (role.includes('director') || role.includes('ceo') || role.includes('hr')) {
+      if (role.includes('director') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)) {
         include = true
       } else if (role.includes('officer')) {
         if (!isOfficeStore(empStore)) include = true
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
       if (OFFICE_STORES.some((s) => bLower.includes(s.toLowerCase()))) return 1
       return a.localeCompare(b)
     })
-    const canSeeOffice = role.includes('director') || role.includes('ceo') || role.includes('hr')
+    const canSeeOffice = role.includes('director') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)
     if (!canSeeOffice) {
       allStores = allStores.filter((st) => !isOfficeStore(st))
     }

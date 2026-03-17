@@ -450,6 +450,18 @@ export function ExpenseManagementTab() {
     [router]
   )
 
+  const openEditPlan = React.useCallback((row: ExpenseAccrualPlanItem) => {
+    setEditingPlanRow(row)
+    setEditPlanAmount(String(row.plannedAmount ?? ""))
+    setEditPlanExpenseDate((row.expenseDate || "").slice(0, 10))
+    setEditPlanDueDate((row.dueDate || "").slice(0, 10))
+    setEditPlanMemo(row.memo || "")
+    setEditPlanPayeeCode(row.payeeCode || "")
+    setEditPlanPayeeName(row.payeeName || "")
+    setEditPlanAccountSubjectId(row.accountSubjectId ? String(row.accountSubjectId) : "__none__")
+    setEditPlanStoreName(row.storeName || "")
+  }, [])
+
   const handleSavePlanEdit = React.useCallback(async () => {
     if (!editingPlanRow?.id) return
     const amount = Number(String(editPlanAmount || "").replace(/,/g, ""))

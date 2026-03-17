@@ -58,7 +58,7 @@ export function BalanceSheetTab() {
     return () => { cancelled = true }
   }, [data?.unpostedBankWithdrawals, lang])
 
-  const getMemo = React.useCallback((memo: string | undefined, store?: string) => {
+  const getMemo = React.useCallback((memo: string | undefined | null, store?: string | null) => {
     const raw = (memo || store || "").trim() || "—"
     if (raw === "—") return "—"
     return (memoTransMap[raw] || memoTransMap[store || ""]) || raw
@@ -219,7 +219,7 @@ export function BalanceSheetTab() {
                             <td className="py-1 pr-2">{row.transDate}</td>
                             <td className="font-mono text-right py-1 pr-2">{formatBaht(row.amount)}</td>
                             <td className="py-1 pr-2 text-amber-700">{row.category}</td>
-                            <td className="py-1 truncate max-w-[180px]" title={row.memo || row.store || ""}>{getMemo(row.memo, row.store)}</td>
+                            <td className="py-1 truncate max-w-[180px]" title={row.memo ?? row.store ?? ""}>{getMemo(row.memo ?? undefined, row.store ?? undefined)}</td>
                           </tr>
                         ))}
                       </tbody>

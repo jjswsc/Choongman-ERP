@@ -124,7 +124,8 @@ export interface SalesManagementTabProps {
   offlineAware?: boolean
 }
 
-export function SalesManagementTab({ offlineAware = false }: SalesManagementTabProps = {}) {
+export function SalesManagementTab(props: SalesManagementTabProps = {}) {
+  const { offlineAware = false } = props
   const { lang } = useLang()
   const t = useT(lang)
   const router = useRouter()
@@ -399,7 +400,7 @@ export function SalesManagementTab({ offlineAware = false }: SalesManagementTabP
     if (startStr && endStr) {
       const id = ++loadIdRef.current
       const guarded =
-        <T>(setter: React.Dispatch<React.SetStateAction<T>>) =>
+        <T,>(setter: React.Dispatch<React.SetStateAction<T>>) =>
         (v: T) => {
           if (loadIdRef.current === id) setter(v)
         }

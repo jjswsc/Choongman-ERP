@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { hashPassword, isHashed } from '@/lib/password'
+import { isAccountingRole } from '@/lib/permissions'
 
 function toDateStr(val: unknown): string | null {
   if (!val) return null
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
     const userStore = String(body.userStore || '').trim()
     const userRole = String(body.userRole || '').toLowerCase()
 
-    const isTop = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
+    const isTop = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r)) || isAccountingRole(userRole)
     if (!isTop && userStore && String(d.store || '').trim() !== userStore) {
       return NextResponse.json(
         { success: false, message: '❌ 해당 매장 직원만 수정할 수 있습니다.' },

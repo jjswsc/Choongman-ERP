@@ -57,6 +57,22 @@ export async function GET(request: NextRequest) {
         limit: 500,
         select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
+
+      if (!rows?.length && storeCode) {
+        const variants = [
+          storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
+          storeCode.replace(/^CM\s+/i, '').trim(),
+        ].filter((v) => v && v !== storeCode)
+        for (const alt of variants) {
+          const altFilter = `store_code=ilike.${encodeURIComponent(alt)}`
+          rows = (await supabaseSelectFilter('pos_orders', altFilter, {
+            order: 'created_at.desc',
+            limit: 500,
+            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
+          })) as typeof rows
+          if (rows?.length) break
+        }
+      }
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',

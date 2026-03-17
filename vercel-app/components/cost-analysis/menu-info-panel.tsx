@@ -404,7 +404,13 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
             <div className="flex gap-1.5">
               <button
                 type="button"
-                onClick={() => onMenuItemChange({ ...menuItem, serviceType: "Dine-In" })}
+                onClick={() =>
+                  onMenuItemChange({
+                    ...menuItem,
+                    serviceType: "Dine-In",
+                    inclVat: menuItem.priceHall ?? menuItem.inclVat ?? 0,
+                  })
+                }
                 className={cn(
                   "inline-flex items-center justify-center gap-1.5 h-9 min-w-[5.5rem] px-3 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
                   menuItem.serviceType === "Dine-In"
@@ -417,7 +423,13 @@ export function MenuInfoPanel({ menuItem, onMenuItemChange, categories = [], mai
               </button>
               <button
                 type="button"
-                onClick={() => onMenuItemChange({ ...menuItem, serviceType: "Delivery" })}
+                onClick={() =>
+                  onMenuItemChange({
+                    ...menuItem,
+                    serviceType: "Delivery",
+                    inclVat: menuItem.priceDelivery ?? menuItem.priceHall ?? menuItem.inclVat ?? 0,
+                  })
+                }
                 className={cn(
                   "inline-flex items-center justify-center gap-1.5 h-9 min-w-[5.5rem] px-3 rounded-md text-sm font-medium transition-colors whitespace-nowrap",
                   menuItem.serviceType === "Delivery"

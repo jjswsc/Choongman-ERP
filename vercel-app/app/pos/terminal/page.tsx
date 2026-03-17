@@ -1102,6 +1102,7 @@ export default function PosTerminalPage() {
                     selectedTableName={selectedTable?.name ?? selectedTableId}
                     onBack={() => setSelectedTableId(null)}
                     onAddItem={handleAddItemToCart}
+                    orderType="dine-in"
                     className="h-full"
                   />
                 </div>
@@ -1169,12 +1170,12 @@ export default function PosTerminalPage() {
                   )}
                   {!loadingTables && currentLayout.length === 0 && currentStore && (
                     <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
-                      {t('posTableStatusEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 화면 구성 > 테이블 구성에서 배치해 주세요.'}
+                      {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 화면 구성 > 테이블 구성에서 배치해 주세요.'}
                     </div>
                   )}
                   {!loadingTables && !currentStore && stores.length === 0 && (
                     <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm">
-                      {t('posTableStatusEmpty') || '매장/테이블 배치를 관리자 페이지에서 설정해 주세요.'}
+                      {t('posTableLayoutEmpty') || '매장/테이블 배치를 관리자 페이지에서 설정해 주세요.'}
                     </div>
                   )}
                 </>
@@ -1191,6 +1192,7 @@ export default function PosTerminalPage() {
                   onBack={() => setSelectedDeliveryTargetId(null)}
                   backButtonLabel={t('posBack') || '뒤로가기'}
                   onAddItem={handleAddItemToCart}
+                  orderType="delivery"
                   className="h-full"
                 />
               ) : (
@@ -1234,6 +1236,7 @@ export default function PosTerminalPage() {
                   onBack={() => setSelectedTakeoutTargetId(null)}
                   backButtonLabel={t('posBack') || '뒤로가기'}
                   onAddItem={handleAddItemToCart}
+                  orderType="takeout"
                   className="h-full"
                 />
               ) : (

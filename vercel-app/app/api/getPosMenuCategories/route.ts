@@ -29,11 +29,14 @@ export async function GET() {
       if (m) mainSet.add(m)
     }
     const categories = Array.from(catSet).sort()
-    const mainCategories = Array.from(mainSet).sort()
+    let mainCategories = Array.from(mainSet).sort()
+    if (mainCategories.length === 0 && categories.length > 0) {
+      mainCategories = categories
+    }
 
     return NextResponse.json({ categories, mainCategories }, { headers })
   } catch (e) {
     console.error('getPosMenuCategories:', e)
-    return NextResponse.json({ categories: [] }, { headers })
+    return NextResponse.json({ categories: [], mainCategories: [] }, { headers })
   }
 }

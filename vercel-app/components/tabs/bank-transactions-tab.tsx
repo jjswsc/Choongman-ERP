@@ -2413,7 +2413,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           <DialogHeader>
             <DialogTitle>{t("bankMemoLabel") || "은행 적요"}</DialogTitle>
           </DialogHeader>
-          <p className="whitespace-pre-wrap break-words text-sm py-2">{getMemo(memoPreviewText) || memoPreviewText || ""}</p>
+          <p className="whitespace-pre-wrap break-words text-sm py-2">{getMemo(memoPreviewText ?? undefined) || memoPreviewText || ""}</p>
         </DialogContent>
       </Dialog>
 

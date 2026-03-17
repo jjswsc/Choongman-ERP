@@ -1,7 +1,10 @@
 'use client'
 
+import * as React from 'react'
 import { SalesManagementTab } from '@/components/tabs/sales-management-tab'
 import { useT } from '@/lib/i18n'
+
+const SalesTab = SalesManagementTab as React.ComponentType<{ offlineAware?: boolean }>
 import { useLang } from '@/lib/lang-context'
 import { BarChart3 } from 'lucide-react'
 
@@ -19,7 +22,7 @@ export default function PosSalesPage() {
             {t('salesManagementTitle') || '매출 관리'}
           </h1>
         </div>
-        <SalesManagementTab offlineAware />
+        <SalesTab offlineAware />
       </div>
     </div>
   )

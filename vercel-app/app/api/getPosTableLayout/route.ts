@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
 /** POS 테이블 배치 조회 (매장별) */
 export async function GET(request: NextRequest) {
@@ -13,11 +13,41 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = (await supabaseSelectFilter(
-      'pos_table_layouts',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
-      { limit: 1 }
-    )) as { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }[] | null
+    const candidates = [
+      storeCode,
+      storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
+      storeCode.replace(/^CM\s+/i, '').trim(),
+    ].filter((v, i, arr) => v && arr.indexOf(v) === i)
+
+    let rows: { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }[] | null = null
+    for (const code of candidates) {
+      try {
+        rows = (await supabaseSelectFilter(
+          'pos_table_layouts',
+          `store_code=ilike.${encodeURIComponent(code)}`,
+          { limit: 1 }
+        )) as typeof rows
+        if (rows?.length) break
+      } catch {
+        continue
+      }
+    }
+
+    if (!rows?.length) {
+      const allRows = (await supabaseSelect('pos_table_layouts', {
+        limit: 50,
+        select: 'store_code,layout_json,updated_at',
+      })) as typeof rows
+      const reqLower = storeCode.toLowerCase()
+      const match =
+        (allRows || []).find(
+          (r) =>
+            (r.store_code ?? '').toLowerCase() === reqLower ||
+            (r.store_code ?? '').toLowerCase().includes(reqLower) ||
+            reqLower.includes((r.store_code ?? '').toLowerCase())
+        ) ?? (allRows?.length === 1 ? allRows[0] : null)
+      if (match) rows = [match]
+    }
 
     const raw = rows?.[0]
     let layout: { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number }[] = []

@@ -6,11 +6,13 @@ import {
   supabaseUpdate,
 } from '@/lib/supabase-server'
 
+import { isAccountingRole } from '@/lib/permissions'
+
 const OFFICE_ROLES = ['director', 'ceo', 'hr', 'officer']
 
 function isOfficeRole(role: string): boolean {
   const r = String(role || '').toLowerCase().trim()
-  return OFFICE_ROLES.some((x) => r.includes(x))
+  return OFFICE_ROLES.some((x) => r.includes(x)) || isAccountingRole(role)
 }
 
 /** 평가 결과 저장 (신규 또는 수정). 오피스 직원 이상만 등록/수정 가능 */
