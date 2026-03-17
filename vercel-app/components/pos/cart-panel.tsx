@@ -1105,7 +1105,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   const mainName = optMatch ? optMatch[1].trim() : item.name
                   const optionPart = optMatch ? optMatch[2].trim() : null
                   const isBanban = optionPart?.includes(' / ')
-                  const [flavor1, flavor2] = isBanban ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
+                  const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
                   return (
                   <div
                     key={item.id}
