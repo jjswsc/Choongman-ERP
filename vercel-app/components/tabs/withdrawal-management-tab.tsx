@@ -28,6 +28,7 @@ import {
   getCardAccounts,
   getVendorsForPurchase,
   getAdminEmployeeList,
+  translateTexts,
   type AccountSubjectItem,
   type BankAccount,
   type CardAccount,
@@ -93,6 +94,7 @@ export function WithdrawalManagementTab() {
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
   const [cardAccounts, setCardAccounts] = React.useState<CardAccount[]>([])
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
+  const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [employeeList, setEmployeeList] = React.useState<{ store: string; job: string; name: string; accountNumber: string; bankName: string }[]>([])
 
   const searchParams = useSearchParams()
@@ -177,18 +179,61 @@ export function WithdrawalManagementTab() {
     return office || list[0]
   }, [])
 
+  const sortedStores = React.useMemo(() => {
+    return [...(stores || [])]
+      .filter((s) => s && String(s).trim())
+      .sort((a, b) => {
+        const lower = (x: string) => String(x).toLowerCase()
+        const aOffice = ["office", "본사", "오피스"].includes(lower(a)) || lower(a).includes("office")
+        const bOffice = ["office", "본사", "오피스"].includes(lower(b)) || lower(b).includes("office")
+        if (aOffice && !bOffice) return -1
+        if (!aOffice && bOffice) return 1
+        return 0
+      })
+  }, [stores])
+
   React.useEffect(() => {
-    const list = (stores || []).filter((s) => s && String(s).trim())
-    if (list.length > 0 && !storeName) {
-      setStoreName(pickOfficeStore(list))
+    if (sortedStores.length > 0 && !storeName) {
+      setStoreName(pickOfficeStore(sortedStores))
     }
-  }, [stores, pickOfficeStore])
+  }, [sortedStores, pickOfficeStore])
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
     getAccountSubjects({ forExpense: true }).catch(() => []).then(setSubjects)
     getCardAccounts().catch(() => []).then((list) => setCardAccounts(list || []))
   }, [])
+
+  React.useEffect(() => {
+    const candidates = subjects
+      .filter((s) => !s.nameEn && (s.name || "").trim())
+    if (candidates.length === 0) {
+      setSubjectEnglishNames({})
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const translated = await translateTexts(candidates.map((s) => s.name.trim()), "en")
+        if (cancelled) return
+        const mapped: Record<number, string> = {}
+        candidates.forEach((s, idx) => {
+          const txt = String(translated[idx] || "").trim()
+          if (txt) mapped[s.id] = txt
+        })
+        setSubjectEnglishNames(mapped)
+      } catch {
+        if (!cancelled) setSubjectEnglishNames({})
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [subjects])
+
+  const getSubjectLabel = React.useCallback((s: AccountSubjectItem) => {
+    return s.nameEn || subjectEnglishNames[s.id] || s.name
+  }, [subjectEnglishNames])
 
   React.useEffect(() => {
     if (categoryMain === "transfer" && paymentMethod === "petty" && auth?.role) {
@@ -288,6 +333,10 @@ export function WithdrawalManagementTab() {
     }
     if (!amt || amt <= 0) {
       alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      return
+    }
+    if (!storeName) {
+      alert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
     setSaving(true)
@@ -412,7 +461,7 @@ export function WithdrawalManagementTab() {
       alert(t("recFilterStoreSelect") || "매장을 선택하세요.")
       return
     }
-    if (!storeName && categoryMain !== "transfer") {
+    if (!storeName) {
       alert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
@@ -467,7 +516,10 @@ export function WithdrawalManagementTab() {
         vendorCode: categoryMain === "purchase" ? vendorCode || undefined : undefined,
         accountSubjectId: categoryMain === "expense" && accountSubjectId ? Number(accountSubjectId) : undefined,
         accountSubjectCode: categoryMain === "expense" ? subjects.find((s) => String(s.id) === accountSubjectId)?.code : undefined,
-        accountSubjectName: categoryMain === "expense" ? subjects.find((s) => String(s.id) === accountSubjectId)?.name : undefined,
+        accountSubjectName: categoryMain === "expense" ? (() => {
+          const subject = subjects.find((s) => String(s.id) === accountSubjectId)
+          return subject ? getSubjectLabel(subject) : undefined
+        })() : undefined,
         transferToAccountNo: categoryMain === "transfer" && effectivePaymentMethod === "petty" && transferToAccountNo.trim() ? transferToAccountNo.trim() : undefined,
         transferToCardAccountId: categoryMain === "transfer" && effectivePaymentMethod === "card" && transferToCardAccountId ? Number(transferToCardAccountId) : undefined,
         transferBankAccountNo: categoryMain === "transfer" && effectivePaymentMethod === "bank" ? transferBankAccountNo.trim() : undefined,
@@ -563,34 +615,22 @@ export function WithdrawalManagementTab() {
           <div className="flex items-center gap-3">
             <Label className="font-semibold whitespace-nowrap">{t("expenseStoreSelect") || "매장"}</Label>
             <Select
-              value={storeName || "__none__"}
+              value={storeName || sortedStores[0] || ""}
               onValueChange={(v) => {
-                const next = v === "__none__" ? "" : v
-                if (next !== storeName) {
+                if (v !== storeName) {
                   setTransferToDept("")
                   setTransferToEmployee("")
                 }
-                setStoreName(next)
+                setStoreName(v)
               }}
             >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder={t("expenseStoreSelect") || "매장 선택"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">-</SelectItem>
-                {[...(stores || [])]
-                  .filter((s) => s && String(s).trim())
-                  .sort((a, b) => {
-                    const lower = (x: string) => String(x).toLowerCase()
-                    const aOffice = ["office", "본사", "오피스"].includes(lower(a)) || lower(a).includes("office")
-                    const bOffice = ["office", "본사", "오피스"].includes(lower(b)) || lower(b).includes("office")
-                    if (aOffice && !bOffice) return -1
-                    if (!aOffice && bOffice) return 1
-                    return 0
-                  })
-                  .map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
+                {sortedStores.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -771,7 +811,7 @@ export function WithdrawalManagementTab() {
                             <SelectContent>
                               {subjects.map((s) => (
                                 <SelectItem key={s.id} value={String(s.id)}>
-                                  {s.code} {s.name}
+                                  {s.code} {getSubjectLabel(s)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -843,7 +883,7 @@ export function WithdrawalManagementTab() {
                               <SelectItem value="__none__">-</SelectItem>
                               {subjects.map((s) => (
                                 <SelectItem key={s.id} value={String(s.id)}>
-                                  {s.code} {s.name}
+                                  {s.code} {getSubjectLabel(s)}
                                 </SelectItem>
                               ))}
                             </SelectContent>

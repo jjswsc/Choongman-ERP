@@ -365,13 +365,16 @@ export function PosTerminalMenuScreen({
   const getPromoPrice = (p: PosPromoWithItems) => p.price ?? 0
 
   const chickenMenusForBanban = React.useMemo(() => {
-    return menus.filter(
-      (m) =>
-        m.isActive &&
-        (!m.soldOutDate || m.soldOutDate !== todayStr) &&
-        m.code?.trim().toLowerCase().startsWith('c') &&
-        !m.isBanban
-    )
+    return menus
+      .filter(
+        (m) =>
+          m.isActive &&
+          (!m.soldOutDate || m.soldOutDate !== todayStr) &&
+          m.code?.trim().toLowerCase().startsWith('c') &&
+          !m.isBanban
+      )
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [menus, todayStr])
 
   const addWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
@@ -392,7 +395,7 @@ export function PosTerminalMenuScreen({
     const ids = [menu1.id, menu2.id].sort()
     const id = `banban-${ids.join('-')}`
     const name = `${banbanMenu.name} (${menu1.name} / ${menu2.name})`
-    const price = Math.round((getMenuPrice(menu1) + getMenuPrice(menu2)) / 2)
+    const price = getMenuPrice(banbanMenu)
     onAddItem?.({ id, name, price })
     setOptionPickerMenu(null)
     setOptionPickerBanbanFirst(null)
@@ -934,7 +937,7 @@ export function PosTerminalMenuScreen({
           }
         }}
       >
-        <DialogContent className="max-w-xs sm:max-w-sm">
+        <DialogContent className="max-w-md sm:max-w-lg w-[min(95vw,28rem)]">
           <DialogHeader>
             <DialogTitle>
               {optionPickerMenu?.name} — {t('posSelectOption') || '옵션 선택'}
@@ -949,24 +952,32 @@ export function PosTerminalMenuScreen({
               const list = chickenMenusForBanban
               return (
                 <div className="flex flex-col gap-3 py-2">
-                  <p className="text-xs text-muted-foreground">
-                    {first
-                      ? t('posBanbanSecondHalf') || '2번째 맛'
-                      : t('posBanbanFirstHalf') || '1번째 맛'}
-                  </p>
-                  {first && (
-                    <p className="text-xs font-medium text-amber-600">
-                      {t('posBanbanFirstSelected') || '1번째'}: {first.name}
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">{t('price') || '단가'}</p>
+                      <p className="text-sm font-bold text-amber-700">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground text-right">
+                      {first
+                        ? (t('posBanbanSecondHalf') || '2번째 맛')
+                        : (t('posBanbanFirstHalf') || '1번째 맛')}
                     </p>
+                  </div>
+                  {first && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs">
+                      <p className="font-semibold text-emerald-700">{t('posBanbanFirstSelected') || '1번째 선택'}</p>
+                      <p className="mt-0.5 text-emerald-900 break-words">{first.name}</p>
+                    </div>
                   )}
                   {list.length === 0 ? (
                     <p className="text-xs text-muted-foreground">{t('posBanbanNoChicken') || '치킨 메뉴가 없습니다.'}</p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                       {list.map((menu) => (
                         <button
                           key={menu.id}
                           type="button"
+                          disabled={!!first && first.id === menu.id}
                           onClick={() => {
                             if (first) {
                               addBanban(optionPickerMenu, first, menu)
@@ -974,10 +985,23 @@ export function PosTerminalMenuScreen({
                               setOptionPickerBanbanFirst(menu)
                             }
                           }}
-                          className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
+                          className={cn(
+                            "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition",
+                            first?.id === menu.id
+                              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                              : "border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50"
+                          )}
                         >
-                          <span className="block font-medium text-slate-800">{menu.name}</span>
-                          <span className="text-xs text-emerald-600">{getMenuPrice(menu).toLocaleString()} ฿</span>
+                          <span className="flex-1 min-w-0 text-left font-medium text-slate-800 break-words">
+                            {menu.name}
+                          </span>
+                          {first?.id === menu.id ? (
+                            <span className="rounded bg-slate-200 px-2 py-1 text-[11px] shrink-0">선택됨</span>
+                          ) : (
+                            <span className="rounded bg-emerald-100 px-2 py-1 text-[11px] text-emerald-700 shrink-0 whitespace-nowrap">
+                              {first ? (t('posSelect') || '선택') : (t('posBanbanFirstHalf') || '1번째 맛')}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>

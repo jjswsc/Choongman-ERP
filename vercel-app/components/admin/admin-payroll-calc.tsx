@@ -326,7 +326,9 @@ export function AdminPayrollCalc() {
       const data = await res.json()
       if (data.success) {
         setError(null)
-        alert(t("pay_save_success"))
+        const created = Number(data?.payrollExpenseSync?.created || 0)
+        const updated = Number(data?.payrollExpenseSync?.updated || 0)
+        alert(`${t("pay_save_success")}\n지출관리 지급예정 연동: 신규 ${created}건, 갱신 ${updated}건`)
       } else {
         setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }

@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const bankTransactionId = Number(searchParams.get('bankTransactionId') || 0)
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+    const storeFilter = String(searchParams.get('storeFilter') || '').trim()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
     if (!isOffice) return NextResponse.json({ success: true, list: [] }, { headers })
     if (!bankTransactionId) {
@@ -123,6 +124,11 @@ export async function GET(request: NextRequest) {
       .filter((r) => {
         const d = String(r.dueDate || r.expenseDate || '').slice(0, 10)
         return d === bankDate
+      })
+      .filter((r) => {
+        if (!storeFilter) return true
+        const rowStore = String(r.storeName || '').trim()
+        return rowStore.toLowerCase() === storeFilter.toLowerCase()
       })
       .filter((r) => (r.remainingAmount || 0) > 0)
 

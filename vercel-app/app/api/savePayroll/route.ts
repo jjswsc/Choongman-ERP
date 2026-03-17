@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpsert } from '@/lib/supabase-server'
+import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdate, supabaseUpsert } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
 
 const CHUNK = 50
+
+type PayrollExpenseAccrualRow = {
+  id?: number
+  payee_code?: string
+  status?: string
+}
+
+type AccountSubjectRow = {
+  id?: number
+  code?: string
+  name?: string
+  type?: string
+}
 
 export interface PayrollSaveRow {
   store: string
@@ -29,6 +43,51 @@ export interface PayrollSaveRow {
   otherDed?: number
   netPay?: number
   status?: string
+}
+
+function toMonthDate(monthStr: string, useLastDay: boolean): string {
+  const base = new Date(`${monthStr}-01T12:00:00`)
+  if (Number.isNaN(base.getTime())) return `${monthStr}-01`
+  if (!useLastDay) return `${monthStr}-01`
+  const last = new Date(base.getFullYear(), base.getMonth() + 1, 0)
+  return last.toISOString().slice(0, 10)
+}
+
+function normalizeToken(src: string): string {
+  return String(src || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40) || 'na'
+}
+
+function buildPayrollPayeeCode(monthStr: string, store: string, name: string): string {
+  const base = `payroll-${monthStr}-${normalizeToken(store)}-${normalizeToken(name)}`
+  return `${base}::wm::expense`
+}
+
+async function resolvePayrollAccountSubject(): Promise<{ id: number | null; code: string; name: string }> {
+  try {
+    const rows = (await supabaseSelectFilter('account_subjects', 'type=eq.expense', {
+      select: 'id,code,name,type',
+      order: 'sort_order.asc,code.asc',
+      limit: 400,
+    })) as AccountSubjectRow[] | null
+    const list = rows || []
+    const picked = list.find((r) => {
+      const text = `${String(r.code || '')} ${String(r.name || '')}`.toLowerCase()
+      return text.includes('급여') || text.includes('salary') || text.includes('wage')
+    })
+    if (picked?.id) {
+      return {
+        id: Number(picked.id),
+        code: String(picked.code || '5520'),
+        name: String(picked.name || '인건비'),
+      }
+    }
+  } catch (_) {}
+  return { id: null, code: '5520', name: '인건비' }
 }
 
 export async function POST(request: NextRequest) {
@@ -94,8 +153,105 @@ export async function POST(request: NextRequest) {
       await supabaseUpsert('payroll_records', chunk, 'month,store,name')
     }
 
+    const expenseSubject = await resolvePayrollAccountSubject()
+    const expenseDate = toMonthDate(monthStr, false)
+    const dueDate = toMonthDate(monthStr, true)
+    const monthlyPrefix = `payroll-${monthStr}-`
+    const existingAccrualRows = (await supabaseSelectFilter(
+      'expense_accruals',
+      `payee_code=ilike.${encodeURIComponent(`${monthlyPrefix}%::wm::expense`)}`,
+      { select: 'id,payee_code,status', limit: 5000 }
+    )) as PayrollExpenseAccrualRow[] | null
+    const existingByPayeeCode = new Map<string, PayrollExpenseAccrualRow>()
+    for (const row of existingAccrualRows || []) {
+      const key = String(row.payee_code || '').trim()
+      if (key) existingByPayeeCode.set(key, row)
+    }
+
+    let createdAccrualCount = 0
+    let updatedAccrualCount = 0
+    for (const r of list) {
+      const netPay = Math.max(0, Number(r.netPay) || 0)
+      const store = String(r.store || '').trim()
+      const name = String(r.name || '').trim()
+      if (!store || !name || netPay <= 0) continue
+
+      const payeeCode = buildPayrollPayeeCode(monthStr, store, name)
+      const memo = `[PAYROLL] ${monthStr} ${store} ${name} 급여`
+      const existing = existingByPayeeCode.get(payeeCode)
+      const existingId = Number(existing?.id || 0)
+      const existingStatus = String(existing?.status || '').toLowerCase()
+      if (existingId > 0) {
+        if (existingStatus === 'paid') continue
+        await supabaseUpdate('expense_accruals', existingId, {
+          amount: netPay,
+          expense_date: expenseDate,
+          due_date: dueDate,
+          memo,
+          store_name: store,
+          account_subject_id: expenseSubject.id,
+          status: existingStatus === 'approved' ? 'approved' : 'planned',
+          updated_at: new Date().toISOString(),
+        })
+        updatedAccrualCount++
+        continue
+      }
+
+      const inserted = (await supabaseInsert('expense_accruals', {
+        payee_code: payeeCode,
+        payee_name: name,
+        amount: netPay,
+        expense_date: expenseDate,
+        due_date: dueDate,
+        memo,
+        store_name: store,
+        account_subject_id: expenseSubject.id,
+        created_by: auth.user || null,
+        status: 'planned',
+      })) as { id?: number }[]
+      const expenseAccrualId = Number(inserted?.[0]?.id || 0)
+      if (!expenseAccrualId) continue
+
+      await supabaseInsert('payable_transactions', {
+        vendor_code: `EMP:${name}`.slice(0, 120),
+        amount: netPay,
+        ref_type: 'Expense',
+        ref_id: null,
+        trans_date: expenseDate,
+        memo: `급여 발생 ${monthStr} ${name}`.slice(0, 200),
+        expense_accrual_id: expenseAccrualId,
+        account_subject_id: expenseSubject.id,
+        expense_date: expenseDate,
+        due_date: dueDate,
+      })
+
+      try {
+        await postExpenseAccrualJournal({
+          expenseAccrualId,
+          accountingDate: expenseDate,
+          amountAbs: netPay,
+          expenseAccountCode: expenseSubject.code,
+          expenseAccountName: expenseSubject.name,
+          memo,
+          storeName: store || undefined,
+          postedBy: auth.user || undefined,
+        })
+      } catch (postingErr) {
+        console.error('savePayroll posting:', postingErr)
+      }
+
+      createdAccrualCount++
+    }
+
     return NextResponse.json(
-      { success: true, msg: `${monthStr} 급여 내역이 DB에 저장되었습니다.` },
+      {
+        success: true,
+        msg: `${monthStr} 급여 내역이 DB에 저장되었습니다.`,
+        payrollExpenseSync: {
+          created: createdAccrualCount,
+          updated: updatedAccrualCount,
+        },
+      },
       { headers }
     )
   } catch (e) {

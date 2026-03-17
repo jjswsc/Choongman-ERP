@@ -1531,11 +1531,13 @@ export interface LogisticsPaymentPlanItem {
 export interface ExpensePaymentPlanResponse {
   success: boolean
   expensePlans: ExpenseAccrualPlanItem[]
+  purchasePlans: ExpenseAccrualPlanItem[]
   logisticsPlans: LogisticsPaymentPlanItem[]
   totals: {
     expensePlanned: number
     expenseRemaining: number
     logisticsRemaining: number
+    purchaseRemaining?: number
   }
 }
 
@@ -1679,14 +1681,37 @@ export async function deleteExpenseAccrual(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function deleteExpenseAccrualsWithoutStore(params: { userRole?: string }) {
+  const res = await apiFetch('/api/deleteExpenseAccrualsWithoutStore', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; deletedCount?: number }>
+}
+
+export async function deletePurchaseAccrualsByVendor(params: {
+  vendorCode: string
+  userRole?: string
+}) {
+  const res = await apiFetch('/api/deletePurchaseAccrualsByVendor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; deletedCount?: number }>
+}
+
 export async function getApprovedExpenseAccrualsForBankTx(params: {
   bankTransactionId: number
   userRole?: string
+  storeFilter?: string
 }) {
   const q = new URLSearchParams({
     bankTransactionId: String(params.bankTransactionId),
   })
   if (params.userRole) q.set('userRole', params.userRole)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   const res = await apiFetch(`/api/getApprovedExpenseAccrualsForBankTx?${q}`)
   return res.json() as Promise<{
     success: boolean

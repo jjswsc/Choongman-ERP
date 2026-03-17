@@ -5,6 +5,7 @@ type ExpenseAccrualRow = {
   id?: number
   status?: string
   payee_code?: string
+  store_name?: string | null
 }
 
 type PayableRow = {
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,status,payee_code',
+      select: 'id,status,payee_code,store_name',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const row = rows?.[0]
@@ -61,8 +62,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급 예정 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
     const status = String(row.status || '').toLowerCase()
-    if (status !== 'planned') {
-      return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정/삭제할 수 있습니다.' }, { status: 400, headers })
+    const rowStoreName = String(row.store_name ?? '').trim()
+    const isNoStore = !rowStoreName
+    if (action === 'delete') {
+      if (!isNoStore && status !== 'planned' && status !== 'rejected') {
+        return NextResponse.json({ success: false, message: '요청(미승인) 또는 반려 상태에서만 삭제할 수 있습니다. 승인된 건은 지출 검색에서 삭제해 주세요.' }, { status: 400, headers })
+      }
+    } else if (status !== 'planned') {
+      return NextResponse.json({ success: false, message: '승인 전(요청) 상태에서만 수정할 수 있습니다.' }, { status: 400, headers })
     }
 
     if (action === 'delete') {

@@ -1104,6 +1104,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                   const mainName = optMatch ? optMatch[1].trim() : item.name
                   const optionPart = optMatch ? optMatch[2].trim() : null
+                  const isBanban = optionPart?.includes(' / ')
+                  const [flavor1, flavor2] = isBanban ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
                   return (
                   <div
                     key={item.id}
@@ -1116,7 +1118,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       >
                         <TooltipTrigger asChild>
                           <p
-                            className="text-sm font-medium truncate cursor-default touch-manipulation select-none"
+                            className="text-sm font-medium cursor-default touch-manipulation select-none break-words"
                             title={item.name}
                             onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
                           >
@@ -1127,9 +1129,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           {item.name}
                         </TooltipContent>
                       </Tooltip>
-                      <p className="text-xs text-muted-foreground truncate flex items-center gap-1.5 flex-wrap">
-                        {optionPart && <span className="truncate">{optionPart}</span>}
-                        <span className="tabular-nums shrink-0">{item.price.toLocaleString()} ฿</span>
+                      {isBanban && flavor1 && flavor2 ? (
+                        <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                          <span>① {flavor1}</span>
+                          <span className="mx-1">·</span>
+                          <span>② {flavor2}</span>
+                        </p>
+                      ) : optionPart ? (
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{optionPart}</p>
+                      ) : null}
+                      <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
+                        {item.price.toLocaleString()} ฿
                       </p>
                     </div>
                   <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end">

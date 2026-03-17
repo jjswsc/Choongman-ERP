@@ -41,6 +41,7 @@ import {
   getBankMemoRules,
   saveBankMemoRule,
   deleteBankMemoRule,
+  translateTexts,
   type ExpenseAccrualPlanItem,
   type AccountSubjectItem,
   type BankMemoRule,
@@ -163,7 +164,12 @@ export function BankTransactionsTab() {
   const [approvedPickId, setApprovedPickId] = React.useState<string>("")
   const [approvedPickLoading, setApprovedPickLoading] = React.useState(false)
   const [approvedPickSaving, setApprovedPickSaving] = React.useState(false)
+  const [expenseSubjectEnglishNames, setExpenseSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
+  const getAccountSubjectLabel = React.useCallback((a: AccountSubjectItem) => {
+    return a.nameEn || expenseSubjectEnglishNames[a.id] || a.name
+  }, [expenseSubjectEnglishNames])
 
   const setQueryRowEdit = (rowId: number, field: string, value: string | undefined) => {
     setQueryRowEdits((prev) => ({
@@ -228,6 +234,7 @@ export function BankTransactionsTab() {
       const res = await getApprovedExpenseAccrualsForBankTx({
         bankTransactionId: Number(row.id),
         userRole: auth?.role,
+        storeFilter: selectedAccountStore || undefined,
       })
       setApprovedPickList(res.list || [])
     } catch {
@@ -235,7 +242,40 @@ export function BankTransactionsTab() {
     } finally {
       setApprovedPickLoading(false)
     }
-  }, [auth?.role])
+  }, [auth?.role, selectedAccountStore])
+
+  React.useEffect(() => {
+    if (!registerExpenseRow) {
+      setExpenseSubjectEnglishNames({})
+      return
+    }
+    const candidates = accountSubjectOptions
+      .filter((a) => a.type === "expense")
+      .filter((a) => !a.nameEn && (a.name || "").trim())
+    if (candidates.length === 0) {
+      setExpenseSubjectEnglishNames({})
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const src = candidates.map((a) => a.name.trim())
+        const translated = await translateTexts(src, "en")
+        if (cancelled) return
+        const mapped: Record<number, string> = {}
+        candidates.forEach((a, idx) => {
+          const txt = String(translated[idx] || "").trim()
+          if (txt) mapped[a.id] = txt
+        })
+        setExpenseSubjectEnglishNames(mapped)
+      } catch {
+        if (!cancelled) setExpenseSubjectEnglishNames({})
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [registerExpenseRow, accountSubjectOptions])
 
   const [accountSubjectsAll, setAccountSubjectsAll] = React.useState<AccountSubjectItem[]>([])
   const [accountSubjectForm, setAccountSubjectForm] = React.useState<{ id?: number; code: string; name: string; nameEn: string; type: string; pAndLSection: string; sortOrder: number }>({ code: "", name: "", nameEn: "", type: "expense", pAndLSection: "expense", sortOrder: 0 })
@@ -2605,7 +2645,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 <SelectContent>
                   <SelectItem value="__none__">—</SelectItem>
                   {accountSubjectOptions.filter((a) => a.type === "expense").map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                    <SelectItem key={a.id} value={String(a.id)}>{a.code} {getAccountSubjectLabel(a)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

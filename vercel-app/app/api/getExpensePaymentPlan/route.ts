@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const vendorFilter = String(searchParams.get('vendorFilter') || '').trim().toLowerCase()
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
-    if (!isOffice) return NextResponse.json({ success: true, expensePlans: [], logisticsPlans: [] }, { headers })
+    if (!isOffice) return NextResponse.json({ success: true, expensePlans: [], purchasePlans: [], totals: { expensePlanned: 0, expenseRemaining: 0, logisticsRemaining: 0 }, logisticsPlans: [] }, { headers })
 
     const [accrualRows, payableRows] = await Promise.all([
       supabaseSelectFilter('expense_accruals', 'id=gt.0', {
@@ -140,50 +140,21 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => (a.dueDate || a.expenseDate).localeCompare(b.dueDate || b.expenseDate))
 
-    // purchase_* 는 일반 지출 표가 아니라 물류 미지급 요약으로 집계
+    // purchase_* = 지출 등록에서 등록한 물류 지급예정만. payable_transactions(입고/PO)는 미수금 관리에서 확인
     const expensePlans = mappedAccrualPlans.filter((r) => !isPurchaseWithdrawalCategory(r.withdrawalCategory))
-    const purchaseAccrualPlans = mappedAccrualPlans.filter((r) => isPurchaseWithdrawalCategory(r.withdrawalCategory))
+    const purchasePlans = mappedAccrualPlans.filter((r) => isPurchaseWithdrawalCategory(r.withdrawalCategory))
 
-    // Existing logistics payable (PO/Inbound/Opening 등) by vendor
-    const logisticsMap: Record<string, { balance: number; count: number }> = {}
-    for (const tx of payableRows || []) {
-      if (tx.expense_accrual_id) continue
-      const vendor = String(tx.vendor_code || '').trim()
-      if (!vendor) continue
-      if (vendorFilter && !vendor.toLowerCase().includes(vendorFilter)) continue
-      if ((startStr || endStr) && !inRange(tx.trans_date, startStr, endStr)) continue
-      if (!logisticsMap[vendor]) logisticsMap[vendor] = { balance: 0, count: 0 }
-      logisticsMap[vendor].balance += Number(tx.amount || 0)
-      logisticsMap[vendor].count += 1
-    }
-    // 승인 워크플로우 기반 매입 대금(purchase_*) 잔액을 물류 요약에 포함
-    for (const r of purchaseAccrualPlans) {
-      if (r.status === 'rejected' || r.status === 'paid') continue
-      if (r.remainingAmount <= 0) continue
-      const vendorCode = String(r.payeeCode || '').trim()
-      if (!vendorCode) continue
-      if (vendorFilter && !vendorCode.toLowerCase().includes(vendorFilter)) continue
-      if (!logisticsMap[vendorCode]) logisticsMap[vendorCode] = { balance: 0, count: 0 }
-      logisticsMap[vendorCode].balance += Number(r.remainingAmount || 0)
-      logisticsMap[vendorCode].count += 1
-    }
-
-    const logisticsPlans = Object.entries(logisticsMap)
-      .map(([vendorCode, v]) => ({
-        vendorCode,
-        remainingAmount: Math.max(0, Number(v.balance || 0)),
-        txCount: v.count,
-      }))
-      .filter((v) => v.remainingAmount > 0)
-      .sort((a, b) => b.remainingAmount - a.remainingAmount)
-
+    const purchaseRemaining = purchasePlans.reduce((s, r) => s + r.remainingAmount, 0)
     const totals = {
       expensePlanned: expensePlans.reduce((s, r) => s + r.plannedAmount, 0),
       expenseRemaining: expensePlans.reduce((s, r) => s + r.remainingAmount, 0),
-      logisticsRemaining: logisticsPlans.reduce((s, r) => s + r.remainingAmount, 0),
+      logisticsRemaining: purchaseRemaining,
     }
 
-    return NextResponse.json({ success: true, expensePlans, logisticsPlans, totals }, { headers })
+    return NextResponse.json(
+      { success: true, expensePlans, purchasePlans, totals, logisticsPlans: [] },
+      { headers }
+    )
   } catch (e) {
     console.error('getExpensePaymentPlan:', e)
     return NextResponse.json(
