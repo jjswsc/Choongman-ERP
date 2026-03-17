@@ -3783,7 +3783,7 @@ export async function getPosTableLayout(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
   const res = await apiFetch('/api/getPosTableLayout?' + q.toString())
-  return res.json() as Promise<{ layout: PosTableItem[]; storeCode: string }>
+  return res.json() as Promise<{ layout: PosTableItem[]; storeCode: string; isFallback?: boolean }>
 }
 
 export interface PosPrinterSettings {

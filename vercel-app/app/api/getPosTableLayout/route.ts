@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+const FLOOR_W = 720
+const FLOOR_H = 480
+
+/** DB 초기화 시 복원용 기본 테이블 배치 (1F 6개) */
+function getDefaultTableLayout(): { id: string; name: string; x: number; y: number; w: number; h: number; floor: number; shape: string; seats: number; rotation: number }[] {
+  return [
+    { id: 't1f1', name: '1F-1', x: 48, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+    { id: 't1f2', name: '1F-2', x: 156, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+    { id: 't1f3', name: '1F-3', x: 264, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+    { id: 't1f4', name: '1F-4', x: 48, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+    { id: 't1f5', name: '1F-5', x: 156, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+    { id: 't1f6', name: '1F-6', x: 264, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
+  ]
+}
+
 /** POS 테이블 배치 조회 (매장별) */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -19,15 +34,17 @@ export async function GET(request: NextRequest) {
       storeCode.replace(/^CM\s+/i, '').trim(),
     ].filter((v, i, arr) => v && arr.indexOf(v) === i)
 
-    let rows: { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }[] | null = null
+    type Row = { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }
+    let rows: Row[] | null = null
     for (const code of candidates) {
       try {
-        rows = (await supabaseSelectFilter(
+        const result = (await supabaseSelectFilter(
           'pos_table_layouts',
           `store_code=ilike.${encodeURIComponent(code)}`,
           { limit: 1 }
-        )) as typeof rows
-        if (rows?.length) break
+        )) as Row[] | null
+        rows = result
+        if (result?.length) break
       } catch {
         continue
       }
@@ -37,7 +54,7 @@ export async function GET(request: NextRequest) {
       const allRows = (await supabaseSelect('pos_table_layouts', {
         limit: 50,
         select: 'store_code,layout_json,updated_at',
-      })) as typeof rows
+      })) as Row[] | null
       const reqLower = storeCode.toLowerCase()
       const match =
         (allRows || []).find(
@@ -50,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     const raw = rows?.[0]
-    let layout: { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number }[] = []
+    let layout: { id: string; name: string; x: number; y: number; w: number; h: number; floor?: number; shape?: string; seats?: number; rotation?: number }[] = []
     if (raw?.layout_json) {
       const arr = Array.isArray(raw.layout_json) ? raw.layout_json : []
       layout = arr
@@ -70,7 +87,15 @@ export async function GET(request: NextRequest) {
         .filter((t) => t.id)
     }
 
-    return NextResponse.json({ layout, storeCode }, { headers })
+    // DB에 데이터가 없을 때 로컬/개발 환경에서 기본 예시 레이아웃 제공 (복원용)
+    let isFallback = false
+    const isDev = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'development'
+    if (layout.length === 0 && isDev && storeCode) {
+      layout = getDefaultTableLayout()
+      isFallback = true
+    }
+
+    return NextResponse.json({ layout, storeCode, isFallback }, { headers })
   } catch (e) {
     console.error('getPosTableLayout:', e)
     return NextResponse.json({ layout: [], storeCode }, { headers })

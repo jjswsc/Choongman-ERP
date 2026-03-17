@@ -107,6 +107,7 @@ export function PosTableLayoutContent() {
   const [activeFloor, setActiveFloor] = React.useState<1 | 2 | 3>(1)
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
+  const [isFallbackLayout, setIsFallbackLayout] = React.useState(false)
   const dragStartRef = React.useRef<{
     ids: string[]
     starts: Record<string, { x: number; y: number; w: number; h: number }>
@@ -174,8 +175,12 @@ export function PosTableLayoutContent() {
   const loadLayout = React.useCallback(() => {
     if (!storeCode) return
     setLoading(true)
+    setIsFallbackLayout(false)
     getPosTableLayout({ storeCode })
-      .then(({ layout: l }) => setLayout(l || []))
+      .then(({ layout: l, isFallback }) => {
+        setLayout(l || [])
+        setIsFallbackLayout(Boolean(isFallback))
+      })
       .catch(() => setLayout([]))
       .finally(() => setLoading(false))
   }, [storeCode])
@@ -696,6 +701,12 @@ export function PosTableLayoutContent() {
       {loading && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           {t("loading")}
+        </div>
+      )}
+
+      {isFallbackLayout && !loading && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {t("posTableLayoutRestoreHint") || "DB에 저장된 배치가 없어 기본 레이아웃을 표시합니다. 수정 후 저장 버튼을 누르면 복원됩니다."}
         </div>
       )}
 
