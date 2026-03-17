@@ -1707,6 +1707,9 @@ export async function updateExpenseAccrual(params: {
   payeeName?: string
   accountSubjectId?: number | null
   storeName?: string
+  withdrawalCategory?: string
+  categoryMain?: string
+  categorySub?: string
   userRole?: string
 }) {
   const res = await apiFetch('/api/updateExpenseAccrual', {

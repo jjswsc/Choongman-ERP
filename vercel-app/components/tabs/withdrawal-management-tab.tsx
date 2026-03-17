@@ -386,6 +386,9 @@ export function WithdrawalManagementTab() {
           payeeName: name || undefined,
           accountSubjectId: accountSubjectId && accountSubjectId !== "__none__" ? Number(accountSubjectId) : null,
           storeName: storeName || undefined,
+          withdrawalCategory,
+          categoryMain,
+          categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
           userRole: auth?.role,
         })
         if (!res.success) {

@@ -24,11 +24,29 @@ function decodePayeeCode(raw: string | undefined): { payeeCode: string; withdraw
 }
 
 function encodePayeeCode(payeeCode: string, withdrawalCategory: string): string {
-  const base = String(payeeCode || '').trim()
+  let base = String(payeeCode || '').trim()
+  if (base.includes('::wm::')) base = base.split('::wm::')[0].trim()
   const cat = String(withdrawalCategory || '').trim().toLowerCase() || 'expense'
   if (!base) return `auto_${cat}::wm::${cat}`
-  if (base.includes('::wm::')) return base
   return `${base}::wm::${cat}`
+}
+
+function mapMainSubToCategory(main: string, sub: string): string {
+  const m = String(main || '').toLowerCase()
+  const s = String(sub || '').toLowerCase()
+  if (m === 'purchase') return s === 'advance' ? 'purchase_advance' : 'purchase_payment'
+  if (m === 'expense') return s === 'advance' ? 'expense_advance' : 'expense'
+  if (m === 'fixed_asset') return 'fixed_asset'
+  if (m === 'transfer') return 'transfer'
+  if (m === 'loan') return s === 'given' ? 'loan_given' : 'loan_repayment'
+  if (m === 'tax') {
+    if (s === 'vat') return 'tax_vat'
+    if (s === 'corporate') return 'tax_corporate'
+    return 'tax_withholding'
+  }
+  if (m === 'correction') return 'correction'
+  if (m === 'dividend') return 'dividend'
+  return ''
 }
 
 export async function POST(request: NextRequest) {
@@ -90,6 +108,13 @@ export async function POST(request: NextRequest) {
     const accountSubjectId = accountSubjectIdRaw != null && !isNaN(Number(accountSubjectIdRaw))
       ? Number(accountSubjectIdRaw)
       : null
+    const withdrawalCategoryDirect = String(
+      body.withdrawalCategory || body.withdrawal_category || ''
+    ).trim().toLowerCase()
+    const categoryMain = String(body.categoryMain || body.category_main || '').trim().toLowerCase()
+    const categorySub = String(body.categorySub || body.category_sub || 'normal').trim().toLowerCase()
+    const withdrawalCategoryInput = withdrawalCategoryDirect
+      || (categoryMain ? mapMainSubToCategory(categoryMain, categorySub) : '')
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ success: false, message: '금액을 입력해 주세요.' }, { status: 400, headers })
@@ -103,7 +128,11 @@ export async function POST(request: NextRequest) {
 
     const decoded = decodePayeeCode(row.payee_code)
     const payeeCode = payeeCodeInput || decoded.payeeCode
-    const encodedPayeeCode = encodePayeeCode(payeeCode, decoded.withdrawalCategory)
+    const withdrawalCategory =
+      withdrawalCategoryInput && ['expense', 'expense_advance', 'purchase_payment', 'purchase_advance', 'fixed_asset', 'transfer', 'loan_repayment', 'loan_given', 'tax_vat', 'tax_withholding', 'tax_corporate', 'correction', 'dividend'].includes(withdrawalCategoryInput)
+        ? withdrawalCategoryInput
+        : decoded.withdrawalCategory
+    const encodedPayeeCode = encodePayeeCode(payeeCode, withdrawalCategory)
 
     await supabaseUpdate('expense_accruals', expenseAccrualId, {
       payee_code: encodedPayeeCode,
