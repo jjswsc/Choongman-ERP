@@ -18,6 +18,7 @@ import {
   RectangleHorizontal,
   RectangleVertical,
   Copy,
+  ClipboardCopy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -108,6 +109,8 @@ export function PosTableLayoutContent() {
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
   const [isFallbackLayout, setIsFallbackLayout] = React.useState(false)
+  const [copyFromStoreCode, setCopyFromStoreCode] = React.useState("")
+  const [copyLoading, setCopyLoading] = React.useState(false)
   const dragStartRef = React.useRef<{
     ids: string[]
     starts: Record<string, { x: number; y: number; w: number; h: number }>
@@ -504,6 +507,39 @@ export function PosTableLayoutContent() {
     setSelectedIds([])
   }
 
+  const handleCopyFromStore = async () => {
+    const source = copyFromStoreCode.trim()
+    if (!source || source === storeCode) {
+      alert(t("posTableLayoutCopyFromHint") || "다른 매장을 선택해 주세요.")
+      return
+    }
+    if (!storeCode) {
+      alert(t("store") || "대상 매장을 선택해 주세요.")
+      return
+    }
+    setCopyLoading(true)
+    try {
+      const { layout: sourceLayout } = await getPosTableLayout({ storeCode: source })
+      const items = sourceLayout || []
+      if (items.length === 0) {
+        alert(t("posTableLayoutCopyEmpty") || "선택한 매장에 저장된 테이블 배치가 없습니다.")
+        return
+      }
+      const copied: PosTableItem[] = items.map((t) => ({
+        ...t,
+        id: generateId(),
+      }))
+      setLayout(copied)
+      setSelectedId(null)
+      setSelectedIds([])
+      alert(t("posTableLayoutCopyDone") || "테이블 배치를 복사했습니다. 저장 버튼을 눌러 적용하세요.")
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setCopyLoading(false)
+    }
+  }
+
   const handleAutoName = () => {
     setLayout((prev) => {
       const floorItems = prev
@@ -691,6 +727,35 @@ export function PosTableLayoutContent() {
           <Button variant="outline" size="sm" onClick={loadLayout} disabled={loading}>
             {t("posRefresh") || "새로고침"}
           </Button>
+          {canSearchAll && stores.length >= 2 && (
+            <>
+              <Select value={copyFromStoreCode} onValueChange={setCopyFromStoreCode}>
+                <SelectTrigger className="h-10 w-40" title={t("posTableLayoutCopyFromHint") || ""}>
+                  <SelectValue placeholder={t("posTableLayoutCopyFrom") || "다른 매장에서 복사"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores
+                    .filter((s) => s !== storeCode)
+                    .map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-10 gap-1.5"
+                onClick={handleCopyFromStore}
+                disabled={copyLoading || !copyFromStoreCode || copyFromStoreCode === storeCode}
+                title={t("posTableLayoutCopyFromHint") || ""}
+              >
+                <ClipboardCopy className="h-4 w-4" />
+                {copyLoading ? "..." : (t("posTableLayoutCopyFrom") || "복사")}
+              </Button>
+            </>
+          )}
         </div>
         <Button size="sm" className="h-10 gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={handleSave} disabled={saving || !storeCode}>
           <Save className="h-4 w-4" />
