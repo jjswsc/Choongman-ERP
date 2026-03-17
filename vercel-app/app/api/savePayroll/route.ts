@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
         memo,
         store_name: store,
         account_subject_id: expenseSubject.id,
-        created_by: auth.user || null,
+        created_by: auth.name || null,
         status: 'planned',
       })) as { id?: number }[]
       const expenseAccrualId = Number(inserted?.[0]?.id || 0)
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
           expenseAccountName: expenseSubject.name,
           memo,
           storeName: store || undefined,
-          postedBy: auth.user || undefined,
+          postedBy: auth.name || undefined,
         })
       } catch (postingErr) {
         console.error('savePayroll posting:', postingErr)
