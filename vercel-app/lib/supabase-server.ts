@@ -111,7 +111,10 @@ export async function supabaseFetch(
   const { status, headers: resHeaders, body: resBody } = await httpsRequest(urlStr, { method, headers, body })
   const resHeadersObj = new Headers()
   Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
-  return new Response(resBody, {
+  // 204/205/304는 body가 null이어야 함 (Fetch 스펙). 그렇지 않으면 "Response constructor: Invalid response status code 204" 발생
+  const nullBodyStatuses = [101, 204, 205, 304]
+  const bodyForResponse = nullBodyStatuses.includes(status) ? null : resBody
+  return new Response(bodyForResponse, {
     status,
     headers: resHeadersObj,
   })
