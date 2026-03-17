@@ -168,7 +168,7 @@ export function BankTransactionsTab() {
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const selectedAccountStore = (accounts.find((a) => String(a.id) === String(accountId))?.store || "").trim()
   const getAccountSubjectLabel = React.useCallback((a: AccountSubjectItem) => {
-    return a.nameEn || expenseSubjectEnglishNames[a.id] || a.name
+    return a.nameEn || (a.id != null ? expenseSubjectEnglishNames[a.id] : undefined) || a.name
   }, [expenseSubjectEnglishNames])
 
   const setQueryRowEdit = (rowId: number, field: string, value: string | undefined) => {
