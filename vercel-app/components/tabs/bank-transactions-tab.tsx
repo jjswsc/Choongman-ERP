@@ -265,7 +265,7 @@ export function BankTransactionsTab() {
         const mapped: Record<number, string> = {}
         candidates.forEach((a, idx) => {
           const txt = String(translated[idx] || "").trim()
-          if (txt) mapped[a.id] = txt
+          if (txt && a.id != null) mapped[a.id] = txt
         })
         setExpenseSubjectEnglishNames(mapped)
       } catch {

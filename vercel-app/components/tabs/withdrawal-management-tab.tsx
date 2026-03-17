@@ -219,7 +219,7 @@ export function WithdrawalManagementTab() {
         const mapped: Record<number, string> = {}
         candidates.forEach((s, idx) => {
           const txt = String(translated[idx] || "").trim()
-          if (txt) mapped[s.id] = txt
+          if (txt && s.id != null) mapped[s.id] = txt
         })
         setSubjectEnglishNames(mapped)
       } catch {
@@ -232,7 +232,7 @@ export function WithdrawalManagementTab() {
   }, [subjects])
 
   const getSubjectLabel = React.useCallback((s: AccountSubjectItem) => {
-    return s.nameEn || subjectEnglishNames[s.id] || s.name
+    return s.nameEn || (s.id != null ? subjectEnglishNames[s.id] : undefined) || s.name
   }, [subjectEnglishNames])
 
   React.useEffect(() => {

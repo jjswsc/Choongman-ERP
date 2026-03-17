@@ -8934,7 +8934,6 @@ orderItemQty: 'จำนวน',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   },
   mm: {
     all: 'အားလုံး',
@@ -11661,7 +11660,6 @@ orderItemQty: 'အရေအတွက်',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -14385,7 +14383,6 @@ orderItemQty: 'ຈຳນວນ',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -15356,7 +15353,6 @@ orderItemQty: 'ຈຳນວນ',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -16328,7 +16324,6 @@ orderItemQty: 'ຈຳນວນ',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -17300,7 +17295,6 @@ orderItemQty: 'ຈຳນວນ',
     posOtherFee: 'Other',
     posOwner: 'Owner',
     posServiceFee: 'Service fee',
-    posSelect: 'Select',
   } as Record<string, string>,
 } as const
 

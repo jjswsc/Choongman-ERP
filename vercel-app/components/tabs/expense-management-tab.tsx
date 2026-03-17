@@ -132,7 +132,7 @@ export function ExpenseManagementTab() {
         const mapped: Record<number, string> = {}
         candidates.forEach((s, idx) => {
           const txt = String(translated[idx] || "").trim()
-          if (txt) mapped[s.id] = txt
+          if (txt && s.id != null) mapped[s.id] = txt
         })
         setSubjectEnglishNames(mapped)
       } catch {
@@ -291,7 +291,7 @@ export function ExpenseManagementTab() {
   const accountSubjectLabel = React.useCallback((id?: number | null) => {
     if (!id) return ""
     const found = subjects.find((s) => Number(s.id) === Number(id))
-    return found ? (found.nameEn || subjectEnglishNames[found.id] || found.name || "") : ""
+    return found ? (found.nameEn || (found.id != null ? subjectEnglishNames[found.id] : undefined) || found.name || "") : ""
   }, [subjects, subjectEnglishNames])
 
   const withdrawalTypeOptions = React.useMemo(
@@ -1153,7 +1153,7 @@ export function ExpenseManagementTab() {
                 <SelectContent>
                   <SelectItem value="__none__">—</SelectItem>
                   {subjects.map((s) => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.code} {s.nameEn || subjectEnglishNames[s.id] || s.name}</SelectItem>
+                    <SelectItem key={s.id} value={String(s.id)}>{s.code} {s.nameEn || (s.id != null ? subjectEnglishNames[s.id] : undefined) || s.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

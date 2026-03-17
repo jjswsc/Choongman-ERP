@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "clasp-push": "clasp push",
-    "clasp-clean-remote": "node scripts/clasp-clean-remote.js"
+    "clasp-clean-remote": "node scripts/clasp-clean-remote.js",
+    "build:vercel": "cd vercel-app && npm run build",
+    "check:vercel": "cd vercel-app && npm run build"
   },
   "devDependencies": {
     "@google/clasp": "^3.0.0",
