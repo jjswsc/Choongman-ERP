@@ -93,7 +93,15 @@ export function PosTerminalMenuScreen({
   const [menuEditTargetId, setMenuEditTargetId] = React.useState<string | null>(null)
   const [menuEditTab, setMenuEditTab] = React.useState<'menu' | 'general' | 'item'>('menu')
   const [imageUploading, setImageUploading] = React.useState(false)
+  const menuListRef = React.useRef<HTMLDivElement | null>(null)
+  const categoryPanelRef = React.useRef<HTMLElement | null>(null)
+  const menuGridRef = React.useRef<HTMLDivElement | null>(null)
   const imageInputRef = React.useRef<HTMLInputElement>(null)
+  const debugLog = React.useCallback((runId: string, hypothesisId: string, location: string, message: string, data: Record<string, unknown>) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId,hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [])
   const [menuEditForm, setMenuEditForm] = React.useState<{
     code: string
     name: string
@@ -174,6 +182,9 @@ export function PosTerminalMenuScreen({
     () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
     []
   )
+  const mainCategoryFontPx = isAdminMode ? screenConfig.mainCategoryFontSize : 12
+  const categoryFontPx = isAdminMode ? screenConfig.categoryFontSize : 12
+  const tileFontPx = isAdminMode ? screenConfig.menuTileFontSize : 13
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
     const set = new Set(
@@ -195,6 +206,93 @@ export function PosTerminalMenuScreen({
     setListPage(0)
   }, [selectedMainCategory, selectedCategory, searchKeyword, screenConfig.menuListPageSize])
 
+  React.useEffect(() => {
+    debugLog('pre-fix', 'H4', 'pos-terminal-menu-screen.tsx:state', 'menu screen state snapshot', {
+      mode,
+      selectedTableName,
+      selectedMainCategory,
+      selectedCategory,
+      filteredMenusLen: filteredMenus.length,
+      filteredPromosLen: filteredPromos.length,
+      searchKeyword,
+      href: typeof window !== 'undefined' ? window.location.href : '',
+    })
+  }, [debugLog, mode, selectedTableName, selectedMainCategory, selectedCategory, menus.length, promos.length, searchKeyword])
+
+  React.useLayoutEffect(() => {
+    const panelRect = categoryPanelRef.current?.getBoundingClientRect()
+    const sectionRect = menuListRef.current?.getBoundingClientRect()
+    const gridRect = menuGridRef.current?.getBoundingClientRect()
+    const firstCard = menuGridRef.current?.querySelector('[data-menu-card]') as HTMLElement | null
+    const firstCardRect = firstCard?.getBoundingClientRect()
+    const scrollTop = menuListRef.current?.scrollTop ?? 0
+    const scrollHeight = menuListRef.current?.scrollHeight ?? 0
+    const clientHeight = menuListRef.current?.clientHeight ?? 0
+    debugLog('pre-fix', 'H1,H2,H3', 'pos-terminal-menu-screen.tsx:layout', 'layout measurements', {
+      selectedMainCategory,
+      selectedCategory,
+      filteredMenusLen: filteredMenus.length,
+      filteredPromosLen: filteredPromos.length,
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+      sectionTop: sectionRect?.top ?? null,
+      sectionBottom: sectionRect?.bottom ?? null,
+      panelBottom: panelRect?.bottom ?? null,
+      gridTop: gridRect?.top ?? null,
+      gapSectionToGrid: sectionRect && gridRect ? Math.round(gridRect.top - sectionRect.top) : null,
+      gapCategoryToGrid: panelRect && gridRect ? Math.round(gridRect.top - panelRect.bottom) : null,
+      firstCardTop: firstCardRect?.top ?? null,
+      gapGridToFirstCard: firstCardRect && gridRect ? Math.round(firstCardRect.top - gridRect.top) : null,
+      firstCardExists: Boolean(firstCard),
+      gridChildCount: menuGridRef.current?.children.length ?? 0,
+    })
+  }, [debugLog, selectedMainCategory, selectedCategory, menus.length, promos.length])
+
+  React.useLayoutEffect(() => {
+    const sectionEl = menuListRef.current
+    const gridEl = menuGridRef.current
+    if (!sectionEl || !gridEl) return
+
+    const logComputed = (phase: string) => {
+      const sectionStyle = window.getComputedStyle(sectionEl)
+      const gridStyle = window.getComputedStyle(gridEl)
+      const firstChild = gridEl.querySelector('[data-menu-card]') as HTMLElement | null
+      const firstChildStyle = firstChild ? window.getComputedStyle(firstChild) : null
+      debugLog('pre-fix', 'H5,H6,H7,H8', 'pos-terminal-menu-screen.tsx:computed', `computed styles (${phase})`, {
+        selectedMainCategory,
+        selectedCategory,
+        sectionPaddingTop: sectionStyle.paddingTop,
+        sectionDisplay: sectionStyle.display,
+        sectionOverflowY: sectionStyle.overflowY,
+        gridAlignContent: gridStyle.alignContent,
+        gridAutoRows: gridStyle.gridAutoRows,
+        gridTemplateRows: gridStyle.gridTemplateRows,
+        gridRowGap: gridStyle.rowGap,
+        firstChildDisplay: firstChildStyle?.display ?? null,
+        firstChildVisibility: firstChildStyle?.visibility ?? null,
+        firstChildOpacity: firstChildStyle?.opacity ?? null,
+      })
+    }
+
+    logComputed('layout')
+    const raf1 = window.requestAnimationFrame(() => {
+      logComputed('raf1')
+      const raf2 = window.requestAnimationFrame(() => logComputed('raf2'))
+      // #region agent log
+      fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId:'pre-fix',hypothesisId:'H8',location:'pos-terminal-menu-screen.tsx:raf-chain',message:'raf chain scheduled',data:{selectedMainCategory,selectedCategory},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      ;(sectionEl as HTMLElement & { __raf2?: number }).__raf2 = raf2
+    })
+    ;(sectionEl as HTMLElement & { __raf1?: number }).__raf1 = raf1
+
+    return () => {
+      const s = sectionEl as HTMLElement & { __raf1?: number; __raf2?: number }
+      if (s.__raf1) window.cancelAnimationFrame(s.__raf1)
+      if (s.__raf2) window.cancelAnimationFrame(s.__raf2)
+    }
+  }, [debugLog, selectedMainCategory, selectedCategory, menus.length, promos.length])
+
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
@@ -210,6 +308,57 @@ export function PosTerminalMenuScreen({
     if (!selectedCategory) return active
     return active.filter((p) => p.category === selectedCategory)
   }, [promos, selectedCategory])
+
+  React.useEffect(() => {
+    const sectionEl = menuListRef.current
+    const gridEl = menuGridRef.current
+    if (!sectionEl || !gridEl) return
+
+    const snapshot = (phase: string) => {
+      const panelRect = categoryPanelRef.current?.getBoundingClientRect()
+      const sectionRect = sectionEl.getBoundingClientRect()
+      const gridRect = gridEl.getBoundingClientRect()
+      const cards = Array.from(gridEl.querySelectorAll('[data-menu-card]')) as HTMLElement[]
+      const firstThree = cards.slice(0, 3).map((el, idx) => {
+        const r = el.getBoundingClientRect()
+        return {
+          idx,
+          top: Math.round(r.top),
+          height: Math.round(r.height),
+          display: window.getComputedStyle(el).display,
+          visibility: window.getComputedStyle(el).visibility,
+          opacity: window.getComputedStyle(el).opacity,
+        }
+      })
+      debugLog('pre-fix', 'H9,H10', 'pos-terminal-menu-screen.tsx:observer', `observer snapshot (${phase})`, {
+        selectedMainCategory,
+        selectedCategory,
+        filteredMenusLen: filteredMenus.length,
+        filteredPromosLen: filteredPromos.length,
+        sectionTop: Math.round(sectionRect.top),
+        sectionBottom: Math.round(sectionRect.bottom),
+        panelBottom: panelRect ? Math.round(panelRect.bottom) : null,
+        gridTop: Math.round(gridRect.top),
+        gapCategoryToGrid: panelRect ? Math.round(gridRect.top - panelRect.bottom) : null,
+        gridChildCount: cards.length,
+        firstThree,
+      })
+    }
+
+    snapshot('effect-start')
+
+    const resizeObserver = new ResizeObserver(() => snapshot('resize'))
+    resizeObserver.observe(sectionEl)
+    resizeObserver.observe(gridEl)
+
+    const mutationObserver = new MutationObserver(() => snapshot('mutation'))
+    mutationObserver.observe(gridEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] })
+
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [debugLog, selectedMainCategory, selectedCategory, filteredMenus.length, filteredPromos.length])
 
   const getMenuPrice = (menu: PosMenu) => menu.price
   const getOptionModifier = (opt: PosMenuOption) => opt.priceModifier ?? 0
@@ -468,47 +617,69 @@ export function PosTerminalMenuScreen({
       </div>
       <div
         className={cn(
-          'flex-1 min-h-0 grid grid-cols-1',
-          isAdminMode ? 'min-[980px]:grid-cols-[220px_1fr_320px]' : 'min-[980px]:grid-cols-[220px_1fr]'
+          'flex-1 min-h-0',
+          isAdminMode ? 'grid grid-cols-1 min-[980px]:grid-cols-[220px_1fr_320px]' : 'flex flex-col'
         )}
       >
-        <section className="min-h-0 border-r bg-muted/20 px-3 py-3">
-          <p className="mb-2 text-xs font-semibold text-muted-foreground">{t('posMainCategory') || '대분류'}</p>
-          <div className="grid gap-1.5">
+        <section
+          ref={categoryPanelRef}
+          className={cn(
+            'min-h-0 bg-muted/20 px-3 py-3',
+            isAdminMode ? 'border-r' : 'border-b px-2 py-1'
+          )}
+        >
+          <p className={cn('font-semibold text-muted-foreground', isAdminMode ? 'mb-2 text-xs' : 'mb-0.5 text-[10px]')}>{t('posMainCategory') || '대분류'}</p>
+          <div className={cn(isAdminMode ? 'grid gap-1.5' : 'flex gap-1 overflow-x-auto')}>
             {mainCategories.map((main) => (
               <button
                 key={main}
                 type="button"
                 onClick={() => {
+                  debugLog('pre-fix', 'H1', 'pos-terminal-menu-screen.tsx:onMainCategoryClick', 'main category clicked', {
+                    nextMain: main,
+                    prevMain: selectedMainCategory,
+                    prevCategory: selectedCategory,
+                    prevScrollTop: menuListRef.current?.scrollTop ?? null,
+                  })
                   setSelectedMainCategory(main)
                   setSelectedCategory('')
                 }}
                 className={cn(
-                  'rounded-md border px-3 py-2 text-left font-semibold transition',
+                  'rounded-md border px-3 py-2 text-left font-semibold transition whitespace-nowrap leading-none',
                   selectedMainCategory === main
                     ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background border-border hover:bg-muted'
+                    : 'bg-background border-border hover:bg-muted',
+                  !isAdminMode && 'h-8 px-3 py-0 text-sm'
                 )}
-                style={{ fontSize: `${screenConfig.mainCategoryFontSize}px` }}
+                style={{ fontSize: `${mainCategoryFontPx}px` }}
               >
                 {main}
               </button>
             ))}
           </div>
-          <p className="mb-2 mt-4 text-xs font-semibold text-muted-foreground">{t('posCategory') || '카테고리'}</p>
-          <div className="grid gap-1.5">
+          <p className={cn('font-semibold text-muted-foreground', isAdminMode ? 'mb-2 mt-4 text-xs' : 'mb-0.5 mt-1.5 text-[10px]')}>{t('posCategory') || '카테고리'}</p>
+          <div className={cn(isAdminMode ? 'grid gap-1.5' : 'flex gap-1 overflow-x-auto')}>
             {categoriesForSelectedMain.map((cat) => (
               <button
                 key={cat}
                 type="button"
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  debugLog('pre-fix', 'H1', 'pos-terminal-menu-screen.tsx:onCategoryClick', 'category clicked', {
+                    nextCategory: cat,
+                    prevCategory: selectedCategory,
+                    currentMain: selectedMainCategory,
+                    prevScrollTop: menuListRef.current?.scrollTop ?? null,
+                  })
+                  setSelectedCategory(cat)
+                }}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-left transition',
+                  'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
                   selectedCategory === cat
                     ? 'bg-sky-500 text-white border-sky-600'
-                    : 'bg-background border-border hover:bg-muted'
+                    : 'bg-background border-border hover:bg-muted',
+                  !isAdminMode && 'h-8 px-3 py-0 text-sm'
                 )}
-                style={{ fontSize: `${screenConfig.categoryFontSize}px` }}
+                style={{ fontSize: `${categoryFontPx}px` }}
               >
                 {cat}
               </button>
@@ -516,7 +687,7 @@ export function PosTerminalMenuScreen({
           </div>
         </section>
 
-        <section className="min-h-0 overflow-y-auto p-3">
+        <section ref={menuListRef} className={cn('min-h-0 overflow-y-auto', isAdminMode ? 'p-3' : 'flex-1 p-1')}>
           {isAdminMode && (
             <div className="mb-2 flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
@@ -526,8 +697,17 @@ export function PosTerminalMenuScreen({
             </div>
           )}
           <div
-            className="grid gap-2"
-            style={{ gridTemplateColumns: `repeat(${Math.max(2, screenConfig.menuTileCols)}, minmax(0, 1fr))` }}
+            ref={menuGridRef}
+            className={cn(
+              'grid content-start gap-2',
+              !isAdminMode && 'auto-rows-[162px]'
+            )}
+            style={{
+              gridTemplateColumns: `repeat(${Math.max(2, screenConfig.menuTileCols)}, minmax(0, 1fr))`,
+              alignContent: 'start',
+              justifyContent: 'start',
+              placeContent: 'start',
+            }}
           >
             {filteredPromos.map((p) => (
               <button
@@ -535,17 +715,28 @@ export function PosTerminalMenuScreen({
                 type="button"
                 onClick={() => interactive && addPromo(p)}
                 className={cn(
-                  'flex min-h-[96px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-2 text-left transition',
+                  'flex h-full flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition',
                   interactive ? 'hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98]' : 'opacity-75 cursor-default'
                 )}
+                data-menu-card="promo"
               >
-                <div className="relative flex aspect-square shrink-0 items-center justify-center overflow-hidden rounded-lg bg-amber-100">
+                <div className="relative flex h-[92px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-amber-100">
                   <span className="text-2xl">🏷️</span>
                 </div>
-                <div className="mt-2 truncate font-medium text-slate-800" style={{ fontSize: `${screenConfig.menuTileFontSize}px` }}>
+                <div
+                  className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
+                  style={{
+                    fontSize: `${tileFontPx}px`,
+                    lineHeight: '1.2',
+                    height: '3.6em',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                  }}
+                >
                   {p.name}
                 </div>
-                <div className="text-xs font-bold text-amber-600">{getPromoPrice(p).toLocaleString()} ฿</div>
+                <div className="mt-auto text-xs font-bold text-amber-600">{getPromoPrice(p).toLocaleString()} ฿</div>
               </button>
             ))}
             {filteredMenus.map((m) => (
@@ -554,11 +745,12 @@ export function PosTerminalMenuScreen({
                 type="button"
                 onClick={() => interactive && openMenuPicker(m)}
                 className={cn(
-                  'flex min-h-[96px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-2 text-left transition',
+                  'flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
                   interactive ? 'hover:border-emerald-400 hover:shadow-md active:scale-[0.98]' : 'opacity-85 cursor-default'
                 )}
+                data-menu-card="menu"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {isAdminMode && (
                     <span
                       role="button"
@@ -597,10 +789,20 @@ export function PosTerminalMenuScreen({
                     <div className="flex h-full items-center justify-center text-2xl text-slate-400">🍗</div>
                   )}
                 </div>
-                <div className="mt-2 truncate font-medium text-slate-800" style={{ fontSize: `${screenConfig.menuTileFontSize}px` }}>
+                <div
+                  className="mt-1 overflow-hidden break-words font-medium leading-tight text-slate-800"
+                  style={{
+                    fontSize: `${tileFontPx}px`,
+                    lineHeight: '1.2',
+                    height: '3.6em',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                  }}
+                >
                   {m.name}
                 </div>
-                <div className="text-xs font-bold text-emerald-600">{getMenuPrice(m).toLocaleString()} ฿</div>
+                <div className="mt-auto text-xs font-bold text-emerald-600">{getMenuPrice(m).toLocaleString()} ฿</div>
               </button>
             ))}
           </div>

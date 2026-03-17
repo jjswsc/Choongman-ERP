@@ -200,7 +200,7 @@ export default function PosCostAnalysisPage() {
 
   const handleExportCsv = () => {
     const csvRows: string[] = [
-      toCsvRow(["코드", "대분류", "카테고리", "메뉴명", "옵션", "홀", "배달", "홀 원가", "배달 원가", "원가율(홀)%", "원가율(배달)%"]),
+      toCsvRow(["코드", "대분류", "카테고리", "메뉴명", "옵션", "홀", "배달앱", "홀 원가", "배달앱 원가", "원가율(홀)%", "원가율(배달앱)%"]),
     ]
     for (const r of flatList) {
       const priceH = (r.priceHall ?? 0) || 1
@@ -369,19 +369,19 @@ export default function PosCostAnalysisPage() {
               {t("posCostPriceHall") || "홀"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceH.toFixed(0)}</span>
             </span>
             <span className="text-muted-foreground">
-              {t("posCostPriceDelivery") || "배달"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceD.toFixed(0)}</span>
+              {t("posCostPriceDelivery") || "배달앱"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgPriceD.toFixed(0)}</span>
             </span>
             <span className="text-muted-foreground">
               {t("posCostCostHall") || "홀 원가"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostH.toFixed(1)}</span>
             </span>
             <span className="text-muted-foreground">
-              {t("posCostCostDelivery") || "배달 원가"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostD.toFixed(1)}</span>
+              {t("posCostCostDelivery") || "배달앱 원가"}: <span className="font-medium tabular-nums text-foreground">{listSummary.avgCostD.toFixed(1)}</span>
             </span>
             <span className="text-amber-600 font-medium tabular-nums">
               {t("posCostRatioHall") || "원가율(홀)"}: {listSummary.avgRatioH.toFixed(1)}%
             </span>
             <span className="text-amber-600 font-medium tabular-nums">
-              {t("posCostRatioDelivery") || "원가율(배달)"}: {listSummary.avgRatioD.toFixed(1)}%
+              {t("posCostRatioDelivery") || "원가율(배달앱)"}: {listSummary.avgRatioD.toFixed(1)}%
             </span>
           </div>
         )}
@@ -397,11 +397,11 @@ export default function PosCostAnalysisPage() {
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategory") || "카테고리"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuName") || "메뉴명"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceHall") || "홀"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceDelivery") || "배달"}</th>
+                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceDelivery") || "배달앱"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostHall") || "홀 원가"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostDelivery") || "배달 원가"}</th>
+                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostDelivery") || "배달앱 원가"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostRatioHall") || "원가율(홀)"}</th>
-                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostRatioDelivery") || "원가율(배달)"}</th>
+                  <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostRatioDelivery") || "원가율(배달앱)"}</th>
                 </tr>
               </thead>
               <tbody>

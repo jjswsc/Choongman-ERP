@@ -34,6 +34,7 @@ import { useT } from '@/lib/i18n'
 import { canAccessAdmin, isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
@@ -161,6 +162,23 @@ export default function PosTerminalPage() {
     byId: new Map(),
     byName: new Map(),
   })
+
+  useEffect(() => {
+    // #region agent log
+    const ping = {sessionId:'960801',runId:'run-3',hypothesisId:'H6',location:'terminal/page.tsx:mount',message:'terminal page mounted',data:{href:typeof window!=='undefined'?window.location.href:'',userAgent:typeof navigator!=='undefined'?navigator.userAgent:''},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
+    // #endregion
+  }, [])
+
+  useEffect(() => {
+    if (!receiptData) return
+    // #region agent log
+    const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H10',location:'terminal/page.tsx:receiptData',message:'terminal receiptData set',data:{orderNoLen:String(receiptData.orderNo||'').length,items:receiptData.items.length,total:receiptData.total},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
+    // #endregion
+  }, [receiptData])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -462,6 +480,17 @@ export default function PosTerminalPage() {
       second: '2-digit',
       hour12: false,
     }).format(new Date())
+    const parsedMemo = parsePosOrderMemo(payload.memo)
+    const taxInvoice = parsedMemo.taxInvoice
+    const tr = (key: string, fallback: string) => {
+      const value = t(key)
+      return value && value !== key ? value : fallback
+    }
+    // #region agent log
+    const logH13 = {sessionId:'960801',runId:'run-13',hypothesisId:'H13',location:'terminal/page.tsx:printReceiptNow:layoutConfig',message:'terminal print layout config',data:{bodyPaddingTopMm:0,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,bodyPaddingBottomMm:1,receiptWidthMm:73.2,contentPadLeftMm:0,contentPadRightMm:0.8,rowPadRightMm:1.2,metaPadRightMm:1.2,contentMarginTopMm:0,contentAlign:'left'},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH13)}).catch(()=>{});
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH13)}).catch(()=>{});
+    // #endregion
     const printContent = `
       <div class="receipt-content">
         <div class="text-center">
@@ -471,29 +500,42 @@ export default function PosTerminalPage() {
         <div class="receipt-divider"></div>
         ${
           receiptShowTitle
-            ? `<div><div class="receipt-section-title">RECEIPT</div><div class="receipt-sub-title">Tax Invoice (ABB)</div></div>`
+            ? `<div><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div></div>`
             : ''
         }
         <div class="text-xs">
-          <div class="receipt-row"><span class="receipt-muted">Order #</span><span>${esc(payload.orderNo)}</span></div>
+          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderNo', '주문번호'))}</span><span class="receipt-meta-value">${esc(payload.orderNo)}</span></div>
           ${
             payload.tableName
-              ? `<div class="receipt-row"><span class="receipt-muted">${esc(t('posTable') || '테이블')}</span><span>${esc(payload.tableName)}</span></div>`
+              ? `<div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posTable', '테이블'))}</span><span class="receipt-meta-value">${esc(payload.tableName)}</span></div>`
               : ''
           }
-          <div class="receipt-row"><span class="receipt-muted">${esc(t('date') || 'Date')}</span><span>${esc(timestamp)}</span></div>
-          <div class="receipt-row"><span class="receipt-muted">${esc(t('posOrderType') || 'Order Type')}</span><span>${esc(payload.orderType)}</span></div>
+          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('date', 'Date'))}</span><span class="receipt-meta-value">${esc(timestamp)}</span></div>
+          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderType', 'Order Type'))}</span><span class="receipt-meta-value">${esc(payload.orderType)}</span></div>
         </div>
         <div class="receipt-divider"></div>
         ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ''}
         ${receiptBizName ? `<div class="biz-line biz-strong">${esc(receiptBizName)}</div>` : ''}
-        ${receiptBizTaxId ? `<div class="biz-line">Tax ID: ${esc(receiptBizTaxId)}</div>` : ''}
-        ${receiptBizOwner ? `<div class="biz-line">${esc(t('posOwner') || '대표')}: ${esc(receiptBizOwner)}</div>` : ''}
+        ${receiptBizTaxId ? `<div class="biz-line">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(receiptBizTaxId)}</div>` : ''}
+        ${receiptBizOwner ? `<div class="biz-line">${esc(tr('posOwner', '대표'))}: ${esc(receiptBizOwner)}</div>` : ''}
         ${receiptBizAddress ? `<div class="biz-line">${esc(receiptBizAddress)}</div>` : ''}
-        ${receiptBizPhone ? `<div class="biz-line">TEL: ${esc(receiptBizPhone)}</div>` : ''}
+        ${receiptBizPhone ? `<div class="biz-line">${esc(tr('posTelLabel', 'TEL'))}: ${esc(receiptBizPhone)}</div>` : ''}
         ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '</div>' : ''}
+        ${
+          taxInvoice
+            ? `<div class="text-xs" style="border:1px solid #111;padding:6px;margin-top:6px">
+                <div style="font-weight:700;margin-bottom:4px">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>
+                <div>${esc(tr('posName', '이름'))}: ${esc(taxInvoice.name)}</div>
+                <div>${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(taxInvoice.taxId)}</div>
+                <div>${esc(tr('posBranchLabel', '지점'))}: ${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</div>
+                <div>${esc(tr('posPhone', '전화번호'))}: ${esc(taxInvoice.phone)}</div>
+                <div>${esc(tr('email', '이메일'))}: ${esc(taxInvoice.email)}</div>
+                <div>${esc(tr('settings_address', '주소'))}: ${esc(taxInvoice.address)}</div>
+              </div>`
+            : ''
+        }
         <div class="receipt-divider-strong"></div>
-        <div class="receipt-item-head"><span>ITEM</span><span>AMOUNT</span></div>
+        <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
         ${payload.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${(it.price * it.qty).toLocaleString()}</span></div>`).join('')}
         <div class="receipt-divider"></div>
         <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${payload.subtotal.toLocaleString()} ฿</span></div>
@@ -502,17 +544,27 @@ export default function PosTerminalPage() {
         ${(payload.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${payload.serviceFeeMode === 'separate' ? '+' : ''}${Number(payload.serviceFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
         ${(payload.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${Number(payload.cardFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
         ${(payload.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${Number(payload.otherFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${payload.memo ? `<div class="memo">${esc(t('posCustomerMemo') || '메모')}: ${esc(payload.memo)}</div>` : ''}
+        ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-row receipt-total"><span>${esc(t('posTotal') || '합계')}</span><span>${payload.total.toLocaleString()} ฿</span></div>
         <div class="receipt-divider"></div>
-        ${receiptShowPaidStamp ? '<div class="paid-stamp-wrap"><span class="paid-stamp">PAID</span></div>' : ''}
+        ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ''}
-        ${receiptShowThankYou ? '<div class="footer-strong">Thank you!</div>' : ''}
-        ${receiptShowCustomerCopy ? '<div>Customer Copy</div>' : ''}
+        ${receiptShowThankYou ? `<div class="footer-strong">${esc(tr('posReceiptThankYou', '감사합니다'))}</div>` : ''}
+        ${receiptShowCustomerCopy ? `<div>${esc(tr('posReceiptCustomerCopy', '고객용'))}</div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '</div>' : ''}
       </div>
     `
+    // #region agent log
+    const logH3 = {sessionId:'960801',runId:'run-2',hypothesisId:'H3',location:'terminal/page.tsx:printReceiptNow:beforeWrite',message:'terminal print payload metrics',data:{orderNoLen:String(payload.orderNo||'').length,items:payload.items.length,contentLen:printContent.length,hasMetaRow:printContent.includes('receipt-meta-row')},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH3)}).catch(()=>{});
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH3)}).catch(()=>{});
+    // #endregion
+    // #region agent log
+    const logH20 = {sessionId:'960801',runId:'run-13',hypothesisId:'H20',location:'terminal/page.tsx:printReceiptNow:cssRiskBudget',message:'terminal css risk budget',data:{paperWidthMm:80,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,receiptWidthMm:73.2,contentPadRightMm:0.8,rowPadRightMm:1.2,horizontalBudgetMm:75.4,contentMarginTopMm:0},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH20)}).catch(()=>{});
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH20)}).catch(()=>{});
+    // #endregion
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -521,8 +573,8 @@ export default function PosTerminalPage() {
           <style>
             @page { size: 80mm 200mm; margin: 0; }
             html, body { margin: 0; padding: 0; }
-            body { width: 80mm; box-sizing: border-box; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; padding: 3mm; color: #000; }
-            .receipt-content { width: 69mm; max-width: 69mm; margin: 0 auto; box-sizing: border-box; padding-left: 0.8mm; }
+            body { width: 80mm; box-sizing: border-box; font-family: 'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.42; letter-spacing: 0; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; color: #000; }
+            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
             .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
             .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
             .receipt-brand-logo.sm { width: 84px; }
@@ -534,8 +586,13 @@ export default function PosTerminalPage() {
             .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
             .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
             .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
-            .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
-            .receipt-item-head { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; padding-bottom: 4px; border-bottom: 1px solid #cbd5e1; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
+            .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
+            .receipt-meta-label { white-space: nowrap; }
+            .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #cbd5e1; }
             .biz-line { margin: 2px 0; font-size: 11px; }
             .biz-strong { color: #111; font-weight: 600; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
@@ -554,10 +611,15 @@ export default function PosTerminalPage() {
     `)
     printWindow.document.close()
     printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
+    let closed = false
+    const safeClose = () => {
+      if (closed) return
+      closed = true
       printWindow.close()
-    }, 250)
+    }
+    printWindow.onafterprint = safeClose
+    setTimeout(() => printWindow.print(), 250)
+    setTimeout(safeClose, 30000)
   }
   const deliveryApps = deliveryAppsFromApi
     .filter((a) => a.enabled)

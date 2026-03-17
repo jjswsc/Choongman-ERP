@@ -98,6 +98,7 @@ export function PosTableLayoutContent() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [selectedIds, setSelectedIds] = React.useState<string[]>([])
   const [draggingId, setDraggingId] = React.useState<string | null>(null)
+  const [resizingId, setResizingId] = React.useState<string | null>(null)
   const [selectBox, setSelectBox] = React.useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
   const [editingNameId, setEditingNameId] = React.useState<string | null>(null)
   const [showGrid, setShowGrid] = React.useState(true)
@@ -106,7 +107,25 @@ export function PosTableLayoutContent() {
   const [activeFloor, setActiveFloor] = React.useState<1 | 2 | 3>(1)
   const [tableNameInput, setTableNameInput] = React.useState("")
   const [tableSeatsInput, setTableSeatsInput] = React.useState<number>(0)
-  const dragStartRef = React.useRef<{ id: string; startX: number; startY: number; mouseX: number; mouseY: number; scaleX: number; scaleY: number } | null>(null)
+  const dragStartRef = React.useRef<{
+    ids: string[]
+    starts: Record<string, { x: number; y: number; w: number; h: number }>
+    mouseX: number
+    mouseY: number
+    scaleX: number
+    scaleY: number
+  } | null>(null)
+  const resizeStartRef = React.useRef<{
+    id: string
+    startW: number
+    startH: number
+    x: number
+    y: number
+    mouseX: number
+    mouseY: number
+    scaleX: number
+    scaleY: number
+  } | null>(null)
   const selectStartRef = React.useRef<{ startX: number; startY: number; additive: boolean } | null>(null)
   const skipNextFloorClickRef = React.useRef(false)
   const floorRef = React.useRef<HTMLDivElement | null>(null)
@@ -186,16 +205,6 @@ export function PosTableLayoutContent() {
       setSelectedId(null)
     }
   }, [activeFloor, currentFloorIdSet, selectedId])
-
-  React.useEffect(() => {
-    if (currentFloorLayout.length > 0 || layout.length === 0) return
-    const floors = Array.from(
-      new Set(layout.map((t) => Math.min(3, Math.max(1, Number(t.floor ?? 1) || 1)) as 1 | 2 | 3))
-    ).sort((a, b) => a - b)
-    if (floors[0] && floors[0] !== activeFloor) {
-      setActiveFloor(floors[0])
-    }
-  }, [layout, currentFloorLayout.length, activeFloor])
 
   const addTable = (preset: (typeof SHAPE_PRESETS)[0]) => {
     const maxY = currentFloorLayout.length ? Math.max(...currentFloorLayout.map((t) => t.y + t.h)) : 0
@@ -282,6 +291,36 @@ export function PosTableLayoutContent() {
       return
     }
     e.preventDefault()
+    const floorSelectedIds = selectedIds.filter((sid) => currentFloorIdSet.has(sid))
+    const dragIds = floorSelectedIds.length > 1 && floorSelectedIds.includes(id) ? floorSelectedIds : [id]
+    const dragItems = currentFloorLayout.filter((tbl) => dragIds.includes(tbl.id))
+    if (dragItems.length === 0) return
+    const rect = floorRef.current?.getBoundingClientRect()
+    const scaleX = rect && rect.width > 0 ? FLOOR_W / rect.width : 1
+    const scaleY = rect && rect.height > 0 ? FLOOR_H / rect.height : 1
+    setSelectedId(id)
+    if (!(floorSelectedIds.length > 1 && floorSelectedIds.includes(id))) {
+      setSelectedIds([id])
+    }
+    setDraggingId(id)
+    setResizingId(null)
+    const starts = dragItems.reduce<Record<string, { x: number; y: number; w: number; h: number }>>((acc, t) => {
+      acc[t.id] = { x: t.x, y: t.y, w: t.w, h: t.h }
+      return acc
+    }, {})
+    dragStartRef.current = {
+      ids: dragIds,
+      starts,
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      scaleX,
+      scaleY,
+    }
+  }
+
+  const handleResizeMouseDown = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    e.stopPropagation()
     const item = layout.find((x) => x.id === id)
     if (!item) return
     const rect = floorRef.current?.getBoundingClientRect()
@@ -289,11 +328,14 @@ export function PosTableLayoutContent() {
     const scaleY = rect && rect.height > 0 ? FLOOR_H / rect.height : 1
     setSelectedId(id)
     setSelectedIds([id])
-    setDraggingId(id)
-    dragStartRef.current = {
+    setDraggingId(null)
+    setResizingId(id)
+    resizeStartRef.current = {
       id,
-      startX: item.x,
-      startY: item.y,
+      startW: item.w,
+      startH: item.h,
+      x: item.x,
+      y: item.y,
       mouseX: e.clientX,
       mouseY: e.clientY,
       scaleX,
@@ -335,25 +377,47 @@ export function PosTableLayoutContent() {
   React.useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = dragStartRef.current
-      if (!d) return
-      const dx = (e.clientX - d.mouseX) * d.scaleX
-      const dy = (e.clientY - d.mouseY) * d.scaleY
-      setLayout((prev) =>
-        prev.map((t) => {
-          if (t.id !== d.id) return t
-          let nx = snapToGrid(d.startX + dx)
-          let ny = snapToGrid(d.startY + dy)
-          nx = Math.max(0, Math.min(FLOOR_W - t.w, nx))
-          ny = Math.max(0, Math.min(FLOOR_H - t.h, ny))
-          return { ...t, x: nx, y: ny }
-        })
-      )
+      if (d) {
+        const rawDx = (e.clientX - d.mouseX) * d.scaleX
+        const rawDy = (e.clientY - d.mouseY) * d.scaleY
+        const starts = Object.values(d.starts)
+        if (starts.length === 0) return
+        const minDx = Math.max(...starts.map((s) => -s.x))
+        const maxDx = Math.min(...starts.map((s) => FLOOR_W - (s.x + s.w)))
+        const minDy = Math.max(...starts.map((s) => -s.y))
+        const maxDy = Math.min(...starts.map((s) => FLOOR_H - (s.y + s.h)))
+        const dx = Math.max(minDx, Math.min(maxDx, rawDx))
+        const dy = Math.max(minDy, Math.min(maxDy, rawDy))
+        setLayout((prev) =>
+          prev.map((t) => {
+            const start = d.starts[t.id]
+            if (!start) return t
+            const nx = Math.max(0, Math.min(FLOOR_W - t.w, snapToGrid(start.x + dx)))
+            const ny = Math.max(0, Math.min(FLOOR_H - t.h, snapToGrid(start.y + dy)))
+            return { ...t, x: nx, y: ny }
+          })
+        )
+        return
+      }
+
+      const r = resizeStartRef.current
+      if (!r) return
+      const minSize = GRID_SIZE * 2
+      const dx = (e.clientX - r.mouseX) * r.scaleX
+      const dy = (e.clientY - r.mouseY) * r.scaleY
+      const maxW = FLOOR_W - r.x
+      const maxH = FLOOR_H - r.y
+      const nextW = Math.max(minSize, Math.min(maxW, snapToGrid(r.startW + dx)))
+      const nextH = Math.max(minSize, Math.min(maxH, snapToGrid(r.startH + dy)))
+      setLayout((prev) => prev.map((t) => (t.id === r.id ? { ...t, w: nextW, h: nextH } : t)))
     }
     const onUp = () => {
       setDraggingId(null)
+      setResizingId(null)
       dragStartRef.current = null
+      resizeStartRef.current = null
     }
-    if (draggingId) {
+    if (draggingId || resizingId) {
       document.addEventListener("mousemove", onMove)
       document.addEventListener("mouseup", onUp)
     }
@@ -361,7 +425,7 @@ export function PosTableLayoutContent() {
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
     }
-  }, [draggingId])
+  }, [draggingId, resizingId])
 
   React.useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -877,6 +941,14 @@ export function PosTableLayoutContent() {
             >
               <Trash2 className="h-3 w-3" />
             </button>
+            {selectedId === item.id && (
+              <button
+                type="button"
+                className="absolute -bottom-1.5 -right-1.5 h-4 w-4 rounded-sm border border-white/80 bg-emerald-500 shadow z-20 cursor-se-resize"
+                onMouseDown={(e) => handleResizeMouseDown(e, item.id)}
+                title={t("posTableResize") || "크기 조절"}
+              />
+            )}
           </div>
         )})}
         {selectBox && (
@@ -898,7 +970,7 @@ export function PosTableLayoutContent() {
       </div>
 
       <p className="text-xs text-slate-500">
-        {t("posTableDragHint") || "테이블을 드래그하여 이동, 더블클릭으로 이름 수정. 추가/삭제 후 저장 버튼을 눌러 반영해 주세요."}
+        {t("posTableDragHint") || "테이블을 드래그해 이동, 우하단 핸들로 크기 조절, 더블클릭으로 이름 수정. 추가/삭제 후 저장 버튼을 눌러 반영해 주세요."}
       </p>
     </div>
   )

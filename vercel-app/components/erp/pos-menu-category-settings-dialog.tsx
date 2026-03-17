@@ -200,8 +200,13 @@ export function PosMenuCategorySettingsDialog({
   }
 
   const startEditSub = (main: string, sub: string | null) => {
-    setEditingSub(sub ? { main, sub } : null)
-    setFormSub({ main, name: sub || "" })
+    if (sub === null) {
+      setEditingSub(null)
+      setFormSub({ main: "", name: "" })
+      return
+    }
+    setEditingSub({ main, sub })
+    setFormSub({ main, name: sub })
   }
 
   return (
@@ -312,7 +317,7 @@ export function PosMenuCategorySettingsDialog({
                     <Button size="sm" onClick={handleSaveSub} disabled={saving}>
                       {saving ? "..." : t("btn_save") || "저장"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => startEditSub("", "")}>
+                    <Button size="sm" variant="outline" onClick={() => startEditSub("", null)}>
                       {t("cancel") || "취소"}
                     </Button>
                   </div>

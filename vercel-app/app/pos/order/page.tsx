@@ -26,6 +26,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { cn, escapeHtml } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
+import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -81,6 +82,11 @@ export default function PosOrderPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  React.useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId:'pre-fix',hypothesisId:'H4',location:'app/pos/order/page.tsx:mount',message:'order page mounted',data:{href:typeof window!=='undefined'?window.location.href:'',path:'/pos/order'},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [])
   const { stores } = useStoreList()
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [promos, setPromos] = React.useState<PosPromoWithItems[]>([])
@@ -162,6 +168,15 @@ export default function PosOrderPage() {
   } | null>(null)
   const receiptRef = React.useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = React.useRef<string>("")
+
+  React.useEffect(() => {
+    if (!receiptData) return
+    // #region agent log
+    const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H11',location:'order/page.tsx:receiptData',message:'order page receiptData set',data:{orderNoLen:String(receiptData.orderNo||'').length,items:receiptData.items.length,total:receiptData.total},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
+    // #endregion
+  }, [receiptData])
 
   React.useEffect(() => {
     const def = auth?.store || stores[0] || "ST01"
@@ -652,7 +667,7 @@ export default function PosOrderPage() {
   }
 
   const POS_PAPER_WIDTH_MM = 80
-  const POS_PAPER_SIDE_PADDING_MM = 3
+  const POS_PAPER_SIDE_PADDING_MM = 1
   const POS_PAPER_HEIGHT_MM = 200
   const getPosPaperBaseCss = (fontFamily: string, fontSizePx: number) => `
     @page { size: ${POS_PAPER_WIDTH_MM}mm ${POS_PAPER_HEIGHT_MM}mm; margin: 0; }
@@ -671,6 +686,11 @@ export default function PosOrderPage() {
   const handlePrintReceipt = () => {
     if (!receiptRef.current) return
     const printContent = receiptRef.current.innerHTML
+    // #region agent log
+    const logH5 = {sessionId:'960801',runId:'run-2',hypothesisId:'H5',location:'order/page.tsx:handlePrintReceipt:entry',message:'order page print entry metrics',data:{contentLen:printContent.length,clientWidth:receiptRef.current.clientWidth,scrollWidth:receiptRef.current.scrollWidth},timestamp:Date.now()}
+    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH5)}).catch(()=>{});
+    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH5)}).catch(()=>{});
+    // #endregion
     const printWindow = window.open("", "_blank")
     if (!printWindow) {
       alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
@@ -682,11 +702,13 @@ export default function PosOrderPage() {
         <head>
           <title>${t("posReceipt") || "영수증"}</title>
           <style>
-            ${getPosPaperBaseCss("'Courier New', monospace", 12)}
-            body { font-weight: 600; line-height: 1.4; letter-spacing: 0.01em; color: #000; }
-            .receipt-content { width: 69mm; max-width: 69mm; margin: 0 auto; box-sizing: border-box; padding-left: 0.8mm; }
+            ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; }
+            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
             .receipt-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-            .receipt-row { display: flex; justify-content: space-between; margin: 4px 0; }
+            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
+            .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-total { border-top: 1px dashed #000; margin-top: 8px; padding-top: 8px; font-weight: bold; }
             .receipt-biz { margin: 2px 0; font-size: 11px; }
             .receipt-brand-logo { display: inline-block; height: auto; object-fit: contain; }
@@ -703,10 +725,15 @@ export default function PosOrderPage() {
     `)
     printWindow.document.close()
     printWindow.focus()
-    setTimeout(() => {
-      printWindow.print()
+    let closed = false
+    const safeClose = () => {
+      if (closed) return
+      closed = true
       printWindow.close()
-    }, 250)
+    }
+    printWindow.onafterprint = safeClose
+    setTimeout(() => printWindow.print(), 250)
+    setTimeout(safeClose, 30000)
   }
 
   const handlePrintKitchenSlip = async () => {
@@ -749,6 +776,7 @@ export default function PosOrderPage() {
         const slip = slips[idx]
         const w = idx === 0 ? win : window.open("", "_blank")
         if (!w) return
+        const kitchenMemo = parsePosOrderMemo(receiptData.memo).plainMemo
         const html = `
           <!DOCTYPE html>
           <html><head><title>${escapeHtml(slip.label)}</title>
@@ -764,7 +792,7 @@ export default function PosOrderPage() {
           <div class="k-row">${new Date().toLocaleString("ko-KR")}</div>
           <hr style="margin: 10px 0;" />
           ${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join("")}
-          ${receiptData.memo ? `<div class="k-memo">${escapeHtml((t("posCustomerMemo") || "메모") + ": " + receiptData.memo)}</div>` : ""}
+          ${kitchenMemo ? `<div class="k-memo">${escapeHtml((t("posCustomerMemo") || "메모") + ": " + kitchenMemo)}</div>` : ""}
           </body></html>`
         w.document.write(html)
         w.document.close()
@@ -813,6 +841,14 @@ export default function PosOrderPage() {
     takeout: t("posOrderTypeTakeout") ?? "포장",
     delivery: t("posOrderTypeDelivery") ?? "배달",
   }
+  const tr = (key: string, fallback: string) => {
+    const value = t(key)
+    return value && value !== key ? value : fallback
+  }
+  const parsedReceiptMemo = React.useMemo(
+    () => parsePosOrderMemo(receiptData?.memo),
+    [receiptData?.memo]
+  )
 
   if (loading) {
     return (
@@ -846,7 +882,7 @@ export default function PosOrderPage() {
       {/* 메뉴 영역 */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* 대분류 선택 (유형은 첫 화면에서 선택됨) */}
-        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-2.5 py-1.5 shadow-sm">
           <Button
             variant="ghost"
             size="sm"
@@ -867,7 +903,7 @@ export default function PosOrderPage() {
                   setSelectedCategory("")
                 }}
                 className={cn(
-                  "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
+                  "shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                   selectedMainCategory === main ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 )}
               >
@@ -878,7 +914,7 @@ export default function PosOrderPage() {
         </div>
         {/* 3단계: 카테고리(소분류) 선택 */}
         {selectedMainCategory && (
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
             <span className="shrink-0 text-xs text-slate-600">{t("posCategory") || "카테고리"}</span>
             <div className="flex flex-1 gap-2 overflow-x-auto">
               {categoriesForSelectedMain.map((c) => (
@@ -886,7 +922,7 @@ export default function PosOrderPage() {
                   key={c}
                   onClick={() => setSelectedCategory(c)}
                   className={cn(
-                    "shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition",
+                    "shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium transition",
                     selectedCategory === c ? "bg-emerald-500 text-white" : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
                   )}
                 >
@@ -897,19 +933,29 @@ export default function PosOrderPage() {
           </div>
         )}
         {/* Oll star pos 15dlscl (1024x768/1366x768) 최적화: 1024 이하 3열, 이상 4~5열 */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-3">
+          <div className="grid content-start auto-rows-max grid-cols-3 items-start gap-2 sm:gap-2.5 min-[1025px]:grid-cols-4 min-[1200px]:grid-cols-5">
             {filteredPromos.map((p) => (
               <button
                 key={`promo-${p.id}`}
                 onClick={() => addPromoToCart(p)}
-                className="flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-2 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
+                className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98] touch-manipulation"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
+                <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-amber-100 flex items-center justify-center">
                   <span className="text-3xl">🏷️</span>
                 </div>
-                <div className="mt-2 truncate text-sm font-medium text-slate-800">{p.name}</div>
-                <div className="text-xs font-bold text-amber-600">
+                <div
+                  className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
+                  style={{
+                    height: "2.6em",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {p.name}
+                </div>
+                <div className="mt-auto text-xs font-bold text-amber-600">
                   {(getPromoPrice(p)) > 0 ? `${(getPromoPrice(p)).toLocaleString()} ฿` : "-"}
                 </div>
               </button>
@@ -918,9 +964,9 @@ export default function PosOrderPage() {
               <button
                 key={m.id}
                 onClick={() => addToCart(m)}
-                className="flex min-h-[88px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-2 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation"
+                className="flex h-[170px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition hover:border-emerald-400 hover:shadow-md active:scale-[0.98] touch-manipulation"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="relative h-[92px] shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {m.imageUrl ? (
                     <Image
                       src={m.imageUrl}
@@ -939,8 +985,18 @@ export default function PosOrderPage() {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 truncate text-sm font-medium text-slate-800">{m.name}</div>
-                <div className="text-xs font-bold text-emerald-600">
+                <div
+                  className="mt-1 overflow-hidden break-words text-sm font-medium leading-tight text-slate-800"
+                  style={{
+                    height: "2.6em",
+                    display: "-webkit-box",
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {m.name}
+                </div>
+                <div className="mt-auto text-xs font-bold text-emerald-600">
                   {(getMenuPrice(m)) > 0 ? `${(getMenuPrice(m)).toLocaleString()} ฿` : "-"}
                 </div>
               </button>
@@ -1569,12 +1625,24 @@ export default function PosOrderPage() {
                   <div className="text-xs text-muted-foreground">
                     {new Date().toLocaleString("ko-KR")}
                   </div>
+                  <div className="text-xs">{parsedReceiptMemo.taxInvoice ? tr("posReceiptTaxInvoice", "세금계산서") : tr("posReceiptSimpleTaxInvoice", "간이 세금계산서")}</div>
                 </div>
                 {receiptBizName && <div className="receipt-biz">{receiptBizName}</div>}
-                {receiptBizTaxId && <div className="receipt-biz">Tax ID: {receiptBizTaxId}</div>}
+                {receiptBizTaxId && <div className="receipt-biz">{tr("posTaxIdLabel", "Tax ID")}: {receiptBizTaxId}</div>}
                 {receiptBizOwner && <div className="receipt-biz">{t("posOwner") || "대표"}: {receiptBizOwner}</div>}
                 {receiptBizAddress && <div className="receipt-biz">{receiptBizAddress}</div>}
-                {receiptBizPhone && <div className="receipt-biz">TEL: {receiptBizPhone}</div>}
+                {receiptBizPhone && <div className="receipt-biz">{tr("posTelLabel", "TEL")}: {receiptBizPhone}</div>}
+                {parsedReceiptMemo.taxInvoice && (
+                  <div className="text-xs border border-black p-2">
+                    <div className="font-semibold mb-1">{tr("posReceiptTaxInvoice", "세금계산서")}</div>
+                    <div>{tr("posName", "이름")}: {parsedReceiptMemo.taxInvoice.name}</div>
+                    <div>{tr("posTaxIdLabel", "Tax ID")}: {parsedReceiptMemo.taxInvoice.taxId}</div>
+                    <div>{tr("posBranchLabel", "지점")}: {parsedReceiptMemo.taxInvoice.branchNo || (parsedReceiptMemo.taxInvoice.customerType === "company" ? "00000" : tr("posHeadOffice", "본점"))}</div>
+                    <div>{tr("posPhone", "전화번호")}: {parsedReceiptMemo.taxInvoice.phone}</div>
+                    <div>{tr("email", "이메일")}: {parsedReceiptMemo.taxInvoice.email}</div>
+                    <div>{tr("settings_address", "주소")}: {parsedReceiptMemo.taxInvoice.address}</div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   {receiptData.items.map((it) => (
                     <div key={it.id} className="receipt-row flex justify-between">
@@ -1633,9 +1701,9 @@ export default function PosOrderPage() {
                     <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{receiptData.otherFeeAmt?.toLocaleString()} ฿</span>
                   </div>
                 )}
-                {receiptData.memo && (
+                {parsedReceiptMemo.plainMemo && (
                   <div className="text-xs text-muted-foreground">
-                    {t("posCustomerMemo") || "메모"}: {receiptData.memo}
+                    {tr("posCustomerMemo", "메모")}: {parsedReceiptMemo.plainMemo}
                   </div>
                 )}
                 <div className="receipt-total flex justify-between">
