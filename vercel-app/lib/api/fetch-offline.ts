@@ -112,6 +112,7 @@ const QUEUE_WHITELIST = new Set([
   '/api/backfillPriceHistory',
   '/api/updateItemOrderDisabled',
   '/api/applyPosMenuCategoryPresets',
+  '/api/posMenuCategories',
   '/api/savePosMenuOption',
   '/api/savePosMenuIngredient',
   '/api/sauces',

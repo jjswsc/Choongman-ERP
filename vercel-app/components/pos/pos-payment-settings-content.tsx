@@ -17,6 +17,7 @@ import { useT } from '@/lib/i18n'
 import {
   getPosPaymentMethodItems,
   savePosPaymentMethodItem,
+  deletePosPaymentMethodItem,
   useStoreList,
   type PosPaymentMethodItem,
 } from '@/lib/api-client'

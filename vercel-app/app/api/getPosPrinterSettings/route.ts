@@ -125,6 +125,7 @@ export async function GET(request: NextRequest) {
     otherRate: 0,
     otherMode: 'separate' as const,
     receiptPrintLang: '' as string,
+    mainDeviceToken: null as string | null,
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -192,6 +193,7 @@ export async function GET(request: NextRequest) {
       card_base_mode?: string
       other_rate?: number
       other_mode?: string
+      main_device_token?: string | null
     }[] | null
 
     const raw = rows?.[0]

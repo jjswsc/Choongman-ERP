@@ -3856,6 +3856,8 @@ export interface PosPrinterSettings {
   cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
   otherRate?: number
   otherMode?: 'included' | 'separate'
+  /** 매장당 메인 포스 1대 지정용. 설정 시 해당 토큰을 가진 기기만 주문 수신·자동 인쇄 */
+  mainDeviceToken?: string | null
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -3927,6 +3929,24 @@ export async function savePosPrinterSettings(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function clearPosMainDevice(params: { storeCode: string; deviceToken?: string }) {
+  const res = await apiFetchWithOffline('/api/clearPosMainDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function registerPosMainDevice(params: { storeCode: string; deviceToken: string }) {
+  const res = await apiFetchWithOffline('/api/registerPosMainDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

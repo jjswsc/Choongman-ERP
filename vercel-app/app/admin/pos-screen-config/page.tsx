@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
-import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset } from "lucide-react"
+import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosTableLayoutContent } from "@/components/pos/pos-table-layout-content"
 import { PosCookingRulesContent } from "@/components/pos/pos-cooking-rules-content"
@@ -10,6 +10,7 @@ import { PosDeliveryAppsContent } from "@/components/pos/pos-delivery-apps-conte
 import { PosPaymentSettingsContent } from "@/components/pos/pos-payment-settings-content"
 import { PosTerminalMenuScreen } from "@/components/pos/pos-terminal-menu-screen"
 import { PosMenuBoardManagementContent } from "@/components/pos/pos-menu-board-management-content"
+import { PosTerminalSettingsContent } from "@/components/pos/pos-terminal-settings-content"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -22,13 +23,13 @@ export default function PosScreenConfigPage() {
   const t = useT(lang)
   const tabParam = searchParams.get("tab") || "tables"
   const [activeTab, setActiveTab] = React.useState(
-    ["tables", "cook-timer", "menus", "payment", "delivery"].includes(tabParam) ? tabParam : "tables"
+    ["tables", "cook-timer", "menus", "payment", "delivery", "terminal"].includes(tabParam) ? tabParam : "tables"
   )
   const [menusSubTab, setMenusSubTab] = React.useState<"menu-screen" | "menu-board">("menu-screen")
 
   React.useEffect(() => {
-    const t = searchParams.get("tab")
-    if (t && ["tables", "cook-timer", "menus", "payment", "delivery"].includes(t)) setActiveTab(t)
+    const tab = searchParams.get("tab")
+    if (tab && ["tables", "cook-timer", "menus", "payment", "delivery", "terminal"].includes(tab)) setActiveTab(tab)
   }, [searchParams])
 
   return (
@@ -40,10 +41,10 @@ export default function PosScreenConfigPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">
-              {t("posScreenConfig") || "POS 화면 구성"}
+              {t("posScreenConfig") || "POS 설정"}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {t("posScreenConfigSub") || "테이블, 메뉴, 결제, 배달앱 설정을 관리합니다."}
+              {t("posScreenConfigSub") || "테이블, 메뉴, 결제, 배달앱, 단말 설정을 관리합니다."}
             </p>
           </div>
         </div>
@@ -69,6 +70,10 @@ export default function PosScreenConfigPage() {
             <TabsTrigger value="delivery" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
               <Truck className="h-3.5 w-3.5" />
               {t("posScreenConfigTabDelivery") || "배달앱 관리"}
+            </TabsTrigger>
+            <TabsTrigger value="terminal" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
+              <Smartphone className="h-3.5 w-3.5" />
+              {t("posScreenConfigTabTerminal") || "단말 설정"}
             </TabsTrigger>
           </TabsList>
 
@@ -130,6 +135,16 @@ export default function PosScreenConfigPage() {
                 {t("posScreenConfigTabDeliveryDesc") || "배달앱 추가·수정·순서 변경, dine out 지원 여부를 설정합니다."}
               </p>
               <PosDeliveryAppsContent />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="terminal" className="mt-0">
+            <div className="rounded-xl border bg-card p-6">
+              <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabTerminal") || "단말 설정"}</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("posScreenConfigTabTerminalDesc") || "메인 포스(프린터 연결) 1대 지정. 주문 단말은 인쇄 없이 주문만 입력합니다."}
+              </p>
+              <PosTerminalSettingsContent />
             </div>
           </TabsContent>
         </Tabs>

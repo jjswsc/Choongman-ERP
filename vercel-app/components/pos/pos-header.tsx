@@ -61,6 +61,8 @@ export function POSHeader({
   onRefresh,
   title = "POS",
   className,
+  isMainPosDevice,
+  onMainPosDeviceChange,
 }: PosHeaderProps) {
   const router = useRouter()
   const { lang, setLang } = useLang()

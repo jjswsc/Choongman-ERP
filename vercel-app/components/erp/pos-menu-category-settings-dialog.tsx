@@ -137,8 +137,9 @@ export function PosMenuCategorySettingsDialog({
     setSaving(true)
     try {
       const subs = config.categoriesByMain[main] || []
-      const newSubs = editingSub
-        ? subs.map((c) => (c === editingSub.sub ? name : c))
+      const isEditMode = editingSub && editingSub.sub !== ""
+      const newSubs = isEditMode
+        ? subs.map((c) => (c === editingSub!.sub ? name : c))
         : subs.includes(name)
           ? subs
           : [...subs, name].sort()

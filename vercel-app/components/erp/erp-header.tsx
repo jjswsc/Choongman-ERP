@@ -1,10 +1,11 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
-import { Bell, Search, User, Smartphone } from "lucide-react"
+import { Bell, Search, User, Smartphone, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -37,11 +38,42 @@ const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ms", label: "Bahasa Melayu" },
 ]
 
+const ERP_HISTORY_KEY_CURR = "erp_back_curr"
+const ERP_HISTORY_KEY_PREV = "erp_back_prev"
+
 export function ErpHeader() {
   const router = useRouter()
+  const pathname = usePathname()
   const { auth, logout } = useAuth()
   const { lang, setLang } = useLang()
   const t = useT(lang)
+  const isLoginPage = pathname === "/admin/login"
+  const isDashboard = pathname === "/admin" || pathname === "/admin/"
+  const showBackButton = !isLoginPage && !isDashboard
+
+  // ERP 내 이동 시 이전/현재 경로 저장 (뒤로가기용)
+  useEffect(() => {
+    if (typeof window === "undefined" || !pathname || isLoginPage) return
+    if (!pathname.startsWith("/admin")) return
+    const curr = sessionStorage.getItem(ERP_HISTORY_KEY_CURR)
+    if (curr !== pathname) {
+      sessionStorage.setItem(ERP_HISTORY_KEY_PREV, curr || "")
+      sessionStorage.setItem(ERP_HISTORY_KEY_CURR, pathname)
+    }
+  }, [pathname, isLoginPage])
+
+  const handleBack = () => {
+    const prev = sessionStorage.getItem(ERP_HISTORY_KEY_PREV)
+    if (prev && prev !== pathname && prev.startsWith("/admin")) {
+      router.push(prev)
+      return
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+      return
+    }
+    router.push("/admin")
+  }
 
   const handleLogout = () => {
     logout()
@@ -52,6 +84,22 @@ export function ErpHeader() {
     <header className="sticky top-0 z-30 flex h-14 items-center border-b bg-card px-4 print:hidden">
       <div className="flex items-center gap-3">
         <SidebarTrigger className="h-8 w-8 text-muted-foreground hover:text-foreground" />
+        {showBackButton && (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 rounded-md px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={handleBack}
+              title={t("posBack") || "뒤로가기"}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline text-xs">{t("posBack") || "뒤로가기"}</span>
+            </Button>
+            <Separator orientation="vertical" className="h-5" />
+          </>
+        )}
         <Link
           href="/"
           className="flex rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"

@@ -12,6 +12,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -31,6 +37,7 @@ import {
   getPosMenuIngredients,
   getMenuCost,
   getAdminItems,
+  saveItem,
   savePosMenu,
   savePosMenuOption,
   savePosMenuIngredient,
@@ -139,6 +146,14 @@ export default function PosMenusPage() {
   const [newOptionPart, setNewOptionPart] = React.useState("")
   const [newOptionModifierPackaging, setNewOptionModifierPackaging] = React.useState("")
   const [chickenBatchApplying, setChickenBatchApplying] = React.useState(false)
+  const [toppingDialogOpen, setToppingDialogOpen] = React.useState(false)
+  const [newToppingCode, setNewToppingCode] = React.useState("")
+  const [newToppingName, setNewToppingName] = React.useState("")
+  const [newToppingUnit, setNewToppingUnit] = React.useState("g")
+  const [newToppingCost, setNewToppingCost] = React.useState("")
+  const [newToppingPrice, setNewToppingPrice] = React.useState("")
+  const [toppingSaveLoading, setToppingSaveLoading] = React.useState(false)
+  const [toppingListLoading, setToppingListLoading] = React.useState(false)
 
   const loadMenusAndCategories = React.useCallback(async (setLoadingState?: (v: boolean) => void) => {
     const setBusy = setLoadingState ?? (() => {})
@@ -247,10 +262,62 @@ export default function PosMenusPage() {
     if (mainTab === "optionsConfig" && optionsConfigSelectedMenuId) loadItems()
   }, [mainTab, optionsConfigSelectedMenuId, loadItems])
 
+  React.useEffect(() => {
+    if (mainTab === "topping") {
+      setToppingListLoading(true)
+      getAdminItems()
+        .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name, category: x.category || "" }))))
+        .catch(() => setItems([]))
+        .finally(() => setToppingListLoading(false))
+    }
+  }, [mainTab])
+
   const additiveOptionItems = React.useMemo(
     () => items.filter((it) => (it.category || "").trim() === ADDITIVE_OPTION_CATEGORY),
     [items]
   )
+
+  const handleOpenToppingDialog = () => {
+    setNewToppingCode("")
+    setNewToppingName("")
+    setNewToppingUnit("g")
+    setNewToppingCost("")
+    setNewToppingPrice("")
+    setToppingDialogOpen(true)
+  }
+
+  const handleSaveNewTopping = async () => {
+    const code = newToppingCode.trim()
+    const name = newToppingName.trim()
+    if (!code || !name) {
+      alert(t("posToppingNewCodeNameRequired") || "코드와 토핑명을 입력해 주세요.")
+      return
+    }
+    if (items.some((it) => it.code === code)) {
+      alert(t("posToppingCodeExists") || "이미 사용 중인 품목 코드입니다. 다른 코드를 입력해 주세요.")
+      return
+    }
+    setToppingSaveLoading(true)
+    try {
+      const res = await saveItem({
+        code,
+        name,
+        category: ADDITIVE_OPTION_CATEGORY,
+        unit: newToppingUnit.trim() || "g",
+        cost: Number(newToppingCost) || 0,
+        price: Number(newToppingPrice) || 0,
+      })
+      if (!res.success) {
+        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
+        return
+      }
+      setItems((prev) => [...prev, { code, name, category: ADDITIVE_OPTION_CATEGORY }])
+      setToppingDialogOpen(false)
+      alert(t("posToppingCreated") || "토핑이 등록되었습니다. 메뉴의 옵션(추가형)에서 선택하고, 원가 분석에 반영됩니다.")
+    } finally {
+      setToppingSaveLoading(false)
+    }
+  }
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -1961,9 +2028,106 @@ export default function PosMenusPage() {
             </div>
           </TabsContent>
           <TabsContent value="topping" className="mt-0">
-            <div className="rounded-xl border bg-card p-6">
-              <p className="text-sm text-muted-foreground">{t("posToppingPlaceholder") || "토핑 관리 (준비 중)"}</p>
+            <div className="rounded-xl border bg-card p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">{t("posMenuTabToppingDesc")}</p>
+              <div className="flex items-center justify-between gap-4">
+                <h3 className="text-sm font-semibold">{t("posMenuTabTopping")}</h3>
+                <Button size="sm" onClick={handleOpenToppingDialog} className="gap-1.5">
+                  <Plus className="h-4 w-4" />
+                  {t("posToppingNewCreate") || "토핑 새로 만들기"}
+                </Button>
+              </div>
+              {toppingListLoading ? (
+                <p className="text-sm text-muted-foreground">{t("loading")}</p>
+              ) : additiveOptionItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("posAdditiveOptionNoItems")}</p>
+              ) : (
+                <div className="rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="px-3 py-2 text-left font-medium">{t("posCostItemCode") || "품목코드"}</th>
+                        <th className="px-3 py-2 text-left font-medium">{t("itemsName") || "품목명"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {additiveOptionItems.map((it) => (
+                        <tr key={it.code} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-mono">{it.code}</td>
+                          <td className="px-3 py-2">{it.name}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t("posToppingUsageHint") || "등록한 토핑은 메뉴의 옵션(추가형)에서 추가 품목으로 선택할 수 있으며, 원가 분석에 자동 반영됩니다. 단가·단위 수정은 품목 관리에서 하세요."}
+              </p>
             </div>
+            <Dialog open={toppingDialogOpen} onOpenChange={setToppingDialogOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{t("posToppingNewCreate") || "토핑 새로 만들기"}</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-2">
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">{t("posCostItemCode") || "품목코드"} *</label>
+                    <Input
+                      value={newToppingCode}
+                      onChange={(e) => setNewToppingCode(e.target.value)}
+                      placeholder="예: TOP-CHEESE"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">{t("itemsName") || "품목명"} *</label>
+                    <Input
+                      value={newToppingName}
+                      onChange={(e) => setNewToppingName(e.target.value)}
+                      placeholder={t("posToppingNamePh") || "토핑 이름"}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">{t("posCostUnit") || "단위"}</label>
+                    <Input
+                      value={newToppingUnit}
+                      onChange={(e) => setNewToppingUnit(e.target.value)}
+                      placeholder="g, 개 등"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">{t("itemsCost") || "원가"} (฿)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={newToppingCost}
+                      onChange={(e) => setNewToppingCost(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium">{t("posMenuPrice") || "판매가"} (฿)</label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={newToppingPrice}
+                      onChange={(e) => setNewToppingPrice(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setToppingDialogOpen(false)} disabled={toppingSaveLoading}>
+                      {t("cancel") || "취소"}
+                    </Button>
+                    <Button onClick={handleSaveNewTopping} disabled={toppingSaveLoading}>
+                      {toppingSaveLoading ? t("loading") : t("save") || "저장"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
           <TabsContent value="set" className="mt-0">
             <div className="rounded-xl border bg-card p-6">

@@ -16,13 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
@@ -32,6 +25,7 @@ import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTod
 import { savePosOrderWithOffline } from '@/lib/offline'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
+import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
@@ -41,6 +35,8 @@ import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { buildKitchenSlipHtml } from '@/lib/pos-kitchen-slip-html'
+import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { subscribePosOrdersInsert } from '@/lib/supabase-client'
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
@@ -68,9 +64,6 @@ export default function PosTerminalPage() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
-  const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
-  const printLang = receiptPrintLang && validPrintLangs.includes(receiptPrintLang) ? receiptPrintLang : lang
-  const tPrint = useT(printLang)
   const cartRef = useRef<CartPanelHandle>(null)
   const {
     stores,
@@ -135,6 +128,9 @@ export default function PosTerminalPage() {
   const [receiptShowThankYou, setReceiptShowThankYou] = useState(true)
   const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = useState(true)
   const [receiptPrintLang, setReceiptPrintLang] = useState<string>('')
+  const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
+  const printLang = receiptPrintLang && validPrintLangs.includes(receiptPrintLang) ? receiptPrintLang : lang
+  const tPrint = useT(printLang)
   const [vatRate, setVatRate] = useState(7)
   const [vatMode, setVatMode] = useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = useState(0)
@@ -419,7 +415,7 @@ export default function PosTerminalPage() {
   const isNarrowViewport = useMediaQuery('(max-width: 1023px)')
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
-  const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice()
+  const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   useEffect(() => {
     if (showSidePanel) setMobilePanelOpen(true)
@@ -431,7 +427,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
-    const channel = subscribePosOrdersInsert((payload) => {
+    const channel = subscribePosOrdersInsert((payload: { new?: Record<string, unknown> }) => {
       const row = payload?.new as Record<string, unknown> | undefined
       if (!row || typeof row.id !== 'number') return
       const rowStore = String(row.store_code ?? '').trim()
@@ -505,14 +501,29 @@ export default function PosTerminalPage() {
               return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items }]
             }
             const slips = toSlips()
-            const paperCss = `@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`
+            const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
             const kitchenMemo = parsePosOrderMemo(memo).plainMemo
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
               const w = window.open('', '_blank')
               if (!w) return
-              const html = `<!DOCTYPE html><html><head><title>${escapeHtml(slip.label)}</title><style>${paperCss}.k-header{text-align:center;font-size:22px;font-weight:bold;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:10px;}.k-row{margin:6px 0;font-size:18px;}.k-memo{margin-top:8px;padding:8px;background:#f0f0f0;font-size:16px;}</style></head><body><div class="k-header">${escapeHtml(slip.label)}</div><div class="k-row"><strong>${escapeHtml(orderNo)}</strong></div><div class="k-row">${escapeHtml(storeCode + ' · ' + (orderTypeLabels[orderType] || orderType) + (tableName ? ` · ${t('posTable') || '테이블'}: ${tableName}` : ''))}</div><div class="k-row">${new Date().toLocaleString('ko-KR')}</div><hr style="margin:10px 0;" />${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join('')}${kitchenMemo ? `<div class="k-memo">${escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo)}</div>` : ''}</body></html>`
+              const cR = (tag: string) => '\u003c/' + tag + '>'
+              const tablePartR = tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + tableName : ''
+              const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+              const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
+              const html = buildKitchenSlipHtml({
+                label: slip.label,
+                orderNo,
+                storeCode,
+                orderTypeLabel: orderTypeLabels[orderType] || orderType,
+                tablePart: tablePartR,
+                dateStr: new Date().toLocaleString('ko-KR'),
+                itemsHtml: itemsHtmlR,
+                memoHtml: memoHtmlR,
+                paperCss,
+                escapeHtml,
+              })
               w.document.write(html)
               w.document.close()
               w.focus()
@@ -620,18 +631,30 @@ export default function PosTerminalPage() {
                 return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items }]
               }
               const slips = toSlips()
-              const paperCss = `
-                @page { size: 80mm 200mm; margin: 0; }
-                html, body { margin: 0; padding: 0; }
-                body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              `
+              const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
               const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
               const printOne = (idx: number) => {
                 if (idx >= slips.length) return
                 const slip = slips[idx]
                 const w = idx === 0 ? window.open('', '_blank') : window.open('', '_blank')
                 if (!w) return
-                const html = `<!DOCTYPE html><html><head><title>${escapeHtml(slip.label)}</title><style>${paperCss}.k-header{text-align:center;font-size:22px;font-weight:bold;border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:10px;}.k-row{margin:6px 0;font-size:18px;}.k-memo{margin-top:8px;padding:8px;background:#f0f0f0;font-size:16px;}</style></head><body><div class="k-header">${escapeHtml(slip.label)}</div><div class="k-row"><strong>${escapeHtml(order.orderNo ?? '')}</strong></div><div class="k-row">${escapeHtml((order.storeCode ?? '') + ' · ' + (orderTypeLabels[order.orderType ?? ''] || order.orderType ?? '') + (order.tableName ? ` · ${t('posTable') || '테이블'}: ${order.tableName}` : ''))}</div><div class="k-row">${new Date().toLocaleString('ko-KR')}</div><hr style="margin:10px 0;" />${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join('')}${kitchenMemo ? `<div class="k-memo">${escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo)}</div>` : ''}</body></html>`
+                const tablePart = order.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + order.tableName : ''
+                const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
+                const c2 = (tag: string) => '\u003c/' + tag + '>'
+                const itemsHtml = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + c2('div')).join('')
+                const memoHtml = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + c2('div') : ''
+                const html = buildKitchenSlipHtml({
+                  label: slip.label,
+                  orderNo: order.orderNo ?? '',
+                  storeCode: order.storeCode ?? '',
+                  orderTypeLabel,
+                  tablePart,
+                  dateStr: new Date().toLocaleString('ko-KR'),
+                  itemsHtml,
+                  memoHtml,
+                  paperCss,
+                  escapeHtml,
+                })
                 w.document.write(html)
                 w.document.close()
                 w.focus()
@@ -751,32 +774,15 @@ export default function PosTerminalPage() {
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH13)}).catch(()=>{});
     // #endregion
     /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
-    const printContent = `
-      <div class="receipt-content receipt-order-simple">
-        <div class="receipt-order-header text-center">
-          <div class="receipt-store-name">${esc(payload.storeCode)}</div>
-          <div class="receipt-order-label">${esc(tr('posOrderNo', '주문'))} #${esc(payload.orderNo)}</div>
-        </div>
-        <div class="receipt-divider"></div>
-        <div class="text-xs">
-          ${
-            payload.tableName
-              ? `<div class="receipt-meta-row"><span class="receipt-meta-label">${esc(tr('posTable', '테이블'))}</span><span class="receipt-meta-value">${esc(payload.tableName)}</span></div>`
-              : ''
-          }
-          <div class="receipt-meta-row"><span class="receipt-meta-label">${esc(tr('date', 'Date'))}</span><span class="receipt-meta-value">${esc(timestamp)}</span></div>
-        </div>
-        <div class="receipt-divider"></div>
-        <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${payload.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
-        ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
-        <div class="receipt-divider"></div>
-        <div class="receipt-row"><span class="receipt-muted">${esc(tPrint('posSubtotal') || '소계')}</span><span>${formatBahtNum(payload.subtotal)} ฿</span></div>
-        ${payload.discountAmt > 0 ? `<div class="receipt-row discount"><span>${esc(tPrint('posDiscount') || '할인')}</span><span>-${formatBahtNum(payload.discountAmt)} ฿</span></div>` : ''}
-        <div class="receipt-divider"></div>
-        <div class="receipt-row receipt-total"><span>${esc(tPrint('posTotal') || '합계')}</span><span>${formatBahtNum(payload.total)} ฿</span></div>
-      </div>
-    `
+    const ct = (tag: string) => '\u003c/' + tag + '>'
+    const tableRow = payload.tableName
+      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('posTable', '테이블')) + ct('span') + '<span class="receipt-meta-value">' + esc(payload.tableName) + ct('span') + ct('div')
+      : ''
+    const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
+    const itemsRows = payload.items.map((it) => '<div class="receipt-row"><span>' + it.qty + 'x ' + esc(it.name) + ct('span') + '<span>' + formatBahtNum(it.price * it.qty) + ct('span') + ct('div')).join('')
+    const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
+    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
+    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
     // #region agent log
     const logH3 = {sessionId:'960801',runId:'run-2',hypothesisId:'H3',location:'terminal/page.tsx:printReceiptNow:beforeWrite',message:'terminal print payload metrics',data:{orderNoLen:String(payload.orderNo||'').length,items:payload.items.length,contentLen:printContent.length,hasMetaRow:printContent.includes('receipt-meta-row')},timestamp:Date.now()}
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH3)}).catch(()=>{});
@@ -787,45 +793,11 @@ export default function PosTerminalPage() {
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH20)}).catch(()=>{});
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH20)}).catch(()=>{});
     // #endregion
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${tPrint('posReceipt') || '영수증'}</title>
-          <style>
-            @page { size: 80mm 200mm; margin: 0; }
-            html, body { margin: 0; padding: 0; }
-            body { width: 80mm; box-sizing: border-box; font-family: 'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.42; letter-spacing: 0; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; color: #000; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
-            .receipt-order-header .receipt-store-name { font-weight: 700; font-size: 13px; }
-            .receipt-order-label { font-size: 11px; color: #333; margin-top: 2px; }
-            .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; }
-            .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
-            .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
-            .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
-            .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
-            .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
-            .receipt-meta-label { white-space: nowrap; }
-            .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #cbd5e1; }
-            .biz-line { margin: 2px 0; font-size: 11px; }
-            .biz-strong { color: #111; font-weight: 600; }
-            .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
-            .discount { color: #166534; }
-            .memo { margin-top: 6px; font-size: 11px; color: #000; }
-            .receipt-muted { color: #000; }
-            .paid-stamp-wrap { text-align: center; margin: 10px 0; }
-            .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
-            .footer-strong { color: #111; font-weight: 600; }
-            .text-center { text-align: center; }
-            .text-xs { font-size: 11px; }
-          </style>
-        </head>
-        <body>${printContent}</body>
-      </html>
-    `)
+    const receiptHtml = buildReceiptDocumentHtml({
+      title: tPrint('posReceipt') || '영수증',
+      bodyContent: printContent,
+    })
+    printWindow.document.write(receiptHtml)
     printWindow.document.close()
     printWindow.focus()
     let closed = false
@@ -1358,7 +1330,7 @@ export default function PosTerminalPage() {
                       {t('loading')}
                     </div>
                   )}
-                  {!loadingTables && currentLayout.length > 0 && (
+                  {(!loadingTables && currentLayout.length > 0) && (
                     <div className="h-full min-h-[min(320px,40vh)] min-w-0">
                       <TableFloorView
                         layout={currentLayout}
@@ -1415,7 +1387,7 @@ export default function PosTerminalPage() {
                   )}
                   {!loadingTables && currentLayout.length === 0 && currentStore && (
                     <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
-                      {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 화면 구성 > 테이블 구성에서 배치해 주세요.'}
+                      {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 설정 > 테이블 구성에서 배치해 주세요.'}
                     </div>
                   )}
                   {!loadingTables && !currentStore && stores.length === 0 && (
@@ -2018,63 +1990,20 @@ export default function PosTerminalPage() {
         receiptShowThankYou={receiptShowThankYou}
         receiptShowCustomerCopy={receiptShowCustomerCopy}
       />
-      <Dialog open={deliveryEditOrderNoOpen} onOpenChange={setDeliveryEditOrderNoOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('posEditOrderNoDialogTitle') || '주문번호 수정'}</DialogTitle>
-          </DialogHeader>
-          {selectedDeliveryOrder && (() => {
-            const label = String(selectedDeliveryOrder.customerName || '').trim() || ''
-            const app = detectDeliveryApp(label)
-            const appLabelEn = app ? app.name : (t('posOrderTypeDelivery') || '배달')
-            return (
-              <div className="space-y-4 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground shrink-0">{appLabelEn}</span>
-                  <span className="text-muted-foreground">#</span>
-                  <Input
-                    type="text"
-                    placeholder={t('posDeliveryOrderNoPh') || '주문번호'}
-                    value={deliveryEditOrderNoValue}
-                    onChange={(e) => setDeliveryEditOrderNoValue(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDeliveryEditOrderNoOpen(false)}>
-                    {t('cancel') || '취소'}
-                  </Button>
-                  <Button
-                    onClick={async () => {
-                      if (!selectedDeliveryOrder) return
-                      const newTableName = [appLabelEn, deliveryEditOrderNoValue.trim() ? `#${deliveryEditOrderNoValue.trim()}` : ''].filter(Boolean).join(' ')
-                      try {
-                        const res = await updatePosOrder({
-                          id: Number(selectedDeliveryOrder.id),
-                          items: selectedDeliveryOrder.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
-                          tableName: newTableName || appLabelEn,
-                          memo: selectedDeliveryOrder.memo,
-                        })
-                        if (!(res as { success?: boolean }).success) {
-                          alert((res as { message?: string }).message || (t('posOrderSaveFailed') || '저장에 실패했습니다.'))
-                          return
-                        }
-                        setSelectedDeliveryTargetLabel(newTableName || appLabelEn)
-                        setDeliveryEditOrderNoOpen(false)
-                        await refetchStores()
-                      } catch (e) {
-                        alert(String(e))
-                      }
-                    }}
-                  >
-                    {t('posSave') || '저장'}
-                  </Button>
-                </DialogFooter>
-              </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+      <DeliveryEditOrderNoDialog
+        open={deliveryEditOrderNoOpen}
+        onOpenChange={setDeliveryEditOrderNoOpen}
+        order={selectedDeliveryOrder}
+        value={deliveryEditOrderNoValue}
+        onValueChange={setDeliveryEditOrderNoValue}
+        onSaved={async (newTableName) => {
+          setSelectedDeliveryTargetLabel(newTableName)
+          await refetchStores()
+        }}
+        t={t}
+        deliveryApps={deliveryAppsFromApi}
+      />
+      </div>
     </div>
   )
 }
