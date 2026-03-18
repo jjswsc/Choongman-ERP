@@ -171,7 +171,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const value = t(key as never)
       return value === key ? fallback : value
     },
-    [t]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t 의존 시 무한 루프
+    []
   )
 
   const currentSubMenu = SALES_IA.find((menu) => menu.id === activeSubMenuId) ?? SALES_IA[0]
@@ -269,17 +270,25 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       qEnd === endStr
     ) return
 
-    const next = new URLSearchParams(searchParams.toString())
-    next.set("menu", activeSubMenuId)
-    next.set("topic", currentTopic)
-    next.set("group", periodGroup)
-    if (startStr) next.set("start", startStr)
-    else next.delete("start")
-    if (endStr) next.set("end", endStr)
-    else next.delete("end")
-    if (posFilter) next.set("pos", posFilter)
-    else next.delete("pos")
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
+    const expected = new URLSearchParams()
+    expected.set("menu", activeSubMenuId)
+    expected.set("topic", currentTopic)
+    expected.set("group", periodGroup)
+    if (startStr) expected.set("start", startStr)
+    if (endStr) expected.set("end", endStr)
+    if (posFilter) expected.set("pos", posFilter)
+    const expectedStr = expected.toString()
+    const currentStr = [
+      searchParams.get("menu"),
+      searchParams.get("topic"),
+      searchParams.get("group"),
+      searchParams.get("start"),
+      searchParams.get("end"),
+      searchParams.get("pos") ?? "",
+    ].join("|")
+    const expectedValues = [activeSubMenuId, currentTopic, periodGroup, startStr, endStr, posFilter].join("|")
+    if (currentStr === expectedValues) return
+    router.replace(`${pathname}?${expectedStr}`, { scroll: false })
   }, [activeSubMenuId, pathname, periodGroup, posFilter, startStr, endStr, router, searchParams, selectedTopic?.id])
 
   const loadPosOptions = React.useCallback(() => {

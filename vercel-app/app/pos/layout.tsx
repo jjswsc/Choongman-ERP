@@ -91,7 +91,7 @@ export default function PosLayout({
             {children}
           </div>
         ) : (
-          <div className="flex w-full min-h-full max-w-7xl flex-col">
+          <div className="flex min-h-0 flex-1 w-full max-w-7xl flex-col overflow-hidden">
             {children}
           </div>
         )}

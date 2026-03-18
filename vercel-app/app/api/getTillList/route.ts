@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     let rows = (await supabaseSelectFilter(
       'pos_till_transactions',
       'store_code=eq.' + encodeURIComponent(effectiveStore),
-      { order: 'trans_date.asc,id.asc', limit: 2000 }
+      { order: 'trans_date.asc,id.asc', limit: 20000 }
     )) as { id: number; store_code?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; user_name?: string }[] | null
 
     const startD = startStr ? new Date(startStr + 'T00:00:00') : null

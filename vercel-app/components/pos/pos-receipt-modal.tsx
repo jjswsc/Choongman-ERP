@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { getPosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
-import { escapeHtml } from '@/lib/utils'
+import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import type { PosMenu } from '@/lib/api-client'
 
 export type ReceiptModalData = {
@@ -177,19 +177,19 @@ export function PosReceiptModal({
         }
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${(it.price * it.qty).toLocaleString()}</span></div>`).join('')}
+        ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
         <div class="receipt-divider"></div>
-        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${receiptData.subtotal.toLocaleString()} ฿</span></div>
-        ${receiptData.discountAmt > 0 ? `<div class="receipt-row"><span>${esc(t('posDiscount') || '할인')}</span><span>-${receiptData.discountAmt.toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.deliveryFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posDeliveryFee') || '배달 수수료')}</span><span>+${Number(receiptData.deliveryFee || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.packagingFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${Number(receiptData.packagingFee || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${receiptData.vatFeeMode === 'separate' ? '+' : ''}${Number(receiptData.vatFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${Number(receiptData.serviceFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${receiptData.cardFeeMode === 'separate' ? '+' : ''}${Number(receiptData.cardFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(receiptData.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${receiptData.otherFeeMode === 'separate' ? '+' : ''}${Number(receiptData.otherFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(receiptData.subtotal)} ฿</span></div>
+        ${receiptData.discountAmt > 0 ? `<div class="receipt-row"><span>${esc(t('posDiscount') || '할인')}</span><span>-${formatBahtNum(receiptData.discountAmt)} ฿</span></div>` : ''}
+        ${(receiptData.deliveryFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posDeliveryFee') || '배달 수수료')}</span><span>+${formatBahtNum(receiptData.deliveryFee)} ฿</span></div>` : ''}
+        ${(receiptData.packagingFee ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posPackagingFee') || '포장 수수료')}</span><span>+${formatBahtNum(receiptData.packagingFee)} ฿</span></div>` : ''}
+        ${(receiptData.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${receiptData.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.vatFeeAmt)} ฿</span></div>` : ''}
+        ${(receiptData.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${receiptData.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.serviceFeeAmt)} ฿</span></div>` : ''}
+        ${(receiptData.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${receiptData.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.cardFeeAmt)} ฿</span></div>` : ''}
+        ${(receiptData.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${receiptData.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(receiptData.otherFeeAmt)} ฿</span></div>` : ''}
         ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
         <div class="receipt-divider-strong"></div>
-        <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${receiptData.total.toLocaleString()} ฿</span></div>
+        <div class="receipt-row receipt-total"><span>${esc(tr('posTotal', '합계'))}</span><span>${formatBahtNum(receiptData.total)} ฿</span></div>
         <div class="receipt-divider"></div>
         ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ''}
@@ -476,7 +476,7 @@ export function PosReceiptModal({
               <div key={it.id} className="text-xs">
                 <div className="receipt-row">
                   <span>{it.qty}x {it.name}</span>
-                  <span className="tabular-nums">{(it.price * it.qty).toLocaleString()}</span>
+                  <span className="tabular-nums">{formatBahtNum(it.price * it.qty)}</span>
                 </div>
               </div>
             ))}
@@ -486,7 +486,7 @@ export function PosReceiptModal({
 
           <div className="receipt-row flex justify-between text-xs">
             <span className="receipt-muted text-slate-500">{t('posSubtotal') || '소계'}</span>
-            <span className="tabular-nums">{receiptData.subtotal.toLocaleString()} ฿</span>
+            <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)} ฿</span>
           </div>
           {receiptData.discountAmt > 0 && (
             <div className="receipt-row flex justify-between text-xs text-green-700">
@@ -494,43 +494,43 @@ export function PosReceiptModal({
                 {t('posDiscount') || '할인'}
                 {receiptData.discountReason ? ` ${receiptData.discountReason}` : ''}
               </span>
-              <span className="tabular-nums">-{receiptData.discountAmt.toLocaleString()} ฿</span>
+              <span className="tabular-nums">-{formatBahtNum(receiptData.discountAmt)} ฿</span>
             </div>
           )}
           {(receiptData.deliveryFee ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posDeliveryFee') || '배달 수수료'}</span>
-              <span className="tabular-nums">+{receiptData.deliveryFee?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">+{formatBahtNum(receiptData.deliveryFee)} ฿</span>
             </div>
           )}
           {(receiptData.packagingFee ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posPackagingFee') || '포장 수수료'}</span>
-              <span className="tabular-nums">+{receiptData.packagingFee?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)} ฿</span>
             </div>
           )}
           {(receiptData.vatFeeAmt ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posVatLabel') || '부가세'}</span>
-              <span className="tabular-nums">{receiptData.vatFeeMode === 'included' ? '' : '+'}{receiptData.vatFeeAmt?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">{receiptData.vatFeeMode === 'included' ? '' : '+'}{formatBahtNum(receiptData.vatFeeAmt)} ฿</span>
             </div>
           )}
           {(receiptData.serviceFeeAmt ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posServiceFee') || '서비스비'}</span>
-              <span className="tabular-nums">{receiptData.serviceFeeMode === 'included' ? '' : '+'}{receiptData.serviceFeeAmt?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">{receiptData.serviceFeeMode === 'included' ? '' : '+'}{formatBahtNum(receiptData.serviceFeeAmt)} ฿</span>
             </div>
           )}
           {(receiptData.cardFeeAmt ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posCardFee') || '카드비'}</span>
-              <span className="tabular-nums">{receiptData.cardFeeMode === 'included' ? '' : '+'}{receiptData.cardFeeAmt?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">{receiptData.cardFeeMode === 'included' ? '' : '+'}{formatBahtNum(receiptData.cardFeeAmt)} ฿</span>
             </div>
           )}
           {(receiptData.otherFeeAmt ?? 0) > 0 && (
             <div className="receipt-row flex justify-between text-xs">
               <span>{t('posOtherFee') || '기타'}</span>
-              <span className="tabular-nums">{receiptData.otherFeeMode === 'included' ? '' : '+'}{receiptData.otherFeeAmt?.toLocaleString()} ฿</span>
+              <span className="tabular-nums">{receiptData.otherFeeMode === 'included' ? '' : '+'}{formatBahtNum(receiptData.otherFeeAmt)} ฿</span>
             </div>
           )}
           {parsedMemo.plainMemo && (
@@ -541,7 +541,7 @@ export function PosReceiptModal({
           <div className="receipt-divider-strong border-t-2 border-black my-2" />
           <div className="receipt-total receipt-row">
             <span className="font-bold">{t('posTotal') || '합계'}</span>
-            <span className="tabular-nums text-base font-bold">{receiptData.total.toLocaleString()} ฿</span>
+            <span className="tabular-nums text-base font-bold">{formatBahtNum(receiptData.total)} ฿</span>
           </div>
           <div className="receipt-divider border-t border-dashed border-slate-400 my-2" />
           {receiptShowPaidStamp && (

@@ -105,7 +105,11 @@ export function ReceivablePayableTab() {
     return () => { cancelled = true }
   }, [listData, lang])
 
-  const getMemo = React.useCallback((memo: string | undefined) => (memo && memoTransMap[memo]) || memo || "-", [memoTransMap])
+  const memoTransferWithdrawalLabel = tt("memoTransferWithdrawal", "Transfer Withdrawal")
+  const getMemo = React.useCallback((memo: string | undefined) => {
+    const raw = (memo && memoTransMap[memo]) || memo || "-"
+    return raw.replace(/통징지급/g, memoTransferWithdrawalLabel)
+  }, [memoTransMap, memoTransferWithdrawalLabel])
 
   React.useEffect(() => {
     getVendorsForPurchase().then((rows) => setVendors(rows || []))

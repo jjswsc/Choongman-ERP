@@ -25,7 +25,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
-import { cn, escapeHtml } from "@/lib/utils"
+import { cn, escapeHtml, formatBahtNum } from "@/lib/utils"
 import { computePosPricing, type PosPricingAdjustments } from "@/lib/pos-pricing"
 import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
 import { Minus, Plus, Printer, RefreshCw, RotateCcw, ShoppingCart, Tag, Trash2, X } from "lucide-react"
@@ -887,7 +887,7 @@ export default function PosOrderPage() {
             {t("posCount") || "건"}
           </span>
           <span className="font-bold tabular-nums text-slate-800">
-            {todaySales.completedTotal.toLocaleString()} ฿
+            {formatBahtNum(todaySales.completedTotal)} ฿
           </span>
         </div>
       )}
@@ -969,7 +969,7 @@ export default function PosOrderPage() {
                   {p.name}
                 </div>
                 <div className="mt-auto text-xs font-bold text-amber-600">
-                  {(getPromoPrice(p)) > 0 ? `${(getPromoPrice(p)).toLocaleString()} ฿` : "-"}
+                  {(getPromoPrice(p)) > 0 ? `${formatBahtNum(getPromoPrice(p))} ฿` : "-"}
                 </div>
               </button>
             ))}
@@ -1010,7 +1010,7 @@ export default function PosOrderPage() {
                   {m.name}
                 </div>
                 <div className="mt-auto text-xs font-bold text-emerald-600">
-                  {(getMenuPrice(m)) > 0 ? `${(getMenuPrice(m)).toLocaleString()} ฿` : "-"}
+                  {(getMenuPrice(m)) > 0 ? `${formatBahtNum(getMenuPrice(m))} ฿` : "-"}
                 </div>
               </button>
             ))}
@@ -1146,7 +1146,7 @@ export default function PosOrderPage() {
                 >
                   <div className="text-[10px] font-bold text-emerald-600">{o.orderNo}</div>
                   <div className="text-[11px] text-slate-600">
-                    {o.total?.toLocaleString()} ฿
+                    {formatBahtNum(o.total)} ฿
                   </div>
                 </button>
               ))}
@@ -1184,7 +1184,7 @@ export default function PosOrderPage() {
                     </button>
                   </div>
                   <span className="w-16 text-right text-xs font-bold text-emerald-600 tabular-nums">
-                    {(it.price * it.qty).toLocaleString()} ฿
+                    {formatBahtNum(it.price * it.qty)} ฿
                   </span>
                   <button
                     onClick={() => removeFromCart(it.id)}
@@ -1293,53 +1293,53 @@ export default function PosOrderPage() {
           <div className="space-y-1">
             <div className="flex justify-between text-sm text-slate-600">
               <span>{t("posSubtotal") || "소계"}</span>
-              <span className="tabular-nums text-slate-800">{subtotal.toLocaleString()} ฿</span>
+              <span className="tabular-nums text-slate-800">{formatBahtNum(subtotal)} ฿</span>
             </div>
             {discountAmt > 0 && (
               <div className="flex justify-between text-sm text-emerald-600">
                 <span>{t("posDiscount") || "할인"}</span>
-                <span className="tabular-nums">-{discountAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums">-{formatBahtNum(discountAmt)} ฿</span>
               </div>
             )}
             {deliveryFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                <span className="tabular-nums text-slate-800">+{deliveryFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">+{formatBahtNum(deliveryFeeAmt)} ฿</span>
               </div>
             )}
             {packagingFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                <span className="tabular-nums text-slate-800">+{packagingFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">+{formatBahtNum(packagingFeeAmt)} ฿</span>
               </div>
             )}
             {pricing.vatFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posVatLabel") || "부가세"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{pricing.vatFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">{pricing.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.vatFeeAmt)} ฿</span>
               </div>
             )}
             {pricing.serviceFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posServiceFee") || "서비스비"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{pricing.serviceFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">{pricing.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.serviceFeeAmt)} ฿</span>
               </div>
             )}
             {pricing.cardFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posCardFee") || "카드비"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.cardFeeMode === 'separate' ? '+' : ''}{pricing.cardFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">{pricing.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.cardFeeAmt)} ฿</span>
               </div>
             )}
             {pricing.otherFeeAmt > 0 && (
               <div className="flex justify-between text-sm text-slate-600">
                 <span>{t("posOtherFee") || "기타"}</span>
-                <span className="tabular-nums text-slate-800">{pricing.otherFeeMode === 'separate' ? '+' : ''}{pricing.otherFeeAmt.toLocaleString()} ฿</span>
+                <span className="tabular-nums text-slate-800">{pricing.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(pricing.otherFeeAmt)} ฿</span>
               </div>
             )}
             <div className="flex justify-between text-sm font-bold text-slate-800 border-t border-slate-200 pt-2">
               <span>{t("posTotal") || "합계"}</span>
-              <span className="tabular-nums">{total.toLocaleString()} ฿</span>
+              <span className="tabular-nums">{formatBahtNum(total)} ฿</span>
             </div>
           </div>
           <Button
@@ -1362,7 +1362,7 @@ export default function PosOrderPage() {
           <div className="space-y-3 py-2">
             <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
               <span className="text-xs text-muted-foreground">{t("posTotal") || "합계"}</span>
-              <div className="text-xl font-bold tabular-nums">{paymentPreviewTotal.toLocaleString()} ฿</div>
+              <div className="text-xl font-bold tabular-nums">{formatBahtNum(paymentPreviewTotal)} ฿</div>
             </div>
             <div className="grid gap-2">
               <div className="flex items-center gap-2">
@@ -1418,7 +1418,7 @@ export default function PosOrderPage() {
                   ? "text-green-600"
                   : "text-amber-600"
               )}>
-                {paymentInputSum.toLocaleString()} ฿
+                {formatBahtNum(paymentInputSum)} ฿
               </span>
             </div>
             <div className="flex gap-2">
@@ -1506,7 +1506,7 @@ export default function PosOrderPage() {
                           className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                         >
                           <span className="block font-medium text-slate-800">{menu.name}</span>
-                          <span className="text-xs text-emerald-600">{getMenuPrice(menu).toLocaleString()} ฿</span>
+                          <span className="text-xs text-emerald-600">{formatBahtNum(getMenuPrice(menu))} ฿</span>
                         </button>
                       ))}
                     </div>
@@ -1536,7 +1536,7 @@ export default function PosOrderPage() {
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
                 <span className="font-medium text-slate-800">{t("posOptionDefault") || "기본 (S 순살)"}</span>
-                <span className="font-bold text-amber-600">{getMenuPrice(optionPickerMenu).toLocaleString()} ฿</span>
+                <span className="font-bold text-amber-600">{formatBahtNum(getMenuPrice(optionPickerMenu))} ฿</span>
               </button>
             )
             if (useMultiStep) {
@@ -1598,7 +1598,7 @@ export default function PosOrderPage() {
                   >
                     <span className="text-slate-800">{opt.name}</span>
                     <span className="font-bold text-emerald-600">
-                      {(getMenuPrice(optionPickerMenu) + getOptionModifier(opt)).toLocaleString()} ฿
+                      {formatBahtNum(getMenuPrice(optionPickerMenu) + getOptionModifier(opt))} ฿
                     </span>
                   </button>
                 ))}
@@ -1663,55 +1663,55 @@ export default function PosOrderPage() {
                         {it.name} × {it.qty}
                       </span>
                       <span className="tabular-nums">
-                        {(it.price * it.qty).toLocaleString()} ฿
+                        {formatBahtNum(it.price * it.qty)} ฿
                       </span>
                     </div>
                   ))}
                 </div>
                 <div className="receipt-row flex justify-between text-xs border-t pt-2 mt-2">
                   <span>{t("posSubtotal") || "소계"}</span>
-                  <span className="tabular-nums">{receiptData.subtotal.toLocaleString()} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)} ฿</span>
                 </div>
                 {receiptData.discountAmt > 0 && (
                   <div className="receipt-row flex justify-between text-xs text-green-600">
                     <span>{t("posDiscount") || "할인"}{receiptData.discountReason ? ` ${receiptData.discountReason}` : ""}</span>
-                    <span className="tabular-nums">-{receiptData.discountAmt.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">-{formatBahtNum(receiptData.discountAmt)} ฿</span>
                   </div>
                 )}
                 {(receiptData.deliveryFee ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posDeliveryFee") || "배달 수수료"}</span>
-                    <span className="tabular-nums">+{receiptData.deliveryFee?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">+{formatBahtNum(receiptData.deliveryFee)} ฿</span>
                   </div>
                 )}
                 {(receiptData.packagingFee ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posPackagingFee") || "포장 수수료"}</span>
-                    <span className="tabular-nums">+{receiptData.packagingFee?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">+{formatBahtNum(receiptData.packagingFee)} ฿</span>
                   </div>
                 )}
                 {(receiptData.vatFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posVatLabel") || "부가세"}</span>
-                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{receiptData.vatFeeAmt?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{receiptData.vatFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.vatFeeAmt)} ฿</span>
                   </div>
                 )}
                 {(receiptData.serviceFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posServiceFee") || "서비스비"}</span>
-                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{receiptData.serviceFeeAmt?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{receiptData.serviceFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.serviceFeeAmt)} ฿</span>
                   </div>
                 )}
                 {(receiptData.cardFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posCardFee") || "카드비"}</span>
-                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{receiptData.cardFeeAmt?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{receiptData.cardFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.cardFeeAmt)} ฿</span>
                   </div>
                 )}
                 {(receiptData.otherFeeAmt ?? 0) > 0 && (
                   <div className="receipt-row flex justify-between text-xs">
                     <span>{t("posOtherFee") || "기타"}</span>
-                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{receiptData.otherFeeAmt?.toLocaleString()} ฿</span>
+                    <span className="tabular-nums">{receiptData.otherFeeMode === 'separate' ? '+' : ''}{formatBahtNum(receiptData.otherFeeAmt)} ฿</span>
                   </div>
                 )}
                 {parsedReceiptMemo.plainMemo && (
@@ -1721,7 +1721,7 @@ export default function PosOrderPage() {
                 )}
                 <div className="receipt-total flex justify-between">
                   <span>{t("posTotal") || "합계"}</span>
-                  <span className="tabular-nums">{receiptData.total.toLocaleString()} ฿</span>
+                  <span className="tabular-nums">{formatBahtNum(receiptData.total)} ฿</span>
                 </div>
               </div>
               <DialogFooter className="gap-2 sm:gap-0">

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const all = await supabaseSelect('pos_delivery_apps', {
       select: 'id,code,name,match_keywords,display_order,enabled,dine_out_enabled,accent_color,store_code',
       order: 'display_order.asc',
-      limit: 100,
+      limit: 1000,
     }) as {
       id?: number
       code?: string

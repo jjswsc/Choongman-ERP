@@ -20,17 +20,17 @@ export async function GET(request: NextRequest) {
       priceByCode[String(it.code || '')] = Number(it.price) || 0
     })
 
-    const filter = `location=eq.${encodeURIComponent(store)}&log_type=eq.Usage`
+    const filter = `location=ilike.${encodeURIComponent(store)}&log_type=eq.Usage`
     const logs = (await supabaseSelectFilter('stock_logs', filter, {
       order: 'log_date.desc',
-      limit: 200,
+      limit: 20000,
     })) as { log_date?: string; item_code?: string; item_name?: string; qty?: number; user_name?: string }[]
 
     const nameToNick: Record<string, string> = {}
     if (store) {
       try {
         const empFilter = `store=eq.${encodeURIComponent(store)}`
-        const emps = (await supabaseSelectFilter('employees', empFilter, { select: 'name,nick', limit: 500 })) as { name?: string; nick?: string }[]
+        const emps = (await supabaseSelectFilter('employees', empFilter, { select: 'name,nick', limit: 2000 })) as { name?: string; nick?: string }[]
         for (const e of emps || []) {
           const n = String(e.name || '').trim()
           if (n) nameToNick[n] = String(e.nick || e.name || '').trim() || n

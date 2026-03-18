@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const filter = `account_id=eq.${accountId}&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'id.asc',
-      limit: 2000,
+      limit: 20000,
     })) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
 
     const linkedIds = new Set<number>()
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     if (rowIds.length > 0) {
       const ptRows = (await supabaseSelectFilter('payable_transactions', 'bank_transaction_id=not.is.null', {
         select: 'bank_transaction_id',
-        limit: 10000,
+        limit: 50000,
       })) as { bank_transaction_id?: number }[]
       for (const r of ptRows || []) {
         const bid = Number(r.bank_transaction_id)
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     const beforeStartFilter = `account_id=eq.${accountId}&trans_date=lt.${startStr}`
     const beforeRows = (await supabaseSelectFilter('bank_transactions', beforeStartFilter, {
       select: 'trans_type,amount,note',
-      limit: 5000,
+      limit: 50000,
     })) as { trans_type?: string; amount?: number; note?: string }[]
     const visibleBeforeRows = (beforeRows || []).filter((r) => !String(r.note || '').toLowerCase().includes(INTERNAL_BANK_SOURCE_MARKER))
     const beforeDeposits = visibleBeforeRows.filter((r) => (r.trans_type || '').toLowerCase() === 'deposit').reduce((s, r) => s + Number(r.amount || 0), 0)

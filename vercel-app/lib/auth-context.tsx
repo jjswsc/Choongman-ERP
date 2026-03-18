@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 export interface AuthState {
   store: string
@@ -55,20 +55,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setInitialized(true)
   }, [])
 
-  const setAuth = (a: AuthState | null) => {
+  const setAuth = useCallback((a: AuthState | null) => {
     setAuthState(a)
     if (a) saveAuth(a)
     else clearAuth()
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setAuthState(null)
     clearAuth()
     if (typeof window !== 'undefined') window.location.href = '/login'
-  }
+  }, [])
+
+  const value = useMemo(
+    () => ({ auth, initialized, setAuth, logout }),
+    [auth, initialized, setAuth, logout]
+  )
 
   return (
-    <AuthContext.Provider value={{ auth, initialized, setAuth, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       (storeCode && storeCode !== 'All' ? `&store_code=ilike.${encodeURIComponent(storeCode)}` : '')
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: 2000,
+      limit: 20000,
       select: 'total,status,payment_cash',
     })) as { total?: number; status?: string; payment_cash?: number }[] | null
 

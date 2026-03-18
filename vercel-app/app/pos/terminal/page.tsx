@@ -35,6 +35,7 @@ import { isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { formatBahtNum } from '@/lib/utils'
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
 export type DeliveryApp = string
@@ -536,17 +537,17 @@ export default function PosTerminalPage() {
         }
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${payload.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${(it.price * it.qty).toLocaleString()}</span></div>`).join('')}
+        ${payload.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
         <div class="receipt-divider"></div>
-        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${payload.subtotal.toLocaleString()} ฿</span></div>
-        ${payload.discountAmt > 0 ? `<div class="receipt-row discount"><span>${esc(t('posDiscount') || '할인')}</span><span>-${payload.discountAmt.toLocaleString()} ฿</span></div>` : ''}
-        ${(payload.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${payload.vatFeeMode === 'separate' ? '+' : ''}${Number(payload.vatFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(payload.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${payload.serviceFeeMode === 'separate' ? '+' : ''}${Number(payload.serviceFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(payload.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${Number(payload.cardFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
-        ${(payload.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${Number(payload.otherFeeAmt || 0).toLocaleString()} ฿</span></div>` : ''}
+        <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(payload.subtotal)} ฿</span></div>
+        ${payload.discountAmt > 0 ? `<div class="receipt-row discount"><span>${esc(t('posDiscount') || '할인')}</span><span>-${formatBahtNum(payload.discountAmt)} ฿</span></div>` : ''}
+        ${(payload.vatFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posVatLabel') || '부가세')}</span><span>${payload.vatFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.vatFeeAmt)} ฿</span></div>` : ''}
+        ${(payload.serviceFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posServiceFee') || '서비스비')}</span><span>${payload.serviceFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.serviceFeeAmt)} ฿</span></div>` : ''}
+        ${(payload.cardFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posCardFee') || '카드비')}</span><span>${payload.cardFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.cardFeeAmt)} ฿</span></div>` : ''}
+        ${(payload.otherFeeAmt ?? 0) > 0 ? `<div class="receipt-row"><span>${esc(t('posOtherFee') || '기타')}</span><span>${payload.otherFeeMode === 'separate' ? '+' : ''}${formatBahtNum(payload.otherFeeAmt)} ฿</span></div>` : ''}
         ${parsedMemo.plainMemo ? `<div class="memo">${esc(tr('posCustomerMemo', '메모'))}: ${esc(parsedMemo.plainMemo)}</div>` : ''}
         <div class="receipt-divider-strong"></div>
-        <div class="receipt-row receipt-total"><span>${esc(t('posTotal') || '합계')}</span><span>${payload.total.toLocaleString()} ฿</span></div>
+        <div class="receipt-row receipt-total"><span>${esc(t('posTotal') || '합계')}</span><span>${formatBahtNum(payload.total)} ฿</span></div>
         <div class="receipt-divider"></div>
         ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ''}

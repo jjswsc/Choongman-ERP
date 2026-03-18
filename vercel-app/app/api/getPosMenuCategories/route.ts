@@ -11,12 +11,12 @@ export async function GET() {
     try {
       rows = (await supabaseSelect('pos_menus', {
         select: 'category,category_main',
-        limit: 5000,
+        limit: 20000,
       })) as { category?: string; category_main?: string }[] | null
     } catch {
       rows = (await supabaseSelect('pos_menus', {
         select: 'category',
-        limit: 5000,
+        limit: 20000,
       })) as { category?: string }[] | null
     }
 

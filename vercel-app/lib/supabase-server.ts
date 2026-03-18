@@ -143,7 +143,7 @@ export async function supabaseSelect(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*']
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 1000
+  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 10000
   const offset = options.offset != null ? Math.max(0, Number(options.offset)) : 0
   query.push(`limit=${limit}`)
   if (offset > 0) query.push(`offset=${offset}`)
@@ -207,7 +207,7 @@ export async function supabaseSelectFilter(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*', filter]
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 1000
+  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 10000
   query.push(`limit=${limit}`)
   const rangeEnd = limit - 1
   const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
@@ -284,6 +284,28 @@ export async function supabaseCountFilter(table: string, filter: string): Promis
     if (match) return parseInt(match[1], 10)
   }
   return 0
+}
+
+/** RPC 호출. params는 함수 인자 (예: { p_location_patterns: ['a','b'], p_as_of_date: null }) */
+export async function supabaseRpc<T = unknown>(
+  fnName: string,
+  params: Record<string, unknown>
+): Promise<T> {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/rpc/${encodeURIComponent(fnName)}`
+  const res = await supabaseFetch(pathStr, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error('Supabase RPC failed: ' + (await res.text()))
+  const text = await res.text()
+  return (text ? JSON.parse(text) : []) as T
 }
 
 export async function supabaseInsertMany(table: string, rows: Record<string, unknown>[]) {

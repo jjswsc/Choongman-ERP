@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       : 'store_code=is.null'
     const rows = (await supabaseSelectFilter('pos_payment_method_items', filter, {
       order: 'category.asc,sort_order.asc,name.asc',
-      limit: 200,
+      limit: 2000,
       select: 'id,store_code,category,name,hidden,sort_order',
     })) as {
       id: number

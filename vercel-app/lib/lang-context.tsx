@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms'
 
@@ -22,15 +22,17 @@ export function LangProvider({ children }: { children: React.ReactNode }) {
     setLangState(loadLang())
   }, [])
 
-  const setLang = (l: LangCode) => {
+  const setLang = useCallback((l: LangCode) => {
     setLangState(l)
     try {
       sessionStorage.setItem('cm_lang', l)
     } catch {}
-  }
+  }, [])
+
+  const value = useMemo(() => ({ lang, setLang }), [lang, setLang])
 
   return (
-    <LangContext.Provider value={{ lang, setLang }}>
+    <LangContext.Provider value={value}>
       {children}
     </LangContext.Provider>
   )

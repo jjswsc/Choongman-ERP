@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       let rows = (await supabaseSelectFilter(
         'payable_transactions',
         filter,
-        { order: 'trans_date.desc', limit: 1000 }
+        { order: 'trans_date.desc', limit: 20000 }
       )) as { id?: number; vendor_code?: string; amount?: number; ref_type?: string; ref_id?: number; trans_date?: string; memo?: string; created_at?: string }[]
 
       // 매장별 필터: 입고(Inbound) 건은 inbound_batches.location으로 필터
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
           const batches = (await supabaseSelectFilter(
             'inbound_batches',
             `id=in.(${inboundIds.join(',')})`,
-            { select: 'id,location', limit: 1000 }
+            { select: 'id,location', limit: 10000 }
           )) as { id?: number; location?: string }[] | null
           const storeNorm = storeFilter.trim().toLowerCase()
           batchIdsForStore = (batches || [])
@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'receivable_transactions',
       filter,
-      { order: 'trans_date.desc', limit: 1000 }
+      { order: 'trans_date.desc', limit: 20000 }
     )) as { id?: number; store_name?: string; amount?: number; ref_type?: string; ref_id?: number; trans_date?: string; memo?: string; invoice_no?: string; created_at?: string }[]
 
     const byStore: Record<string, { total: number; items: typeof rows }> = {}

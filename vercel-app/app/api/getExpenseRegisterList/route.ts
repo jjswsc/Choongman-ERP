@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const filter = parts.join('&')
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'trans_date.desc,id.desc',
-      limit: 1000,
+      limit: 20000,
       select: 'id,account_id,trans_date,trans_type,amount,memo,note,category,account_subject_id,expense_date,vendor_code,store_name,invoice_received,invoice_no,invoice_photo_url',
     })) as {
       id?: number

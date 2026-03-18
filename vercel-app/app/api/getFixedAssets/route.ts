@@ -21,13 +21,13 @@ export async function GET(request: NextRequest) {
       assets = (await supabaseSelectFilter('fixed_assets', filter, {
         select: '*',
         order: 'acquisition_date.desc',
-        limit: 500,
+        limit: 5000,
       })) as { status?: string }[]
     } else {
       assets = (await supabaseSelect('fixed_assets', {
         select: '*',
         order: 'acquisition_date.desc',
-        limit: 500,
+        limit: 5000,
       })) as { status?: string }[]
     }
     return NextResponse.json({ success: true, list: assets || [] }, { headers })

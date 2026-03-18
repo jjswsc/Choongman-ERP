@@ -409,8 +409,8 @@ export function ExpenseManagementTab() {
       ? window.prompt(t("memo") || "메모", "") || ""
       : ""
     const ok = action === "approve"
-      ? window.confirm(t("confirmDo") || "승인하시겠습니까?")
-      : window.confirm(t("confirmDo") || "반려하시겠습니까?")
+      ? window.confirm(t("confirmApprove") || "승인하시겠습니까?")
+      : window.confirm(t("confirmReject") || "반려하시겠습니까?")
     if (!ok) return
     setPayingId(row.id)
     try {
@@ -430,7 +430,8 @@ export function ExpenseManagementTab() {
     } finally {
       setPayingId(null)
     }
-  }, [auth?.role, auth?.user, loadPlans, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [auth?.role, auth?.user, loadPlans])
 
   const navigateToEditInRegister = React.useCallback(
     (row: ExpenseAccrualPlanItem) => {
@@ -500,7 +501,8 @@ export function ExpenseManagementTab() {
     } finally {
       setEditPlanSaving(false)
     }
-  }, [auth?.role, editPlanAccountSubjectId, editPlanAmount, editPlanDueDate, editPlanExpenseDate, editPlanMemo, editPlanPayeeCode, editPlanPayeeName, editPlanStoreName, editingPlanRow?.id, loadPlans, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [auth?.role, editPlanAccountSubjectId, editPlanAmount, editPlanDueDate, editPlanExpenseDate, editPlanMemo, editPlanPayeeCode, editPlanPayeeName, editPlanStoreName, editingPlanRow?.id, loadPlans])
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
@@ -520,7 +522,8 @@ export function ExpenseManagementTab() {
     } finally {
       setDeletingPlanId(null)
     }
-  }, [auth?.role, loadPlans, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [auth?.role, loadPlans])
 
   const handleCleanNoStore = React.useCallback(async () => {
     const ok = window.confirm(t("expenseCleanNoStoreConfirm") || "매장 미선택인 지급예정을 모두 삭제합니다. 진행할까요?")
@@ -537,7 +540,8 @@ export function ExpenseManagementTab() {
     } finally {
       setCleaningNoStore(false)
     }
-  }, [auth?.role, loadPlans, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [auth?.role, loadPlans])
 
   const handleApproveAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
@@ -566,7 +570,8 @@ export function ExpenseManagementTab() {
     } finally {
       setApprovingAll(false)
     }
-  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr])
 
   const handleRejectAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
@@ -595,7 +600,8 @@ export function ExpenseManagementTab() {
     } finally {
       setRejectingAll(false)
     }
-  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr, t])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- t 변경 시마다 재생성 시 무한 루프 방지
+  }, [approvablePlansForDay, auth?.role, auth?.user, loadPlans, startStr])
 
   return (
     <div className="space-y-4">

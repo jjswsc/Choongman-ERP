@@ -23,14 +23,14 @@ export async function GET(request: NextRequest) {
     const filter = `account_id=eq.${accountId}&trans_type=eq.withdraw&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: 'trans_date.desc,id.desc',
-      limit: 500,
+      limit: 10000,
     })) as { id?: number; trans_date?: string; amount?: number; memo?: string; note?: string }[]
 
     const linkedIds = new Set<number>()
     if (rows?.length) {
       const ptRows = (await supabaseSelectFilter('payable_transactions', 'bank_transaction_id=not.is.null', {
         select: 'bank_transaction_id',
-        limit: 10000,
+        limit: 50000,
       })) as { bank_transaction_id?: number }[]
       for (const r of ptRows || []) {
         const bid = Number(r.bank_transaction_id)

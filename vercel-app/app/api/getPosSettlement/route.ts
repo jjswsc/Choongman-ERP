@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       (storeCode && storeCode !== 'All' ? `&store_code=ilike.${encodeURIComponent(storeCode)}` : '')
 
     const orders = (await supabaseSelectFilter('pos_orders', orderFilter, {
-      limit: 5000,
+      limit: 20000,
       select: 'subtotal,vat,total,status',
     })) as { subtotal?: number; vat?: number; total?: number; status?: string }[] | null
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
         : `settle_date=eq.${settleDate}`
 
     const settlements = (await supabaseSelectFilter('pos_settlements', storeFilter, {
-      limit: 50,
+      limit: 500,
     })) as {
       id?: number
       store_code?: string

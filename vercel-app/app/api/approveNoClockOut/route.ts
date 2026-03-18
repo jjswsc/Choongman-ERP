@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
     const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { order: 'log_at.asc', limit: 20 })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
+    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { order: 'log_at.asc', limit: 200 })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
     const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
     const outLog = (attRows || []).find((r) => String(r.log_type || '').trim() === '퇴근')
     const hasOut = !!outLog
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     // 스케줄: 같은 날·매장에서 이름 일치 또는 부분 일치(근태 풀네임 vs 스케줄 닉네임)
     const schFilter = `schedule_date=eq.${dateStr}&store_name=ilike.${encodeURIComponent(storeName)}`
-    const schRowsAll = (await supabaseSelectFilter('schedules', schFilter, { limit: 50 })) as {
+    const schRowsAll = (await supabaseSelectFilter('schedules', schFilter, { limit: 500 })) as {
       name?: string
       plan_in?: string
       plan_out?: string

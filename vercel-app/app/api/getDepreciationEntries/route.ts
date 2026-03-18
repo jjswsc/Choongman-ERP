@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     let filter = `year_month=eq.${yearMonth}`
     const entries = (await supabaseSelectFilter('depreciation_entries', filter, {
       select: 'id,fixed_asset_id,year_month,accounting_date,amount,journal_entry_id',
-      limit: 500,
+      limit: 5000,
     })) as {
       id?: number
       fixed_asset_id?: number

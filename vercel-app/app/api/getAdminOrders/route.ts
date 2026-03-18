@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   try {
     const endIso = e + 'T23:59:59.999Z'
 
-    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: 'code,category,spec,vendor,outbound_location' })) as {
+    const itemsRows = (await supabaseSelect('items', { order: 'id.asc', limit: 10000, select: 'code,category,spec,vendor,outbound_location' })) as {
       code?: string
       category?: string
       spec?: string
@@ -60,10 +60,10 @@ export async function GET(request: NextRequest) {
     const hasValidOrderId = !Number.isNaN(orderIdNum) && orderIdNum > 0
 
     const [rows, storeRows, orderByIdRows, empRows] = await Promise.all([
-      supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 300 }),
-      supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 500 }),
+      supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 5000 }),
+      supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 10000 }),
       hasValidOrderId ? supabaseSelectFilter('orders', `id=eq.${orderIdNum}`, { limit: 1 }) : Promise.resolve(null),
-      supabaseSelect('employees', { order: 'id.asc', limit: 500, select: 'store,name,nick' }),
+      supabaseSelect('employees', { order: 'id.asc', limit: 2000, select: 'store,name,nick' }),
     ])
 
     const nameToNick: Record<string, string> = {}

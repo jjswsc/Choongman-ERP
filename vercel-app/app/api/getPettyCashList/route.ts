@@ -37,19 +37,19 @@ export async function GET(request: NextRequest) {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-          { order: 'trans_date.asc,id.asc', limit: 2000 }
+          { order: 'trans_date.asc,id.asc', limit: 20000 }
         )) as typeof rows
       } else {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'store=eq.' + encodeURIComponent(effectiveStore),
-          { order: 'trans_date.asc,id.asc', limit: 2000 }
+          { order: 'trans_date.asc,id.asc', limit: 20000 }
         )) as typeof rows
       }
     } else {
       rows = (await supabaseSelect('petty_cash_transactions', {
         order: 'trans_date.asc,id.asc',
-        limit: 2000,
+        limit: 20000,
       })) as typeof rows
     }
 

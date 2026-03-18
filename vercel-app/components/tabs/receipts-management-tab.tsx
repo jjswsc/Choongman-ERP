@@ -20,7 +20,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
 import { isOfficeRole } from '@/lib/permissions'
-import { cn } from '@/lib/utils'
+import { cn, formatBahtNum } from '@/lib/utils'
 
 const orderTypeLabels: Record<string, string> = {
   dine_in: '매장',
@@ -74,6 +74,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
   const [storeFilter, setStoreFilter] = React.useState('')
   const [statusFilter, setStatusFilter] = React.useState('all')
   const [searchTerm, setSearchTerm] = React.useState('')
+  const [appliedSearchTerm, setAppliedSearchTerm] = React.useState('')
   const [orders, setOrders] = React.useState<PosOrder[]>([])
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
@@ -82,8 +83,8 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
   const canSearchAll = isOfficeRole(auth?.role || '')
 
   const filteredOrders = React.useMemo(() => {
-    if (!searchTerm.trim()) return orders
-    const term = searchTerm.trim().toLowerCase()
+    if (!appliedSearchTerm.trim()) return orders
+    const term = appliedSearchTerm.trim().toLowerCase()
     return orders.filter(
       (o) =>
         o.orderNo?.toLowerCase().includes(term) ||
@@ -94,7 +95,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
             it.name && String(it.name).toLowerCase().includes(term)
         )
     )
-  }, [orders, searchTerm])
+  }, [orders, appliedSearchTerm])
 
   const loadOrders = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -281,8 +282,17 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
               placeholder={t('posSearchPh') || '주문번호, 테이블, 메뉴 검색'}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && setAppliedSearchTerm(searchTerm)}
               className="h-9 flex-1 min-w-[180px]"
             />
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-9 px-3"
+              onClick={() => setAppliedSearchTerm(searchTerm)}
+            >
+              {t('search') || '검색'}
+            </Button>
           </div>
 
           {loading && (
@@ -307,7 +317,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                   {t('posInputTotal') || '합계'}:
                 </span>
                 <span className="font-bold tabular-nums">
-                  {todaySummary.completedTotal.toLocaleString()} ฿
+                  {formatBahtNum(todaySummary.completedTotal)} ฿
                 </span>
               </div>
               {todaySummary.pendingCount > 0 && (
@@ -359,7 +369,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                           {o.orderType === 'dine_in' && o.tableName ? o.tableName : '-'}
                         </td>
                         <td className="px-4 py-3 text-right font-bold tabular-nums">
-                          {o.total?.toLocaleString()} ฿
+                          {formatBahtNum(o.total)} ฿
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -403,7 +413,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                                   )}
                                   {o.discountAmt && o.discountAmt > 0 && (
                                     <div className="text-green-600 mt-0.5">
-                                      {t('posDiscount') || '할인'}: -{o.discountAmt.toLocaleString()} ฿
+                                      {t('posDiscount') || '할인'}: -{formatBahtNum(o.discountAmt)} ฿
                                       {o.discountReason && ` (${o.discountReason})`}
                                     </div>
                                   )}
@@ -425,7 +435,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
                                         {it.name} × {it.qty ?? 1}
                                       </span>
                                       <span className="tabular-nums shrink-0">
-                                        {((it.price ?? 0) * (it.qty ?? 1)).toLocaleString()} ฿
+                                        {formatBahtNum((it.price ?? 0) * (it.qty ?? 1))} ฿
                                       </span>
                                     </div>
                                   ))}

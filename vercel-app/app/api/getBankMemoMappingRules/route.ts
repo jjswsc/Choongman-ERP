@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const rows = (await supabaseSelect('bank_memo_mapping_rules', { order: 'id.asc', limit: 500 })) as {
+    const rows = (await supabaseSelect('bank_memo_mapping_rules', { order: 'id.asc', limit: 5000 })) as {
       id?: number
       keyword?: string
       trans_type?: string

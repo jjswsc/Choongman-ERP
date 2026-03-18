@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
 
 export interface AppItem {
@@ -148,15 +148,26 @@ const OFFICE_LOCATIONS = ['office', '본사', '오피스', '본점']
 /** 입고 시 "입고등록"(HQ Warehouse) 선택하면 저장되는 location. 본사 재고 조회 시 포함해야 함 */
 const INBOUND_HQ_LOCATION = '입고등록'
 
+/** 매장명→동일 매장 변형 목록. stock_logs.location이 "สาขาเอกมัย"/"เอกมัย"/"Ekkamai" 등으로 섞여 있을 때 모두 매칭 */
+const STORE_ALIASES: Record<string, string[]> = {
+  ekkamai: ['เอกมัย', 'สาขาเอกมัย', 'ekkamai'],
+  'เอกมัย': ['ekkamai', 'สาขาเอกมัย', 'เอกมัย'],
+  jidubang: ['jidubang'],
+  huamak: ['huamak'],
+  silom: ['silom'],
+}
+
 /** 매장명 변형 생성 (예: "CM The street" → ["cm the street", "the street"]) - stock_logs.location 불일치 대응 */
 function getLocationVariants(storeNorm: string): string[] {
-  const variants = [storeNorm]
+  const variants = new Set<string>([storeNorm])
   const cmPrefix = /^cm\s+/i
   if (cmPrefix.test(storeNorm)) {
     const withoutCm = storeNorm.replace(cmPrefix, '').trim()
-    if (withoutCm && !variants.includes(withoutCm)) variants.push(withoutCm)
+    if (withoutCm) variants.add(withoutCm)
   }
-  return variants
+  const aliases = STORE_ALIASES[storeNorm]
+  if (aliases) aliases.forEach((a) => variants.add(a))
+  return Array.from(variants)
 }
 
 async function getStoreStock(store: string, asOfDate?: string): Promise<Record<string, number>> {
@@ -166,34 +177,54 @@ async function getStoreStock(store: string, asOfDate?: string): Promise<Record<s
 
     const isOffice = OFFICE_LOCATIONS.some((x) => storeNorm === x || storeNorm.includes(x))
     const isInboundHq = storeNorm === INBOUND_HQ_LOCATION.toLowerCase()
-    const locFilter = isOffice
-      ? `or=(location.eq.${encodeURIComponent(INBOUND_HQ_LOCATION)},${OFFICE_LOCATIONS.map((l) => `location.ilike.${l}`).join(',')})`
+
+    const patterns: string[] = isOffice
+      ? [INBOUND_HQ_LOCATION, ...OFFICE_LOCATIONS]
       : isInboundHq
-        ? `location=eq.${encodeURIComponent(INBOUND_HQ_LOCATION)}`
-        : (() => {
-            const variants = getLocationVariants(storeNorm)
-            if (variants.length === 1) {
-              return `location=ilike.${encodeURIComponent(storeNorm)}`
-            }
-            return `or=(${variants.map((v) => `location.ilike.${encodeURIComponent(v)}`).join(',')})`
-          })()
-    const dateSuffix = asOfDate?.trim()
-      ? `&log_date=lte.${encodeURIComponent(asOfDate.trim() + 'T23:59:59.999Z')}`
-      : ''
-    const filter = `${locFilter}${dateSuffix}`
+        ? [INBOUND_HQ_LOCATION]
+        : getLocationVariants(storeNorm)
 
-    const rows = (await supabaseSelectFilter(
-      'stock_logs',
-      filter
-    )) as { item_code?: string; qty?: number }[] | null
+    const asOfTimestamp =
+      asOfDate?.trim() ? `${asOfDate.trim()}T23:59:59.999Z` : null
 
-    const m: Record<string, number> = {}
-    for (let i = 0; i < (rows || []).length; i++) {
-      const code = rows![i].item_code
-      if (!code) continue
-      m[code] = (m[code] || 0) + Number(rows![i].qty || 0)
+    try {
+      const rows = (await supabaseRpc<{ item_code: string; total_qty: number }[]>(
+        'get_store_stock',
+        {
+          p_location_patterns: patterns,
+          p_as_of_date: asOfTimestamp,
+        }
+      )) as { item_code?: string; total_qty?: number }[] | null
+
+      const m: Record<string, number> = {}
+      for (let i = 0; i < (rows || []).length; i++) {
+        const code = rows![i].item_code
+        if (!code) continue
+        m[code] = Number(rows![i].total_qty ?? 0)
+      }
+      return m
+    } catch (rpcErr) {
+      // RPC 미배포 시 fallback: 기존 select 방식 (limit 50000)
+      const locFilter =
+        patterns.length === 1
+          ? `location=ilike.${encodeURIComponent(patterns[0])}`
+          : `or=(${patterns.map((p) => `location.ilike.${encodeURIComponent(p)}`).join(',')})`
+      const dateSuffix = asOfTimestamp
+        ? `&log_date=lte.${encodeURIComponent(asOfTimestamp)}`
+        : ''
+      const rows = (await supabaseSelectFilter(
+        'stock_logs',
+        `${locFilter}${dateSuffix}`,
+        { order: 'id.asc', limit: 50000, select: 'item_code,qty' }
+      )) as { item_code?: string; qty?: number }[] | null
+      const m: Record<string, number> = {}
+      for (let i = 0; i < (rows || []).length; i++) {
+        const code = rows![i].item_code
+        if (!code) continue
+        m[code] = (m[code] || 0) + Number(rows![i].qty || 0)
+      }
+      return m
     }
-    return m
   } catch {
     return {}
   }

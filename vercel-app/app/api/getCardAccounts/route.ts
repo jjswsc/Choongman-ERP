@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const rows = (await supabaseSelect('card_accounts', {
       order: 'name.asc',
-      limit: 100,
+      limit: 1000,
     })) as { id?: number; name?: string; store?: string; memo?: string; card_number?: string; holder_name?: string; card_company?: string }[]
     const list = (rows || []).map((r) => ({
       id: r.id,

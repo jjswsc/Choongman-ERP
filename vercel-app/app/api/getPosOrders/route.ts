@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { toDateStrBangkok } from '@/lib/attendance-utils'
+import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -43,6 +43,13 @@ export async function GET(request: NextRequest) {
     }[] = []
 
     const filters: string[] = []
+    const startDate = startStr ? startStr.slice(0, 10) : ''
+    const endDate = endStr ? endStr.slice(0, 10) : ''
+    if (startDate && endDate) {
+      const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+      filters.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+      filters.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+    }
     if (storeCode && storeCode !== 'All') {
       filters.push(`store_code=ilike.${encodeURIComponent(storeCode)}`)
     }
@@ -54,7 +61,7 @@ export async function GET(request: NextRequest) {
     if (filterStr) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
-        limit: 500,
+        limit: 10000,
         select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
 
@@ -64,10 +71,16 @@ export async function GET(request: NextRequest) {
           storeCode.replace(/^CM\s+/i, '').trim(),
         ].filter((v) => v && v !== storeCode)
         for (const alt of variants) {
-          const altFilter = `store_code=ilike.${encodeURIComponent(alt)}`
+          const altParts = [`store_code=ilike.${encodeURIComponent(alt)}`]
+          if (startDate && endDate) {
+            const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
+            altParts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+            altParts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+          }
+          const altFilter = altParts.join('&')
           rows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
-            limit: 500,
+            limit: 10000,
             select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
           })) as typeof rows
           if (rows?.length) break
@@ -76,16 +89,18 @@ export async function GET(request: NextRequest) {
     } else {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
-        limit: 500,
+        limit: 10000,
         select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
-    const startDate = startStr ? startStr.slice(0, 10) : ''
-    const endDate = endStr ? endStr.slice(0, 10) : ''
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[getPosOrders]', { rowCount: (rows || []).length, startDate, endDate, storeCode: storeCode || '(all)', status: status || '(all)' })
+    }
 
     const list = (rows || [])
       .filter((r) => {
+        if (startDate && endDate) return true
         const rowDate = toDateStrBangkok(r.created_at)
         if (!rowDate) return false
         if (startDate && rowDate < startDate) return false
@@ -128,6 +143,10 @@ export async function GET(request: NextRequest) {
         createdAt: String(r.created_at ?? ''),
       }))
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[getPosOrders] result count:', list.length)
+    }
+    headers.set('X-Pos-Orders-Count', String(list.length))
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getPosOrders:', e)

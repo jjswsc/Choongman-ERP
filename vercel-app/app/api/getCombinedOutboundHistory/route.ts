@@ -68,11 +68,11 @@ export async function GET(request: NextRequest) {
     const [outboundLogs, forceLogs] = await Promise.all([
       supabaseSelectFilter('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
         order: 'log_date.desc',
-        limit: 500,
+        limit: 10000,
       }),
       supabaseSelectFilter('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
         order: 'log_date.desc',
-        limit: 500,
+        limit: 10000,
       }),
     ])
 
@@ -95,8 +95,8 @@ export async function GET(request: NextRequest) {
       const orderDateFilter = `status=eq.Approved&order_date=gte.${startStr}&order_date=lte.${endStr}T23:59:59.999`
       const deliveryDateFilter = `status=eq.Approved&delivery_date=gte.${startStr}&delivery_date=lte.${endStr}`
       const [ordersByOrderDate, ordersByDeliveryDate] = await Promise.all([
-        supabaseSelectFilter('orders', orderDateFilter, { limit: 200 }),
-        supabaseSelectFilter('orders', deliveryDateFilter, { limit: 200 }),
+        supabaseSelectFilter('orders', orderDateFilter, { limit: 5000 }),
+        supabaseSelectFilter('orders', deliveryDateFilter, { limit: 5000 }),
       ])
       const seenOrderIds = new Set<number>()
       const approvedOrders = [

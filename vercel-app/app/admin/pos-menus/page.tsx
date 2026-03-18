@@ -839,11 +839,9 @@ export default function PosMenusPage() {
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(searchTerm.toLowerCase())
       const categoryEq = m.category === categoryFilter
-      const chickenCategorySelected = categoryFilter === "Chicken" || categoryFilter === "치킨"
-      const matchCategory = categoryFilter === "all" || categoryEq || (chickenCategorySelected && isChickenMenu(m.code))
+      const matchCategory = categoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
-      const chickenMainSelected = mainCategoryFilter === "Chicken" || mainCategoryFilter === "치킨"
-      const matchMainCategory = mainCategoryFilter === "all" || mainEq || (chickenMainSelected && isChickenMenu(m.code))
+      const matchMainCategory = mainCategoryFilter === "all" || mainEq
       const isSoldOut = !!(m.soldOutDate && String(m.soldOutDate).trim())
       const matchSoldOut =
         soldOutFilter === "all" ||
@@ -860,11 +858,9 @@ export default function PosMenusPage() {
         m.name.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase())
       const categoryEq = m.category === optionsConfigCategoryFilter
-      const chickenCategorySelected = optionsConfigCategoryFilter === "Chicken" || optionsConfigCategoryFilter === "치킨"
-      const matchCategory = optionsConfigCategoryFilter === "all" || categoryEq || (chickenCategorySelected && isChickenMenu(m.code))
+      const matchCategory = optionsConfigCategoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
-      const chickenMainSelected = mainCategoryFilter === "Chicken" || mainCategoryFilter === "치킨"
-      const matchMainCategory = mainCategoryFilter === "all" || mainEq || (chickenMainSelected && isChickenMenu(m.code))
+      const matchMainCategory = mainCategoryFilter === "all" || mainEq
       return matchTerm && matchCategory && matchMainCategory
     })
   }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter, mainCategoryFilter])
@@ -916,7 +912,7 @@ export default function PosMenusPage() {
     const presetFromLib = main in POS_CATEGORIES_BY_MAIN ? POS_CATEGORIES_BY_MAIN[main as keyof typeof POS_CATEGORIES_BY_MAIN] : null
     const preset = presetFromConfig?.length ? presetFromConfig : (presetFromLib ?? [])
     const fromMenus = menus
-      .filter((m) => (m.categoryMain ?? "") === main || (main === "Chicken" || main === "치킨" ? isChickenMenu(m.code) : false))
+      .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)
       .filter((c): c is string => typeof c === "string" && c !== "")
     return Array.from(new Set([...preset, ...fromMenus]))

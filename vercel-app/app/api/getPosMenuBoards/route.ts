@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     if (boardType) filters.push(`board_type=eq.${encodeURIComponent(boardType)}`)
     const filter = filters.join('&')
     const rows = (await supabaseSelectFilter('pos_menu_boards', filter || 'id=gt.0', {
-      limit: 500,
+      limit: 5000,
       order: 'store_code.asc,board_type.asc,board_name.asc',
       select: 'id,store_code,board_type,board_name,group_grid_cols,group_grid_rows,menu_grid_cols,menu_grid_rows,resolution_width,resolution_height,group_count,menu_count,is_active,created_at,updated_at',
     })) as {

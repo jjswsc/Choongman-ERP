@@ -4182,14 +4182,16 @@ export async function getPosOrders(params?: {
   endStr?: string
   storeCode?: string
   status?: string
-}) {
+}): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
   const res = await apiFetch('/api/getPosOrders?' + q.toString())
-  return res.json() as Promise<PosOrder[]>
+  const data = await res.json().catch(() => null)
+  if (!Array.isArray(data)) return []
+  return data as PosOrder[]
 }
 
 export interface PosSettlement {

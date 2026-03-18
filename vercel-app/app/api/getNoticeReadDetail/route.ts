@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const readRows = (await supabaseSelectFilter(
       'notice_reads',
       `notice_id=eq.${noticeId}`,
-      { limit: 1000 }
+      { limit: 10000 }
     )) as { store?: string; name?: string; read_at?: string; status?: string }[] || []
 
     const readMap: Record<string, { read_at: string; status: string }> = {}

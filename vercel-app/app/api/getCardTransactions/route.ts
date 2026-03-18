@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('card_transactions', filter, {
       order: 'trans_date.desc,id.desc',
-      limit: 500,
+      limit: 20000,
     })) as {
       id?: number
       card_account_id?: number

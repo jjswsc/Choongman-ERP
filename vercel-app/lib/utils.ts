@@ -16,6 +16,13 @@ export function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, '&#39;')
 }
 
+/** POS/주문 등에서 사용할 금액 포맷 - 소수점 둘째자리까지 표시 (모바일과 통일) */
+export function formatBahtNum(n: number | null | undefined): string {
+  const v = Number(n ?? 0)
+  if (!Number.isFinite(v)) return '0.00'
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 /** 직원 닉네임/역할 표시 시 "(Part-Time)"을 "(P/T)"로 줄여서 표시 */
 export function displayLabelShort(val: string | null | undefined): string {
   const s = String(val ?? '').trim()

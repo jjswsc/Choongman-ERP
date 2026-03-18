@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const recRows = (await supabaseSelectFilter('receivable_transactions', recFilter, {
       select: 'id,store_name,amount,ref_id,trans_date,memo',
       order: 'trans_date.desc',
-      limit: 500,
+      limit: 10000,
     })) as { id?: number; store_name?: string; amount?: number; ref_id?: number; trans_date?: string; memo?: string }[]
 
     if (!recRows?.length) {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const orders = (await supabaseSelectFilter('orders', `id=in.(${orderIds.join(',')})`, {
       select: 'id,order_date,delivery_date,store_name,total,status,delivery_status',
-      limit: 500,
+      limit: 10000,
     })) as { id?: number; order_date?: string; delivery_date?: string; store_name?: string; total?: number; status?: string; delivery_status?: string }[]
 
     const orderMap = new Map<number, (typeof orders)[0]>()
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     const storeFilterForBalance = effectiveStore ? `store_name=ilike.${encodeURIComponent(effectiveStore)}` : 'id=gt.0'
     const allRec = (await supabaseSelectFilter('receivable_transactions', storeFilterForBalance, {
       select: 'store_name,amount',
-      limit: 5000,
+      limit: 20000,
     })) as { store_name?: string; amount?: number }[]
     for (const r of allRec || []) {
       const sn = String(r.store_name ?? '').trim()

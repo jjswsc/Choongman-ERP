@@ -21,7 +21,7 @@ export default function PosLocalLayout({
   const headerTitle = isPettyCash ? t('adminPettyCash') : t('posCashInputOutput')
 
   return (
-    <div className="flex min-h-full w-full flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
         <div className="flex items-center gap-1">
           <button

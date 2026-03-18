@@ -21,12 +21,12 @@ export async function GET(request: NextRequest) {
     if (typeFilter && typeFilter !== 'All') {
       rows = (await supabaseSelectFilter('account_subjects', `type=ilike.${encodeURIComponent(typeFilter)}`, {
         order: 'sort_order.asc,code.asc',
-        limit: 200,
+        limit: 2000,
       })) as Row[]
     } else {
       rows = (await supabaseSelect('account_subjects', {
         order: 'sort_order.asc,code.asc',
-        limit: 200,
+        limit: 2000,
       })) as Row[]
     }
 
