@@ -65,7 +65,7 @@ export function setupForegroundHandler(): void {
       const title = payload.data?.title || (payload as { notification?: { title?: string } }).notification?.title || "CM ERP"
       const body = payload.data?.body || (payload as { notification?: { body?: string } }).notification?.body || ""
       const tag = payload.data?.tag || `cm-erp-notice-${Date.now()}`
-      const opts: NotificationOptions = {
+      const opts = {
         body,
         icon: "/icon-192.png",
         tag,
@@ -73,7 +73,7 @@ export function setupForegroundHandler(): void {
         vibrate: [200, 100, 200],
         renotify: true,
         requireInteraction: true,
-      }
+      } as NotificationOptions
       new Notification(title, opts)
     })
   } catch {
