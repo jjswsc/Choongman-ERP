@@ -70,9 +70,14 @@ export async function POST(req: NextRequest) {
           'pos_menus',
           `id=eq.${editingId}`,
           { limit: 1 }
-        )) as { id?: number; price?: number; price_delivery?: number | null; name?: string; category_main?: string; category?: string }[] | null
+        )) as { id?: number; price?: number; price_delivery?: number | null; name?: string; category_main?: string; category?: string; image?: string }[] | null
         if (existing && existing.length > 0) {
           const prev = existing[0]
+          // 수정 시 이미지 URL이 비어 있으면 기존 이미지 유지 (폼 리셋/오류로 빈 값 저장 방지)
+          const incomingImage = String(body.imageUrl ?? '').trim()
+          if (!incomingImage && prev.image != null && String(prev.image).trim()) {
+            row.image = String(prev.image).trim()
+          }
           const catMain = (prev.category_main || '').trim()
           const cat = (prev.category || '').trim()
           const changes: { fieldName: string; oldValue: number | null; newValue: number | null }[] = []

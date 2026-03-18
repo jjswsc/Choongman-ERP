@@ -1,14 +1,17 @@
 /**
- * Excel 원가 파일 → items 테이블에 코드가 없는 품목만 추가
+ * Excel 원가 파일 → items 테이블에 코드가 없는 품목만 추가, 행 순서대로 sort_order 반영
  * POST FormData: file (Excel .xlsx)
  *
- * 기존 코드가 있는 품목은 제외, 코드가 DB에 없는 품목만 등록
+ * - 엑셀 행 순서대로 모든 품목(기존+신규)의 sort_order를 설정 → 관리 화면 정렬이 엑셀과 동일
+ * - 코드가 DB에 없는 품목만 신규 등록
  */
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import {
   supabaseSelect,
   supabaseInsertMany,
+  supabaseInsert,
+  supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
 
 /** 헤더에서 컬럼 인덱스 찾기 (한글/영어 모두 지원) */
@@ -82,6 +85,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 엑셀에 나온 카테고리 순서(첫 등장 순) → item_categories.sort_order 반영
+    const orderedCategoryNames: string[] = []
+    const seenCategories = new Set<string>()
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i] as unknown[]
+      const catRaw = col.category >= 0 ? String(row[col.category] ?? '').trim() : ''
+      const cat = !catRaw ? '' : catRaw === '매장 전용' ? 'Store Only' : catRaw
+      if (cat && !seenCategories.has(cat)) {
+        seenCategories.add(cat)
+        orderedCategoryNames.push(cat)
+      }
+    }
+    const existingCats = (await supabaseSelect('item_categories', { select: 'id,name', limit: 500 })) as { id?: number; name?: string }[] | null
+    const existingCatNames = new Set((existingCats || []).map((r) => String(r.name || '').trim()).filter(Boolean))
+    for (let idx = 0; idx < orderedCategoryNames.length; idx++) {
+      const name = orderedCategoryNames[idx]
+      const sortOrder = idx
+      try {
+        if (existingCatNames.has(name)) {
+          await supabaseUpdateByFilter('item_categories', `name=eq.${encodeURIComponent(name)}`, { sort_order: sortOrder })
+        } else {
+          await supabaseInsert('item_categories', { name, sort_order: sortOrder })
+          existingCatNames.add(name)
+        }
+      } catch (_) {
+        // 무시
+      }
+    }
+
     // 기존 품목 코드 조회
     const existing = (await supabaseSelect('items', {
       select: 'code',
@@ -90,13 +122,24 @@ export async function POST(request: NextRequest) {
     const existingCodes = new Set((existing || []).map((r) => String(r.code || '').trim()).filter(Boolean))
 
     const toInsert: Record<string, unknown>[] = []
+    let sortOrderUpdated = 0
     for (let i = 1; i < data.length; i++) {
       const row = data[i] as unknown[]
       const code = col.code >= 0 ? String(row[col.code] ?? '').trim() : ''
       const name = col.name >= 0 ? String(row[col.name] ?? '').trim() : ''
 
       if (!code || !name) continue
-      if (existingCodes.has(code)) continue
+
+      const sortOrder = i
+      if (existingCodes.has(code)) {
+        try {
+          await supabaseUpdateByFilter('items', `code=eq.${encodeURIComponent(code)}`, { sort_order: sortOrder })
+          sortOrderUpdated += 1
+        } catch (_) {
+          // 컬럼 없음 등 무시
+        }
+        continue
+      }
 
       const category = col.category >= 0 ? String(row[col.category] ?? '').trim() : ''
       const spec = col.spec >= 0 ? String(row[col.spec] ?? '').trim() : ''
@@ -121,15 +164,9 @@ export async function POST(request: NextRequest) {
         description: null,
         tax,
         purchase_source: 'hq',
+        sort_order: sortOrder,
       })
       existingCodes.add(code)
-    }
-
-    if (toInsert.length === 0) {
-      return NextResponse.json(
-        { success: true, message: '추가할 신규 품목이 없습니다. (모든 코드가 이미 등록됨)', added: 0 },
-        { headers }
-      )
     }
 
     const chunkSize = 100
@@ -138,8 +175,17 @@ export async function POST(request: NextRequest) {
       await supabaseInsertMany('items', chunk)
     }
 
+    const added = toInsert.length
+    const msg =
+      added > 0 && sortOrderUpdated > 0
+        ? `${added}건 신규 등록, 기존 ${sortOrderUpdated}건 정렬 순서 반영 완료`
+        : added > 0
+          ? `${added}건 신규 등록 완료`
+          : sortOrderUpdated > 0
+            ? `정렬 순서 ${sortOrderUpdated}건 반영 완료 (신규 없음)`
+            : '추가할 신규 품목이 없습니다. (모든 코드가 이미 등록됨)'
     return NextResponse.json(
-      { success: true, message: `${toInsert.length}건 신규 등록 완료`, added: toInsert.length },
+      { success: true, message: msg, added, sortOrderUpdated },
       { headers }
     )
   } catch (e) {

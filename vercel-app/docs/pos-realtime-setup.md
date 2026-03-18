@@ -14,6 +14,13 @@
 alter table public.pos_printer_settings add column if not exists main_device_token text;
 ```
 
+- **접속 기기 목록**을 보려면 `pos_connected_devices` 테이블이 필요합니다. Supabase SQL Editor에서 실행:
+
+```sql
+-- vercel-app/scripts/pos_connected_devices.sql
+-- (파일 내용 전체 실행)
+```
+
 ## 1. Supabase Realtime 발행(Publication) 설정
 
 Supabase 대시보드 → Database → Publications → `supabase_realtime` 에서 `pos_orders` 테이블을 추가하거나, SQL Editor에서 실행:

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { POSMainGrid } from '@/components/pos/pos-main-grid'
+import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { DEFAULT_TILES, POS_SUBMENUS, type POSTile, type POSSubMenuItem } from '@/lib/pos-display'
 import { cn } from '@/lib/utils'
 import { Circle } from 'lucide-react'
@@ -57,6 +58,7 @@ export default function POSMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
 
   const storeCode = auth?.store || stores[0] || ''
+  const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(storeCode || null)
 
   useEffect(() => {
     setCurrentTime(new Date())
@@ -254,6 +256,8 @@ export default function POSMainPage() {
         canAccessAdmin={canAccessAdmin(auth?.role || '')}
         todayOrders={todayOrders}
         totalAmount={totalAmount}
+        isMainPosDevice={isMainPosDevice}
+        onMainPosDeviceChange={setIsMainPosDevice}
       />
 
       <POSMainGrid tiles={visibleTiles} onTileClick={handleTileClick} isKorean={lang === 'ko'} />

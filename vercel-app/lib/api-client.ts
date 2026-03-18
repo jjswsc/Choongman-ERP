@@ -2759,6 +2759,8 @@ export interface AdminItem {
   purchaseSource?: 'hq' | 'store'
   /** true이면 매장 발주 품목 검색에 노출되지 않음 */
   orderDisabled?: boolean
+  /** 표시 순서. 엑셀 가져오기 시 행 순서로 설정. 있으면 이 값 기준 정렬 */
+  sortOrder?: number
   /** 재고 기본 단위 (저장 단위). 비어 있으면 unit 사용 (하위 호환) */
   stockBaseUnit?: string
   /** 조정/조사 시 선택 단위 (하위 호환) */
@@ -3944,6 +3946,57 @@ export async function clearPosMainDevice(params: { storeCode: string; deviceToke
 
 export async function registerPosMainDevice(params: { storeCode: string; deviceToken: string }) {
   const res = await apiFetchWithOffline('/api/registerPosMainDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface PosDeviceItem {
+  deviceToken: string
+  role: 'main' | 'order'
+  lastSeenAt: string
+  createdAt: string
+  isMain: boolean
+}
+
+export async function getPosDevices(params: { storeCode: string }) {
+  const q = new URLSearchParams()
+  q.set('storeCode', params.storeCode)
+  const res = await apiFetchWithOffline('/api/getPosDevices?' + q.toString())
+  const data = await res.json() as { success: boolean; message?: string; devices?: PosDeviceItem[] }
+  return { ...data, devices: data.devices ?? [] }
+}
+
+export async function registerPosDevice(params: {
+  storeCode: string
+  deviceToken: string
+  role: 'main' | 'order'
+}) {
+  const res = await apiFetchWithOffline('/api/registerPosDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      storeCode: params.storeCode,
+      deviceToken: params.deviceToken,
+      role: params.role,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function revokePosDevice(params: { storeCode: string; deviceToken: string }) {
+  const res = await apiFetchWithOffline('/api/revokePosDevice', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function setPosMainDevice(params: { storeCode: string; deviceToken: string }) {
+  const res = await apiFetchWithOffline('/api/setPosMainDevice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ storeCode: params.storeCode, deviceToken: params.deviceToken }),

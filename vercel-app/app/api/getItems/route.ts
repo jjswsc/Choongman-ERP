@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,stock_base_unit,stock_unit_options,standard_units'
-const ITEMS_SELECT_MINIMAL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled'
+const ITEMS_SELECT_FULL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order,stock_base_unit,stock_unit_options,standard_units'
+const ITEMS_SELECT_MINIMAL = 'id,code,category,name,spec,unit,price,cost,total_quantity,image,vendor,tax,outbound_location,description,purchase_source,order_disabled,sort_order'
 
 function parseStockUnitOptions(val: unknown): { unit: string; factor: number }[] {
   if (!Array.isArray(val)) return []
@@ -37,6 +37,7 @@ type ItemRow = {
   description?: string
   purchase_source?: string
   order_disabled?: boolean
+  sort_order?: number | null
   stock_base_unit?: string
   stock_unit_options?: { unit: string; factor: number }[] | null
   standard_units?: unknown
@@ -58,18 +59,18 @@ export async function GET(request: NextRequest) {
         ? ((await supabaseSelectFilter(
             'items',
             'or=(purchase_source.eq.hq,purchase_source.is.null)',
-            { order: 'id.asc', limit: 5000, select: ITEMS_SELECT_FULL }
+            { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_FULL }
           )) as ItemRow[] | null)
-        : ((await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: ITEMS_SELECT_FULL })) as ItemRow[] | null)
+        : ((await supabaseSelect('items', { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_FULL })) as ItemRow[] | null)
     } catch {
       hasStockCols = false
       rows = isHqOnly
         ? ((await supabaseSelectFilter(
             'items',
             'or=(purchase_source.eq.hq,purchase_source.is.null)',
-            { order: 'id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL }
+            { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL }
           )) as ItemRow[] | null)
-        : ((await supabaseSelect('items', { order: 'id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL })) as ItemRow[] | null)
+        : ((await supabaseSelect('items', { order: 'sort_order.asc.nullslast,id.asc', limit: 5000, select: ITEMS_SELECT_MINIMAL })) as ItemRow[] | null)
     }
     const list = (rows || [])
       .filter((row) => {
@@ -105,6 +106,7 @@ export async function GET(request: NextRequest) {
           description: row.description ? String(row.description).trim() : '',
           purchaseSource: ((row.purchase_source ?? 'hq') === 'store' ? 'store' : 'hq') as 'hq' | 'store',
           orderDisabled: row.order_disabled === true,
+          sortOrder: row.sort_order != null ? Number(row.sort_order) : undefined,
           ...(hasStockCols
             ? {
                 stockBaseUnit: String(row.stock_base_unit ?? '').trim(),

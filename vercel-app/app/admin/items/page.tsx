@@ -13,7 +13,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
-import { sortByCode } from "@/lib/sort-utils"
+import { compareByCode } from "@/lib/sort-utils"
 
 export type Product = AdminItem
 
@@ -310,8 +310,21 @@ export default function ItemsPage() {
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
       return matchTerm && matchCategory && matchOutbound
     })
-    return sortByCode(filtered, (p) => p.code)
-  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter])
+    // 엑셀(ไฟล์เช็คสต๊อก) 엑셀에 나온 카테고리 순 → 같은 카테고리 안에서는 품목 sort_order → 코드 순
+    return [...filtered].sort((a, b) => {
+      const catA = (a.category || '').trim()
+      const catB = (b.category || '').trim()
+      const idxA = allCategories.indexOf(catA)
+      const idxB = allCategories.indexOf(catB)
+      const orderA = idxA < 0 ? 999999 : idxA
+      const orderB = idxB < 0 ? 999999 : idxB
+      if (orderA !== orderB) return orderA - orderB
+      const oa = a.sortOrder ?? 999999
+      const ob = b.sortOrder ?? 999999
+      if (oa !== ob) return oa - ob
+      return compareByCode(a.code, b.code)
+    })
+  }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter, allCategories])
 
   const categories = React.useMemo(() => {
     const fromProducts = new Set(products.map((p) => p.category).filter(Boolean))

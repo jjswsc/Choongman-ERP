@@ -423,6 +423,9 @@ export function IngredientTable({
               <TableHead className="text-center text-xs font-medium text-muted-foreground min-w-[200px]">
                 {t("posCostIngredient")}
               </TableHead>
+              <TableHead className="text-center text-xs font-medium text-muted-foreground w-28">
+                {t("itemsCategory")}
+              </TableHead>
               <TableHead className="text-center text-xs font-medium text-muted-foreground">
                 {t("posCostBahtPerUnit")}
               </TableHead>
@@ -470,6 +473,9 @@ export function IngredientTable({
                       onOpenChange={setOpenPickerRow}
                       t={t}
                     />
+                  </TableCell>
+                  <TableCell className="text-center text-xs text-muted-foreground">
+                    {getRuntimeApiItems().find((i) => i.code === item.ingredientCode)?.categoryRaw ?? "—"}
                   </TableCell>
                   <TableCell className={cn("text-right font-mono text-sm", costTextDark ? "text-foreground" : "text-muted-foreground")}>
                     {(() => {
@@ -571,7 +577,7 @@ export function IngredientTable({
             {items.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="h-20 text-center text-sm text-muted-foreground"
                 >
                   {t("posCostNoIngredients")}
@@ -644,17 +650,20 @@ export function IngredientTable({
                 autoFocus
               />
             </div>
-            <Select value={addCategoryFilter} onValueChange={setAddCategoryFilter}>
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder={t("posMenuCategoryAll") || "전체 카테고리"} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
-                {itemCategories.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">{t("itemsCategory")}</label>
+              <Select value={addCategoryFilter} onValueChange={setAddCategoryFilter}>
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue placeholder={t("itemsCategoryAll") || "전체 카테고리"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("posMenuCategoryAll") || "전체"}</SelectItem>
+                  {itemCategories.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="overflow-y-auto flex-1 min-h-[180px] border rounded-md py-2">
               {addDialogFiltered.length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">

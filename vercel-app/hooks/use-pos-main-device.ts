@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { getPosPrinterSettings, registerPosMainDevice, clearPosMainDevice } from '@/lib/api-client'
+import { getPosPrinterSettings, registerPosMainDevice, clearPosMainDevice, registerPosDevice } from '@/lib/api-client'
 
 const STORAGE_KEY = 'pos_main_device'
 const DEVICE_TOKEN_KEY = 'pos_device_token'
@@ -62,53 +62,72 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
 
   const setValue = React.useCallback(
     (value: boolean) => {
-      if (!storeCode || !deviceToken) {
-        setLocalIsMain(value)
+      const applyLocal = (v: boolean) => {
+        setLocalIsMain(v)
         try {
-          localStorage.setItem(STORAGE_KEY, value ? '1' : '0')
+          localStorage.setItem(STORAGE_KEY, v ? '1' : '0')
         } catch {
           // ignore
         }
+      }
+      if (!storeCode || !deviceToken) {
+        applyLocal(value)
         return
       }
+      const role = value ? 'main' : 'order'
+      registerPosDevice({ storeCode, deviceToken, role }).catch(() => {})
       if (value) {
+        applyLocal(true)
+        setServerMainToken(deviceToken)
         registerPosMainDevice({ storeCode, deviceToken })
           .then(async (res) => {
-            if (!res.success) return
+            if (!res.success) {
+              setServerMainToken(null)
+              applyLocal(false)
+              return
+            }
             try {
               const s = await getPosPrinterSettings({ storeCode })
               if (s?.mainDeviceToken === deviceToken) {
                 setServerMainToken(deviceToken)
-                setLocalIsMain(true)
-                try {
-                  localStorage.setItem(STORAGE_KEY, '1')
-                } catch {
-                  // ignore
-                }
               }
             } catch {
-              // ignore
+              // keep optimistic state
             }
           })
-          .catch(() => {})
+          .catch(() => {
+            setServerMainToken(null)
+            applyLocal(false)
+          })
       } else {
+        applyLocal(false)
+        setServerMainToken(null)
         clearPosMainDevice({ storeCode, deviceToken })
           .then((res) => {
-            if (res.success) {
-              setServerMainToken(null)
-              setLocalIsMain(false)
-              try {
-                localStorage.setItem(STORAGE_KEY, '0')
-              } catch {
-                // ignore
-              }
+            if (!res.success) {
+              setServerMainToken(deviceToken)
+              applyLocal(true)
             }
           })
-          .catch(() => {})
+          .catch(() => {
+            setServerMainToken(deviceToken)
+            applyLocal(true)
+          })
       }
     },
     [storeCode, deviceToken]
   )
+
+  // 접속 기기 목록에 등록·하트비트 (last_seen_at 갱신)
+  React.useEffect(() => {
+    if (!storeCode || !deviceToken) return
+    registerPosDevice({ storeCode, deviceToken, role: isMain ? 'main' : 'order' }).catch(() => {})
+    const interval = setInterval(
+      () => registerPosDevice({ storeCode, deviceToken, role: isMain ? 'main' : 'order' }).catch(() => {}),
+      120_000
+    )
+    return () => clearInterval(interval)
+  }, [storeCode, deviceToken, isMain])
 
   return [isMain, setValue]
 }

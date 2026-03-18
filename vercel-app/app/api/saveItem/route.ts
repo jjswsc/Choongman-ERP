@@ -79,8 +79,22 @@ export async function POST(request: NextRequest) {
     const filterCode = editingCode || code
     const existing = (await supabaseSelectFilter(
       'items',
-      `code=eq.${encodeURIComponent(filterCode)}`
-    )) as { id?: number; price?: number; cost?: number; name?: string }[] | null
+      `code=eq.${encodeURIComponent(filterCode)}`,
+      { limit: 1 }
+    )) as { id?: number; price?: number; cost?: number; name?: string; category?: string; image?: string }[] | null
+
+    // 수정 시 폼 리셋/오류로 빈 값이 오면 기존 값 유지 (이미지·분류 누락 방지)
+    if (existing && existing.length > 0) {
+      const prev = existing[0] as { image?: string; category?: string }
+      const incomingImage = String(body.imageUrl || '').trim()
+      if (!incomingImage && prev.image != null && String(prev.image).trim()) {
+        ;(row as Record<string, unknown>).image = String(prev.image).trim()
+      }
+      const incomingCategory = String(body.category || '').trim()
+      if (!incomingCategory && prev.category != null && String(prev.category).trim()) {
+        row.category = String(prev.category).trim()
+      }
+    }
 
     if (existing && existing.length > 0) {
       const prev = existing[0] as { price?: number; cost?: number; name?: string; category?: string }
