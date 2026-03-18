@@ -122,7 +122,8 @@ export async function GET(request: NextRequest) {
 
       if (type === 'payable') {
         const byVendor: Record<string, { balance: number; count: number }> = {}
-        for (const r of rows || []) {
+        const payableRows = (rows || []) as { vendor_code?: string; amount?: number }[]
+        for (const r of payableRows) {
           const vc = String(r.vendor_code || '').trim()
           if (!vc) continue
           if (!byVendor[vc]) byVendor[vc] = { balance: 0, count: 0 }
@@ -137,7 +138,8 @@ export async function GET(request: NextRequest) {
       }
 
       const byStore: Record<string, { balance: number; count: number }> = {}
-      for (const r of rows || []) {
+      const receivableRows = (rows || []) as { store_name?: string; amount?: number }[]
+      for (const r of receivableRows) {
         const sn = String(r.store_name || '').trim()
         if (!sn) continue
         if (!byStore[sn]) byStore[sn] = { balance: 0, count: 0 }

@@ -161,7 +161,16 @@ export default function StockPage() {
       return
     }
     alert(t("stockAdjustSuccess"))
-    fetchStock()
+    // 조정한 항목만 로컬 업데이트 (전체 refetch 없음 → 스크롤 위치 유지)
+    setList((prev) =>
+      prev.map((r) =>
+        r.code === adjustItem.code && r.store === adjustItem.store
+          ? { ...r, qty: r.qty + diffQty }
+          : r
+      )
+    )
+    setAdjustOpen(false)
+    setAdjustItem(null)
   }
 
   const handleToggleOrderDisabled = async (item: StockStatusItem) => {
