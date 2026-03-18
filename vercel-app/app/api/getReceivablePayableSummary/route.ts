@@ -96,73 +96,75 @@ export async function GET(request: NextRequest) {
     const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
     return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
   } catch (rpcErr) {
-    // RPC 미배포 시 fallback: 기존 select + JS 집계
-    const pParts: string[] = []
-    if (vendorFilter) pParts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
-    if (endStr) pParts.push(`trans_date=lte.${endStr}`)
-    const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
+    try {
+      // RPC 미배포 시 fallback: 기존 select + JS 집계
+      const pParts: string[] = []
+      if (vendorFilter) pParts.push(`vendor_code=ilike.${encodeURIComponent(vendorFilter)}`)
+      if (endStr) pParts.push(`trans_date=lte.${endStr}`)
+      const pFilter = pParts.length ? pParts.join('&') : 'id=gt.0'
 
-    const rParts: string[] = []
-    if (isManager && userStore) rParts.push(`store_name=ilike.${encodeURIComponent(userStore)}`)
-    else if (storeFilter) rParts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
-    if (endStr) rParts.push(`trans_date=lte.${endStr}`)
-    const rFilter = rParts.length ? rParts.join('&') : 'id=gt.0'
+      const rParts: string[] = []
+      if (isManager && userStore) rParts.push(`store_name=ilike.${encodeURIComponent(userStore)}`)
+      else if (storeFilter) rParts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
+      if (endStr) rParts.push(`trans_date=lte.${endStr}`)
+      const rFilter = rParts.length ? rParts.join('&') : 'id=gt.0'
 
-    const rows =
-      type === 'payable'
-        ? ((await supabaseSelectFilter('payable_transactions', pFilter, {
-            order: 'trans_date.desc',
-            limit: 20000,
-          })) as { vendor_code?: string; amount?: number }[])
-        : ((await supabaseSelectFilter('receivable_transactions', rFilter, {
-            order: 'trans_date.desc',
-            limit: 20000,
-          })) as { store_name?: string; amount?: number }[])
+      const rows =
+        type === 'payable'
+          ? ((await supabaseSelectFilter('payable_transactions', pFilter, {
+              order: 'trans_date.desc',
+              limit: 20000,
+            })) as { vendor_code?: string; amount?: number }[])
+          : ((await supabaseSelectFilter('receivable_transactions', rFilter, {
+              order: 'trans_date.desc',
+              limit: 20000,
+            })) as { store_name?: string; amount?: number }[])
 
-    if (type === 'payable') {
-      const byVendor: Record<string, { balance: number; count: number }> = {}
-      for (const r of rows || []) {
-        const vc = String(r.vendor_code || '').trim()
-        if (!vc) continue
-        if (!byVendor[vc]) byVendor[vc] = { balance: 0, count: 0 }
-        byVendor[vc].balance += Number(r.amount ?? 0)
-        byVendor[vc].count += 1
+      if (type === 'payable') {
+        const byVendor: Record<string, { balance: number; count: number }> = {}
+        for (const r of rows || []) {
+          const vc = String(r.vendor_code || '').trim()
+          if (!vc) continue
+          if (!byVendor[vc]) byVendor[vc] = { balance: 0, count: 0 }
+          byVendor[vc].balance += Number(r.amount ?? 0)
+          byVendor[vc].count += 1
+        }
+        const list = Object.entries(byVendor)
+          .map(([vendorCode, v]) => ({ vendorCode, balance: v.balance, count: v.count }))
+          .sort((a, b) => b.balance - a.balance)
+        const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
+        return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
       }
-      const list = Object.entries(byVendor)
-        .map(([vendorCode, v]) => ({ vendorCode, balance: v.balance, count: v.count }))
+
+      const byStore: Record<string, { balance: number; count: number }> = {}
+      for (const r of rows || []) {
+        const sn = String(r.store_name || '').trim()
+        if (!sn) continue
+        if (!byStore[sn]) byStore[sn] = { balance: 0, count: 0 }
+        byStore[sn].balance += Number(r.amount ?? 0)
+        byStore[sn].count += 1
+      }
+      const storeToVendor = await getStoreToVendorMap()
+      const list = Object.entries(byStore)
+        .map(([storeName, v]) => {
+          const vendor = storeToVendor.get(storeName)
+          return {
+            storeName,
+            vendorCode: vendor?.code,
+            vendorName: vendor?.name,
+            balance: v.balance,
+            count: v.count,
+          }
+        })
         .sort((a, b) => b.balance - a.balance)
       const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-      return NextResponse.json({ type: 'payable', list, totalAmount }, { headers })
+      return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
+    } catch (e) {
+      console.error('getReceivablePayableSummary:', e)
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : 'Failed' },
+        { status: 500, headers }
+      )
     }
-
-    const byStore: Record<string, { balance: number; count: number }> = {}
-    for (const r of rows || []) {
-      const sn = String(r.store_name || '').trim()
-      if (!sn) continue
-      if (!byStore[sn]) byStore[sn] = { balance: 0, count: 0 }
-      byStore[sn].balance += Number(r.amount ?? 0)
-      byStore[sn].count += 1
-    }
-    const storeToVendor = await getStoreToVendorMap()
-    const list = Object.entries(byStore)
-      .map(([storeName, v]) => {
-        const vendor = storeToVendor.get(storeName)
-        return {
-          storeName,
-          vendorCode: vendor?.code,
-          vendorName: vendor?.name,
-          balance: v.balance,
-          count: v.count,
-        }
-      })
-      .sort((a, b) => b.balance - a.balance)
-    const totalAmount = list.reduce((sum, i) => sum + (i.balance ?? 0), 0)
-    return NextResponse.json({ type: 'receivable', list, totalAmount }, { headers })
-  } catch (e) {
-    console.error('getReceivablePayableSummary:', e)
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed' },
-      { status: 500, headers }
-    )
   }
 }
