@@ -27,7 +27,8 @@ function extractLangBlock(source, lang, nextLangs) {
 
 function extractKeys(block) {
   const out = new Set()
-  const re = /\n\s*([A-Za-z0-9_]+):\s*'/g
+  // single- or double-quoted values (posMenuTabToppingDesc 등 문자열 내 작은따옴표로 인해 " 사용)
+  const re = /\n\s*([A-Za-z0-9_]+):\s*["']/g
   let m
   while ((m = re.exec(block))) {
     const key = m[1]
