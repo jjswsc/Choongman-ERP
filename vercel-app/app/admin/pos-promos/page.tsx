@@ -254,6 +254,7 @@ export default function PosPromosPage() {
         )}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           {/* Form */}
+          <div className="lg:sticky lg:top-0 lg:self-start">
           <div className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div>
@@ -424,6 +425,7 @@ export default function PosPromosPage() {
                 </Button>
               </div>
             </div>
+          </div>
           </div>
 
           {/* List */}

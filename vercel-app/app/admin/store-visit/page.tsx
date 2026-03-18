@@ -24,7 +24,7 @@ export default function Page() {
           </div>
         </div>
 
-        <Tabs defaultValue="stats" className="w-full">
+        <Tabs defaultValue="list" className="w-full">
           <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
             <TabsTrigger value="list" className="text-sm font-medium">{t("tab_visit_list")}</TabsTrigger>
             <TabsTrigger value="stats" className="text-sm font-medium">{t("tab_visit_stats")}</TabsTrigger>

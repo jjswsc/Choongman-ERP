@@ -408,16 +408,18 @@ export default function ItemsPage() {
           </TabsList>
           <TabsContent value="list" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-          <ItemForm
-            formData={formData}
-            setFormData={setFormData}
-            isEditing={!!editingCode}
-            onSave={handleSave}
-            onReset={handleReset}
-            onNewRegister={handleNewRegister}
-            categories={categories}
-            outboundLocations={outboundLocations}
-          />
+          <div className="lg:sticky lg:top-0 lg:self-start">
+            <ItemForm
+              formData={formData}
+              setFormData={setFormData}
+              isEditing={!!editingCode}
+              onSave={handleSave}
+              onReset={handleReset}
+              onNewRegister={handleNewRegister}
+              categories={categories}
+              outboundLocations={outboundLocations}
+            />
+          </div>
           <ItemTable
             products={filteredProducts}
             categories={categories}

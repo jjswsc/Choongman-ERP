@@ -344,7 +344,7 @@ export default function EmployeesPage() {
 
           <TabsContent value="list" className="mt-0">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-4">
+              <div className="lg:col-span-4 lg:sticky lg:top-0 lg:self-start">
                 <EmployeeForm
                   form={form}
                   onChange={setForm}

@@ -210,6 +210,7 @@ export default function MembersPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+          <div className="lg:sticky lg:top-0 lg:self-start">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">회원 정보 수정</CardTitle>
@@ -289,6 +290,7 @@ export default function MembersPage() {
               </div>
             </CardContent>
           </Card>
+          </div>
 
           <Card>
             <CardHeader className="space-y-3">

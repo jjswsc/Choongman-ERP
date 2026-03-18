@@ -316,7 +316,7 @@ export default function MarketingPromosPage() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          <div className="space-y-6">
+          <div className="lg:sticky lg:top-0 lg:self-start space-y-6">
             <div className="rounded-xl border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b px-6 py-4">
                 <div>

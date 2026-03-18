@@ -970,6 +970,7 @@ export default function PosMenusPage() {
           <TabsContent value="screen" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           {/* Form */}
+          <div className="lg:sticky lg:top-0 lg:self-start">
           <div className="rounded-xl border bg-card shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div>
@@ -1460,6 +1461,7 @@ export default function PosMenusPage() {
               )}
             </div>
           </div>
+          </div>
 
           {/* Table */}
           <div className="rounded-xl border bg-card overflow-hidden">
@@ -1716,6 +1718,7 @@ export default function PosMenusPage() {
             </div>
             <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
               {/* 좌측: 메뉴 리스트 */}
+              <div className="lg:sticky lg:top-0 lg:self-start">
               <div className="rounded-xl border bg-card overflow-hidden">
                 <div className="border-b px-4 py-3 bg-muted/20 flex items-center justify-between gap-2">
                   <div>
@@ -1804,6 +1807,7 @@ export default function PosMenusPage() {
                     </ul>
                   )}
                 </div>
+              </div>
               </div>
               {/* 우측: 옵션 설정 패널 */}
               <div className="rounded-xl border bg-card overflow-hidden">

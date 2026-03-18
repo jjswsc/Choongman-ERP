@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search } from "lucide-react"
+import { Search, ChevronUp, ChevronDown } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateVisitType, translateVisitPurpose } from "@/lib/visit-i18n"
@@ -46,6 +46,9 @@ export function VisitListTab() {
   const [listPurpose, setListPurpose] = useState("__all__")
   const [historyList, setHistoryList] = useState<StoreVisitHistoryItem[]>([])
   const [listLoading, setListLoading] = useState(false)
+  type SortKey = "date" | "time" | "name" | "store" | "type" | "purpose" | "duration"
+  const [sortKey, setSortKey] = useState<SortKey>("date")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
   const { stores: storeKeys } = useStoreList()
   const loadOptions = useCallback(async () => {
@@ -90,6 +93,50 @@ export function VisitListTab() {
       setListLoading(false)
     }
   }, [listStart, listEnd, listStore, listEmployee, listDept, listPurpose])
+
+  const sortedList = useMemo(() => {
+    const arr = [...historyList]
+    if (arr.length === 0) return arr
+    arr.sort((a, b) => {
+      let cmp = 0
+      switch (sortKey) {
+        case "date":
+          cmp = (a.date || "").localeCompare(b.date || "")
+          break
+        case "time":
+          cmp = (a.time || "").localeCompare(b.time || "")
+          break
+        case "name":
+          cmp = (a.name || "").localeCompare(b.name || "")
+          break
+        case "store":
+          cmp = (a.store || "").localeCompare(b.store || "")
+          break
+        case "type":
+          cmp = (a.type || "").localeCompare(b.type || "")
+          break
+        case "purpose":
+          cmp = (a.purpose || "").localeCompare(b.purpose || "")
+          break
+        case "duration":
+          cmp = (a.duration ?? 0) - (b.duration ?? 0)
+          break
+        default:
+          return 0
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+    return arr
+  }, [historyList, sortKey, sortDir])
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortKey(key)
+      setSortDir("asc")
+    }
+  }
 
   return (
     <Card>
@@ -157,13 +204,69 @@ export function VisitListTab() {
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="p-2 text-center font-medium">{t("visit_col_date")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_time")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_visitor")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_store")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_type")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_purpose")}</th>
-                <th className="p-2 text-center font-medium">{t("visit_col_duration")}</th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("date")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_date")}
+                    {sortKey === "date" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("time")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_time")}
+                    {sortKey === "time" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("name")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_visitor")}
+                    {sortKey === "name" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("store")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_store")}
+                    {sortKey === "store" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("type")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_type")}
+                    {sortKey === "type" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("purpose")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_purpose")}
+                    {sortKey === "purpose" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
+                <th
+                  className="p-2 text-center font-medium cursor-pointer hover:bg-muted/70 select-none"
+                  onClick={() => handleSort("duration")}
+                >
+                  <span className="inline-flex items-center gap-0.5">
+                    {t("visit_col_duration")}
+                    {sortKey === "duration" ? (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />) : null}
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -176,7 +279,7 @@ export function VisitListTab() {
                   <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("visit_query_please")}</td>
                 </tr>
               ) : (
-                historyList.map((h, i) => (
+                sortedList.map((h, i) => (
                   <tr key={i} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{h.date}</td>
                     <td className="p-2 text-center">{h.time}</td>

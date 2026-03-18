@@ -206,6 +206,7 @@ export default function VendorsPage() {
           </div>
         )}
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+          <div className="lg:sticky lg:top-0 lg:self-start">
           <VendorForm
             formData={formData}
             setFormData={setFormData}
@@ -214,6 +215,7 @@ export default function VendorsPage() {
             onReset={handleReset}
             onNewRegister={handleNewRegister}
           />
+          </div>
           <VendorTable
             vendors={filteredVendors}
             hasSearched={hasSearched}
