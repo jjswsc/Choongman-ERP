@@ -20,15 +20,17 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   messaging.onBackgroundMessage((payload) => {
     const title = payload.data?.title || payload.notification?.title || "CM ERP";
     const body = payload.data?.body || payload.notification?.body || "";
+    const tag = payload.data?.tag || ("cm-erp-notice-" + Date.now());
     self.registration.showNotification(title, {
       body,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
-      tag: payload.data?.tag || "cm-erp-notice",
+      tag,
       data: payload.data || {},
       silent: false,
       vibrate: [200, 100, 200],
       renotify: true,
+      requireInteraction: true,
     });
   });
 }

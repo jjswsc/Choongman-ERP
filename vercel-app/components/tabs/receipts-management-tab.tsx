@@ -329,9 +329,9 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-xl border bg-card">
+          <div className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border bg-card">
             <table className="w-full min-w-[600px] text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                 <tr className="border-b bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold">{t('posOrderNo') || '주문번호'}</th>
                   <th className="px-4 py-3 text-left font-semibold">{t('posStoreSelect') || '매장'}</th>

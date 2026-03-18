@@ -102,24 +102,39 @@ export async function POST(request: NextRequest) {
     } else {
       fcmRecipients = await getRecipientsByTargetStoreRole(targetStore, targetRole, targetPermissionGroup ?? undefined)
     }
+    let fcmResult: { sent: number; failed: number } | null = null
     if (fcmRecipients.length > 0) {
       const settings = await getNotificationSettings()
       if (settings.pushNoticeEnabled) {
-        sendFcmToRecipients({
-          title,
-          body: content.slice(0, 100),
-          recipients: fcmRecipients,
-        })
-          .then((r) => {
-            if (r.sent === 0 && r.failed === 0) console.warn('sendNotice FCM: 수신자', fcmRecipients.length, '명, push_tokens 없음')
-            else console.info('sendNotice FCM:', r.sent, 'sent,', r.failed, 'failed')
+        try {
+          fcmResult = await sendFcmToRecipients({
+            title,
+            body: content.slice(0, 100),
+            recipients: fcmRecipients,
           })
-          .catch((e) => console.error('sendNotice FCM:', e))
+          if (fcmResult.sent === 0 && fcmResult.failed === 0) {
+            console.warn('sendNotice FCM: 수신자', fcmRecipients.length, '명, push_tokens 없음')
+          } else {
+            console.info('sendNotice FCM:', fcmResult.sent, 'sent,', fcmResult.failed, 'failed')
+          }
+        } catch (e) {
+          console.error('sendNotice FCM:', e)
+          fcmResult = { sent: 0, failed: fcmRecipients.length }
+        }
+      }
+    }
+
+    let message = '공지사항이 등록되었습니다.'
+    if (fcmResult && fcmRecipients.length > 0) {
+      if (fcmResult.sent === 0 && fcmResult.failed === 0) {
+        message += ` 푸시 알림: 수신자 ${fcmRecipients.length}명 중 푸시 토큰이 없습니다. 수신자가 홈 화면에서 "푸시 받기"를 등록했는지 확인하세요.`
+      } else if (fcmResult.sent > 0) {
+        message += ` 푸시 알림 ${fcmResult.sent}명 발송됨.`
       }
     }
 
     return NextResponse.json(
-      { success: true, message: '공지사항이 등록되었습니다.' },
+      { success: true, message, fcmSent: fcmResult?.sent ?? 0, fcmFailed: fcmResult?.failed ?? 0 },
       { headers }
     )
   } catch (e) {

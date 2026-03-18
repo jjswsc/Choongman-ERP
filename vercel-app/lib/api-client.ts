@@ -1300,7 +1300,7 @@ export interface ReceivablePayableItem {
   vendorCode?: string
   vendorName?: string
   balance: number
-  items: { id?: number; trans_date?: string; ref_type?: string; ref_id?: number; amount?: number; memo?: string; invoice_no?: string }[]
+  items: { id?: number; trans_date?: string; ref_type?: string; ref_id?: number; amount?: number; memo?: string; invoice_no?: string; invoice_received?: boolean }[]
 }
 
 export interface ReceivablePayableSummaryItem {
@@ -1388,6 +1388,22 @@ export async function getReceivablePayableList(params: {
   const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
   const data = await res.json()
   return data as { type: string; list: ReceivablePayableItem[] }
+}
+
+export interface PayableTransactionItem {
+  code?: string
+  name?: string
+  spec?: string
+  qty: number
+  unitCost?: number
+  amount: number
+}
+
+export async function getPayableTransactionItems(params: { refType: string; refId: number }) {
+  const q = new URLSearchParams({ refType: params.refType, refId: String(params.refId) })
+  const res = await apiFetch(`/api/getPayableTransactionItems?${q}`)
+  const data = await res.json()
+  return data as { items: PayableTransactionItem[] }
 }
 
 // ─── 손익계산서 (1단계) ───

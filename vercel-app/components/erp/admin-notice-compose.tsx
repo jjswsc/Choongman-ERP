@@ -285,18 +285,46 @@ export function AdminNoticeCompose() {
   return (
     <div className="rounded-xl border bg-card shadow-sm">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b px-6 py-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-          <Send className="h-[18px] w-[18px] text-primary" />
+      <div className="flex items-center justify-between gap-3 border-b px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+            <Send className="h-[18px] w-[18px] text-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-card-foreground">
+              {t("noticeNewTitle")}
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              {t("noticeNewSub")}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 className="text-sm font-bold text-card-foreground">
-            {t("noticeNewTitle")}
-          </h3>
-          <p className="text-[11px] text-muted-foreground">
-            {t("noticeNewSub")}
-          </p>
-        </div>
+        <button
+          type="button"
+          className="text-[11px] text-muted-foreground hover:text-foreground underline"
+          onClick={async () => {
+            try {
+              const r = await fetch('/api/debugPushStatus')
+              const d = await r.json()
+              const msg = [
+                `푸시 알림: ${d.pushNoticeEnabled ? 'ON' : 'OFF'}`,
+                `Firebase: ${d.firebaseConfigured ? '설정됨' : '미설정'}`,
+                `등록 토큰: ${d.pushTokensCount}개`,
+                d.employeesWithoutTokenTotal > 0
+                  ? `토큰 미등록: ${d.employeesWithoutTokenTotal}명`
+                  : '',
+                d.hint || '',
+              ]
+                .filter(Boolean)
+                .join('\n')
+              alert(msg)
+            } catch (e) {
+              alert('점검 실패: ' + (e instanceof Error ? e.message : String(e)))
+            }
+          }}
+        >
+          푸시 상태 점검
+        </button>
       </div>
 
       <div className="flex flex-col gap-5 p-6">

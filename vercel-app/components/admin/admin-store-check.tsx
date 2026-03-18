@@ -437,12 +437,18 @@ export function AdminStoreCheck() {
                 </div>
 
                 {viewOnlyMode && checkRows.length > 0 && (
-                  <div className="mb-3 p-3 rounded-md bg-amber-500/15 border border-amber-500/40 text-sm text-amber-800 dark:text-amber-200">
-                    {lang === "ko"
-                      ? "읽기 전용입니다. 체크 항목을 수정하려면 점검 이력에서 연필(✏️) 버튼을 클릭하여 수정 모드로 열어주세요."
-                      : lang === "th"
-                        ? "โหมดดูอย่างเดียว หากต้องการแก้ไข กรุณาคลิกปุ่มดินสอ (✏️) ในประวัติการตรวจ"
-                        : "Read-only mode. To edit checks, click the pencil (✏️) button in the check history."}
+                  <div className="mb-3 p-3 rounded-md bg-amber-500/15 border border-amber-500/40 text-sm text-amber-800 dark:text-amber-200 flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {lang === "ko"
+                        ? "읽기 전용입니다. 수정하려면 아래 버튼을 누르세요."
+                        : lang === "th"
+                          ? "โหมดดูอย่างเดียว กดปุ่มด้านล่างเพื่อแก้ไข"
+                          : "Read-only mode. Click the button below to edit."}
+                    </span>
+                    <Button size="sm" variant="outline" className="shrink-0 border-amber-600 text-amber-800 hover:bg-amber-500/20" onClick={() => setViewOnlyMode(false)}>
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      {lang === "ko" ? "수정 모드로 전환" : lang === "th" ? "แก้ไข" : "Switch to edit"}
+                    </Button>
                   </div>
                 )}
                 <div className="border rounded-md overflow-auto max-h-[420px]">
@@ -472,16 +478,26 @@ export function AdminStoreCheck() {
                             <td className="p-2 text-center">{tr(r.sub)}</td>
                             <td className="p-2 text-center">{tr(r.name)}</td>
                             <td className="p-2 align-middle">
-                              <div className="flex gap-2 justify-center" style={{ touchAction: "manipulation" }}>
+                              <div
+                                className="flex gap-2 justify-center items-center select-none"
+                                style={{ touchAction: "manipulation" }}
+                                role="group"
+                                aria-label={tr(r.name) || String(r.id)}
+                              >
                                 <button
                                   type="button"
                                   className={cn(
-                                    "min-h-[44px] min-w-[44px] rounded-md text-sm font-medium transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "min-h-[48px] min-w-[48px] rounded-md text-base font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
                                     r.val === "O"
-                                      ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                                      : "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
+                                      ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                                      : "border-2 bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
                                   )}
-                                  onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "O")}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    if (!viewOnlyMode) updateCheckRow(idx, "val", "O")
+                                  }}
+                                  onPointerDown={(e) => e.currentTarget.setPointerCapture?.(e.pointerId)}
                                   disabled={viewOnlyMode}
                                   aria-pressed={r.val === "O"}
                                   aria-label={r.val === "O" ? "선택됨 (O)" : "O 선택"}
@@ -491,12 +507,17 @@ export function AdminStoreCheck() {
                                 <button
                                   type="button"
                                   className={cn(
-                                    "min-h-[44px] min-w-[44px] rounded-md text-sm font-medium transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed",
+                                    "min-h-[48px] min-w-[48px] rounded-md text-base font-bold transition-all cursor-pointer active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
                                     r.val === "X"
-                                      ? "bg-destructive text-white hover:bg-destructive/90"
-                                      : "border bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
+                                      ? "bg-destructive text-white hover:bg-destructive/90 shadow-sm"
+                                      : "border-2 bg-background hover:bg-accent hover:text-accent-foreground dark:border-input dark:hover:bg-input/50"
                                   )}
-                                  onClick={() => !viewOnlyMode && updateCheckRow(idx, "val", "X")}
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    if (!viewOnlyMode) updateCheckRow(idx, "val", "X")
+                                  }}
+                                  onPointerDown={(e) => e.currentTarget.setPointerCapture?.(e.pointerId)}
                                   disabled={viewOnlyMode}
                                   aria-pressed={r.val === "X"}
                                   aria-label={r.val === "X" ? "선택됨 (X)" : "X 선택"}

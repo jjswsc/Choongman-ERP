@@ -19,7 +19,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -30,9 +30,11 @@ import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
+  getPayableTransactionItems,
   addBalanceTransaction,
   translateTexts,
   type ReceivablePayableItem,
+  type PayableTransactionItem,
 } from "@/lib/api-client"
 
 function todayStr() {
@@ -83,6 +85,9 @@ export function ReceivablePayableTab() {
   const [addSaving, setAddSaving] = React.useState(false)
   const [addIsOpening, setAddIsOpening] = React.useState(false)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
+  const [expandedPayableRowId, setExpandedPayableRowId] = React.useState<string | null>(null)
+  const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, PayableTransactionItem[]>>({})
+  const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     const rows = listData.flatMap((item) => item.items || [])
@@ -188,6 +193,11 @@ export function ReceivablePayableTab() {
     setHasSearchedList(false)
   }, [tab])
 
+  React.useEffect(() => {
+    setExpandedPayableRowId(null)
+    setPayableItemsCache({})
+  }, [listData, tab])
+
   const handleAdd = async () => {
     const amount = Number(addAmount?.replace(/,/g, ""))
     if (!amount || amount <= 0) {
@@ -244,6 +254,26 @@ export function ReceivablePayableTab() {
     return items.filter((r) => r.ref_type === "Opening" || r.ref_type === "PO")
   }
 
+  const togglePayableRowExpand = React.useCallback(async (row: { id?: number; ref_type?: string; ref_id?: number }) => {
+    const key = row.id ? `pay-${row.id}` : `${row.ref_type}-${row.ref_id}`
+    if (expandedPayableRowId === key) {
+      setExpandedPayableRowId(null)
+      return
+    }
+    setExpandedPayableRowId(key)
+    if (payableItemsCache[key]) return
+    if (row.ref_type !== "Inbound" && row.ref_type !== "PO" || !row.ref_id) return
+    setLoadingItemsFor(key)
+    try {
+      const { items } = await getPayableTransactionItems({ refType: row.ref_type, refId: Number(row.ref_id) })
+      setPayableItemsCache((c) => ({ ...c, [key]: items }))
+    } catch {
+      setPayableItemsCache((c) => ({ ...c, [key]: [] }))
+    } finally {
+      setLoadingItemsFor(null)
+    }
+  }, [expandedPayableRowId, payableItemsCache])
+
   const escapeXml = (s: string) =>
     String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
@@ -279,7 +309,7 @@ export function ReceivablePayableTab() {
     const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")
     const header = isRec
       ? [entityCol, t("date") || "날짜", t("type") || "구분", t("recColOrderNo") || "주문번호", t("recColReceiveStatus") || "수령여부", t("amount") || "금액", t("memo") || "메모"]
-      : [entityCol, t("date") || "날짜", t("type") || "구분", t("payColPaymentStatus") || "지급여부", t("amount") || "금액", t("memo") || "메모"]
+      : [entityCol, t("date") || "날짜", t("type") || "구분", t("poInvoice") || "인보이스", t("payColPaymentStatus") || "지급여부", t("amount") || "금액", t("memo") || "메모"]
     const rows: string[][] = [header]
     for (const item of listData) {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
@@ -296,10 +326,17 @@ export function ReceivablePayableTab() {
           fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H2',location:'receivable-payable-tab.tsx:260',message:'order row invoice candidate',data:{invoiceNo:row.invoice_no||'',refId:row.ref_id||0,transDate:row.trans_date||''},timestamp:Date.now()})}).catch(()=>{});
           // #endregion
         }
+        const invPayable = !isRec
+          ? ((row as { invoice_received?: boolean; invoice_no?: string }).invoice_received === true
+            ? ((row as { invoice_no?: string }).invoice_no || t("poInvoiceReceived") || "수령")
+            : (row as { invoice_received?: boolean }).invoice_received === false
+              ? (t("poInvoiceNotReceived") || "미수령")
+              : "-")
+          : ""
         rows.push(
           isRec
             ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
-            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), statusPay(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
+            : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), invPayable, statusPay(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
         )
       }
     }
@@ -354,22 +391,33 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         <th className="text-center py-1 px-2 w-[115px]">{t("date") || "날짜"}</th>
                         <th className="text-center py-1 px-2 w-[95px]">{t("type") || "구분"}</th>
                         {isRec && <th className="text-center py-1 px-2 w-[110px]">{t("recColOrderNo") || "주문번호"}</th>}
+                        {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "인보이스"}</th>}
                         <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "수령여부") : (t("payColPaymentStatus") || "지급여부")}</th>
                         <th className="text-center py-1 px-2 w-[135px]">{t("amount") || "금액"}</th>
                         <th className="text-center py-1 px-2 min-w-[150px]">{t("memo") || "메모"}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {displayItems.map((row, i) => (
+                      {displayItems.map((row, i) => {
+                        const invCell = !isRec
+                          ? ((row as { invoice_received?: boolean; invoice_no?: string }).invoice_received === true
+                            ? ((row as { invoice_no?: string }).invoice_no || t("poInvoiceReceived") || "수령")
+                            : (row as { invoice_received?: boolean }).invoice_received === false
+                              ? (t("poInvoiceNotReceived") || "미수령")
+                              : "-")
+                          : null
+                        return (
                         <tr key={i} className="border-b border-border/50">
                           <td className="py-1 px-2">{row.trans_date || "-"}</td>
                           <td className="py-1 px-2">{typeLabel(row.ref_type || "")}</td>
                           {isRec && <td className="py-1 px-2">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>}
+                          {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
                           <td className="py-1 px-2 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                           <td className="py-1 px-2 text-muted-foreground">{getMemo(row.memo)}</td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -634,30 +682,96 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                               <table className="w-full text-sm border-collapse table-fixed">
                                 <thead>
                                   <tr className="border-b bg-muted/50">
+                                    <th className="text-center py-2 px-4 w-[35px] font-semibold"></th>
                                     <th className="text-center py-2 px-4 w-[115px] font-semibold">{t("date") || "날짜"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
+                                    <th className="text-center py-2 px-4 w-[100px] font-semibold">{t("poInvoice") || "인보이스"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("payColPaymentStatus") || "지급여부"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {tableItems.map((row) => (
-                                    <tr key={row.id} className="border-b border-border/50">
-                                      <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
-                                      <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
-                                      <td className="py-1.5 px-4 w-[95px] text-center">
-                                        <span className={cn(
-                                          "text-xs font-medium px-2 py-0.5 rounded",
-                                          row.ref_type === "Payment" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                                        )}>
-                                          {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
-                                        </span>
-                                      </td>
-                                      <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
-                                      <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
-                                    </tr>
-                                  ))}
+                                  {tableItems.map((row) => {
+                                    const rowKey = row.id ? `pay-${row.id}` : `${row.ref_type}-${row.ref_id}`
+                                    const canExpand = (row.ref_type === "Inbound" || row.ref_type === "PO") && row.ref_id
+                                    const isExpanded = expandedPayableRowId === rowKey
+                                    const items = payableItemsCache[rowKey]
+                                    const isLoading = loadingItemsFor === rowKey
+                                    return (
+                                      <React.Fragment key={row.id ?? rowKey}>
+                                        <tr
+                                          className={cn(
+                                            "border-b border-border/50",
+                                            canExpand && "cursor-pointer hover:bg-muted/20"
+                                          )}
+                                          onClick={() => canExpand && togglePayableRowExpand(row)}
+                                        >
+                                          <td className="py-1.5 px-4 w-[35px] text-center">
+                                            {canExpand ? (
+                                              isLoading ? (
+                                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                                              ) : (
+                                                isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                                              )
+                                            ) : null}
+                                          </td>
+                                          <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
+                                          <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "PO" ? (t("payTypePO") || "발주") : (t("payTypePayment") || "지급")}</td>
+                                          <td className="py-1.5 px-4 w-[100px] text-center">
+                                            {(row.ref_type === "Inbound" || row.ref_type === "PO") ? (
+                                              row.invoice_received ? (
+                                                <span className="text-xs text-green-700 dark:text-green-400" title={row.invoice_no || ""}>
+                                                  ✓ {row.invoice_no ? String(row.invoice_no).slice(0, 12) + (String(row.invoice_no).length > 12 ? "…" : "") : (t("poInvoiceReceived") || "수령")}
+                                                </span>
+                                              ) : (
+                                                <span className="text-xs text-amber-700 dark:text-amber-400">{t("poInvoiceNotReceived") || "미수령"}</span>
+                                              )
+                                            ) : "-"}
+                                          </td>
+                                          <td className="py-1.5 px-4 w-[95px] text-center">
+                                            <span className={cn(
+                                              "text-xs font-medium px-2 py-0.5 rounded",
+                                              row.ref_type === "Payment" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                                            )}>
+                                              {row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")}
+                                            </span>
+                                          </td>
+                                          <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
+                                          <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
+                                        </tr>
+                                        {isExpanded && items && items.length > 0 && (
+                                          <tr className="border-b border-border/50 bg-muted/10">
+                                            <td colSpan={7} className="py-2 px-4">
+                                              <div className="ml-4 rounded border border-border/50 bg-background p-3 text-xs">
+                                                <div className="mb-2 font-semibold text-muted-foreground">{t("outColItem") || "품목"}</div>
+                                                <table className="w-full text-xs">
+                                                  <thead>
+                                                    <tr className="border-b">
+                                                      <th className="py-1 px-2 text-left font-medium">품목명</th>
+                                                      <th className="py-1 px-2 text-center font-medium">수량</th>
+                                                      <th className="py-1 px-2 text-right font-medium">단가</th>
+                                                      <th className="py-1 px-2 text-right font-medium">금액</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {items.map((it, i) => (
+                                                      <tr key={i} className="border-b border-border/30">
+                                                        <td className="py-1 px-2">{it.name || it.code || "-"}</td>
+                                                        <td className="py-1 px-2 text-center tabular-nums">{it.qty}</td>
+                                                        <td className="py-1 px-2 text-right tabular-nums">{it.unitCost != null ? `฿${it.unitCost.toLocaleString()}` : "-"}</td>
+                                                        <td className="py-1 px-2 text-right tabular-nums font-medium">฿{(it.amount ?? 0).toLocaleString()}</td>
+                                                      </tr>
+                                                    ))}
+                                                  </tbody>
+                                                </table>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
+                                    )
+                                  })}
                                 </tbody>
                               </table>
                             </AccordionContent>

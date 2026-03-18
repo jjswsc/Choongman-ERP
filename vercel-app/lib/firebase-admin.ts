@@ -38,9 +38,9 @@ export async function getRecipientsByTargetStoreRole(
   targetPermissionGroup?: string | null
 ): Promise<{ store: string; name: string }[]> {
   const empRows = (await supabaseSelect('employees', {
-    select: 'store,name,job,role',
+    select: 'store,name,nick,job,role',
     limit: 500,
-  })) as { store?: string; name?: string; job?: string; role?: string }[] | null
+  })) as { store?: string; name?: string; nick?: string; job?: string; role?: string }[] | null
   if (!empRows?.length) return []
 
   const storeList = String(targetStore || '전체').split(',').map((s) => s.trim()).filter(Boolean)
@@ -53,7 +53,7 @@ export async function getRecipientsByTargetStoreRole(
   const permList = (targetPermissionGroup || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
   const permMatchAll = permList.length === 0
 
-  const result: { store: string; name: string }[] = []
+  const result: { store: string; name: string; nick?: string }[] = []
   for (const emp of empRows) {
     const store = String(emp.store || '').trim()
     const name = String(emp.name || '').trim()
@@ -64,7 +64,10 @@ export async function getRecipientsByTargetStoreRole(
     const storeMatch = storeMatchAll || storeList.includes(store)
     const roleMatch = roleMatchAll || (myJob && roleList.includes(myJob))
     const permMatch = permMatchAll || (myRole && permList.includes(myRole))
-    if (storeMatch && roleMatch && permMatch) result.push({ store, name })
+    if (storeMatch && roleMatch && permMatch) {
+      const nick = String(emp.nick || emp.name || '').trim() || undefined
+      result.push({ store, name, nick: nick && nick !== name ? nick : undefined })
+    }
   }
   return result
 }
@@ -76,7 +79,7 @@ export async function getRecipientsByTargetStoreRole(
 export async function sendFcmToRecipients(params: {
   title: string
   body: string
-  recipients: { store: string; name: string }[]
+  recipients: { store: string; name: string; nick?: string }[]
 }): Promise<{ sent: number; failed: number }> {
   const { title, body, recipients } = params
   const app = getAdminApp()
@@ -86,20 +89,42 @@ export async function sendFcmToRecipients(params: {
   }
   if (!recipients?.length) return { sent: 0, failed: 0 }
 
-  // token + lang + store/name 조회 (lang 없으면 ko로 처리)
-  const tokenLangList: { token: string; lang: string; store: string; name: string }[] = []
-  for (const r of recipients) {
-    if (!r.store?.trim() || !r.name?.trim()) continue
-    const rows = (await supabaseSelectFilter(
-      'push_tokens',
-      `store=eq.${encodeURIComponent(r.store.trim())}&name=eq.${encodeURIComponent(r.name.trim())}`,
-      { select: 'token,lang', limit: 1 }
-    )) as { token?: string; lang?: string }[] | null
-    const row = rows?.[0]
-    if (row?.token) {
+  // push_tokens 전부 조회 후 수신자와 매칭 (store/name 대소문자·공백 차이 시 유연 매칭)
+  const allTokenRows = (await supabaseSelect('push_tokens', {
+    select: 'store,name,token,lang',
+    limit: 2000,
+  })) as { store?: string; name?: string; token?: string; lang?: string }[] | null
+
+  const norm = (s: string) => s.toLowerCase().trim()
+  const tokenMap = new Map<string, { token: string; lang: string; store: string; name: string }>()
+  for (const row of allTokenRows || []) {
+    const store = String(row.store || '').trim()
+    const name = String(row.name || '').trim()
+    if (!store || !name || !row.token) continue
+    const key = `${norm(store)}|${norm(name)}`
+    if (!tokenMap.has(key)) {
       const lang = String(row.lang || 'ko').toLowerCase().slice(0, 2)
       const normalized = lang === 'mm' ? 'my' : lang === 'la' ? 'lo' : lang === 'kh' ? 'km' : lang
-      tokenLangList.push({ token: row.token, lang: normalized || 'ko', store: r.store.trim(), name: r.name.trim() })
+      tokenMap.set(key, { token: row.token, lang: normalized || 'ko', store, name })
+    }
+  }
+
+  const tokenLangList: { token: string; lang: string; store: string; name: string }[] = []
+  for (const r of recipients) {
+    if (!r.store?.trim()) continue
+    const store = r.store.trim()
+    const name = r.name?.trim()
+    const nick = r.nick?.trim()
+    const keysToTry = [
+      `${norm(store)}|${norm(name)}`,
+      ...(nick && nick !== name ? [`${norm(store)}|${norm(nick)}`] : []),
+    ]
+    for (const key of keysToTry) {
+      const found = tokenMap.get(key)
+      if (found) {
+        tokenLangList.push({ ...found, name: r.name.trim() })
+        break
+      }
     }
   }
 
@@ -151,11 +176,12 @@ export async function sendFcmToRecipients(params: {
       const chunk = tokens.slice(i, i + batchSize)
       // data-only 페이로드: notification 제거 시 브라우저 자동 표시(무음) 대신
       // Service Worker onBackgroundMessage가 항상 호출되어 vibrate/silent:false 적용 가능
+      const tag = `cm-erp-notice-${Date.now()}-${i}` // unique tag: 연속 공지 시 renotify로 소리 재생
       const message: admin.messaging.MulticastMessage = {
         tokens: chunk,
-        data: { title: finalTitle, body: finalBody },
+        data: { title: finalTitle, body: finalBody, tag },
         webpush: {
-          headers: { TTL: '3600' },
+          headers: { TTL: '3600', Urgency: 'high' },
           fcmOptions: { link: '/' },
         },
       }

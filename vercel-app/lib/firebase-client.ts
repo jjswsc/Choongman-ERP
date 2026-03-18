@@ -64,15 +64,17 @@ export function setupForegroundHandler(): void {
     onMessage(messaging, (payload) => {
       const title = payload.data?.title || (payload as { notification?: { title?: string } }).notification?.title || "CM ERP"
       const body = payload.data?.body || (payload as { notification?: { body?: string } }).notification?.body || ""
-      const opts: Record<string, unknown> = {
+      const tag = payload.data?.tag || `cm-erp-notice-${Date.now()}`
+      const opts: NotificationOptions = {
         body,
         icon: "/icon-192.png",
-        tag: payload.data?.tag || "cm-erp-notice",
+        tag,
         silent: false,
         vibrate: [200, 100, 200],
         renotify: true,
+        requireInteraction: true,
       }
-      new Notification(title, opts as any)
+      new Notification(title, opts)
     })
   } catch {
     // getMessaging 실패 시 (SSR 등) 무시
