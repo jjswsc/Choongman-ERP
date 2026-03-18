@@ -293,9 +293,9 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-xl border">
+          <div className="overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-xl border">
             <table className="w-full min-w-[400px] text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur-sm">
                 <tr className="border-b bg-muted/30">
                   <th className="px-4 py-3 text-left font-semibold">{t('pettyColDate') || '날짜'}</th>
                   {canSearchAll && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Store, Table, Order } from '@/lib/pos-types'
 import { useStoreList } from '@/lib/use-store-list'
 import { useAuth } from '@/lib/auth-context'
@@ -241,7 +241,8 @@ export function usePosStore() {
     )
   }, [])
 
-  const refetchStores = useCallback(() => {
+  const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refetchStoresImmediate = useCallback(() => {
     if (!effectiveStoreCodes?.length) return Promise.resolve()
     setLoading(true)
     const businessDate = getPosBusinessDateStr()
@@ -279,6 +280,15 @@ export function usePosStore() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [effectiveStoreCodes.join(',')])
+
+  /** refetchStores 디바운스 (600ms) - 연속 호출 시 API 부하 감소 */
+  const refetchStores = useCallback(() => {
+    if (refetchTimeoutRef.current) clearTimeout(refetchTimeoutRef.current)
+    refetchTimeoutRef.current = setTimeout(() => {
+      refetchTimeoutRef.current = null
+      refetchStoresImmediate()
+    }, 600)
+  }, [refetchStoresImmediate])
 
   const deliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status !== 'ready' && o.status !== 'completed')
   const packagedDeliveryOrders = orders.filter((o) => o.type === 'delivery' && o.status === 'ready')

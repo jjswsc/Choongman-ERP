@@ -68,6 +68,8 @@ cp .env.example .env
 | `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service_role 키 (권장). RLS 적용 시 서버 전용 | 권장 |
 | `SUPABASE_ANON_KEY` | Supabase anon 키. service_role 없을 때 사용 | ✅ (둘 중 하나) |
+| `NEXT_PUBLIC_SUPABASE_URL` | POS Realtime용 (SUPABASE_URL과 동일). 미설정 시 폴링만 사용 | 선택 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | POS Realtime용 (SUPABASE_ANON_KEY와 동일) | 선택 |
 | `JWT_SECRET` | JWT 서명용 (32자 이상). 미설정 시 ANON_KEY 사용. **운영(Vercel)에서는 둘 중 하나 필수** | 권장 |
 | `RESEND_API_KEY` | 급여 명세서 이메일 발송 (resend.com) | 선택 |
 | `RESEND_FROM` | 발신 이메일 주소 | 선택 |

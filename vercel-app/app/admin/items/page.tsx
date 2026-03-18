@@ -13,6 +13,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAdminItems, getItemCategories, getWarehouseLocations, saveItem, deleteItem, updateItemOrderDisabled, importItemsFromExcel, type AdminItem } from "@/lib/api-client"
+import { sortByCode } from "@/lib/sort-utils"
 
 export type Product = AdminItem
 
@@ -295,7 +296,7 @@ export default function ItemsPage() {
 
   const filteredProducts = React.useMemo(() => {
     if (!hasSearched) return []
-    return products.filter((p) => {
+    const filtered = products.filter((p) => {
       const q = searchTerm.toLowerCase().trim()
       const matchTerm =
         !q ||
@@ -309,6 +310,7 @@ export default function ItemsPage() {
       const matchOutbound = outboundFilter === "all" || pLoc === outboundFilter
       return matchTerm && matchCategory && matchOutbound
     })
+    return sortByCode(filtered, (p) => p.code)
   }, [products, hasSearched, searchTerm, categoryFilter, outboundFilter])
 
   const categories = React.useMemo(() => {

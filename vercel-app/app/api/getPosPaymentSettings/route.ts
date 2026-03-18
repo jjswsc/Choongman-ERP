@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
 const DEFAULT_CARD_KEYS = ['Visa', 'Master', 'Amex', 'JCB', 'Other']
-const DEFAULT_QR_KEYS = ['TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other']
+const DEFAULT_QR_KEYS = ['QR', 'TrueMoney', 'WeChat', 'Alipay', 'PromptPay', 'LINE Pay', 'Shopee Pay', 'Other']
+const DEFAULT_DELIVERY_KEYS = ['Grab', 'Line Man', 'Shopee', 'Other']
 
-/** POS 결제 수단 설정 조회 (카드/QR breakdown 키) - pos_payment_method_items 우선, 없으면 pos_payment_settings 폴백 */
+/** POS 결제 수단 설정 조회 (카드/QR/배달앱 breakdown 키) - pos_payment_method_items 우선, 없으면 pos_payment_settings 폴백 */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   if (!storeCode) {
     return NextResponse.json(
-      { storeCode: '', cardKeys: DEFAULT_CARD_KEYS, qrKeys: DEFAULT_QR_KEYS },
+      { storeCode: '', cardKeys: DEFAULT_CARD_KEYS, qrKeys: DEFAULT_QR_KEYS, deliveryKeys: DEFAULT_DELIVERY_KEYS },
       { headers }
     )
   }
@@ -46,13 +47,18 @@ export async function GET(request: NextRequest) {
       .filter((r) => r.category === 'qr' && !r.hidden)
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
       .map((r) => r.name)
+    const deliveryKeys = merged
+      .filter((r) => r.category === 'delivery' && !r.hidden)
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+      .map((r) => r.name)
 
-    if (cardKeys.length > 0 || qrKeys.length > 0) {
+    if (cardKeys.length > 0 || qrKeys.length > 0 || deliveryKeys.length > 0) {
       return NextResponse.json(
         {
           storeCode,
           cardKeys: cardKeys.length > 0 ? cardKeys : DEFAULT_CARD_KEYS,
           qrKeys: qrKeys.length > 0 ? qrKeys : DEFAULT_QR_KEYS,
+          deliveryKeys: deliveryKeys.length > 0 ? deliveryKeys : DEFAULT_DELIVERY_KEYS,
         },
         { headers }
       )
@@ -76,13 +82,14 @@ export async function GET(request: NextRequest) {
         storeCode: String(raw?.store_code ?? storeCode),
         cardKeys: cardKeys.length > 0 ? cardKeys : DEFAULT_CARD_KEYS,
         qrKeys: qrKeys.length > 0 ? qrKeys : DEFAULT_QR_KEYS,
+        deliveryKeys: DEFAULT_DELIVERY_KEYS,
       },
       { headers }
     )
   } catch (e) {
     console.error('getPosPaymentSettings:', e)
     return NextResponse.json(
-      { storeCode, cardKeys: DEFAULT_CARD_KEYS, qrKeys: DEFAULT_QR_KEYS },
+      { storeCode, cardKeys: DEFAULT_CARD_KEYS, qrKeys: DEFAULT_QR_KEYS, deliveryKeys: DEFAULT_DELIVERY_KEYS },
       { headers }
     )
   }

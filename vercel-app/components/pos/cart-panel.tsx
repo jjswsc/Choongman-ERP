@@ -33,6 +33,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { getMembers, validatePosCoupon } from '@/lib/api-client'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
 export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
@@ -186,6 +187,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
+  const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const tr = (key: string, fallback: string) => {
     const v = t(key)
     return !v || v === key ? fallback : v
@@ -943,6 +945,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               value={memberKeyword}
               onChange={(e) => setMemberKeyword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleMemberSearch())}
+              onFocus={scrollIntoViewOnFocus}
               className="h-8 flex-1 min-w-[8rem] max-w-[12rem]"
             />
             <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={handleMemberSearch} disabled={membersLoading}>

@@ -589,7 +589,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             </p>
           </div>
 
-          <div className="mt-6 rounded-lg border p-4">
+          <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
             {selectedView === "period" && (
               !hasData ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">

@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { ErpSidebar } from "@/components/erp/erp-sidebar"
 import { ErpHeader } from "@/components/erp/erp-header"
+import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -100,6 +101,11 @@ export default function AdminLayout({
         <ErpSidebar />
         <SidebarInset>
           <ErpHeader />
+          <OfflineBanner
+            offlineMsg="오프라인 모드 - 입력한 데이터가 로컬에 저장됩니다. 복구 후 자동 전송됩니다."
+            syncingMsg="동기화 중..."
+            pendingLabel="데이터"
+          />
           {children}
         </SidebarInset>
       </SidebarProvider>

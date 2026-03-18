@@ -130,9 +130,11 @@ purchase_orders.location_code   → warehouse_locations.location_code
 - `idx_items_code`, `idx_items_outbound_location`
 - `idx_orders_status`, `idx_orders_order_date`
 - `idx_stock_logs_location`, `idx_stock_logs_item_code`, `idx_stock_logs_log_date`
+- `idx_stock_logs_log_type_log_date`, `idx_stock_logs_location_log_type_date` (Disk I/O 최적화, supabase_performance_indexes.sql)
 - `idx_pos_orders_order_no`, `idx_pos_orders_created`, `idx_pos_orders_status`
-- `idx_attendance_logs_store_name_log_at`
+- `idx_attendance_logs_store_name_log_at`, `idx_attendance_logs_log_at_store` (복합, supabase_performance_indexes.sql)
 - `idx_leave_requests_store_name_date`
 - `idx_stock_logs_location_log_date`
+- `idx_notices_created_at`
 
 성능 이슈 시 쿼리 plan 확인 후 인덱스 추가 검토.

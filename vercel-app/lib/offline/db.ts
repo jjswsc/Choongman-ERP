@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'cm_offline'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORES = {
   PENDING_REQUESTS: 'pending_requests',
   POS_ORDER_LOCAL: 'pos_order_local',
@@ -13,6 +13,8 @@ const STORES = {
   POS_SALES_CACHE: 'pos_sales_cache',
   /** 시재 입출금 캐시 (로컬 입력 이력, 최대 ~30일) */
   POS_CASH_CACHE: 'pos_cash_cache',
+  /** ERP 핵심 데이터 캐시 (매장/직원/거래처/점검항목 - 오프라인 시 사용) */
+  ERP_CACHE: 'erp_cache',
 } as const
 
 let dbInstance: IDBDatabase | null = null
@@ -51,6 +53,10 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORES.POS_CASH_CACHE)) {
         const store = db.createObjectStore(STORES.POS_CASH_CACHE, { keyPath: 'id' })
         store.createIndex('createdAt', 'createdAt', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) {
+        const store = db.createObjectStore(STORES.ERP_CACHE, { keyPath: 'cacheKey' })
+        store.createIndex('cachedAt', 'cachedAt', { unique: false })
       }
     }
   })

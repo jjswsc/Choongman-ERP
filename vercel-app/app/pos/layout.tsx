@@ -87,7 +87,7 @@ export default function PosLayout({
       )}
       <main className="flex-1 min-h-0 overflow-hidden flex items-start justify-center p-2 md:p-4">
         {useViewport ? (
-          <div className="w-full max-w-[1024px] h-full max-h-[768px] min-h-[600px] bg-background rounded-lg shadow-xl overflow-hidden flex flex-col border border-border">
+          <div className="w-full max-w-[1024px] h-full min-h-0 max-h-[768px] min-[1024px]:min-h-[600px] bg-background rounded-lg shadow-xl overflow-hidden flex flex-col border border-border">
             {children}
           </div>
         ) : (

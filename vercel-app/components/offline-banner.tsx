@@ -19,6 +19,8 @@ interface OfflineBannerProps {
   syncingMsg?: string
   /** i18n: 재시도 버튼 */
   retryLabel?: string
+  /** "대기 중인 {pendingLabel} N건" 문구용 (기본: 주문) */
+  pendingLabel?: string
   /** true: 오프라인일 때만 표시 (매출 관리 등, 주문 대기 건수 무시) */
   offlineOnly?: boolean
 }
@@ -28,6 +30,7 @@ export function OfflineBanner({
   offlineMsg = '오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.',
   syncingMsg = '동기화 중...',
   retryLabel = '재시도',
+  pendingLabel = '주문',
   offlineOnly = false,
 }: OfflineBannerProps) {
   const online = useOnlineStatus()
@@ -74,7 +77,7 @@ export function OfflineBanner({
         ) : online ? (
           <>
             <RefreshCw className="h-4 w-4 text-amber-600" />
-            <span>대기 중인 주문 {pendingCount}건 — 서버로 전송 대기</span>
+            <span>대기 중인 {pendingLabel} {pendingCount}건 — 서버로 전송 대기</span>
           </>
         ) : (
           <>

@@ -132,8 +132,22 @@ export function PosReceiptModal({
       second: '2-digit',
       hour12: false,
     }).format(new Date())
+    /* 결제용 영수증: 로고 포함, 손님용. 세금계산서 시 프리미엄 디자인 */
+    const isTaxInvoice = !!taxInvoice
+    const taxInvoiceBlock = taxInvoice
+      ? `
+        <div class="tax-invoice-premium">
+          <div class="tax-invoice-header">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posName', '이름'))}</span><span>${esc(taxInvoice.name)}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posTaxIdLabel', 'Tax ID'))}</span><span>${esc(taxInvoice.taxId)}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posBranchLabel', '지점'))}</span><span>${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('posPhone', '전화번호'))}</span><span>${esc(taxInvoice.phone)}</span></div>
+          <div class="tax-invoice-row"><span class="tax-invoice-label">${esc(tr('email', '이메일'))}</span><span>${esc(taxInvoice.email)}</span></div>
+          <div class="tax-invoice-row tax-invoice-addr"><span class="tax-invoice-label">${esc(tr('settings_address', '주소'))}</span><span>${esc(taxInvoice.address)}</span></div>
+        </div>`
+      : ''
     const printContent = `
-      <div class="receipt-content">
+      <div class="receipt-content receipt-payment ${isTaxInvoice ? 'receipt-tax-invoice' : ''}">
         <div class="receipt-brand-wrap text-center">
           <img src="${esc(logoUrl)}" alt="Company logo" class="receipt-brand-logo ${esc(receiptLogoSize)}" />
           <div class="receipt-store-name">${esc(receiptData.storeCode)}</div>
@@ -141,7 +155,7 @@ export function PosReceiptModal({
         <div class="receipt-divider"></div>
         ${
           receiptShowTitle
-            ? `<div><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div></div>`
+            ? `<div class="receipt-title-block"><div class="receipt-section-title">${esc(tr('posReceipt', '영수증'))}</div><div class="receipt-sub-title">${esc(taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서'))}</div></div>`
             : ''
         }
         <div class="text-xs">
@@ -155,26 +169,14 @@ export function PosReceiptModal({
           <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderType', 'Order Type'))}</span><span class="receipt-meta-value">${esc(orderTypeLabels[receiptData.orderType] || receiptData.orderType)}</span></div>
         </div>
         <div class="receipt-divider"></div>
-        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted">' : ''}
+        ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
         ${receiptBizName ? `<div class="receipt-biz" style="color:#111;font-weight:600">${esc(receiptBizName)}</div>` : ''}
         ${receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(receiptBizTaxId)}</div>` : ''}
         ${receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(receiptBizOwner)}</div>` : ''}
         ${receiptBizAddress ? `<div class="receipt-biz">${esc(receiptBizAddress)}</div>` : ''}
         ${receiptBizPhone ? `<div class="receipt-biz">${esc(tr('posTelLabel', 'TEL'))}: ${esc(receiptBizPhone)}</div>` : ''}
         ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '</div>' : ''}
-        ${
-          taxInvoice
-            ? `<div class="text-xs" style="border:1px solid #111;padding:6px;margin-top:6px">
-                <div style="font-weight:700;margin-bottom:4px">${esc(tr('posReceiptTaxInvoice', '세금계산서'))}</div>
-                <div>${esc(tr('posName', '이름'))}: ${esc(taxInvoice.name)}</div>
-                <div>${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(taxInvoice.taxId)}</div>
-                <div>${esc(tr('posBranchLabel', '지점'))}: ${esc(taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점')))}</div>
-                <div>${esc(tr('posPhone', '전화번호'))}: ${esc(taxInvoice.phone)}</div>
-                <div>${esc(tr('email', '이메일'))}: ${esc(taxInvoice.email)}</div>
-                <div>${esc(tr('settings_address', '주소'))}: ${esc(taxInvoice.address)}</div>
-              </div>`
-            : ''
-        }
+        ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
         ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
@@ -255,6 +257,13 @@ export function PosReceiptModal({
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }
             .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
+            .tax-invoice-premium { border: 2px solid #111; padding: 8px 10px; margin-top: 8px; background: #fafafa; }
+            .tax-invoice-header { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #111; text-align: center; }
+            .tax-invoice-row { display: grid; grid-template-columns: 22mm 1fr; gap: 4px; margin: 4px 0; font-size: 11px; }
+            .tax-invoice-row.tax-invoice-addr { grid-template-columns: 22mm minmax(0,1fr); word-break: break-word; }
+            .tax-invoice-label { font-weight: 600; color: #333; }
+            .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
+            .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
             .space-y-2 > * + * { margin-top: 8px; }
             .space-y-1 > * + * { margin-top: 4px; }
             .text-center { text-align: center; }
@@ -453,14 +462,16 @@ export function PosReceiptModal({
             </div>
           )}
           {taxInvoice && (
-            <div className="text-xs border border-black p-1.5">
-              <div className="font-semibold mb-1">{tr('posReceiptTaxInvoice', '세금계산서')}</div>
-              <div>{tr('posName', '이름')}: {taxInvoice.name}</div>
-              <div>{tr('posTaxIdLabel', 'Tax ID')}: {taxInvoice.taxId}</div>
-              <div>{tr('posBranchLabel', '지점')}: {taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점'))}</div>
-              <div>{tr('posPhone', '전화번호')}: {taxInvoice.phone}</div>
-              <div>{tr('email', '이메일')}: {taxInvoice.email}</div>
-              <div>{tr('settings_address', '주소')}: {taxInvoice.address}</div>
+            <div className="text-xs border-2 border-black p-3 bg-slate-50 rounded-sm">
+              <div className="font-bold text-center mb-2 pb-2 border-b-2 border-black tracking-wide">{tr('posReceiptTaxInvoice', '세금계산서')}</div>
+              <div className="grid grid-cols-[5rem_1fr] gap-1">
+                <span className="font-semibold text-slate-600">{tr('posName', '이름')}</span><span>{taxInvoice.name}</span>
+                <span className="font-semibold text-slate-600">{tr('posTaxIdLabel', 'Tax ID')}</span><span>{taxInvoice.taxId}</span>
+                <span className="font-semibold text-slate-600">{tr('posBranchLabel', '지점')}</span><span>{taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점'))}</span>
+                <span className="font-semibold text-slate-600">{tr('posPhone', '전화번호')}</span><span>{taxInvoice.phone}</span>
+                <span className="font-semibold text-slate-600">{tr('email', '이메일')}</span><span>{taxInvoice.email}</span>
+                <span className="font-semibold text-slate-600">{tr('settings_address', '주소')}</span><span className="break-words">{taxInvoice.address}</span>
+              </div>
             </div>
           )}
 

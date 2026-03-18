@@ -6,6 +6,7 @@
 import { getDB, STORES } from './db'
 
 const TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30일
+const ERP_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24시간 (ERP 기본 데이터)
 
 export interface CacheEntry<T> {
   cacheKey: string
@@ -75,6 +76,68 @@ export async function setCache<T>(
     const store = tx.objectStore(storeName)
     const req = store.put(entry)
     req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** ERP 오프라인 캐시 - 매장/거래처/점검항목 등 */
+export async function getFromErpCache<T>(cacheKey: string): Promise<T | null> {
+  const db = await getDB()
+  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return null
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORES.ERP_CACHE, 'readonly')
+    const store = tx.objectStore(STORES.ERP_CACHE)
+    const req = store.get(cacheKey)
+    req.onsuccess = () => {
+      const entry = req.result as (CacheEntry<T> & { cacheKey: string }) | undefined
+      if (!entry) {
+        resolve(null)
+        return
+      }
+      const age = Date.now() - entry.cachedAt
+      if (age > ERP_CACHE_TTL_MS) {
+        const delTx = db.transaction(STORES.ERP_CACHE, 'readwrite')
+        delTx.objectStore(STORES.ERP_CACHE).delete(cacheKey)
+        resolve(null)
+        return
+      }
+      resolve(entry.data)
+    }
+    req.onerror = () => resolve(null)
+  })
+}
+
+export async function setErpCache<T>(cacheKey: string, data: T): Promise<void> {
+  const db = await getDB()
+  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  const entry = { cacheKey, data, cachedAt: Date.now() }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
+    const store = tx.objectStore(STORES.ERP_CACHE)
+    const req = store.put(entry)
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** ERP 캐시 키 prefix로 삭제 (예: erp:appData) */
+export async function deleteErpCacheByPrefix(prefix: string): Promise<void> {
+  const db = await getDB()
+  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
+    const store = tx.objectStore(STORES.ERP_CACHE)
+    const range = IDBKeyRange.bound(prefix, prefix + '\uffff', false, false)
+    const req = store.openCursor(range)
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (cursor) {
+        store.delete(cursor.primaryKey)
+        cursor.continue()
+      } else {
+        resolve()
+      }
+    }
     req.onerror = () => reject(req.error)
   })
 }

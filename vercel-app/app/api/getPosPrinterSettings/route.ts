@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
     cardBaseMode: 'card_only' as const,
     otherRate: 0,
     otherMode: 'separate' as const,
+    receiptPrintLang: '' as string,
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -181,6 +182,7 @@ export async function GET(request: NextRequest) {
       receipt_show_paid_stamp?: boolean
       receipt_show_thank_you?: boolean
       receipt_show_customer_copy?: boolean
+      receipt_print_lang?: string
       vat_rate?: number
       vat_mode?: string
       service_rate?: number
@@ -262,6 +264,7 @@ export async function GET(request: NextRequest) {
       receiptShowPaidStamp: raw?.receipt_show_paid_stamp !== false,
       receiptShowThankYou: raw?.receipt_show_thank_you !== false,
       receiptShowCustomerCopy: raw?.receipt_show_customer_copy !== false,
+      receiptPrintLang: String(raw?.receipt_print_lang ?? '').trim(),
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),
       vatMode: String(raw?.vat_mode || 'included') === 'separate' ? 'separate' : 'included',
       serviceRate: Math.max(0, Number(raw?.service_rate ?? 0)),

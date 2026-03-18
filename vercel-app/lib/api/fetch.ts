@@ -26,6 +26,10 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const url = resolveUrl(input)
   const res = await fetch(url, { ...init, headers })
   if (res.status === 401 && typeof window !== 'undefined') {
+    if (navigator.onLine === false) {
+      // 오프라인 시 401 리다이렉트 방지 - 세션이 있으면 캐시된 데이터로 계속 사용 허용
+      return res
+    }
     try {
       sessionStorage.removeItem('cm_token')
       sessionStorage.removeItem('cm_store')

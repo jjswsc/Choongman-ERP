@@ -58,19 +58,20 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     withTimeout
       .then((d) => {
         setLoginData(d.users || {})
-        setLoadError(null)
+        if (d._source === 'fallback') {
+          setLoadError('네트워크 연결을 확인해 주세요. 오프라인이거나 서버에 연결할 수 없습니다.')
+        } else {
+          setLoadError(null)
+        }
         setLoading(false)
       })
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e)
-        // #region agent log
-        fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e3767f' },
-          body: JSON.stringify({ sessionId: 'e3767f', location: 'login-form.tsx', message: 'getLoginData catch', data: { msg, isTimeout: msg.includes('초과') }, timestamp: Date.now() }),
-        }).catch(() => {})
-        // #endregion
-        setLoadError(msg)
+        setLoadError(
+          msg.includes('연결') || msg.includes('시간 초과')
+            ? '네트워크 연결을 확인해 주세요. 오프라인이거나 서버에 연결할 수 없습니다.'
+            : msg
+        )
         setLoginData({})
         setLoading(false)
       })
@@ -122,7 +123,11 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       if (typeof console !== "undefined" && console.error) {
         console.error("[Login] loginCheck failed:", err)
       }
-      setError(tMsg("msg_server_error_prefix") + msg)
+      const friendlyMsg =
+        msg.includes('fetch') || msg.includes('Failed') || msg.includes('Network') || msg.includes('연결')
+          ? '네트워크 연결을 확인해 주세요. 오프라인이거나 서버에 연결할 수 없습니다.'
+          : tMsg("msg_server_error_prefix") + msg
+      setError(friendlyMsg)
     } finally {
       setSubmitting(false)
     }

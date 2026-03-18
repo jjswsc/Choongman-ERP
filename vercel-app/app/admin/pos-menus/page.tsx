@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import { sortByCode } from "@/lib/sort-utils"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D 접두사) */
 const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks"] as const
@@ -833,7 +834,7 @@ export default function PosMenusPage() {
   }
 
   const filteredMenus = React.useMemo(() => {
-    return menus.filter((m) => {
+    const filtered = menus.filter((m) => {
       const matchTerm =
         !searchTerm ||
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -849,10 +850,11 @@ export default function PosMenusPage() {
         (soldOutFilter === "soldOut" && isSoldOut)
       return matchTerm && matchCategory && matchMainCategory && matchSoldOut
     })
+    return sortByCode(filtered, (m) => m.code)
   }, [menus, searchTerm, categoryFilter, mainCategoryFilter, soldOutFilter])
 
   const optionsConfigFilteredMenus = React.useMemo(() => {
-    return menus.filter((m) => {
+    const filtered = menus.filter((m) => {
       const matchTerm =
         !optionsConfigSearchTerm ||
         m.name.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase()) ||
@@ -863,6 +865,7 @@ export default function PosMenusPage() {
       const matchMainCategory = mainCategoryFilter === "all" || mainEq
       return matchTerm && matchCategory && matchMainCategory
     })
+    return sortByCode(filtered, (m) => m.code)
   }, [menus, optionsConfigSearchTerm, optionsConfigCategoryFilter, mainCategoryFilter])
 
   const categories = React.useMemo(() => {

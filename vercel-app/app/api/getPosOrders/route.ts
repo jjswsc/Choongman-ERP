@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
   const storeCode = String(searchParams.get('storeCode') || searchParams.get('store') || '').trim()
   const status = String(searchParams.get('status') || '').trim()
+  const sinceIdRaw = searchParams.get('sinceId')?.trim()
+  const sinceId = sinceIdRaw && /^\d+$/.test(sinceIdRaw) ? parseInt(sinceIdRaw, 10) : null
 
   try {
     let rows: {
@@ -56,6 +58,9 @@ export async function GET(request: NextRequest) {
     if (status && status !== 'all') {
       filters.push(`status=eq.${encodeURIComponent(status)}`)
     }
+    if (sinceId != null && sinceId > 0) {
+      filters.push(`id=gt.${sinceId}`)
+    }
     const filterStr = filters.length ? filters.join('&') : ''
 
     if (filterStr) {
@@ -95,7 +100,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('[getPosOrders]', { rowCount: (rows || []).length, startDate, endDate, storeCode: storeCode || '(all)', status: status || '(all)' })
+      console.log('[getPosOrders]', { rowCount: (rows || []).length, startDate, endDate, storeCode: storeCode || '(all)', status: status || '(all)', sinceId: sinceId ?? '(none)' })
     }
 
     const list = (rows || [])

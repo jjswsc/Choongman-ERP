@@ -94,7 +94,10 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
 
   React.useEffect(() => {
     if ((vendorOpen || itemVendorsOpen) && vendorList.length === 0) {
-      getVendorsForPurchase().then((list) => setVendorList(list || []))
+      getVendorsForPurchase().then((list) => {
+        const mapped = (list || []).map((v) => ({ code: v.code, name: v.name, address: v.address ?? '' }))
+        setVendorList(mapped)
+      })
     }
   }, [vendorOpen, itemVendorsOpen, vendorList.length])
 

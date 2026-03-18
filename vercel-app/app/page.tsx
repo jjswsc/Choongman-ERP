@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { AppNavigation } from "@/components/app-navigation"
 import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-bar"
+import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
 import { HomeTab } from "@/components/tabs/home-tab"
@@ -64,6 +65,7 @@ export default function DashboardPage() {
     <StoreViewProvider>
       <div className="mx-auto min-h-screen max-w-lg bg-background">
         <AppHeader />
+        <OfflineBanner offlineMsg="오프라인 모드 — 캐시된 데이터를 사용 중입니다. 연결 복구 후 자동 동기화됩니다." offlineOnly />
         <MobileStoreSelectorBar />
         <AppNavigation activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="pb-8">

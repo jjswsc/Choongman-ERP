@@ -227,7 +227,7 @@ export default function EmployeesPage() {
     const g = gradeFilter || "All"
     const st = statusFilter || "all"
     const k = searchText.toLowerCase().trim()
-    return employeeCache.filter((e) => {
+    const filtered = employeeCache.filter((e) => {
       const eStore = String(e.store || "")
       const eJob = String(e.job || "").trim()
       const eName = String(e.name || "").toLowerCase()
@@ -244,6 +244,18 @@ export default function EmployeesPage() {
         (st === "resigned" && hasResign)
       const matchKey = k === "" || eName.includes(k) || eNick.includes(k)
       return matchStore && matchJob && matchGrade && matchStatus && matchKey
+    })
+    // 매장 → 직무 → 이름 순으로 정렬
+    return [...filtered].sort((a, b) => {
+      const storeA = String(a.store || "").trim()
+      const storeB = String(b.store || "").trim()
+      if (storeA !== storeB) return storeA.localeCompare(storeB, undefined, { sensitivity: "base" })
+      const jobA = String(a.job || "").trim()
+      const jobB = String(b.job || "").trim()
+      if (jobA !== jobB) return jobA.localeCompare(jobB, undefined, { sensitivity: "base" })
+      const nameA = (a.nick || a.name || "").trim()
+      const nameB = (b.nick || b.name || "").trim()
+      return nameA.localeCompare(nameB, undefined, { sensitivity: "base" })
     })
   }, [employeeCache, storeFilter, jobFilter, gradeFilter, statusFilter, searchText])
 

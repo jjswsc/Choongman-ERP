@@ -162,6 +162,7 @@ export default function PosPrintersPage() {
   const [receiptShowPaidStamp, setReceiptShowPaidStamp] = React.useState(true)
   const [receiptShowThankYou, setReceiptShowThankYou] = React.useState(true)
   const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = React.useState(true)
+  const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
   const [vatRate, setVatRate] = React.useState("7")
   const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
   const [serviceRate, setServiceRate] = React.useState("0")
@@ -227,6 +228,7 @@ export default function PosPrintersPage() {
         setReceiptShowPaidStamp(settings.receiptShowPaidStamp !== false)
         setReceiptShowThankYou(settings.receiptShowThankYou !== false)
         setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
+        setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
         setVatRate(String(settings.vatRate ?? 7))
         setVatMode(settings.vatMode === 'separate' ? 'separate' : 'included')
         setServiceRate(String(settings.serviceRate ?? 0))
@@ -325,6 +327,7 @@ export default function PosPrintersPage() {
         receiptShowPaidStamp,
         receiptShowThankYou,
         receiptShowCustomerCopy,
+        receiptPrintLang: receiptPrintLang || undefined,
         vatRate: Number(vatRate) || 0,
         vatMode,
         serviceRate: Number(serviceRate) || 0,
@@ -774,6 +777,26 @@ export default function PosPrintersPage() {
                 {t("posReceiptOptionsHint") || "영수증·고객 주문서 출력 시 포함할 항목을 설정합니다."}
               </p>
               <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">{t("posReceiptPrintLang") || "주문·영수증·주방 인쇄 언어"}</label>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("posReceiptPrintLangHint") || "설정 시 주문, 영수증, 주방 주문서에 적용됩니다. 미설정 시 화면 언어를 따릅니다."}</p>
+                  <Select value={receiptPrintLang || "__auto__"} onValueChange={(v) => setReceiptPrintLang(v === "__auto__" ? "" : v)}>
+                    <SelectTrigger className="mt-1 w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__auto__">{t("posReceiptPrintLangAuto") || "화면 언어 따름"}</SelectItem>
+                      <SelectItem value="ko">{t("posLangKo") || "한국어"}</SelectItem>
+                      <SelectItem value="en">{t("posLangEn") || "English"}</SelectItem>
+                      <SelectItem value="th">{t("posLangTh") || "ไทย"}</SelectItem>
+                      <SelectItem value="mm">{t("posLangMm") || "မြန်မာ"}</SelectItem>
+                      <SelectItem value="la">{t("posLangLa") || "ລາວ"}</SelectItem>
+                      <SelectItem value="kh">{t("posLangKh") || "ខ្មែរ"}</SelectItem>
+                      <SelectItem value="vi">{t("posLangVi") || "Tiếng Việt"}</SelectItem>
+                      <SelectItem value="ms">{t("posLangMs") || "Bahasa"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <ToggleRow label={t("posLogoPrint") || "로고 인쇄"} value={logoPrint} onChange={setLogoPrint} t={t} />
                 <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-xs text-muted-foreground">
                   {t("posReceiptPrintTiming") || "영수증 출력 시점"}: {t("posOrderButton") || "주문"} / {t("posReorder") || "추가 주문"} / {t("posPayButton") || "결제"}

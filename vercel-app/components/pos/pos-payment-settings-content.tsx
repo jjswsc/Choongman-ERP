@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { CreditCard, RotateCw, Save, Plus } from 'lucide-react'
+import { CreditCard, RotateCw, Save, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -39,6 +39,7 @@ export function PosPaymentSettingsContent() {
   const [storeCode, setStoreCode] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
   const [items, setItems] = React.useState<PosPaymentMethodItem[]>([])
   const [categoryFilter, setCategoryFilter] = React.useState<string>('__all__')
   const [selected, setSelected] = React.useState<PosPaymentMethodItem | null>(null)
@@ -138,6 +139,26 @@ export function PosPaymentSettingsContent() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!selected) return
+    if (!confirm(t('posPaymentMethodDeleteConfirm') || `"${selected.name}" 항목을 삭제하시겠습니까?`)) return
+    setDeleting(true)
+    try {
+      const res = await deletePosPaymentMethodItem({ id: selected.id })
+      if (res.success) {
+        setSelected(null)
+        setEditName('')
+        await loadData()
+      } else {
+        alert(res.message || t('msg_save_fail_detail'))
+      }
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -190,6 +211,7 @@ export function PosPaymentSettingsContent() {
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left px-2 py-2 w-10">#</th>
+                      <th className="text-left px-2 py-2 w-20">{t('posPaymentMethodCategory') || '분류'}</th>
                       <th className="text-left px-2 py-2">{t('name') || '이름'}</th>
                     </tr>
                   </thead>
@@ -204,6 +226,9 @@ export function PosPaymentSettingsContent() {
                         onClick={() => setSelected(item)}
                       >
                         <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground">
+                          {CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category}
+                        </td>
                         <td className="px-2 py-1.5">
                           {item.name}
                           {item.hidden && (
@@ -254,7 +279,7 @@ export function PosPaymentSettingsContent() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={handleNew} className="gap-1.5">
                   <Plus className="h-4 w-4" />
                   {t('posPaymentMethodNew') || '신규'}
@@ -263,6 +288,17 @@ export function PosPaymentSettingsContent() {
                   <Save className="h-4 w-4" />
                   {saving ? '...' : t('itemsBtnSave') || '저장'}
                 </Button>
+                {selected && (
+                  <Button
+                    variant="outline"
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deleting ? '...' : t('delete') || '삭제'}
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 {t('posPaymentSettingsGuide') ||

@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Languages } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -40,6 +40,9 @@ interface PosHeaderProps {
   onRefresh?: () => void
   title?: string
   className?: string
+  /** 메인 포스 모드 (프린터 연결, 태블릿 주문 수신 인쇄) */
+  isMainPosDevice?: boolean
+  onMainPosDeviceChange?: (value: boolean) => void
 }
 
 export function POSHeader({
@@ -135,6 +138,18 @@ export function POSHeader({
           {t('posTodayCompleted')}:{" "}
           <span className="font-semibold text-foreground">{completed}{t('posCount')}</span>
         </span>
+        {typeof isMainPosDevice === "boolean" && onMainPosDeviceChange && (
+          <Button
+            variant={isMainPosDevice ? "default" : "outline"}
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
+            title={isMainPosDevice ? (t('posMainDeviceOn') || '메인 포스 (프린터 연결)') : (t('posMainDeviceOff') || '주문 단말')}
+          >
+            {isMainPosDevice ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
+            <span className="text-xs">{isMainPosDevice ? (t('posMainDevice') || '메인') : (t('posOrderTerminal') || '주문')}</span>
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

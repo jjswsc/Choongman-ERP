@@ -1,11 +1,32 @@
 /**
  * API 클라이언트
  * core fetch/auth는 lib/api/ 에서 분리
+ * 쓰기 API는 apiFetchWithOffline 사용 → 네트워크 실패 시 큐 적재, 복구 후 자동 전송
  */
-import { apiFetch } from './api/fetch'
+import { apiFetchWithOffline } from './api/fetch-offline'
+import {
+  getChecklistItemsWithCache,
+  getVendorsForPurchaseWithCache,
+  getVendorsForSalesWithCache,
+  getReceivablePayableListWithCache,
+  getPayableTransactionItemsWithCache,
+  getPurchaseOrdersWithCache,
+  getCheckHistoryWithCache,
+  getBankTransactionsWithCache,
+  getPettyCashListWithCache,
+  getAdminItemsWithCache,
+  getWarehouseLocationsWithCache,
+  getAppDataWithCache,
+  getMyOrderHistoryWithCache,
+  getMyUsageHistoryWithCache,
+  getLoginDataWithCache,
+  invalidateAppDataCache as invalidateAppDataCacheOffline,
+} from './offline/erp-offline'
 
 export { apiFetch } from './api/fetch'
-export { getLoginData, loginCheck, changePassword } from './api/auth'
+export { apiFetchWithOffline }
+export { loginCheck, changePassword } from './api/auth'
+export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
 
 export interface NoticeAttachment {
@@ -26,7 +47,7 @@ export interface NoticeItem {
 
 export async function getMyNotices(params: { store: string; name: string }) {
   const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getMyNotices?${q}`)
+  const res = await apiFetchWithOffline(`/api/getMyNotices?${q}`)
   return res.json() as Promise<NoticeItem[]>
 }
 
@@ -36,7 +57,7 @@ export async function confirmNoticeRead(params: {
   name: string
   action: '확인' | '다음에'
 }) {
-  const res = await apiFetch('/api/confirmNoticeRead', {
+  const res = await apiFetchWithOffline('/api/confirmNoticeRead', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,7 +101,7 @@ export async function getMyPayroll(params: {
     userName: params.name,
     month: params.month.slice(0, 7),
   })
-  const res = await apiFetch(`/api/getMyPayroll?${q}`)
+  const res = await apiFetchWithOffline(`/api/getMyPayroll?${q}`)
   const json = await res.json()
   return {
     success: json.success === true,
@@ -108,6 +129,11 @@ export interface AppItem {
   standardUnits?: { unit: string; totalQuantity: number }[]
 }
 
+/** 재고/품목 변경 후 캐시 무효화 (processOrder, processUsage, adjustStock 등 호출 후) */
+export function invalidateAppDataCache() {
+  invalidateAppDataCacheOffline()
+}
+
 export async function getAppData(
   storeName: string,
   asOfDateOrOptions?: string | { asOfDate?: string; scope?: 'order' | 'stock' }
@@ -115,12 +141,8 @@ export async function getAppData(
   const opts = typeof asOfDateOrOptions === 'string'
     ? { asOfDate: asOfDateOrOptions }
     : (asOfDateOrOptions || {})
-  const params = new URLSearchParams({ storeName })
-  if (opts.asOfDate?.trim()) params.set('asOfDate', opts.asOfDate.trim())
-  if (opts.scope === 'order') params.set('scope', 'order')
-  const res = await apiFetch(`/api/getAppData?${params}`)
-  const data = await res.json()
-  return { items: (data.items || []) as AppItem[], stock: data.stock || {} }
+  const raw = await getAppDataWithCache(storeName, opts)
+  return { items: (raw.items || []) as AppItem[], stock: raw.stock || {} }
 }
 
 // ─── 재고 현황 (Stock) ───
@@ -160,7 +182,7 @@ export async function saveSafetyStock(params: {
   code: string
   qty: number
 }) {
-  const res = await apiFetch('/api/saveSafetyStock', {
+  const res = await apiFetchWithOffline('/api/saveSafetyStock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -178,12 +200,12 @@ export async function getAdjustmentHistory(params: {
     endStr: params.endStr,
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
-  const res = await apiFetch(`/api/getAdjustmentHistory?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAdjustmentHistory?${q}`)
   return res.json() as Promise<AdjustmentHistoryItem[]>
 }
 
 export async function getStockStores() {
-  const res = await apiFetch('/api/getStockStores')
+  const res = await apiFetchWithOffline('/api/getStockStores')
   return res.json() as Promise<string[]>
 }
 
@@ -196,12 +218,14 @@ export async function adjustStock(params: {
   memo?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/adjustStock', {
+  const res = await apiFetchWithOffline('/api/adjustStock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = await res.json()
+  if (json?.success) invalidateAppDataCache()
+  return json as Promise<{ success: boolean; message?: string }>
 }
 
 export async function processOrder(params: {
@@ -209,12 +233,14 @@ export async function processOrder(params: {
   userName: string
   cart: { code?: string; name: string; price: number; qty: number }[]
 }) {
-  const res = await apiFetch('/api/processOrder', {
+  const res = await apiFetchWithOffline('/api/processOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = await res.json()
+  if (json?.success) invalidateAppDataCache()
+  return json as Promise<{ success: boolean; message?: string }>
 }
 
 export interface OrderHistoryItem {
@@ -240,9 +266,8 @@ export async function getMyOrderHistory(params: {
   startStr: string
   endStr: string
 }) {
-  const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getMyOrderHistory?${q}`)
-  return res.json() as Promise<OrderHistoryItem[]>
+  const raw = await getMyOrderHistoryWithCache(params)
+  return raw as OrderHistoryItem[]
 }
 
 export interface UsageHistoryItem {
@@ -260,12 +285,14 @@ export async function processUsage(params: {
   userName?: string
   items: { code?: string; name?: string; qty: number }[]
 }) {
-  const res = await apiFetch('/api/processUsage', {
+  const res = await apiFetchWithOffline('/api/processUsage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = await res.json()
+  if (json?.success) invalidateAppDataCache()
+  return json as Promise<{ success: boolean; message?: string }>
 }
 
 export async function getMyUsageHistory(params: {
@@ -273,9 +300,8 @@ export async function getMyUsageHistory(params: {
   startStr: string
   endStr: string
 }) {
-  const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getMyUsageHistory?${q}`)
-  return res.json() as Promise<UsageHistoryItem[]>
+  const raw = await getMyUsageHistoryWithCache(params)
+  return raw as UsageHistoryItem[]
 }
 
 export async function processOrderReceive(params: {
@@ -286,7 +312,7 @@ export async function processOrderReceive(params: {
   inspectedIndices?: number[]
   receivedQtys?: Record<number, number>
 }) {
-  const res = await apiFetch('/api/processOrderReceive', {
+  const res = await apiFetchWithOffline('/api/processOrderReceive', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -295,6 +321,7 @@ export async function processOrderReceive(params: {
   if (!res.ok) {
     return { success: false, message: data?.message || `요청 실패 (${res.status})` }
   }
+  if (data?.success) invalidateAppDataCache()
   return data as { success: boolean; message?: string }
 }
 
@@ -339,7 +366,7 @@ export async function getAdminOrders(params: {
   if (params.status) q.set('status', params.status)
   const orderIdVal = params.orderId != null ? String(params.orderId).replace(/^#/, '').trim() : ''
   if (orderIdVal && /^\d+$/.test(orderIdVal)) q.set('orderId', orderIdVal)
-  const res = await apiFetch(`/api/getAdminOrders?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAdminOrders?${q}`)
   const data = await res.json()
   return {
     list: (data.list || []) as AdminOrderItem[],
@@ -348,7 +375,7 @@ export async function getAdminOrders(params: {
 }
 
 export async function getOrderFilterOptions() {
-  const res = await apiFetch('/api/getOrderFilterOptions')
+  const res = await apiFetchWithOffline('/api/getOrderFilterOptions')
   const data = await res.json()
   return {
     categories: (data.categories || []) as string[],
@@ -365,7 +392,7 @@ export interface AdminDashboardStats {
 }
 
 export async function getAdminDashboardStats() {
-  const res = await apiFetch('/api/getAdminDashboardStats')
+  const res = await apiFetchWithOffline('/api/getAdminDashboardStats')
   return res.json() as Promise<AdminDashboardStats>
 }
 
@@ -383,7 +410,7 @@ export interface AdminActivityItem {
 }
 
 export async function getAdminRecentActivity() {
-  const res = await apiFetch('/api/getAdminRecentActivity')
+  const res = await apiFetchWithOffline('/api/getAdminRecentActivity')
   return res.json() as Promise<AdminActivityItem[]>
 }
 
@@ -398,12 +425,14 @@ export async function processOrderDecision(params: {
   processorName?: string
   updatedCart?: { code?: string; name?: string; spec?: string; price: number; qty: number }[]
 }) {
-  const res = await apiFetch('/api/processOrderDecision', {
+  const res = await apiFetchWithOffline('/api/processOrderDecision', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string }>
+  const json = await res.json()
+  if (json?.success) invalidateAppDataCache()
+  return json as Promise<{ success: boolean; message?: string }>
 }
 
 export async function updateOrderDeliveryDates(params: {
@@ -411,7 +440,7 @@ export async function updateOrderDeliveryDates(params: {
   deliveryDatesByOutbound: Record<string, string>
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updateOrderDeliveryDates', {
+  const res = await apiFetchWithOffline('/api/updateOrderDeliveryDates', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -423,7 +452,7 @@ export async function updateOrderDeliveryStatus(params: {
   orderId: number
   deliveryStatus: string
 }) {
-  const res = await apiFetch('/api/updateOrderDeliveryStatus', {
+  const res = await apiFetchWithOffline('/api/updateOrderDeliveryStatus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -441,7 +470,7 @@ export async function updateOrderCart(params: {
   deliveryStatus?: string
   receivedIndices?: number[]
 }) {
-  const res = await apiFetch('/api/updateOrderCart', {
+  const res = await apiFetchWithOffline('/api/updateOrderCart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -455,7 +484,7 @@ export async function getTodayAttendanceTypes(params: { storeName: string; name:
     storeName: params.storeName,
     name: params.name,
   })
-  const res = await apiFetch(`/api/getTodayAttendanceTypes?${q}`)
+  const res = await apiFetchWithOffline(`/api/getTodayAttendanceTypes?${q}`)
   return res.json() as Promise<string[]>
 }
 
@@ -480,7 +509,7 @@ export async function getAttendanceList(params: {
     storeFilter: params.storeFilter,
     employeeFilter: params.employeeFilter,
   })
-  const res = await apiFetch(`/api/getAttendanceList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAttendanceList?${q}`)
   return res.json() as Promise<AttendanceLogItem[]>
 }
 
@@ -491,7 +520,7 @@ export async function submitAttendance(params: {
   lat: string | number
   lng: string | number
 }) {
-  const res = await apiFetch('/api/submitAttendance', {
+  const res = await apiFetchWithOffline('/api/submitAttendance', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -506,7 +535,7 @@ export async function requestLeave(params: {
   date: string
   reason: string
 }) {
-  const res = await apiFetch('/api/requestLeave', {
+  const res = await apiFetchWithOffline('/api/requestLeave', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -527,7 +556,7 @@ export interface LeaveHistoryItem {
 
 export async function getMyLeaveInfo(params: { store: string; name: string }) {
   const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getMyLeaveInfo?${q}`)
+  const res = await apiFetchWithOffline(`/api/getMyLeaveInfo?${q}`)
   return res.json() as Promise<{
     history: LeaveHistoryItem[]
     stats: { usedAnn: number; usedSick: number; usedUnpaid: number; usedLakij: number; remain: number; remainLakij: number; annualTotal: number; lakijTotal: number }
@@ -540,7 +569,7 @@ export async function uploadLeaveCertificate(params: {
   name: string
   certificateUrl: string
 }) {
-  const res = await apiFetch('/api/uploadLeaveCertificate', {
+  const res = await apiFetchWithOffline('/api/uploadLeaveCertificate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -550,7 +579,7 @@ export async function uploadLeaveCertificate(params: {
 
 // ─── 관리 (Admin) ───
 export async function getNoticeOptions() {
-  const res = await apiFetch('/api/getNoticeOptions')
+  const res = await apiFetchWithOffline('/api/getNoticeOptions')
   return res.json() as Promise<{ stores: string[]; roles: string[]; permissionGroups: string[] }>
 }
 
@@ -566,7 +595,7 @@ export async function sendNotice(params: {
   userRole?: string
   attachments?: Array<{ name: string; mime: string; url: string }>
 }) {
-  const res = await apiFetch('/api/sendNotice', {
+  const res = await apiFetchWithOffline('/api/sendNotice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -590,7 +619,7 @@ export async function getNoticeSenders(params?: { startDate?: string; endDate?: 
   const q = new URLSearchParams()
   if (params?.startDate) q.set('startDate', params.startDate)
   if (params?.endDate) q.set('endDate', params.endDate)
-  const res = await apiFetch(`/api/getNoticeSenders?${q}`)
+  const res = await apiFetchWithOffline(`/api/getNoticeSenders?${q}`)
   const data = (await res.json()) as { senders?: string[] }
   return { senders: data.senders ?? [] }
 }
@@ -611,7 +640,7 @@ export async function getSentNotices(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
-  const res = await apiFetch(`/api/getSentNotices?${q}`)
+  const res = await apiFetchWithOffline(`/api/getSentNotices?${q}`)
   return res.json() as Promise<SentNoticeItem[]>
 }
 
@@ -624,14 +653,14 @@ export interface NoticeReadDetailItem {
 
 export async function getNoticeReadDetail(params: { noticeId: number }) {
   const q = new URLSearchParams({ noticeId: String(params.noticeId) })
-  const res = await apiFetch(`/api/getNoticeReadDetail?${q}`)
+  const res = await apiFetchWithOffline(`/api/getNoticeReadDetail?${q}`)
   const data = (await res.json()) as { items?: NoticeReadDetailItem[]; success?: boolean; message?: string }
   if (!res.ok || data.success === false) throw new Error(data.message || 'Failed')
   return { items: data.items ?? [] }
 }
 
 export async function deleteNoticeAdmin(params: { id: number }) {
-  const res = await apiFetch('/api/deleteNoticeAdmin', {
+  const res = await apiFetchWithOffline('/api/deleteNoticeAdmin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: params.id }),
@@ -659,7 +688,7 @@ export async function getLeavePendingList(params: {
   if (params.userRole) clean.userRole = params.userRole
   if (params.dateFilterType) clean.dateFilterType = params.dateFilterType
   const q = new URLSearchParams(clean)
-  const res = await apiFetch(`/api/getLeavePendingList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getLeavePendingList?${q}`)
   return res.json() as Promise<{ id: number; store: string; name: string; nick: string; type: string; date: string; requestDate: string; reason: string; status: string; certificateUrl: string }[]>
 }
 
@@ -677,12 +706,12 @@ export async function getLeaveStats(params: {
   if (params.userStore) clean.userStore = params.userStore
   if (params.userRole) clean.userRole = params.userRole
   const q = new URLSearchParams(clean)
-  const res = await apiFetch(`/api/getLeaveStats?${q}`)
+  const res = await apiFetchWithOffline(`/api/getLeaveStats?${q}`)
   return res.json() as Promise<{ store: string; name: string; usedPeriodAnnual: number; usedPeriodSick: number; usedPeriodUnpaid: number; usedPeriodLakij: number; usedTotalAnnual: number; usedTotalSick: number; usedTotalUnpaid: number; usedTotalLakij: number; remain: number; remainLakij: number }[]>
 }
 
 export async function processLeaveApproval(params: { id: number; decision: string; userStore?: string; userRole?: string; rejectReason?: string }) {
-  const res = await apiFetch('/api/processLeaveApproval', {
+  const res = await apiFetchWithOffline('/api/processLeaveApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -703,7 +732,7 @@ export async function getAttendancePendingList(params: {
   if (params.store != null && params.store !== '') q.set('store', params.store)
   if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
   if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getAttendancePendingList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAttendancePendingList?${q}`)
   return res.json() as Promise<{ id: number; log_at: string; store_name: string; name: string; log_type: string; status?: string; approved?: string }[]>
 }
 
@@ -714,7 +743,7 @@ export async function processAttendanceApproval(params: { id: number; decision: 
   if (params.waiveLate) body.waiveLate = true
   if (params.userStore) body.userStore = params.userStore
   if (params.userRole) body.userRole = params.userRole
-  const res = await apiFetch('/api/processAttendanceApproval', {
+  const res = await apiFetchWithOffline('/api/processAttendanceApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -750,7 +779,7 @@ export async function getAttendanceNoRecordList(params: {
   if (params.store != null && params.store !== '') q.set('store', params.store)
   if (params.userStore != null && params.userStore !== '') q.set('userStore', params.userStore)
   if (params.userRole != null && params.userRole !== '') q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getAttendanceNoRecordList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAttendanceNoRecordList?${q}`)
   return res.json() as Promise<AttendanceNoRecordRow[]>
 }
 
@@ -761,7 +790,7 @@ export async function createAttendanceFromSchedule(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/createAttendanceFromSchedule', {
+  const res = await apiFetchWithOffline('/api/createAttendanceFromSchedule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -776,7 +805,7 @@ export async function approveNoClockOut(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/approveNoClockOut', {
+  const res = await apiFetchWithOffline('/api/approveNoClockOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -827,7 +856,7 @@ export async function getAttendanceRecordsAdmin(params: {
   if (params.statusFilter) q.set('statusFilter', params.statusFilter || 'all')
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getAttendanceRecordsAdmin?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAttendanceRecordsAdmin?${q}`)
   return res.json() as Promise<AttendanceDailyRow[]>
 }
 
@@ -849,12 +878,12 @@ export interface WorkLogData {
 }
 
 export async function getWorkLogStaffList() {
-  const res = await apiFetch('/api/getWorkLogStaffList')
+  const res = await apiFetchWithOffline('/api/getWorkLogStaffList')
   return res.json() as Promise<{ staff: { name: string; displayName: string }[] }>
 }
 
 export async function getWorkLogOfficeOptions() {
-  const res = await apiFetch('/api/getWorkLogOfficeOptions')
+  const res = await apiFetchWithOffline('/api/getWorkLogOfficeOptions')
   return res.json() as Promise<{ staff: { name: string; displayName: string }[]; depts: string[] }>
 }
 
@@ -863,7 +892,7 @@ export async function getWorkLogData(params: { dateStr: string; name: string }) 
     dateStr: params.dateStr,
     name: params.name,
   })
-  const res = await apiFetch(`/api/getWorkLogData?${q}`)
+  const res = await apiFetchWithOffline(`/api/getWorkLogData?${q}`)
   return res.json() as Promise<WorkLogData>
 }
 
@@ -872,7 +901,7 @@ export async function saveWorkLogData(params: {
   name: string
   logs: WorkLogItem[]
 }) {
-  const res = await apiFetch('/api/saveWorkLogData', {
+  const res = await apiFetchWithOffline('/api/saveWorkLogData', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -885,7 +914,7 @@ export async function submitDailyClose(params: {
   name: string
   logs: WorkLogItem[]
 }) {
-  const res = await apiFetch('/api/submitDailyClose', {
+  const res = await apiFetchWithOffline('/api/submitDailyClose', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -898,7 +927,7 @@ export async function updateWorkLogManagerCheck(params: {
   status: string
   comment?: string
 }) {
-  const res = await apiFetch('/api/updateManagerCheck', {
+  const res = await apiFetchWithOffline('/api/updateManagerCheck', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -907,7 +936,7 @@ export async function updateWorkLogManagerCheck(params: {
 }
 
 export async function updateWorkLogPriority(params: { id: string; priority: string }) {
-  const res = await apiFetch('/api/updateWorkLogPriority', {
+  const res = await apiFetchWithOffline('/api/updateWorkLogPriority', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -916,7 +945,7 @@ export async function updateWorkLogPriority(params: { id: string; priority: stri
 }
 
 export async function deleteWorkLogItem(params: { id: string }) {
-  const res = await apiFetch('/api/deleteWorkLogItem', {
+  const res = await apiFetchWithOffline('/api/deleteWorkLogItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -951,7 +980,7 @@ export async function getWorkLogManagerReport(params: {
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
   if (params.status && params.status !== 'all') q.set('status', params.status)
-  const res = await apiFetch(`/api/getWorkLogManagerReport?${q}`)
+  const res = await apiFetchWithOffline(`/api/getWorkLogManagerReport?${q}`)
   return res.json() as Promise<WorkLogManagerItem[]>
 }
 
@@ -977,7 +1006,7 @@ export async function getWorkLogWeekly(params: {
   })
   if (params.dept && params.dept !== 'all') q.set('dept', params.dept)
   if (params.employee && params.employee !== 'all') q.set('employee', params.employee)
-  const res = await apiFetch(`/api/getWorkLogWeekly?${q}`)
+  const res = await apiFetchWithOffline(`/api/getWorkLogWeekly?${q}`)
   return res.json() as Promise<{
     summaries: WorkLogWeeklySummary[]
     totalTasks: number
@@ -1015,7 +1044,7 @@ export interface TodayAttendanceItem {
 
 export async function getTodaySchedule(params: { store: string; date: string }) {
   const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getTodaySchedule?${q}`)
+  const res = await apiFetchWithOffline(`/api/getTodaySchedule?${q}`)
   return res.json() as Promise<TodayScheduleItem[]>
 }
 
@@ -1024,7 +1053,7 @@ export async function getTodayAttendanceSummary(params: {
   date: string
 }) {
   const q = new URLSearchParams(params)
-  const res = await apiFetch(`/api/getTodayAttendanceSummary?${q}`)
+  const res = await apiFetchWithOffline(`/api/getTodayAttendanceSummary?${q}`)
   return res.json() as Promise<TodayAttendanceItem[]>
 }
 
@@ -1040,7 +1069,7 @@ export async function getWeeklySchedule(params: {
     monday: params.monday,
   })
   if (params.area && params.area !== 'All') q.set('area', params.area)
-  const res = await apiFetch(`/api/getWeeklySchedule?${q}`)
+  const res = await apiFetchWithOffline(`/api/getWeeklySchedule?${q}`)
   return res.json() as Promise<WeeklyScheduleItem[]>
 }
 
@@ -1049,7 +1078,7 @@ export async function saveSchedule(params: {
   monday: string
   rows: { date: string; name: string; pIn?: string; pOut?: string; pBS?: string; pBE?: string; remark?: string; plan_in_prev_day?: boolean }[]
 }) {
-  const res = await apiFetch('/api/saveSchedule', {
+  const res = await apiFetchWithOffline('/api/saveSchedule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1075,7 +1104,7 @@ export async function getMyAttendanceSummary(params: {
     name: params.name,
     yearMonth: params.yearMonth,
   })
-  const res = await apiFetch(`/api/getMyAttendanceSummary?${q}`)
+  const res = await apiFetchWithOffline(`/api/getMyAttendanceSummary?${q}`)
   return res.json() as Promise<MyAttendanceSummary>
 }
 
@@ -1089,13 +1118,13 @@ export interface TodayVisitItem {
 
 export async function getTodayMyVisits(params: { userName: string }) {
   const q = new URLSearchParams({ userName: params.userName })
-  const res = await apiFetch(`/api/getTodayMyVisits?${q}`)
+  const res = await apiFetchWithOffline(`/api/getTodayMyVisits?${q}`)
   return res.json() as Promise<TodayVisitItem[]>
 }
 
 export async function checkUserVisitStatus(params: { userName: string }) {
   const q = new URLSearchParams({ userName: params.userName })
-  const res = await apiFetch(`/api/checkUserVisitStatus?${q}`)
+  const res = await apiFetchWithOffline(`/api/checkUserVisitStatus?${q}`)
   return res.json() as Promise<{ active: boolean; storeName?: string; purpose?: string }>
 }
 
@@ -1108,7 +1137,7 @@ export async function submitStoreVisit(params: {
   lng?: string | number
   clientTimestamp?: number
 }) {
-  const res = await apiFetch('/api/submitStoreVisit', {
+  const res = await apiFetchWithOffline('/api/submitStoreVisit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1132,7 +1161,7 @@ export interface PettyCashItem {
 }
 
 export async function getPettyCashOptions(): Promise<{ stores: string[]; officeDepartments: string[] }> {
-  const res = await apiFetch('/api/getPettyCashOptions')
+  const res = await apiFetchWithOffline('/api/getPettyCashOptions')
   return res.json()
 }
 
@@ -1145,17 +1174,7 @@ export async function getPettyCashList(params: {
   userStore?: string
   userRole?: string
 }) {
-  const q = new URLSearchParams({
-    startStr: params.startStr,
-    endStr: params.endStr,
-  })
-  if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
-  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
-  if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
-  if (params.userStore) q.set('userStore', params.userStore)
-  if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getPettyCashList?${q}`)
-  return res.json() as Promise<PettyCashItem[]>
+  return getPettyCashListWithCache(params) as Promise<PettyCashItem[]>
 }
 
 /** 해당 월 또는 기간 거래 전체 + 실시간 잔액 */
@@ -1179,7 +1198,7 @@ export async function getPettyCashMonthDetail(params: {
   if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getPettyCashMonthDetail?${q}`)
+  const res = await apiFetchWithOffline(`/api/getPettyCashMonthDetail?${q}`)
   return res.json() as Promise<PettyCashItem[]>
 }
 
@@ -1187,7 +1206,7 @@ export async function getPettyCashMonthDetail(params: {
 export async function translateTexts(texts: string[], targetLang: string): Promise<string[]> {
   const filtered = texts.filter((s) => s && String(s).trim())
   if (filtered.length === 0) return []
-  const res = await apiFetch('/api/translate', {
+  const res = await apiFetchWithOffline('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ texts: filtered, targetLang }),
@@ -1208,7 +1227,7 @@ export async function addPettyCashTransaction(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/addPettyCashTransaction', {
+  const res = await apiFetchWithOffline('/api/addPettyCashTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1242,7 +1261,7 @@ export async function getTillList(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getTillList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getTillList?${q}`)
   return res.json() as Promise<TillItem[]>
 }
 
@@ -1256,7 +1275,7 @@ export async function addTillTransaction(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/addTillTransaction', {
+  const res = await apiFetchWithOffline('/api/addTillTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1276,7 +1295,7 @@ export async function updatePettyCashTransaction(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updatePettyCashTransaction', {
+  const res = await apiFetchWithOffline('/api/updatePettyCashTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -1327,7 +1346,7 @@ export async function getReceivablePayableSummary(params: {
   if (params.endStr) q.set('endStr', params.endStr)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
-  const res = await apiFetch(`/api/getReceivablePayableSummary?${q}`)
+  const res = await apiFetchWithOffline(`/api/getReceivablePayableSummary?${q}`)
   const data = await res.json()
   return data as { type: string; list: ReceivablePayableSummaryItem[]; totalAmount?: number }
 }
@@ -1358,7 +1377,7 @@ export async function getReceivableOrders(params: {
   if (params.endStr) q.set('endStr', params.endStr)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getReceivableOrders?${q}`)
+  const res = await apiFetchWithOffline(`/api/getReceivableOrders?${q}`)
   const data = await res.json()
   return data as {
     type: string
@@ -1376,18 +1395,7 @@ export async function getReceivablePayableList(params: {
   userStore?: string
   userRole?: string
 }) {
-  const q = new URLSearchParams({
-    type: params.type,
-    startStr: params.startStr,
-    endStr: params.endStr,
-  })
-  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
-  if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
-  if (params.userStore) q.set('userStore', params.userStore)
-  if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getReceivablePayableList?${q}`)
-  const data = await res.json()
-  return data as { type: string; list: ReceivablePayableItem[] }
+  return getReceivablePayableListWithCache(params)
 }
 
 export interface PayableTransactionItem {
@@ -1400,10 +1408,7 @@ export interface PayableTransactionItem {
 }
 
 export async function getPayableTransactionItems(params: { refType: string; refId: number }) {
-  const q = new URLSearchParams({ refType: params.refType, refId: String(params.refId) })
-  const res = await apiFetch(`/api/getPayableTransactionItems?${q}`)
-  const data = await res.json()
-  return data as { items: PayableTransactionItem[] }
+  return getPayableTransactionItemsWithCache(params)
 }
 
 // ─── 손익계산서 (1단계) ───
@@ -1447,7 +1452,7 @@ export async function getIncomeStatement(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.includeDebug) q.set('includeDebug', '1')
-  const res = await apiFetch(`/api/getIncomeStatement?${q}`)
+  const res = await apiFetchWithOffline(`/api/getIncomeStatement?${q}`)
   return res.json() as Promise<IncomeStatementData>
 }
 
@@ -1484,7 +1489,7 @@ export async function getBalanceSheet(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getBalanceSheet?${q}`)
+  const res = await apiFetchWithOffline(`/api/getBalanceSheet?${q}`)
   return res.json() as Promise<BalanceSheetData>
 }
 
@@ -1493,7 +1498,7 @@ export async function getFixedAssets(params: { storeFilter?: string; status?: st
   const q = new URLSearchParams()
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.status) q.set('status', params.status)
-  const res = await apiFetch(`/api/getFixedAssets?${q}`)
+  const res = await apiFetchWithOffline(`/api/getFixedAssets?${q}`)
   return res.json() as Promise<{ success: boolean; list: unknown[] }>
 }
 
@@ -1509,7 +1514,7 @@ export async function saveFixedAsset(params: {
   depreciationMethod?: string
   memo?: string
 }) {
-  const res = await apiFetch('/api/saveFixedAsset', {
+  const res = await apiFetchWithOffline('/api/saveFixedAsset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1520,14 +1525,14 @@ export async function saveFixedAsset(params: {
 export async function getDepreciationEntries(params: { yearMonth: string; storeFilter?: string }) {
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
-  const res = await apiFetch(`/api/getDepreciationEntries?${q}`)
+  const res = await apiFetchWithOffline(`/api/getDepreciationEntries?${q}`)
   return res.json() as Promise<{ success: boolean; list: unknown[]; totalAmount: number }>
 }
 
 export async function runDepreciationPreview(params: { yearMonth: string; storeFilter?: string }) {
   const q = new URLSearchParams({ yearMonth: params.yearMonth })
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
-  const res = await apiFetch(`/api/runDepreciation?${q}`)
+  const res = await apiFetchWithOffline(`/api/runDepreciation?${q}`)
   return res.json() as Promise<{
     success: boolean
     candidates: { id: number; name: string; store_name: string; monthly_amount: number }[]
@@ -1536,7 +1541,7 @@ export async function runDepreciationPreview(params: { yearMonth: string; storeF
 }
 
 export async function runDepreciation(params: { yearMonth: string; storeFilter?: string; dryRun?: boolean }) {
-  const res = await apiFetch('/api/runDepreciation', {
+  const res = await apiFetchWithOffline('/api/runDepreciation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1555,7 +1560,7 @@ export async function addBalanceTransaction(params: {
   userStore?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/addBalanceTransaction', {
+  const res = await apiFetchWithOffline('/api/addBalanceTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1616,7 +1621,7 @@ export async function registerExpenseFromBankTransaction(params: {
   userRole?: string
   updateExisting?: boolean
 }) {
-  const res = await apiFetch('/api/registerExpenseFromBankTransaction', {
+  const res = await apiFetchWithOffline('/api/registerExpenseFromBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1631,7 +1636,7 @@ export async function registerPurchaseFromBankTransaction(params: {
   userRole?: string
   updateExisting?: boolean
 }) {
-  const res = await apiFetch('/api/registerPurchaseFromBankTransaction', {
+  const res = await apiFetchWithOffline('/api/registerPurchaseFromBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1654,7 +1659,7 @@ export async function addExpenseAccrual(params: {
   userName?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/addExpenseAccrual', {
+  const res = await apiFetchWithOffline('/api/addExpenseAccrual', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1678,7 +1683,7 @@ export async function updateExpenseRegisterItem(params: {
   invoicePhotoUrl?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updateExpenseRegisterItem', {
+  const res = await apiFetchWithOffline('/api/updateExpenseRegisterItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1690,7 +1695,7 @@ export async function deleteExpenseRegisterItem(params: {
   bankTransactionId: number
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updateExpenseRegisterItem', {
+  const res = await apiFetchWithOffline('/api/updateExpenseRegisterItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...params, action: 'delete' }),
@@ -1705,7 +1710,7 @@ export async function approveExpenseAccrual(params: {
   userName?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/approveExpenseAccrual', {
+  const res = await apiFetchWithOffline('/api/approveExpenseAccrual', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1728,7 +1733,7 @@ export async function updateExpenseAccrual(params: {
   categorySub?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updateExpenseAccrual', {
+  const res = await apiFetchWithOffline('/api/updateExpenseAccrual', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...params, action: 'update' }),
@@ -1740,7 +1745,7 @@ export async function deleteExpenseAccrual(params: {
   expenseAccrualId: number
   userRole?: string
 }) {
-  const res = await apiFetch('/api/updateExpenseAccrual', {
+  const res = await apiFetchWithOffline('/api/updateExpenseAccrual', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...params, action: 'delete' }),
@@ -1749,7 +1754,7 @@ export async function deleteExpenseAccrual(params: {
 }
 
 export async function deleteExpenseAccrualsWithoutStore(params: { userRole?: string }) {
-  const res = await apiFetch('/api/deleteExpenseAccrualsWithoutStore', {
+  const res = await apiFetchWithOffline('/api/deleteExpenseAccrualsWithoutStore', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1761,7 +1766,7 @@ export async function deletePurchaseAccrualsByVendor(params: {
   vendorCode: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/deletePurchaseAccrualsByVendor', {
+  const res = await apiFetchWithOffline('/api/deletePurchaseAccrualsByVendor', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1779,7 +1784,7 @@ export async function getApprovedExpenseAccrualsForBankTx(params: {
   })
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
-  const res = await apiFetch(`/api/getApprovedExpenseAccrualsForBankTx?${q}`)
+  const res = await apiFetchWithOffline(`/api/getApprovedExpenseAccrualsForBankTx?${q}`)
   return res.json() as Promise<{
     success: boolean
     message?: string
@@ -1802,7 +1807,7 @@ export async function getExpensePaymentPlan(params: {
   if (params.payeeFilter) q.set('payeeFilter', params.payeeFilter)
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   if (params.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getExpensePaymentPlan?${q}`)
+  const res = await apiFetchWithOffline(`/api/getExpensePaymentPlan?${q}`)
   return res.json() as Promise<ExpensePaymentPlanResponse>
 }
 
@@ -1818,7 +1823,7 @@ export async function executeExpensePayment(params: {
   userName?: string
   userRole?: string
 }) {
-  const res = await apiFetch('/api/executeExpensePayment', {
+  const res = await apiFetchWithOffline('/api/executeExpensePayment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1846,7 +1851,7 @@ export async function getUnlinkedBankWithdrawals(params: {
   })
   if (params.amount != null && params.amount > 0) q.set('amount', String(params.amount))
   if (params.transDate) q.set('transDate', params.transDate)
-  const res = await apiFetch(`/api/getUnlinkedBankWithdrawals?${q}`)
+  const res = await apiFetchWithOffline(`/api/getUnlinkedBankWithdrawals?${q}`)
   return res.json() as Promise<{
     list: { id: number; transDate: string; amount: number; memo: string }[]
   }>
@@ -1876,7 +1881,7 @@ export interface CardTransaction {
 }
 
 export async function getCardAccounts() {
-  const res = await apiFetch('/api/getCardAccounts')
+  const res = await apiFetchWithOffline('/api/getCardAccounts')
   return res.json() as Promise<CardAccount[]>
 }
 
@@ -1889,12 +1894,12 @@ export async function getCardTransactions(params: {
   if (params.cardAccountId) q.set('cardAccountId', String(params.cardAccountId))
   if (params.startStr) q.set('startStr', params.startStr)
   if (params.endStr) q.set('endStr', params.endStr)
-  const res = await apiFetch(`/api/getCardTransactions?${q}`)
+  const res = await apiFetchWithOffline(`/api/getCardTransactions?${q}`)
   return res.json() as Promise<{ list: CardTransaction[] }>
 }
 
 export async function saveCardAccount(params: { id?: number; name: string; store?: string; memo?: string; cardNumber?: string; holderName?: string; cardCompany?: string }) {
-  const res = await apiFetch('/api/saveCardAccount', {
+  const res = await apiFetchWithOffline('/api/saveCardAccount', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1914,7 +1919,7 @@ export async function saveCardTransaction(params: {
   accountSubjectId?: number | null
   note?: string
 }) {
-  const res = await apiFetch('/api/saveCardTransaction', {
+  const res = await apiFetchWithOffline('/api/saveCardTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1923,7 +1928,7 @@ export async function saveCardTransaction(params: {
 }
 
 export async function deleteCardAccount(params: { id: number }) {
-  const res = await apiFetch('/api/deleteCardAccount', {
+  const res = await apiFetchWithOffline('/api/deleteCardAccount', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1932,7 +1937,7 @@ export async function deleteCardAccount(params: { id: number }) {
 }
 
 export async function deleteCardTransaction(params: { id: number }) {
-  const res = await apiFetch('/api/deleteCardTransaction', {
+  const res = await apiFetchWithOffline('/api/deleteCardTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1981,7 +1986,7 @@ export async function executeWithdrawal(params: {
   userRole?: string
   userStore?: string
 }) {
-  const res = await apiFetch('/api/executeWithdrawal', {
+  const res = await apiFetchWithOffline('/api/executeWithdrawal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2003,7 +2008,7 @@ export async function getPosSalesByStore(params: {
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
-  const res = await apiFetch(`/api/posSalesByStore?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`)
   return res.json() as Promise<
     { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
   >
@@ -2011,7 +2016,7 @@ export async function getPosSalesByStore(params: {
 
 export async function getPosSalesFilterOptions(params: { startStr: string; endStr: string }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  const res = await apiFetch(`/api/posSalesFilterOptions?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesFilterOptions?${q}`)
   return res.json() as Promise<{ posOptions: string[] }>
 }
 
@@ -2027,7 +2032,7 @@ export async function getPosSalesByPeriod(params: {
     groupBy: params.groupBy,
   })
   if (params.pos) q.set('pos', params.pos)
-  const res = await apiFetch(`/api/posSalesByPeriod?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`)
   return res.json() as Promise<{ label: string; key: string; sales: number }[]>
 }
 
@@ -2038,7 +2043,7 @@ export async function getPosSalesByDeliveryApp(params: {
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
-  const res = await apiFetch(`/api/posSalesByDeliveryApp?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByDeliveryApp?${q}`)
   return res.json() as Promise<{ items: { label: string; sales: number; pct: number }[]; total: number }>
 }
 
@@ -2049,7 +2054,7 @@ export async function getPosSalesByChannel(params: {
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
-  const res = await apiFetch(`/api/posSalesByChannel?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByChannel?${q}`)
   return res.json() as Promise<{ label: string; sales: number }[]>
 }
 
@@ -2062,7 +2067,7 @@ export async function getPosSalesByMenu(params: {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   if (params.search) q.set('search', params.search)
-  const res = await apiFetch(`/api/posSalesByMenu?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
   return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
 }
 
@@ -2073,7 +2078,7 @@ export async function getPosSalesByPayment(params: {
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
-  const res = await apiFetch(`/api/posSalesByPayment?${q}`)
+  const res = await apiFetchWithOffline(`/api/posSalesByPayment?${q}`)
   return res.json() as Promise<{ label: string; sales: number }[]>
 }
 
@@ -2121,7 +2126,7 @@ export async function getBankAccounts(params?: { store?: string; userStore?: str
   if (params?.store) q.set('store', params.store)
   if (params?.userStore) q.set('userStore', params.userStore)
   if (params?.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getBankAccounts?${q}`)
+  const res = await apiFetchWithOffline(`/api/getBankAccounts?${q}`)
   return res.json() as Promise<BankAccount[]>
 }
 
@@ -2130,13 +2135,7 @@ export async function getBankTransactions(params: {
   startStr: string
   endStr: string
 }) {
-  const q = new URLSearchParams({
-    accountId: String(params.accountId),
-    startStr: params.startStr,
-    endStr: params.endStr,
-  })
-  const res = await apiFetch(`/api/getBankTransactions?${q}`)
-  return res.json() as Promise<{
+  return getBankTransactionsWithCache(params) as Promise<{
     list: BankTransactionItem[]
     summary: BankTransactionsSummary | null
   }>
@@ -2174,7 +2173,7 @@ export async function getExpenseRegisterList(params: {
   })
   if (params.accountId) q.set('accountId', String(params.accountId))
   if (params.category) q.set('category', params.category)
-  const res = await apiFetch(`/api/getExpenseRegisterList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getExpenseRegisterList?${q}`)
   return res.json() as Promise<{ list: ExpenseRegisterItem[] }>
 }
 
@@ -2195,7 +2194,7 @@ export async function addBankTransaction(params: {
   vendorCode?: string
   storeName?: string
 }) {
-  const res = await apiFetch('/api/addBankTransaction', {
+  const res = await apiFetchWithOffline('/api/addBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2221,7 +2220,7 @@ export async function addBankTransactionsBulk(params: {
     storeName?: string
   }>
 }) {
-  const res = await apiFetch('/api/addBankTransactionsBulk', {
+  const res = await apiFetchWithOffline('/api/addBankTransactionsBulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2236,7 +2235,7 @@ export async function updateBankTransactionInvoice(params: {
   invoicePhotoUrl?: string
   purchaseOrderId?: number | null
 }) {
-  const res = await apiFetch('/api/updateBankTransactionInvoice', {
+  const res = await apiFetchWithOffline('/api/updateBankTransactionInvoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2254,7 +2253,7 @@ export async function updateBankTransaction(params: {
   vendorCode?: string
   storeName?: string
 }) {
-  const res = await apiFetch('/api/updateBankTransaction', {
+  const res = await apiFetchWithOffline('/api/updateBankTransaction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2279,12 +2278,12 @@ export async function getInboundBatchesForLink(params: {
   if (params.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
   if (params.vendorName?.trim()) q.set('vendorName', params.vendorName.trim())
   if (params.storeFilter?.trim()) q.set('storeFilter', params.storeFilter.trim())
-  const res = await apiFetch(`/api/getInboundBatchesForLink?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInboundBatchesForLink?${q}`)
   return res.json() as Promise<InboundBatchForLink[]>
 }
 
 export async function getBankTransactionInboundLinks(bankTransactionId: number) {
-  const res = await apiFetch(`/api/getBankTransactionInboundLinks?bankTransactionId=${bankTransactionId}`)
+  const res = await apiFetchWithOffline(`/api/getBankTransactionInboundLinks?bankTransactionId=${bankTransactionId}`)
   return res.json() as Promise<{ id?: number; inboundBatchId?: number; amount: number }[]>
 }
 
@@ -2292,7 +2291,7 @@ export async function saveBankTransactionInboundLinks(params: {
   bankTransactionId: number
   links: { inboundBatchId: number; amount: number }[]
 }) {
-  const res = await apiFetch('/api/saveBankTransactionInboundLinks', {
+  const res = await apiFetchWithOffline('/api/saveBankTransactionInboundLinks', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2309,7 +2308,7 @@ export interface BankMemoRule {
 }
 
 export async function getBankMemoRules() {
-  const res = await apiFetch('/api/getBankMemoRules')
+  const res = await apiFetchWithOffline('/api/getBankMemoRules')
   return res.json() as Promise<BankMemoRule[]>
 }
 
@@ -2320,7 +2319,7 @@ export async function saveBankMemoRule(params: {
   category: string
   accountSubjectId?: number | null
 }) {
-  const res = await apiFetch('/api/saveBankMemoRule', {
+  const res = await apiFetchWithOffline('/api/saveBankMemoRule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2329,7 +2328,7 @@ export async function saveBankMemoRule(params: {
 }
 
 export async function deleteBankMemoRule(params: { id: number }) {
-  const res = await apiFetch('/api/deleteBankMemoRule', {
+  const res = await apiFetchWithOffline('/api/deleteBankMemoRule', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2345,7 +2344,7 @@ export async function saveBankAccount(params: {
   openingBalance?: number
   openingBalanceDate?: string | null
 }) {
-  const res = await apiFetch('/api/saveBankAccount', {
+  const res = await apiFetchWithOffline('/api/saveBankAccount', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2354,7 +2353,7 @@ export async function saveBankAccount(params: {
 }
 
 export async function deleteBankAccount(params: { id: number }) {
-  const res = await apiFetch('/api/deleteBankAccount', {
+  const res = await apiFetchWithOffline('/api/deleteBankAccount', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2390,7 +2389,7 @@ export async function getAccountSubjects(params?: {
   if (params?.forTransfer) q.set('forTransfer', 'true')
   if (params?.forRevenue) q.set('forRevenue', 'true')
   if (params?.forCard) q.set('forCard', 'true')
-  const res = await apiFetch(`/api/getAccountSubjects?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAccountSubjects?${q}`)
   return res.json() as Promise<AccountSubjectItem[]>
 }
 
@@ -2403,7 +2402,7 @@ export async function saveAccountSubject(params: {
   pAndLSection?: string | null
   sortOrder?: number
 }) {
-  const res = await apiFetch('/api/saveAccountSubject', {
+  const res = await apiFetchWithOffline('/api/saveAccountSubject', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2412,7 +2411,7 @@ export async function saveAccountSubject(params: {
 }
 
 export async function deleteAccountSubject(params: { id: number }) {
-  const res = await apiFetch('/api/deleteAccountSubject', {
+  const res = await apiFetchWithOffline('/api/deleteAccountSubject', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2437,7 +2436,7 @@ export async function getFixedExpenses(params?: { store?: string; userStore?: st
   if (params?.store) q.set('store', params.store)
   if (params?.userStore) q.set('userStore', params.userStore)
   if (params?.userRole) q.set('userRole', params.userRole)
-  const res = await apiFetch(`/api/getFixedExpenses?${q}`)
+  const res = await apiFetchWithOffline(`/api/getFixedExpenses?${q}`)
   return res.json() as Promise<FixedExpenseItem[]>
 }
 
@@ -2451,7 +2450,7 @@ export async function saveFixedExpense(params: {
   memo?: string | null
   accountSubjectId?: number | null
 }) {
-  const res = await apiFetch('/api/saveFixedExpense', {
+  const res = await apiFetchWithOffline('/api/saveFixedExpense', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2460,7 +2459,7 @@ export async function saveFixedExpense(params: {
 }
 
 export async function deleteFixedExpense(params: { id: number }) {
-  const res = await apiFetch('/api/deleteFixedExpense', {
+  const res = await apiFetchWithOffline('/api/deleteFixedExpense', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2481,12 +2480,12 @@ export interface InteriorProject {
 }
 
 export async function getInteriorProjects() {
-  const res = await apiFetch('/api/getInteriorProjects')
+  const res = await apiFetchWithOffline('/api/getInteriorProjects')
   return res.json() as Promise<InteriorProject[]>
 }
 
 export async function saveInteriorProject(params: Partial<InteriorProject> & { code: string; name: string }) {
-  const res = await apiFetch('/api/saveInteriorProject', {
+  const res = await apiFetchWithOffline('/api/saveInteriorProject', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2495,7 +2494,7 @@ export async function saveInteriorProject(params: Partial<InteriorProject> & { c
 }
 
 export async function deleteInteriorProject(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorProject', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorProject', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2516,12 +2515,12 @@ export interface InteriorScheduleItem {
 
 export async function getInteriorSchedule(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorSchedule?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorSchedule?${q}`)
   return res.json() as Promise<InteriorScheduleItem[]>
 }
 
 export async function saveInteriorScheduleItem(params: Partial<InteriorScheduleItem> & { projectId: number; workDetail: string }) {
-  const res = await apiFetch('/api/saveInteriorScheduleItem', {
+  const res = await apiFetchWithOffline('/api/saveInteriorScheduleItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2530,7 +2529,7 @@ export async function saveInteriorScheduleItem(params: Partial<InteriorScheduleI
 }
 
 export async function deleteInteriorScheduleItem(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorScheduleItem', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorScheduleItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2553,12 +2552,12 @@ export interface InteriorExpenseItem {
 
 export async function getInteriorExpenseItems(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorExpenseItems?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorExpenseItems?${q}`)
   return res.json() as Promise<InteriorExpenseItem[]>
 }
 
 export async function saveInteriorExpenseItem(params: Partial<InteriorExpenseItem> & { projectId: number; description: string }) {
-  const res = await apiFetch('/api/saveInteriorExpenseItem', {
+  const res = await apiFetchWithOffline('/api/saveInteriorExpenseItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2567,7 +2566,7 @@ export async function saveInteriorExpenseItem(params: Partial<InteriorExpenseIte
 }
 
 export async function deleteInteriorExpenseItem(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorExpenseItem', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorExpenseItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2582,7 +2581,7 @@ export async function payInteriorExpense(params: {
   amount: number
   memo?: string
 }) {
-  const res = await apiFetch('/api/payInteriorExpense', {
+  const res = await apiFetchWithOffline('/api/payInteriorExpense', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2607,12 +2606,12 @@ export interface InteriorDirectPurchase {
 
 export async function getInteriorDirectPurchases(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorDirectPurchases?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorDirectPurchases?${q}`)
   return res.json() as Promise<InteriorDirectPurchase[]>
 }
 
 export async function saveInteriorDirectPurchase(params: Partial<InteriorDirectPurchase> & { projectId: number; description: string }) {
-  const res = await apiFetch('/api/saveInteriorDirectPurchase', {
+  const res = await apiFetchWithOffline('/api/saveInteriorDirectPurchase', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2621,7 +2620,7 @@ export async function saveInteriorDirectPurchase(params: Partial<InteriorDirectP
 }
 
 export async function deleteInteriorDirectPurchase(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorDirectPurchase', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorDirectPurchase', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2641,7 +2640,7 @@ export interface InteriorProjectFile {
 
 export async function getInteriorFiles(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorFiles?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorFiles?${q}`)
   return res.json() as Promise<InteriorProjectFile[]>
 }
 
@@ -2654,7 +2653,7 @@ export async function uploadInteriorFile(params: {
   formData.append('projectId', String(params.projectId))
   formData.append('fileType', params.fileType)
   formData.append('file', params.file)
-  const res = await apiFetch('/api/uploadInteriorFile', {
+  const res = await apiFetchWithOffline('/api/uploadInteriorFile', {
     method: 'POST',
     body: formData,
   })
@@ -2662,7 +2661,7 @@ export async function uploadInteriorFile(params: {
 }
 
 export async function deleteInteriorFile(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorFile', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorFile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2684,12 +2683,12 @@ export interface InteriorKitchenItem {
 
 export async function getInteriorKitchenItems(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorKitchenItems?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorKitchenItems?${q}`)
   return res.json() as Promise<InteriorKitchenItem[]>
 }
 
 export async function saveInteriorKitchenItem(params: Partial<InteriorKitchenItem> & { projectId: number }) {
-  const res = await apiFetch('/api/saveInteriorKitchenItem', {
+  const res = await apiFetchWithOffline('/api/saveInteriorKitchenItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2698,7 +2697,7 @@ export async function saveInteriorKitchenItem(params: Partial<InteriorKitchenIte
 }
 
 export async function deleteInteriorKitchenItem(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorKitchenItem', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorKitchenItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2718,12 +2717,12 @@ export interface InteriorSpecification {
 
 export async function getInteriorSpecifications(params: { projectId: string | number }) {
   const q = new URLSearchParams({ projectId: String(params.projectId) })
-  const res = await apiFetch(`/api/getInteriorSpecifications?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInteriorSpecifications?${q}`)
   return res.json() as Promise<InteriorSpecification[]>
 }
 
 export async function saveInteriorSpecification(params: Partial<InteriorSpecification> & { projectId: number; description: string }) {
-  const res = await apiFetch('/api/saveInteriorSpecification', {
+  const res = await apiFetchWithOffline('/api/saveInteriorSpecification', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2732,7 +2731,7 @@ export async function saveInteriorSpecification(params: Partial<InteriorSpecific
 }
 
 export async function deleteInteriorSpecification(params: { id: number }) {
-  const res = await apiFetch('/api/deleteInteriorSpecification', {
+  const res = await apiFetchWithOffline('/api/deleteInteriorSpecification', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2783,11 +2782,7 @@ export interface AdminVendor {
 }
 
 export async function getAdminItems(options?: { scope?: 'outbound' | 'order' }) {
-  const params = new URLSearchParams()
-  if (options?.scope) params.set('scope', options.scope)
-  const q = params.toString()
-  const res = await apiFetch(`/api/getItems${q ? '?' + q : ''}`)
-  return res.json() as Promise<AdminItem[]>
+  return getAdminItemsWithCache(options) as Promise<AdminItem[]>
 }
 
 export interface WarehouseLocation {
@@ -2799,8 +2794,7 @@ export interface WarehouseLocation {
 }
 
 export async function getWarehouseLocations() {
-  const res = await apiFetch('/api/getWarehouseLocations')
-  return res.json() as Promise<WarehouseLocation[]>
+  return getWarehouseLocationsWithCache() as Promise<WarehouseLocation[]>
 }
 
 export async function saveWarehouseLocation(params: {
@@ -2810,7 +2804,7 @@ export async function saveWarehouseLocation(params: {
   location_code?: string
   sort_order?: number
 }) {
-  const res = await apiFetch('/api/saveWarehouseLocation', {
+  const res = await apiFetchWithOffline('/api/saveWarehouseLocation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2819,7 +2813,7 @@ export async function saveWarehouseLocation(params: {
 }
 
 export async function deleteWarehouseLocation(params: { id?: number; location_code?: string }) {
-  const res = await apiFetch('/api/deleteWarehouseLocation', {
+  const res = await apiFetchWithOffline('/api/deleteWarehouseLocation', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2834,7 +2828,7 @@ export interface ItemCategory {
 }
 
 export async function getItemCategorySettings() {
-  const res = await apiFetch('/api/getItemCategorySettings')
+  const res = await apiFetchWithOffline('/api/getItemCategorySettings')
   return res.json() as Promise<ItemCategory[]>
 }
 
@@ -2844,7 +2838,7 @@ export async function saveItemCategory(params: {
   oldName?: string
   sort_order?: number
 }) {
-  const res = await apiFetch('/api/saveItemCategory', {
+  const res = await apiFetchWithOffline('/api/saveItemCategory', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2853,7 +2847,7 @@ export async function saveItemCategory(params: {
 }
 
 export async function deleteItemCategory(params: { id?: number; name?: string }) {
-  const res = await apiFetch('/api/deleteItemCategory', {
+  const res = await apiFetchWithOffline('/api/deleteItemCategory', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2862,12 +2856,12 @@ export async function deleteItemCategory(params: { id?: number; name?: string })
 }
 
 export async function getItemCategories() {
-  const res = await apiFetch('/api/getItemCategories')
+  const res = await apiFetchWithOffline('/api/getItemCategories')
   return res.json() as Promise<{ categories: string[] }>
 }
 
 export async function getAdminVendors() {
-  const res = await apiFetch('/api/getVendors')
+  const res = await apiFetchWithOffline('/api/getVendors')
   return res.json() as Promise<AdminVendor[]>
 }
 
@@ -2891,7 +2885,7 @@ export async function saveItem(params: {
   stockUnitOptions?: { unit: string; factor: number }[]
   standardUnits?: { unit: string; totalQuantity: number }[]
 }) {
-  const res = await apiFetch('/api/saveItem', {
+  const res = await apiFetchWithOffline('/api/saveItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2900,7 +2894,7 @@ export async function saveItem(params: {
 }
 
 export async function deleteItem(params: { code: string }) {
-  const res = await apiFetch('/api/deleteItem', {
+  const res = await apiFetchWithOffline('/api/deleteItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2943,7 +2937,7 @@ export async function getPriceHistory(params: {
   if (params.search) searchParams.set('search', params.search)
   if (params.limit != null) searchParams.set('limit', String(params.limit))
   const q = searchParams.toString()
-  const res = await apiFetch(`/api/getPriceHistory${q ? '?' + q : ''}`)
+  const res = await apiFetchWithOffline(`/api/getPriceHistory${q ? '?' + q : ''}`)
   const data = await res.json()
   if (!res.ok || (data && typeof data === 'object' && 'error' in data)) {
     console.warn('getPriceHistory:', data?.error || res.status)
@@ -2953,7 +2947,7 @@ export async function getPriceHistory(params: {
 }
 
 export async function backfillPriceHistory() {
-  const res = await apiFetch('/api/backfillPriceHistory', { method: 'POST' })
+  const res = await apiFetchWithOffline('/api/backfillPriceHistory', { method: 'POST' })
   const data = await res.json() as { success?: boolean; inserted?: number; error?: string }
   if (!res.ok || !data?.success) {
     return { success: false as const, error: data?.error || '실패', inserted: 0 }
@@ -2962,7 +2956,7 @@ export async function backfillPriceHistory() {
 }
 
 export async function updateItemOrderDisabled(params: { code: string; disabled: boolean }) {
-  const res = await apiFetch('/api/updateItemOrderDisabled', {
+  const res = await apiFetchWithOffline('/api/updateItemOrderDisabled', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -2974,7 +2968,7 @@ export async function updateItemOrderDisabled(params: { code: string; disabled: 
 export async function importItemsFromExcel(file: File) {
   const form = new FormData()
   form.set('file', file)
-  const res = await apiFetch('/api/importItemsFromExcel', {
+  const res = await apiFetchWithOffline('/api/importItemsFromExcel', {
     method: 'POST',
     body: form,
   })
@@ -3027,18 +3021,18 @@ export interface PosMenuOption {
 }
 
 export async function getPosMenus() {
-  const res = await apiFetch('/api/getPosMenus')
+  const res = await apiFetchWithOffline('/api/getPosMenus')
   return res.json() as Promise<PosMenu[]>
 }
 
 export async function getNextPosMenuCode(mainCategory: string) {
   const q = new URLSearchParams({ mainCategory })
-  const res = await apiFetch(`/api/getNextPosMenuCode?${q}`)
+  const res = await apiFetchWithOffline(`/api/getNextPosMenuCode?${q}`)
   return res.json() as Promise<{ code: string | null; message?: string }>
 }
 
 export async function getPosMenuCategories() {
-  const res = await apiFetch('/api/getPosMenuCategories')
+  const res = await apiFetchWithOffline('/api/getPosMenuCategories')
   return res.json() as Promise<{ categories: string[]; mainCategories: string[] }>
 }
 
@@ -3048,12 +3042,12 @@ export interface PosMenuCategoriesConfig {
 }
 
 export async function getPosMenuCategoriesConfig() {
-  const res = await apiFetch('/api/posMenuCategories')
+  const res = await apiFetchWithOffline('/api/posMenuCategories')
   return res.json() as Promise<PosMenuCategoriesConfig>
 }
 
 export async function applyPosMenuCategoryPresets() {
-  const res = await apiFetch('/api/applyPosMenuCategoryPresets', {
+  const res = await apiFetchWithOffline('/api/applyPosMenuCategoryPresets', {
     method: 'POST',
   })
   return res.json() as Promise<{ success: boolean; updated: number; total: number }>
@@ -3064,7 +3058,7 @@ export async function savePosMenuCategoriesConfig(params: {
   categoriesByMain: Record<string, string[]>
   applyToMenus?: boolean
 }) {
-  const res = await apiFetch('/api/posMenuCategories', {
+  const res = await apiFetchWithOffline('/api/posMenuCategories', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3081,7 +3075,7 @@ export async function savePosMenuCategoriesConfig(params: {
 export async function getPosMenuOptions(params?: { menuId?: string }) {
   const q = new URLSearchParams()
   if (params?.menuId) q.set('menuId', params.menuId)
-  const res = await apiFetch('/api/getPosMenuOptions?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosMenuOptions?' + q.toString())
   return res.json() as Promise<PosMenuOption[]>
 }
 
@@ -3101,7 +3095,7 @@ export async function savePosMenuOption(params: {
   sellDelivery?: boolean
   sellPackaging?: boolean
 }) {
-  const res = await apiFetch('/api/savePosMenuOption', {
+  const res = await apiFetchWithOffline('/api/savePosMenuOption', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3123,7 +3117,7 @@ export async function getPosMenuIngredients(params: { menuId: string; optionId?:
   const q = new URLSearchParams()
   q.set('menuId', params.menuId)
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
-  const res = await apiFetch('/api/getPosMenuIngredients?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosMenuIngredients?' + q.toString())
   return res.json() as Promise<PosMenuIngredient[]>
 }
 
@@ -3136,7 +3130,7 @@ export async function savePosMenuIngredient(params: {
   optionId?: number | null
   ingredientType?: 'food' | 'packaging'
 }) {
-  const res = await apiFetch('/api/savePosMenuIngredient', {
+  const res = await apiFetchWithOffline('/api/savePosMenuIngredient', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3157,7 +3151,7 @@ export async function getMenuCost(params: { menuId: string; optionId?: string })
   const q = new URLSearchParams()
   q.set('menuId', params.menuId)
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
-  const res = await apiFetch('/api/getMenuCost?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getMenuCost?' + q.toString())
   return res.json() as Promise<{ cost: number; breakdown: MenuCostBreakdown[] }>
 }
 
@@ -3190,7 +3184,7 @@ export interface PosMenuCostAnalysisRow {
 }
 
 export async function getPosMenuCostAnalysis(): Promise<PosMenuCostAnalysisRow[]> {
-  const res = await apiFetch('/api/getPosMenuCostAnalysis')
+  const res = await apiFetchWithOffline('/api/getPosMenuCostAnalysis')
   const data = await res.json().catch(() => [])
   if (!res.ok) return []
   return Array.isArray(data) ? data : []
@@ -3212,7 +3206,7 @@ export interface SauceRow {
 }
 
 export async function getSauces() {
-  const res = await apiFetch('/api/sauces')
+  const res = await apiFetchWithOffline('/api/sauces')
   const data = await res.json().catch(() => null)
   if (!res.ok) {
     throw new Error((data as { message?: string })?.message || `소스 목록 조회 실패 (${res.status})`)
@@ -3229,7 +3223,7 @@ export async function saveSauce(params: {
   totalQuantity?: number
   ingredients: { itemCode: string; quantity: number; lossRate?: number }[]
 }) {
-  const res = await apiFetch('/api/sauces', {
+  const res = await apiFetchWithOffline('/api/sauces', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3242,7 +3236,7 @@ export async function saveSauce(params: {
 }
 
 export async function deleteSauce(params: { id: number }) {
-  const res = await apiFetch('/api/sauces/delete', {
+  const res = await apiFetchWithOffline('/api/sauces/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3255,7 +3249,7 @@ export async function deleteSauce(params: { id: number }) {
 }
 
 export async function recalculateSauces() {
-  const res = await apiFetch('/api/sauces/recalculate', { method: 'POST' })
+  const res = await apiFetchWithOffline('/api/sauces/recalculate', { method: 'POST' })
   const data = await res.json().catch(() => ({})) as { success?: boolean; count?: number; message?: string }
   if (!res.ok) {
     throw new Error(data?.message || `재계산 실패 (${res.status})`)
@@ -3264,7 +3258,7 @@ export async function recalculateSauces() {
 }
 
 export async function getNotificationSettings() {
-  const res = await apiFetch('/api/notificationSettings')
+  const res = await apiFetchWithOffline('/api/notificationSettings')
   return res.json() as Promise<{ pushNoticeEnabled: boolean; pushOrderApprovalEnabled: boolean }>
 }
 
@@ -3272,7 +3266,7 @@ export async function updateNotificationSettings(params: {
   pushNoticeEnabled?: boolean
   pushOrderApprovalEnabled?: boolean
 }) {
-  const res = await apiFetch('/api/notificationSettings', {
+  const res = await apiFetchWithOffline('/api/notificationSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3281,7 +3275,7 @@ export async function updateNotificationSettings(params: {
 }
 
 export async function getCostSettings() {
-  const res = await apiFetch('/api/costSettings')
+  const res = await apiFetchWithOffline('/api/costSettings')
   const data = await res.json().catch(() => ({})) as { defaultOverheadPercent?: number; globalOverheadPercent?: number; message?: string }
   if (!res.ok) {
     throw new Error(data?.message || `OH 설정 조회 실패 (${res.status})`)
@@ -3293,7 +3287,7 @@ export async function getCostSettings() {
 }
 
 export async function updateCostSettings(params: { globalOverheadPercent?: number; defaultOverheadPercent?: number }) {
-  const res = await apiFetch('/api/costSettings', {
+  const res = await apiFetchWithOffline('/api/costSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3306,7 +3300,7 @@ export async function updateCostSettings(params: { globalOverheadPercent?: numbe
 }
 
 export async function deletePosMenuIngredient(params: { id: string }) {
-  const res = await apiFetch('/api/deletePosMenuIngredient', {
+  const res = await apiFetchWithOffline('/api/deletePosMenuIngredient', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3315,7 +3309,7 @@ export async function deletePosMenuIngredient(params: { id: string }) {
 }
 
 export async function deletePosMenuOption(params: { id: string }) {
-  const res = await apiFetch('/api/deletePosMenuOption', {
+  const res = await apiFetchWithOffline('/api/deletePosMenuOption', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3340,7 +3334,7 @@ export async function savePosMenu(params: {
   cookingTimeMin?: number | null
   isBanban?: boolean
 }) {
-  const res = await apiFetch('/api/savePosMenu', {
+  const res = await apiFetchWithOffline('/api/savePosMenu', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3351,7 +3345,7 @@ export async function savePosMenu(params: {
 export async function uploadPosMenuImage(params: { file: File }) {
   const formData = new FormData()
   formData.append('file', params.file)
-  const res = await apiFetch('/api/uploadPosMenuImage', {
+  const res = await apiFetchWithOffline('/api/uploadPosMenuImage', {
     method: 'POST',
     body: formData,
   })
@@ -3359,7 +3353,7 @@ export async function uploadPosMenuImage(params: { file: File }) {
 }
 
 export async function deletePosMenu(params: { id: string }) {
-  const res = await apiFetch('/api/deletePosMenu', {
+  const res = await apiFetchWithOffline('/api/deletePosMenu', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3368,7 +3362,7 @@ export async function deletePosMenu(params: { id: string }) {
 }
 
 export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolean }) {
-  const res = await apiFetch('/api/updatePosMenuSoldOut', {
+  const res = await apiFetchWithOffline('/api/updatePosMenuSoldOut', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3400,7 +3394,7 @@ export interface PosPromoItem {
 }
 
 export async function getPosPromos() {
-  const res = await apiFetch('/api/getPosPromos')
+  const res = await apiFetchWithOffline('/api/getPosPromos')
   return res.json() as Promise<PosPromo[]>
 }
 
@@ -3409,14 +3403,14 @@ export interface PosPromoWithItems extends PosPromo {
 }
 
 export async function getPosPromosWithItems() {
-  const res = await apiFetch('/api/getPosPromosWithItems')
+  const res = await apiFetchWithOffline('/api/getPosPromosWithItems')
   return res.json() as Promise<PosPromoWithItems[]>
 }
 
 export async function getPosPromoItems(params: { promoId: string }) {
   const q = new URLSearchParams()
   q.set('promoId', params.promoId)
-  const res = await apiFetch('/api/getPosPromoItems?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosPromoItems?' + q.toString())
   return res.json() as Promise<PosPromoItem[]>
 }
 
@@ -3432,7 +3426,7 @@ export async function savePosPromo(params: {
   sortOrder?: number
   marketingCampaignId?: string | null
 }) {
-  const res = await apiFetch('/api/savePosPromo', {
+  const res = await apiFetchWithOffline('/api/savePosPromo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3448,7 +3442,7 @@ export async function savePosPromoItem(params: {
   quantity?: number
   sortOrder?: number
 }) {
-  const res = await apiFetch('/api/savePosPromoItem', {
+  const res = await apiFetchWithOffline('/api/savePosPromoItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3457,7 +3451,7 @@ export async function savePosPromoItem(params: {
 }
 
 export async function deletePosPromoItem(params: { id: string }) {
-  const res = await apiFetch('/api/deletePosPromoItem', {
+  const res = await apiFetchWithOffline('/api/deletePosPromoItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3466,7 +3460,7 @@ export async function deletePosPromoItem(params: { id: string }) {
 }
 
 export async function deletePosPromo(params: { id: string }) {
-  const res = await apiFetch('/api/deletePosPromo', {
+  const res = await apiFetchWithOffline('/api/deletePosPromo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3505,13 +3499,13 @@ export interface MarketingCampaignDetail extends MarketingCampaign {
 }
 
 export async function getMarketingCampaigns() {
-  const res = await apiFetch('/api/marketingCampaigns')
+  const res = await apiFetchWithOffline('/api/marketingCampaigns')
   return res.json() as Promise<MarketingCampaign[]>
 }
 
 export async function getMarketingCampaign(id: string) {
   const q = new URLSearchParams({ id })
-  const res = await apiFetch('/api/marketingCampaigns?' + q.toString())
+  const res = await apiFetchWithOffline('/api/marketingCampaigns?' + q.toString())
   return res.json() as Promise<MarketingCampaignDetail | null>
 }
 
@@ -3538,7 +3532,7 @@ export async function saveMarketingCampaign(params: {
   campaignPerformance?: string
   conclusion?: string
 }) {
-  const res = await apiFetch('/api/marketingCampaigns', {
+  const res = await apiFetchWithOffline('/api/marketingCampaigns', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3547,7 +3541,7 @@ export async function saveMarketingCampaign(params: {
 }
 
 export async function deleteMarketingCampaign(params: { id: string }) {
-  const res = await apiFetch('/api/deleteMarketingCampaign', {
+  const res = await apiFetchWithOffline('/api/deleteMarketingCampaign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3557,7 +3551,7 @@ export async function deleteMarketingCampaign(params: { id: string }) {
 
 export async function getMarketingCampaignCosts(campaignId: string) {
   const q = new URLSearchParams({ campaignId })
-  const res = await apiFetch(`/api/marketingCampaignCosts?${q}`)
+  const res = await apiFetchWithOffline(`/api/marketingCampaignCosts?${q}`)
   return res.json() as Promise<{
     success: boolean
     message?: string
@@ -3573,7 +3567,7 @@ export async function getMarketingCampaignCosts(campaignId: string) {
 
 export async function getMarketingCampaignResults(params: { campaignId: string }) {
   const q = new URLSearchParams({ campaignId: params.campaignId })
-  const res = await apiFetch(`/api/marketingCampaignResults?${q}`)
+  const res = await apiFetchWithOffline(`/api/marketingCampaignResults?${q}`)
   return res.json() as Promise<{
     success: boolean
     message?: string
@@ -3595,7 +3589,7 @@ export async function getMarketingCampaignResults(params: { campaignId: string }
 export async function importMarketingExcel(file: File) {
   const form = new FormData()
   form.set('file', file)
-  const res = await apiFetch('/api/importMarketingExcel', {
+  const res = await apiFetchWithOffline('/api/importMarketingExcel', {
     method: 'POST',
     body: form,
   })
@@ -3625,7 +3619,7 @@ export interface MarketingAd {
 export async function getMarketingAds(params?: { campaignId?: string }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
-  const res = await apiFetch('/api/marketingAds' + (q.toString() ? '?' + q.toString() : ''))
+  const res = await apiFetchWithOffline('/api/marketingAds' + (q.toString() ? '?' + q.toString() : ''))
   return res.json() as Promise<MarketingAd[]>
 }
 
@@ -3641,7 +3635,7 @@ export async function saveMarketingAd(params: {
   boostBudget?: number
   actualSpent?: number
 }) {
-  const res = await apiFetch('/api/marketingAds', {
+  const res = await apiFetchWithOffline('/api/marketingAds', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3650,7 +3644,7 @@ export async function saveMarketingAd(params: {
 }
 
 export async function deleteMarketingAd(params: { id: string }) {
-  const res = await apiFetch('/api/deleteMarketingAd', {
+  const res = await apiFetchWithOffline('/api/deleteMarketingAd', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3679,7 +3673,7 @@ export interface MarketingInfluencer {
 export async function getMarketingInfluencers(params?: { campaignId?: string }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
-  const res = await apiFetch('/api/marketingInfluencers' + (q.toString() ? '?' + q.toString() : ''))
+  const res = await apiFetchWithOffline('/api/marketingInfluencers' + (q.toString() ? '?' + q.toString() : ''))
   return res.json() as Promise<MarketingInfluencer[]>
 }
 
@@ -3699,7 +3693,7 @@ export async function saveMarketingInfluencer(params: {
   platformLinks?: Record<string, string>
   note?: string
 }) {
-  const res = await apiFetch('/api/marketingInfluencers', {
+  const res = await apiFetchWithOffline('/api/marketingInfluencers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3708,7 +3702,7 @@ export async function saveMarketingInfluencer(params: {
 }
 
 export async function deleteMarketingInfluencer(params: { id: string }) {
-  const res = await apiFetch('/api/deleteMarketingInfluencer', {
+  const res = await apiFetchWithOffline('/api/deleteMarketingInfluencer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3732,7 +3726,7 @@ export interface PosCoupon {
 }
 
 export async function getPosCoupons() {
-  const res = await apiFetch('/api/getPosCoupons')
+  const res = await apiFetchWithOffline('/api/getPosCoupons')
   return res.json() as Promise<PosCoupon[]>
 }
 
@@ -3750,7 +3744,7 @@ export async function savePosCoupon(params: {
   isActive?: boolean
   marketingCampaignId?: string | null
 }) {
-  const res = await apiFetch('/api/savePosCoupon', {
+  const res = await apiFetchWithOffline('/api/savePosCoupon', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3762,7 +3756,7 @@ export async function validatePosCoupon(params: { code: string; subtotal: number
   const q = new URLSearchParams()
   q.set('code', params.code.trim().toUpperCase())
   q.set('subtotal', String(Math.max(0, params.subtotal)))
-  const res = await apiFetch('/api/validatePosCoupon?' + q.toString())
+  const res = await apiFetchWithOffline('/api/validatePosCoupon?' + q.toString())
   return res.json() as Promise<{
     valid: boolean
     message?: string
@@ -3773,7 +3767,7 @@ export async function validatePosCoupon(params: { code: string; subtotal: number
 }
 
 export async function deletePosCoupon(params: { id: number }) {
-  const res = await apiFetch('/api/deletePosCoupon', {
+  const res = await apiFetchWithOffline('/api/deletePosCoupon', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3801,7 +3795,7 @@ export interface PosTableItem {
 export async function getPosTableLayout(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
-  const res = await apiFetch('/api/getPosTableLayout?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosTableLayout?' + q.toString())
   return res.json() as Promise<{ layout: PosTableItem[]; storeCode: string; isFallback?: boolean }>
 }
 
@@ -3852,6 +3846,7 @@ export interface PosPrinterSettings {
   receiptShowPaidStamp?: boolean
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
+  receiptPrintLang?: string
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
@@ -3866,7 +3861,7 @@ export interface PosPrinterSettings {
 export async function getPosPrinterSettings(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
-  const res = await apiFetch('/api/getPosPrinterSettings?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosPrinterSettings?' + q.toString())
   return res.json() as Promise<PosPrinterSettings>
 }
 
@@ -3917,6 +3912,7 @@ export async function savePosPrinterSettings(params: {
   receiptShowPaidStamp?: boolean
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
+  receiptPrintLang?: string
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
@@ -3927,7 +3923,7 @@ export async function savePosPrinterSettings(params: {
   otherRate?: number
   otherMode?: 'included' | 'separate'
 }) {
-  const res = await apiFetch('/api/savePosPrinterSettings', {
+  const res = await apiFetchWithOffline('/api/savePosPrinterSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3939,7 +3935,7 @@ export async function savePosTableLayout(params: {
   storeCode: string
   layout: PosTableItem[]
 }) {
-  const res = await apiFetch('/api/savePosTableLayout', {
+  const res = await apiFetchWithOffline('/api/savePosTableLayout', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -3963,7 +3959,7 @@ export async function getPosDeliveryApps(params?: { storeCode?: string; includeD
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.includeDisabled) q.set('includeDisabled', 'true')
-  const res = await apiFetch('/api/getPosDeliveryApps?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosDeliveryApps?' + q.toString())
   return res.json() as Promise<PosDeliveryApp[]>
 }
 
@@ -3980,7 +3976,7 @@ export async function savePosDeliveryApps(params: {
     accentColor?: string | null
   }>
 }) {
-  const res = await apiFetch('/api/savePosDeliveryApps', {
+  const res = await apiFetchWithOffline('/api/savePosDeliveryApps', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4003,7 +3999,7 @@ export interface PosMenuScreenConfig {
 export async function getPosMenuScreenConfig(params?: { storeCode?: string }) {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
-  const res = await apiFetch('/api/getPosMenuScreenConfig?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosMenuScreenConfig?' + q.toString())
   return res.json() as Promise<PosMenuScreenConfig>
 }
 
@@ -4017,7 +4013,7 @@ export async function savePosMenuScreenConfig(params: {
   menuListPageSize: number
   kioskGroupFontSize: number
 }) {
-  const res = await apiFetch('/api/savePosMenuScreenConfig', {
+  const res = await apiFetchWithOffline('/api/savePosMenuScreenConfig', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4050,7 +4046,7 @@ export async function getPosMenuBoards(params?: {
   const q = new URLSearchParams()
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.boardType) q.set('boardType', params.boardType)
-  const res = await apiFetch('/api/getPosMenuBoards?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosMenuBoards?' + q.toString())
   return res.json() as Promise<PosMenuBoardConfig[]>
 }
 
@@ -4069,7 +4065,7 @@ export async function savePosMenuBoard(params: {
   menuCount?: number
   isActive?: boolean
 }) {
-  const res = await apiFetch('/api/savePosMenuBoard', {
+  const res = await apiFetchWithOffline('/api/savePosMenuBoard', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4078,7 +4074,7 @@ export async function savePosMenuBoard(params: {
 }
 
 export async function deletePosMenuBoard(params: { id: number }) {
-  const res = await apiFetch('/api/deletePosMenuBoard', {
+  const res = await apiFetchWithOffline('/api/deletePosMenuBoard', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4089,8 +4085,8 @@ export async function deletePosMenuBoard(params: { id: number }) {
 export async function getPosPaymentSettings(params: { storeCode: string }) {
   const q = new URLSearchParams()
   q.set('storeCode', params.storeCode)
-  const res = await apiFetch('/api/getPosPaymentSettings?' + q.toString())
-  return res.json() as Promise<{ storeCode: string; cardKeys: string[]; qrKeys: string[] }>
+  const res = await apiFetchWithOffline('/api/getPosPaymentSettings?' + q.toString())
+  return res.json() as Promise<{ storeCode: string; cardKeys: string[]; qrKeys: string[]; deliveryKeys?: string[] }>
 }
 
 export interface PosPaymentMethodItem {
@@ -4105,7 +4101,7 @@ export interface PosPaymentMethodItem {
 export async function getPosPaymentMethodItems(params: { storeCode?: string }) {
   const q = new URLSearchParams()
   if (params.storeCode?.trim()) q.set('storeCode', params.storeCode.trim())
-  const res = await apiFetch('/api/getPosPaymentMethodItems?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosPaymentMethodItems?' + q.toString())
   return res.json() as Promise<PosPaymentMethodItem[]>
 }
 
@@ -4116,7 +4112,7 @@ export async function savePosPaymentMethodItem(params: {
   name: string
   hidden?: boolean
 }) {
-  const res = await apiFetch('/api/savePosPaymentMethodItem', {
+  const res = await apiFetchWithOffline('/api/savePosPaymentMethodItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4124,12 +4120,21 @@ export async function savePosPaymentMethodItem(params: {
   return res.json() as Promise<{ success: boolean; id?: string; message?: string }>
 }
 
+export async function deletePosPaymentMethodItem(params: { id: string }) {
+  const res = await apiFetchWithOffline('/api/deletePosPaymentMethodItem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: params.id }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function savePosPaymentSettings(params: {
   storeCode: string
   cardKeys: string[]
   qrKeys: string[]
 }) {
-  const res = await apiFetch('/api/savePosPaymentSettings', {
+  const res = await apiFetchWithOffline('/api/savePosPaymentSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4184,7 +4189,7 @@ export async function getPosTodaySales(params?: {
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
-  const res = await apiFetch('/api/getPosTodaySales?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosTodaySales?' + q.toString())
   return res.json() as Promise<{
     completedCount: number
     completedTotal: number
@@ -4198,13 +4203,15 @@ export async function getPosOrders(params?: {
   endStr?: string
   storeCode?: string
   status?: string
+  sinceId?: number
 }): Promise<PosOrder[]> {
   const q = new URLSearchParams()
   if (params?.startStr) q.set('startStr', params.startStr)
   if (params?.endStr) q.set('endStr', params.endStr)
   if (params?.storeCode) q.set('storeCode', params.storeCode)
   if (params?.status) q.set('status', params.status)
-  const res = await apiFetch('/api/getPosOrders?' + q.toString())
+  if (params?.sinceId != null && params.sinceId > 0) q.set('sinceId', String(params.sinceId))
+  const res = await apiFetchWithOffline('/api/getPosOrders?' + q.toString())
   const data = await res.json().catch(() => null)
   if (!Array.isArray(data)) return []
   return data as PosOrder[]
@@ -4234,7 +4241,7 @@ export async function getPosSettlement(params: {
   const q = new URLSearchParams()
   q.set('settleDate', params.settleDate)
   if (params.storeCode) q.set('storeCode', params.storeCode)
-  const res = await apiFetch('/api/getPosSettlement?' + q.toString())
+  const res = await apiFetchWithOffline('/api/getPosSettlement?' + q.toString())
   return res.json() as Promise<{
     systemTotal: number
     systemSubtotal?: number
@@ -4258,7 +4265,7 @@ export async function savePosSettlement(params: {
   memo?: string
   closed?: boolean
 }) {
-  const res = await apiFetch('/api/savePosSettlement', {
+  const res = await apiFetchWithOffline('/api/savePosSettlement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4295,7 +4302,7 @@ export async function updatePosOrder(params: {
     otherMode?: 'included' | 'separate'
   }
 }) {
-  const res = await apiFetch('/api/updatePosOrder', {
+  const res = await apiFetchWithOffline('/api/updatePosOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4304,7 +4311,7 @@ export async function updatePosOrder(params: {
 }
 
 export async function updatePosOrderStatus(params: { id: number; status: string }) {
-  const res = await apiFetch('/api/updatePosOrderStatus', {
+  const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4318,7 +4325,7 @@ export async function markPosOrderItemServed(params: {
   served: boolean
   servedBy?: string
 }) {
-  const res = await apiFetch('/api/markPosOrderItemServed', {
+  const res = await apiFetchWithOffline('/api/markPosOrderItemServed', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4360,7 +4367,7 @@ export async function savePosOrder(params: {
   }
   items: PosOrderItem[]
 }) {
-  const res = await apiFetch('/api/savePosOrder', {
+  const res = await apiFetchWithOffline('/api/savePosOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4373,7 +4380,7 @@ export async function getLineMembers(params?: { q?: string; limit?: number }) {
   if (params?.q) q.set('q', params.q)
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
-  const res = await apiFetch('/api/members/line' + (suffix ? `?${suffix}` : ''))
+  const res = await apiFetchWithOffline('/api/members/line' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<Array<{
     member: Member
     identity: {
@@ -4394,7 +4401,7 @@ export async function linkMemberLine(params: {
   displayName?: string
   pictureUrl?: string
 }) {
-  const res = await apiFetch(`/api/members/${params.memberId}/link-line`, {
+  const res = await apiFetchWithOffline(`/api/members/${params.memberId}/link-line`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4403,7 +4410,7 @@ export async function linkMemberLine(params: {
 }
 
 export async function unlinkMemberLine(params: { memberId: number; lineUserId?: string }) {
-  const res = await apiFetch(`/api/members/${params.memberId}/unlink-line`, {
+  const res = await apiFetchWithOffline(`/api/members/${params.memberId}/unlink-line`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4412,7 +4419,7 @@ export async function unlinkMemberLine(params: { memberId: number; lineUserId?: 
 }
 
 export async function syncLineMembers(params?: { limit?: number }) {
-  const res = await apiFetch('/api/members/line-sync', {
+  const res = await apiFetchWithOffline('/api/members/line-sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ limit: params?.limit ?? 2000 }),
@@ -4432,7 +4439,7 @@ export async function syncLineMembers(params?: { limit?: number }) {
 export async function importLineCrmFile(params: { file: File }) {
   const form = new FormData()
   form.set('file', params.file)
-  const res = await apiFetch('/api/members/line-import', {
+  const res = await apiFetchWithOffline('/api/members/line-import', {
     method: 'POST',
     body: form,
   })
@@ -4451,7 +4458,7 @@ export async function getMemberPoints(params?: { memberId?: number; limit?: numb
   const q = new URLSearchParams()
   if (params?.memberId) q.set('memberId', String(params.memberId))
   if (params?.limit != null) q.set('limit', String(params.limit))
-  const res = await apiFetch('/api/member-points?' + q.toString())
+  const res = await apiFetchWithOffline('/api/member-points?' + q.toString())
   return res.json() as Promise<Array<{
     id: number
     memberId: number
@@ -4465,7 +4472,7 @@ export async function getMemberPoints(params?: { memberId?: number; limit?: numb
 }
 
 export async function adjustMemberPoints(params: { memberId: number; points: number; note?: string }) {
-  const res = await apiFetch('/api/member-points/adjust', {
+  const res = await apiFetchWithOffline('/api/member-points/adjust', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4474,12 +4481,12 @@ export async function adjustMemberPoints(params: { memberId: number; points: num
 }
 
 export async function getMemberTiers() {
-  const res = await apiFetch('/api/member-tiers')
+  const res = await apiFetchWithOffline('/api/member-tiers')
   return res.json() as Promise<Array<{ code: string; name: string; min_amount: number; point_rate: number }>>
 }
 
 export async function saveMemberTier(params: { code: string; name: string; minAmount: number; pointRate: number }) {
-  const res = await apiFetch('/api/member-tiers', {
+  const res = await apiFetchWithOffline('/api/member-tiers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4488,7 +4495,7 @@ export async function saveMemberTier(params: { code: string; name: string; minAm
 }
 
 export async function recalculateMemberTier(params?: { memberId?: number }) {
-  const res = await apiFetch('/api/member-tiers/recalculate', {
+  const res = await apiFetchWithOffline('/api/member-tiers/recalculate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params || {}),
@@ -4501,7 +4508,7 @@ export async function getMemberVisits(params?: { memberId?: number; limit?: numb
   if (params?.memberId) q.set('memberId', String(params.memberId))
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
-  const res = await apiFetch('/api/member-visits' + (suffix ? `?${suffix}` : ''))
+  const res = await apiFetchWithOffline('/api/member-visits' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<Array<{
     orderId: number
     memberId: number
@@ -4518,7 +4525,7 @@ export async function getMemberCoupons(params?: { memberId?: number; limit?: num
   if (params?.memberId) q.set('memberId', String(params.memberId))
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
-  const res = await apiFetch('/api/member-coupons' + (suffix ? `?${suffix}` : ''))
+  const res = await apiFetchWithOffline('/api/member-coupons' + (suffix ? `?${suffix}` : ''))
   return res.json() as Promise<Array<{
     id: number
     memberId: number
@@ -4531,7 +4538,7 @@ export async function getMemberCoupons(params?: { memberId?: number; limit?: num
 }
 
 export async function issueMemberCoupon(params: { memberId: number; couponCode: string }) {
-  const res = await apiFetch('/api/member-coupons', {
+  const res = await apiFetchWithOffline('/api/member-coupons', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4571,7 +4578,7 @@ export async function getMembers(params?: { q?: string; limit?: number }) {
   if (params?.q) q.set('q', params.q)
   if (params?.limit != null) q.set('limit', String(params.limit))
   const suffix = q.toString()
-  const res = await apiFetch('/api/members' + (suffix ? `?${suffix}` : ''))
+  const res = await apiFetchWithOffline('/api/members' + (suffix ? `?${suffix}` : ''))
   const json = await res.json().catch(() => [])
   if (!Array.isArray(json)) return []
   return json as Member[]
@@ -4586,7 +4593,7 @@ export async function createMember(params: {
   lineDisplayName?: string
   linePictureUrl?: string
 }) {
-  const res = await apiFetch('/api/members', {
+  const res = await apiFetchWithOffline('/api/members', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4608,7 +4615,7 @@ export async function updateMember(params: {
   consentAt?: string
   status?: string
 }) {
-  const res = await apiFetch(`/api/members/${params.id}`, {
+  const res = await apiFetchWithOffline(`/api/members/${params.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -4636,7 +4643,7 @@ export async function registerLineMember(params: {
   email?: string
   name?: string
 }) {
-  const res = await apiFetch('/api/members/line-register', {
+  const res = await apiFetchWithOffline('/api/members/line-register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4659,7 +4666,7 @@ export async function saveVendor(params: {
   direct_settlement?: boolean
   editingCode?: string
 }) {
-  const res = await apiFetch('/api/saveVendor', {
+  const res = await apiFetchWithOffline('/api/saveVendor', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4668,7 +4675,7 @@ export async function saveVendor(params: {
 }
 
 export async function deleteVendor(params: { code: string }) {
-  const res = await apiFetch('/api/deleteVendor', {
+  const res = await apiFetchWithOffline('/api/deleteVendor', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4708,7 +4715,7 @@ export interface InboundBatchDetail {
 }
 
 export async function getInboundBatch(batchId: number) {
-  const res = await apiFetch(`/api/getInboundBatch?batchId=${batchId}`)
+  const res = await apiFetchWithOffline(`/api/getInboundBatch?batchId=${batchId}`)
   return res.json() as Promise<InboundBatchDetail>
 }
 
@@ -4721,7 +4728,7 @@ export async function updateInboundBatch(params: {
   invoiceReceived?: boolean
   purchaseOrderId?: number | null
 }) {
-  const res = await apiFetch('/api/updateInboundBatch', {
+  const res = await apiFetchWithOffline('/api/updateInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -4730,7 +4737,7 @@ export async function updateInboundBatch(params: {
 }
 
 export async function deleteInboundBatch(batchId: number) {
-  const res = await apiFetch('/api/deleteInboundBatch', {
+  const res = await apiFetchWithOffline('/api/deleteInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ batchId }),
@@ -4751,7 +4758,7 @@ export async function registerInboundBatch(
   storeName?: string,
   options?: { vendorCode?: string; purchaseOrderId?: number; poNo?: string; invoiceNo?: string }
 ) {
-  const res = await apiFetch('/api/registerInboundBatch', {
+  const res = await apiFetchWithOffline('/api/registerInboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -4778,7 +4785,7 @@ export async function getInboundHistory(params: {
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
     ...(params.storeFilter ? { storeFilter: params.storeFilter } : {}),
   })
-  const res = await apiFetch(`/api/getInboundHistory?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInboundHistory?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }
 
@@ -4794,7 +4801,7 @@ export async function getInboundForStore(params: {
     endStr: params.endStr,
     ...(params.vendorFilter ? { vendorFilter: params.vendorFilter } : {}),
   })
-  const res = await apiFetch(`/api/getInboundForStore?${q}`)
+  const res = await apiFetchWithOffline(`/api/getInboundForStore?${q}`)
   return res.json() as Promise<InboundHistoryItem[]>
 }
 
@@ -4838,7 +4845,7 @@ export async function forceOutboundBatch(
   options?: { processorName?: string }
 ) {
   const payload = options?.processorName ? { list, processorName: options.processorName } : list
-  const res = await apiFetch('/api/forceOutboundBatch', {
+  const res = await apiFetchWithOffline('/api/forceOutboundBatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -4848,7 +4855,7 @@ export async function forceOutboundBatch(
 
 /** 강제출고 수령 완료 처리 */
 export async function updateForceOutboundReceived(params: { date: string; vendorTarget: string }) {
-  const res = await apiFetch('/api/updateForceOutboundReceived', {
+  const res = await apiFetchWithOffline('/api/updateForceOutboundReceived', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date: params.date, vendorTarget: params.vendorTarget }),
@@ -4868,13 +4875,13 @@ export async function getCombinedOutboundHistory(params: {
   })
   if (params.vendorFilter) q.set('vendorFilter', params.vendorFilter)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
-  const res = await apiFetch(`/api/getCombinedOutboundHistory?${q}`)
+  const res = await apiFetchWithOffline(`/api/getCombinedOutboundHistory?${q}`)
   return res.json() as Promise<OutboundHistoryItem[]>
 }
 
 /** 주문 수령 사진 온디맨드 조회 (출고 내역에서 사진 클릭 시) */
 export async function getOrderReceivePhoto(orderId: string) {
-  const res = await apiFetch(`/api/getOrderReceivePhoto?orderId=${encodeURIComponent(orderId)}`)
+  const res = await apiFetchWithOffline(`/api/getOrderReceivePhoto?orderId=${encodeURIComponent(orderId)}`)
   const data = (await res.json()) as { urls?: string[] }
   return { urls: data.urls ?? [] }
 }
@@ -4891,7 +4898,7 @@ export interface EtaxGroupInput {
 }
 
 export async function generateEtaxXmlApi(groups: EtaxGroupInput[], sign = false) {
-  const res = await apiFetch('/api/generateEtaxXml', {
+  const res = await apiFetchWithOffline('/api/generateEtaxXml', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ groups, sign }),
@@ -4933,7 +4940,7 @@ export async function getOutboundByWarehouse(params: {
     endStr: params.endStr,
   })
   if (params.filterBy) q.set('filterBy', params.filterBy)
-  const res = await apiFetch(`/api/getOutboundByWarehouse?${q}`)
+  const res = await apiFetchWithOffline(`/api/getOutboundByWarehouse?${q}`)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
@@ -4958,19 +4965,19 @@ export interface InvoiceDataClient {
 }
 
 export async function getInvoiceData() {
-  const res = await apiFetch('/api/getInvoiceData')
+  const res = await apiFetchWithOffline('/api/getInvoiceData')
   return res.json() as Promise<{ company: InvoiceDataCompany; clients: Record<string, InvoiceDataClient> }>
 }
 
 export type InvoiceSettings = Record<string, string>
 
 export async function getInvoiceSettings() {
-  const res = await apiFetch('/api/getInvoiceSettings')
+  const res = await apiFetchWithOffline('/api/getInvoiceSettings')
   return res.json() as Promise<InvoiceSettings>
 }
 
 export async function updateInvoiceSettings(settings: InvoiceSettings) {
-  const res = await apiFetch('/api/updateInvoiceSettings', {
+  const res = await apiFetchWithOffline('/api/updateInvoiceSettings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -5013,7 +5020,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
     userStore: params.userStore,
     userRole: params.userRole,
   })
-  const res = await apiFetch(`/api/getAdminEmployeeList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getAdminEmployeeList?${q}`)
   const data = await res.json()
   return {
     list: (data.list || []) as AdminEmployeeItem[],
@@ -5023,7 +5030,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
 }
 
 export async function getEmployeeLatestGrades() {
-  const res = await apiFetch('/api/getEmployeeLatestGrades')
+  const res = await apiFetchWithOffline('/api/getEmployeeLatestGrades')
   return res.json() as Promise<Record<string, { grade: string }>>
 }
 
@@ -5033,7 +5040,7 @@ export async function saveAdminEmployee(params: {
   userRole: string
   userName?: string
 }) {
-  const res = await apiFetch('/api/saveAdminEmployee', {
+  const res = await apiFetchWithOffline('/api/saveAdminEmployee', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5046,7 +5053,7 @@ export async function deleteAdminEmployee(params: {
   userStore: string
   userRole: string
 }) {
-  const res = await apiFetch('/api/deleteAdminEmployee', {
+  const res = await apiFetchWithOffline('/api/deleteAdminEmployee', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5063,7 +5070,7 @@ export async function getEvaluationItems(params: {
     type: params.type,
     activeOnly: String(params.activeOnly === true),
   })
-  const res = await apiFetch(`/api/getEvaluationItems?${q}`)
+  const res = await apiFetchWithOffline(`/api/getEvaluationItems?${q}`)
   return res.json() as Promise<{ id: string | number; main: string; sub: string; name: string; use?: boolean }[]>
 }
 
@@ -5083,7 +5090,7 @@ export async function getEvaluationHistory(params: {
   if (params.store) q.set('store', params.store)
   if (params.employee) q.set('employee', params.employee)
   if (params.evaluator) q.set('evaluator', params.evaluator)
-  const res = await apiFetch(`/api/getEvaluationHistory?${q}`)
+  const res = await apiFetchWithOffline(`/api/getEvaluationHistory?${q}`)
   return res.json() as Promise<
     {
       id: string
@@ -5104,7 +5111,7 @@ export async function updateEvaluationItems(params: {
   type: 'kitchen' | 'service'
   updates: { id: string | number; main?: string; sub?: string; name?: string; use?: boolean; sort_order?: number }[]
 }) {
-  const res = await apiFetch('/api/updateEvaluationItems', {
+  const res = await apiFetchWithOffline('/api/updateEvaluationItems', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -5126,7 +5133,7 @@ export async function addEvaluationItem(params: {
   subCat?: string
   itemName?: string
 }) {
-  const res = await apiFetch('/api/addEvaluationItem', {
+  const res = await apiFetchWithOffline('/api/addEvaluationItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5143,7 +5150,7 @@ export async function deleteEvaluationItem(params: {
   type: 'kitchen' | 'service'
   itemId: string | number
 }) {
-  const res = await apiFetch('/api/deleteEvaluationItem', {
+  const res = await apiFetchWithOffline('/api/deleteEvaluationItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -5171,7 +5178,7 @@ export async function saveEvaluationResult(params: {
   jsonData: unknown
   userRole?: string
 }) {
-  const res = await apiFetch('/api/saveEvaluationResult', {
+  const res = await apiFetchWithOffline('/api/saveEvaluationResult', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5191,9 +5198,7 @@ export interface ChecklistItem {
 }
 
 export async function getChecklistItems(activeOnly = true) {
-  const q = new URLSearchParams({ activeOnly: String(activeOnly) })
-  const res = await apiFetch(`/api/getChecklistItems?${q}`)
-  return res.json() as Promise<ChecklistItem[]>
+  return getChecklistItemsWithCache(activeOnly)
 }
 
 export async function saveCheckResult(params: {
@@ -5205,7 +5210,7 @@ export async function saveCheckResult(params: {
   memo: string
   jsonData: string | unknown
 }) {
-  const res = await apiFetch('/api/saveCheckResult', {
+  const res = await apiFetchWithOffline('/api/saveCheckResult', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5231,18 +5236,11 @@ export async function getCheckHistory(params: {
   store?: string
   inspector?: string
 }) {
-  const q = new URLSearchParams({
-    start: params.startStr,
-    end: params.endStr,
-    ...(params.store && params.store !== 'All' && { store: params.store }),
-    ...(params.inspector && { inspector: params.inspector }),
-  })
-  const res = await apiFetch(`/api/getCheckHistory?${q}`)
-  return res.json() as Promise<CheckHistoryItem[]>
+  return getCheckHistoryWithCache(params)
 }
 
 export async function deleteCheckHistory(id: string) {
-  const res = await apiFetch('/api/deleteCheckHistory', {
+  const res = await apiFetchWithOffline('/api/deleteCheckHistory', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -5253,7 +5251,7 @@ export async function deleteCheckHistory(id: string) {
 }
 
 export async function updateChecklistItems(updates: { id: string | number; main?: string; sub?: string; name?: string; use?: boolean; sort_order?: number }[]) {
-  const res = await apiFetch('/api/updateChecklistItems', {
+  const res = await apiFetchWithOffline('/api/updateChecklistItems', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ updates }),
@@ -5264,7 +5262,7 @@ export async function updateChecklistItems(updates: { id: string | number; main?
 }
 
 export async function addChecklistItem(params: { main?: string; sub?: string; name?: string }) {
-  const res = await apiFetch('/api/addChecklistItem', {
+  const res = await apiFetchWithOffline('/api/addChecklistItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5275,7 +5273,7 @@ export async function addChecklistItem(params: { main?: string; sub?: string; na
 }
 
 export async function deleteChecklistItem(id: string | number) {
-  const res = await apiFetch('/api/deleteChecklistItem', {
+  const res = await apiFetchWithOffline('/api/deleteChecklistItem', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -5312,7 +5310,7 @@ export async function getStoreVisitHistory(params: {
     ...(params.department && params.department !== 'All' && { department: params.department }),
     ...(params.purpose && { purpose: params.purpose }),
   })
-  const res = await apiFetch(`/api/getStoreVisitHistory?${q}`)
+  const res = await apiFetchWithOffline(`/api/getStoreVisitHistory?${q}`)
   return res.json() as Promise<StoreVisitHistoryItem[]>
 }
 
@@ -5323,7 +5321,7 @@ export interface StoreVisitStatsItem {
 
 export async function getStoreVisitStats(params: { startStr: string; endStr: string }) {
   const q = new URLSearchParams({ start: params.startStr, end: params.endStr })
-  const res = await apiFetch(`/api/getStoreVisitStats?${q}`)
+  const res = await apiFetchWithOffline(`/api/getStoreVisitStats?${q}`)
   return res.json() as Promise<{
     byDept: StoreVisitStatsItem[]
     byEmployee: StoreVisitStatsItem[]
@@ -5362,7 +5360,7 @@ export async function getStoreVisitRecords(params: {
     ...(params.department && params.department !== "__ALL__" && { department: params.department }),
     ...(params.purpose && params.purpose !== "__ALL__" && { purpose: params.purpose }),
   })
-  const res = await apiFetch(`/api/getStoreVisitRecords?${q}`)
+  const res = await apiFetchWithOffline(`/api/getStoreVisitRecords?${q}`)
   return res.json() as Promise<VisitRecord[]>
 }
 
@@ -5407,12 +5405,12 @@ export async function getComplaintLogList(params: {
   if (params.visitPath) q.set('visitPath', params.visitPath)
   if (params.typeFilter) q.set('typeFilter', params.typeFilter)
   if (params.statusFilter) q.set('statusFilter', params.statusFilter)
-  const res = await apiFetch(`/api/getComplaintLogList?${q}`)
+  const res = await apiFetchWithOffline(`/api/getComplaintLogList?${q}`)
   return res.json() as Promise<ComplaintLogItem[]>
 }
 
 export async function saveComplaintLog(data: Record<string, unknown>) {
-  const res = await apiFetch('/api/saveComplaintLog', {
+  const res = await apiFetchWithOffline('/api/saveComplaintLog', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data }),
@@ -5421,7 +5419,7 @@ export async function saveComplaintLog(data: Record<string, unknown>) {
 }
 
 export async function updateComplaintLog(rowOrId: string | number, data: Record<string, unknown>) {
-  const res = await apiFetch('/api/updateComplaintLog', {
+  const res = await apiFetchWithOffline('/api/updateComplaintLog', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rowOrId, data }),
@@ -5439,12 +5437,12 @@ export interface HeadOfficeInfo {
 }
 
 export async function getHeadOfficeInfo() {
-  const res = await apiFetch('/api/getHeadOfficeInfo')
+  const res = await apiFetchWithOffline('/api/getHeadOfficeInfo')
   return res.json() as Promise<HeadOfficeInfo>
 }
 
 export async function saveHeadOfficeInfo(data: HeadOfficeInfo) {
-  const res = await apiFetch('/api/saveHeadOfficeInfo', {
+  const res = await apiFetchWithOffline('/api/saveHeadOfficeInfo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -5462,7 +5460,7 @@ export interface PurchaseLocation {
 export interface VendorForPurchase {
   code: string
   name: string
-  address: string
+  address?: string
   taxId?: string
   phone?: string
   bankAccountNo?: string | null
@@ -5481,18 +5479,16 @@ export interface ItemByVendor {
 }
 
 export async function getPurchaseLocations() {
-  const res = await apiFetch('/api/getPurchaseLocations')
+  const res = await apiFetchWithOffline('/api/getPurchaseLocations')
   return res.json() as Promise<PurchaseLocation[]>
 }
 
 export async function getVendorsForPurchase() {
-  const res = await apiFetch('/api/getVendorsForPurchase')
-  return res.json() as Promise<VendorForPurchase[]>
+  return getVendorsForPurchaseWithCache()
 }
 
 export async function getVendorsForSales() {
-  const res = await apiFetch('/api/getVendorsForSales')
-  return res.json() as Promise<{ name: string }[]>
+  return getVendorsForSalesWithCache()
 }
 
 export async function getItemsByVendor(
@@ -5503,7 +5499,7 @@ export async function getItemsByVendor(
   const q = new URLSearchParams({ vendorCode })
   if (vendorName?.trim()) q.set('vendorName', vendorName.trim())
   if (outboundLocation?.trim()) q.set('outboundLocation', outboundLocation.trim())
-  const res = await apiFetch(`/api/getItemsByVendor?${q}`)
+  const res = await apiFetchWithOffline(`/api/getItemsByVendor?${q}`)
   return res.json() as Promise<ItemByVendor[]>
 }
 
@@ -5517,7 +5513,7 @@ export interface ItemVendorRow {
 
 export async function getItemVendors(itemCode: string) {
   const q = new URLSearchParams({ itemCode })
-  const res = await apiFetch(`/api/getItemVendors?${q}`)
+  const res = await apiFetchWithOffline(`/api/getItemVendors?${q}`)
   return res.json() as Promise<ItemVendorRow[]>
 }
 
@@ -5525,7 +5521,7 @@ export async function saveItemVendors(params: {
   itemCode: string
   vendors: { vendorCode: string; priority?: number; unitPrice?: number | null; minOrderQty?: number | null; memo?: string | null }[]
 }) {
-  const res = await apiFetch('/api/saveItemVendors', {
+  const res = await apiFetchWithOffline('/api/saveItemVendors', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5535,7 +5531,7 @@ export async function saveItemVendors(params: {
 
 export async function getHqStockByLocation(locationCode: string) {
   const q = new URLSearchParams({ locationCode })
-  const res = await apiFetch(`/api/getHqStockByLocation?${q}`)
+  const res = await apiFetchWithOffline(`/api/getHqStockByLocation?${q}`)
   return res.json() as Promise<Record<string, number>>
 }
 
@@ -5550,7 +5546,7 @@ export async function savePurchaseOrder(params: {
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
 }) {
-  const res = await apiFetch('/api/savePurchaseOrder', {
+  const res = await apiFetchWithOffline('/api/savePurchaseOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5585,15 +5581,7 @@ export async function getPurchaseOrders(params?: {
   startDate?: string
   endDate?: string
 }) {
-  const q = new URLSearchParams()
-  if (params?.vendorCode?.trim()) q.set('vendorCode', params.vendorCode.trim())
-  if (params?.poId && !isNaN(params.poId)) q.set('poId', String(params.poId))
-  if (params?.startDate?.trim()) q.set('startDate', params.startDate.trim())
-  if (params?.endDate?.trim()) q.set('endDate', params.endDate.trim())
-  const url = q.toString() ? `/api/getPurchaseOrders?${q}` : '/api/getPurchaseOrders'
-  const res = await apiFetch(url)
-  const data = await res.json()
-  return Array.isArray(data) ? data : []
+  return getPurchaseOrdersWithCache(params) as Promise<PurchaseOrderRow[]>
 }
 
 export async function updatePurchaseOrderInvoice(params: {
@@ -5603,7 +5591,7 @@ export async function updatePurchaseOrderInvoice(params: {
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
 }) {
-  const res = await apiFetch('/api/updatePurchaseOrderInvoice', {
+  const res = await apiFetchWithOffline('/api/updatePurchaseOrderInvoice', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5612,7 +5600,7 @@ export async function updatePurchaseOrderInvoice(params: {
 }
 
 export async function processPurchaseOrderApproval(params: { poId: number }) {
-  const res = await apiFetch('/api/processPurchaseOrderApproval', {
+  const res = await apiFetchWithOffline('/api/processPurchaseOrderApproval', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5621,7 +5609,7 @@ export async function processPurchaseOrderApproval(params: { poId: number }) {
 }
 
 export async function processPurchaseOrderCancel(params: { poId: number }) {
-  const res = await apiFetch('/api/processPurchaseOrderCancel', {
+  const res = await apiFetchWithOffline('/api/processPurchaseOrderCancel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -5631,7 +5619,7 @@ export async function processPurchaseOrderCancel(params: { poId: number }) {
 
 export async function getMenuPermission(store: string, name: string) {
   const q = new URLSearchParams({ store, name })
-  const res = await apiFetch(`/api/getMenuPermission?${q}`)
+  const res = await apiFetchWithOffline(`/api/getMenuPermission?${q}`)
   return res.json() as Promise<Record<string, number>>
 }
 
@@ -5640,7 +5628,7 @@ export async function setMenuPermission(
   name: string,
   permissions: Record<string, number>
 ) {
-  const res = await apiFetch('/api/setMenuPermission', {
+  const res = await apiFetchWithOffline('/api/setMenuPermission', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ store, name, perm: permissions }),

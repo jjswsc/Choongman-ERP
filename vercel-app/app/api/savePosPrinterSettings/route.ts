@@ -117,6 +117,9 @@ export async function POST(req: NextRequest) {
         : 'card_only'
     const otherRate = Math.max(0, Number(body?.otherRate ?? 0))
     const otherMode = String(body?.otherMode || 'separate') === 'included' ? 'included' : 'separate'
+    const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
+    const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
+    const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
@@ -174,6 +177,7 @@ export async function POST(req: NextRequest) {
       receipt_show_paid_stamp: receiptShowPaidStamp,
       receipt_show_thank_you: receiptShowThankYou,
       receipt_show_customer_copy: receiptShowCustomerCopy,
+      receipt_print_lang: receiptPrintLang,
       vat_rate: vatRate,
       vat_mode: vatMode,
       service_rate: serviceRate,
