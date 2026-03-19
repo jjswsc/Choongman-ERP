@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
@@ -43,7 +43,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   /** 이전 로그인 세션이 있으면 서버 없이 오프라인 진입 가능 */
-  const cachedAuth = React.useMemo((): AuthState | null => {
+  const cachedAuth = useMemo((): AuthState | null => {
     if (typeof window === "undefined") return null
     try {
       const store = sessionStorage.getItem("cm_store")
@@ -55,7 +55,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     return null
   }, [])
 
-  const fetchLoginData = React.useCallback(() => {
+  const fetchLoginData = useCallback(() => {
     setLoadError(null)
     setLoading(true)
     const timeoutMs = 6000
@@ -115,7 +115,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     } catch {}
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!store || !user) {
       setError(tMsg("msg_select_store_name"))
@@ -151,7 +151,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  const handlePwChange = async (e: React.FormEvent) => {
+  const handlePwChange = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!store || !user) {
       setPwError(tMsg("msg_store_name_first"))
