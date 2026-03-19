@@ -6,11 +6,15 @@
  * API 라우트(app/api/*) 내부에서만 import. 클라이언트 번들에 포함되지 않도록.
  *
  * UND_ERR_HEADERS_TIMEOUT 방지: Node.js fetch(undici) 대신 https 모듈 사용.
+ * 일시적 장애 대응: 5xx/429/네트워크 오류 시 최대 2회 재시도 (exponential backoff).
  */
 
 import https from 'node:https'
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
+
+const SUPABASE_RETRY_MAX = 3
+const SUPABASE_RETRY_BASE_MS = 800
 
 // #region agent log
 const _log = (msg: string, data?: Record<string, unknown>) => {
@@ -76,6 +80,17 @@ function httpsRequest(
   })
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 5xx, 429, 네트워크 오류 시 재시도 대상 */
+function isRetriable(status: number | null, err: unknown): boolean {
+  if (status != null) return status >= 500 || status === 429
+  const msg = err instanceof Error ? err.message : String(err)
+  return /timeout|ECONNRESET|ETIMEDOUT|ENOTFOUND|network|failed/i.test(msg)
+}
+
 export async function supabaseFetch(
   input: RequestInfo | URL,
   init?: RequestInit
@@ -108,16 +123,42 @@ export async function supabaseFetch(
       body = Buffer.from(await (bodyRaw as Blob).arrayBuffer())
     else body = Buffer.from(bodyRaw as unknown as ArrayBuffer)
   }
-  const { status, headers: resHeaders, body: resBody } = await httpsRequest(urlStr, { method, headers, body })
-  const resHeadersObj = new Headers()
-  Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
-  // 204/205/304는 body가 null이어야 함 (Fetch 스펙). 그렇지 않으면 "Response constructor: Invalid response status code 204" 발생
-  const nullBodyStatuses = [101, 204, 205, 304]
-  const bodyForResponse = nullBodyStatuses.includes(status) ? null : resBody
-  return new Response(bodyForResponse, {
-    status,
-    headers: resHeadersObj,
-  })
+
+  let lastStatus: number | null = null
+  let lastErr: unknown = null
+  let resHeaders: Record<string, string> = {}
+  let resBody = ''
+
+  for (let attempt = 1; attempt <= SUPABASE_RETRY_MAX; attempt++) {
+    try {
+      const res = await httpsRequest(urlStr, { method, headers, body })
+      lastStatus = res.status
+      resHeaders = res.headers
+      resBody = res.body
+      if (!isRetriable(res.status, null)) {
+        const resHeadersObj = new Headers()
+        Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
+        const nullBodyStatuses = [101, 204, 205, 304]
+        const bodyForResponse = nullBodyStatuses.includes(res.status) ? null : resBody
+        return new Response(bodyForResponse, { status: res.status, headers: resHeadersObj })
+      }
+      lastErr = new Error(`Supabase ${res.status}`)
+    } catch (e) {
+      lastErr = e
+      lastStatus = null
+    }
+    if (attempt < SUPABASE_RETRY_MAX) {
+      const delay = SUPABASE_RETRY_BASE_MS * Math.pow(2, attempt - 1)
+      await sleep(delay)
+    }
+  }
+
+  if (lastStatus != null) {
+    const resHeadersObj = new Headers()
+    Object.entries(resHeaders).forEach(([k, v]) => resHeadersObj.set(k, v))
+    return new Response(lastStatus >= 500 ? resBody : null, { status: lastStatus, headers: resHeadersObj })
+  }
+  throw lastErr
 }
 
 function getConfig() {

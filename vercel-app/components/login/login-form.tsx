@@ -42,13 +42,23 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [pwError, setPwError] = useState("")
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (auth) {
-      router.replace(redirectTo)
-      return
-    }
+  /** 이전 로그인 세션이 있으면 서버 없이 오프라인 진입 가능 */
+  const cachedAuth = React.useMemo((): AuthState | null => {
+    if (typeof window === "undefined") return null
+    try {
+      const store = sessionStorage.getItem("cm_store")
+      const user = sessionStorage.getItem("cm_user")
+      const role = sessionStorage.getItem("cm_role") || ""
+      const token = sessionStorage.getItem("cm_token")
+      if (store && user) return { store, user, role, token: token || undefined }
+    } catch {}
+    return null
+  }, [])
+
+  const fetchLoginData = React.useCallback(() => {
     setLoadError(null)
-    const timeoutMs = 15000
+    setLoading(true)
+    const timeoutMs = 6000
     const withTimeout = Promise.race([
       getLoginData(),
       new Promise<never>((_, reject) =>
@@ -59,7 +69,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       .then((d) => {
         setLoginData(d.users || {})
         if (d._source === 'fallback') {
-          setLoadError('네트워크 연결을 확인해 주세요. 오프라인이거나 서버에 연결할 수 없습니다.')
+          setLoadError('서버에 연결할 수 없습니다.')
         } else {
           setLoadError(null)
         }
@@ -68,14 +78,22 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e)
         setLoadError(
-          msg.includes('연결') || msg.includes('시간 초과')
-            ? '네트워크 연결을 확인해 주세요. 오프라인이거나 서버에 연결할 수 없습니다.'
+          msg.includes('연결') || msg.includes('시간 초과') || msg.includes('fetch') || msg.includes('Failed')
+            ? '서버에 연결할 수 없습니다.'
             : msg
         )
         setLoginData({})
         setLoading(false)
       })
-  }, [auth, redirectTo, router])
+  }, [])
+
+  useEffect(() => {
+    if (auth) {
+      router.replace(redirectTo)
+      return
+    }
+    fetchLoginData()
+  }, [auth, redirectTo, router, fetchLoginData])
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -171,19 +189,6 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  /** 서버 접속 불가 시, 이전 로그인 세션( sessionStorage )이 있으면 오프라인 진입 허용 */
-  const getCachedAuth = (): AuthState | null => {
-    if (typeof window === "undefined") return null
-    try {
-      const token = sessionStorage.getItem("cm_token")
-      const store = sessionStorage.getItem("cm_store")
-      const user = sessionStorage.getItem("cm_user")
-      const role = sessionStorage.getItem("cm_role") || ""
-      if (store && user) return { store, user, role, token: token || undefined }
-    } catch {}
-    return null
-  }
-  const cachedAuth = getCachedAuth()
   const canEnterOffline = Boolean(loadError && cachedAuth)
 
   const isOfficeStore = (s: string) => {
@@ -236,6 +241,19 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       <div className="login-page">
         <div className="login-loading">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
+          <p className="mt-4 text-sm text-white/80">서버에 연결 중...</p>
+          {cachedAuth && (
+            <button
+              type="button"
+              onClick={() => {
+                setAuth(cachedAuth)
+                router.replace(redirectTo)
+              }}
+              className="mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+            >
+              오프라인 모드로 들어가기
+            </button>
+          )}
         </div>
       </div>
     )
@@ -292,6 +310,11 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             {(noStores || loadError) && (
               <div className="-mt-2 mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
                 <span>{loadError || tMsg("msg_no_stores_env")}</span>
+                {!cachedAuth && (noStores || loadError) && (
+                  <span className="text-xs text-amber-200/90">
+                    이 기기에서 이전에 로그인한 적이 있어야 오프라인으로 들어갈 수 있습니다.
+                  </span>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {canEnterOffline && (
                     <button
@@ -307,6 +330,13 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                       오프라인 모드로 들어가기
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => fetchLoginData()}
+                    className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
+                  >
+                    다시 시도
+                  </button>
                   <button
                     type="button"
                     onClick={() => window.location.reload()}
