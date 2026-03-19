@@ -60,6 +60,11 @@ export interface TableFloorViewProps {
   delayAlertOverMin?: number
   activeFloor?: 1 | 2 | 3
   onFloorChange?: (floor: 1 | 2 | 3) => void
+  /** 그리드 배경 칸 수 — 720×480 픽셀 그리드와 맞추려면 30×20 (24px 칸) */
+  gridCols?: number
+  gridRows?: number
+  /** 테이블 현황 필터: 준비중 / 결제완료 / 전체 (null이면 전체) */
+  tableListMode?: 'in_progress' | 'completed' | 'all' | null
 }
 
 function getPreparingStageByElapsed(createdAt: string | undefined, freshMaxMin: number, warningMaxMin: number): TableStatusStage {
@@ -136,6 +141,9 @@ export function TableFloorView({
   delayAlertOverMin = 0,
   activeFloor = 1,
   onFloorChange,
+  gridCols = 30,
+  gridRows = 20,
+  tableListMode = 'all',
 }: TableFloorViewProps) {
   const [, setTick] = useState(0)
   const availableFloors = useMemo<(1 | 2 | 3)[]>(() => {
@@ -153,6 +161,19 @@ export function TableFloorView({
   const tableStyles = useMemo(() => {
     return layout
       .filter((item) => Math.min(3, Math.max(1, Number(item.floor ?? 1) || 1)) === activeFloor)
+      .filter((item) => {
+        if (!tableListMode || tableListMode === 'all') return true
+        const raw = getTableStatus?.(item.id, String(item.name ?? '').trim() || item.id)
+        const status: TableStatus =
+          raw == null
+            ? (getIsOccupied(item.id, String(item.name ?? '').trim() || item.id) ? 'preparing' : null)
+            : typeof raw === 'object'
+              ? raw.status
+              : raw
+        if (tableListMode === 'in_progress') return status === 'preparing' || status === 'partial_served'
+        if (tableListMode === 'completed') return status === 'completed'
+        return true
+      })
       .map((item) => ({
       id: item.id,
       name: String(item.name ?? '').trim() || item.id,
@@ -166,7 +187,7 @@ export function TableFloorView({
       shape: String(item.shape ?? 'rect'),
       seats: Number(item.seats ?? 0) || 0,
     }))
-  }, [layout, activeFloor])
+  }, [layout, activeFloor, tableListMode, getTableStatus, getIsOccupied])
 
   const delayedCount = (() => {
     return tableStyles.reduce((acc, tab) => {
@@ -247,7 +268,7 @@ export function TableFloorView({
           ))}
         </div>
       )}
-      {/* 그리드 배경 (관리자와 유사) */}
+      {/* 그리드 배경 — gridCols×gridRows 칸에 맞춰 테이블과 정렬 */}
       <div
         className="absolute inset-0 opacity-30 pointer-events-none"
         style={{
@@ -255,7 +276,7 @@ export function TableFloorView({
             linear-gradient(to right, #94a3b8 1px, transparent 1px),
             linear-gradient(to bottom, #94a3b8 1px, transparent 1px)
           `,
-          backgroundSize: `${100 / 30}% ${100 / 20}%`,
+          backgroundSize: `${100 / gridCols}% ${100 / gridRows}%`,
         }}
       />
       {tableStyles.map((tab) => {
@@ -303,7 +324,7 @@ export function TableFloorView({
             type="button"
             onClick={() => onTableSelect?.(tab.id)}
             className={cn(
-              'absolute flex flex-col items-center justify-center cursor-pointer select-none transition-all rounded-xl shadow-sm border-2 border-dashed overflow-visible',
+              'absolute flex flex-col items-center justify-center cursor-pointer select-none transition-all rounded-xl shadow-sm border-2 border-dashed overflow-visible box-border',
               isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600 text-white',
               !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40 text-stone-800',
               isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40 text-stone-800 rounded-full',
@@ -323,6 +344,7 @@ export function TableFloorView({
               height: `${tab.heightPct}%`,
               transform: `rotate(${tab.rotation}deg)`,
               transformOrigin: 'center center',
+              boxSizing: 'border-box',
               boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
             }}
           >

@@ -12,6 +12,14 @@ DROP POLICY IF EXISTS "Allow select pos_orders" ON public.pos_orders;
 CREATE POLICY "Allow select pos_orders" ON public.pos_orders
   FOR SELECT USING (true);
 
+-- pos_orders: 주문 저장(INSERT) / 수정·상태변경(UPDATE) 허용 (주문 버튼 동작에 필요)
+DROP POLICY IF EXISTS "Allow insert pos_orders" ON public.pos_orders;
+CREATE POLICY "Allow insert pos_orders" ON public.pos_orders
+  FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update pos_orders" ON public.pos_orders;
+CREATE POLICY "Allow update pos_orders" ON public.pos_orders
+  FOR UPDATE USING (true) WITH CHECK (true);
+
 -- pos_table_layouts: 조회 허용 (테이블 배치)
 DROP POLICY IF EXISTS "Allow select pos_table_layouts" ON public.pos_table_layouts;
 CREATE POLICY "Allow select pos_table_layouts" ON public.pos_table_layouts

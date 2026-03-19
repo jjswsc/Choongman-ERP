@@ -1,22 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
-const FLOOR_W = 720
-const FLOOR_H = 480
-
-/** DB 초기화 시 복원용 기본 테이블 배치 (1F 6개) */
-function getDefaultTableLayout(): { id: string; name: string; x: number; y: number; w: number; h: number; floor: number; shape: string; seats: number; rotation: number }[] {
-  return [
-    { id: 't1f1', name: '1F-1', x: 48, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-    { id: 't1f2', name: '1F-2', x: 156, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-    { id: 't1f3', name: '1F-3', x: 264, y: 48, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-    { id: 't1f4', name: '1F-4', x: 48, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-    { id: 't1f5', name: '1F-5', x: 156, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-    { id: 't1f6', name: '1F-6', x: 264, y: 180, w: 80, h: 60, floor: 1, shape: 'rect', seats: 4, rotation: 0 },
-  ]
-}
-
-/** POS 테이블 배치 조회 (매장별) */
+/** POS 테이블 배치 조회 (매장별). 관리자 테이블 구성과 동일한 DB(pos_table_layouts) 사용. */
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -28,10 +13,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // 매장 코드 변형 후보 (하이픈/공백, CM 접두사 등 — DB store_code와 형식이 달라도 매칭되도록)
     const candidates = [
       storeCode,
       storeCode.startsWith('CM ') ? storeCode.slice(3).trim() : `CM ${storeCode}`.trim(),
       storeCode.replace(/^CM\s+/i, '').trim(),
+      storeCode.replace(/-/g, ' ').trim(),
+      storeCode.replace(/\s+/g, '-').trim(),
     ].filter((v, i, arr) => v && arr.indexOf(v) === i)
 
     type Row = { store_code?: string; layout_json?: string | unknown[]; updated_at?: string }
@@ -50,18 +38,25 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 후보로 못 찾으면 전체 조회 후 정규화해서 비교 (예: cm-asoke ↔ CM Asoke)
     if (!rows?.length) {
-      const allRows = (await supabaseSelect('pos_table_layouts', {
-        limit: 50,
-        select: 'store_code,layout_json,updated_at',
-      })) as Row[] | null
-      const reqLower = storeCode.toLowerCase()
+      let allRows: Row[] | null = null
+      try {
+        allRows = (await supabaseSelect('pos_table_layouts', {
+          limit: 50,
+          select: 'store_code,layout_json,updated_at',
+        })) as Row[] | null
+      } catch {
+        // RLS 등으로 SELECT 실패 시 빈 배열 반환
+      }
+      const normalize = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').replace(/-/g, ' ')
+      const reqNorm = normalize(storeCode)
       const match =
         (allRows || []).find(
-          (r) =>
-            (r.store_code ?? '').toLowerCase() === reqLower ||
-            (r.store_code ?? '').toLowerCase().includes(reqLower) ||
-            reqLower.includes((r.store_code ?? '').toLowerCase())
+          (r) => {
+            const dbNorm = normalize(String(r.store_code ?? ''))
+            return dbNorm === reqNorm || dbNorm.includes(reqNorm) || reqNorm.includes(dbNorm)
+          }
         ) ?? (allRows?.length === 1 ? allRows[0] : null)
       if (match) rows = [match]
     }
@@ -87,15 +82,9 @@ export async function GET(request: NextRequest) {
         .filter((t) => t.id)
     }
 
-    // DB에 데이터가 없을 때 로컬/개발 환경에서 기본 예시 레이아웃 제공 (복원용)
-    let isFallback = false
-    const isDev = process.env.NODE_ENV !== 'production' || process.env.VERCEL_ENV === 'development'
-    if (layout.length === 0 && isDev && storeCode) {
-      layout = getDefaultTableLayout()
-      isFallback = true
-    }
-
-    return NextResponse.json({ layout, storeCode, isFallback }, { headers })
+    // 관리자 테이블 구성과 POS 터미널이 항상 동일한 데이터를 보이도록, DB에 없으면 빈 배열만 반환.
+    // (이전: 개발 환경에서만 기본 6칸 레이아웃 반환 → 로컬 POS가 관리자 화면과 달라짐)
+    return NextResponse.json({ layout, storeCode }, { headers })
   } catch (e) {
     console.error('getPosTableLayout:', e)
     return NextResponse.json({ layout: [], storeCode }, { headers })

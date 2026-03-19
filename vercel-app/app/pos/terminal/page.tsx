@@ -109,6 +109,7 @@ export default function PosTerminalPage() {
   const [deliveryEditOrderNoValue, setDeliveryEditOrderNoValue] = useState('')
   const [deliveryListMode, setDeliveryListMode] = useState<'in_progress' | 'completed' | 'all'>('in_progress')
   const [takeoutListMode, setTakeoutListMode] = useState<'in_progress' | 'completed' | 'all'>('in_progress')
+  const [tableListMode, setTableListMode] = useState<'in_progress' | 'completed' | 'all'>('all')
   const [deliveryAppsFromApi, setDeliveryAppsFromApi] = useState<PosDeliveryApp[]>([])
   const [menus, setMenus] = useState<PosMenu[]>([])
   const [receiptData, setReceiptData] = useState<ReceiptModalData | null>(null)
@@ -1110,7 +1111,7 @@ export default function PosTerminalPage() {
         todayCompleted={todayCompleted}
         totalSales={totalSales}
         showBackButton
-        canChangeStore={isOfficeRole(auth?.role || '')}
+        canChangeStore={stores.length > 0}
         canAccessAdmin={false}
         isMainPosDevice={isMainPosDevice}
         onMainPosDeviceChange={setIsMainPosDevice}
@@ -1142,7 +1143,7 @@ export default function PosTerminalPage() {
             className="flex-1 min-w-0 flex flex-col min-h-0"
           >
             <div className="border-b border-border bg-card px-2 sm:px-4 shrink-0">
-              <div className="flex h-12 min-[640px]:h-10 items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
+              <div className="flex h-12 min-[640px]:h-10 min-h-[44px] items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
                 <TabsList className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0">
                   <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
                     <LayoutGrid className="w-4 h-4 shrink-0" />
@@ -1157,7 +1158,23 @@ export default function PosTerminalPage() {
                     <span className="hidden min-[640px]:inline">{t('posOrderTypeTakeout') || '포장'}</span>
                   </TabsTrigger>
                 </TabsList>
-                <div className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0">
+                {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
+                <div className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0">
+                  {activeTab === 'tables' && (
+                    <Select
+                      value={tableListMode}
+                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => setTableListMode(v)}
+                    >
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_progress">{t('posFilterPreparing') || '준비중'}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete') || '결재 완료'}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll') || '전체'}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   {activeTab === 'delivery' && (
                     <Select
                       value={deliveryListMode}
@@ -1166,7 +1183,7 @@ export default function PosTerminalPage() {
                         setSelectedDeliveryTargetId(null)
                       }}
                     >
-                      <SelectTrigger className="h-10 min-[640px]:h-8 min-h-[44px] w-20 min-[640px]:w-28 shrink-0 touch-manipulation">
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1184,7 +1201,7 @@ export default function PosTerminalPage() {
                         setSelectedTakeoutTargetId(null)
                       }}
                     >
-                      <SelectTrigger className="h-10 min-[640px]:h-8 min-h-[44px] w-20 min-[640px]:w-28 shrink-0 touch-manipulation">
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1194,7 +1211,7 @@ export default function PosTerminalPage() {
                       </SelectContent>
                     </Select>
                   )}
-                  <Button size="sm" variant="outline" className="h-10 min-[640px]:h-8 min-h-[44px] gap-1.5 px-2 min-[640px]:px-3 touch-manipulation" onClick={() => setLiveSearchOpen(true)} title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}>
+                  <Button size="sm" variant="outline" className="h-9 min-[640px]:h-8 gap-1.5 px-2 min-[640px]:px-3 touch-manipulation shrink-0 rounded-md" onClick={() => setLiveSearchOpen(true)} title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}>
                     <Search className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
                   </Button>
@@ -1502,6 +1519,9 @@ export default function PosTerminalPage() {
                     <div className="h-full min-h-[min(320px,40vh)] min-w-0">
                       <TableFloorView
                         layout={currentLayout}
+                        tableListMode={tableListMode}
+                        gridCols={30}
+                        gridRows={20}
                         getTableStatus={(id, name) => {
                           const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
                           if (!tbl?.order) return null

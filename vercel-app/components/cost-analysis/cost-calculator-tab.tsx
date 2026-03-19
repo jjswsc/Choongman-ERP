@@ -327,7 +327,17 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
                       const code = String(initialLoadFromRow.menuCode ?? "").replace(/-\d+$/, "").trim()
                       const name = String(initialLoadFromRow.menuName ?? "").replace(/\s*\([^)]+\)$/, "").trim()
                       if (code && name) {
-                        await savePosMenu({ id, code, name, cookingTimeMin })
+                        // 조리 시간만 바꿔도 category·가격이 사라지지 않도록 현재 값을 함께 전달
+                        await savePosMenu({
+                          id,
+                          code,
+                          name,
+                          cookingTimeMin,
+                          category: menuItem.category ?? initialLoadFromRow.category ?? "",
+                          categoryMain: menuItem.categoryMain ?? initialLoadFromRow.categoryMain ?? "",
+                          price: menuItem.priceHall ?? initialLoadFromRow.priceHall ?? 0,
+                          priceDelivery: menuItem.priceDelivery ?? initialLoadFromRow.priceDelivery ?? null,
+                        })
                         onSaveSuccess?.()
                       }
                     } catch (e) {
