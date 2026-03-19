@@ -29,10 +29,13 @@ import {
   getCardAccounts,
   getVendorsForPurchase,
   getAdminEmployeeList,
+  getInboundBatchesForLink,
+  saveBankTransactionInboundLinks,
   translateTexts,
   type AccountSubjectItem,
   type BankAccount,
   type CardAccount,
+  type InboundBatchForLink,
 } from "@/lib/api-client"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { compressImageForUpload } from "@/lib/utils"
@@ -89,6 +92,10 @@ export function WithdrawalManagementTab() {
   const [payeeManual, setPayeeManual] = React.useState(false)
   const [advanceInstallments, setAdvanceInstallments] = React.useState("1")
   const [advanceInstallmentCurrent, setAdvanceInstallmentCurrent] = React.useState("1")
+
+  const [inboundBatchesForLink, setInboundBatchesForLink] = React.useState<InboundBatchForLink[]>([])
+  const [inboundLinkAmounts, setInboundLinkAmounts] = React.useState<Record<number, number>>({})
+  const [inboundLinkLoading, setInboundLinkLoading] = React.useState(false)
 
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
   const [bankAccounts, setBankAccounts] = React.useState<BankAccount[]>([])
@@ -192,6 +199,20 @@ export function WithdrawalManagementTab() {
       if (storeNameParam) setStoreName(storeNameParam)
     }
   }, [searchParams, mapCategoryToMainSub])
+
+  React.useEffect(() => {
+    if (categoryMain !== "purchase" || !vendorCode.trim() || isBankLinkMode || isEditMode) {
+      setInboundBatchesForLink([])
+      setInboundLinkAmounts({})
+      return
+    }
+    setInboundLinkLoading(true)
+    getInboundBatchesForLink({ vendorCode: vendorCode.trim() })
+      .then((list) => setInboundBatchesForLink(list || []))
+      .catch(() => setInboundBatchesForLink([]))
+      .finally(() => setInboundLinkLoading(false))
+    setInboundLinkAmounts({})
+  }, [categoryMain, vendorCode, isBankLinkMode, isEditMode])
 
   React.useEffect(() => {
     const vc = searchParams.get("vendorCode")
@@ -602,9 +623,26 @@ export function WithdrawalManagementTab() {
         alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
+      const newBankTxId = res.bankTransactionId ?? undefined
+      if (categoryMain === "purchase" && newBankTxId && effectivePaymentMethod === "bank") {
+        const links = Object.entries(inboundLinkAmounts)
+          .filter(([, amt]) => amt > 0)
+          .map(([batchId, amount]) => ({ inboundBatchId: parseInt(batchId, 10), amount }))
+        if (links.length > 0) {
+          try {
+            const linkRes = await saveBankTransactionInboundLinks({ bankTransactionId: newBankTxId, links })
+            if (linkRes?.success) {
+              setInboundLinkAmounts({})
+            }
+          } catch (e) {
+            console.error("saveBankTransactionInboundLinks:", e)
+          }
+        }
+      }
       setAmount("")
       setMemo("")
       setInvoicePhotoFile(null)
+      setInboundLinkAmounts({})
       if (res.fixedAssetId) {
         alert(t("wm_successWithAsset") || "등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.")
       } else {
@@ -821,6 +859,50 @@ export function WithdrawalManagementTab() {
                     <div className="text-sm text-muted-foreground pb-2">
                       {t("inv_account_no") || "계좌"}: {vendors.find((x) => x.code === vendorCode)?.bankAccountNo || "—"}
                     </div>
+                  )}
+                </div>
+              )}
+              {categoryMain === "purchase" && vendorCode && !isBankLinkMode && !isEditMode && (
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {t("adminInbound") || "입고"} 연동 ({t("optional") || "선택"})
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("inboundLinkAtRegisterHint") || "등록 시 여기서 연결(선택). 나중에 통장 탭에서도 연결·수정 가능."}
+                  </p>
+                  {inboundLinkLoading ? (
+                    <p className="text-sm text-muted-foreground py-2">{t("loading")}</p>
+                  ) : inboundBatchesForLink.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">해당 거래처의 입고 배치가 없습니다.</p>
+                  ) : (
+                    <>
+                      <div className="border rounded-md divide-y max-h-[200px] overflow-y-auto">
+                        {inboundBatchesForLink.map((b) => (
+                          <div key={b.id} className="flex items-center justify-between gap-2 p-2">
+                            <div className="flex-1 min-w-0 text-sm">
+                              <span>{b.batchDate}</span>
+                              <span className="text-muted-foreground ml-2">
+                                {b.vendorName} · {(b.totalAmount || 0).toLocaleString()} ฿
+                              </span>
+                            </div>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0"
+                              className="w-24 h-8 text-right"
+                              value={inboundLinkAmounts[b.id] ? String(inboundLinkAmounts[b.id]) : ""}
+                              onChange={(e) => {
+                                const num = parseInt(String(e.target.value).replace(/\D/g, ""), 10) || 0
+                                setInboundLinkAmounts((prev) => ({ ...prev, [b.id]: num }))
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        출금액과 일치하도록 배치별 금액을 입력하면 등록 후 자동 연동됩니다. 비워두면 통장 탭에서 나중에 연결할 수 있습니다.
+                      </p>
+                    </>
                   )}
                 </div>
               )}

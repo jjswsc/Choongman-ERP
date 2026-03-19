@@ -92,14 +92,20 @@ export default function PosScreenConfigPage() {
                   <TabsTrigger value="menu-screen" className="text-xs">{t("posScreenConfigTabMenus") || "메뉴 화면 구성"}</TabsTrigger>
                   <TabsTrigger value="menu-board" className="text-xs">{t("posMenuTabMenuBoard") || "메뉴판 관리"}</TabsTrigger>
                 </TabsList>
-                <TabsContent value="menu-screen" className="mt-0">
-                  <PosTerminalMenuScreen
-                    mode="admin-config"
-                    storeCode={auth?.store || null}
-                    selectedTableName={t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
-                    onBack={() => setActiveTab("tables")}
-                    backButtonLabel={t("posScreenConfigTabTables") || "테이블 구성"}
-                  />
+                <TabsContent value="menu-screen" className="mt-0 flex flex-col min-h-0 overflow-hidden">
+                  <div
+                    className="flex flex-col overflow-hidden rounded-b-lg border border-border min-h-[560px]"
+                    style={{ height: 'calc(100vh - 11rem)' }}
+                  >
+                    <PosTerminalMenuScreen
+                      mode="admin-config"
+                      storeCode={auth?.store || null}
+                      selectedTableName={t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
+                      onBack={() => setActiveTab("tables")}
+                      backButtonLabel={t("posScreenConfigTabTables") || "테이블 구성"}
+                      className="h-full min-h-0 flex-1"
+                    />
+                  </div>
                 </TabsContent>
                 <TabsContent value="menu-board" className="mt-0">
                   <PosMenuBoardManagementContent storeCode={auth?.store || null} />

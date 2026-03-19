@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { getPriceHistory, getPosMenus, getPosMenuCategoriesConfig, getItemCategories, type PriceHistoryRow, backfillPriceHistory } from "@/lib/api-client"
+import { getPriceHistory, getPosMenus, getPosMenuCategoriesConfig, getItemCategories, type PriceHistoryRow, backfillPriceHistory, restoreFromPriceHistory } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
@@ -50,6 +50,8 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
   const [categoriesByMain, setCategoriesByMain] = React.useState<Record<string, string[]>>({})
   const [menus, setMenus] = React.useState<{ id: string; name: string; code: string; categoryMain?: string; category?: string }[]>([])
   const [backfilling, setBackfilling] = React.useState(false)
+  const [restoreDate, setRestoreDate] = React.useState("")
+  const [restoring, setRestoring] = React.useState(false)
   /** 품목 모드: 원가 vs 홀/판매가 선택 */
   const [itemFieldFilter, setItemFieldFilter] = React.useState<"cost" | "price">("price")
   /** 메뉴 모드: 가격 항목 선택 */
@@ -127,6 +129,30 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
       setBackfilling(false)
     }
   }, [loadHistory, t])
+
+  const handleRestoreByDate = React.useCallback(async () => {
+    const date = restoreDate.trim()
+    if (!date) {
+      alert(t("priceHistoryRestoreDateRequired") || "복구할 날짜(YYYY-MM-DD)를 선택하세요.")
+      return
+    }
+    if (!confirm(t("priceHistoryRestoreByDateConfirm") || `가격 이력의 ${date} 시점 가격으로 메뉴·옵션 가격을 덮어씁니다. 계속할까요?`)) return
+    setRestoring(true)
+    try {
+      const res = await restoreFromPriceHistory({ targetDate: date, dryRun: false })
+      if (res.success) {
+        alert(res.message || "복구 완료")
+        setRestoreDate("")
+        loadHistory()
+      } else {
+        alert(res.error || t("msg_save_fail_detail"))
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "실패")
+    } finally {
+      setRestoring(false)
+    }
+  }, [restoreDate, loadHistory, t])
 
   const formatDate = (s: string) => {
     try {
@@ -379,6 +405,20 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
         <Button size="sm" variant="outline" className="h-9 gap-1.5" onClick={handleBackfill} disabled={backfilling}>
           {backfilling ? (t("loading") || "처리 중") : (t("priceHistoryBackfillBtn") || "일괄 초기 등록")}
         </Button>
+        {mode === "menu" && (
+          <>
+            <Input
+              type="date"
+              value={restoreDate}
+              onChange={(e) => setRestoreDate(e.target.value)}
+              className="h-9 w-[140px] text-sm"
+              title={t("priceHistoryRestoreDatePh") || "복구할 날짜"}
+            />
+            <Button size="sm" variant="secondary" className="h-9 gap-1.5" onClick={handleRestoreByDate} disabled={restoring || !restoreDate.trim()}>
+              {restoring ? (t("loading") || "처리 중") : (t("priceHistoryRestoreByDateBtn") || "해당 날짜 가격으로 복구")}
+            </Button>
+          </>
+        )}
       </div>
 
       <div className="rounded-xl border bg-card overflow-hidden">

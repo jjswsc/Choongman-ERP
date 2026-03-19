@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const userName = String(body.userName || body.user_name || '').trim()
     const userStore = String(body.userStore || body.user_store || '').trim()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
+    const salesDate = String(body.salesDate || body.sales_date || '').trim().slice(0, 10) || null
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: '매장을 선택하세요.' }, { status: 400, headers })
@@ -27,13 +28,17 @@ export async function POST(request: NextRequest) {
     if (amount === 0) {
       return NextResponse.json({ success: false, message: '금액을 입력하세요.' }, { status: 400, headers })
     }
+    const allowedTypes = ['deposit', 'withdrawal', 'sales_withdrawal']
+    if (!allowedTypes.includes(transType)) {
+      return NextResponse.json({ success: false, message: '유형이 올바르지 않습니다.' }, { status: 400, headers })
+    }
 
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
     if (!isOffice && userStore && storeCode !== userStore) {
       return NextResponse.json({ success: false, message: '해당 매장만 등록할 수 있습니다.' }, { status: 403, headers })
     }
 
-    const amt = transType === 'withdrawal' ? -amount : amount
+    const amt = transType === 'withdrawal' || transType === 'sales_withdrawal' ? -amount : amount
 
     await supabaseInsert('pos_till_transactions', {
       store_code: storeCode,
@@ -42,6 +47,7 @@ export async function POST(request: NextRequest) {
       amount: amt,
       memo: memo || null,
       user_name: userName || null,
+      ...(salesDate && transType === 'sales_withdrawal' ? { sales_date: salesDate } : {}),
     })
 
     return NextResponse.json({ success: true, message: '등록되었습니다.' }, { headers })

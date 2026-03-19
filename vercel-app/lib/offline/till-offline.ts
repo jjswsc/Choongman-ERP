@@ -8,9 +8,9 @@ import { getFromCache, setCache } from './cache'
 import { addToQueue } from './queue'
 import { getTillList, addTillTransaction, type TillItem } from '@/lib/api-client'
 
-function cacheKeyTillList(params: { startStr: string; endStr: string; storeFilter?: string }): string {
-  const { startStr, endStr, storeFilter = '' } = params
-  return `till:list:${storeFilter}:${startStr}:${endStr}`
+function cacheKeyTillList(params: { startStr: string; endStr: string; storeFilter?: string; typeFilter?: string }): string {
+  const { startStr, endStr, storeFilter = '', typeFilter = '' } = params
+  return `till:list:${storeFilter}:${startStr}:${endStr}:${typeFilter}`
 }
 
 export async function getTillListWithCache(params: {
@@ -19,9 +19,10 @@ export async function getTillListWithCache(params: {
   storeFilter?: string
   userStore?: string
   userRole?: string
+  typeFilter?: 'all' | 'till_only' | 'sales_withdrawal_only'
 }): Promise<TillItem[]> {
-  const { startStr, endStr, storeFilter = '' } = params
-  const key = cacheKeyTillList({ startStr, endStr, storeFilter })
+  const { startStr, endStr, storeFilter = '', typeFilter } = params
+  const key = cacheKeyTillList({ startStr, endStr, storeFilter, typeFilter: typeFilter || '' })
 
   if (isOnline()) {
     try {

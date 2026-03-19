@@ -17,6 +17,8 @@ export interface TillItem {
   balance_after: number | null
   memo: string
   user_name: string
+  /** 매출액 출금일 때만: 해당 현금 매출의 영업일 */
+  sales_date?: string | null
 }
 
 /** 시재(카운터 현금) 입출금 목록 - pos_till_transactions */
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
   let storeFilter = String(searchParams.get('storeFilter') || searchParams.get('store') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const typeFilter = String(searchParams.get('typeFilter') || searchParams.get('type') || 'all').toLowerCase()
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
@@ -43,8 +46,8 @@ export async function GET(request: NextRequest) {
     let rows = (await supabaseSelectFilter(
       'pos_till_transactions',
       'store_code=eq.' + encodeURIComponent(effectiveStore),
-      { order: 'trans_date.asc,id.asc', limit: 20000 }
-    )) as { id: number; store_code?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; user_name?: string }[] | null
+      { order: 'trans_date.asc,id.asc', limit: 20000, select: 'id,store_code,trans_date,trans_type,amount,memo,user_name,sales_date' }
+    )) as { id: number; store_code?: string; trans_date?: string; trans_type?: string; amount?: number; memo?: string; user_name?: string; sales_date?: string | null }[] | null
 
     const startD = startStr ? new Date(startStr + 'T00:00:00') : null
     const endD = endStr ? new Date(endStr + 'T23:59:59') : null
@@ -53,24 +56,29 @@ export async function GET(request: NextRequest) {
     const list: TillItem[] = []
 
     for (const r of rows || []) {
+      const transType = String(r.trans_type || 'deposit').trim()
+      if (typeFilter === 'till_only' && transType === 'sales_withdrawal') continue
+      if (typeFilter === 'sales_withdrawal_only' && transType !== 'sales_withdrawal') continue
+
       const dt = toDateStr(r.trans_date)
       if (!dt) continue
       const dtD = new Date(dt + 'T12:00:00')
       const inRange = (!startD || dtD >= startD) && (!endD || dtD <= endD)
 
       const amt = Number(r.amount) || 0
-      balance += amt
+      if (typeFilter !== 'sales_withdrawal_only') balance += amt
 
       if (inRange) {
         list.push({
           id: r.id,
           store: String(r.store_code || '').trim(),
           trans_date: dt,
-          trans_type: String(r.trans_type || 'deposit').trim(),
+          trans_type: transType,
           amount: amt,
-          balance_after: balance,
+          balance_after: typeFilter === 'sales_withdrawal_only' ? null : balance,
           memo: String(r.memo || '').trim(),
           user_name: String(r.user_name || '').trim(),
+          sales_date: r.sales_date ? toDateStr(r.sales_date) : null,
         })
       }
     }

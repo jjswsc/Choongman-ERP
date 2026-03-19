@@ -1245,6 +1245,8 @@ export interface TillItem {
   balance_after: number | null
   memo: string
   user_name: string
+  /** 매출액 출금일 때만: 해당 현금 매출의 영업일 */
+  sales_date?: string | null
 }
 
 export async function getTillList(params: {
@@ -1253,6 +1255,8 @@ export async function getTillList(params: {
   storeFilter?: string
   userStore?: string
   userRole?: string
+  /** all | till_only(일반 입출금만) | sales_withdrawal_only(매출액 출금만) */
+  typeFilter?: 'all' | 'till_only' | 'sales_withdrawal_only'
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -1261,6 +1265,7 @@ export async function getTillList(params: {
   if (params.storeFilter) q.set('storeFilter', params.storeFilter)
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
+  if (params.typeFilter && params.typeFilter !== 'all') q.set('typeFilter', params.typeFilter)
   const res = await apiFetchWithOffline(`/api/getTillList?${q}`)
   return res.json() as Promise<TillItem[]>
 }
@@ -1268,12 +1273,14 @@ export async function getTillList(params: {
 export async function addTillTransaction(params: {
   storeCode: string
   transDate: string
-  transType: 'deposit' | 'withdrawal'
+  transType: 'deposit' | 'withdrawal' | 'sales_withdrawal'
   amount: number
   memo?: string
   userName?: string
   userStore?: string
   userRole?: string
+  /** 매출액 출금 시 해당 현금 매출의 영업일 (YYYY-MM-DD) */
+  salesDate?: string
 }) {
   const res = await apiFetchWithOffline('/api/addTillTransaction', {
     method: 'POST',
@@ -2955,6 +2962,35 @@ export async function backfillPriceHistory() {
     return { success: false as const, error: data?.error || '실패', inserted: 0 }
   }
   return { success: true as const, inserted: data.inserted ?? 0, message: `${data.inserted ?? 0}건 등록됨` }
+}
+
+/** 가격 이력 복구. targetDate(YYYY-MM-DD) 있으면 해당 날짜 시점 가격으로 메뉴/옵션 복구, 없으면 0/비어있는 것만 복구 */
+export async function restoreFromPriceHistory(params?: { targetDate?: string; dryRun?: boolean }) {
+  const sp = new URLSearchParams()
+  if (params?.dryRun) sp.set('dryRun', '1')
+  if (params?.targetDate) sp.set('targetDate', params.targetDate)
+  const q = sp.toString()
+  const url = q ? `/api/restoreFromPriceHistory?${q}` : '/api/restoreFromPriceHistory'
+  const res = await apiFetchWithOffline(url, { method: 'POST' })
+  const data = await res.json() as {
+    success?: boolean
+    message?: string
+    restored?: { items: number; menus: number; options: number }
+    dryRun?: boolean
+    targetDate?: string
+    details?: { items: string[]; menus: string[]; options: string[] }
+  }
+  if (!res.ok || !data?.success) {
+    return { success: false as const, error: data?.message || '복구 실패', restored: { items: 0, menus: 0, options: 0 } }
+  }
+  return {
+    success: true as const,
+    message: data.message,
+    restored: data.restored ?? { items: 0, menus: 0, options: 0 },
+    dryRun: data.dryRun,
+    targetDate: data.targetDate,
+    details: data.details,
+  }
 }
 
 export async function updateItemOrderDisabled(params: { code: string; disabled: boolean }) {

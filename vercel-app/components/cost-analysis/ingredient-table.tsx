@@ -213,10 +213,8 @@ export function IngredientTable({
   const runtimeByType = getRuntimeIngredients().filter((i) => i.category === type)
   const sauceIngs = type === "food" ? getRuntimeSauces() : []
   const apiItemsByType = getRuntimeApiItems().filter((i) => i.category === type)
-  /** 음식 재료 탭: 추가 다이얼로그에 food + packaging 둘 다 포함 */
-  const apiItemsForAddDialog = type === "food"
-    ? getRuntimeApiItems().filter((i) => i.category === "food" || i.category === "packaging")
-    : apiItemsByType
+  /** 재료 추가 다이얼로그: 음식·포장 모두 전체 카테고리(food + packaging) 선택 가능 */
+  const apiItemsForAddDialog = getRuntimeApiItems().filter((i) => i.category === "food" || i.category === "packaging")
   const usedRuntimeCodes = excludeCodes ?? new Set(runtimeByType.map((i) => i.code))
   const availableIngredients: IngredientWithSource[] = [
     ...apiItemsByType.filter((i) => !usedRuntimeCodes.has(i.code)).map((i) => ({ ...i, source: "api" as const })),

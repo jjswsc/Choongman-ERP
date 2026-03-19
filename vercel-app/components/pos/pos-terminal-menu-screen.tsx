@@ -638,15 +638,15 @@ export function PosTerminalMenuScreen({
       </div>
       <div
         className={cn(
-          'flex-1 min-h-0',
-          isAdminMode ? 'grid grid-cols-1 min-[980px]:grid-cols-[220px_1fr_320px]' : 'flex flex-col'
+          'flex-1 min-h-0 flex flex-col',
+          isAdminMode && 'min-[980px]:grid min-[980px]:grid-cols-[220px_1fr_320px] min-[980px]:grid-rows-[minmax(0,1fr)]'
         )}
       >
         <section
           ref={categoryPanelRef}
           className={cn(
-            'min-h-0 bg-muted/20 px-3 py-3',
-            isAdminMode ? 'border-r' : 'border-b px-2 py-1'
+            'bg-muted/20 px-3 py-3',
+            isAdminMode ? 'min-[980px]:min-h-0 min-[980px]:overflow-hidden border-r' : 'flex-shrink-0 border-b px-2 py-1'
           )}
         >
           <p className={cn('font-semibold text-muted-foreground', isAdminMode ? 'mb-2 text-xs' : 'mb-0.5 text-[10px]')}>{t('posMainCategory') || '대분류'}</p>
@@ -708,7 +708,7 @@ export function PosTerminalMenuScreen({
           </div>
         </section>
 
-        <section ref={menuListRef} className={cn('min-h-0 overflow-y-auto', isAdminMode ? 'p-3' : 'flex-1 p-1')}>
+        <section ref={menuListRef} className={cn('min-h-0 flex-1 overflow-y-scroll overflow-x-hidden', isAdminMode ? 'min-[980px]:min-h-0 p-3' : 'p-1')}>
           {isAdminMode && (
             <div className="mb-2 flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
@@ -830,8 +830,8 @@ export function PosTerminalMenuScreen({
         </section>
 
         {isAdminMode && (
-          <section className="min-h-0 border-l bg-card p-3">
-            <div className="mb-2 flex items-center gap-2">
+          <section className="min-h-0 flex min-[980px]:min-h-0 flex-col overflow-hidden border-l bg-card p-3">
+            <div className="mb-2 flex shrink-0 items-center gap-2">
               <Input
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
@@ -840,7 +840,7 @@ export function PosTerminalMenuScreen({
               />
               <span className="text-xs text-muted-foreground">{safePage + 1}/{totalPages}</span>
             </div>
-            <div className="h-[calc(100%-76px)] overflow-auto rounded-md border">
+            <div className="min-h-0 flex-1 overflow-y-scroll overflow-x-auto rounded-md border">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted">
                   <tr>
@@ -885,7 +885,7 @@ export function PosTerminalMenuScreen({
                 </tbody>
               </table>
             </div>
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-2 flex shrink-0 items-center justify-between">
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={safePage <= 0} onClick={() => setListPage((p) => Math.max(0, p - 1))}>
                 {t('prev') || '이전'}
               </Button>

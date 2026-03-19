@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2, Link2, Save, Pencil, FileSpreadsheet } from "lucide-react"
+import { Search, Plus, Upload, X, List, PenLine, HelpCircle, Trash2, Camera, BookOpen, Receipt, Settings2, Save, Pencil, FileSpreadsheet } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
@@ -46,7 +46,6 @@ import {
   type AccountSubjectItem,
   type BankMemoRule,
 } from "@/lib/api-client"
-import { BankInboundLinkDialog } from "@/components/tabs/bank-inbound-link-dialog"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
 import { suggestDepositWithRules } from "@/lib/suggest-with-custom-rules"
@@ -114,7 +113,6 @@ export function BankTransactionsTab() {
   const [memoPreviewText, setMemoPreviewText] = React.useState<string | null>(null)
   const [updatingInvoiceId, setUpdatingInvoiceId] = React.useState<number | null>(null)
   const [invoiceLinkRow, setInvoiceLinkRow] = React.useState<(typeof list)[0] | null>(null)
-  const [inboundLinkRow, setInboundLinkRow] = React.useState<(typeof list)[0] | null>(null)
   const [invoiceLinkPOList, setInvoiceLinkPOList] = React.useState<{ id?: number; po_no?: string; vendor_name?: string; total?: number; created_at?: string }[]>([])
   const [invoiceLinkSelectedPO, setInvoiceLinkSelectedPO] = React.useState<string>("")
   const [invoicePhotoUploadingId, setInvoicePhotoUploadingId] = React.useState<number | null>(null)
@@ -1455,30 +1453,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   >
                                     {t("bankRegisterLink") || "지출등록"}
                                   </Button>
-                                ) : r.transType === "withdraw" && r.isLinked && r.category === "purchase_payment" ? (
-                                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs px-2 shrink-0"
-                                      onClick={() => {
-                                        setRegisterEditMode(true)
-                                        setRegisterPurchaseRow(r)
-                                        setRegisterVendorCode(r.vendorCode || "")
-                                        setRegisterVendorManual(false)
-                                      }}
-                                    >
-                                      {t("bankRegisterEdit") || "수정"}
-                                    </Button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setInboundLinkRow(r)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
-                                      title="입고 연동"
-                                    >
-                                      <Link2 className="h-4 w-4" />
-                                    </button>
-                                  </div>
                                 ) : r.transType === "withdraw" && r.isLinked ? (
                                   <Button
                                     size="sm"
@@ -2471,14 +2445,6 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           </div>
         </DialogContent>
       </Dialog>
-
-      <BankInboundLinkDialog
-        row={inboundLinkRow}
-        vendorOptions={vendorOptions}
-        storeFilter={accounts.find((a) => String(a.id) === accountId)?.store}
-        onClose={() => setInboundLinkRow(null)}
-        onSaved={loadData}
-      />
 
       <Dialog open={!!registerActionRow} onOpenChange={(open) => !open && setRegisterActionRow(null)}>
         <DialogContent className="max-w-md">

@@ -4,6 +4,13 @@ import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Banknote, Search, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useStoreList } from '@/lib/api-client'
@@ -21,6 +28,12 @@ import { useOnlineStatus } from '@/lib/offline'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
 import { cn } from '@/lib/utils'
+
+const OFFICE_ROLES = ['director', 'officer', 'ceo', 'hr']
+function isOfficeRole(role: string | undefined): boolean {
+  const r = (role || '').toLowerCase()
+  return OFFICE_ROLES.some((o) => r.includes(o))
+}
 
 const typeKeys: Record<string, string> = {
   receive: 'pettyTypeReceive',
@@ -40,9 +53,12 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const t = useT(lang)
   const { stores } = useStoreList()
   const online = useOnlineStatus()
+  const isOffice = isOfficeRole(auth?.role)
   const storeCode = auth?.store || stores[0] || ''
 
   const [storeOptions, setStoreOptions] = React.useState<string[]>([])
+  /** Office: 선택한 매장으로 목록 조회. 매장직원: 자신 매장만 */
+  const [selectedStoreForView, setSelectedStoreForView] = React.useState('')
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
   const [listData, setListData] = React.useState<PettyCashItem[]>([])
@@ -56,7 +72,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const [addSaving, setAddSaving] = React.useState(false)
   const [memoTransMap, setMemoTransMap] = React.useState<Record<string, string>>({})
 
-  const effectiveStore = storeCode
+  const effectiveStore = isOffice ? (selectedStoreForView || storeOptions[0] || storeCode) : storeCode
 
   React.useEffect(() => {
     const memos = [...new Set(listData.map((r) => (r.memo || "").trim()).filter(Boolean))]
@@ -85,15 +101,21 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
     load()
       .then((opts: { stores: string[]; officeDepartments: string[] }) => {
         const list = opts.stores?.filter((s) => s && s !== 'All') || (auth?.store ? [auth.store] : [])
-        setStoreOptions(list.length ? list : auth?.store ? [auth.store] : [])
-        setAddStore(auth?.store || list[0] || '')
+        const options = list.length ? list : auth?.store ? [auth.store] : []
+        setStoreOptions(options)
+        if (isOffice) {
+          setSelectedStoreForView((prev) => (options.includes(prev) ? prev : options[0] || ''))
+          setAddStore((prev) => (options.includes(prev) ? prev : options[0] || ''))
+        } else {
+          setAddStore(auth?.store || options[0] || '')
+        }
       })
       .catch(() => {
         const list = auth?.store ? [auth.store] : []
         setStoreOptions(list)
-        setAddStore(auth?.store || '')
+        if (!isOffice) setAddStore(auth?.store || '')
       })
-  }, [auth?.store, stores, offlineAware])
+  }, [auth?.store, stores, offlineAware, isOffice])
 
   const loadList = React.useCallback(() => {
     if (!effectiveStore) return
@@ -203,6 +225,30 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
             <h2 className="text-lg font-semibold">{t('adminPettyCash') || '패티 캐쉬'}</h2>
           </div>
 
+          {isOffice && storeOptions.length > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">{t('store') || '매장'}</span>
+              <Select
+                value={selectedStoreForView || storeOptions[0]}
+                onValueChange={(v) => {
+                  setSelectedStoreForView(v)
+                  setAddStore(v)
+                }}
+              >
+                <SelectTrigger className="h-9 w-[180px]">
+                  <SelectValue placeholder={t('store') || '매장 선택'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {storeOptions.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <Input
               type="date"
@@ -293,11 +339,26 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <div>
                   <label className="text-xs text-muted-foreground">{t('store') || '매장'}</label>
-                  <Input
-                    value={addStore}
-                    readOnly
-                    className="h-9 mt-1 bg-muted/50"
-                  />
+                  {isOffice && storeOptions.length > 0 ? (
+                    <Select value={addStore} onValueChange={setAddStore}>
+                      <SelectTrigger className="h-9 mt-1">
+                        <SelectValue placeholder={t('store') || '매장 선택'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storeOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={addStore}
+                      readOnly
+                      className="h-9 mt-1 bg-muted/50"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">

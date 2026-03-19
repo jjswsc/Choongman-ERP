@@ -33,7 +33,7 @@ import { isOfficeRole } from '@/lib/permissions'
 import type { Order } from '@/lib/pos-types'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
-import { formatBahtNum, escapeHtml } from '@/lib/utils'
+import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { buildKitchenSlipHtml } from '@/lib/pos-kitchen-slip-html'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
@@ -413,13 +413,15 @@ export default function PosTerminalPage() {
     Boolean(pendingDeliveryOrderId)
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
   const isNarrowViewport = useMediaQuery('(max-width: 1023px)')
+  /** 모바일 테이블 주문: 테이블 선택 후 메뉴 화면 + 하단 장바구니(시트 자동 오픈 안 함) */
+  const isTablesMenuWithCart = activeTab === 'tables' && Boolean(selectedTableId) && !servingTable?.order
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   useEffect(() => {
-    if (showSidePanel) setMobilePanelOpen(true)
-  }, [showSidePanel])
+    if (showSidePanel && !isTablesMenuWithCart) setMobilePanelOpen(true)
+  }, [showSidePanel, isTablesMenuWithCart])
 
   const hasInitializedMainPosPollRef = useRef(false)
   const lastSeenOrderIdRef = useRef<number>(0)
@@ -1309,19 +1311,185 @@ export default function PosTerminalPage() {
               </div>
             )}
 
-            {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 전체 메뉴 화면(대분류/카테고리/옵션) */}
+            {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 메뉴 화면(모바일은 하단에 장바구니 고정) */}
             <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 min-w-0 flex flex-col">
               {selectedTableId ? (
-                <div className="flex-1 min-h-0">
-                  <PosTerminalMenuScreen
-                    mode="pos-order"
-                    storeCode={currentStoreId}
-                    selectedTableName={selectedTable?.name ?? selectedTableId}
-                    onBack={() => setSelectedTableId(null)}
-                    onAddItem={handleAddItemToCart}
-                    orderType="dine-in"
-                    className="h-full"
-                  />
+                <div className={cn('flex-1 min-h-0 flex flex-col', isNarrowViewport && 'gap-0')}>
+                  <div className="flex-1 min-h-0 overflow-hidden">
+                    <PosTerminalMenuScreen
+                      mode="pos-order"
+                      storeCode={currentStoreId}
+                      selectedTableName={selectedTable?.name ?? selectedTableId}
+                      onBack={() => setSelectedTableId(null)}
+                      onAddItem={handleAddItemToCart}
+                      orderType="dine-in"
+                      className="h-full"
+                    />
+                  </div>
+                  {isNarrowViewport && (
+                    <div className="flex-shrink-0 border-t border-border bg-card min-h-[200px] max-h-[45vh] overflow-hidden flex flex-col rounded-b-lg">
+                      <CartPanel
+                        ref={cartRef}
+                        stores={stores}
+                        currentStoreId={currentStoreId}
+                        selectedTable={selectedTable}
+                        onStoreChange={setCurrentStoreId}
+                        t={t}
+                        lockOrderType
+                        orderType="dine-in"
+                        pricingAdjustments={pricingAdjustments}
+                        pendingOrderId={pendingDineInOrderId}
+                        onOrderSubmit={async (payload) => {
+                          try {
+                            const isAddOrder = Boolean(selectedTable?.order)
+                            const res = await savePosOrderWithOffline({
+                              storeCode: currentStoreId,
+                              orderType: 'dine_in',
+                              tableName: payload.tableName,
+                              memo: payload.memo,
+                              discountAmt: payload.discountAmt,
+                              discountReason: payload.discountReason,
+                              memberId: payload.memberId,
+                              memberNo: payload.memberNo,
+                              couponCode: payload.couponCode,
+                              couponDiscountAmt: payload.couponDiscountAmt,
+                              pointUsed: payload.pointUsed,
+                              paymentCash: 0,
+                              paymentCard: 0,
+                              paymentQr: 0,
+                              paymentOther: 0,
+                              pricingAdjustments,
+                              items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                            })
+                            if (!res.success) {
+                              const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                              alert(msg)
+                              return
+                            }
+                            if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
+                            const shouldAutoPrintReceipt = isMainPosDevice && (isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder)
+                            if (shouldAutoPrintReceipt) {
+                              const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                              const discountAmt = payload.discountAmt ?? 0
+                              const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
+                              printReceiptNow({
+                                orderNo: (res as { orderNo?: string }).orderNo ?? '',
+                                storeCode: currentStoreId,
+                                orderType: t('posOrderTypeDineIn') || '매장',
+                                tableName: payload.tableName,
+                                memo: payload.memo,
+                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                                subtotal,
+                                discountAmt,
+                                total: pricing.finalTotal,
+                                vatFeeAmt: pricing.vatFeeAmt,
+                                vatFeeMode: pricing.vatFeeMode,
+                                serviceFeeAmt: pricing.serviceFeeAmt,
+                                serviceFeeMode: pricing.serviceFeeMode,
+                                cardFeeAmt: pricing.cardFeeAmt,
+                                cardFeeMode: pricing.cardFeeMode,
+                                otherFeeAmt: pricing.otherFeeAmt,
+                                otherFeeMode: pricing.otherFeeMode,
+                              })
+                            }
+                            if (res.orderId != null) setPendingDineInOrderId(res.orderId)
+                            setServingTableId(null)
+                            setSelectedTableId(null)
+                            await refetchStores()
+                          } catch (e) {
+                            console.error('savePosOrder:', e)
+                          }
+                        }}
+                        onDineInOrderComplete={async (payload, existingOrderId) => {
+                          try {
+                            let orderIdToComplete: number | null = null
+                            let orderNo: string = ''
+                            if (existingOrderId != null && payload.payment != null) {
+                              await updatePosOrder({
+                                id: existingOrderId,
+                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                                tableName: payload.tableName,
+                                memo: payload.memo,
+                                discountAmt: payload.discountAmt ?? 0,
+                                discountReason: payload.discountReason ?? '',
+                                memberId: payload.memberId,
+                                memberNo: payload.memberNo,
+                                couponCode: payload.couponCode,
+                                couponDiscountAmt: payload.couponDiscountAmt,
+                                pointUsed: payload.pointUsed,
+                                paymentCash: payload.payment.paymentCash,
+                                paymentCard: payload.payment.paymentCard,
+                                paymentQr: payload.payment.paymentQr,
+                                paymentOther: payload.payment.paymentOther,
+                                pricingAdjustments,
+                              })
+                              orderIdToComplete = existingOrderId
+                              orderNo = pendingReceiptOrderNo ?? ''
+                            } else {
+                              const res = await savePosOrderWithOffline({
+                                storeCode: currentStoreId,
+                                orderType: 'dine_in',
+                                tableName: payload.tableName,
+                                memo: payload.memo,
+                                discountAmt: payload.discountAmt ?? 0,
+                                discountReason: payload.discountReason ?? '',
+                                memberId: payload.memberId,
+                                memberNo: payload.memberNo,
+                                couponCode: payload.couponCode,
+                                couponDiscountAmt: payload.couponDiscountAmt,
+                                pointUsed: payload.pointUsed,
+                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                                paymentCash: payload.payment?.paymentCash ?? 0,
+                                paymentCard: payload.payment?.paymentCard ?? 0,
+                                paymentQr: payload.payment?.paymentQr ?? 0,
+                                paymentOther: payload.payment?.paymentOther ?? 0,
+                                pricingAdjustments,
+                              })
+                              orderIdToComplete = (res as { orderId?: number }).orderId ?? null
+                              orderNo = (res as { orderNo?: string }).orderNo ?? ''
+                            }
+                            if (orderIdToComplete != null) {
+                              const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
+                              await updatePosOrderStatus({ id: orderIdToComplete, status: targetStatus })
+                              if (!payload.isPrepaid && payload.tableName) {
+                                clearTableOrder(currentStoreId, payload.tableName)
+                              }
+                            }
+                            const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                            const discountAmt = payload.discountAmt ?? 0
+                            const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
+                            setReceiptData({
+                              orderNo,
+                              items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                              subtotal,
+                              discountAmt,
+                              total: pricing.finalTotal,
+                              storeCode: currentStoreId,
+                              orderType: 'dine_in',
+                              tableName: payload.tableName,
+                              memo: payload.memo,
+                              discountReason: payload.discountReason,
+                              vatFeeAmt: pricing.vatFeeAmt,
+                              vatFeeMode: pricing.vatFeeMode,
+                              serviceFeeAmt: pricing.serviceFeeAmt,
+                              serviceFeeMode: pricing.serviceFeeMode,
+                              cardFeeAmt: pricing.cardFeeAmt,
+                              cardFeeMode: pricing.cardFeeMode,
+                              otherFeeAmt: pricing.otherFeeAmt,
+                              otherFeeMode: pricing.otherFeeMode,
+                            })
+                            setPendingReceiptOrderNo(null)
+                            setPendingDineInOrderId(null)
+                            setServingTableId(null)
+                            setSelectedTableId(null)
+                            await refetchStores()
+                          } catch (e) {
+                            console.error('savePosOrder/updatePosOrder:', e)
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -1487,6 +1655,7 @@ export default function PosTerminalPage() {
           </Tabs>
         </div>
         {showSidePanel && (() => {
+          if (isNarrowViewport && isTablesMenuWithCart) return null
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
               orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
