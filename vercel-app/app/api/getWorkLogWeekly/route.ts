@@ -28,9 +28,11 @@ export async function GET(req: NextRequest) {
     const rows =
       (await supabaseSelectFilter('work_logs', fullFilter, {
         order: 'log_date.asc',
+        limit: 5000,
+        select: 'id,log_date,dept,name,content,progress,status,priority,manager_check',
       })) || []
 
-    const empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job' })) || []) as { name?: string; nick?: string; job?: string }[]
+    const empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'name,nick,job', limit: 2000 })) || []) as { name?: string; nick?: string; job?: string }[]
 
     const nameToRole: Record<string, string> = {}
     for (const e of empList) {

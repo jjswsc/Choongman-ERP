@@ -7,9 +7,10 @@ export async function GET(request: NextRequest) {
   const activeOnly = searchParams.get('activeOnly') === 'true'
   try {
     const orderOpt = 'sort_order.asc,item_id.asc'
+    const listOpt = { order: orderOpt, limit: 500, select: 'item_id,id,main_cat,sub_cat,name,use_flag' }
     const rows = activeOnly
-      ? await supabaseSelectFilter('checklist_items', 'use_flag=eq.true', { order: orderOpt })
-      : await supabaseSelect('checklist_items', { order: orderOpt })
+      ? await supabaseSelectFilter('checklist_items', 'use_flag=eq.true', listOpt)
+      : await supabaseSelect('checklist_items', listOpt)
     const list = (rows || []).map((r: { item_id?: number; id?: number; main_cat?: string; sub_cat?: string; name?: string; use_flag?: boolean }) => ({
       id: r.item_id != null ? r.item_id : (r as { id?: number }).id,
       main: r.main_cat || '',

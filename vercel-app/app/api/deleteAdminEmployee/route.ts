@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: '❌ 잘못된 행' }, { headers })
     }
 
-    const rows = (await supabaseSelectFilter('employees', `id=eq.${r}`)) as { store?: string }[] | null
+    const rows = (await supabaseSelectFilter('employees', `id=eq.${r}`, { select: 'store', limit: 1 })) as { store?: string }[] | null
     if (!rows || rows.length === 0) {
       return NextResponse.json({ success: false, message: '❌ 해당 직원을 찾을 수 없습니다.' }, { headers })
     }

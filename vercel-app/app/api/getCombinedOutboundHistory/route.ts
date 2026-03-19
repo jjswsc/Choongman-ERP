@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price,outbound_location' })) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
+    const items = (await supabaseSelect('items', { order: 'id.asc', select: 'code,spec,price,outbound_location', limit: 10000 })) as { code?: string; spec?: string; price?: number; outbound_location?: string }[]
     const itemMap: Record<string, { spec: string; price: number; outboundLocation: string }> = {}
     for (const it of items || []) {
       const c = String(it.code || '').trim()

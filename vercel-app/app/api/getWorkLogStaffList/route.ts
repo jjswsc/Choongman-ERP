@@ -7,7 +7,7 @@ export async function GET() {
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
-    const list = (await supabaseSelect('employees', { order: 'name.asc', select: 'name,nick' })) || []
+    const list = (await supabaseSelect('employees', { order: 'name.asc', select: 'name,nick', limit: 2000 })) || []
     const staff = (list as { name?: string; nick?: string }[]).map((e) => {
       const n = String(e.name || '').trim()
       const nick = String(e.nick || '').trim()

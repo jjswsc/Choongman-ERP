@@ -30,6 +30,8 @@ export async function GET(req: NextRequest) {
     const rows =
       (await supabaseSelectFilter('work_logs', filterStr, {
         order: 'log_date.asc',
+        limit: 5000,
+        select: 'id,log_date,dept,name,content,progress,status,priority,manager_check,manager_comment',
       })) || []
 
     const result = rows.map((r: Record<string, unknown>) => ({
