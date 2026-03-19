@@ -41,6 +41,9 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [pwChanging, setPwChanging] = useState(false)
   const [pwError, setPwError] = useState("")
   const [loadError, setLoadError] = useState<string | null>(null)
+  /** 서버 장애로 목록이 없을 때 매장/이름 직접 입력 */
+  const [manualStore, setManualStore] = useState("")
+  const [manualUser, setManualUser] = useState("")
 
   /** 이전 로그인 세션이 있으면 서버 없이 오프라인 진입 가능 */
   const cachedAuth = useMemo((): AuthState | null => {
@@ -69,7 +72,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       .then((d) => {
         setLoginData(d.users || {})
         if (d._source === 'fallback') {
-          setLoadError('서버에 연결할 수 없습니다.')
+          setLoadError('SERVER_ERROR')
         } else {
           setLoadError(null)
         }
@@ -79,7 +82,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
         const msg = e instanceof Error ? e.message : String(e)
         setLoadError(
           msg.includes('연결') || msg.includes('시간 초과') || msg.includes('fetch') || msg.includes('Failed')
-            ? '서버에 연결할 수 없습니다.'
+            ? 'SERVER_ERROR'
             : msg
         )
         setLoginData({})
@@ -117,14 +120,16 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!store || !user) {
+    const effectiveStore = (manualStore || store).trim()
+    const effectiveUser = (manualUser || user).trim()
+    if (!effectiveStore || !effectiveUser) {
       setError(tMsg("msg_select_store_name"))
       return
     }
     setSubmitting(true)
     setError("")
     try {
-      const res = await loginCheck({ store, name: user, pw, isAdminPage })
+      const res = await loginCheck({ store: effectiveStore, name: effectiveUser, pw, isAdminPage })
       if (res.success && res.storeName && res.userName) {
         setAuth({
           store: res.storeName,
@@ -216,6 +221,15 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwNewConfirm: "새 비밀번호 확인",
       pwChangeBtn: "변경",
       cancel: "취소",
+      serverError: "서버에 연결할 수 없습니다.",
+      offlineRequiresPreviousLogin: "이 기기에서 이전에 로그인한 적이 있어야 오프라인으로 들어갈 수 있습니다.",
+      enterOfflineMode: "오프라인 모드로 들어가기",
+      retry: "다시 시도",
+      refresh: "새로고침",
+      connectingToServer: "서버에 연결 중...",
+      manualEntryHint: "매장 목록을 불러올 수 없습니다. 아래에 직접 입력 후 비밀번호를 넣고 로그인을 시도하세요. (서버 복구 시 로그인됩니다)",
+      manualStorePlaceholder: "매장명 직접 입력",
+      manualUserPlaceholder: "이름 직접 입력",
     },
     en: {
       selectStore: "Select Store",
@@ -229,10 +243,82 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwNewConfirm: "Confirm new password",
       pwChangeBtn: "Change",
       cancel: "Cancel",
+      serverError: "Cannot connect to the server.",
+      offlineRequiresPreviousLogin: "You must have logged in on this device before to enter offline.",
+      enterOfflineMode: "Enter offline mode",
+      retry: "Retry",
+      refresh: "Refresh",
+      connectingToServer: "Connecting to server...",
+      manualEntryHint: "Store list could not be loaded. Enter store and name below, then try login. (Login will work when server is back.)",
+      manualStorePlaceholder: "Enter store name",
+      manualUserPlaceholder: "Enter your name",
     },
-    th: { selectStore: "เลือกสาขา", selectName: "เลือกชื่อ", pinPlaceholder: "รหัสผ่าน (PIN)", login: "เข้าสู่ระบบ", loggingIn: "กำลังเข้าสู่ระบบ...", changePw: "เปลี่ยนรหัสผ่าน", pwCurrent: "รหัสปัจจุบัน", pwNew: "รหัสใหม่", pwNewConfirm: "ยืนยันรหัสใหม่", pwChangeBtn: "เปลี่ยน", cancel: "ยกเลิก" },
-    mm: { selectStore: "ဆိုင်ရွေးပါ", selectName: "အမည်ရွေးပါ", pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)", login: "ဝင်ရောက်မည်", loggingIn: "ဝင်နေသည်...", changePw: "လျှို့ဝှက်နံပါတ်ပြောင်းမည်", pwCurrent: "လက်ရှိလျှို့ဝှက်နံပါတ်", pwNew: "လျှို့ဝှက်နံပါတ်အသစ်", pwNewConfirm: "အသစ်ထပ်ရိုက်ပါ", pwChangeBtn: "ပြောင်းမည်", cancel: "ပယ်ဖျက်မည်" },
-    la: { selectStore: "ເລືອກສາຂາ", selectName: "ເລືອກຊື່", pinPlaceholder: "ລະຫັດ (PIN)", login: "ເຂົ້າສູ່ລະບົບ", loggingIn: "ກຳລັງເຂົ້າສູ່ລະບົບ...", changePw: "ປ່ຽນລະຫັດຜ່ານ", pwCurrent: "ລະຫັດປັດຈຸບັນ", pwNew: "ລະຫັດໃໝ່", pwNewConfirm: "ຢືນຢັນລະຫັດໃໝ່", pwChangeBtn: "ປ່ຽນ", cancel: "ຍົກເລີກ" },
+    th: {
+      selectStore: "เลือกสาขา",
+      selectName: "เลือกชื่อ",
+      pinPlaceholder: "รหัสผ่าน (PIN)",
+      login: "เข้าสู่ระบบ",
+      loggingIn: "กำลังเข้าสู่ระบบ...",
+      changePw: "เปลี่ยนรหัสผ่าน",
+      pwCurrent: "รหัสปัจจุบัน",
+      pwNew: "รหัสใหม่",
+      pwNewConfirm: "ยืนยันรหัสใหม่",
+      pwChangeBtn: "เปลี่ยน",
+      cancel: "ยกเลิก",
+      serverError: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้",
+      offlineRequiresPreviousLogin: "ต้องเคยเข้าสู่ระบบบนอุปกรณ์นี้ก่อนจึงจะเข้าโหมดออฟไลน์ได้",
+      enterOfflineMode: "เข้าโหมดออฟไลน์",
+      retry: "ลองอีกครั้ง",
+      refresh: "รีเฟรช",
+      connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
+      manualEntryHint: "โหลดรายการสาขาไม่ได้ กรุณาพิมพ์สาขาและชื่อด้านล่าง แล้วลองเข้าสู่ระบบ (จะเข้าได้เมื่อเซิร์ฟเวอร์กลับมา)",
+      manualStorePlaceholder: "พิมพ์ชื่อสาขา",
+      manualUserPlaceholder: "พิมพ์ชื่อของคุณ",
+    },
+    mm: {
+      selectStore: "ဆိုင်ရွေးပါ",
+      selectName: "အမည်ရွေးပါ",
+      pinPlaceholder: "လျှို့ဝှက်နံပါတ် (PIN)",
+      login: "ဝင်ရောက်မည်",
+      loggingIn: "ဝင်နေသည်...",
+      changePw: "လျှို့ဝှက်နံပါတ်ပြောင်းမည်",
+      pwCurrent: "လက်ရှိလျှို့ဝှက်နံပါတ်",
+      pwNew: "လျှို့ဝှက်နံပါတ်အသစ်",
+      pwNewConfirm: "အသစ်ထပ်ရိုက်ပါ",
+      pwChangeBtn: "ပြောင်းမည်",
+      cancel: "ပယ်ဖျက်မည်",
+      serverError: "ဆာဗာနှင့် ချိတ်ဆက်မရပါ။",
+      offlineRequiresPreviousLogin: "အော့ဖ်လိုင်းဝင်ရန် ဤစက်တွင် ယခင်က ဝင်ထားရမည်။",
+      enterOfflineMode: "အော့ဖ်လိုင်းမုဒ်သို့ ဝင်မည်",
+      retry: "ပြန်ကြိုးစားမည်",
+      refresh: "ပြန်စမည်",
+      connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
+      manualEntryHint: "ဆိုင်စာရင်း မရနိုင်ပါ။ အောက်တွင် ဆိုင်နှင့် အမည် ရိုက်ထည့်ပြီး ဝင်ကြိုးစားပါ။ (ဆာဗာ ပြန်ကောင်းလျှင် ဝင်မည်)",
+      manualStorePlaceholder: "ဆိုင်အမည် ရိုက်ထည့်ပါ",
+      manualUserPlaceholder: "အမည် ရိုက်ထည့်ပါ",
+    },
+    la: {
+      selectStore: "ເລືອກສາຂາ",
+      selectName: "ເລືອກຊື່",
+      pinPlaceholder: "ລະຫັດ (PIN)",
+      login: "ເຂົ້າສູ່ລະບົບ",
+      loggingIn: "ກຳລັງເຂົ້າສູ່ລະບົບ...",
+      changePw: "ປ່ຽນລະຫັດຜ່ານ",
+      pwCurrent: "ລະຫັດປັດຈຸບັນ",
+      pwNew: "ລະຫັດໃໝ່",
+      pwNewConfirm: "ຢືນຢັນລະຫັດໃໝ່",
+      pwChangeBtn: "ປ່ຽນ",
+      cancel: "ຍົກເລີກ",
+      serverError: "ເຊື່ອມຕໍ່ເຊີບເວີບໍ່ໄດ້.",
+      offlineRequiresPreviousLogin: "ຕ້ອງເຄີຍເຂົ້າສູ່ລະບົບໃນອຸປະກອນນີ້ກ່ອນ ຈຶ່ງເຂົ້າໂອບຟ໌ລາຍໄດ້.",
+      enterOfflineMode: "ເຂົ້າໂອບຟ໌ລາຍ",
+      retry: "ລອງໃໝ່",
+      refresh: "ໂຫຼດໃໝ່",
+      connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
+      manualEntryHint: "โຫຼດລາຍການສາຂາບໍ່ໄດ້ ກະລຸນາພິມສາຂາແລະຊື່ດ້ານລຸ່ມ ແລ້ວລອງເຂົ້າສູ່ລະບົບ (ຈະເຂົ້າໄດ້ເມື່ອເຊີບເວີກັບມາ)",
+      manualStorePlaceholder: "ພິມຊື່ສາຂາ",
+      manualUserPlaceholder: "ພິມຊື່ຂອງທ່ານ",
+    },
   } as const
   const t = labels[lang as keyof typeof labels] || labels.ko
 
@@ -241,7 +327,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       <div className="login-page">
         <div className="login-loading">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
-          <p className="mt-4 text-sm text-white/80">서버에 연결 중...</p>
+          <p className="mt-4 text-sm text-white/80">{t.connectingToServer}</p>
           {cachedAuth && (
             <button
               type="button"
@@ -251,7 +337,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               }}
               className="mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
             >
-              오프라인 모드로 들어가기
+              {t.enterOfflineMode}
             </button>
           )}
         </div>
@@ -309,10 +395,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             </Select>
             {(noStores || loadError) && (
               <div className="-mt-2 mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-                <span>{loadError || tMsg("msg_no_stores_env")}</span>
+                <span>{loadError === 'SERVER_ERROR' ? t.serverError : (loadError || tMsg("msg_no_stores_env"))}</span>
                 {!cachedAuth && (noStores || loadError) && (
                   <span className="text-xs text-amber-200/90">
-                    이 기기에서 이전에 로그인한 적이 있어야 오프라인으로 들어갈 수 있습니다.
+                    {t.offlineRequiresPreviousLogin}
                   </span>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -327,7 +413,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                       }}
                       className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
                     >
-                      오프라인 모드로 들어가기
+                      {t.enterOfflineMode}
                     </button>
                   )}
                   <button
@@ -335,20 +421,44 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                     onClick={() => fetchLoginData()}
                     className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
                   >
-                    다시 시도
+                    {t.retry}
                   </button>
                   <button
                     type="button"
                     onClick={() => window.location.reload()}
                     className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
                   >
-                    새로고침
+                    {t.refresh}
                   </button>
                 </div>
               </div>
             )}
 
-            <Select value={user} onValueChange={setUser} disabled={!store}>
+            {(loadError || noStores) && (
+              <div className="-mt-1 mb-3 flex flex-col gap-2 text-sm">
+                <span className="text-amber-200/90">{t.manualEntryHint}</span>
+                <input
+                  type="text"
+                  value={manualStore}
+                  onChange={(e) => setManualStore(e.target.value)}
+                  placeholder={t.manualStorePlaceholder}
+                  className="login-input-field"
+                  autoComplete="off"
+                  aria-label={t.manualStorePlaceholder}
+                />
+                <input
+                  type="text"
+                  value={manualUser}
+                  onChange={(e) => setManualUser(e.target.value)}
+                  placeholder={t.manualUserPlaceholder}
+                  className="login-input-field"
+                  autoComplete="off"
+                  aria-label={t.manualUserPlaceholder}
+                />
+              </div>
+            )}
+
+            <Select value={user} onValueChange={setUser} disabled={!store && !manualStore}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue placeholder={`${t.selectName}...`} />
               </SelectTrigger>
