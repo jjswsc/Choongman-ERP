@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
-import { useAuth } from "@/lib/auth-context"
+import { useAuth, type AuthState } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -171,6 +171,21 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
+  /** 서버 접속 불가 시, 이전 로그인 세션( sessionStorage )이 있으면 오프라인 진입 허용 */
+  const getCachedAuth = (): AuthState | null => {
+    if (typeof window === "undefined") return null
+    try {
+      const token = sessionStorage.getItem("cm_token")
+      const store = sessionStorage.getItem("cm_store")
+      const user = sessionStorage.getItem("cm_user")
+      const role = sessionStorage.getItem("cm_role") || ""
+      if (store && user) return { store, user, role, token: token || undefined }
+    } catch {}
+    return null
+  }
+  const cachedAuth = getCachedAuth()
+  const canEnterOffline = Boolean(loadError && cachedAuth)
+
   const isOfficeStore = (s: string) => {
     const x = String(s || "").trim()
     return x === "본사" || x === "오피스" || x === "본점" || x.toLowerCase().includes("office")
@@ -277,13 +292,29 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             {(noStores || loadError) && (
               <div className="-mt-2 mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
                 <span>{loadError || tMsg("msg_no_stores_env")}</span>
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="self-start rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
-                >
-                  새로고침
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  {canEnterOffline && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (cachedAuth) {
+                          setAuth(cachedAuth)
+                          router.replace(redirectTo)
+                        }
+                      }}
+                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
+                    >
+                      오프라인 모드로 들어가기
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
+                  >
+                    새로고침
+                  </button>
+                </div>
               </div>
             )}
 

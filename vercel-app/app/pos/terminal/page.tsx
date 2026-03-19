@@ -510,7 +510,10 @@ export default function PosTerminalPage() {
               if (idx >= slips.length) return
               const slip = slips[idx]
               const w = window.open('', '_blank')
-              if (!w) return
+              if (!w) {
+                alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+                return
+              }
               const cR = (tag: string) => '\u003c/' + tag + '>'
               const tablePartR = tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + tableName : ''
               const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
@@ -639,8 +642,11 @@ export default function PosTerminalPage() {
               const printOne = (idx: number) => {
                 if (idx >= slips.length) return
                 const slip = slips[idx]
-                const w = idx === 0 ? window.open('', '_blank') : window.open('', '_blank')
-                if (!w) return
+                const w = window.open('', '_blank')
+                if (!w) {
+                  alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+                  return
+                }
                 const tablePart = order.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + order.tableName : ''
                 const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
                 const c2 = (tag: string) => '\u003c/' + tag + '>'

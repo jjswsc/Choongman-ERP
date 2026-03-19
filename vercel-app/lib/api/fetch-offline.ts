@@ -159,6 +159,11 @@ const OFFLINE_FALLBACK: Record<string, unknown> = {
 /** 기본 fallback */
 const DEFAULT_FALLBACK = { success: true }
 
+/** savePosOrder 5xx/오프라인 시 클라이언트에 줄 응답 (orderNo 표시용) */
+function getSavePosOrderFallback(): Record<string, unknown> {
+  return { success: true, orderNo: `LOCAL-${Date.now()}` }
+}
+
 function canQueue(url: string, init?: RequestInit): boolean {
   const path = normalPath(url)
   const method = (init?.method || 'GET').toUpperCase()
@@ -183,35 +188,53 @@ function getSerializableBody(init?: RequestInit): string | undefined {
 }
 
 /**
- * apiFetch 오프라인 래퍼 - 네트워크 실패 시 큐 적재 후 성공 응답 반환
+ * apiFetch 오프라인 래퍼 - 네트워크 실패 또는 서버/DB 장애(5xx) 시 큐 적재 후 성공 응답 반환
  */
 export async function apiFetchWithOffline(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  try {
-    return await apiFetch(input, init)
-  } catch (e) {
-    if (!isNetworkError(e)) throw e
+  const url = typeof input === 'string' ? input : input.toString()
+  const path = normalPath(url)
 
-    const url = typeof input === 'string' ? input : input.toString()
-    const path = normalPath(url)
-    if (!canQueue(url, init)) throw e
-
+  const queueAndReturnFallback = async (): Promise<Response> => {
+    if (!canQueue(url, init)) throw new Error('Cannot queue this request')
     const body = getSerializableBody(init)
-    if (body === undefined) throw e
-
+    if (body === undefined) throw new Error('Body not serializable')
     const method = (init?.method || 'POST').toUpperCase()
     await addToQueue({
       api: path.startsWith('/') ? path : `/${path}`,
       method,
       body,
-      headers: init?.headers instanceof Headers
-        ? Object.fromEntries((init.headers as Headers).entries())
-        : (init?.headers as Record<string, string>) ?? {},
+      headers:
+        init?.headers instanceof Headers
+          ? Object.fromEntries((init.headers as Headers).entries())
+          : (init?.headers as Record<string, string>) ?? {},
     })
-
-    const fallback = OFFLINE_FALLBACK[path] ?? DEFAULT_FALLBACK
+    const fallback =
+      path === '/api/savePosOrder'
+        ? getSavePosOrderFallback()
+        : (OFFLINE_FALLBACK[path] ?? DEFAULT_FALLBACK)
     return new Response(JSON.stringify(fallback), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  try {
+    const res = await apiFetch(input, init)
+    // 서버/DB 장애(5xx) 시에도 큐 적재 → Supabase 등 장애 시 오프라인처럼 동작
+    if (!res.ok && res.status >= 500 && res.status < 600) {
+      try {
+        return await queueAndReturnFallback()
+      } catch {
+        return res
+      }
+    }
+    return res
+  } catch (e) {
+    if (!isNetworkError(e)) throw e
+    try {
+      return await queueAndReturnFallback()
+    } catch {
+      throw e
+    }
   }
 }
