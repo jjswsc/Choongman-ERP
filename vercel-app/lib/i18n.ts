@@ -9204,8 +9204,6 @@ orderItemQty: 'จำนวน',
     posSalesWithdrawalList: 'Sales withdrawal list',
     posSalesWithdrawal: 'Sales withdrawal',
     posSalesWithdrawalHint: "Select a date to see that day's cash sales. Enter amount and memo, then register.",
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   },
   mm: {
     all: 'အားလုံး',
@@ -12026,8 +12024,6 @@ orderItemQty: 'အရေအတွက်',
     posSalesWithdrawalList: 'Sales withdrawal list',
     posSalesWithdrawal: 'Sales withdrawal',
     posSalesWithdrawalHint: "Select a date to see that day's cash sales. Enter amount and memo, then register.",
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -14845,8 +14841,6 @@ orderItemQty: 'ຈຳນວນ',
     posSalesWithdrawalList: 'Sales withdrawal list',
     posSalesWithdrawal: 'Sales withdrawal',
     posSalesWithdrawalHint: "Select a date to see that day's cash sales. Enter amount and memo, then register.",
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -15901,8 +15895,6 @@ orderItemQty: 'ຈຳນວນ',
     posTerminalRoleOrder: 'Order',
     posTerminalSetMain: 'Set as main',
     posTerminalSetMainConfirm: 'Set this device as the main POS?',
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -16958,8 +16950,6 @@ orderItemQty: 'ຈຳນວນ',
     posTerminalRoleOrder: 'Order',
     posTerminalSetMain: 'Set as main',
     posTerminalSetMainConfirm: 'Set this device as the main POS?',
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -18015,8 +18005,6 @@ orderItemQty: 'ຈຳນວນ',
     posTerminalRoleOrder: 'Order',
     posTerminalSetMain: 'Set as main',
     posTerminalSetMainConfirm: 'Set this device as the main POS?',
-    posTableElapsedHint: 'Elapsed (min) since order',
-    posTableOrderClockHint: 'Order time',
   } as Record<string, string>,
 } as const
 
