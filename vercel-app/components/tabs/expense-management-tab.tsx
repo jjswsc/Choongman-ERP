@@ -442,6 +442,9 @@ export function ExpenseManagementTab() {
       q.set("transDate", String(row.expenseDate || "").slice(0, 10))
       q.set("payeeCode", row.payeeCode || "")
       q.set("payeeName", row.payeeName || "")
+      if ((row.withdrawalCategory || "").toLowerCase().startsWith("purchase") && (row.payeeCode || "").trim()) {
+        q.set("vendorCode", row.payeeCode || "")
+      }
       if (row.accountSubjectId) q.set("accountSubjectId", String(row.accountSubjectId))
       if (row.withdrawalCategory) q.set("category", row.withdrawalCategory)
       if ((row.storeName || "").trim()) q.set("storeName", (row.storeName || "").trim())
@@ -1022,7 +1025,7 @@ export function ExpenseManagementTab() {
                                 <td className="py-2 px-2 text-muted-foreground whitespace-nowrap truncate" title={r.memo || ""}>{getMemo(r.memo)}</td>
                                 <td className="py-2 px-2 text-center">
                                   {r.status === "planned" ? (
-                                    <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "수정")} onClick={() => openEditPlan(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
+                                    <Button size="icon" variant="outline" className="h-7 w-7" title={tt("btnEdit", "수정")} onClick={() => navigateToEditInRegister(r)} disabled={payingId === r.id || deletingPlanId === r.id}>
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
                                   ) : r.status === "approved" && r.remainingAmount > 0 ? (
