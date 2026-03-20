@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
@@ -36,7 +36,9 @@ import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { buildKitchenSlipHtml } from '@/lib/pos-kitchen-slip-html'
+import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
+import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { subscribePosOrdersInsert } from '@/lib/supabase-client'
 
 /** 배달앱 코드 (API에서 동적 로드 가능) */
@@ -509,11 +511,6 @@ export default function PosTerminalPage() {
             const printOne = (idx: number) => {
               if (idx >= slips.length) return
               const slip = slips[idx]
-              const w = window.open('', '_blank')
-              if (!w) {
-                alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
-                return
-              }
               const cR = (tag: string) => '\u003c/' + tag + '>'
               const tablePartR = tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + tableName : ''
               const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
@@ -530,19 +527,15 @@ export default function PosTerminalPage() {
                 paperCss,
                 escapeHtml,
               })
-              w.document.write(html)
-              w.document.close()
-              w.focus()
-              let done = false
-              const afterPrint = () => {
-                if (done) return
-                done = true
-                w.close()
-                if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
-              }
-              w.onafterprint = afterPrint
-              setTimeout(() => w.print(), 250)
-              setTimeout(afterPrint, 30000)
+              printHtmlInHiddenIframe(html, {
+                title: slip.label,
+                printDelayMs: 250,
+                onPrintUnavailable: () =>
+                  alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                onAfterCleanup: () => {
+                  if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                },
+              })
             }
             setTimeout(() => printOne(0), autoPrintReceiptOnOrder ? 600 : 180)
           })
@@ -642,11 +635,6 @@ export default function PosTerminalPage() {
               const printOne = (idx: number) => {
                 if (idx >= slips.length) return
                 const slip = slips[idx]
-                const w = window.open('', '_blank')
-                if (!w) {
-                  alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
-                  return
-                }
                 const tablePart = order.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + order.tableName : ''
                 const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
                 const c2 = (tag: string) => '\u003c/' + tag + '>'
@@ -664,19 +652,15 @@ export default function PosTerminalPage() {
                   paperCss,
                   escapeHtml,
                 })
-                w.document.write(html)
-                w.document.close()
-                w.focus()
-                let done = false
-                const afterPrint = () => {
-                  if (done) return
-                  done = true
-                  w.close()
-                  if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
-                }
-                w.onafterprint = afterPrint
-                setTimeout(() => w.print(), 250)
-                setTimeout(afterPrint, 30000)
+                printHtmlInHiddenIframe(html, {
+                  title: slip.label,
+                  printDelayMs: 250,
+                  onPrintUnavailable: () =>
+                    alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                  onAfterCleanup: () => {
+                    if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                  },
+                })
               }
               setTimeout(() => printOne(0), autoPrintReceiptOnOrder ? 600 : 180)
             } catch (e) {
@@ -729,31 +713,35 @@ export default function PosTerminalPage() {
     otherMode,
   }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
 
-  const printReceiptNow = (payload: {
-    orderNo: string
-    storeCode: string
-    orderType: string
-    tableName?: string
-    memo?: string
-    items: { id: string; name: string; price: number; qty: number }[]
-    subtotal: number
-    discountAmt: number
-    total: number
-    vatFeeAmt?: number
-    vatFeeMode?: 'included' | 'separate'
-    serviceFeeAmt?: number
-    serviceFeeMode?: 'included' | 'separate'
-    cardFeeAmt?: number
-    cardFeeMode?: 'included' | 'separate'
-    otherFeeAmt?: number
-    otherFeeMode?: 'included' | 'separate'
-  }) => {
-    const logoUrl = `${window.location.origin}/company-stamp.png`
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
-      return
-    }
+  const printReceiptNow = (
+    payload: {
+      orderNo: string
+      storeCode: string
+      orderType: string
+      tableName?: string
+      memo?: string
+      items: { id: string; name: string; price: number; qty: number }[]
+      subtotal: number
+      discountAmt: number
+      total: number
+      vatFeeAmt?: number
+      vatFeeMode?: 'included' | 'separate'
+      serviceFeeAmt?: number
+      serviceFeeMode?: 'included' | 'separate'
+      cardFeeAmt?: number
+      cardFeeMode?: 'included' | 'separate'
+      otherFeeAmt?: number
+      otherFeeMode?: 'included' | 'separate'
+    },
+    /** 사용자 클릭 직후 열어둔 창을 넘기면 팝업 차단/자동 인쇄 제한을 피할 수 있음 */
+    existingWindow?: Window | null,
+    /** true면 사용자 제스처 직후 호출로 간주 */
+    fromUserGesture?: boolean,
+    /** 주문 후 인쇄: 이 콜백을 넘기면 새 창 대신 HTML만 넘겨서 같은 페이지 iframe 모달로 보여줌 (팝업 차단 무관, iframe 안에서 인쇄 버튼 클릭 시 인쇄 화면 표시) */
+    onShowInModal?: (html: string) => void,
+    /** true면 주문 직인쇄: 숨김 iframe에 쓰고 print() (별도 브라우저 창 없음). 결제 등은 false */
+    directPrint?: boolean
+  ) => {
     const esc = (value: string) =>
       value
         .replace(/&/g, '&amp;')
@@ -784,11 +772,19 @@ export default function PosTerminalPage() {
     // #endregion
     /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
     const ct = (tag: string) => '\u003c/' + tag + '>'
-    const tableRow = payload.tableName
-      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('posTable', '테이블')) + ct('span') + '<span class="receipt-meta-value">' + esc(payload.tableName) + ct('span') + ct('div')
+    const tableDisplay = payload.tableName
+      ? translateReceiptTableDisplayName(payload.tableName, (k) => tPrint(k))
+      : ''
+    const tableRow = tableDisplay
+      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('posTable', '테이블')) + ct('span') + '<span class="receipt-meta-value">' + esc(tableDisplay) + ct('span') + ct('div')
       : ''
     const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
-    const itemsRows = payload.items.map((it) => '<div class="receipt-row"><span>' + it.qty + 'x ' + esc(it.name) + ct('span') + '<span>' + formatBahtNum(it.price * it.qty) + ct('span') + ct('div')).join('')
+    const itemsRows = payload.items
+      .map((it) => {
+        const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
+        return '<div class="receipt-row"><span>' + it.qty + 'x ' + esc(line) + ct('span') + '<span>' + formatBahtNum(it.price * it.qty) + ct('span') + ct('div')
+      })
+      .join('')
     const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
     const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
     const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
@@ -802,10 +798,74 @@ export default function PosTerminalPage() {
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH20)}).catch(()=>{});
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH20)}).catch(()=>{});
     // #endregion
+    const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+    const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
     const receiptHtml = buildReceiptDocumentHtml({
       title: tPrint('posReceipt') || '영수증',
       bodyContent: printContent,
+      footerContent: showPrintButtonInReceipt
+        ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
+            printButtonLabel +
+            '</button>'
+        : undefined,
     })
+
+    if (fromUserGesture && onShowInModal) {
+      onShowInModal(receiptHtml)
+      return
+    }
+
+    /** 주문 직인쇄: 팝업 창 대신 숨김 iframe → OS 인쇄 대화상자만 보임 */
+    if (directPrint) {
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('title', tPrint('posReceipt') || '영수증')
+      iframe.setAttribute('aria-hidden', 'true')
+      iframe.style.cssText =
+        'position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;visibility:hidden'
+      document.body.appendChild(iframe)
+      const cw = iframe.contentWindow
+      if (!cw) {
+        iframe.remove()
+        alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+        return
+      }
+      cw.document.open()
+      cw.document.write(receiptHtml)
+      cw.document.close()
+      let cleaned = false
+      const removeIframe = () => {
+        if (cleaned) return
+        cleaned = true
+        try {
+          iframe.remove()
+        } catch {
+          /* ignore */
+        }
+      }
+      cw.onafterprint = removeIframe
+      setTimeout(() => {
+        try {
+          cw.focus()
+          cw.print()
+        } catch {
+          removeIframe()
+        }
+      }, 450)
+      setTimeout(removeIframe, 30000)
+      return
+    }
+
+    let printWindow: Window | null =
+      existingWindow != null && typeof existingWindow !== 'undefined' && !existingWindow.closed ? existingWindow : null
+    if (!printWindow) printWindow = window.open('', '_blank')
+    if (!printWindow || printWindow.closed) {
+      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      return
+    }
     printWindow.document.write(receiptHtml)
     printWindow.document.close()
     printWindow.focus()
@@ -813,10 +873,12 @@ export default function PosTerminalPage() {
     const safeClose = () => {
       if (closed) return
       closed = true
-      printWindow.close()
+      if (printWindow && !printWindow.closed) printWindow.close()
     }
     printWindow.onafterprint = safeClose
-    setTimeout(() => printWindow.print(), 250)
+    if (existingWindow == null && !fromUserGesture) {
+      setTimeout(() => printWindow.print(), 250)
+    }
     setTimeout(safeClose, 30000)
   }
   const deliveryApps = deliveryAppsFromApi
@@ -1337,20 +1399,25 @@ export default function PosTerminalPage() {
             {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 메뉴 화면(모바일은 하단에 장바구니 고정) */}
             <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 min-w-0 flex flex-col">
               {selectedTableId ? (
-                <div className={cn('flex-1 min-h-0 flex flex-col', isNarrowViewport && 'gap-0')}>
-                  <div className="flex-1 min-h-0 overflow-hidden">
+                <div className={cn('flex-1 min-h-0 flex flex-col', isNarrowViewport && 'gap-0 overflow-y-auto')}>
+                  <div className={cn(isNarrowViewport ? 'flex-none min-h-0' : 'flex-1 min-h-[260px] overflow-hidden')}>
                     <PosTerminalMenuScreen
                       mode="pos-order"
                       storeCode={currentStoreId}
-                      selectedTableName={selectedTable?.name ?? selectedTableId}
+                      selectedTableName={
+                        selectedTable?.name
+                          ? translateReceiptTableDisplayName(selectedTable.name, t)
+                          : String(selectedTableId ?? '')
+                      }
                       onBack={() => setSelectedTableId(null)}
                       onAddItem={handleAddItemToCart}
                       orderType="dine-in"
-                      className="h-full"
+                      touchMode={isNarrowViewport ? 'large' : 'default'}
+                      className={isNarrowViewport ? 'h-auto' : 'h-full'}
                     />
                   </div>
                   {isNarrowViewport && (
-                    <div className="flex-shrink-0 border-t border-border bg-card min-h-[200px] max-h-[45vh] overflow-hidden flex flex-col rounded-b-lg">
+                    <div className="flex-shrink-0 border-t border-border bg-card h-[22vh] min-h-[140px] max-h-[220px] overflow-hidden flex flex-col rounded-b-lg">
                       <CartPanel
                         ref={cartRef}
                         stores={stores}
@@ -1363,8 +1430,9 @@ export default function PosTerminalPage() {
                         pricingAdjustments={pricingAdjustments}
                         pendingOrderId={pendingDineInOrderId}
                         onOrderSubmit={async (payload) => {
+                          const isAddOrder = Boolean(selectedTable?.order)
+                          const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
                           try {
-                            const isAddOrder = Boolean(selectedTable?.order)
                             const res = await savePosOrderWithOffline({
                               storeCode: currentStoreId,
                               orderType: 'dine_in',
@@ -1390,12 +1458,11 @@ export default function PosTerminalPage() {
                               return
                             }
                             if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
-                            const shouldAutoPrintReceipt = isMainPosDevice && (isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder)
-                            if (shouldAutoPrintReceipt) {
-                              const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                              const discountAmt = payload.discountAmt ?? 0
-                              const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
-                              printReceiptNow({
+                            const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                            const discountAmt = payload.discountAmt ?? 0
+                            const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
+                            printReceiptNow(
+                              {
                                 orderNo: (res as { orderNo?: string }).orderNo ?? '',
                                 storeCode: currentStoreId,
                                 orderType: t('posOrderTypeDineIn') || '매장',
@@ -1413,7 +1480,75 @@ export default function PosTerminalPage() {
                                 cardFeeMode: pricing.cardFeeMode,
                                 otherFeeAmt: pricing.otherFeeAmt,
                                 otherFeeMode: pricing.otherFeeMode,
-                              })
+                              },
+                              null,
+                              false,
+                              undefined,
+                              true
+                            )
+                            if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                              const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
+                              const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
+                              getPosPrinterSettings({ storeCode: currentStoreId })
+                                .then((settings) => {
+                                  const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
+                                  const kitchen2 = settings.kitchen2Categories || []
+                                  const mode = settings.kitchenMode || 1
+                                  const orderTypeLabels: Record<string, string> = {
+                                    dine_in: t('posOrderTypeDineIn') ?? '매장',
+                                    takeout: t('posOrderTypeTakeout') ?? '포장',
+                                    delivery: t('posOrderTypeDelivery') ?? '배달',
+                                  }
+                                  const toSlips = (): { label: string; items: typeof itemsForKitchen }[] => {
+                                    if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
+                                    const slip1: typeof itemsForKitchen = []
+                                    const slip2: typeof itemsForKitchen = []
+                                    for (const it of itemsForKitchen) {
+                                      const menuId = String(it.id ?? '').split('-')[0]
+                                      const cat = categoryByMenuId[menuId] ?? ''
+                                      if (kitchen2.includes(cat)) slip2.push(it)
+                                      else slip1.push(it)
+                                    }
+                                    const result: { label: string; items: typeof itemsForKitchen }[] = []
+                                    if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
+                                    if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
+                                    return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
+                                  }
+                                  const slips = toSlips()
+                                  const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
+                                  const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
+                                  const cR = (tag: string) => '\u003c/' + tag + '>'
+                                  const tablePartR = payload.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + payload.tableName : ''
+                                  const printOne = (idx: number) => {
+                                    if (idx >= slips.length) return
+                                    const slip = slips[idx]
+                                    const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+                                    const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
+                                    const html = buildKitchenSlipHtml({
+                                      label: slip.label,
+                                      orderNo: orderNoStr,
+                                      storeCode: currentStoreId,
+                                      orderTypeLabel: orderTypeLabels.dine_in || '매장',
+                                      tablePart: tablePartR,
+                                      dateStr: new Date().toLocaleString('ko-KR'),
+                                      itemsHtml: itemsHtmlR,
+                                      memoHtml: memoHtmlR,
+                                      paperCss,
+                                      escapeHtml,
+                                    })
+                                    printHtmlInHiddenIframe(html, {
+                                      title: slip.label,
+                                      printDelayMs: 250,
+                                      onPrintUnavailable: () =>
+                                        alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                                      onAfterCleanup: () => {
+                                        if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                                      },
+                                    })
+                                  }
+                                  setTimeout(() => printOne(0), shouldAutoPrintReceipt ? 600 : 180)
+                                })
+                                .catch((e) => console.error('Kitchen slip print:', e))
                             }
                             if (res.orderId != null) setPendingDineInOrderId(res.orderId)
                             setServingTableId(null)
@@ -1604,6 +1739,7 @@ export default function PosTerminalPage() {
                   backButtonLabel={t('posBack') || '뒤로가기'}
                   onAddItem={handleAddItemToCart}
                   orderType="delivery"
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
                   className="h-full"
                 />
               ) : (
@@ -1649,6 +1785,7 @@ export default function PosTerminalPage() {
                   backButtonLabel={t('posBack') || '뒤로가기'}
                   onAddItem={handleAddItemToCart}
                   orderType="takeout"
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
                   className="h-full"
                 />
               ) : (
@@ -1681,6 +1818,7 @@ export default function PosTerminalPage() {
           </Tabs>
         </div>
         {showSidePanel && (() => {
+          // 테이블 주문(모바일)은 하단 고정 카트 패널을 화면에 항상 붙여 실시간 확인
           if (isNarrowViewport && isTablesMenuWithCart) return null
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
@@ -1911,8 +2049,9 @@ export default function PosTerminalPage() {
               }
             }}
             onOrderSubmit={async (payload) => {
+              const isAddOrder = Boolean(selectedTable?.order)
+              const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
               try {
-                const isAddOrder = Boolean(selectedTable?.order)
                 const res = await savePosOrderWithOffline({
                   storeCode: currentStoreId,
                   orderType: 'dine_in',
@@ -1938,12 +2077,11 @@ export default function PosTerminalPage() {
                   return
                 }
                 if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
-                const shouldAutoPrintReceipt = isMainPosDevice && (isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder)
-                if (shouldAutoPrintReceipt) {
-                  const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                  const discountAmt = payload.discountAmt ?? 0
-                  const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
-                  printReceiptNow({
+                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+                const discountAmt = payload.discountAmt ?? 0
+                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
+                printReceiptNow(
+                  {
                     orderNo: (res as { orderNo?: string }).orderNo ?? '',
                     storeCode: currentStoreId,
                     orderType: t('posOrderTypeDineIn') || '매장',
@@ -1961,7 +2099,75 @@ export default function PosTerminalPage() {
                     cardFeeMode: pricing.cardFeeMode,
                     otherFeeAmt: pricing.otherFeeAmt,
                     otherFeeMode: pricing.otherFeeMode,
-                  })
+                  },
+                  null,
+                  false,
+                  undefined,
+                  true
+                )
+                if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
+                  const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
+                  const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
+                  getPosPrinterSettings({ storeCode: currentStoreId })
+                    .then((settings) => {
+                      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
+                      const kitchen2 = settings.kitchen2Categories || []
+                      const mode = settings.kitchenMode || 1
+                      const orderTypeLabels: Record<string, string> = {
+                        dine_in: t('posOrderTypeDineIn') ?? '매장',
+                        takeout: t('posOrderTypeTakeout') ?? '포장',
+                        delivery: t('posOrderTypeDelivery') ?? '배달',
+                      }
+                      const toSlips = (): { label: string; items: typeof itemsForKitchen }[] => {
+                        if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
+                        const slip1: typeof itemsForKitchen = []
+                        const slip2: typeof itemsForKitchen = []
+                        for (const it of itemsForKitchen) {
+                          const menuId = String(it.id ?? '').split('-')[0]
+                          const cat = categoryByMenuId[menuId] ?? ''
+                          if (kitchen2.includes(cat)) slip2.push(it)
+                          else slip1.push(it)
+                        }
+                        const result: { label: string; items: typeof itemsForKitchen }[] = []
+                        if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
+                        if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
+                        return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
+                      }
+                      const slips = toSlips()
+                      const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
+                      const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
+                      const cR = (tag: string) => '\u003c/' + tag + '>'
+                      const tablePartR = payload.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + payload.tableName : ''
+                      const printOne = (idx: number) => {
+                        if (idx >= slips.length) return
+                        const slip = slips[idx]
+                        const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+                        const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
+                        const html = buildKitchenSlipHtml({
+                          label: slip.label,
+                          orderNo: orderNoStr,
+                          storeCode: currentStoreId,
+                          orderTypeLabel: orderTypeLabels.dine_in || '매장',
+                          tablePart: tablePartR,
+                          dateStr: new Date().toLocaleString('ko-KR'),
+                          itemsHtml: itemsHtmlR,
+                          memoHtml: memoHtmlR,
+                          paperCss,
+                          escapeHtml,
+                        })
+                        printHtmlInHiddenIframe(html, {
+                          title: slip.label,
+                          printDelayMs: 250,
+                          onPrintUnavailable: () =>
+                            alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                          onAfterCleanup: () => {
+                            if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+                          },
+                        })
+                      }
+                      setTimeout(() => printOne(0), shouldAutoPrintReceipt ? 600 : 180)
+                    })
+                    .catch((e) => console.error('Kitchen slip print:', e))
                 }
                 if (res.orderId != null) setPendingDineInOrderId(res.orderId)
                 setServingTableId(null)
@@ -2132,20 +2338,26 @@ export default function PosTerminalPage() {
               showCloseButton={true}
               className="h-[85vh] max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 rounded-t-xl"
             >
+              <SheetTitle className="sr-only">{t('posCart') || '장바구니'}</SheetTitle>
               <div className="flex-1 min-h-0 overflow-y-auto shrink-0">
                 {panelContent}
               </div>
             </SheetContent>
           </Sheet>
           {!mobilePanelOpen && (
-            <button
-              type="button"
-              onClick={() => setMobilePanelOpen(true)}
-              className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/90 active:scale-95 touch-manipulation"
-              aria-label={t('posCart') || '장바구니'}
-            >
-              <ShoppingCart className="h-6 w-6" />
-            </button>
+            <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+              <div className="mx-auto w-full max-w-[1024px]">
+                <button
+                  type="button"
+                  onClick={() => setMobilePanelOpen(true)}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-t-xl bg-primary text-sm font-semibold text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/90 active:scale-[0.99] touch-manipulation"
+                  aria-label={t('posCart') || '장바구니'}
+                >
+                  <ShoppingCart className="h-5 w-5" />
+                  <span>{t('posCart') || '장바구니'}</span>
+                </button>
+              </div>
+            </div>
           )}
         </>
       ) : (

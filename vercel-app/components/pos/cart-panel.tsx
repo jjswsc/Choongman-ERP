@@ -33,6 +33,7 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { getMembers, validatePosCoupon } from '@/lib/api-client'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
+import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
@@ -939,21 +940,21 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           )}
 
           {/* 1행: 회원검색 + 손님(테이블현황만) */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-1.5">
             <Input
               placeholder={t('posMemberSearchPh') || '회원번호/이름/번호'}
               value={memberKeyword}
               onChange={(e) => setMemberKeyword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleMemberSearch())}
               onFocus={scrollIntoViewOnFocus}
-              className="h-8 flex-1 min-w-[8rem] max-w-[12rem]"
+              className="h-8 flex-1 w-0 min-w-0 max-w-[9rem]"
             />
             <Button type="button" variant="secondary" size="sm" className="h-8 shrink-0" onClick={handleMemberSearch} disabled={membersLoading}>
               {membersLoading ? '...' : (t('posSearch') || '검색')}
             </Button>
             {orderType === 'dine-in' && (
-              <div className="flex items-center gap-2">
-                <Label className="text-sm flex-shrink-0">{t('posGuestCount') || '손님'}</Label>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Label className="text-sm whitespace-nowrap">{t('posGuestCount') || '손님'}</Label>
                 <Select
                   value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
                   onValueChange={(v) => {
@@ -984,7 +985,9 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             <div className="flex items-center gap-2">
               <Label className="text-sm w-12 flex-shrink-0">{t('posTableLabel')}</Label>
               <Badge variant="secondary" className="h-7 px-3">
-                {selectedTable?.name || t('posSelectTableNone')}
+                {selectedTable?.name
+                  ? translateReceiptTableDisplayName(selectedTable.name, t)
+                  : t('posSelectTableNone')}
               </Badge>
             </div>
           )}

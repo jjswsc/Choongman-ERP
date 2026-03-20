@@ -94,7 +94,7 @@ export function WithdrawalManagementTab() {
   const [advanceInstallmentCurrent, setAdvanceInstallmentCurrent] = React.useState("1")
 
   const [inboundBatchesForLink, setInboundBatchesForLink] = React.useState<InboundBatchForLink[]>([])
-  const [inboundLinkAmounts, setInboundLinkAmounts] = React.useState<Record<number, number>>({})
+  const [inboundLinkAmounts, setInboundLinkAmounts] = React.useState<Record<number, string>>({})
   const [inboundLinkLoading, setInboundLinkLoading] = React.useState(false)
 
   const [vendors, setVendors] = React.useState<{ code: string; name: string; bankAccountNo?: string | null }[]>([])
@@ -626,8 +626,9 @@ export function WithdrawalManagementTab() {
       const newBankTxId = res.bankTransactionId ?? undefined
       if (categoryMain === "purchase" && newBankTxId && effectivePaymentMethod === "bank") {
         const links = Object.entries(inboundLinkAmounts)
-          .filter(([, amt]) => amt > 0)
-          .map(([batchId, amount]) => ({ inboundBatchId: parseInt(batchId, 10), amount }))
+          .map(([batchId, raw]) => ({ batchId, amount: Number(String(raw).replace(/,/g, "")) }))
+          .filter((x) => Number.isFinite(x.amount) && x.amount > 0)
+          .map((x) => ({ inboundBatchId: parseInt(x.batchId, 10), amount: x.amount }))
         if (links.length > 0) {
           try {
             const linkRes = await saveBankTransactionInboundLinks({ bankTransactionId: newBankTxId, links })
@@ -890,10 +891,14 @@ export function WithdrawalManagementTab() {
                               inputMode="numeric"
                               placeholder="0"
                               className="w-24 h-8 text-right"
-                              value={inboundLinkAmounts[b.id] ? String(inboundLinkAmounts[b.id]) : ""}
+                              value={inboundLinkAmounts[b.id] || ""}
                               onChange={(e) => {
-                                const num = parseInt(String(e.target.value).replace(/\D/g, ""), 10) || 0
-                                setInboundLinkAmounts((prev) => ({ ...prev, [b.id]: num }))
+                                const next = String(e.target.value).replace(/[^\d.,]/g, "").replace(/,/g, "")
+                                const parts = next.split(".")
+                                const normalized = parts.length <= 1
+                                  ? next
+                                  : `${parts[0]}.${parts.slice(1).join("").slice(0, 2)}`
+                                setInboundLinkAmounts((prev) => ({ ...prev, [b.id]: normalized }))
                               }}
                             />
                           </div>

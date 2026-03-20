@@ -33,6 +33,7 @@ import {
   normalizePosMenuScreenConfig,
   type PosMenuScreenConfig,
 } from '@/lib/pos-menu-screen-config'
+import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
@@ -59,6 +60,8 @@ export interface PosTerminalMenuScreenProps {
   orderType?: PosOrderTypeForPrice
   /** 하단 화면 구성바 표시 */
   showConfigBar?: boolean
+  /** 터치 UI 밀도 (모바일: large) */
+  touchMode?: 'default' | 'large'
   className?: string
 }
 
@@ -71,6 +74,7 @@ export function PosTerminalMenuScreen({
   onAddItem,
   orderType = 'dine-in',
   showConfigBar = true,
+  touchMode = 'default',
   className,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
@@ -382,18 +386,11 @@ export function PosTerminalMenuScreen({
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === 'delivery' && p.priceDelivery != null ? p.priceDelivery : (p.price ?? 0)
 
-  const chickenMenusForBanban = React.useMemo(() => {
-    return menus
-      .filter(
-        (m) =>
-          m.isActive &&
-          (!m.soldOutDate || m.soldOutDate !== todayStr) &&
-          m.code?.trim().toLowerCase().startsWith('c') &&
-          !m.isBanban
-      )
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [menus, todayStr])
+  /** 반반 맛 선택 목록 (열린 메뉴 기준, 후보 0개일 때 대분류·코드 기반 폴백) */
+  const banbanFlavorList = React.useMemo(() => {
+    if (!optionPickerMenu || !isBanbanMenu(optionPickerMenu)) return []
+    return getBanbanFlavorMenuList(menus, optionPickerMenu, todayStr)
+  }, [menus, optionPickerMenu, todayStr])
 
   const addWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
     const id = opt ? `${menu.id}-${opt.id}` : menu.id
@@ -424,7 +421,7 @@ export function PosTerminalMenuScreen({
   }
 
   const openMenuPicker = (menu: PosMenu) => {
-    if (menu.isBanban) {
+    if (isBanbanMenu(menu)) {
       setOptionPickerBanbanFirst(null)
       setOptionPickerMenu(menu)
       return
@@ -439,7 +436,9 @@ export function PosTerminalMenuScreen({
     addWithOption(menu, null)
   }
 
-  const interactive = mode === 'pos-order' && typeof onAddItem === 'function'
+  // 실제 담기 가능 여부는 콜백 존재로 판단 (모드 문자열 불일치로 클릭이 막히는 케이스 방지)
+  const interactive = typeof onAddItem === 'function'
+  const isExpandedMobileList = !isAdminMode && touchMode === 'large'
   const combinedRows = React.useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase()
     const promoRows = filteredPromos.map((p) => ({
@@ -626,7 +625,7 @@ export function PosTerminalMenuScreen({
   }
 
   return (
-    <div className={cn('flex h-full flex-col rounded-lg border border-border bg-card overflow-hidden', className)}>
+    <div className={cn('flex flex-col rounded-lg border border-border bg-card overflow-hidden', isExpandedMobileList ? 'h-auto' : 'h-full', className)}>
       <div className="flex shrink-0 items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
         <Button variant="ghost" size="sm" className="gap-1.5 h-9" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
@@ -638,7 +637,7 @@ export function PosTerminalMenuScreen({
       </div>
       <div
         className={cn(
-          'flex-1 min-h-0 flex flex-col',
+          isExpandedMobileList ? 'flex-none min-h-fit flex flex-col' : 'flex-1 min-h-0 flex flex-col',
           isAdminMode && 'min-[980px]:grid min-[980px]:grid-cols-[220px_1fr_320px] min-[980px]:grid-rows-[minmax(0,1fr)]'
         )}
       >
@@ -708,7 +707,15 @@ export function PosTerminalMenuScreen({
           </div>
         </section>
 
-        <section ref={menuListRef} className={cn('min-h-0 flex-1 overflow-y-scroll overflow-x-hidden', isAdminMode ? 'min-[980px]:min-h-0 p-3' : 'p-1')}>
+        <section
+          ref={menuListRef}
+          className={cn(
+            isExpandedMobileList
+              ? 'flex-none overflow-visible p-1'
+              : 'min-h-0 flex-1 overflow-y-scroll overflow-x-hidden',
+            isAdminMode && 'min-[980px]:min-h-0 p-3'
+          )}
+        >
           {isAdminMode && (
             <div className="mb-2 flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
@@ -965,9 +972,9 @@ export function PosTerminalMenuScreen({
             </DialogTitle>
           </DialogHeader>
           {optionPickerMenu && (() => {
-            if (optionPickerMenu.isBanban) {
+            if (isBanbanMenu(optionPickerMenu)) {
               const first = optionPickerBanbanFirst
-              const list = chickenMenusForBanban
+              const list = banbanFlavorList
               return (
                 <div className="flex flex-col gap-3 py-2">
                   <div className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">

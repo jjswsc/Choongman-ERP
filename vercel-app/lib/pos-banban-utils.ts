@@ -1,0 +1,122 @@
+import type { PosMenu } from '@/lib/api-client'
+
+/**
+ * 공백·하이픈 등 제거한 메뉴 코드 키 (예: `C0 24`, `C-024` → `c024`)
+ */
+export function normalizePosMenuCodeKey(raw: string | undefined | null): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_.#]/g, '')
+}
+
+/** DB `is_banban` 없을 때도 반반으로 고정 인식할 코드 (normalizePosMenuCodeKey 기준) */
+const KNOWN_BANBAN_CODE_KEYS = new Set(['c024'])
+
+export function isKnownBanbanMenuCode(code: string | undefined | null): boolean {
+  return KNOWN_BANBAN_CODE_KEYS.has(normalizePosMenuCodeKey(code))
+}
+
+/**
+ * 반반(반반 치킨) 메뉴 여부.
+ * DB에 `is_banban` 컬럼이 없거나 getPosMenus 폴백으로 플래그가 안 내려올 때를 대비해 이름·코드로도 인식합니다.
+ */
+export function isBanbanMenu(menu: Pick<PosMenu, 'isBanban' | 'name' | 'code'>): boolean {
+  if (menu.isBanban === true) return true
+  if (isKnownBanbanMenuCode(menu.code)) return true
+  const name = String(menu.name ?? '').toLowerCase()
+  const code = String(menu.code ?? '').trim().toLowerCase()
+  if (name.includes('banban') || name.includes('반반')) return true
+  if (code.includes('banban') || code.startsWith('bb-') || code === 'banban') return true
+  return false
+}
+
+/** 반반에서 고를 수 있는 “맛” 후보: 일반 치킨 단품 (반반 상품 자체는 제외) */
+export function isChickenMenuForBanban(menu: Pick<PosMenu, 'code' | 'categoryMain' | 'category'>): boolean {
+  if (isKnownBanbanMenuCode(menu.code)) return false
+  const code = String(menu.code ?? '').trim().toLowerCase()
+  const main = String(menu.categoryMain ?? '').trim().toLowerCase()
+  const cat = String(menu.category ?? '').trim().toLowerCase()
+  return (
+    code.startsWith('c') ||
+    main === 'chicken' ||
+    main.includes('치킨') ||
+    cat.includes('chicken') ||
+    cat.includes('치킨')
+  )
+}
+
+/**
+ * 코드가 `c`로 시작하는 메뉴와 같은 소분류(category)면 치킨 코너로 간주 (코드 규칙이 섞인 매장용)
+ */
+export function isSameCategoryAsCodeChickenMenu(
+  menu: Pick<PosMenu, 'category'>,
+  allMenus: Pick<PosMenu, 'code' | 'category'>[]
+): boolean {
+  const cat = String(menu.category ?? '').trim()
+  if (!cat) return false
+  return allMenus.some((m) => {
+    if (isKnownBanbanMenuCode(m.code)) return false
+    const c = String(m.code ?? '').trim().toLowerCase()
+    return c.startsWith('c') && String(m.category ?? '').trim() === cat
+  })
+}
+
+/** 반반 후보: 위 조건 중 하나라도 만족 */
+export function isEligibleChickenHalfForBanban(
+  menu: Pick<PosMenu, 'code' | 'categoryMain' | 'category'>,
+  allMenus: Pick<PosMenu, 'code' | 'category'>[]
+): boolean {
+  return isChickenMenuForBanban(menu) || isSameCategoryAsCodeChickenMenu(menu, allMenus)
+}
+
+function sortMenusByName(arr: PosMenu[]): PosMenu[] {
+  return arr.slice().sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * 반반 1·2번째 맛 선택 목록.
+ * 1차: 치킨 판별 규칙 — 비어 있으면 반반 메뉴와 같은 대분류 → 그다음 `c`코드 메뉴의 대분류 → 마지막 음료·디저트 제외 전체(상한).
+ */
+export function getBanbanFlavorMenuList(allMenus: PosMenu[], banbanMenu: PosMenu, todayStr: string): PosMenu[] {
+  const base = allMenus.filter(
+    (m) =>
+      m.isActive !== false &&
+      (!m.soldOutDate || m.soldOutDate !== todayStr) &&
+      !isBanbanMenu(m) &&
+      String(m.id) !== String(banbanMenu.id)
+  )
+
+  const primary = base.filter((m) => isEligibleChickenHalfForBanban(m, allMenus))
+  if (primary.length > 0) return sortMenusByName(primary)
+
+  const banbanMain = String(banbanMenu.categoryMain ?? '').trim()
+  if (banbanMain) {
+    const byMain = base.filter((m) => String(m.categoryMain ?? '').trim() === banbanMain)
+    if (byMain.length > 0) return sortMenusByName(byMain)
+  }
+
+  const mainsFromCodeChicken = new Set<string>()
+  for (const m of allMenus) {
+    if (isKnownBanbanMenuCode(m.code)) continue
+    const c = String(m.code ?? '').trim().toLowerCase()
+    if (!c.startsWith('c')) continue
+    const cm = String(m.categoryMain ?? '').trim()
+    if (cm) mainsFromCodeChicken.add(cm)
+  }
+  if (mainsFromCodeChicken.size > 0) {
+    const byDerived = base.filter((m) => mainsFromCodeChicken.has(String(m.categoryMain ?? '').trim()))
+    if (byDerived.length > 0) return sortMenusByName(byDerived)
+  }
+
+  const excludeDrinkDessert = (m: PosMenu) => {
+    const cat = String(m.category ?? '').toLowerCase()
+    const cm = String(m.categoryMain ?? '').toLowerCase()
+    const blob = `${cat} ${cm}`
+    if (/drink|beverage|coffee|tea|juice|smoothie|음료|카페|콜라|사이다/.test(blob)) return false
+    if (/dessert|디저트|cake|케이크|아이스크림/.test(blob)) return false
+    return true
+  }
+  const loose = base.filter(excludeDrinkDessert)
+  return sortMenusByName(loose).slice(0, 120)
+}

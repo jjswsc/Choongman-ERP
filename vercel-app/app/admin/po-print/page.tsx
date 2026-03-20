@@ -2,7 +2,11 @@
 
 import "../invoice-print/invoice-print.css"
 import * as React from "react"
-import { PurchaseOrderPrint, type PoPrintData, type PoPrintCompany } from "@/components/invoice/purchase-order-print"
+import {
+  PurchaseOrderPrint,
+  type PoPrintData,
+  type PoPrintCompany,
+} from "@/components/invoice/purchase-order-print"
 import { Button } from "@/components/ui/button"
 import { getInvoiceData } from "@/lib/api-client"
 import { useLang } from "@/lib/lang-context"
@@ -17,6 +21,13 @@ export default function PoPrintPage() {
   const [company, setCompany] = React.useState<PoPrintCompany | null>(null)
   const [loaded, setLoaded] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [stampImageUrl, setStampImageUrl] = React.useState<string | undefined>(undefined)
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      setStampImageUrl(`${window.location.origin}/company-stamp.png`)
+    }
+  }, [])
 
   React.useEffect(() => {
     let cancelled = false
@@ -87,6 +98,10 @@ export default function PoPrintPage() {
       grandTotal: t("total") || "Grand Total",
       preparedBy: t("poPreparedBy") || "Prepared by",
       store: t("orderColStore") || "Store",
+      receivedBy: t("inv_received_by") || "Received by",
+      signatureDate: t("inv_date") || "Date",
+      authorizedSignatureStamp:
+        t("poAuthorizedSignatureStamp") || "Authorized Signature & Company Stamp",
     }),
     [t]
   )
@@ -135,7 +150,12 @@ export default function PoPrintPage() {
         </span>
       </div>
       <div className="invoice-print-wrapper pb-24 print:pb-0 max-w-4xl mx-auto print:max-w-full print:mx-0 print:px-0 pt-4">
-        <PurchaseOrderPrint data={data} company={company!} labels={labels} />
+        <PurchaseOrderPrint
+          data={data}
+          company={company!}
+          labels={labels}
+          stampImageUrl={stampImageUrl}
+        />
       </div>
     </div>
   )

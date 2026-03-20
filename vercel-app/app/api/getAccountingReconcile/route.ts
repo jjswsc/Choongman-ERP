@@ -6,6 +6,7 @@ import { supabaseSelectFilter } from '@/lib/supabase-server'
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
   try {
     const { searchParams } = new URL(request.url)
     const yearMonth = String(searchParams.get('yearMonth') || '').trim()
@@ -37,9 +38,11 @@ export async function GET(request: NextRequest) {
     let journalCogs = 0
     if (ids.length > 0) {
       const idList = ids.join(',')
+      // 합산에 사용되는 계정(41xx 매출, 5xx 비용)만 조회해 egress를 줄인다.
+      const lineFilter = `journal_entry_id=in.(${idList})&or=(account_code.like.41*,account_code.like.5*)`
       const lines = (await supabaseSelectFilter(
         'journal_lines',
-        `journal_entry_id=in.(${idList})`,
+        lineFilter,
         { select: 'account_code,side,amount', limit: 100000 }
       )) as { account_code?: string; side?: string; amount?: number }[] | null
       for (const l of lines || []) {

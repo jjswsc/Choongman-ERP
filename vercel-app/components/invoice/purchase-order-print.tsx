@@ -51,6 +51,12 @@ function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+/** DB·캐시에서 Approved / approved 등 변형 허용 */
+export function isPoApprovedStatus(status?: string): boolean {
+  const s = String(status ?? "").trim().toLowerCase()
+  return s === "approved"
+}
+
 function groupCartByStore(cart: PoPrintItem[]): Map<string, PoPrintItem[]> {
   const byStore = new Map<string, PoPrintItem[]>()
   for (const c of cart) {
@@ -66,9 +72,11 @@ export function PurchaseOrderPrint({
   data,
   company,
   labels,
+  stampImageUrl,
 }: {
   data: PoPrintData
   company: PoPrintCompany
+  stampImageUrl?: string
   labels?: {
     poTitle?: string
     poNo?: string
@@ -87,9 +95,13 @@ export function PurchaseOrderPrint({
     grandTotal?: string
     preparedBy?: string
     store?: string
+    receivedBy?: string
+    signatureDate?: string
+    authorizedSignatureStamp?: string
   }
 }) {
   const t = (key: keyof NonNullable<typeof labels>) => labels?.[key] ?? key
+  const approved = isPoApprovedStatus(data.status)
   const hasStore = data.cart.some((c) => c.store && String(c.store).trim())
   const byStore = hasStore ? groupCartByStore(data.cart) : null
 
@@ -340,24 +352,59 @@ export function PurchaseOrderPrint({
       </div>
 
       <div className="invoice-section px-8 py-6 border-t">
-        <div className="flex justify-between items-end">
-          <div>
-            <span className="text-sm text-muted-foreground">
-              {t("preparedBy") || "Prepared by"}:
-            </span>
-            <span className="ml-2 font-medium">{data.userName}</span>
-          </div>
-          {data.status === "Approved" && (
-            <div className="flex items-center gap-2">
-              <div className="w-24 h-24 border-2 border-dashed border-[#1e4d8c]/30 rounded-full flex items-center justify-center bg-[#1e4d8c]/5">
-                <div className="text-center">
-                  <div className="text-[#1e4d8c] font-bold text-sm">S&J</div>
-                  <div className="text-[#1e4d8c] text-xs">GLOBAL</div>
+        <div className="mb-4">
+          <span className="text-sm text-muted-foreground">
+            {t("preparedBy") || "Prepared by"}:
+          </span>
+          <span className="ml-2 font-medium">{data.userName}</span>
+        </div>
+        {approved && (
+          <div className="invoice-signature-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 items-stretch min-h-[160px]">
+            <div className="flex flex-col justify-between min-h-[160px] py-1">
+              <h4 className="font-semibold">{data.vendorName}</h4>
+              <div className="space-y-1.5">
+                <div className="flex items-end gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">
+                    {t("receivedBy") || "Received by"}:
+                  </span>
+                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
+                </div>
+                <div className="flex items-end gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">
+                    {t("signatureDate") || "Date"}:
+                  </span>
+                  <div className="flex-1 border-b border-dashed border-muted-foreground/50 min-w-[120px]" />
                 </div>
               </div>
             </div>
-          )}
-        </div>
+            <div className="flex items-center justify-end gap-4 min-h-[160px]">
+              <div className="flex flex-col justify-between items-end text-right min-h-[160px] py-0">
+                <h4 className="font-semibold">{company.companyName}</h4>
+                <span className="text-xs text-muted-foreground">
+                  {t("authorizedSignatureStamp") ||
+                    "Authorized Signature & Company Stamp"}
+                </span>
+              </div>
+              <div className="invoice-stamp shrink-0 flex-shrink-0">
+                {stampImageUrl ? (
+                  <img
+                    src={stampImageUrl}
+                    alt=""
+                    className="w-36 h-36 md:w-40 md:h-40 print:w-40 print:h-40 object-contain opacity-90"
+                    style={{ mixBlendMode: "multiply" }}
+                  />
+                ) : (
+                  <div className="w-36 h-36 md:w-40 md:h-40 print:w-40 print:h-40 border-2 border-dashed border-[#1e4d8c]/30 rounded-full flex items-center justify-center bg-[#1e4d8c]/5">
+                    <div className="text-center">
+                      <div className="text-[#1e4d8c] font-bold text-sm">S&J</div>
+                      <div className="text-[#1e4d8c] text-xs">GLOBAL</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -23,6 +23,7 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
 import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search, XCircle } from "lucide-react"
+import { isPoApprovedStatus } from "@/components/invoice/purchase-order-print"
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -342,7 +343,7 @@ ${allRows.map((row, ri) => {
                       <td className="px-3 py-2">{po.vendor_name || "-"}</td>
                       <td className="px-3 py-2">{po.location_name || "-"}</td>
                       <td className="px-3 py-2">
-                        {po.status === "Approved" ? (
+                        {isPoApprovedStatus(po.status) ? (
                           <span className="rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">{t("statusApproved")}</span>
                         ) : (
                           <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{po.status || "Draft"}</span>
@@ -359,7 +360,7 @@ ${allRows.map((row, ri) => {
                       <td className="px-3 py-2 text-muted-foreground">{po.user_name || "-"}</td>
                       <td className="px-1 py-2">
                         <div className="flex items-center gap-0.5">
-                          {po.status === "Approved" && (
+                          {isPoApprovedStatus(po.status) && (
                             <Link href={`/admin/inbound?fromPo=${po.id}`}>
                               <Button
                                 variant="ghost"
@@ -371,7 +372,7 @@ ${allRows.map((row, ri) => {
                               </Button>
                             </Link>
                           )}
-                          {po.status !== "Approved" && (
+                          {!isPoApprovedStatus(po.status) && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -383,7 +384,7 @@ ${allRows.map((row, ri) => {
                               <CheckCircle className="h-4 w-4" />
                             </Button>
                           )}
-                          {po.status !== "Approved" && po.status !== "Cancelled" && (
+                          {!isPoApprovedStatus(po.status) && po.status !== "Cancelled" && (
                             <Button
                               variant="ghost"
                               size="icon"

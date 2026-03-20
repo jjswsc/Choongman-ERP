@@ -13,6 +13,7 @@ import type { Order } from '@/lib/pos-types'
 import type { PosDeliveryApp } from '@/lib/api-client'
 import { markPosOrderItemServed, updatePosOrder, updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
+import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
 
 export interface TableOrderPanelProps {
@@ -204,7 +205,7 @@ export function TableOrderPanel({
     <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
         <h3 className="text-sm font-semibold truncate">
-          {tableName} {t('posTableOrder') || '주문'}
+          {translateReceiptTableDisplayName(tableName, t)} {t('posTableOrder') || '주문'}
         </h3>
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onClose}>
           {t('posBack') || '뒤로가기'}

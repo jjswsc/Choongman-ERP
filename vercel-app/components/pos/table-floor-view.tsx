@@ -3,11 +3,14 @@
 import { useMemo, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import type { PosTableItem } from '@/lib/api-client'
+import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 
 const FLOOR_W = 720
 const FLOOR_H = 480
 const SEAT_R = 6
 const SEAT_INSET = 6
+/** 포스 테이블 현황에서만 표시 크기 확대 (저장 좌표는 그대로, 중심 기준) */
+const TABLE_FLOOR_DISPLAY_SCALE = 1.3
 
 /** 조리중 구간: 0~10분 연두, 10~15분 주황, 15분~ 빨강 */
 export type TableStatus = 'preparing' | 'partial_served' | 'completed' | null
@@ -94,7 +97,12 @@ function formatTableTime(createdAt?: string): string {
   if (!createdAt) return ''
   try {
     const d = new Date(createdAt)
-    return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+    return d.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Bangkok',
+    })
   } catch {
     return ''
   }
@@ -174,19 +182,29 @@ export function TableFloorView({
         if (tableListMode === 'completed') return status === 'completed'
         return true
       })
-      .map((item) => ({
-      id: item.id,
-      name: String(item.name ?? '').trim() || item.id,
-      leftPct: ((Number(item.x ?? 0) || 0) / FLOOR_W) * 100,
-      topPct: ((Number(item.y ?? 0) || 0) / FLOOR_H) * 100,
-      widthPct: ((Number(item.w ?? 80) || 80) / FLOOR_W) * 100,
-      heightPct: ((Number(item.h ?? 60) || 60) / FLOOR_H) * 100,
-      w: Number(item.w ?? 80) || 80,
-      h: Number(item.h ?? 60) || 60,
-      rotation: item.rotation ?? 0,
-      shape: String(item.shape ?? 'rect'),
-      seats: Number(item.seats ?? 0) || 0,
-    }))
+      .map((item) => {
+        const baseLeft = ((Number(item.x ?? 0) || 0) / FLOOR_W) * 100
+        const baseTop = ((Number(item.y ?? 0) || 0) / FLOOR_H) * 100
+        const baseW = ((Number(item.w ?? 80) || 80) / FLOOR_W) * 100
+        const baseH = ((Number(item.h ?? 60) || 60) / FLOOR_H) * 100
+        const cx = baseLeft + baseW / 2
+        const cy = baseTop + baseH / 2
+        const widthPct = baseW * TABLE_FLOOR_DISPLAY_SCALE
+        const heightPct = baseH * TABLE_FLOOR_DISPLAY_SCALE
+        return {
+          id: item.id,
+          name: String(item.name ?? '').trim() || item.id,
+          leftPct: cx - widthPct / 2,
+          topPct: cy - heightPct / 2,
+          widthPct,
+          heightPct,
+          w: Number(item.w ?? 80) || 80,
+          h: Number(item.h ?? 60) || 60,
+          rotation: Number(item.rotation) || 0,
+          shape: String(item.shape ?? 'rect'),
+          seats: Number(item.seats ?? 0) || 0,
+        }
+      })
   }, [layout, activeFloor, tableListMode, getTableStatus, getIsOccupied])
 
   const delayedCount = (() => {
@@ -318,21 +336,50 @@ export function TableFloorView({
                 : 'bg-lime-900/80 text-lime-100'
         const isOccupied = status !== null
 
+        const tableSurfaceClass = cn(
+          'absolute inset-0 shadow-sm border-2 border-dashed box-border',
+          isRound ? 'rounded-full' : 'rounded-xl',
+          isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600',
+          !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
+          isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40',
+          status === 'preparing' && stage === 'fresh' && 'bg-lime-400/95 border-lime-600 ring-2 ring-lime-600/80',
+          status === 'preparing' && stage === 'warning' && 'bg-amber-500/90 border-amber-600 ring-2 ring-amber-600/80',
+          status === 'preparing' && stage === 'urgent' && 'bg-red-500/90 border-red-600 ring-2 ring-red-600/80',
+          status === 'partial_served' && 'bg-sky-400/95 border-sky-600 ring-2 ring-sky-600/80',
+          status === 'completed' && 'bg-slate-500/90 border-slate-600 ring-2 ring-slate-600/80'
+        )
+
+        const labelTextClass = cn(
+          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-1 pointer-events-none px-1 text-center antialiased',
+          /** 밝은 테이블 면 위에서도 글자가 잘 보이도록 */
+          '[text-shadow:0_1px_2px_rgba(0,0,0,0.45)]',
+          isSquare && !isOccupied && 'text-white',
+          !isSquare && !isRound && !isOccupied && 'text-stone-800',
+          isRound && !isOccupied && 'text-stone-800',
+          status === 'preparing' && stage === 'fresh' && 'text-lime-950',
+          status === 'preparing' && stage === 'warning' && 'text-amber-950',
+          status === 'preparing' && stage === 'urgent' && 'text-red-950',
+          status === 'partial_served' && 'text-sky-950',
+          status === 'completed' && 'text-slate-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.75)]'
+        )
+
+        const rot = Number(tab.rotation) || 0
+
         return (
-          <button
+          <div
             key={tab.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onTableSelect?.(tab.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onTableSelect?.(tab.id)
+              }
+            }}
             className={cn(
-              'absolute flex flex-col items-center justify-center cursor-pointer select-none transition-all rounded-xl shadow-sm border-2 border-dashed overflow-visible box-border',
-              isSquare && !isOccupied && 'bg-stone-500/90 border-stone-600 text-white',
-              !isSquare && !isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40 text-stone-800',
-              isRound && !isOccupied && 'bg-[#d4a574] border-amber-800/40 text-stone-800 rounded-full',
-              status === 'preparing' && stage === 'fresh' && 'bg-lime-400/95 border-lime-600 text-lime-950 ring-2 ring-lime-600/80',
-              status === 'preparing' && stage === 'warning' && 'bg-amber-500/90 border-amber-600 text-amber-950 ring-2 ring-amber-600/80',
-              status === 'preparing' && stage === 'urgent' && 'bg-red-500/90 border-red-600 text-red-950 ring-2 ring-red-600/80',
-              status === 'partial_served' && 'bg-sky-400/95 border-sky-600 text-sky-950 ring-2 ring-sky-600/80',
-              status === 'completed' && 'bg-slate-500/90 border-slate-600 text-slate-100 ring-2 ring-slate-600/80',
+              'absolute cursor-pointer select-none transition-all overflow-visible box-border rounded-sm',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
               selectedTableId === tab.id &&
                 'ring-2 ring-emerald-500 ring-offset-2 border-solid border-emerald-600 z-10',
               'hover:shadow-md active:scale-[0.98]'
@@ -342,95 +389,118 @@ export function TableFloorView({
               top: `${tab.topPct}%`,
               width: `${tab.widthPct}%`,
               height: `${tab.heightPct}%`,
-              transform: `rotate(${tab.rotation}deg)`,
-              transformOrigin: 'center center',
               boxSizing: 'border-box',
-              boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
             }}
           >
-            {tab.seats > 0 && getSeatPositions(tab.w, tab.h, tab.seats).map((pos, idx) => (
-              <div
-                key={idx}
-                className={cn(
-                  'absolute rounded-full pointer-events-none shadow-sm',
-                  isSquare
-                    ? 'bg-stone-400/90 border border-stone-500'
-                    : 'bg-[#c9a86c] border border-amber-800/50'
+            {/* 테이블 면·좌석만 회전 (관리자에서 설정한 각도) */}
+            <div
+              className={tableSurfaceClass}
+              style={{
+                transform: `rotate(${rot}deg)`,
+                transformOrigin: 'center center',
+                boxShadow: !isSquare ? 'inset 0 1px 2px rgba(255,255,255,0.3)' : undefined,
+              }}
+            >
+              {tab.seats > 0 &&
+                getSeatPositions(tab.w, tab.h, tab.seats).map((pos, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      'absolute rounded-full pointer-events-none shadow-sm',
+                      isSquare
+                        ? 'bg-stone-400/90 border border-stone-500'
+                        : 'bg-[#c9a86c] border border-amber-800/50'
+                    )}
+                    style={{
+                      left: `calc(${(pos.x / Math.max(tab.w, 1)) * 100}% - ${SEAT_R}px)`,
+                      top: `calc(${(pos.y / Math.max(tab.h, 1)) * 100}% - ${SEAT_R}px)`,
+                      width: SEAT_R * 2,
+                      height: SEAT_R * 2,
+                    }}
+                  />
+                ))}
+            </div>
+            {/* 글자는 항상 가로 유지 (테이블 면만 회전) */}
+            <div
+              className={labelTextClass}
+              style={{ writingMode: 'horizontal-tb' }}
+            >
+              {/* 1줄: 테이블 번호 · 조리중(또는 일부 서빙/서빙 완료) · 빈 테이블은 좌석 */}
+              <div className="flex min-w-0 max-w-full flex-row flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 px-0.5 leading-tight">
+                <span className="max-w-[min(100%,8rem)] shrink truncate text-sm font-extrabold tracking-tight sm:text-base">
+                  {translateReceiptTableDisplayName(tab.name, t)}
+                </span>
+                {isOccupied && (
+                  <>
+                    <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
+                      ·
+                    </span>
+                    {status === 'preparing' && (
+                      <span className="text-xs font-bold sm:text-sm">
+                        {t('posTableStatusPreparing') || '조리중'}
+                      </span>
+                    )}
+                    {status === 'partial_served' && (
+                      <span className="text-xs font-bold sm:text-sm">
+                        {t('posTableStatusPartiallyServed') || '일부 서빙'}
+                      </span>
+                    )}
+                    {status === 'completed' && (
+                      <span className="text-xs font-bold sm:text-sm">
+                        {t('posTableStatusServed') || '서빙 완료'}
+                      </span>
+                    )}
+                  </>
                 )}
-                style={{
-                  left: `calc(${(pos.x / Math.max(tab.w, 1)) * 100}% - ${SEAT_R}px)`,
-                  top: `calc(${(pos.y / Math.max(tab.h, 1)) * 100}% - ${SEAT_R}px)`,
-                  width: SEAT_R * 2,
-                  height: SEAT_R * 2,
-                }}
-              />
-            ))}
-            <span className="text-xs font-bold relative z-10 truncate max-w-full px-0.5">
-              {tab.name}
-            </span>
-            {tab.seats > 0 && !isOccupied && (
-              <span className="text-[10px] opacity-90 mt-0.5">{tab.seats}{t('posTableSeatsUnit') || '인'}</span>
-            )}
-            {status === 'preparing' && (
-              <>
-                <span className="text-[10px] font-semibold mt-0.5">{t('posTableStatusPreparing') || '조리중'}</span>
-                {showDelayBadge && (
-                  <span className="mt-0.5 rounded bg-red-900/90 px-1.5 py-0.5 text-[10px] font-bold text-red-100">
-                    {t('posDelayBadge') || '지연'}
+                {!isOccupied && tab.seats > 0 && (
+                  <>
+                    <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
+                      ·
+                    </span>
+                    <span className="text-xs font-semibold opacity-95 sm:text-sm">
+                      {tab.seats}
+                      {t('posTableSeatsUnit') || '인'}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* 2줄: 지연 + 경과 시간 */}
+              {isOccupied && createdAt && (
+                <div className="flex max-w-full flex-row flex-wrap items-center justify-center gap-1.5 px-0.5 text-xs tabular-nums leading-tight sm:text-sm">
+                  {showDelayBadge && (
+                    <span className="rounded-md bg-red-900/95 px-1.5 py-0.5 text-[11px] font-extrabold text-red-50 shadow-sm sm:text-xs">
+                      {t('posDelayBadge') || '지연'}
+                    </span>
+                  )}
+                  {showDelayBadge && (
+                    <span className="shrink-0 font-bold opacity-70" aria-hidden>
+                      ·
+                    </span>
+                  )}
+                  <span
+                    className={cn(
+                      'rounded-md px-1.5 py-1 font-extrabold tabular-nums shadow-sm',
+                      elapsedClass
+                    )}
+                    title={t('posTableElapsedHint') || '경과(분)'}
+                  >
+                    {elapsedMin}
+                    {t('posMinuteUnit') || '분'}
                   </span>
-                )}
-                {createdAt && (
-                  <>
-                    <span
-                      className={cn(
-                        'text-[12px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md tabular-nums leading-none',
-                        elapsedClass
-                      )}
-                    >
-                      {elapsedMin}{t('posMinuteUnit') || '분'}
-                    </span>
-                    <span className="text-[9px] opacity-90 mt-0.5 tabular-nums">{formatTableTime(createdAt)}</span>
-                  </>
-                )}
-              </>
-            )}
-            {status === 'completed' && (
-              <>
-                <span className="text-[10px] font-semibold mt-0.5">{t('posTableStatusServed') || '서빙 완료'}</span>
-                {createdAt && (
-                  <>
-                    <span
-                      className={cn(
-                        'text-[12px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md tabular-nums leading-none',
-                        elapsedClass
-                      )}
-                    >
-                      {elapsedMin}{t('posMinuteUnit') || '분'}
-                    </span>
-                    <span className="text-[9px] opacity-90 mt-0.5 tabular-nums">{formatTableTime(createdAt)}</span>
-                  </>
-                )}
-              </>
-            )}
-            {status === 'partial_served' && (
-              <>
-                <span className="text-[10px] font-semibold mt-0.5">{t('posTableStatusPartiallyServed') || '일부 서빙'}</span>
-                {createdAt && (
-                  <>
-                    <span
-                      className={cn(
-                        'text-[12px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md tabular-nums leading-none',
-                        elapsedClass
-                      )}
-                    >
-                      {elapsedMin}{t('posMinuteUnit') || '분'}
-                    </span>
-                    <span className="text-[9px] opacity-90 mt-0.5 tabular-nums">{formatTableTime(createdAt)}</span>
-                  </>
-                )}
-              </>
-            )}
-          </button>
+                </div>
+              )}
+
+              {/* 3줄: 주문 시간 */}
+              {isOccupied && createdAt && (
+                <div className="flex max-w-full items-center justify-center px-0.5 text-xs font-semibold tabular-nums leading-tight opacity-95 sm:text-sm">
+                  <span title={t('posTableOrderClockHint') || '주문 시각'}>
+                    {formatTableTime(createdAt)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
         )
       })}
     </div>

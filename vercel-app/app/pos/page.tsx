@@ -154,7 +154,7 @@ export default function POSMainPage() {
           router.push('/pos/local/petty-cash')
           break
         case 'attendance':
-          router.push('/admin/attendance')
+          router.push('/pos/attendance')
           break
         case 'members':
           router.push('/admin/employees')

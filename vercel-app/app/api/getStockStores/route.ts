@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(list, { headers })
   } catch (rpcErr) {
     // RPC 미배포 시 fallback: 기존 select 방식
-    const logs = (await supabaseSelect('stock_logs', { limit: 50000 })) as { location?: string }[] | null
+    const logs = (await supabaseSelect('stock_logs', { limit: 50000, select: 'location' })) as { location?: string }[] | null
     const fromLogs = new Set<string>()
     for (const row of logs || []) {
       const loc = String(row.location || '').trim()

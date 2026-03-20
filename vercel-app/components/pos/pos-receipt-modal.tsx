@@ -13,6 +13,7 @@ import {
 import { getPosPrinterSettings } from '@/lib/api-client'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
+import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import type { PosMenu } from '@/lib/api-client'
 
 export type ReceiptModalData = {
@@ -51,8 +52,8 @@ function getPosPaperBaseCss(fontFamily: string, fontSizePx: number) {
       font-family: ${fontFamily};
       font-size: ${fontSizePx}px;
       padding: ${POS_PAPER_SIDE_PADDING_MM}mm;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+      -webkit-print-color-adjust: economy;
+      print-color-adjust: economy;
     }
   `
 }
@@ -119,6 +120,9 @@ export function PosReceiptModal({
   const handlePrintReceipt = () => {
     if (!receiptData) return
     const esc = (value: string) => escapeHtml(String(value || ''))
+    const tableForPrint = receiptData.tableName
+      ? translateReceiptTableDisplayName(receiptData.tableName, t)
+      : ''
     const parsedMemo = parsePosOrderMemo(receiptData.memo)
     const taxInvoice = parsedMemo.taxInvoice
     const logoUrl = `${window.location.origin}/company-stamp.png`
@@ -159,10 +163,10 @@ export function PosReceiptModal({
             : ''
         }
         <div class="text-xs">
-          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderNo', '주문번호'))}</span><span class="receipt-meta-value">${esc(receiptData.orderNo)}</span></div>
+          <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posOrderNo', '주문번호'))}</span><span class="receipt-meta-value receipt-order-no-print">${esc(receiptData.orderNo)}</span></div>
           ${
-            receiptData.tableName
-              ? `<div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posTable', '테이블'))}</span><span class="receipt-meta-value">${esc(receiptData.tableName)}</span></div>`
+            tableForPrint
+              ? `<div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('posTable', '테이블'))}</span><span class="receipt-meta-value">${esc(tableForPrint)}</span></div>`
               : ''
           }
           <div class="receipt-meta-row"><span class="receipt-meta-label receipt-muted">${esc(tr('date', 'Date'))}</span><span class="receipt-meta-value">${esc(printedAt)}</span></div>
@@ -170,7 +174,7 @@ export function PosReceiptModal({
         </div>
         <div class="receipt-divider"></div>
         ${(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) ? '<div class="text-xs receipt-muted receipt-biz-wrap">' : ''}
-        ${receiptBizName ? `<div class="receipt-biz" style="color:#111;font-weight:600">${esc(receiptBizName)}</div>` : ''}
+        ${receiptBizName ? `<div class="receipt-biz" style="color:#000;font-weight:600">${esc(receiptBizName)}</div>` : ''}
         ${receiptBizTaxId ? `<div class="receipt-biz">${esc(tr('posTaxIdLabel', 'Tax ID'))}: ${esc(receiptBizTaxId)}</div>` : ''}
         ${receiptBizOwner ? `<div class="receipt-biz">${esc(tr('posOwner', '대표'))}: ${esc(receiptBizOwner)}</div>` : ''}
         ${receiptBizAddress ? `<div class="receipt-biz">${esc(receiptBizAddress)}</div>` : ''}
@@ -179,7 +183,7 @@ export function PosReceiptModal({
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(it.name)}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
+        ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
         <div class="receipt-divider"></div>
         <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(receiptData.subtotal)} ฿</span></div>
         ${receiptData.discountAmt > 0 ? `<div class="receipt-row"><span>${esc(t('posDiscount') || '할인')}</span><span>-${formatBahtNum(receiptData.discountAmt)} ฿</span></div>` : ''}
@@ -195,7 +199,7 @@ export function PosReceiptModal({
         <div class="receipt-divider"></div>
         ${receiptShowPaidStamp ? `<div class="paid-stamp-wrap"><span class="paid-stamp">${esc(tr('posReceiptPaid', '결제완료'))}</span></div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '<div class="text-center text-xs receipt-muted">' : ''}
-        ${receiptShowThankYou ? `<div style="font-weight:600;color:#111">${esc(tr('posReceiptThankYou', '감사합니다'))}</div>` : ''}
+        ${receiptShowThankYou ? `<div style="font-weight:600;color:#000">${esc(tr('posReceiptThankYou', '감사합니다'))}</div>` : ''}
         ${receiptShowCustomerCopy ? `<div>${esc(tr('posReceiptCustomerCopy', '고객용'))}</div>` : ''}
         ${(receiptShowThankYou || receiptShowCustomerCopy) ? '</div>' : ''}
       </div>
@@ -232,36 +236,37 @@ export function PosReceiptModal({
           <title>${t('posReceipt') || '영수증'}</title>
           <style>
             ${getPosPaperBaseCss("'Noto Sans KR', 'Malgun Gothic', Arial, sans-serif", 12)}
-            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; }
-            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; }
+            body { font-weight: 600; line-height: 1.42; letter-spacing: 0; color: #000; padding-top: 0; padding-right: 0.2mm; padding-bottom: 1mm; padding-left: 0; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
+            .receipt-content { width: 73.2mm; max-width: 73.2mm; margin-left: 0; margin-right: auto; box-sizing: border-box; padding: 0 0.8mm 0 0; color: #000; }
             .receipt-brand-wrap { text-align: center; }
-            .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; }
+            .receipt-brand-logo { display: inline-block; width: 120px; height: auto; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
             .receipt-brand-logo.sm { width: 84px; }
             .receipt-brand-logo.md { width: 108px; }
             .receipt-brand-logo.lg { width: 132px; }
-            .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; }
-            .receipt-brand-badge { display: inline-block; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; }
-            .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; }
-            .receipt-sub-title { text-align: center; font-size: 11px; color: #000; }
+            .receipt-store-name { margin-top: 4px; font-size: 11px; color: #000; text-align: center; font-weight: 700; }
+            .receipt-brand-badge { display: inline-block; border: 2px solid #000; border-radius: 999px; padding: 4px 12px; font-weight: 700; letter-spacing: 0.08em; color: #000; }
+            .receipt-section-title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px; color: #000; }
+            .receipt-sub-title { text-align: center; font-size: 11px; color: #000; font-weight: 600; }
             .receipt-divider { border-top: 1px dashed #000; margin: 8px 0; }
-            .receipt-divider-strong { border-top: 2px solid #111; margin: 8px 0; }
+            .receipt-divider-strong { border-top: 2px solid #000; margin: 8px 0; }
+            .receipt-order-no-print { color: #000 !important; font-weight: 700 !important; }
             .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
             .receipt-meta-label { white-space: nowrap; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #cbd5e1; }
-            .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
-            .receipt-biz { margin: 2px 0; font-size: 11px; }
+            .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #000; color: #000; }
+            .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; color: #000; }
+            .receipt-biz { margin: 2px 0; font-size: 11px; color: #000; }
             .receipt-muted { color: #000; }
             .paid-stamp-wrap { text-align: center; margin: 10px 0; }
-            .paid-stamp { display: inline-block; border: 1px solid #111; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; }
-            .tax-invoice-premium { border: 2px solid #111; padding: 8px 10px; margin-top: 8px; background: #fafafa; }
-            .tax-invoice-header { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #111; text-align: center; }
-            .tax-invoice-row { display: grid; grid-template-columns: 22mm 1fr; gap: 4px; margin: 4px 0; font-size: 11px; }
+            .paid-stamp { display: inline-block; border: 1px solid #000; padding: 2px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #000; }
+            .tax-invoice-premium { border: 2px solid #000; padding: 8px 10px; margin-top: 8px; background: #fff; color: #000; }
+            .tax-invoice-header { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #000; text-align: center; color: #000; }
+            .tax-invoice-row { display: grid; grid-template-columns: 22mm 1fr; gap: 4px; margin: 4px 0; font-size: 11px; color: #000; }
             .tax-invoice-row.tax-invoice-addr { grid-template-columns: 22mm minmax(0,1fr); word-break: break-word; }
-            .tax-invoice-label { font-weight: 600; color: #333; }
+            .tax-invoice-label { font-weight: 600; color: #000; }
             .receipt-tax-invoice .receipt-section-title { font-size: 13px; }
             .receipt-tax-invoice .receipt-sub-title { font-size: 12px; font-weight: 700; }
             .space-y-2 > * + * { margin-top: 8px; }
@@ -347,10 +352,10 @@ export function PosReceiptModal({
           </style></head><body>
           <div class="k-header">${escapeHtml(slip.label)}</div>
           <div class="k-row"><strong>${escapeHtml(receiptData.orderNo)}</strong></div>
-          <div class="k-row">${escapeHtml(receiptData.storeCode + ' · ' + (orderTypeLabels[receiptData.orderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t('posTable') || '테이블'}: ${receiptData.tableName}` : ''))}</div>
+          <div class="k-row">${escapeHtml(receiptData.storeCode + ' · ' + (orderTypeLabels[receiptData.orderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t('posTable') || '테이블'}: ${translateReceiptTableDisplayName(receiptData.tableName, t)}` : ''))}</div>
           <div class="k-row">${new Date().toLocaleString('ko-KR')}</div>
           <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join('')}
+          ${slip.items.map((it) => `<div class="k-row">${escapeHtml(translatePosMenuLineForReceipt(it.name, t))} × ${it.qty}</div>`).join('')}
           ${kitchenMemo ? `<div class="k-memo">${escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo)}</div>` : ''}
           </body></html>`
         w.document.write(html)
@@ -427,34 +432,34 @@ export function PosReceiptModal({
             <img
               src={receiptLogoSrc}
               alt="Company logo"
-              className={`receipt-brand-logo inline-block ${receiptDesignStyle} ${receiptLogoSize}`}
+              className={`receipt-brand-logo inline-block grayscale contrast-125 ${receiptDesignStyle} ${receiptLogoSize}`}
             />
             <div className="receipt-store-name">{receiptData.storeCode}</div>
           </div>
 
-          <div className="receipt-divider border-t border-dashed border-slate-400 my-2" />
+          <div className="receipt-divider border-t border-dashed border-neutral-800 my-2" />
 
           {receiptShowTitle && (
             <div>
               <div className="receipt-section-title text-center text-sm font-semibold tracking-wide">{tr('posReceipt', '영수증')}</div>
-              <div className="receipt-sub-title text-center text-xs text-slate-500">{taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서')}</div>
+              <div className="receipt-sub-title text-center text-xs text-neutral-900">{taxInvoice ? tr('posReceiptTaxInvoice', '세금계산서') : tr('posReceiptSimpleTaxInvoice', '간이 세금계산서')}</div>
             </div>
           )}
 
           <div className="text-xs">
-            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-slate-500">{tr('posOrderNo', '주문번호')}</span><span className="receipt-meta-value">{receiptData.orderNo}</span></div>
+            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-neutral-900">{tr('posOrderNo', '주문번호')}</span><span className="receipt-meta-value font-bold text-neutral-900">{receiptData.orderNo}</span></div>
             {receiptData.tableName && (
-              <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-slate-500">{tr('posTable', '테이블')}</span><span className="receipt-meta-value">{receiptData.tableName}</span></div>
+              <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-neutral-900">{tr('posTable', '테이블')}</span><span className="receipt-meta-value">{translateReceiptTableDisplayName(receiptData.tableName, t)}</span></div>
             )}
-            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-slate-500">{tr('date', 'Date')}</span><span className="receipt-meta-value">{issuedAt}</span></div>
-            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-slate-500">{tr('posOrderType', 'Order Type')}</span><span className="receipt-meta-value">{orderTypeLabels[receiptData.orderType] || receiptData.orderType}</span></div>
+            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-neutral-900">{tr('date', 'Date')}</span><span className="receipt-meta-value">{issuedAt}</span></div>
+            <div className="receipt-meta-row"><span className="receipt-meta-label receipt-muted text-neutral-900">{tr('posOrderType', 'Order Type')}</span><span className="receipt-meta-value">{orderTypeLabels[receiptData.orderType] || receiptData.orderType}</span></div>
           </div>
 
-          <div className="receipt-divider border-t border-dashed border-slate-400 my-2" />
+          <div className="receipt-divider border-t border-dashed border-neutral-800 my-2" />
 
           {(receiptBizName || receiptBizTaxId || receiptBizOwner || receiptBizAddress || receiptBizPhone) && (
-            <div className="text-xs receipt-muted text-slate-500">
-              {receiptBizName && <div className="receipt-biz" style={{ color: '#111', fontWeight: 600 }}>{receiptBizName}</div>}
+            <div className="text-xs receipt-muted text-neutral-900">
+              {receiptBizName && <div className="receipt-biz font-semibold text-neutral-900">{receiptBizName}</div>}
               {receiptBizTaxId && <div className="receipt-biz">{tr('posTaxIdLabel', 'Tax ID')}: {receiptBizTaxId}</div>}
               {receiptBizOwner && <div className="receipt-biz">{tr('posOwner', '대표')}: {receiptBizOwner}</div>}
               {receiptBizAddress && <div className="receipt-biz">{receiptBizAddress}</div>}
@@ -462,22 +467,22 @@ export function PosReceiptModal({
             </div>
           )}
           {taxInvoice && (
-            <div className="text-xs border-2 border-black p-3 bg-slate-50 rounded-sm">
+            <div className="text-xs border-2 border-black p-3 bg-white rounded-sm text-neutral-900">
               <div className="font-bold text-center mb-2 pb-2 border-b-2 border-black tracking-wide">{tr('posReceiptTaxInvoice', '세금계산서')}</div>
               <div className="grid grid-cols-[5rem_1fr] gap-1">
-                <span className="font-semibold text-slate-600">{tr('posName', '이름')}</span><span>{taxInvoice.name}</span>
-                <span className="font-semibold text-slate-600">{tr('posTaxIdLabel', 'Tax ID')}</span><span>{taxInvoice.taxId}</span>
-                <span className="font-semibold text-slate-600">{tr('posBranchLabel', '지점')}</span><span>{taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점'))}</span>
-                <span className="font-semibold text-slate-600">{tr('posPhone', '전화번호')}</span><span>{taxInvoice.phone}</span>
-                <span className="font-semibold text-slate-600">{tr('email', '이메일')}</span><span>{taxInvoice.email}</span>
-                <span className="font-semibold text-slate-600">{tr('settings_address', '주소')}</span><span className="break-words">{taxInvoice.address}</span>
+                <span className="font-semibold text-neutral-900">{tr('posName', '이름')}</span><span>{taxInvoice.name}</span>
+                <span className="font-semibold text-neutral-900">{tr('posTaxIdLabel', 'Tax ID')}</span><span>{taxInvoice.taxId}</span>
+                <span className="font-semibold text-neutral-900">{tr('posBranchLabel', '지점')}</span><span>{taxInvoice.branchNo || (taxInvoice.customerType === 'company' ? '00000' : tr('posHeadOffice', '본점'))}</span>
+                <span className="font-semibold text-neutral-900">{tr('posPhone', '전화번호')}</span><span>{taxInvoice.phone}</span>
+                <span className="font-semibold text-neutral-900">{tr('email', '이메일')}</span><span>{taxInvoice.email}</span>
+                <span className="font-semibold text-neutral-900">{tr('settings_address', '주소')}</span><span className="break-words">{taxInvoice.address}</span>
               </div>
             </div>
           )}
 
           <div className="receipt-divider-strong border-t-2 border-black my-2" />
 
-          <div className="receipt-item-head flex justify-between text-xs font-semibold border-b border-slate-300 pb-1">
+          <div className="receipt-item-head flex justify-between text-xs font-semibold border-b border-black pb-1 text-neutral-900">
             <span>{tr('posMenuName', '품목')}</span>
             <span>{tr('amount', '금액')}</span>
           </div>
@@ -486,21 +491,21 @@ export function PosReceiptModal({
             {receiptData.items.map((it) => (
               <div key={it.id} className="text-xs">
                 <div className="receipt-row">
-                  <span>{it.qty}x {it.name}</span>
+                  <span>{it.qty}x {translatePosMenuLineForReceipt(it.name, t)}</span>
                   <span className="tabular-nums">{formatBahtNum(it.price * it.qty)}</span>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="receipt-divider border-t border-dashed border-slate-400 my-2" />
+          <div className="receipt-divider border-t border-dashed border-neutral-800 my-2" />
 
           <div className="receipt-row flex justify-between text-xs">
-            <span className="receipt-muted text-slate-500">{t('posSubtotal') || '소계'}</span>
+            <span className="receipt-muted text-neutral-900">{t('posSubtotal') || '소계'}</span>
             <span className="tabular-nums">{formatBahtNum(receiptData.subtotal)} ฿</span>
           </div>
           {receiptData.discountAmt > 0 && (
-            <div className="receipt-row flex justify-between text-xs text-green-700">
+            <div className="receipt-row flex justify-between text-xs text-neutral-900 font-semibold">
               <span>
                 {t('posDiscount') || '할인'}
                 {receiptData.discountReason ? ` ${receiptData.discountReason}` : ''}
@@ -545,7 +550,7 @@ export function PosReceiptModal({
             </div>
           )}
           {parsedMemo.plainMemo && (
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-neutral-900">
               {tr('posCustomerMemo', '메모')}: {parsedMemo.plainMemo}
             </div>
           )}
@@ -554,15 +559,15 @@ export function PosReceiptModal({
             <span className="font-bold">{t('posTotal') || '합계'}</span>
             <span className="tabular-nums text-base font-bold">{formatBahtNum(receiptData.total)} ฿</span>
           </div>
-          <div className="receipt-divider border-t border-dashed border-slate-400 my-2" />
+          <div className="receipt-divider border-t border-dashed border-neutral-800 my-2" />
           {receiptShowPaidStamp && (
             <div className="paid-stamp-wrap text-center my-2">
               <span className="paid-stamp inline-block border border-black px-3 py-0.5 text-xs font-semibold tracking-widest">{tr('posReceiptPaid', '결제완료')}</span>
             </div>
           )}
           {(receiptShowThankYou || receiptShowCustomerCopy) && (
-            <div className="text-center text-xs receipt-muted text-slate-500">
-              {receiptShowThankYou && <div className="font-semibold" style={{ color: '#111' }}>{tr('posReceiptThankYou', '감사합니다')}</div>}
+            <div className="text-center text-xs receipt-muted text-neutral-900">
+              {receiptShowThankYou && <div className="font-semibold text-neutral-900">{tr('posReceiptThankYou', '감사합니다')}</div>}
               {receiptShowCustomerCopy && <div>{tr('posReceiptCustomerCopy', '고객용')}</div>}
             </div>
           )}

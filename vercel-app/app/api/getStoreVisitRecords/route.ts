@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name" })) as
+    const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name", limit: 2000 })) as
       | { store?: string; job?: string; nick?: string; name?: string }[]
       | []
 

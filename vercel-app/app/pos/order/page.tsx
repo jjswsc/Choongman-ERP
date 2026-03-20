@@ -46,6 +46,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { OfflineBanner } from "@/components/offline-banner"
+import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
+import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -316,19 +318,13 @@ export default function PosOrderPage() {
     return m
   }, [allOptions, orderType])
 
-  /** 반반용: 코드 c로 시작하는 치킨 메뉴 (기본가=S 순살, 옵션 없이 맛 2개 선택) */
-  const chickenMenusForBanban = React.useMemo(() => {
-    const today = getBangkokDateStr()
-    return menus.filter(
-      (m) =>
-        m.isActive &&
-        (!m.soldOutDate || m.soldOutDate !== today) &&
-        m.code?.trim().toLowerCase().startsWith("c") &&
-        !m.isBanban
-    )
-  }, [menus])
-
   const todayStr = getBangkokDateStr()
+
+  /** 반반 맛 선택 목록 (폴백: 같은 대분류 → c코드 대분류 → 음료/디저트 제외) */
+  const banbanFlavorList = React.useMemo(() => {
+    if (!optionPickerMenu || !isBanbanMenu(optionPickerMenu)) return []
+    return getBanbanFlavorMenuList(menus, optionPickerMenu, todayStr)
+  }, [menus, optionPickerMenu, todayStr])
   /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
@@ -395,7 +391,7 @@ export default function PosOrderPage() {
   }
 
   const addToCart = (menu: PosMenu) => {
-    if (menu.isBanban) {
+    if (isBanbanMenu(menu)) {
       setOptionPickerBanbanFirst(null)
       setOptionPickerMenu(menu)
       return
@@ -1096,9 +1092,9 @@ export default function PosOrderPage() {
                       <SelectItem value="_">
                         {t("posTableOther") || "직접 입력"}
                       </SelectItem>
-                      {tableOptions.map((t) => (
-                        <SelectItem key={t.id} value={t.name}>
-                          {t.name}
+                      {tableOptions.map((tbl) => (
+                        <SelectItem key={tbl.id} value={tbl.name}>
+                          {translateReceiptTableDisplayName(tbl.name, t)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1475,9 +1471,9 @@ export default function PosOrderPage() {
             </DialogTitle>
           </DialogHeader>
           {optionPickerMenu && (() => {
-            if (optionPickerMenu.isBanban) {
+            if (isBanbanMenu(optionPickerMenu)) {
               const first = optionPickerBanbanFirst
-              const list = chickenMenusForBanban
+              const list = banbanFlavorList
               return (
                 <div className="flex flex-col gap-3 py-2">
                   <p className="text-xs text-muted-foreground">

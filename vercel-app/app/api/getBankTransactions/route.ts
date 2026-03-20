@@ -7,10 +7,17 @@ const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 export async function GET(request: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
+  headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120')
   const { searchParams } = new URL(request.url)
   const accountId = String(searchParams.get('accountId') || '').trim()
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+  const pageSizeParam = Number(searchParams.get('pageSize') || searchParams.get('limit') || 0)
+  const cursorIdParam = Number(searchParams.get('cursorId') || 0)
+  const sortParam = String(searchParams.get('sort') || 'asc').toLowerCase()
+  const isDesc = sortParam === 'desc'
+  const hasPagination = Number.isFinite(pageSizeParam) && pageSizeParam > 0
+  const pageSize = hasPagination ? Math.min(1000, Math.max(1, Math.floor(pageSizeParam))) : 20000
 
   if (!accountId) {
     return NextResponse.json({ list: [], summary: null }, { headers })
@@ -18,6 +25,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const accountRows = (await supabaseSelectFilter('bank_accounts', `id=eq.${accountId}`, {
+      select: 'id,opening_balance,opening_balance_date',
       limit: 1,
     })) as { id?: number; opening_balance?: number; opening_balance_date?: string }[]
     const account = accountRows?.[0]
@@ -38,22 +46,26 @@ export async function GET(request: NextRequest) {
       }, { headers })
     }
 
-    const filter = `account_id=eq.${accountId}&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
+    let filter = `account_id=eq.${accountId}&trans_date=gte.${startStr}&trans_date=lte.${endStr}`
+    if (hasPagination && Number.isFinite(cursorIdParam) && cursorIdParam > 0) {
+      filter += isDesc ? `&id=lt.${Math.floor(cursorIdParam)}` : `&id=gt.${Math.floor(cursorIdParam)}`
+    }
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
-      order: 'id.asc',
-      limit: 20000,
+      order: isDesc ? 'id.desc' : 'id.asc',
+      limit: pageSize,
     })) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
 
     const linkedIds = new Set<number>()
     const rowIds = (rows || []).map((r) => Number(r.id)).filter((id) => id && !isNaN(id))
     if (rowIds.length > 0) {
-      const ptRows = (await supabaseSelectFilter('payable_transactions', 'bank_transaction_id=not.is.null', {
+      const idList = rowIds.join(',')
+      const ptRows = (await supabaseSelectFilter('payable_transactions', `bank_transaction_id=in.(${idList})`, {
         select: 'bank_transaction_id',
-        limit: 50000,
+        limit: rowIds.length,
       })) as { bank_transaction_id?: number }[]
       for (const r of ptRows || []) {
         const bid = Number(r.bank_transaction_id)
-        if (bid && !isNaN(bid) && rowIds.includes(bid)) linkedIds.add(bid)
+        if (bid && !isNaN(bid)) linkedIds.add(bid)
       }
     }
 
@@ -93,7 +105,19 @@ export async function GET(request: NextRequest) {
     const beginningBalance = openingBalance + beforeDeposits - beforeWithdrawals
     const endingBalance = beginningBalance + periodDeposits - periodWithdrawals
 
-    return NextResponse.json({
+    const responseBody: {
+      list: typeof list
+      summary: {
+        openingBalance: number
+        beginningBalance: number
+        periodDeposits: number
+        periodWithdrawals: number
+        calculatedBalance: number
+        actualBalance: null
+        difference: null
+      }
+      pagination?: { pageSize: number; sort: 'asc' | 'desc'; hasMore: boolean; nextCursorId: number | null }
+    } = {
       list,
       summary: {
         openingBalance,
@@ -104,7 +128,18 @@ export async function GET(request: NextRequest) {
         actualBalance: null,
         difference: null,
       },
-    }, { headers })
+    }
+    if (hasPagination) {
+      const lastId = list.length > 0 ? Number(list[list.length - 1]?.id || 0) : 0
+      responseBody.pagination = {
+        pageSize,
+        sort: isDesc ? 'desc' : 'asc',
+        hasMore: list.length === pageSize && lastId > 0,
+        nextCursorId: list.length === pageSize && lastId > 0 ? lastId : null,
+      }
+    }
+
+    return NextResponse.json(responseBody, { headers })
   } catch (e) {
     console.error('getBankTransactions:', e)
     return NextResponse.json({ list: [], summary: null }, { headers })

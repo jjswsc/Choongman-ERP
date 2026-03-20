@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const endIso = `${dateStr}T23:59:59.999`
 
     const filter = `log_type=eq.ForceOutbound&vendor_target=eq.${encodeURIComponent(vendorTarget)}&log_date=gte.${startIso}&log_date=lte.${endIso}`
-    const rows = (await supabaseSelectFilter('stock_logs', filter, { select: 'id' })) as { id: number }[]
+    const rows = (await supabaseSelectFilter('stock_logs', filter, { select: 'id', limit: 1000 })) as { id: number }[]
 
     if (!rows || rows.length === 0) {
       return NextResponse.json(

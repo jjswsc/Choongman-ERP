@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const vendors = (await supabaseSelect('vendors', { limit: 2000 })) as {
+    const vendors = (await supabaseSelect('vendors', { limit: 2000, select: 'id,gps_name,name,type,lat,lng' })) as {
       id?: number
       gps_name?: string
       name?: string
