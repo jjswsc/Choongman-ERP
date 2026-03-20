@@ -59,6 +59,11 @@ const CATEGORY_MAIN_OPTIONS = [
 export function WithdrawalManagementTab() {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const { auth } = useAuth()
   const { stores } = useStoreList()
 
@@ -115,6 +120,8 @@ export function WithdrawalManagementTab() {
   const updateExistingParam = searchParams.get("updateExisting") === "1"
   const startStrParam = searchParams.get("startStr")
   const endStrParam = searchParams.get("endStr")
+  const returnTabParam = searchParams.get("returnTab")
+  const returnOpenRegisterTxIdParam = searchParams.get("openRegisterTxId")
 
   const mapCategoryToMainSub = React.useCallback((catRaw: string): { main: string; sub: string } => {
     const c = String(catRaw || "").trim().toLowerCase()
@@ -200,19 +207,27 @@ export function WithdrawalManagementTab() {
     }
   }, [searchParams, mapCategoryToMainSub])
 
-  React.useEffect(() => {
+  const loadInboundBatchesForLink = React.useCallback(async () => {
     if (categoryMain !== "purchase" || !vendorCode.trim() || isBankLinkMode || isEditMode) {
       setInboundBatchesForLink([])
       setInboundLinkAmounts({})
       return
     }
     setInboundLinkLoading(true)
-    getInboundBatchesForLink({ vendorCode: vendorCode.trim() })
-      .then((list) => setInboundBatchesForLink(list || []))
-      .catch(() => setInboundBatchesForLink([]))
-      .finally(() => setInboundLinkLoading(false))
+    try {
+      const list = await getInboundBatchesForLink({ vendorCode: vendorCode.trim() })
+      setInboundBatchesForLink(list || [])
+    } catch {
+      setInboundBatchesForLink([])
+    } finally {
+      setInboundLinkLoading(false)
+    }
     setInboundLinkAmounts({})
   }, [categoryMain, vendorCode, isBankLinkMode, isEditMode])
+
+  React.useEffect(() => {
+    loadInboundBatchesForLink()
+  }, [loadInboundBatchesForLink])
 
   React.useEffect(() => {
     const vc = searchParams.get("vendorCode")
@@ -223,6 +238,13 @@ export function WithdrawalManagementTab() {
       setPayeeManual(false)
     }
   }, [vendors, searchParams, isBankLinkMode, payeeCode, payeeName])
+
+  React.useEffect(() => {
+    // Prevent stale account subject from leaking into non-expense categories.
+    if (categoryMain !== "expense" && accountSubjectId) {
+      setAccountSubjectId("")
+    }
+  }, [categoryMain, accountSubjectId])
 
   const pickOfficeStore = React.useCallback((list: string[]) => {
     if (list.length === 0) return ""
@@ -405,7 +427,10 @@ export function WithdrawalManagementTab() {
           memo: memo.trim() || undefined,
           payeeCode: code || undefined,
           payeeName: name || undefined,
-          accountSubjectId: accountSubjectId && accountSubjectId !== "__none__" ? Number(accountSubjectId) : null,
+          accountSubjectId:
+            categoryMain === "expense" && accountSubjectId && accountSubjectId !== "__none__"
+              ? Number(accountSubjectId)
+              : null,
           storeName: storeName || undefined,
           withdrawalCategory,
           categoryMain,
@@ -434,7 +459,7 @@ export function WithdrawalManagementTab() {
           expenseDate: transDate,
           dueDate: transDate,
           memo: memo.trim() || undefined,
-          accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+          accountSubjectId: categoryMain === "expense" && accountSubjectId ? Number(accountSubjectId) : null,
           storeName: storeName || undefined,
           userName: auth?.user,
           userRole: auth?.role,
@@ -865,16 +890,28 @@ export function WithdrawalManagementTab() {
               )}
               {categoryMain === "purchase" && vendorCode && !isBankLinkMode && !isEditMode && (
                 <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {t("adminInbound") || "입고"} 연동 ({t("optional") || "선택"})
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {tt("adminInbound", "Inbound")} {tt("inboundLinkLabel", "Link")} ({tt("optional", "Optional")})
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[11px]"
+                      onClick={loadInboundBatchesForLink}
+                      disabled={inboundLinkLoading}
+                    >
+                      {tt("store_refresh", "Refresh")}
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    {t("inboundLinkAtRegisterHint") || "등록 시 여기서 연결(선택). 나중에 통장 탭에서도 연결·수정 가능."}
+                    {tt("inboundLinkAtRegisterHint", "You can link here when registering (optional). You can also link or edit later in the Bank tab.")}
                   </p>
                   {inboundLinkLoading ? (
-                    <p className="text-sm text-muted-foreground py-2">{t("loading")}</p>
+                    <p className="text-sm text-muted-foreground py-2">{tt("loading", "Loading...")}</p>
                   ) : inboundBatchesForLink.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">해당 거래처의 입고 배치가 없습니다.</p>
+                    <p className="text-sm text-muted-foreground">{tt("inboundNoBatches", "No inbound batches for this vendor.")}</p>
                   ) : (
                     <>
                       <div className="border rounded-md divide-y max-h-[200px] overflow-y-auto">
@@ -905,7 +942,7 @@ export function WithdrawalManagementTab() {
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        출금액과 일치하도록 배치별 금액을 입력하면 등록 후 자동 연동됩니다. 비워두면 통장 탭에서 나중에 연결할 수 있습니다.
+                        {tt("inboundLinkRegisterHelp", "Enter amounts by batch to match the withdrawal amount for auto-linking. Leave blank to link later in Bank tab.")}
                       </p>
                     </>
                   )}
@@ -1349,12 +1386,15 @@ export function WithdrawalManagementTab() {
                 variant="outline"
                 onClick={() => {
                   const q = new URLSearchParams()
-                  q.set("tab", isBankLinkMode ? "query" : "input")
+                  q.set("tab", returnTabParam || (isBankLinkMode ? "query" : "input"))
                   if (accountId) q.set("accountId", accountId)
                   const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
                   const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
                   q.set("startStr", start)
                   q.set("endStr", end)
+                  if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
+                    q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
+                  }
                   router.push(`/admin/bank-transactions?${q.toString()}`)
                 }}
               >

@@ -46,6 +46,11 @@ export function BankInboundLinkDialog({
 }: BankInboundLinkDialogProps) {
   const { lang } = useLang()
   const t = useT(lang)
+  const tt = React.useCallback((key: string, fallback: string) => {
+    const v = t(key)
+    if (!v || v === key) return fallback
+    return v
+  }, [t])
   const [vendorCode, setVendorCode] = React.useState("")
   const [vendorSearch, setVendorSearch] = React.useState("")
   const [batches, setBatches] = React.useState<InboundBatchForLink[]>([])
@@ -122,26 +127,26 @@ export function BankInboundLinkDialog({
           <div className="space-y-4">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">
-                출금액: <strong className="text-foreground">{(withdrawAmount || 0).toLocaleString()} ฿</strong>
+                {tt("withdrawalAmountLabel", "Withdrawal amount")}: <strong className="text-foreground">{(withdrawAmount || 0).toLocaleString()} ฿</strong>
                 {row.transDate && ` (${row.transDate})`}
               </span>
             </div>
 
             {!row.vendorCode?.trim() && (
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">거래처</label>
+                <label className="text-xs text-muted-foreground block mb-1">{tt("vendor", "Vendor")}</label>
                 <Select
                   value={vendorCode || "__none__"}
                   onValueChange={(v) => setVendorCode(v === "__none__" ? "" : v)}
                   onOpenChange={(open) => !open && setVendorSearch("")}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="거래처 선택" />
+                    <SelectValue placeholder={tt("inSelectVendor", "Select vendor")} />
                   </SelectTrigger>
                   <SelectContent>
                     <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
                       <Input
-                        placeholder={t("search") || "검색"}
+                        placeholder={tt("search", "Search")}
                         value={vendorSearch}
                         onChange={(e) => setVendorSearch(e.target.value)}
                         className="h-7 text-xs"
@@ -163,12 +168,41 @@ export function BankInboundLinkDialog({
             {effectiveVendor && (
               <>
                 {loading ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
+                  <p className="py-6 text-center text-sm text-muted-foreground">{tt("loading", "Loading...")}</p>
                 ) : batches.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">해당 거래처의 입고 배치가 없습니다.</p>
+                  <p className="text-sm text-muted-foreground">{tt("inboundNoBatches", "No inbound batches for this vendor.")}</p>
                 ) : (
                   <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground block">입고 배치별 결제액 할당</label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-xs text-muted-foreground block">{tt("inboundAllocationByBatch", "Allocate payment by inbound batch")}</label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => {
+                          if (!row?.id || !effectiveVendor) return
+                          setLoading(true)
+                          Promise.all([
+                            getInboundBatchesForLink({ vendorCode: effectiveVendor, storeFilter }),
+                            getBankTransactionInboundLinks(row.id),
+                          ])
+                            .then(([batchesRes, links]) => {
+                              setBatches(batchesRes || [])
+                              setExistingLinks(links || [])
+                              const init: Record<number, number> = {}
+                              for (const l of links || []) {
+                                if (l.inboundBatchId && l.amount > 0) init[l.inboundBatchId] = l.amount
+                              }
+                              setAmounts(init)
+                            })
+                            .finally(() => setLoading(false))
+                        }}
+                        disabled={loading}
+                      >
+                        {tt("store_refresh", "Refresh")}
+                      </Button>
+                    </div>
                     <div className="border rounded-md divide-y max-h-[260px] overflow-y-auto">
                       {batches.map((b) => (
                         <div key={b.id} className="flex items-center justify-between gap-2 p-2">
@@ -190,12 +224,12 @@ export function BankInboundLinkDialog({
                       ))}
                     </div>
                     <div className="flex justify-between text-sm pt-1">
-                      <span className="text-muted-foreground">할당 합계</span>
+                      <span className="text-muted-foreground">{tt("inboundAllocatedSum", "Allocated total")}</span>
                       <span className={isMatch ? "text-green-600 font-medium" : "text-amber-600"}>
                         {allocatedSum.toLocaleString()} ฿
                         {withdrawAmount > 0 && (
                           <span className="text-muted-foreground ml-1">
-                            {isMatch ? " ✓" : ` (출금액과 ${Math.abs(allocatedSum - withdrawAmount).toLocaleString()} ฿ 차이)`}
+                            {isMatch ? " ✓" : ` (${tt("inboundDiffFromWithdrawal", "diff from withdrawal")} ${Math.abs(allocatedSum - withdrawAmount).toLocaleString()} ฿)`}
                           </span>
                         )}
                       </span>

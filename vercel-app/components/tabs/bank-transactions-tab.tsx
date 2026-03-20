@@ -308,15 +308,22 @@ export function BankTransactionsTab() {
   const [accountSubjectDeletingId, setAccountSubjectDeletingId] = React.useState<number | null>(null)
   const searchParams = useSearchParams()
   const tabParam = searchParams.get("tab")
+  const openRegisterTxIdParam = searchParams.get("openRegisterTxId")
   const [activeBankTab, setActiveBankTab] = React.useState(
     tabParam === "fixed-expenses" ? "fixed-expenses" : tabParam === "input" ? "input" : tabParam === "query" ? "query" : "input"
   )
   const urlParamsApplied = React.useRef(false)
+  const restoreOpenRegisterTxIdRef = React.useRef<number | null>(
+    openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0 ? Number(openRegisterTxIdParam) : null
+  )
+  const restoreListLoadedRef = React.useRef(false)
+  const [restoredHighlightTxId, setRestoredHighlightTxId] = React.useState<number | null>(null)
   React.useEffect(() => {
     if (tabParam === "fixed-expenses") setActiveBankTab("fixed-expenses")
     else if (tabParam === "input") setActiveBankTab("input")
     else if (tabParam === "query") setActiveBankTab("query")
-  }, [tabParam])
+    if (openRegisterTxIdParam && Number(openRegisterTxIdParam) > 0) setActiveBankTab("query")
+  }, [tabParam, openRegisterTxIdParam])
   React.useEffect(() => {
     if (urlParamsApplied.current) return
     const aid = searchParams.get("accountId")
@@ -384,6 +391,37 @@ export function BankTransactionsTab() {
       })
       .finally(() => setLoading(false))
   }, [accountId, startStr, endStr])
+
+  React.useEffect(() => {
+    if (!restoreOpenRegisterTxIdRef.current || !accountId || restoreListLoadedRef.current) return
+    restoreListLoadedRef.current = true
+    loadData()
+  }, [accountId, loadData])
+
+  React.useEffect(() => {
+    const txId = restoreOpenRegisterTxIdRef.current
+    if (!txId || loading) return
+    const row = list.find((x) => Number(x.id) === txId)
+    if (!row) return
+    setRestoredHighlightTxId(txId)
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`bank-tx-row-${txId}`)
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+    const clearTimer = window.setTimeout(() => {
+      setRestoredHighlightTxId((prev) => (prev === txId ? null : prev))
+    }, 2200)
+    window.setTimeout(() => {
+      try {
+        const next = new URLSearchParams(searchParams.toString())
+        next.delete("openRegisterTxId")
+        const q = next.toString()
+        router.replace(q ? `/admin/bank-transactions?${q}` : "/admin/bank-transactions")
+      } catch {}
+    }, 100)
+    restoreOpenRegisterTxIdRef.current = null
+    return () => window.clearTimeout(clearTimer)
+  }, [list, loading, router, searchParams])
 
   React.useEffect(() => {
     getVendorsForPurchase().then((r) => setVendorOptions(r || []))
@@ -1280,7 +1318,11 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             const hasEdits = r.id && edits && Object.keys(edits).length > 0
                             const isSaving = querySavingId === r.id
                             return (
-                            <tr key={r.id ?? i} className={`border-t ${cat === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""}`}>
+                            <tr
+                              id={r.id ? `bank-tx-row-${r.id}` : undefined}
+                              key={r.id ?? i}
+                              className={`border-t ${cat === "correction" ? "bg-pink-50 dark:bg-pink-950/20" : ""} ${r.id && restoredHighlightTxId === r.id ? "bg-primary/10 ring-2 ring-primary/60" : ""}`}
+                            >
                               <td className="p-2 align-middle text-center">{r.transDate}</td>
                               <td className="p-2 align-middle text-center">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                               <td className="p-2 align-middle">
@@ -1469,10 +1511,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                       if (bankNote) q.set("bankNote", bankNote)
                                       if (r.transDate) q.set("transDate", r.transDate)
                                       if (accountId) q.set("accountId", accountId)
+                                      if (selectedAccountStore) q.set("storeName", selectedAccountStore)
+                                      if (r.category) q.set("category", r.category)
                                       if (r.vendorCode) q.set("vendorCode", r.vendorCode)
                                       if (r.accountSubjectId != null) q.set("accountSubjectId", String(r.accountSubjectId))
                                       q.set("startStr", startStr)
                                       q.set("endStr", endStr)
+                                      q.set("returnTab", "query")
+                                      if (r.id) q.set("openRegisterTxId", String(r.id))
                                       router.push(`/admin/expense-management?${q.toString()}`)
                                     }}
                                   >
@@ -2481,8 +2527,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                 if (bankNote) q.set("bankNote", bankNote)
                 if (r.transDate) q.set("transDate", r.transDate)
                 if (accountId) q.set("accountId", accountId)
+                if (selectedAccountStore) q.set("storeName", selectedAccountStore)
+                if (r.category) q.set("category", r.category)
                 q.set("startStr", startStr)
                 q.set("endStr", endStr)
+                q.set("returnTab", "query")
+                if (r.id) q.set("openRegisterTxId", String(r.id))
                 setRegisterActionRow(null)
                 router.push(`/admin/expense-management?${q.toString()}`)
               }}

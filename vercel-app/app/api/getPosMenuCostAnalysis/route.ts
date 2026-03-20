@@ -171,6 +171,7 @@ export async function GET() {
       vatIncluded: boolean
       optionId: string | null
       optionName: string | null
+      optionType?: 'substitution' | 'additive' | null
       costHall: number
       costDelivery: number
       breakdown: BreakdownRow[]
@@ -250,6 +251,7 @@ export async function GET() {
         vatIncluded,
         optionId: null,
         optionName: null,
+        optionType: null,
         costHall: base.costHall,
         costDelivery: base.costDelivery,
         breakdown: base.breakdown,
@@ -295,6 +297,7 @@ export async function GET() {
             vatIncluded,
             optionId: String(opt.id ?? ''),
             optionName: String(opt.name ?? ''),
+            optionType: 'additive',
             costHall: Math.round((baseCost + addFood) * 10) / 10,
             costDelivery: Math.round((baseCost + addFood + basePkg) * 10) / 10,
             breakdown: addBreakdown,
@@ -313,6 +316,7 @@ export async function GET() {
             vatIncluded,
             optionId: String(opt.id ?? ''),
             optionName: String(opt.name ?? ''),
+            optionType: 'substitution',
             costHall: computed.costHall,
             costDelivery: computed.costDelivery,
             breakdown: computed.breakdown,

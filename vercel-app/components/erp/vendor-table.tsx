@@ -77,7 +77,7 @@ export function VendorTable({
         </span>
       </div>
 
-      <div className="flex flex-col gap-3 border-b bg-muted/20 px-6 py-3 sm:flex-row sm:items-center">
+      <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-6 py-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
@@ -104,9 +104,9 @@ export function VendorTable({
         </Button>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="min-h-0 max-h-[calc(100vh-14rem)] overflow-x-auto overflow-y-scroll">
         <table className="w-full text-left text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur supports-[backdrop-filter]:bg-muted/80">
             <tr className="border-b bg-muted/30">
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-20">{t("vendorColCode")}</th>
               <th className="px-5 py-3 text-[11px] font-bold text-muted-foreground w-24 min-w-[92px]">{t("vendorColType")}</th>

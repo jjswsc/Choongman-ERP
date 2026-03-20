@@ -3205,6 +3205,7 @@ export interface PosMenuCostAnalysisRow {
   vatIncluded?: boolean
   optionId: string | null
   optionName: string | null
+  optionType?: 'substitution' | 'additive' | null
   costHall: number
   costDelivery: number
   cookingTimeMin?: number | null
