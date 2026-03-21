@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -26,6 +26,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import type { LangCode } from "@/lib/lang-context"
+import { preloadCommonData, preloadErpOfflineData } from "@/lib/offline"
 
 const LANG_OPTIONS: { value: LangCode; label: string }[] = [
   { value: "ko", label: "한국어" },
@@ -78,6 +79,20 @@ export function ErpHeader() {
   const handleLogout = () => {
     logout()
     router.replace("/admin/login")
+  }
+
+  const [preloading, setPreloading] = useState(false)
+  const handlePreloadOffline = async () => {
+    setPreloading(true)
+    try {
+      await preloadCommonData()
+      await preloadErpOfflineData()
+      alert(t("posPreloadOfflineDone") || "오프라인용 데이터 저장 완료.")
+    } catch (e) {
+      alert(t("posPreloadOfflineFail") || "저장 실패. 네트워크 상태를 확인하세요.")
+    } finally {
+      setPreloading(false)
+    }
   }
 
   return (
@@ -175,6 +190,13 @@ export function ErpHeader() {
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="text-xs cursor-pointer">
               <Link href="/admin/profile">{t("adminChangePw")}</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs cursor-pointer"
+              onClick={handlePreloadOffline}
+              disabled={preloading}
+            >
+              {preloading ? "..." : (t("posPreloadOffline") || "오프라인 데이터 저장")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

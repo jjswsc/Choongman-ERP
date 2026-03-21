@@ -19,7 +19,6 @@ import {
   isPosOrderOnlyRole,
   isPosSettlementOnlyRole,
 } from "@/lib/permissions"
-import { usePreloadCommonOnLogin, usePreloadErpData } from "@/hooks/use-preload-offline"
 
 function AdminLayoutLoading() {
   const [stuck, setStuck] = useState(false)
@@ -99,10 +98,6 @@ export default function AdminLayout({
   if (!initialized || !auth) {
     return <AdminLayoutLoading />
   }
-
-  // 오프라인용 데이터 자동 프리로드 (백그라운드)
-  usePreloadCommonOnLogin(true)
-  usePreloadErpData()
 
   return (
     <StoreViewProvider>

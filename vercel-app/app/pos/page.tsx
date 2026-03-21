@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useStoreList, getPosTodaySales, getLoginData, loginCheck } from '@/lib/api-client'
+import { preloadCommonData, preloadPosOfflineData } from '@/lib/offline'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import {
   canAccessPosSettlement,
@@ -97,8 +98,19 @@ export default function POSMainPage() {
 
   /** 세부 메뉴에서 선택한 항목 실행 (영업/운영 하위) */
   const handleSubAction = useCallback(
-    (subType: string) => {
+    async (subType: string) => {
       switch (subType) {
+        case 'preload_offline': {
+          setSubmenuParent(null)
+          try {
+            await preloadCommonData()
+            await preloadPosOfflineData(auth?.store)
+            alert(t('posPreloadOfflineDone') || '오프라인용 데이터 저장 완료.')
+          } catch (e) {
+            alert(t('posPreloadOfflineFail') || '저장 실패. 네트워크 상태를 확인하세요.')
+          }
+          break
+        }
         case 'open':
           router.push('/pos/settlement?mode=open')
           break
@@ -118,7 +130,7 @@ export default function POSMainPage() {
           break
       }
     },
-    [router, logout]
+    [router, logout, auth?.store, t]
   )
 
   const [submenuParent, setSubmenuParent] = useState<'business' | 'operations' | null>(null)

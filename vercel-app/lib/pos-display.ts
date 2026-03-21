@@ -67,6 +67,7 @@ export type POSTileType =
   | "settings"
   | "refresh"
   | "logout"
+  | "preload_offline"
 
 export type TileVariant = "primary" | "accent" | "default"
 
@@ -100,6 +101,7 @@ export const POS_SUBMENUS: Record<"business" | "operations", POSSubMenuItem[]> =
     { type: "close", labelKey: "posBusinessClose" },
   ],
   operations: [
+    { type: "preload_offline", labelKey: "posPreloadOffline" },
     { type: "refresh", labelKey: "posRefresh" },
     { type: "logout", labelKey: "posLogout" },
     { type: "settings", labelKey: "posSettings" },
