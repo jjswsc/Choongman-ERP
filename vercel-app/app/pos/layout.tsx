@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth-context"
 import { canAccessPosOrder, isPosSettlementOnlyRole } from "@/lib/permissions"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { usePreloadCommonOnLogin, usePreloadPosData } from "@/hooks/use-preload-offline"
 
 /** POS 전용 레이아웃 - 풀스크린, 태블릿 터치 UI (로그인 필수) */
 export default function PosLayout({
@@ -54,6 +55,10 @@ export default function PosLayout({
       </div>
     )
   }
+
+  // 오프라인용 데이터 자동 프리로드 (백그라운드)
+  usePreloadCommonOnLogin(true)
+  usePreloadPosData(auth?.store)
 
   const isFirstScreen = pathname === "/pos" || pathname === "/pos/"
   const isLocalPage = pathname?.startsWith?.('/pos/local')

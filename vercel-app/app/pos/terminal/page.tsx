@@ -21,7 +21,8 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { LayoutGrid, Bike, Package, Search, ShoppingCart } from 'lucide-react'
-import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTodaySales, getPosDeliveryApps, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
+import { getMembers, getPosOrders, getPosTodaySales, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
+import { getPosMenusWithCache, getPosDeliveryAppsWithCache, getPosPrinterSettingsWithCache } from '@/lib/offline'
 import { savePosOrderWithOffline } from '@/lib/offline'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
@@ -195,8 +196,8 @@ export default function PosTerminalPage() {
   }, [orderType])
 
   useEffect(() => {
-    getPosDeliveryApps({ storeCode: currentStoreId || undefined })
-      .then((list) => setDeliveryAppsFromApi(Array.isArray(list) ? list : []))
+    getPosDeliveryAppsWithCache({ storeCode: currentStoreId || undefined })
+      .then((list) => setDeliveryAppsFromApi((Array.isArray(list) ? list : []) as PosDeliveryApp[]))
       .catch(() => setDeliveryAppsFromApi([]))
   }, [currentStoreId])
 
@@ -226,7 +227,7 @@ export default function PosTerminalPage() {
 
   useEffect(() => {
     if (!currentStoreId) return
-    getPosPrinterSettings({ storeCode: currentStoreId })
+    getPosPrinterSettingsWithCache({ storeCode: currentStoreId })
       .then((s) => {
         const fresh = Math.max(1, Number(s.cookingFreshMaxMin ?? 10))
         const warning = Math.max(fresh + 1, Number(s.cookingWarningMaxMin ?? 15))
@@ -317,9 +318,9 @@ export default function PosTerminalPage() {
         setOtherRate(0)
         setOtherMode('separate')
       })
-    getPosMenus()
+    getPosMenusWithCache()
       .then((list) => {
-        const arr = Array.isArray(list) ? list : []
+        const arr = (Array.isArray(list) ? list : []) as PosMenu[]
         setMenus(arr)
         const byId = new Map<string, number>()
         const byName = new Map<string, number>()
@@ -480,7 +481,7 @@ export default function PosTerminalPage() {
         })
       }
       if (autoPrintKitchenSlipOnOrder) {
-        getPosPrinterSettings({ storeCode })
+        getPosPrinterSettingsWithCache({ storeCode })
           .then((settings) => {
             const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
             const kitchen2 = settings.kitchen2Categories || []
@@ -604,7 +605,7 @@ export default function PosTerminalPage() {
           }
           if (autoPrintKitchenSlipOnOrder && items.length > 0) {
             try {
-              const settings = await getPosPrinterSettings({ storeCode: order.storeCode ?? currentStoreId })
+              const settings = await getPosPrinterSettingsWithCache({ storeCode: order.storeCode ?? currentStoreId })
               const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
               const kitchen1 = settings.kitchen1Categories || []
               const kitchen2 = settings.kitchen2Categories || []
@@ -1489,7 +1490,7 @@ export default function PosTerminalPage() {
                             if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
                               const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
                               const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
-                              getPosPrinterSettings({ storeCode: currentStoreId })
+                              getPosPrinterSettingsWithCache({ storeCode: currentStoreId })
                                 .then((settings) => {
                                   const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
                                   const kitchen2 = settings.kitchen2Categories || []
@@ -2108,7 +2109,7 @@ export default function PosTerminalPage() {
                 if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
                   const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
                   const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
-                  getPosPrinterSettings({ storeCode: currentStoreId })
+                  getPosPrinterSettingsWithCache({ storeCode: currentStoreId })
                     .then((settings) => {
                       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
                       const kitchen2 = settings.kitchen2Categories || []
