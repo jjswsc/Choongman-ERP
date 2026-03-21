@@ -8,6 +8,8 @@ import { MobileStoreSelectorBar } from "@/components/erp/mobile-store-selector-b
 import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import { HomeTab } from "@/components/tabs/home-tab"
 import { OrderTab } from "@/components/tabs/order-tab"
 import { UsageTab } from "@/components/tabs/usage-tab"
@@ -47,6 +49,8 @@ function DashboardLoading() {
 export default function DashboardPage() {
   const router = useRouter()
   const { auth, initialized } = useAuth()
+  const { lang } = useLang()
+  const t = useT(lang)
   const [activeTab, setActiveTab] = useState("home")
 
   useEffect(() => {
@@ -65,7 +69,7 @@ export default function DashboardPage() {
     <StoreViewProvider>
       <div className="mx-auto min-h-screen max-w-lg bg-background">
         <AppHeader />
-        <OfflineBanner offlineMsg="오프라인 모드 — 캐시된 데이터를 사용 중입니다. 연결 복구 후 자동 동기화됩니다." offlineOnly />
+        <OfflineBanner offlineMsg={t("offlineBannerMobileCached")} offlineOnly />
         <MobileStoreSelectorBar />
         <AppNavigation activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="pb-8">

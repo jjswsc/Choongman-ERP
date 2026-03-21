@@ -8,6 +8,8 @@ import { ErpHeader } from "@/components/erp/erp-header"
 import { OfflineBanner } from "@/components/offline-banner"
 import { StoreViewProvider } from "@/lib/store-view-context"
 import { useAuth } from "@/lib/auth-context"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 import {
   isManagerRole,
   isFranchiseeRole,
@@ -53,6 +55,8 @@ export default function AdminLayout({
   const router = useRouter()
   const pathname = usePathname()
   const { auth, initialized } = useAuth()
+  const { lang } = useLang()
+  const t = useT(lang)
   const isLoginPage = pathname === "/admin/login"
 
   useEffect(() => {
@@ -101,11 +105,7 @@ export default function AdminLayout({
         <ErpSidebar />
         <SidebarInset>
           <ErpHeader />
-          <OfflineBanner
-            offlineMsg="오프라인 모드 - 입력한 데이터가 로컬에 저장됩니다. 복구 후 자동 전송됩니다."
-            syncingMsg="동기화 중..."
-            pendingLabel="데이터"
-          />
+          <OfflineBanner pendingLabel={t("offlineBannerPendingData")} />
           {children}
         </SidebarInset>
       </SidebarProvider>

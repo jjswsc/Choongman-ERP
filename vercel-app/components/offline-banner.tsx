@@ -9,6 +9,8 @@ import {
   syncPending,
   onSyncComplete,
 } from '@/lib/offline'
+import { useLang } from '@/lib/lang-context'
+import { useT } from '@/lib/i18n'
 
 interface OfflineBannerProps {
   /** 동기화 완료 시 호출 (todaySales 갱신 등) */
@@ -27,15 +29,26 @@ interface OfflineBannerProps {
 
 export function OfflineBanner({
   onSyncComplete: onSync,
-  offlineMsg = '오프라인 모드 - 주문이 로컬에 저장됩니다. 복구 후 자동 전송됩니다.',
-  syncingMsg = '동기화 중...',
-  retryLabel = '재시도',
-  pendingLabel = '주문',
+  offlineMsg: offlineMsgProp,
+  syncingMsg: syncingMsgProp,
+  retryLabel: retryLabelProp,
+  pendingLabel: pendingLabelProp,
   offlineOnly = false,
 }: OfflineBannerProps) {
+  const { lang } = useLang()
+  const t = useT(lang)
+  const offlineMsg = offlineMsgProp ?? t('offlineBannerAdminSaved')
+  const syncingMsg = syncingMsgProp ?? t('offlineBannerSyncing')
+  const retryLabel = retryLabelProp ?? t('offlineBannerRetry')
+  const pendingLabel = pendingLabelProp ?? t('offlineBannerPendingOrders')
   const online = useOnlineStatus()
   const [pendingCount, setPendingCount] = React.useState(0)
   const [syncing, setSyncing] = React.useState(false)
+
+  const pendingLineText = React.useMemo(
+    () => t('offlineBannerPendingLine').replace('{label}', pendingLabel).replace('{count}', String(pendingCount)),
+    [t, pendingLabel, pendingCount]
+  )
 
   const refreshPending = React.useCallback(() => {
     getPendingCount().then(setPendingCount).catch(() => setPendingCount(0))
@@ -77,7 +90,7 @@ export function OfflineBanner({
         ) : online ? (
           <>
             <RefreshCw className="h-4 w-4 text-amber-600" />
-            <span>대기 중인 {pendingLabel} {pendingCount}건 — 서버로 전송 대기</span>
+            <span>{pendingLineText}</span>
           </>
         ) : (
           <>
@@ -85,7 +98,7 @@ export function OfflineBanner({
             <span>{offlineMsg}</span>
             {pendingCount > 0 && (
               <span className="text-amber-700 font-medium">
-                ({pendingCount}건 대기)
+                {t('offlineBannerOfflineQueued').replace('{count}', String(pendingCount))}
               </span>
             )}
           </>

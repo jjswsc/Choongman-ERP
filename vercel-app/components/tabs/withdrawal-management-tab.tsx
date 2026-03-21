@@ -22,6 +22,7 @@ import {
   addExpenseAccrual,
   executeWithdrawal,
   registerExpenseFromBankTransaction,
+  registerPurchaseFromBankTransaction,
   updateExpenseRegisterItem,
   updateExpenseAccrual,
   getAccountSubjects,
@@ -699,6 +700,44 @@ export function WithdrawalManagementTab() {
 
   const handleBankLinkSubmit = async () => {
     if (!bankTransactionIdParam) return
+    const bankTxId = Number(bankTransactionIdParam)
+    if (!bankTxId) return
+    if (categoryMain === "purchase") {
+      const vendor = vendorCode.trim()
+      if (!vendor) {
+        alert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+        return
+      }
+      setSaving(true)
+      try {
+        const res = await registerPurchaseFromBankTransaction({
+          bankTransactionId: bankTxId,
+          vendorCode: vendor,
+          userName: auth?.user,
+          userRole: auth?.role,
+          updateExisting: updateExistingParam,
+        })
+        if (!res.success) {
+          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        alert(res.message || t("success"))
+        const q = new URLSearchParams()
+        q.set("tab", returnTabParam || "query")
+        if (accountId) q.set("accountId", accountId)
+        const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
+        const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
+        q.set("startStr", start)
+        q.set("endStr", end)
+        if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
+          q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
+        }
+        router.push(`/admin/bank-transactions?${q.toString()}`)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
     const code = payeeCode.trim()
     const name = payeeName.trim()
     if (!code && !name) {
@@ -708,7 +747,7 @@ export function WithdrawalManagementTab() {
     setSaving(true)
     try {
       const res = await registerExpenseFromBankTransaction({
-        bankTransactionId: Number(bankTransactionIdParam),
+        bankTransactionId: bankTxId,
         payeeCode: code || name,
         payeeName: name || code,
         accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
@@ -723,12 +762,15 @@ export function WithdrawalManagementTab() {
       }
       alert(res.message || t("success"))
       const q = new URLSearchParams()
-      q.set("tab", "query")
+      q.set("tab", returnTabParam || "query")
       if (accountId) q.set("accountId", accountId)
       const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
       const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
       q.set("startStr", start)
       q.set("endStr", end)
+      if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
+        q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
+      }
       router.push(`/admin/bank-transactions?${q.toString()}`)
     } finally {
       setSaving(false)
@@ -1367,7 +1409,11 @@ export function WithdrawalManagementTab() {
                 disabled={
                   saving ||
                   !categoryMain ||
-                  (isBankLinkMode && !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))
+                  (isBankLinkMode && (
+                    categoryMain === "purchase"
+                      ? !vendorCode.trim()
+                      : !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode)
+                  ))
                 }
               >
                 <Wallet className="h-4 w-4 mr-1" />

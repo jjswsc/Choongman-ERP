@@ -38,7 +38,10 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 로그인/권한
   "권한 없음": "msg_no_admin_permission",
   "관리자 권한이 없습니다.": "msg_no_admin_permission",
+  "Login Failed": "msg_login_failed",
   "퇴사된 계정은 사용할 수 없습니다.": "msg_resigned_account_blocked",
+  "서버에 일시적으로 연결할 수 없습니다. 인터넷 상태를 확인하고 잠시 후 다시 시도해 주세요.":
+    "msg_login_server_unavailable",
 
   // 공통
   "수정되었습니다.": "msg_saved",

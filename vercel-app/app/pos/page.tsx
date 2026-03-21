@@ -200,6 +200,11 @@ export default function POSMainPage() {
       }
       setSwitchLoading(true)
       setSwitchError('')
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        setSwitchError(t('msg_login_need_network'))
+        setSwitchLoading(false)
+        return
+      }
       try {
         const res = await loginCheck({
           store: switchStore,
@@ -220,7 +225,12 @@ export default function POSMainPage() {
           setSwitchError(translateApiMessage(res.message, t) || res.message || t('msg_login_failed'))
         }
       } catch (err) {
-        setSwitchError(t('msg_server_error_prefix') + (err instanceof Error ? err.message : String(err)))
+        const msg = err instanceof Error ? err.message : String(err)
+        const friendly =
+          msg.includes('fetch') || msg.includes('Failed') || msg.includes('Network') || msg.includes('연결')
+            ? t('msg_login_need_network')
+            : t('msg_server_error_prefix') + msg
+        setSwitchError(friendly)
       } finally {
         setSwitchLoading(false)
       }

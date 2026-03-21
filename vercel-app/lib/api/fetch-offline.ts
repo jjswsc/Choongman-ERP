@@ -10,7 +10,15 @@ function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError && e.message?.toLowerCase().includes('fetch')) return true
   if (e instanceof Error) {
     const msg = e.message?.toLowerCase() ?? ''
-    if (msg.includes('network') || msg.includes('failed') || msg.includes('load')) return true
+    if (
+      msg.includes('network') ||
+      msg.includes('failed') ||
+      msg.includes('load') ||
+      msg.includes('internet') ||
+      msg.includes('disconnected') ||
+      msg.includes('aborted')
+    )
+      return true
   }
   return false
 }
@@ -216,6 +224,15 @@ export async function apiFetchWithOffline(input: RequestInfo | URL, init?: Reque
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
+  }
+
+  /** 브라우저가 오프라인이면 fetch 대기 없이 곧바로 큐 적재 (저장 버튼이 실패로 보이는 현상 완화) */
+  if (typeof navigator !== 'undefined' && navigator.onLine === false && canQueue(url, init)) {
+    try {
+      return await queueAndReturnFallback()
+    } catch {
+      /* 큐 실패 시 아래에서 일반 fetch 시도 */
+    }
   }
 
   try {

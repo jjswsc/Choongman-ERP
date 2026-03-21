@@ -406,7 +406,9 @@ export function BankTransactionsTab() {
     setRestoredHighlightTxId(txId)
     requestAnimationFrame(() => {
       const el = document.getElementById(`bank-tx-row-${txId}`)
+      const listEl = document.getElementById("bank-query-list-wrap")
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+      else if (listEl) listEl.scrollIntoView({ behavior: "smooth", block: "start" })
     })
     const clearTimer = window.setTimeout(() => {
       setRestoredHighlightTxId((prev) => (prev === txId ? null : prev))
@@ -1276,7 +1278,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     </Button>
                   </div>
 
-                  <div className="rounded-lg border max-h-[70vh] min-h-[320px] overflow-auto">
+                  <div id="bank-query-list-wrap" className="rounded-lg border max-h-[70vh] min-h-[320px] overflow-auto">
                     {loading ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
                     ) : filteredList.length === 0 ? (

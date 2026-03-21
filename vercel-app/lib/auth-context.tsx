@@ -9,6 +9,8 @@ export interface AuthState {
   token?: string
 }
 
+const LAST_LOGIN_SNAPSHOT_KEY = 'cm_last_login_snapshot'
+
 function loadAuth(): AuthState | null {
   if (typeof window === 'undefined') return null
   try {
@@ -21,12 +23,39 @@ function loadAuth(): AuthState | null {
   return null
 }
 
+/**
+ * 오프라인 진입용: 탭 단위 sessionStorage가 비어도, 이전에 이 브라우저에서 로그인한 적이 있으면
+ * localStorage 스냅샷으로 매장·이름·역할 복구 (토큰은 session에 있을 때만 첨부)
+ */
+export function loadOfflineResumeAuth(): AuthState | null {
+  if (typeof window === 'undefined') return null
+  const fromSession = loadAuth()
+  if (fromSession) return fromSession
+  try {
+    const raw = localStorage.getItem(LAST_LOGIN_SNAPSHOT_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw) as { store?: string; user?: string; role?: string }
+    if (!o.store || !o.user) return null
+    let token: string | undefined
+    try {
+      token = sessionStorage.getItem('cm_token') || undefined
+    } catch {}
+    return { store: o.store, user: o.user, role: o.role || '', token }
+  } catch {
+    return null
+  }
+}
+
 function saveAuth(auth: AuthState) {
   try {
     sessionStorage.setItem('cm_store', auth.store)
     sessionStorage.setItem('cm_user', auth.user)
     sessionStorage.setItem('cm_role', auth.role)
     if (auth.token) sessionStorage.setItem('cm_token', auth.token)
+    localStorage.setItem(
+      LAST_LOGIN_SNAPSHOT_KEY,
+      JSON.stringify({ store: auth.store, user: auth.user, role: auth.role })
+    )
   } catch {}
 }
 
@@ -36,6 +65,7 @@ function clearAuth() {
     sessionStorage.removeItem('cm_user')
     sessionStorage.removeItem('cm_role')
     sessionStorage.removeItem('cm_token')
+    localStorage.removeItem(LAST_LOGIN_SNAPSHOT_KEY)
   } catch {}
 }
 
@@ -51,7 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    setAuthState(loadAuth())
+    const a = loadAuth()
+    setAuthState(a)
+    // 예전 빌드: session만 있고 스냅샷 없음 → 오프라인 복구용 localStorage 보강
+    if (a) saveAuth(a)
     setInitialized(true)
   }, [])
 

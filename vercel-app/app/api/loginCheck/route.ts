@@ -64,6 +64,12 @@ export async function POST(req: NextRequest) {
     }, { headers })
   } catch (e) {
     console.error('loginCheck:', e)
-    return NextResponse.json({ success: false, message: 'Login Failed' }, { headers: new Headers({ 'Access-Control-Allow-Origin': '*' }) })
+    return NextResponse.json(
+      {
+        success: false,
+        message: '서버에 일시적으로 연결할 수 없습니다. 인터넷 상태를 확인하고 잠시 후 다시 시도해 주세요.',
+      },
+      { headers: new Headers({ 'Access-Control-Allow-Origin': '*' }) }
+    )
   }
 }
