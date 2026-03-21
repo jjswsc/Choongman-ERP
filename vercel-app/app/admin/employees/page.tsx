@@ -6,7 +6,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerRole, isOfficeRole, isOfficeStore, isAccountingRole } from "@/lib/permissions"
+import { isManagerRole, isFranchiseeRole, isOfficeRole, isOfficeStore, isAccountingRole } from "@/lib/permissions"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -23,6 +23,8 @@ import {
   EmployeeEvalTab,
   EmployeeEvalListTab,
   EmployeeEvalSettingTab,
+  EmployeeMovementTab,
+  EmployeeHeadcountTab,
   emptyForm,
   type EmployeeTableRow,
   type EmployeeFormData,
@@ -310,6 +312,7 @@ export default function EmployeesPage() {
   }
 
   const isManager = isManagerRole(userRole)
+  const isManagerOrFranchisee = isManager || isFranchiseeRole(userRole)
   const isOffice = isOfficeRole(userRole) || isAccountingRole(userRole)
 
   const handleNew = () => {
@@ -342,14 +345,32 @@ export default function EmployeesPage() {
         </div>
 
         <Tabs defaultValue="list" className="space-y-4">
-          <TabsList className={isOffice ? "grid w-full grid-cols-5 max-w-2xl" : "grid w-full grid-cols-2 max-w-md"}>
-            <TabsTrigger value="list">{t("tab_hr_list")}</TabsTrigger>
-            {isOffice && <TabsTrigger value="eval">{t("tab_hr_eval")}</TabsTrigger>}
-            <TabsTrigger value="eval-list">{t("tab_eval_list")}</TabsTrigger>
+          <TabsList className="flex h-auto min-h-9 w-full max-w-5xl flex-wrap gap-1 bg-muted/60 p-1">
+            <TabsTrigger value="list" className="shrink-0">
+              {t("tab_hr_list")}
+            </TabsTrigger>
+            <TabsTrigger value="movement" className="shrink-0">
+              {t("tab_hr_movement")}
+            </TabsTrigger>
+            <TabsTrigger value="headcount" className="shrink-0">
+              {t("tab_hr_headcount")}
+            </TabsTrigger>
+            {isOffice && (
+              <TabsTrigger value="eval" className="shrink-0">
+                {t("tab_hr_eval")}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="eval-list" className="shrink-0">
+              {t("tab_eval_list")}
+            </TabsTrigger>
             {isOffice && (
               <>
-                <TabsTrigger value="kitchen-setting">{t("tab_eval_kitchen_setting")}</TabsTrigger>
-                <TabsTrigger value="service-setting">{t("tab_eval_service_setting")}</TabsTrigger>
+                <TabsTrigger value="kitchen-setting" className="shrink-0">
+                  {t("tab_eval_kitchen_setting")}
+                </TabsTrigger>
+                <TabsTrigger value="service-setting" className="shrink-0">
+                  {t("tab_eval_service_setting")}
+                </TabsTrigger>
               </>
             )}
           </TabsList>
@@ -416,6 +437,14 @@ export default function EmployeesPage() {
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="movement" className="mt-0">
+            <EmployeeMovementTab userStore={userStore} userRole={userRole} />
+          </TabsContent>
+
+          <TabsContent value="headcount" className="mt-0">
+            <EmployeeHeadcountTab userStore={userStore} userRole={userRole} isManager={isManagerOrFranchisee} />
           </TabsContent>
 
           {isOffice && (

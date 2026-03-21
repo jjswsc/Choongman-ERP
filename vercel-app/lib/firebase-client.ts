@@ -43,11 +43,13 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 export type FcmTokenError = "unsupported" | "webview" | "permission" | "network" | "unknown"
 
-/** 페이지 로드 시 미리 호출하여 SW 등록 - 푸시 받기 클릭 시 준비 완료되도록 */
+/**
+ * PWA + FCM 통합 Service Worker (`/sw.js`, Serwist 빌드 + postbuild FCM 주입).
+ * Firebase 미설정이어도 등록하여 오프라인 셸이 동작하도록 함.
+ */
 export function preRegisterServiceWorker(): void {
   if (typeof window === "undefined" || !navigator?.serviceWorker?.register) return
-  if (!isFirebaseConfigured()) return
-  navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" }).catch(() => {})
+  navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {})
 }
 
 /** 앱이 포그라운드(열려 있을 때)일 때 FCM 메시지 수신 → 알림 표시. 백그라운드는 Service Worker가 처리 */
@@ -120,13 +122,21 @@ export async function getFcmToken(
   }
 
   try {
-    // Firebase 기본 방식: serviceWorkerRegistration 생략 시 SDK가 /firebase-messaging-sw.js 자동 등록·활성화
     const messaging = getMessaging(app)
+    let swReg: ServiceWorkerRegistration | undefined
+    try {
+      swReg = (await navigator.serviceWorker.getRegistration()) || undefined
+    } catch {
+      swReg = undefined
+    }
     const maxRetries = 4
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         if (attempt > 0) await new Promise((r) => setTimeout(r, 5000 * attempt))
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY })
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          ...(swReg ? { serviceWorkerRegistration: swReg } : {}),
+        })
         return token
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)

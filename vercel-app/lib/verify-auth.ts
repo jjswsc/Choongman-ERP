@@ -4,6 +4,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken, type JwtPayload } from './jwt-auth'
+import { isAccountingRole } from '@/lib/permissions'
 
 export type AuthLevel = 'any' | 'manager' | 'office' | 'director'
 
@@ -57,7 +58,7 @@ export async function requireAuth(
   const r = (auth.role || '').toLowerCase()
   const isDirector = ['director', 'ceo', 'hr'].some((x) => r.includes(x))
   const isOffice = isDirector || r.includes('officer')
-  const isManager = r.includes('manager')
+  const isManager = r.includes('manager') || r.includes('franchisee')
 
   if (requiredLevel === 'director' && !isDirector) {
     return {
@@ -77,7 +78,7 @@ export async function requireAuth(
       ),
     }
   }
-  if (requiredLevel === 'manager' && !isManager && !isOffice) {
+  if (requiredLevel === 'manager' && !isManager && !isOffice && !isAccountingRole(r)) {
     return {
       auth: null,
       errorResponse: NextResponse.json(

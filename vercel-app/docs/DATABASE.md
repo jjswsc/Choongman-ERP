@@ -57,6 +57,7 @@ Supabase (PostgreSQL) 사용. 다른 개발자가 수정·확장 시 참고용 �
 | 테이블 | 설명 |
 |--------|------|
 | `employees` | 직원. store, name(유니크), annual_leave_days, grade 등 |
+| `store_job_headcount` | 매장×직무(`job`) 적정인원 목표. `supabase_store_job_headcount.sql` 참고 |
 | `payroll_records` | 급여 명세. month, store, name(유니크 조합) |
 | `leave_requests` | 휴가 신청. store, name, leave_date |
 | `attendance_logs` | 출퇴근 로그. store_name, name, log_at |

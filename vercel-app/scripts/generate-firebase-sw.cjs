@@ -1,6 +1,7 @@
 /**
- * 빌드/개발 시점에 public/firebase-messaging-sw.js 생성
- * NEXT_PUBLIC_FIREBASE_* env가 있어야 함 (.env.local 또는 환경변수)
+ * (레거시) public/firebase-messaging-sw.js 생성용.
+ * 운영 PWA는 Serwist `public/sw.js` + scripts/merge-fcm-into-sw.cjs 로 통합됨.
+ * 로컬 FCM SW만 단독으로 테스트할 때만 사용.
  */
 const fs = require('fs')
 const path = require('path')

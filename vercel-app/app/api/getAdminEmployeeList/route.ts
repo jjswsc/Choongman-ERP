@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 import { isOfficeStore, OFFICE_STORES, isAccountingRole } from '@/lib/permissions'
-
-/** userStore와 empStore 매칭 - "CM " 접두사 차이 허용 (Ekkamai ↔ CM Ekkamai) */
-function storeMatches(userStore: string, empStore: string): boolean {
-  if (!userStore || !empStore) return false
-  if (userStore === empStore) return true
-  const cmPrefixed = empStore.startsWith('CM ') ? empStore.slice(3) : 'CM ' + empStore
-  return userStore === cmPrefixed || empStore === cmPrefixed
-}
+import { userCanAccessEmployeeStore } from '@/lib/admin-employee-store-access'
 
 function toDateStr(val: unknown): string {
   if (!val) return ''
@@ -46,19 +39,7 @@ export async function GET(req: Request) {
     for (const r of rows || []) {
       if (!r.store && !r.name) continue
       const empStore = String(r.store || '').trim()
-      let include = false
-      if (role.includes('director') || role.includes('ceo') || role.includes('hr') || isAccountingRole(role)) {
-        include = true
-      } else if (role.includes('officer')) {
-        if (!isOfficeStore(empStore)) include = true
-      } else if (role.includes('manager')) {
-        if (storeMatches(userStore, empStore)) include = true
-      } else if (role.includes('franchisee')) {
-        if (storeMatches(userStore, empStore)) include = true
-      } else {
-        if (storeMatches(userStore, empStore)) include = true
-      }
-      if (!include) continue
+      if (!userCanAccessEmployeeStore(role, userStore, empStore)) continue
       list.push({
         row: r.id,
         store: empStore,

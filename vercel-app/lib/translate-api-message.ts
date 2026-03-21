@@ -58,6 +58,7 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 직원
   "✅ 신규 직원이 등록되었습니다.": "emp_registered",
   "✅ 직원 정보가 수정되었습니다.": "emp_updated",
+  "적정인원이 저장되었습니다.": "msg_saved",
 
   // 점검
   "저장됨": "msg_saved",

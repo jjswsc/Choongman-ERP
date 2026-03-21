@@ -5135,6 +5135,7 @@ export async function getAdminEmployeeList(params: { userStore: string; userRole
   return {
     list: (data.list || []) as AdminEmployeeItem[],
     stores: (data.stores || []) as string[],
+    jobOptions: (data.jobOptions || []) as string[],
     _debug: data._debug as Record<string, unknown> | undefined,
   }
 }
@@ -5164,6 +5165,34 @@ export async function deleteAdminEmployee(params: {
   userRole: string
 }) {
   const res = await apiFetchWithOffline('/api/deleteAdminEmployee', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface StoreJobHeadcountRow {
+  store: string
+  job: string
+  target_count: number
+  updated_at?: string
+}
+
+export async function getStoreJobHeadcount(params?: { store?: string }) {
+  const q = new URLSearchParams()
+  if (params?.store) q.set('store', params.store)
+  const qs = q.toString()
+  const res = await apiFetchWithOffline(`/api/getStoreJobHeadcount${qs ? `?${qs}` : ''}`)
+  const data = await res.json()
+  return {
+    list: (data.list || []) as StoreJobHeadcountRow[],
+    _note: data._note as string | undefined,
+  }
+}
+
+export async function saveStoreJobHeadcount(params: { store: string; rows: { job: string; target_count: number }[] }) {
+  const res = await apiFetchWithOffline('/api/saveStoreJobHeadcount', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),

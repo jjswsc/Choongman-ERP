@@ -42,3 +42,7 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Serwist (빌드 산출)
+public/sw.js
+public/swe-worker*

@@ -18,12 +18,12 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 
 /** i18n 키 누락·손상 시 영어 (번들 문자열은 네트워크 없이 동작 — 이 폴백은 이중 안전장치) */
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
-  msg_login_need_network:
-    "No internet connection. New sign-in requires a network. If you signed in on this device before, tap Enter offline mode.",
   msg_login_network_error:
     "Cannot connect to the network. You may be offline or the server may be unreachable.",
   msg_login_offline_banner_hint:
     "A previous login session exists on this device. Tap the button below to continue without the internet.",
+  msg_login_offline_banner_hint_online:
+    "Wi‑Fi may look connected but the server may still be unreachable. Tap below to continue with the account saved on this device (cache/offline).",
 }
 
 function pickLoginStr(tMsg: (k: string) => string, key: string): string {
@@ -31,6 +31,17 @@ function pickLoginStr(tMsg: (k: string) => string, key: string): string {
   const fb = LOGIN_I18N_FALLBACK_EN[key]
   if (fb && (!raw || raw === key)) return fb
   return raw || fb || key
+}
+
+/** loginCheck API catch 등 — DB/네트워크 실패 시 내려오는 메시지 */
+function isLoginCheckBackendFailureMessage(msg: string): boolean {
+  const s = String(msg || "")
+  return (
+    s.includes("일시적으로 연결") ||
+    s.includes("인터넷 상태를 확인") ||
+    s.includes("Cannot reach the server right now") ||
+    s.includes("Cannot reach the login server")
+  )
 }
 
 interface LoginFormProps {
@@ -48,6 +59,8 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+  /** 연결·서버 도달 실패 등 — 에러 칸 아래에 오프라인 CTA를 같이 띄움 */
+  const [errorIsConnectivity, setErrorIsConnectivity] = useState(false)
   const { lang, setLang } = useLang()
   const tMsg = useT(lang)
 
@@ -76,10 +89,16 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }, [])
 
-  /** sessionStorage + localStorage(마지막 성공 로그인 스냅샷) — 새 탭/재시작 후에도 오프라인 버튼 표시 */
-  const [resumeAuth] = useState<AuthState | null>(() =>
-    typeof window === "undefined" ? null : loadOfflineResumeAuth()
-  )
+  /**
+   * 오프라인 재진입 스냅샷. 로그인 페이지는 `dynamic(..., { ssr: false })`로만 불러와
+   * 브라우저에서만 마운트되므로, 첫 렌더에서 곧바로 localStorage를 읽어도 하이드레이션 불일치가 없음.
+   */
+  const [resumeAuth] = useState<AuthState | null>(() => loadOfflineResumeAuth())
+
+  const clearFormError = useCallback(() => {
+    setError("")
+    setErrorIsConnectivity(false)
+  }, [])
 
   const fetchLoginData = useCallback(() => {
     setLoadError(null)
@@ -146,13 +165,15 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     const effectiveStore = (manualStore || store).trim()
     const effectiveUser = (manualUser || user).trim()
     if (!effectiveStore || !effectiveUser) {
+      setErrorIsConnectivity(false)
       setError(tMsg("msg_select_store_name"))
       return
     }
     setSubmitting(true)
-    setError("")
+    clearFormError()
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      setError(pickLoginStr(tMsg, "msg_login_need_network"))
+      setError(pickLoginStr(tMsg, "msg_login_network_error"))
+      setErrorIsConnectivity(true)
       setSubmitting(false)
       return
     }
@@ -167,18 +188,33 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
         })
         router.replace(redirectTo)
       } else {
-        setError(translateApiMessage(res.message, tMsg) || res.message || tMsg("msg_login_failed"))
+        const apiMsg = res.message || ""
+        if (isLoginCheckBackendFailureMessage(apiMsg)) {
+          setError(pickLoginStr(tMsg, "msg_login_network_error"))
+          setErrorIsConnectivity(true)
+        } else {
+          setErrorIsConnectivity(false)
+          setError(translateApiMessage(apiMsg, tMsg) || apiMsg || tMsg("msg_login_failed"))
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (typeof console !== "undefined" && console.error) {
         console.error("[Login] loginCheck failed:", err)
       }
-      const friendlyMsg =
-        msg.includes('fetch') || msg.includes('Failed') || msg.includes('Network') || msg.includes('연결')
-          ? pickLoginStr(tMsg, "msg_login_network_error")
-          : tMsg("msg_server_error_prefix") + msg
-      setError(friendlyMsg)
+      const isNetErr =
+        msg.includes("fetch") ||
+        msg.includes("Failed") ||
+        msg.includes("Network") ||
+        msg.includes("network") ||
+        msg.includes("연결")
+      if (isNetErr) {
+        setError(pickLoginStr(tMsg, "msg_login_network_error"))
+        setErrorIsConnectivity(true)
+      } else {
+        setErrorIsConnectivity(false)
+        setError(tMsg("msg_server_error_prefix") + msg)
+      }
     } finally {
       setSubmitting(false)
     }
@@ -222,8 +258,12 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  /** 캐시된 매장 목록이 있어도 오프라인이면 배너가 안 뜨던 문제 보완: 브라우저 오프라인이면 세션만 있으면 버튼 표시 */
-  const canEnterOffline = Boolean(resumeAuth && (!browserOnline || !!loadError))
+  /**
+   * 이전 로그인 스냅샷이 있으면 항상 오프라인 진입 허용.
+   * (navigator.onLine === true 인데 서버/DB만 죽은 경우 캐시로 목록이 채워지면 loadError가 없어
+   * 예전에는 버튼이 아예 안 보였음.)
+   */
+  const canEnterOffline = Boolean(resumeAuth)
 
   const isOfficeStore = (s: string) => {
     const x = String(s || "").trim()
@@ -351,29 +391,6 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   } as const
   const t = labels[lang as keyof typeof labels] || labels.ko
 
-  if (loading) {
-    return (
-      <div className="login-page">
-        <div className="login-loading">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
-          <p className="mt-4 text-sm text-white/80">{t.connectingToServer}</p>
-          {resumeAuth && (
-            <button
-              type="button"
-              onClick={() => {
-                setAuth(resumeAuth)
-                router.replace(redirectTo)
-              }}
-              className="mt-4 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-            >
-              {t.enterOfflineMode}
-            </button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="login-page">
       <div className="login-bg">
@@ -396,9 +413,13 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             <p className="erp-text">CM ERP SYSTEM</p>
           </div>
 
-          {resumeAuth && !browserOnline && (
+          {resumeAuth && (
             <div className="mb-4 rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-3 py-3 text-sm text-emerald-100">
-              <p className="mb-2 leading-snug">{pickLoginStr(tMsg, "msg_login_offline_banner_hint")}</p>
+              <p className="mb-2 leading-snug">
+                {!browserOnline
+                  ? pickLoginStr(tMsg, "msg_login_offline_banner_hint")
+                  : pickLoginStr(tMsg, "msg_login_offline_banner_hint_online")}
+              </p>
               <button
                 type="button"
                 onClick={() => {
@@ -412,6 +433,12 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             </div>
           )}
 
+          {loading ? (
+            <div className="login-loading py-6">
+              <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
+              <p className="mt-4 text-center text-sm text-white/80">{t.connectingToServer}</p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit}>
             <Select value={lang} onValueChange={handleLangChange}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
@@ -528,7 +555,31 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
 
             {error && (
               <div className="mb-3 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                {error}
+                <p className="leading-snug">{error}</p>
+                {errorIsConnectivity && typeof window !== "undefined" && (
+                  <div className="mt-3 border-t border-red-500/25 pt-3">
+                    {(() => {
+                      const snap = loadOfflineResumeAuth()
+                      if (snap) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAuth(snap)
+                              router.replace(redirectTo)
+                            }}
+                            className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                          >
+                            {t.enterOfflineMode}
+                          </button>
+                        )
+                      }
+                      return (
+                        <p className="text-xs leading-snug text-amber-200/90">{t.offlineRequiresPreviousLogin}</p>
+                      )
+                    })()}
+                  </div>
+                )}
               </div>
             )}
 
@@ -554,6 +605,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               {t.changePw}
             </button>
           </form>
+          )}
         </div>
       </div>
 

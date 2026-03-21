@@ -42,6 +42,7 @@ const QUEUE_WHITELIST = new Set([
   '/api/saveCheckResult',
   '/api/savePurchaseOrder',
   '/api/saveSafetyStock',
+  '/api/saveStoreJobHeadcount',
   '/api/adjustStock',
   '/api/processOrder',
   '/api/processUsage',

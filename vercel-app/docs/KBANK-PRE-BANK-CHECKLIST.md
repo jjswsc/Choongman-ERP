@@ -6,12 +6,21 @@
 
 ## 1. Git 반영 후 배포
 
-```bash
-cd vercel-app
-git add app/api/webhooks/kbank app/payment/return app/pos/payment/return docs/KBANK-FIXED-IP-PROXY.md docs/KBANK-PRE-BANK-CHECKLIST.md
+**저장소 루트**에서 실행해야 합니다. 이 프로젝트는 `vercel-app`이 **홈 폴더가 아니라** 클론한 경로 아래에 있습니다.
+
+- Windows 예: `C:\CM_ERP\vercel-app` (먼저 `cd C:\CM_ERP` 후 `cd vercel-app`, 또는 한 번에 `cd C:\CM_ERP\vercel-app`)
+- `C:\Users\…`에서 `cd vercel-app`만 하면 **경로가 없다**는 오류가 납니다.
+
+**옵션 A — Git은 저장소 루트(`C:\CM_ERP`)에서** (경로에 `vercel-app/` 접두사):
+
+```powershell
+cd C:\CM_ERP
+git add vercel-app/app/api/webhooks/kbank vercel-app/app/payment/return vercel-app/app/pos/payment/return vercel-app/docs/KBANK-FIXED-IP-PROXY.md vercel-app/docs/KBANK-PRE-BANK-CHECKLIST.md
 git commit -m "feat(kbank): webhook stubs, switchback pages, proxy docs"
 git push
 ```
+
+**Git 루트**는 `vercel-app` 안이 아니라 **`C:\CM_ERP`** 한 단계 위입니다. `npm run build` 등만 `C:\CM_ERP\vercel-app`에서 하면 됩니다.
 
 - Vercel이 Git 연동이면 **푸시 후 자동 배포**됩니다.  
 - 수동 배포면 [Vercel Dashboard](https://vercel.com) → 프로젝트 → **Deployments → Redeploy** 또는 로컬에서 `vercel` CLI(로그인된 환경)로 배포합니다.
@@ -19,6 +28,8 @@ git push
 ---
 
 ## 2. 배포 후 URL 확인 (PowerShell)
+
+**이미 Vercel에 배포까지 끝났다면** §1(Git 푸시·배포)은 생략하고, 아래 `curl`만으로 동작 확인하면 됩니다.
 
 **베이스 URL**을 본인 프로덕션 주소로 바꿉니다. (예: `https://choongman-erp.vercel.app`)
 
