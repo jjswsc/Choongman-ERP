@@ -3,7 +3,11 @@
  * 메뉴 관리, 원가 분석 드롭다운에 사용
  */
 
-import { PROMOTION_DEFAULT_SUBCATEGORIES, PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import {
+  PROMOTION_DEFAULT_SUBCATEGORIES,
+  PROMOTION_MAIN_CATEGORY,
+  LEGACY_PROMOTION_MAIN_CATEGORY,
+} from '@/lib/pos-promo-constants'
 
 export type PosMenuCategoriesConfigShape = {
   mainCategories: string[]
@@ -13,9 +17,22 @@ export type PosMenuCategoriesConfigShape = {
 /** API/DB 설정에 프로모션 대분류·기본 소분류가 없으면 병합 */
 export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigShape): PosMenuCategoriesConfigShape {
   const main = PROMOTION_MAIN_CATEGORY
-  const mains = [...cfg.mainCategories]
+
+  let mains = [...new Set(cfg.mainCategories.map((m) => (m === LEGACY_PROMOTION_MAIN_CATEGORY ? main : m)))]
+
+  let categoriesByMain = { ...cfg.categoriesByMain }
+  const legacySubs = categoriesByMain[LEGACY_PROMOTION_MAIN_CATEGORY]
+  if (legacySubs?.length) {
+    const cur = categoriesByMain[main] || []
+    categoriesByMain[main] = [...new Set([...cur, ...legacySubs])]
+  }
+  if (LEGACY_PROMOTION_MAIN_CATEGORY in categoriesByMain) {
+    const { [LEGACY_PROMOTION_MAIN_CATEGORY]: _, ...rest } = categoriesByMain
+    categoriesByMain = rest
+  }
+
   if (!mains.includes(main)) mains.push(main)
-  const existingSubs = [...(cfg.categoriesByMain[main] || [])]
+  const existingSubs = [...(categoriesByMain[main] || [])]
   const nextSubs = [...existingSubs]
   for (const d of PROMOTION_DEFAULT_SUBCATEGORIES) {
     if (!nextSubs.includes(d)) nextSubs.push(d)
@@ -23,7 +40,7 @@ export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigS
   return {
     mainCategories: mains,
     categoriesByMain: {
-      ...cfg.categoriesByMain,
+      ...categoriesByMain,
       [main]: nextSubs.length > 0 ? nextSubs : [...PROMOTION_DEFAULT_SUBCATEGORIES],
     },
   }
@@ -52,6 +69,7 @@ const MAIN_CATEGORY_ALIASES: Record<string, string[]> = {
   Korean: ["한국"],
   Side: ["사이드", "사이드메뉴"],
   Drinks: ["음료"],
+  Promotion: [LEGACY_PROMOTION_MAIN_CATEGORY],
 }
 
 /** 치킨 대분류 선택 여부 */

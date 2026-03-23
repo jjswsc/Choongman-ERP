@@ -43,19 +43,27 @@ import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const orderTypeLabels: Record<string, string> = {
-  dine_in: "매장",
-  takeout: "포장",
-  delivery: "배달",
+type CookCompareKey = "unset" | "ok" | "warn" | "late"
+
+const COOK_VERDICT_I18N: Record<CookCompareKey, string> = {
+  unset: "posCookAnalysisUnset",
+  ok: "posCookAnalysisOnTime",
+  warn: "posCookAnalysisWarn",
+  late: "posCookAnalysisLate",
 }
 
-const statusLabels: Record<string, string> = {
-  pending: "대기",
-  paid: "결제완료",
-  cooking: "조리중",
-  ready: "준비완료",
-  completed: "완료",
-  cancelled: "취소",
+function bangkokDisplayLocale(lang: string): string {
+  const m: Record<string, string> = {
+    ko: "ko-KR",
+    en: "en-GB",
+    th: "th-TH",
+    mm: "my-MM",
+    la: "lo-LA",
+    kh: "km-KH",
+    vi: "vi-VN",
+    ms: "ms-MY",
+  }
+  return m[lang] || "en-GB"
 }
 
 function formatPosOrderGuestCount(o: PosOrder): string {
@@ -64,11 +72,11 @@ function formatPosOrderGuestCount(o: PosOrder): string {
   return String(n)
 }
 
-function formatBangkokDateTime(value: string | null | undefined) {
+function formatBangkokDateTime(value: string | null | undefined, locale = "en-GB") {
   if (!value) return "-"
   const dt = new Date(value)
   if (Number.isNaN(dt.getTime())) return "-"
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: "Asia/Bangkok",
     year: "numeric",
     month: "2-digit",
@@ -172,9 +180,30 @@ export default function PosOrdersPage() {
 
   const canSearchAll = isOfficeRole(auth?.role || "")
 
+  const orderTypeLabels = React.useMemo(
+    () => ({
+      dine_in: t("posOrderTypeDineIn"),
+      takeout: t("posOrderTypeTakeout"),
+      delivery: t("posOrderTypeDelivery"),
+    }),
+    [t]
+  )
+
+  const statusLabels = React.useMemo(
+    () => ({
+      pending: t("posAdminStatusPending"),
+      paid: t("posAdminStatusPaid"),
+      cooking: t("posOrderStatusPreparing"),
+      ready: t("posOrderStatusReady"),
+      completed: t("posOrderStatusCompleted"),
+      cancelled: t("posCancel"),
+    }),
+    [t]
+  )
+
   const formatListOrderType = React.useCallback(
     (o: PosOrder) => {
-      const base = orderTypeLabels[o.orderType] || o.orderType
+      const base = orderTypeLabels[o.orderType as keyof typeof orderTypeLabels] || o.orderType
       const channelSuffix =
         o.orderType === "delivery" || o.orderType === "takeout"
           ? formatPosOrderTypeChannelSuffix(o)
@@ -189,7 +218,7 @@ export default function PosOrdersPage() {
       const mid = platform ? `${base} · ${platform}` : base
       return `${mid}${channelSuffix}`
     },
-    [deliveryAppsByStore]
+    [deliveryAppsByStore, orderTypeLabels]
   )
 
   const filteredOrders = React.useMemo(() => {
@@ -378,7 +407,7 @@ export default function PosOrdersPage() {
           <div class="k-header">${slip.label}</div>
           <div class="k-row"><strong>${o.orderNo}</strong></div>
           <div class="k-row">${storeCode} · ${formatListOrderType(o)}${o.tableName && o.orderType !== "delivery" ? ` · ${t("posTable") || "테이블"}: ${o.tableName}` : ""}</div>
-          <div class="k-row">${o.createdAt ? new Date(o.createdAt).toLocaleString("ko-KR") : "-"}</div>
+          <div class="k-row">${o.createdAt ? formatBangkokDateTime(o.createdAt, bangkokDisplayLocale(lang)) : "-"}</div>
           <hr style="margin: 10px 0;" />
           ${slip.items.map((it) => `<div class="k-row">${it.name ?? "-"} × ${it.qty ?? 1}</div>`).join("")}
           ${o.memo ? `<div class="k-memo">${t("posCustomerMemo") || "메모"}: ${o.memo}</div>` : ""}
@@ -493,7 +522,7 @@ export default function PosOrdersPage() {
       elapsedMin: number
       targetMin: number | null
       diffMin: number | null
-      compareLabel: string
+      compareKey: CookCompareKey
     }> = []
 
     for (const o of filteredOrders) {
@@ -513,14 +542,14 @@ export default function PosOrdersPage() {
           menuByName
         )
         const diffMin = targetMin != null ? elapsedMin - targetMin : null
-        const compareLabel =
+        const compareKey: CookCompareKey =
           targetMin == null
-            ? "미설정"
+            ? "unset"
             : (elapsedMin - targetMin) <= 0
-              ? "정상"
+              ? "ok"
               : (elapsedMin - targetMin) <= 5
-                ? "주의"
-                : "지연"
+                ? "warn"
+                : "late"
         rows.push({
           orderId: o.id,
           orderNo: o.orderNo,
@@ -534,7 +563,7 @@ export default function PosOrdersPage() {
           elapsedMin,
           targetMin,
           diffMin,
-          compareLabel,
+          compareKey,
         })
       }
     }
@@ -676,7 +705,7 @@ export default function PosOrdersPage() {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className="space-y-4">
           <TabsList>
             <TabsTrigger value="orders">{t("posOrderList") || "POS 주문 내역"}</TabsTrigger>
-            <TabsTrigger value="cookTime">조리 시간 분석</TabsTrigger>
+            <TabsTrigger value="cookTime">{t("posCookTimeAnalysisTab")}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orders" className="mt-0">
@@ -689,7 +718,7 @@ export default function PosOrdersPage() {
                         {t("posOrderNo") || "주문번호"}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
-                        매장
+                        {t("store")}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-20">
                         {t("posOrderType") || "유형"}
@@ -701,13 +730,13 @@ export default function PosOrdersPage() {
                         {t("posOrderGuestCount") || "손님 수"}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
-                        합계
+                        {t("posInputTotal")}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
                         {t("posStatus") || "상태"}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-36">
-                        주문일시
+                        {t("posOrderOrderedAt")}
                       </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-12" />
                     </tr>
@@ -793,7 +822,7 @@ export default function PosOrdersPage() {
                             </td>
                             <td className="px-5 py-3 text-center text-muted-foreground">
                               {o.createdAt
-                                ? new Date(o.createdAt).toLocaleString("ko-KR")
+                                ? formatBangkokDateTime(o.createdAt, bangkokDisplayLocale(lang))
                                 : "-"}
                             </td>
                             <td className="px-5 py-3">
@@ -879,11 +908,12 @@ export default function PosOrdersPage() {
                                           <div className="flex items-center gap-2 shrink-0">
                                             {it.servedAt ? (
                                               <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                                                {t("posTableStatusServed") || "서빙 완료"} {formatBangkokDateTime(it.servedAt)}
+                                                {t("posTableStatusServed")}{" "}
+                                                {formatBangkokDateTime(it.servedAt, bangkokDisplayLocale(lang))}
                                               </span>
                                             ) : (
                                               <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                                                미서빙
+                                                {t("posItemNotServed")}
                                               </span>
                                             )}
                                             <span className="tabular-nums">
@@ -940,40 +970,57 @@ export default function PosOrdersPage() {
 
           <TabsContent value="cookTime" className="mt-0">
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
-              <span className="rounded bg-muted px-2 py-1">완료 라인: {cookingRows.length}건</span>
-              <span className="rounded bg-muted px-2 py-1">평균 소요: {cookSummary.avgMin}분</span>
-              <span className="rounded bg-muted px-2 py-1">최소: {cookSummary.minMin}분</span>
-              <span className="rounded bg-muted px-2 py-1">최대: {cookSummary.maxMin}분</span>
-              <span className="rounded bg-muted px-2 py-1">기준 미설정: {cookingRows.filter((r) => r.targetMin == null).length}건</span>
+              <span className="rounded bg-muted px-2 py-1">
+                {t("posCookTimeStatCompletedLines")}: {cookingRows.length}
+                {t("posCount")}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                {t("posCookTimeStatAvgElapsed")}: {cookSummary.avgMin}
+                {t("posTimeMinUnit")}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                {t("posCookTimeStatMin")}: {cookSummary.minMin}
+                {t("posTimeMinUnit")}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                {t("posCookTimeStatMax")}: {cookSummary.maxMin}
+                {t("posTimeMinUnit")}
+              </span>
+              <span className="rounded bg-muted px-2 py-1">
+                {t("posCookTimeStatNoBaseline")}: {cookingRows.filter((r) => r.targetMin == null).length}
+                {t("posCount")}
+              </span>
             </div>
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/30">
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">서빙시각</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">매장</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posServedAtTime")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("store")}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posOrderNo") || "주문번호"}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-center w-16">{t("posTable") || "테이블"}</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[220px]">메뉴</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-left min-w-[220px]">{t("posMenuName")}</th>
                       <th className="px-4 py-3 text-[11px] font-bold text-center w-12">{t("qty") || "수량"}</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">실제 소요</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">기준 조리시간</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">차이</th>
-                      <th className="px-4 py-3 text-[11px] font-bold text-center w-16">판정</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posCookTimeActualElapsed")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-24">{t("posCookTimeTargetBaseline")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-20">{t("posCookTimeDiff")}</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-center w-16">{t("posCookTimeVerdict")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {cookingRows.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">
-                          조회 조건에 맞는 서빙 완료 데이터가 없습니다.
+                          {t("posCookTimeNoServedRows")}
                         </td>
                       </tr>
                     ) : (
                       cookingRows.map((r) => (
                         <tr key={`${r.orderId}-${r.itemId}-${r.itemName}-${r.servedAt}`} className="border-b">
-                          <td className="px-4 py-3 text-center text-muted-foreground">{formatBangkokDateTime(r.servedAt)}</td>
+                          <td className="px-4 py-3 text-center text-muted-foreground">
+                            {formatBangkokDateTime(r.servedAt, bangkokDisplayLocale(lang))}
+                          </td>
                           <td className="px-4 py-3 text-center">{r.storeCode || "-"}</td>
                           <td className="px-4 py-3 text-center">
                             <button
@@ -990,26 +1037,29 @@ export default function PosOrdersPage() {
                           <td className="px-4 py-3 text-center tabular-nums">{r.qty}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                              {r.elapsedMin}분
+                              {r.elapsedMin}
+                              {t("posTimeMinUnit")}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center tabular-nums">
-                            {r.targetMin != null ? `${r.targetMin}분` : "-"}
+                            {r.targetMin != null ? `${r.targetMin}${t("posTimeMinUnit")}` : "-"}
                           </td>
                           <td className="px-4 py-3 text-center tabular-nums">
-                            {r.diffMin != null ? `${r.diffMin > 0 ? "+" : ""}${r.diffMin}분` : "-"}
+                            {r.diffMin != null
+                              ? `${r.diffMin > 0 ? "+" : ""}${r.diffMin}${t("posTimeMinUnit")}`
+                              : "-"}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span
                               className={cn(
                                 "rounded px-2 py-0.5 text-xs",
-                                r.compareLabel === "정상" && "bg-emerald-50 text-emerald-700",
-                                r.compareLabel === "주의" && "bg-amber-50 text-amber-700",
-                                r.compareLabel === "지연" && "bg-rose-50 text-rose-700",
-                                r.compareLabel === "미설정" && "bg-muted text-muted-foreground"
+                                r.compareKey === "ok" && "bg-emerald-50 text-emerald-700",
+                                r.compareKey === "warn" && "bg-amber-50 text-amber-700",
+                                r.compareKey === "late" && "bg-rose-50 text-rose-700",
+                                r.compareKey === "unset" && "bg-muted text-muted-foreground"
                               )}
                             >
-                              {r.compareLabel}
+                              {t(COOK_VERDICT_I18N[r.compareKey])}
                             </span>
                           </td>
                         </tr>

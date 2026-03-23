@@ -3,6 +3,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
+import { PROMOTION_MAIN_CATEGORY, PROMOTION_DEFAULT_SUBCATEGORIES } from '@/lib/pos-promo-constants'
 
 export interface PromoMirrorPayload {
   promoId: string
@@ -27,8 +28,8 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
   const baseMenuRow: Record<string, unknown> = {
     code: p.code,
     name: p.name,
-    category: p.categorySub || '프로모션',
-    category_main: p.categoryMain || '프로모션',
+    category: p.categorySub || PROMOTION_DEFAULT_SUBCATEGORIES[0],
+    category_main: p.categoryMain || PROMOTION_MAIN_CATEGORY,
     price: p.price,
     price_delivery: p.priceDelivery,
     image: '',

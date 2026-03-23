@@ -6,9 +6,11 @@ const PREFIX_BY_MAIN: Record<string, string> = {
   Korean: 'K',
   Side: 'S',
   Drinks: 'D',
+  /** 토핑은 치킨(C)과 겹치지 않도록 T 접두사 */
+  Topping: 'T',
 }
 
-/** GET ?mainCategory=Chicken → 다음 코드 C0013 */
+/** GET ?mainCategory=Chicken → 다음 코드 C013 (Topping → T001) */
 export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')

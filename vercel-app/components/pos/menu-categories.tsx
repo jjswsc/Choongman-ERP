@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getPosMenus, getPosMenuCategories, type PosMenu } from '@/lib/api-client'
+import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useLang } from '@/lib/lang-context'
@@ -32,8 +33,9 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
       .then(([menusList, catRes]) => {
         setMenus(Array.isArray(menusList) ? menusList : [])
         setCategories(catRes.categories ?? [])
-        setMainCategories(catRes.mainCategories ?? [])
-        if (catRes.mainCategories?.length) setSelectedCategory(catRes.mainCategories[0])
+        const mains = normalizePosMainCategoryTabs([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])
+        setMainCategories(mains)
+        if (mains.length) setSelectedCategory(mains[0])
         else if (catRes.categories?.length) setSelectedCategory(catRes.categories[0])
       })
       .catch(() => setMenus([]))

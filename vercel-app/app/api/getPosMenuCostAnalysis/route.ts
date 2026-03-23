@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 /** 치킨 기본 옵션(S 순살): 원가 분석에서는 메뉴 기본 행으로 이미 포함되므로 옵션 목록에서 제외 */
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -254,7 +255,7 @@ export async function GET() {
       }
 
       const base = computeCost(null)
-      const categoryMain = String(menu.category_main ?? '').trim()
+      const categoryMain = normalizePromotionCategoryMain(menu.category_main)
       const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
       const vatIncluded = menu.vat_included !== false
       result.push({

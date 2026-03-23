@@ -135,7 +135,30 @@ export function canAccessPosOrder(role: string): boolean {
 
 /** POS 결산 가능 */
 export function canAccessPosSettlement(role: string): boolean {
-  return isPosSettlementOnlyRole(role) || isManagerRole(role) || isFranchiseeRole(role) || isOfficeRole(role)
+  return (
+    isPosSettlementOnlyRole(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role) ||
+    isOfficeRole(role)
+  )
+}
+
+/**
+ * POS 홈에서 관리자(/admin)로 이동하는 버튼 표시 — 본사(디렉터/오피스/CEO/HR) 및 매장 매니저만.
+ * 가맹점주·POS·회계·일반 staff 등은 숨김.
+ */
+export function canNavigateFromPosToAdmin(role: string): boolean {
+  return isOfficeRole(role) || isManagerRole(role)
+}
+
+/** POS 근태 화면에서 승인·스케줄 수정 등 편집 가능 (일반 staff / POS 전용 역할은 조회만) */
+export function canEditPosAttendanceManagement(role: string): boolean {
+  return (
+    isOfficeRole(role) ||
+    isManagerRole(role) ||
+    isFranchiseeRole(role) ||
+    isAccountingRole(role)
+  )
 }
 
 /** POS 주문 내역 가능 (관리자) */

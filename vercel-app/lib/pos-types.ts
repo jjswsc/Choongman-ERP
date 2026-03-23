@@ -32,6 +32,8 @@ export interface Order {
   memo?: string
   /** POS 주문 번호 (예: ST01-20250314-093000-ABCD) */
   orderNo?: string
+  /** 홀(dine-in) 손님 수 (POS guest_count) */
+  guestCount?: number
 }
 
 export interface OrderItem {

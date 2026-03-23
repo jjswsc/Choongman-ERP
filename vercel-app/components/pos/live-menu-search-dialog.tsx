@@ -27,6 +27,7 @@ import {
   type PosOrderItem,
 } from '@/lib/api-client'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 
 interface LiveMenuSearchDialogProps {
   open: boolean
@@ -71,6 +72,14 @@ function getDeliveryDisplayLabel(tableName: string, fallbackOrderNo: string): st
   if (appEn) return appEn
   if (no) return `#${no}`
   return fallbackOrderNo
+}
+
+/** 테이블명 끝의 한글 접미 "번" 제거 (예: "5번" → "5", "1F-3번" → "1F-3") */
+function stripKoreanTableNumberSuffix(name: string): string {
+  const s = String(name || '').trim()
+  if (!s || s === '-') return s
+  const stripped = s.replace(/번\s*$/u, '').trim()
+  return stripped || s
 }
 
 function formatBangkokTime(value: string): string {
@@ -147,7 +156,7 @@ export function LiveMenuSearchDialog({
         }),
       ])
       setMenus((menuList || []).filter((m) => m.isActive))
-      setMainCategories(catCfg.mainCategories || [])
+      setMainCategories(normalizePosMainCategoryTabs([...(catCfg.mainCategories || []), PROMOTION_MAIN_CATEGORY]))
       setOrders((orderList || []).filter((o) => o.status !== 'cancelled'))
     } finally {
       setLoading(false)
@@ -330,7 +339,11 @@ export function LiveMenuSearchDialog({
                       </Badge>
                     )}
                     <Badge variant="outline">
-                      {r.isTable ? `${tableLabel} ${r.tableName}` : r.orderType === 'delivery' ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo) : r.orderNo}
+                      {r.isTable
+                        ? `${tableLabel} ${stripKoreanTableNumberSuffix(r.tableName)}`
+                        : r.orderType === 'delivery'
+                          ? getDeliveryDisplayLabel(r.tableName || '', r.orderNo)
+                          : r.orderNo}
                     </Badge>
                   </div>
                 </div>

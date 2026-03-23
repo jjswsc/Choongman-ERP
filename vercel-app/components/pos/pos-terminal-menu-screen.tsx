@@ -35,7 +35,7 @@ import {
   type PosMenuScreenConfig,
 } from '@/lib/pos-menu-screen-config'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
-import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
@@ -159,7 +159,7 @@ export function PosTerminalMenuScreen({
     setMenus(list || [])
     setPromos(promoList || [])
     setAllOptions(opts || [])
-    const mains = [...new Set([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])].sort()
+    const mains = normalizePosMainCategoryTabs([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])
     setMainCategories(mains)
     setSelectedMainCategory(mains[0] ?? '')
     setSelectedCategory('')

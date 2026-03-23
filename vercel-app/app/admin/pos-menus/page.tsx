@@ -60,8 +60,8 @@ import { PriceHistoryTab } from "@/components/erp/price-history-tab"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 import { sortByCode } from "@/lib/sort-utils"
 
-/** 코드 자동 생성 대상 대분류 (C/K/S/D 접두사) */
-const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks"] as const
+/** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
+const CODE_AUTO_MAINS = ["Chicken", "Korean", "Side", "Drinks", "Topping"] as const
 
 /** 옵션관리 탭: 고정 2단계 — 1. 사이즈, 2. 부위 */
 const OPTION_SIZE_VALUES = ["S", "M", "L"]
@@ -322,8 +322,18 @@ export default function PosMenusPage() {
   }, [menus, editingId])
 
   const handleNewRegister = () => {
-    setFormData(emptyForm)
     setEditingId(null)
+    const filter = mainCategoryFilter === "all" ? "" : mainCategoryFilter.trim()
+    if (!filter) {
+      setFormData(emptyForm)
+      return
+    }
+    setFormData({ ...emptyForm, categoryMain: filter, category: "" })
+    if ((CODE_AUTO_MAINS as readonly string[]).includes(filter)) {
+      void getNextPosMenuCode(filter).then(({ code: next }) => {
+        if (next) setFormData((p) => ({ ...p, categoryMain: filter, category: "", code: next }))
+      })
+    }
   }
 
   const handleReset = () => {
@@ -1487,7 +1497,13 @@ export default function PosMenusPage() {
                   <div>
                     <label className="text-xs font-semibold">{t("posMenuCode")}</label>
                     <Input
-                      placeholder="C001"
+                      placeholder={
+                        formData.categoryMain === "Topping"
+                          ? "T001"
+                          : formData.categoryMain === "Chicken"
+                            ? "C001"
+                            : "C001 / T001"
+                      }
                       className="mt-1 h-10"
                       value={formData.code}
                       onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}

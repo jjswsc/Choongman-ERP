@@ -49,7 +49,7 @@ import {
 import { OfflineBanner } from "@/components/offline-banner"
 import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
-import { PROMOTION_MAIN_CATEGORY } from "@/lib/pos-promo-constants"
+import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from "@/lib/pos-promo-constants"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
@@ -292,7 +292,7 @@ export default function PosOrderPage() {
         const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
         const merged = [...new Set([...(cats || []), ...promoCategories])].sort()
         setCategories(merged)
-        const mainMerged = [...new Set([...(mains || []), PROMOTION_MAIN_CATEGORY])].sort()
+        const mainMerged = normalizePosMainCategoryTabs([...(mains || []), PROMOTION_MAIN_CATEGORY])
         setMainCategories(mainMerged)
         setSelectedMainCategory((prev) => (mainMerged.includes(prev) ? prev : ""))
         setSelectedCategory((prev) => (merged.includes(prev) ? prev : ""))

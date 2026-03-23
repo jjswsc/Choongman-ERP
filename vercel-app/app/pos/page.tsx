@@ -16,6 +16,8 @@ import { translateApiMessage } from '@/lib/translate-api-message'
 import {
   canAccessPosSettlement,
   canAccessAdmin,
+  canAccessPosOrder,
+  canNavigateFromPosToAdmin,
   isManagerOrFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
@@ -79,9 +81,10 @@ export default function POSMainPage() {
       switch (tile.type) {
         case 'sales':
         case 'receipt':
-        case 'attendance':
         case 'members':
           return canAccessAdmin(auth?.role || '')
+        case 'attendance':
+          return canAccessPosOrder(auth?.role || '')
         case 'business':
           return canAccessPosSettlement(auth?.role || '')
         case 'cash':
@@ -244,10 +247,6 @@ export default function POSMainPage() {
   )
   const switchUsers = switchStore ? (switchLoginData[switchStore] || []) : []
 
-  const handleBack = useCallback(() => {
-    router.push('/admin')
-  }, [router])
-
   const formatDate = (date: Date) =>
     date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
   const formatTime = (date: Date) =>
@@ -261,8 +260,9 @@ export default function POSMainPage() {
     >
       <POSHeader
         title={t('posTerminalTitle')}
-        onBack={handleBack}
-        showBackButton={canAccessAdmin(auth?.role || '')}
+        showBackButton={false}
+        showAdminNavButton={canNavigateFromPosToAdmin(auth?.role || '')}
+        onAdminNav={() => router.push('/admin')}
         canAccessAdmin={canAccessAdmin(auth?.role || '')}
         todayOrders={todayOrders}
         totalAmount={totalAmount}

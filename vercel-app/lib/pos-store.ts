@@ -50,6 +50,10 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
     customerName: String(po.tableName || '').trim() || undefined,
     memo: String(po.memo || '').trim() || undefined,
     orderNo: String(po.orderNo ?? '').trim() || undefined,
+    guestCount:
+      mapOrderType(po.orderType) === 'dine-in'
+        ? Math.max(0, Math.min(99, Math.trunc(Number(po.guestCount ?? 0) || 0)))
+        : undefined,
   }
 }
 

@@ -497,7 +497,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const handleTaxProfileSearch = () => {
     const keyword = taxSearchKeyword.trim()
     if (!keyword) {
-      setTaxSearchMessage('검색어를 입력해 주세요.')
+      setTaxSearchMessage(t('posTaxSearchNeedKeyword'))
       return
     }
     const entries = Object.entries(taxMemberRegistry)
@@ -512,11 +512,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       found = entries.find(([, profile]) => String(profile.name || '').toLowerCase().includes(k))
     }
     if (!found) {
-      setTaxSearchMessage('일치하는 회원 데이터가 없습니다.')
+      setTaxSearchMessage(t('posTaxSearchNoSavedProfile'))
       return
     }
     applyTaxProfile(found[0], found[1])
-    setTaxSearchMessage(`회원번호 ${found[0]} 데이터를 불러왔습니다.`)
+    setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', found[0]))
   }
 
   const resetPaymentInputs = () => {
@@ -591,6 +591,23 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (!showPaymentModal) return
     setSplitPaidSteps(0)
   }, [showPaymentModal, splitCount, total])
+
+  /** 모달을 닫을 때 더치페이 상태 초기화 (다음 결제 시 전액 자동 입력과 충돌 방지) */
+  useEffect(() => {
+    if (!showPaymentModal) {
+      setShowSplit(false)
+    }
+  }, [showPaymentModal])
+
+  /**
+   * 더치페이 켜짐·인원 변경 시 결제 입력을 비움.
+   * (모달 오픈 직후 전액이 현금 등에 채워진 뒤, CollapsibleTrigger asChild로 onClick이 누락되면 전액이 남는 문제 방지)
+   */
+  useEffect(() => {
+    if (!showPaymentModal || !showSplit) return
+    resetPaymentInputs()
+    setSplitPaidSteps(0)
+  }, [showPaymentModal, showSplit, splitCount])
 
   useEffect(() => {
     if (activePaymentTab !== 'other') {
@@ -1678,7 +1695,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Receipt className="h-5 w-5 text-primary" />
-                    <Label className="text-sm font-medium">Tax Invoice</Label>
+                    <Label className="text-sm font-medium">{t('posReceiptTaxInvoice')}</Label>
                     <Button
                       type="button"
                       size="sm"
@@ -1686,7 +1703,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       className="h-8"
                       onClick={() => setNeedTaxInvoice((v) => !v)}
                     >
-                      {needTaxInvoice ? (t('posConfirm') || '사용') : (t('posOrderButton') || '사용 안함')}
+                      {needTaxInvoice ? t('posTaxInvoiceOn') : t('posTaxInvoiceOff')}
                     </Button>
                   </div>
                   <CollapsibleTrigger asChild>
@@ -1707,7 +1724,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       onClick={() => setInvoiceCustomerType('person')}
                     >
                       <User className="h-4 w-4 mr-1.5" />
-                      개인
+                      {t('posTaxCustomerIndividual')}
                     </Button>
                     <Button
                       type="button"
@@ -1717,7 +1734,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       onClick={() => setInvoiceCustomerType('company')}
                     >
                       <Building2 className="h-4 w-4 mr-1.5" />
-                      법인
+                      {t('posTaxCustomerCorporate')}
                     </Button>
                     <div className="grid grid-cols-[7.5rem_1fr_auto] gap-2 min-w-0">
                       <Select value={taxSearchField} onValueChange={(v) => setTaxSearchField(v as TaxSearchField)}>
@@ -1748,7 +1765,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </div>
                     {isMemberOrder && (
                       <span className="text-xs text-muted-foreground self-center">
-                        회원 선택됨: 등록 정보 자동 반영
+                        {t('posTaxMemberLinkedHint')}
                       </span>
                     )}
                   </div>
@@ -1762,40 +1779,55 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     className="h-12 rounded-xl max-w-[10rem]"
                   />
                   <div className="grid sm:grid-cols-2 gap-2">
-                    <Input className="h-12 rounded-xl" placeholder="수취인명 / 회사명*" value={taxName} onChange={(e) => setTaxName(e.target.value)} />
                     <Input
                       className="h-12 rounded-xl"
-                      placeholder="Tax ID 13자리*"
+                      placeholder={t('posTaxRecipientNamePlaceholder')}
+                      value={taxName}
+                      onChange={(e) => setTaxName(e.target.value)}
+                    />
+                    <Input
+                      className="h-12 rounded-xl"
+                      placeholder={t('posTaxIdThirteenPlaceholder')}
                       value={taxId}
                       onChange={(e) => setTaxId(e.target.value.replace(/\D/g, '').slice(0, 13))}
                       inputMode="numeric"
                     />
                     <Input
                       className="h-12 rounded-xl"
-                      placeholder={`지점번호 5자리${taxBranchRequired ? '*' : ' (개인: 00000)'}`}
+                      placeholder={taxBranchRequired ? t('posTaxBranchFiveCompany') : t('posTaxBranchFivePerson')}
                       value={taxBranchNo}
                       onChange={(e) => setTaxBranchNo(e.target.value.replace(/\D/g, '').slice(0, 5))}
                       inputMode="numeric"
                     />
                     <Input
                       className="h-12 rounded-xl"
-                      placeholder="전화번호 9~10자리*"
+                      placeholder={t('posTaxPhonePlaceholder')}
                       value={taxPhone}
                       onChange={(e) => setTaxPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       inputMode="numeric"
                     />
-                    <Input className="h-12 rounded-xl" placeholder="이메일 (선택)" value={taxEmail} onChange={(e) => setTaxEmail(e.target.value)} />
-                    <Input className="h-12 rounded-xl" placeholder="주소" value={taxAddress} onChange={(e) => setTaxAddress(e.target.value)} />
+                    <Input
+                      className="h-12 rounded-xl"
+                      placeholder={t('posTaxEmailOptionalPlaceholder')}
+                      value={taxEmail}
+                      onChange={(e) => setTaxEmail(e.target.value)}
+                    />
+                    <Input
+                      className="h-12 rounded-xl"
+                      placeholder={t('posTaxAddressPlaceholder')}
+                      value={taxAddress}
+                      onChange={(e) => setTaxAddress(e.target.value)}
+                    />
                   </div>
                   {taxInvoiceInvalid && (
                     <div className="rounded-xl bg-amber-500/10 p-3 text-xs text-amber-700 space-y-0.5">
-                      <p>Tax Invoice 필수/형식 확인이 필요합니다.</p>
-                      {taxInvoiceValidationErrors.includes('name') && <p>- 이름/회사명을 입력해 주세요.</p>}
-                      {taxInvoiceValidationErrors.includes('taxId') && <p>- Tax ID는 숫자 13자리여야 합니다.</p>}
-                      {taxInvoiceValidationErrors.includes('branch') && <p>- 지점번호는 숫자 5자리여야 합니다.</p>}
-                      {taxInvoiceValidationErrors.includes('phone') && <p>- 전화번호는 숫자 9~10자리여야 합니다.</p>}
-                      {taxInvoiceValidationErrors.includes('address') && <p>- 주소를 입력해 주세요.</p>}
-                      {taxInvoiceValidationErrors.includes('email') && <p>- 이메일 형식이 올바르지 않습니다.</p>}
+                      <p>{t('posTaxValidationTitle')}</p>
+                      {taxInvoiceValidationErrors.includes('name') && <p>- {t('posTaxErrName')}</p>}
+                      {taxInvoiceValidationErrors.includes('taxId') && <p>- {t('posTaxErrTaxId')}</p>}
+                      {taxInvoiceValidationErrors.includes('branch') && <p>- {t('posTaxErrBranch')}</p>}
+                      {taxInvoiceValidationErrors.includes('phone') && <p>- {t('posTaxErrPhone')}</p>}
+                      {taxInvoiceValidationErrors.includes('address') && <p>- {t('posTaxErrAddress')}</p>}
+                      {taxInvoiceValidationErrors.includes('email') && <p>- {t('posTaxErrEmail')}</p>}
                     </div>
                   )}
                     </div>
@@ -1812,12 +1844,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     type="button"
                     variant="ghost"
                     className="min-h-11 justify-between rounded-lg px-3 shrink-0"
-                    onClick={() => {
-                      if (!showSplit) {
-                        resetPaymentInputs()
-                        setSplitPaidSteps(0)
-                      }
-                    }}
                   >
                     <span className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-primary shrink-0" />

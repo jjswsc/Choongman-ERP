@@ -47,5 +47,5 @@ comment on column public.pos_menus.promo_id is '프로모션 마스터와 연동
 
 -- 기존 행 백필: 대분류 없으면 프로모션 통일
 update public.pos_promos
-set category_main = '프로모션'
+set category_main = 'Promotion'
 where category_main is null or nullif(trim(category_main), '') is null;

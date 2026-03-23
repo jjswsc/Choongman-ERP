@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,vat_included,is_active,sort_order,sold_out_date'
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
@@ -66,8 +67,8 @@ export async function GET() {
         id: String(row.id ?? ''),
         code: String(row.code ?? ''),
         name: String(row.name ?? ''),
-        category: String(row.category ?? ''),
-        categoryMain: String((row as { category_main?: string }).category_main ?? ''),
+        category: normalizePromotionCategoryMain(String(row.category ?? '').trim()),
+        categoryMain: normalizePromotionCategoryMain((row as { category_main?: string }).category_main),
         price: Number(row.price) ?? 0,
         priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
         imageUrl: String(row.image ?? ''),

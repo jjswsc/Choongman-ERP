@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
-import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
@@ -63,8 +63,8 @@ export async function GET() {
       id: String(p.id ?? ''),
       code: String(p.code ?? ''),
       name: String(p.name ?? ''),
-      category: String(p.category ?? ''),
-      categoryMain: String(p.category_main ?? '').trim() || PROMOTION_MAIN_CATEGORY,
+      category: normalizePromotionCategoryMain(String(p.category ?? '').trim()),
+      categoryMain: normalizePromotionCategoryMain(p.category_main) || PROMOTION_MAIN_CATEGORY,
       price: Number(p.price) ?? 0,
       priceDelivery: p.price_delivery != null ? Number(p.price_delivery) : null,
       isActive: p.is_active !== false,

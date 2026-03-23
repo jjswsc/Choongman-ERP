@@ -18,7 +18,7 @@ export type TableStatusStage = 'fresh' | 'warning' | 'urgent'
 
 export type TableStatusResult =
   | TableStatus
-  | { status: TableStatus; createdAt?: string; targetMin?: number }
+  | { status: TableStatus; createdAt?: string; targetMin?: number; guestCount?: number }
 
 /** 관리자 화면과 동일하게 좌석 원을 위/아래에 배치 */
 function getSeatPositions(w: number, h: number, n: number): { x: number; y: number }[] {
@@ -309,6 +309,10 @@ export function TableFloorView({
               : raw
         const createdAt = typeof raw === 'object' && raw?.createdAt ? raw.createdAt : undefined
         const targetMin = typeof raw === 'object' ? Number(raw?.targetMin ?? 0) : 0
+        const tableGuestCount =
+          typeof raw === 'object' && raw != null
+            ? Math.max(0, Math.trunc(Number((raw as { guestCount?: number }).guestCount ?? 0)))
+            : 0
         const stage = status === 'preparing'
           ? (ruleMode === 'recipe_diff' && targetMin > 0
               ? getPreparingStageByRecipeDiff(createdAt, targetMin, recipeWarningDiffMin, recipeUrgentDiffMin)
@@ -450,6 +454,17 @@ export function TableFloorView({
                         {t('posTableStatusServed') || '서빙 완료'}
                       </span>
                     )}
+                    {tableGuestCount > 0 && (
+                        <>
+                          <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
+                            ·
+                          </span>
+                          <span className="text-xs font-extrabold tabular-nums sm:text-sm" title={t('posOrderGuestCount') || ''}>
+                            {tableGuestCount}
+                            {t('posPeopleUnit') || ''}
+                          </span>
+                        </>
+                      )}
                   </>
                 )}
                 {!isOccupied && tab.seats > 0 && (

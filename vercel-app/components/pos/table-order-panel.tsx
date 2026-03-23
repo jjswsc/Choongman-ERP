@@ -15,7 +15,7 @@ import type { PosDeliveryApp } from '@/lib/api-client'
 import { markPosOrderItemServed, updatePosOrder, updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
-import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { Check, CheckCircle, Clock, Users, XCircle } from 'lucide-react'
 
 export interface TableOrderPanelProps {
   tableName: string
@@ -221,6 +221,18 @@ export function TableOrderPanel({
             <Clock className="w-4 h-4 shrink-0" />
             <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
           </div>
+          {order.type === 'dine-in' && (order.guestCount ?? 0) > 0 && (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Users className="w-4 h-4 shrink-0" />
+              <span>
+                {t('posOrderGuestCount') || '손님 수'}:{' '}
+                <span className="font-semibold tabular-nums text-foreground">
+                  {order.guestCount}
+                  {t('posPeopleUnit') || ''}
+                </span>
+              </span>
+            </div>
+          )}
 
           {isPaidPrepaid ? (
             <>

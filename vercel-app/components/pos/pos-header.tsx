@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone } from "lucide-react"
+import { Home, ArrowLeft, Settings, RefreshCw, Languages, Monitor, Smartphone, LayoutDashboard } from "lucide-react"
 import type { Store } from "@/lib/pos-types"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -29,9 +29,12 @@ interface PosHeaderProps {
   totalAmount?: number
   /** V0: Admin으로 돌아가기 링크 표시 */
   showBackToAdmin?: boolean
-  /** 기존: 뒤로가기 버튼 */
+  /** 기존: 뒤로가기 버튼 (터미널·메뉴 내부 네비용) */
   showBackButton?: boolean
   onBack?: () => void
+  /** POS 홈: 관리자(/admin)로 가기 — 뒤로가기가 아닌 명시 버튼 */
+  showAdminNavButton?: boolean
+  onAdminNav?: () => void
   /** 관리자 페이지 접근 가능 시에만 Admin/설정 링크 표시 (포스 직원은 숨김) */
   canAccessAdmin?: boolean
   /** 매장 선택 표시 여부 (오피스 직원만 true, 나머지는 자기 매장 고정) */
@@ -56,6 +59,8 @@ export function POSHeader({
   showBackToAdmin = false,
   showBackButton = true,
   onBack,
+  showAdminNavButton = false,
+  onAdminNav,
   canAccessAdmin: canAccessAdminProp = true,
   canChangeStore = true,
   onRefresh,
@@ -96,17 +101,31 @@ export function POSHeader({
               <Home className="w-4 h-4" />
             </Button>
           </Link>
-          {showBackButton && (
+          {showAdminNavButton && onAdminNav ? (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-8 gap-1"
-              onClick={() => (onBack ? onBack() : router.back())}
-              title={t('posBack') || '뒤로가기'}
+              className="h-8 gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+              type="button"
+              onClick={onAdminNav}
+              title={t("posNavAdmin") || "관리자"}
             >
-              <ArrowLeft className="w-4 h-4" />
-              {t('posBack') || '뒤로가기'}
+              <LayoutDashboard className="w-4 h-4" />
+              <span className="text-xs font-medium">{t("posNavAdmin") || "관리자"}</span>
             </Button>
+          ) : (
+            showBackButton && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => (onBack ? onBack() : router.back())}
+                title={t("posBack") || "뒤로가기"}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                {t("posBack") || "뒤로가기"}
+              </Button>
+            )
           )}
         </div>
 

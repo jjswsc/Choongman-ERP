@@ -70,10 +70,11 @@ function statusLabel(s: string | undefined, t: (key: string) => string): string 
 }
 
 /** 관리자 `/admin/attendance`와 POS `/pos/attendance`에서 공통 사용 — 동일 API·세션 연동 */
-export function AttendanceManageContent() {
+export function AttendanceManageContent({ readOnly = false }: { readOnly?: boolean }) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const allowEdit = !readOnly
 
   const [stores, setStores] = React.useState<string[]>([])
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
@@ -231,16 +232,23 @@ export function AttendanceManageContent() {
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminAttendance")}</h1>
             <p className="text-xs text-muted-foreground">{t("tab_att_status")}</p>
+            {readOnly && (
+              <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2 py-1.5">
+                {t("posAttendanceReadOnlyHint")}
+              </p>
+            )}
           </div>
         </div>
 
         <Tabs defaultValue="status" className="space-y-4">
-          <TabsList className="grid w-full max-w-2xl grid-cols-5">
+          <TabsList
+            className={readOnly ? "grid w-full max-w-2xl grid-cols-4" : "grid w-full max-w-2xl grid-cols-5"}
+          >
             <TabsTrigger value="status">{t("tab_att_status")}</TabsTrigger>
             <TabsTrigger value="help">{t("att_tab_help")}</TabsTrigger>
             <TabsTrigger value="today">{t("tab_att_today_realtime")}</TabsTrigger>
             <TabsTrigger value="view">{t("tab_att_view")}</TabsTrigger>
-            <TabsTrigger value="schedule">{t("tab_att_schedule")}</TabsTrigger>
+            {!readOnly && <TabsTrigger value="schedule">{t("tab_att_schedule")}</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="help" className="mt-0 space-y-4">
@@ -371,7 +379,11 @@ export function AttendanceManageContent() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_in")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_out")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_break_min")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_btn_emergency_approve")}</th>
+                      {allowEdit && (
+                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">
+                          {t("att_btn_emergency_approve")}
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -385,15 +397,17 @@ export function AttendanceManageContent() {
                           <td className="px-3 py-2.5 text-center">{row.inTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.outTimeStr}</td>
                           <td className="px-3 py-2.5 text-center">{row.breakMin}</td>
-                          <td className="px-2 py-2.5 text-center">
-                            <Button
-                              size="sm"
-                              className="h-6 px-2 text-[10px]"
-                              onClick={() => handleEmergencyApprove(row)}
-                            >
-                              {t("att_btn_emergency_approve")}
-                            </Button>
-                          </td>
+                          {allowEdit && (
+                            <td className="px-2 py-2.5 text-center">
+                              <Button
+                                size="sm"
+                                className="h-6 px-2 text-[10px]"
+                                onClick={() => handleEmergencyApprove(row)}
+                              >
+                                {t("att_btn_emergency_approve")}
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                   </tbody>
@@ -418,9 +432,17 @@ export function AttendanceManageContent() {
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_planned_hrs")}</th>
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_diff")}</th>
                       <th className="px-2 py-2.5 text-center font-semibold min-w-[3rem]">{t("att_late_extra")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20">{t("att_adjust_label")}</th>
+                      {allowEdit && (
+                        <th className="px-2 py-2.5 text-center font-semibold min-w-[4.5rem] w-20">
+                          {t("att_adjust_label")}
+                        </th>
+                      )}
                       <th className="px-3 py-2.5 text-center font-semibold">{t("att_col_status")}</th>
-                      <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">{t("att_approve_btn")}</th>
+                      {allowEdit && (
+                        <th className="px-2 py-2.5 text-center font-semibold whitespace-nowrap min-w-[100px]">
+                          {t("att_approve_btn")}
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -464,46 +486,48 @@ export function AttendanceManageContent() {
                               return <span className="text-muted-foreground">-</span>
                             })()}
                           </td>
-                          <td className="px-2 py-2.5 text-center min-w-[5rem]">
-                            {(() => {
-                              const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
-                              const showAdjustInput = (!isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")))) || (row.status && String(row.status).includes("정상(승인)"))
-                              const adjustKey =
-                                hasPendingOut && (pendingOut != null || row.pendingId != null)
-                                  ? (pendingOut ?? row.pendingId)!
-                                  : row.outLogId != null
-                                    ? row.outLogId
-                                    : `${row.date}-${row.store}-${row.name}`
-                              const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
-                              const defaultVal = String(
-                                row.plannedWorkHrs > 0 && row.diffMin < 0
-                                  ? (row.earlyMin ?? Math.abs(row.diffMin))
-                                  : row.plannedWorkHrs > 0 && row.diffMin > 0
-                                    ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
-                                    : row.lateMin > 0
-                                      ? Math.max(1, row.lateMin)
-                                      : 0
-                              )
-                              const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
-                              return showAdjustInput ? (
-                                <Input
-                                  key={String(adjustKey)}
-                                  name={`adj_${adjustKey}`}
-                                  type="number"
-                                  min={isLateOrPendingIn ? 1 : 0}
-                                  max={999}
-                                  placeholder={isLateOrPendingIn ? "1" : "0"}
-                                  defaultValue={defaultVal}
-                                  data-adjust-key={String(adjustKey)}
-                                  className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
-                                />
-                              ) : (
-                                <span className="text-muted-foreground text-xs">-</span>
-                              )
-                            })()}
-                          </td>
+                          {allowEdit ? (
+                            <td className="px-2 py-2.5 text-center min-w-[5rem]">
+                              {(() => {
+                                const isNormal = row.status === "정상" || (row.status && String(row.status).includes("정상(승인)"))
+                                const showAdjustInput = (!isNormal && ((row.plannedWorkHrs > 0 && row.diffMin !== 0) || row.lateMin > 0 || (row.status && String(row.status).includes("강제퇴근(승인)")))) || (row.status && String(row.status).includes("정상(승인)"))
+                                const adjustKey =
+                                  hasPendingOut && (pendingOut != null || row.pendingId != null)
+                                    ? (pendingOut ?? row.pendingId)!
+                                    : row.outLogId != null
+                                      ? row.outLogId
+                                      : `${row.date}-${row.store}-${row.name}`
+                                const isOvertimeCell = row.diffMin > 0 && (row.otMin ?? 0) >= 30
+                                const defaultVal = String(
+                                  row.plannedWorkHrs > 0 && row.diffMin < 0
+                                    ? (row.earlyMin ?? Math.abs(row.diffMin))
+                                    : row.plannedWorkHrs > 0 && row.diffMin > 0
+                                      ? (isOvertimeCell ? (row.otMin ?? row.diffMin) : row.diffMin >= 30 ? (row.otMin ?? row.diffMin) : 0)
+                                      : row.lateMin > 0
+                                        ? Math.max(1, row.lateMin)
+                                        : 0
+                                )
+                                const isLateOrPendingIn = row.lateMin > 0 || pendingIn != null
+                                return showAdjustInput ? (
+                                  <Input
+                                    key={String(adjustKey)}
+                                    name={`adj_${adjustKey}`}
+                                    type="number"
+                                    min={isLateOrPendingIn ? 1 : 0}
+                                    max={999}
+                                    placeholder={isLateOrPendingIn ? "1" : "0"}
+                                    defaultValue={defaultVal}
+                                    data-adjust-key={String(adjustKey)}
+                                    className="h-7 min-w-[4rem] w-16 text-xs tabular-nums text-center mx-auto"
+                                  />
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">-</span>
+                                )
+                              })()}
+                            </td>
+                          ) : null}
                           <td className="px-3 py-2.5 text-center">
-                            {pendingIn != null ? (
+                            {pendingIn != null && allowEdit ? (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="outline" size="sm" className={cn(
@@ -540,7 +564,9 @@ export function AttendanceManageContent() {
                             )}
                           </td>
                           <td className="px-2 py-2.5">
-                            {hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
+                            {!allowEdit ? (
+                              <span className="flex justify-center text-[10px] text-muted-foreground">-</span>
+                            ) : hasPendingOut && (row.status !== "정상" || row.otMin >= 30 || row.lateMin > 0 || row.diffMin < 0) ? (
                               <div className="flex items-center gap-1 justify-center">
                                 <Button
                                   type="button"
@@ -677,29 +703,33 @@ export function AttendanceManageContent() {
             </div>
           </TabsContent>
 
-          <TabsContent value="schedule" className="mt-0 space-y-3">
-            <div className="rounded-lg border bg-card p-4">
-              <div className="mb-4 flex items-center gap-3">
-                <label className="text-xs font-semibold">{t("stockFilterStore")}</label>
-                <Select value={scheduleStore} onValueChange={setScheduleStore}>
-                  <SelectTrigger className="h-9 w-40 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stores.filter((s) => s !== "All").map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {!readOnly && (
+            <TabsContent value="schedule" className="mt-0 space-y-3">
+              <div className="rounded-lg border bg-card p-4">
+                <div className="mb-4 flex items-center gap-3">
+                  <label className="text-xs font-semibold">{t("stockFilterStore")}</label>
+                  <Select value={scheduleStore} onValueChange={setScheduleStore}>
+                    <SelectTrigger className="h-9 w-40 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.filter((s) => s !== "All").map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <AdminScheduleEdit
+                  stores={stores.filter((s) => s !== "All")}
+                  storeFilter={scheduleStore}
+                  onStoreChange={setScheduleStore}
+                  staffByStore={staffByStore}
+                />
               </div>
-              <AdminScheduleEdit
-                stores={stores.filter((s) => s !== "All")}
-                storeFilter={scheduleStore}
-                onStoreChange={setScheduleStore}
-                staffByStore={staffByStore}
-              />
-            </div>
-          </TabsContent>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
+import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 /** POS 메뉴 카테고리 목록 (distinct) */
 export async function GET() {
@@ -23,9 +24,9 @@ export async function GET() {
     const catSet = new Set<string>()
     const mainSet = new Set<string>()
     for (const r of rows || []) {
-      const c = String(r.category || '').trim()
-      if (c) catSet.add(c)
-      const m = String((r as { category_main?: string }).category_main || '').trim()
+      const cRaw = String(r.category || '').trim()
+      if (cRaw) catSet.add(normalizePromotionCategoryMain(cRaw))
+      const m = normalizePromotionCategoryMain((r as { category_main?: string }).category_main)
       if (m) mainSet.add(m)
     }
     const categories = Array.from(catSet).sort()

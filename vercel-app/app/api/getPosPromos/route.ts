@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
-import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
@@ -47,8 +47,8 @@ function mapRow(row: RawRow) {
     id: String(row.id ?? ''),
     code: String(row.code ?? ''),
     name: String(row.name ?? ''),
-    category: String(row.category ?? ''),
-    categoryMain: String(row.category_main ?? '').trim() || PROMOTION_MAIN_CATEGORY,
+    category: normalizePromotionCategoryMain(String(row.category ?? '').trim()),
+    categoryMain: normalizePromotionCategoryMain(row.category_main) || PROMOTION_MAIN_CATEGORY,
     price: Number(row.price) ?? 0,
     priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
     vatIncluded: !!row.vat_included,

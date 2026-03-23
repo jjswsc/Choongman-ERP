@@ -1241,9 +1241,9 @@ export default function PosTerminalPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing') || '준비중'}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete') || '결재 완료'}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll') || '전체'}</SelectItem>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -1259,9 +1259,9 @@ export default function PosTerminalPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing') || '준비중'}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete') || '결재 완료'}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll') || '전체'}</SelectItem>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -1277,9 +1277,9 @@ export default function PosTerminalPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing') || '준비중'}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete') || '결재 완료'}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll') || '전체'}</SelectItem>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
@@ -1703,7 +1703,8 @@ export default function PosTerminalPage() {
                                 ? tbl.order.createdAt.toISOString()
                                 : String(tbl.order.createdAt))
                             : undefined
-                          return { status, createdAt, targetMin }
+                          const guestCount = Math.max(0, Math.trunc(Number(tbl.order.guestCount ?? 0) || 0))
+                          return { status, createdAt, targetMin, guestCount: guestCount > 0 ? guestCount : undefined }
                         }}
                         selectedTableId={selectedTableId ?? servingTableId}
                         onTableSelect={handleTableSelect}
