@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 type BankTxRow = {
   id?: number
@@ -117,6 +118,12 @@ export async function POST(request: NextRequest) {
       }
       if (['expense', 'expense_advance'].includes(category) && !accountSubjectId) {
         return NextResponse.json({ success: false, message: '계정과목을 선택해 주세요.' }, { status: 400, headers })
+      }
+      if (accountSubjectId) {
+        const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
       }
     }
 

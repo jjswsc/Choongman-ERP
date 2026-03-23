@@ -42,6 +42,9 @@ export interface OrderItem {
   options?: string[]
   servedAt?: string | null
   servedBy?: string | null
+  promoId?: string
+  promoCode?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
 export interface Store {

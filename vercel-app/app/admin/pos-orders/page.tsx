@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Receipt, Search, ChevronDown, Pencil, Plus, Trash2, Printer } from "lucide-react"
@@ -173,7 +174,9 @@ export default function PosOrdersPage() {
   const copyOrderNo = (orderNo: string, e: React.MouseEvent) => {
     e.stopPropagation()
     navigator.clipboard.writeText(orderNo).then(
-      () => alert(t("posOrderNoCopied") || "주문번호가 복사되었습니다."),
+      () => {
+        void appAlert(t("posOrderNoCopied") || "주문번호가 복사되었습니다.")
+      },
       () => {}
     )
   }
@@ -202,7 +205,7 @@ export default function PosOrdersPage() {
   const handleSaveEdit = async () => {
     if (!editOrder) return
     if (editItems.length === 0) {
-      alert(t("posEditItemsRequired") || "항목이 하나 이상 필요합니다.")
+      await appAlert(t("posEditItemsRequired") || "항목이 하나 이상 필요합니다.")
       return
     }
     setUpdatingId(editOrder.id)
@@ -236,10 +239,10 @@ export default function PosOrdersPage() {
         )
         setEditOrder(null)
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setUpdatingId(null)
     }
@@ -268,7 +271,7 @@ export default function PosOrdersPage() {
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
     if (newStatus === "cancelled") {
-      if (!confirm(t("posCancelConfirm") || "이 주문을 취소하시겠습니까?")) return
+      if (!await appConfirm(t("posCancelConfirm") || "이 주문을 취소하시겠습니까?")) return
     }
     setUpdatingId(orderId)
     try {
@@ -278,10 +281,10 @@ export default function PosOrdersPage() {
           prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
         )
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setUpdatingId(null)
     }
@@ -290,12 +293,12 @@ export default function PosOrdersPage() {
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const storeCode = (o.storeCode ?? "").trim()
     if (!storeCode || !o.items?.length) {
-      alert(t("posPrintUnavailable") || "인쇄할 수 없습니다.")
+      await appAlert(t("posPrintUnavailable") || "인쇄할 수 없습니다.")
       return
     }
     const win = window.open("", "_blank")
     if (!win) {
-      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
       return
     }
     try {
@@ -361,7 +364,7 @@ export default function PosOrdersPage() {
       printOne(0)
     } catch (e) {
       win.close()
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Search, RotateCcw, Copy, Save, Calendar, ZoomIn, ZoomOut, Maximize2, Minimize2, Printer, FileSpreadsheet, CalendarDays } from "lucide-react"
@@ -148,9 +149,9 @@ export function AdminScheduleEdit({
     }
   }
 
-  const loadSaved = () => {
+  const loadSaved = async () => {
     if (!store || !monday) {
-      alert(t("att_store_monday_required"))
+      await appAlert(t("att_store_monday_required"))
       return
     }
     setLoading(true)
@@ -200,7 +201,9 @@ export function AdminScheduleEdit({
         setLeaveByDay(leaveMap)
         setLeaveDetails(leaveDetailList)
       })
-      .catch(() => alert(t("att_load_failed")))
+      .catch(async () => {
+        await appAlert(t("att_load_failed"))
+      })
       .finally(() => setLoading(false))
   }
 
@@ -215,9 +218,9 @@ export function AdminScheduleEdit({
     return set
   }, [leaveByDay])
 
-  const resetOnePerson = () => {
+  const resetOnePerson = async () => {
     if (!selectedStaff) {
-      alert(t("att_staff_select") + " " + t("att_select_first"))
+      await appAlert(t("att_staff_select") + " " + t("att_select_first"))
       return
     }
     const name = selectedStaff.name
@@ -267,14 +270,14 @@ export function AdminScheduleEdit({
     })
   }
 
-  const applyQuick = (area: string) => {
+  const applyQuick = async (area: string) => {
     if (!selectedStaff) {
-      alert(t("att_staff_select") + " " + t("att_select_first"))
+      await appAlert(t("att_staff_select") + " " + t("att_select_first"))
       return
     }
     const namesOnLeave = leaveByDay[quickDay]
     if (namesOnLeave?.has(selectedStaff.name)) {
-      alert(t("leaveDayCannotSchedule") || "해당 요일은 휴가일이라 스케줄을 넣을 수 없습니다.")
+      await appAlert(t("leaveDayCannotSchedule") || "해당 요일은 휴가일이라 스케줄을 넣을 수 없습니다.")
       return
     }
     const [sh, sm] = quickStart.split(":").map(Number)
@@ -304,13 +307,13 @@ export function AdminScheduleEdit({
     })
   }
 
-  const copyToNext = () => {
+  const copyToNext = async () => {
     if (!store || !monday) {
-      alert(t("att_store_monday_required"))
+      await appAlert(t("att_store_monday_required"))
       return
     }
     const nextMonday = addDaysSchedule(monday, 7)
-    if (!confirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
+    if (!await appConfirm(t("att_copy_confirm").replace("{date}", nextMonday))) return
 
     const nextDayStrs = Array.from({ length: 7 }, (_, i) => addDaysSchedule(nextMonday, i))
     const map: Record<string, { work: string[]; break: string[] }> = {}
@@ -392,29 +395,31 @@ export function AdminScheduleEdit({
     }
 
     if (rows.length === 0) {
-      alert(t("att_no_data_to_save") || "복사할 스케줄 데이터가 없습니다.")
+      await appAlert(t("att_no_data_to_save") || "복사할 스케줄 데이터가 없습니다.")
       return
     }
 
     setSaving(true)
     saveSchedule({ store, monday: nextMonday, rows })
-      .then((r) => {
+      .then(async (r) => {
         if (r.success) {
-          alert(translateApiMessage(r.message, t) || (t("att_saved") || "저장되었습니다."))
+          await appAlert(translateApiMessage(r.message, t) || (t("att_saved") || "저장되었습니다."))
           setMonday(nextMonday)
         } else if (r.message === "schedule_dup_area" && r.duplicateNames) {
-          alert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
+          await appAlert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
         } else {
-          alert(translateApiMessage(r.message, t) || (t("att_save_failed") || "저장에 실패했습니다."))
+          await appAlert(translateApiMessage(r.message, t) || (t("att_save_failed") || "저장에 실패했습니다."))
         }
       })
-      .catch((e) => alert((t("att_save_failed") || "저장 실패") + ": " + (e?.message || e)))
+      .catch(async (e) => {
+        await appAlert((t("att_save_failed") || "저장 실패") + ": " + (e?.message || e))
+      })
       .finally(() => setSaving(false))
   }
 
-  const doSave = () => {
+  const doSave = async () => {
     if (!store || !monday) {
-      alert(t("att_store_monday_required"))
+      await appAlert(t("att_store_monday_required"))
       return
     }
     const map: Record<string, { work: string[]; break: string[] }> = {}
@@ -498,20 +503,22 @@ export function AdminScheduleEdit({
     }
 
     if (rows.length === 0) {
-      alert(t("att_no_data_to_save"))
+      await appAlert(t("att_no_data_to_save"))
       return
     }
     setSaving(true)
     saveSchedule({ store, monday, rows })
-      .then((r) => {
-        if (r.success) alert(translateApiMessage(r.message, t) || t("att_saved"))
+      .then(async (r) => {
+        if (r.success) await appAlert(translateApiMessage(r.message, t) || t("att_saved"))
         else if (r.message === "schedule_dup_area" && r.duplicateNames) {
-          alert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
+          await appAlert(t("schedule_dup_area").replace("{names}", r.duplicateNames))
         } else {
-          alert(translateApiMessage(r.message, t) || t("att_save_failed"))
+          await appAlert(translateApiMessage(r.message, t) || t("att_save_failed"))
         }
       })
-      .catch((e) => alert(t("att_save_failed") + ": " + (e?.message || e)))
+      .catch(async (e) => {
+        await appAlert(t("att_save_failed") + ": " + (e?.message || e))
+      })
       .finally(() => setSaving(false))
   }
 

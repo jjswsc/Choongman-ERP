@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -95,7 +96,7 @@ export function VisitTab() {
   const handleVisit = async (type: "방문시작" | "방문종료") => {
     if (!auth?.user) return
     if (type === "방문시작" && !selectedStore) {
-      alert(t("visitErrSelectStore"))
+      await appAlert(t("visitErrSelectStore"))
       return
     }
 
@@ -129,7 +130,7 @@ export function VisitTab() {
       const forceType = type === "방문시작" ? "강제 방문시작" : "강제 방문종료"
       const useForce =
         lat === "Unknown" || lng === "Unknown"
-          ? window.confirm(t("attGpsFailConfirm"))
+          ? await appConfirm(t("attGpsFailConfirm"))
           : false
 
       const visitType = useForce ? forceType : type
@@ -156,10 +157,10 @@ export function VisitTab() {
         }
         loadStatusAndLog()
       } else {
-        alert(translateApiMessage(result.msg, t) || t("msg_save_fail"))
+        await appAlert(translateApiMessage(result.msg, t) || t("msg_save_fail"))
       }
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(null)
     }

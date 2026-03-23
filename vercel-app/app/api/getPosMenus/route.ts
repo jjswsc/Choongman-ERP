@@ -5,6 +5,7 @@ const POS_MENUS_SELECT_BASE = 'id,code,name,category,price,price_delivery,image,
 const POS_MENUS_SELECT = POS_MENUS_SELECT_BASE.replace(',category,', ',category,category_main,')
 const POS_MENUS_SELECT_WITH_GROUPS = POS_MENUS_SELECT + ',option_selection_groups'
 const POS_MENUS_SELECT_WITH_ALL = POS_MENUS_SELECT_WITH_GROUPS + ',kitchen_printer,cooking_time_min,is_banban'
+const POS_MENUS_SELECT_WITH_ALL_PROMO = POS_MENUS_SELECT_WITH_ALL + ',promo_id'
 
 /** POS 메뉴 목록 조회 (category_main, option_selection_groups 등 컬럼 없으면 폴백) */
 export async function GET() {
@@ -13,7 +14,13 @@ export async function GET() {
 
   try {
     let rows: unknown[] | null = null
-    for (const cols of [POS_MENUS_SELECT_WITH_ALL, POS_MENUS_SELECT_WITH_GROUPS, POS_MENUS_SELECT, POS_MENUS_SELECT_BASE]) {
+    for (const cols of [
+      POS_MENUS_SELECT_WITH_ALL_PROMO,
+      POS_MENUS_SELECT_WITH_ALL,
+      POS_MENUS_SELECT_WITH_GROUPS,
+      POS_MENUS_SELECT,
+      POS_MENUS_SELECT_BASE,
+    ]) {
       try {
         rows = (await supabaseSelect('pos_menus', {
           order: 'sort_order.asc,name.asc',
@@ -43,6 +50,7 @@ export async function GET() {
       kitchen_printer?: number | null
       cooking_time_min?: number | null
       is_banban?: boolean
+      promo_id?: number | null
     }[]
 
     const list = (typedRows || []).map((row) => {
@@ -53,6 +61,7 @@ export async function GET() {
       const kp = row.kitchen_printer
       const ctm = row.cooking_time_min
       const isBanban = (row as { is_banban?: boolean }).is_banban === true
+      const pid = row.promo_id
       return {
         id: String(row.id ?? ''),
         code: String(row.code ?? ''),
@@ -70,6 +79,7 @@ export async function GET() {
         kitchenPrinter: kp === 1 || kp === 2 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,
+        promoId: pid != null && Number(pid) > 0 ? String(pid) : null,
       }
     })
 

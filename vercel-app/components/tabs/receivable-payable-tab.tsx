@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -201,11 +202,11 @@ export function ReceivablePayableTab() {
   const handleAdd = async () => {
     const amount = Number(addAmount?.replace(/,/g, ""))
     if (!amount || amount <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (!addEntity?.trim()) {
-      alert(tab === "receivable"
+      await appAlert(tab === "receivable"
         ? tt("receivableSelectCustomer", "매출처를 선택해 주세요.")
         : tt("payableSelectVendor", "매입처를 선택해 주세요."))
       return
@@ -228,10 +229,10 @@ export function ReceivablePayableTab() {
         setAddMemo("")
         loadList()
       } else {
-        alert(translateApiMessage(res.message, t) || res.message)
+        await appAlert(translateApiMessage(res.message, t) || res.message)
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAddSaving(false)
     }

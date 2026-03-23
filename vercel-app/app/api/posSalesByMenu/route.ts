@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
     const search = searchParams.get('search')?.trim().toLowerCase()
+    const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
@@ -30,11 +32,12 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 10000,
-      select: 'items_json,status',
-    })) as { items_json?: string; status?: string }[]
+      select: 'items_json,status,order_type',
+    })) as { items_json?: string; status?: string; order_type?: string }[]
 
     const byMenu: Record<string, { qty: number; sales: number }> = {}
     for (const r of rows) {
+      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
       let items: PosOrderItem[] = []
       try {

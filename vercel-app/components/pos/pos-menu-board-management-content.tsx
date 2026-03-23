@@ -1,4 +1,5 @@
 'use client'
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import { Plus, Pencil, Eye, Trash2 } from 'lucide-react'
@@ -123,11 +124,11 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
 
   const handleSave = async () => {
     if (!form.storeCode.trim()) {
-      alert('매장을 선택해 주세요.')
+      await appAlert('매장을 선택해 주세요.')
       return
     }
     if (!form.boardName.trim()) {
-      alert('메뉴판 이름을 입력해 주세요.')
+      await appAlert('메뉴판 이름을 입력해 주세요.')
       return
     }
     const res = await savePosMenuBoard({
@@ -146,7 +147,7 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
       isActive: form.isActive,
     })
     if (!res?.success) {
-      alert(res?.message || '저장 실패')
+      await appAlert(res?.message || '저장 실패')
       return
     }
     setDialogOpen(false)
@@ -154,10 +155,10 @@ export function PosMenuBoardManagementContent({ storeCode }: { storeCode?: strin
   }
 
   const handleDelete = async (row: PosMenuBoardConfig) => {
-    if (!confirm(`삭제하시겠습니까?\n${row.boardName}`)) return
+    if (!await appConfirm(`삭제하시겠습니까?\n${row.boardName}`)) return
     const res = await deletePosMenuBoard({ id: row.id })
     if (!res?.success) {
-      alert(res?.message || '삭제 실패')
+      await appAlert(res?.message || '삭제 실패')
       return
     }
     load()

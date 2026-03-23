@@ -18,6 +18,7 @@ import { HrTab } from "@/components/tabs/hr-tab"
 import { AdminTab } from "@/components/tabs/admin-tab"
 import { VisitTab } from "@/components/tabs/visit-tab"
 import { PettyCashTab } from "@/components/tabs/petty-cash-tab"
+import { RepairTab } from "@/components/tabs/repair-tab"
 
 function DashboardLoading() {
   const [stuck, setStuck] = useState(false)
@@ -79,6 +80,7 @@ export default function DashboardPage() {
         {activeTab === "hr" && <HrTab />}
         {activeTab === "timesheet" && <TimesheetTab />}
         {activeTab === "visit" && <VisitTab />}
+        {activeTab === "repair" && <RepairTab />}
         {activeTab === "pettycash" && <PettyCashTab />}
         {activeTab === "admin" && <AdminTab />}
       </main>

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -96,7 +97,7 @@ export function AdminLeaveApproval() {
       setRejectReason("")
       loadLeaveList()
     } else {
-      alert(translateApiMessage(res.message) || t("processFail"))
+      await appAlert(translateApiMessage(res.message) || t("processFail"))
     }
   }
 
@@ -105,11 +106,11 @@ export function AdminLeaveApproval() {
     setRejectDialog({ id })
   }
 
-  const handleRejectConfirm = () => {
+  const handleRejectConfirm = async () => {
     if (!rejectDialog) return
     const reason = rejectReason.trim()
     if (!reason) {
-      alert(t("leaveRejectReasonRequired") || "반려 사유를 입력해 주세요.")
+      await appAlert(t("leaveRejectReasonRequired") || "반려 사유를 입력해 주세요.")
       return
     }
     handleLeaveApprove(rejectDialog.id, "반려", reason)
@@ -220,7 +221,7 @@ export function AdminLeaveApproval() {
                         <div className="flex items-center justify-center gap-1.5">
                           <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
                           <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleRejectClick(item.id)}>{t("adminRejected")}</Button>
-                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                          <Button variant="outline" size="sm" className="h-7 px-2 text-xs font-medium text-destructive hover:text-destructive" onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-center gap-1.5">
@@ -228,7 +229,7 @@ export function AdminLeaveApproval() {
                           {(item.status === "승인" || item.status === "Approved") && (
                             <Button size="sm" className="h-7 px-2 text-xs font-medium" onClick={() => handleLeaveApprove(item.id, "승인")}>{t("adminApproved")}</Button>
                           )}
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => { if (window.confirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={async () => { if (await appConfirm(t("leaveDeleteConfirm") || "이 휴가 신청을 삭제하시겠습니까?")) handleLeaveApprove(item.id, "삭제") }}>{t("delete")}</Button>
                         </div>
                       )}
                     </td>

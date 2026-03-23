@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
@@ -435,17 +436,17 @@ export function AdminOrderHistory() {
   }
 
   const handleDeliveryComplete = async (orderId: number) => {
-    if (!confirm(t("statusDelivered") || "배송 완료로 변경하시겠습니까? 모바일 수령 없이 직접 완료 처리됩니다.")) return
+    if (!await appConfirm(t("statusDelivered") || "배송 완료로 변경하시겠습니까? 모바일 수령 없이 직접 완료 처리됩니다.")) return
     setDeliveryCompleteOrderId(orderId)
     try {
       const res = await updateOrderDeliveryStatus({ orderId, deliveryStatus: "배송완료" })
       if (res.success) {
         await load()
       } else {
-        alert(res.message || "변경에 실패했습니다.")
+        await appAlert(res.message || "변경에 실패했습니다.")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeliveryCompleteOrderId(null)
     }

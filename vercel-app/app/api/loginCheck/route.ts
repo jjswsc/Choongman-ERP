@@ -44,11 +44,13 @@ export async function POST(req: NextRequest) {
     if (rawRole.includes('director') || rawRole.includes('ceo') || rawRole.includes('대표')) finalRole = 'director'
     else if (rawRole.includes('officer') || rawRole.includes('총괄') || rawRole.includes('오피스')) finalRole = 'officer'
     else if (rawRole.includes('manager') || rawRole.includes('점장') || rawRole.includes('매니저')) finalRole = 'manager'
+    else if (rawRole.includes('franchisee') || rawRole.includes('가맹') || rawRole.includes('점주')) finalRole = 'franchisee'
+    else if (rawRole.includes('accounting') || rawRole.includes('회계')) finalRole = 'accounting'
     else if (empIsOfficeStore) finalRole = 'officer' // store=Office → Officer로 인식
 
-    // 관리자 페이지: director, officer, manager만 접근. 일반 직원(staff)은 권한 없음으로 로그인 차단
-    // ※ Office 소속이라도 role에 director/officer/manager가 없으면 접근 불가
-    if (isAdminPage && finalRole !== 'director' && finalRole !== 'officer' && finalRole !== 'manager') {
+    // 관리자 페이지: 본사·매장 관리·회계 등 허용 역할만. 일반 직원(staff)은 차단
+    const adminAllowed = new Set(['director', 'officer', 'manager', 'franchisee', 'accounting'])
+    if (isAdminPage && !adminAllowed.has(finalRole)) {
       return NextResponse.json({ success: false, message: '관리자 권한이 없습니다.' }, { headers })
     }
 

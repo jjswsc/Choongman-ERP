@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
@@ -336,7 +337,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
   const handleSave = async () => {
     if (!effectiveStore) {
-      alert(t('store') || '매장을 선택하세요.')
+      await appAlert(t('store') || '매장을 선택하세요.')
       return
     }
     setSaving(true)
@@ -363,22 +364,22 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
         closed,
       })
       if (res.success) {
-        alert(t('itemsAlertSaved') || '저장되었습니다.')
+        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
         loadData()
       } else {
-        alert(res.message || t('msg_save_fail_detail'))
+        await appAlert(res.message || t('msg_save_fail_detail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
   }
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     const w = window.open('', '_blank')
     if (!w) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
       return
     }
     const storeLabel = canSearchAll && storeFilter ? storeFilter : effectiveStore

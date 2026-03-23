@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -64,7 +65,7 @@ export function PosMenuCategorySettingsDialog({
   const handleSaveMain = async () => {
     const name = formMain.trim()
     if (!name) {
-      alert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
+      await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
     if (!config) return
@@ -91,17 +92,17 @@ export function PosMenuCategorySettingsDialog({
         setFormMain("")
         onSaved?.()
       } else {
-        alert((res as { message?: string })?.message || t("msg_save_fail_detail"))
+        await appAlert((res as { message?: string })?.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteMain = async (main: string) => {
-    if (!confirm(`"${main}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${main}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
     if (!config) return
     setDeletingMain(main)
     try {
@@ -117,10 +118,10 @@ export function PosMenuCategorySettingsDialog({
         setConfig({ mainCategories: newMains, categoriesByMain: newCategoriesByMain })
         onSaved?.()
       } else {
-        alert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
+        await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
     } finally {
       setDeletingMain(null)
     }
@@ -130,7 +131,7 @@ export function PosMenuCategorySettingsDialog({
     const main = formSub.main.trim()
     const name = formSub.name.trim()
     if (!main || !name) {
-      alert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
+      await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
     if (!config) return
@@ -158,17 +159,17 @@ export function PosMenuCategorySettingsDialog({
         setFormSub({ main: "", name: "" })
         onSaved?.()
       } else {
-        alert((res as { message?: string })?.message || t("msg_save_fail_detail"))
+        await appAlert((res as { message?: string })?.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeleteSub = async (main: string, sub: string) => {
-    if (!confirm(`"${main} > ${sub}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${main} > ${sub}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
     if (!config) return
     setDeletingSub(`${main}|${sub}`)
     try {
@@ -186,10 +187,10 @@ export function PosMenuCategorySettingsDialog({
         setConfig({ ...config, categoriesByMain: newCategoriesByMain })
         onSaved?.()
       } else {
-        alert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
+        await appAlert((res as { message?: string })?.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
     } finally {
       setDeletingSub(null)
     }

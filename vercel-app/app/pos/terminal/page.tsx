@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -9,7 +10,7 @@ import { DeliveryOrderPanel } from '@/components/pos/delivery-order-panel'
 import { TakeoutOrderPanel } from '@/components/pos/takeout-order-panel'
 import { OrderBarList, type OrderBarItem } from '@/components/pos/order-bar-list'
 import { PosTerminalMenuScreen } from '@/components/pos/pos-terminal-menu-screen'
-import { CartPanel, type CartPanelHandle } from '@/components/pos/cart-panel'
+import { CartPanel, type CartPanelHandle, type CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 import { LiveMenuSearchDialog } from '@/components/pos/live-menu-search-dialog'
 import { usePosStore } from '@/hooks/use-pos-store'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -23,6 +24,7 @@ import { usePosMainDevice } from '@/hooks/use-pos-main-device'
 import { LayoutGrid, Bike, Package, Search, ShoppingCart } from 'lucide-react'
 import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTodaySales, getPosDeliveryApps, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
 import { savePosOrderWithOffline } from '@/lib/offline'
+import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
 import { OfflineBanner } from '@/components/offline-banner'
 import { PosReceiptModal, type ReceiptModalData } from '@/components/pos/pos-receipt-modal'
 import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-no-dialog'
@@ -530,8 +532,9 @@ export default function PosTerminalPage() {
               printHtmlInHiddenIframe(html, {
                 title: slip.label,
                 printDelayMs: 250,
-                onPrintUnavailable: () =>
-                  alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                onPrintUnavailable: () => {
+                  void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                },
                 onAfterCleanup: () => {
                   if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
                 },
@@ -655,8 +658,9 @@ export default function PosTerminalPage() {
                 printHtmlInHiddenIframe(html, {
                   title: slip.label,
                   printDelayMs: 250,
-                  onPrintUnavailable: () =>
-                    alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                  onPrintUnavailable: () => {
+                    void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                  },
                   onAfterCleanup: () => {
                     if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
                   },
@@ -713,7 +717,7 @@ export default function PosTerminalPage() {
     otherMode,
   }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
 
-  const printReceiptNow = (
+  const printReceiptNow = async (
     payload: {
       orderNo: string
       storeCode: string
@@ -830,7 +834,7 @@ export default function PosTerminalPage() {
       const cw = iframe.contentWindow
       if (!cw) {
         iframe.remove()
-        alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+        await appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
         return
       }
       cw.document.open()
@@ -863,7 +867,7 @@ export default function PosTerminalPage() {
       existingWindow != null && typeof existingWindow !== 'undefined' && !existingWindow.closed ? existingWindow : null
     if (!printWindow) printWindow = window.open('', '_blank')
     if (!printWindow || printWindow.closed) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
       return
     }
     printWindow.document.write(receiptHtml)
@@ -1165,7 +1169,7 @@ export default function PosTerminalPage() {
     setServingTableId(null)
     setSelectedTableId(tableId)
   }
-  const handleAddItemToCart = (item: { id: string; name: string; price: number }) => {
+  const handleAddItemToCart = (item: CartPanelAddItemPayload) => {
     cartRef.current?.addItem(item)
   }
 
@@ -1450,11 +1454,11 @@ export default function PosTerminalPage() {
                               paymentQr: 0,
                               paymentOther: 0,
                               pricingAdjustments,
-                              items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                              items: cartLinesToPosOrderItems(payload.items),
                             })
                             if (!res.success) {
                               const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                              alert(msg)
+                              await appAlert(msg)
                               return
                             }
                             if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
@@ -1468,7 +1472,7 @@ export default function PosTerminalPage() {
                                 orderType: t('posOrderTypeDineIn') || '매장',
                                 tableName: payload.tableName,
                                 memo: payload.memo,
-                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                                items: cartLinesToPosOrderItems(payload.items),
                                 subtotal,
                                 discountAmt,
                                 total: pricing.finalTotal,
@@ -1539,8 +1543,9 @@ export default function PosTerminalPage() {
                                     printHtmlInHiddenIframe(html, {
                                       title: slip.label,
                                       printDelayMs: 250,
-                                      onPrintUnavailable: () =>
-                                        alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                                      onPrintUnavailable: () => {
+                                        void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                                      },
                                       onAfterCleanup: () => {
                                         if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
                                       },
@@ -1565,7 +1570,7 @@ export default function PosTerminalPage() {
                             if (existingOrderId != null && payload.payment != null) {
                               await updatePosOrder({
                                 id: existingOrderId,
-                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                                items: cartLinesToPosOrderItems(payload.items),
                                 tableName: payload.tableName,
                                 memo: payload.memo,
                                 discountAmt: payload.discountAmt ?? 0,
@@ -1596,7 +1601,7 @@ export default function PosTerminalPage() {
                                 couponCode: payload.couponCode,
                                 couponDiscountAmt: payload.couponDiscountAmt,
                                 pointUsed: payload.pointUsed,
-                                items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                                items: cartLinesToPosOrderItems(payload.items),
                                 paymentCash: payload.payment?.paymentCash ?? 0,
                                 paymentCard: payload.payment?.paymentCard ?? 0,
                                 paymentQr: payload.payment?.paymentQr ?? 0,
@@ -1618,7 +1623,7 @@ export default function PosTerminalPage() {
                             const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                             setReceiptData({
                               orderNo,
-                              items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                              items: cartLinesToPosOrderItems(payload.items),
                               subtotal,
                               discountAmt,
                               total: pricing.finalTotal,
@@ -1737,11 +1742,12 @@ export default function PosTerminalPage() {
                   selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
                   onBack={() => setSelectedDeliveryTargetId(null)}
                   backButtonLabel={t('posBack') || '뒤로가기'}
-                  onAddItem={handleAddItemToCart}
-                  orderType="delivery"
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  className="h-full"
-                />
+                      onAddItem={handleAddItemToCart}
+                      orderType="delivery"
+                      deliveryAppCode={deliveryApp || null}
+                      touchMode={isNarrowViewport ? 'large' : 'default'}
+                      className="h-full"
+                    />
               ) : (
                 <OrderBarList
                   items={currentDeliveryBarItems}
@@ -1941,7 +1947,7 @@ export default function PosTerminalPage() {
                 if (existingOrderId != null && payload.payment != null) {
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                    items: cartLinesToPosOrderItems(payload.items),
                     tableName: payload.orderLabel,
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
@@ -1964,7 +1970,7 @@ export default function PosTerminalPage() {
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                  items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -1998,7 +2004,7 @@ export default function PosTerminalPage() {
                 if (existingOrderId != null && payload.payment != null) {
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                    items: cartLinesToPosOrderItems(payload.items),
                     tableName: payload.orderLabel,
                     memo: payload.memo ?? '',
                     discountAmt: payload.discountAmt ?? 0,
@@ -2021,7 +2027,7 @@ export default function PosTerminalPage() {
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo: pendingReceiptOrderNo ?? '',
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                  items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -2069,11 +2075,11 @@ export default function PosTerminalPage() {
                   paymentQr: 0,
                   paymentOther: 0,
                   pricingAdjustments,
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                  items: cartLinesToPosOrderItems(payload.items),
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                  alert(msg)
+                  await appAlert(msg)
                   return
                 }
                 if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
@@ -2087,7 +2093,7 @@ export default function PosTerminalPage() {
                     orderType: t('posOrderTypeDineIn') || '매장',
                     tableName: payload.tableName,
                     memo: payload.memo,
-                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                    items: cartLinesToPosOrderItems(payload.items),
                     subtotal,
                     discountAmt,
                     total: pricing.finalTotal,
@@ -2158,8 +2164,9 @@ export default function PosTerminalPage() {
                         printHtmlInHiddenIframe(html, {
                           title: slip.label,
                           printDelayMs: 250,
-                          onPrintUnavailable: () =>
-                            alert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.'),
+                          onPrintUnavailable: () => {
+                            void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+                          },
                           onAfterCleanup: () => {
                             if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
                           },
@@ -2184,7 +2191,7 @@ export default function PosTerminalPage() {
                 if (existingOrderId != null && payload.payment != null) {
                   await updatePosOrder({
                     id: existingOrderId,
-                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                    items: cartLinesToPosOrderItems(payload.items),
                     tableName: payload.tableName,
                     memo: payload.memo,
                     discountAmt: payload.discountAmt ?? 0,
@@ -2215,7 +2222,7 @@ export default function PosTerminalPage() {
                     couponCode: payload.couponCode,
                     couponDiscountAmt: payload.couponDiscountAmt,
                     pointUsed: payload.pointUsed,
-                    items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                    items: cartLinesToPosOrderItems(payload.items),
                     paymentCash: payload.payment?.paymentCash ?? 0,
                     paymentCard: payload.payment?.paymentCard ?? 0,
                     paymentQr: payload.payment?.paymentQr ?? 0,
@@ -2237,7 +2244,7 @@ export default function PosTerminalPage() {
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo,
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                  items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,
@@ -2278,7 +2285,7 @@ export default function PosTerminalPage() {
                   couponCode: payload.couponCode,
                   couponDiscountAmt: payload.couponDiscountAmt,
                   pointUsed: payload.pointUsed,
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity })),
+                  items: cartLinesToPosOrderItems(payload.items),
                   paymentCash: payload.payment?.paymentCash ?? 0,
                   paymentCard: payload.payment?.paymentCard ?? 0,
                   paymentQr: payload.payment?.paymentQr ?? 0,
@@ -2287,7 +2294,7 @@ export default function PosTerminalPage() {
                 })
                 if (!res.success) {
                   const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                  alert(msg)
+                  await appAlert(msg)
                   return
                 }
                 const orderNo = (res as { orderNo?: string }).orderNo ?? ''
@@ -2296,7 +2303,7 @@ export default function PosTerminalPage() {
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
                 setReceiptData({
                   orderNo,
-                  items: payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                  items: cartLinesToPosOrderItems(payload.items),
                   subtotal,
                   discountAmt,
                   total: pricing.finalTotal,

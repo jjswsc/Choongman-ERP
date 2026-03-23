@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,7 +42,7 @@ export default function MemberCouponsPage() {
                 const id = Number(memberId || 0)
                 if (!id || !couponCode.trim()) return
                 const res = await issueMemberCoupon({ memberId: id, couponCode: couponCode.trim().toUpperCase() })
-                if (!res.success) alert(res.message || "발급 실패")
+                if (!res.success) await appAlert(res.message || "발급 실패")
                 setCouponCode("")
                 await load()
               }}

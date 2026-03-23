@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -204,11 +205,11 @@ export function HrTab() {
     fetchPayroll()
   }, [auth?.store, auth?.user, fetchPayroll])
 
-  const sendAttendance = (type: string) => {
+  const sendAttendance = async (type: string) => {
     if (!auth?.store || !auth?.user) return
     const confirmKey = ATT_TYPE_TO_CONFIRM_KEY[type] || "attConfirmIn"
     const msg = t(confirmKey as "attConfirmIn" | "attConfirmOut" | "attConfirmBreak" | "attConfirmResume")
-    if (!confirm(msg)) return
+    if (!(await appConfirm(msg))) return
 
     const options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     const gpsFailMsg = t("attGpsFailConfirm")
@@ -221,7 +222,7 @@ export function HrTab() {
         lat,
         lng,
       })
-        .then((res) => {
+        .then(async (res) => {
           const isGpsPending = res.code === "ATT_GPS_PENDING"
           const isDuplicate =
             typeof res.message === "string" &&
@@ -229,32 +230,34 @@ export function HrTab() {
             res.message.includes("기록이 있습니다")
 
           if (isDuplicate) {
-            alert(t("attDuplicateOnce"))
+            await appAlert(t("attDuplicateOnce"))
             loadButtonState()
             return
           }
           if (!isGpsPending && res.message && (res.message.includes("지각") || res.message.includes("조퇴") || res.message.includes("연장"))) {
-            const reason = prompt(t("attReasonPrompt"))
+            const reason = await appPrompt(t("attReasonPrompt"))
             if (reason) {
               // updateLastReason would need an API - skip for now
             }
           }
-          if (isGpsPending) alert(t("attGpsPendingSaved"))
-          else alert(translateApiMessage(res.message, t) || t("msg_done"))
+          if (isGpsPending) await appAlert(t("attGpsPendingSaved"))
+          else await appAlert(translateApiMessage(res.message, t) || t("msg_done"))
 
           if ((res.message && res.message.includes("✅")) || isGpsPending) {
             loadButtonState()
             loadTodayLog()
           }
         })
-        .catch((e) => alert((e instanceof Error ? e.message : String(e)) + "\n" + t("orderFail")))
+        .catch(async (e) => {
+          await appAlert((e instanceof Error ? e.message : String(e)) + "\n" + t("orderFail"))
+        })
         .finally(() => setSubmitting(null))
     }
 
     navigator.geolocation.getCurrentPosition(
       (p) => doSend(p.coords.latitude, p.coords.longitude),
-      (e) => {
-        if (confirm(gpsFailMsg)) doSend("Unknown", "Unknown")
+      async () => {
+        if (await appConfirm(gpsFailMsg)) doSend("Unknown", "Unknown")
       },
       options
     )
@@ -263,7 +266,7 @@ export function HrTab() {
   const handleRequestLeave = async () => {
     if (!auth?.store || !auth?.user) return
     if (!leaveDate.trim()) {
-      alert(t("msg_select_date"))
+      await appAlert(t("msg_select_date"))
       return
     }
     setLeaveSubmitting(true)
@@ -276,14 +279,14 @@ export function HrTab() {
         reason: leaveReason,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("leaveRequestSuccess"))
+        await appAlert(translateApiMessage(res.message, t) || t("leaveRequestSuccess"))
         setLeaveReason("")
         loadLeaveInfo()
       } else {
-        alert(translateApiMessage(res.message, t) || t("leaveRequestFail"))
+        await appAlert(translateApiMessage(res.message, t) || t("leaveRequestFail"))
       }
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLeaveSubmitting(false)
     }
@@ -312,12 +315,12 @@ export function HrTab() {
       })
       if (res.success) {
         loadLeaveInfo()
-        alert(translateApiMessage(res.message, t) || t("leaveCertUploaded"))
+        await appAlert(translateApiMessage(res.message, t) || t("leaveCertUploaded"))
       } else {
-        alert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
+        await appAlert(translateApiMessage(res.message, t) || t("msg_upload_fail"))
       }
     } catch (err) {
-      alert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
+      await appAlert(t("msg_error_prefix") + (err instanceof Error ? err.message : String(err)))
     } finally {
       setCertUploadingId(null)
     }

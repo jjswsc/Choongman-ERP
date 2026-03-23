@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -180,18 +181,18 @@ export function AdminNoticeCompose() {
     setFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target
     const selected = input.files
     if (!selected || selected.length === 0) return
     const remaining = MAX_FILES - files.length
     if (remaining <= 0) {
-      alert(t("noticeFileLimit") || "파일당 5MB, 최대 10개")
+      await appAlert(t("noticeFileLimit") || "파일당 5MB, 최대 10개")
       input.value = ""
       return
     }
     const newFiles: AttachedFile[] = []
-    const processNext = (idx: number) => {
+    const processNext = async (idx: number) => {
       if (idx >= selected.length || newFiles.length >= remaining) {
         if (newFiles.length > 0) setFiles((prev) => [...prev, ...newFiles])
         input.value = ""
@@ -199,8 +200,8 @@ export function AdminNoticeCompose() {
       }
       const file = selected[idx]
       if (file.size > MAX_FILE_SIZE) {
-        alert(`${file.name}: ` + (t("noticeFileLimit") || "파일당 1MB, 최대 3개"))
-        processNext(idx + 1)
+        await appAlert(`${file.name}: ` + (t("noticeFileLimit") || "파일당 1MB, 최대 3개"))
+        void processNext(idx + 1)
         return
       }
       const reader = new FileReader()
@@ -218,16 +219,16 @@ export function AdminNoticeCompose() {
           dataUrl,
           mime,
         })
-        processNext(idx + 1)
+        void processNext(idx + 1)
       }
       reader.readAsDataURL(file)
     }
-    processNext(0)
+    void processNext(0)
   }
 
   const handleSend = async () => {
     if (!title.trim()) {
-      alert(t("adminNoticeSubjectRequired"))
+      await appAlert(t("adminNoticeSubjectRequired"))
       return
     }
     if (!auth?.store || !auth?.user) return
@@ -271,9 +272,9 @@ export function AdminNoticeCompose() {
         setSelectedRecipients([])
         setFiles([])
         window.dispatchEvent(new CustomEvent("notice-sent"))
-        alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
+        await appAlert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
       } else {
-        alert(translateApiMessage(res.message, t) || t("noticeSendFail"))
+        await appAlert(translateApiMessage(res.message, t) || t("noticeSendFail"))
       }
     } finally {
       setSending(false)
@@ -317,9 +318,9 @@ export function AdminNoticeCompose() {
               ]
                 .filter(Boolean)
                 .join('\n')
-              alert(msg)
+              await appAlert(msg)
             } catch (e) {
-              alert('점검 실패: ' + (e instanceof Error ? e.message : String(e)))
+              await appAlert('점검 실패: ' + (e instanceof Error ? e.message : String(e)))
             }
           }}
         >

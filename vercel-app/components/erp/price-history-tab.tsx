@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { History, Search, Calendar } from "lucide-react"
@@ -113,18 +114,18 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
   }, [entityTypes, mode, fromDate, toDate, searchTerm, mainCategoryFilter, categoryFilter, menuFilter])
 
   const handleBackfill = React.useCallback(async () => {
-    if (!confirm(t("priceHistoryBackfillConfirm") || "기존 메뉴·품목의 현재 가격을 이력에 등록합니다. 계속할까요?")) return
+    if (!await appConfirm(t("priceHistoryBackfillConfirm") || "기존 메뉴·품목의 현재 가격을 이력에 등록합니다. 계속할까요?")) return
     setBackfilling(true)
     try {
       const res = await backfillPriceHistory()
       if (res.success) {
-        alert(res.message || `${res.inserted}건 등록됨`)
+        await appAlert(res.message || `${res.inserted}건 등록됨`)
         loadHistory()
       } else {
-        alert(res.error || t("msg_save_fail_detail"))
+        await appAlert(res.error || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "실패")
+      await appAlert(e instanceof Error ? e.message : "실패")
     } finally {
       setBackfilling(false)
     }
@@ -133,22 +134,22 @@ export function PriceHistoryTab({ entityTypes, mode, title }: PriceHistoryTabPro
   const handleRestoreByDate = React.useCallback(async () => {
     const date = restoreDate.trim()
     if (!date) {
-      alert(t("priceHistoryRestoreDateRequired") || "복구할 날짜(YYYY-MM-DD)를 선택하세요.")
+      await appAlert(t("priceHistoryRestoreDateRequired") || "복구할 날짜(YYYY-MM-DD)를 선택하세요.")
       return
     }
-    if (!confirm(t("priceHistoryRestoreByDateConfirm") || `가격 이력의 ${date} 시점 가격으로 메뉴·옵션 가격을 덮어씁니다. 계속할까요?`)) return
+    if (!await appConfirm(t("priceHistoryRestoreByDateConfirm") || `가격 이력의 ${date} 시점 가격으로 메뉴·옵션 가격을 덮어씁니다. 계속할까요?`)) return
     setRestoring(true)
     try {
       const res = await restoreFromPriceHistory({ targetDate: date, dryRun: false })
       if (res.success) {
-        alert(res.message || "복구 완료")
+        await appAlert(res.message || "복구 완료")
         setRestoreDate("")
         loadHistory()
       } else {
-        alert(res.error || t("msg_save_fail_detail"))
+        await appAlert(res.error || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : "실패")
+      await appAlert(e instanceof Error ? e.message : "실패")
     } finally {
       setRestoring(false)
     }

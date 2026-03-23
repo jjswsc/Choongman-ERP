@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { RotateCw } from "lucide-react"
@@ -368,10 +369,10 @@ export function EmployeeEvalTab({
 
   const handleSave = async () => {
     if (!evalStore || !evalEmployee || !evalDate) {
-      alert(t("eval_store_first"))
+      await appAlert(t("eval_store_first"))
       return
     }
-    if (!confirm(t("eval_confirm_save"))) return
+    if (!await appConfirm(t("eval_confirm_save"))) return
     setSaving(true)
     try {
       const sectionKey: Record<string, string> = {
@@ -442,7 +443,7 @@ export function EmployeeEvalTab({
           grade: displayGrade || computedGrade,
         },
       })
-      alert(t("eval_saved_ok"))
+      await appAlert(t("eval_saved_ok"))
       setEvalId("")
       setTotalMemo("")
       setTrainingNeeded("")
@@ -462,7 +463,7 @@ export function EmployeeEvalTab({
       onSaved?.()
     } catch (e) {
       console.error(e)
-      alert(t("eval_save_fail"))
+      await appAlert(t("eval_save_fail"))
     } finally {
       setSaving(false)
     }
@@ -494,7 +495,7 @@ export function EmployeeEvalTab({
       })
     } catch (err) {
       console.error(err)
-      alert(t("msg_upload_fail"))
+      await appAlert(t("msg_upload_fail"))
     } finally {
       setUploadingWarningForIdx(null)
       if (warningLetterInputRef.current) warningLetterInputRef.current.value = ""

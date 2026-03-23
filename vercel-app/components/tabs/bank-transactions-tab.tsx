@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -20,6 +21,7 @@ import { useT } from "@/lib/i18n"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, OFFICE_STORES } from "@/lib/permissions"
+import { canManageAccountingCompliance } from "@/lib/accounting-auth"
 import {
   executeExpensePayment,
   getApprovedExpenseAccrualsForBankTx,
@@ -37,6 +39,8 @@ import {
   getVendorsForSales,
   updateBankTransactionInvoice,
   updateBankTransaction,
+  reconcileBankTransaction,
+  invalidateBankTransactionsListCache,
   getPurchaseOrders,
   getBankMemoRules,
   saveBankMemoRule,
@@ -48,7 +52,7 @@ import {
 } from "@/lib/api-client"
 import { parseKDepositCsv, type KDepositParsedResult } from "@/lib/parse-kdeposit-csv"
 import { compressImageForUpload } from "@/lib/utils"
-import { suggestDepositWithRules } from "@/lib/suggest-with-custom-rules"
+import { suggestDepositWithRules, suggestWithdrawWithRules } from "@/lib/suggest-with-custom-rules"
 import { FixedExpensesTab } from "@/components/tabs/fixed-expenses-tab"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
@@ -72,6 +76,7 @@ export function BankTransactionsTab() {
   const { stores: storeList } = useStoreList()
 
   const isOffice = isOfficeRole(auth?.role || "")
+  const canReconcileBank = canManageAccountingCompliance(auth?.role || "")
   const [accounts, setAccounts] = React.useState<{
     id: number
     name: string
@@ -83,7 +88,28 @@ export function BankTransactionsTab() {
   const [accountId, setAccountId] = React.useState<string>("")
   const [startStr, setStartStr] = React.useState(todayStr)
   const [endStr, setEndStr] = React.useState(todayStr)
-  const [list, setList] = React.useState<{ id?: number; transDate: string; transType: string; amount: number; memo: string; note?: string; category?: string; accountSubjectId?: number | null; salesDate?: string; expenseDate?: string; invoiceReceived?: boolean; invoiceNo?: string; invoicePhotoUrl?: string; purchaseOrderId?: number; vendorCode?: string; storeName?: string; isLinked?: boolean }[]>([])
+  const [list, setList] = React.useState<{
+    id?: number
+    transDate: string
+    transType: string
+    amount: number
+    memo: string
+    note?: string
+    category?: string
+    accountSubjectId?: number | null
+    salesDate?: string
+    expenseDate?: string
+    invoiceReceived?: boolean
+    invoiceNo?: string
+    invoicePhotoUrl?: string
+    purchaseOrderId?: number
+    vendorCode?: string
+    storeName?: string
+    isLinked?: boolean
+    reconciledAt?: string | null
+    reconciledBy?: string | null
+    reconciliationNote?: string | null
+  }[]>([])
   const [summary, setSummary] = React.useState<{
     openingBalance: number
     beginningBalance: number
@@ -146,6 +172,7 @@ export function BankTransactionsTab() {
   const [queryVendorSearch, setQueryVendorSearch] = React.useState("")
   const [queryStoreSearch, setQueryStoreSearch] = React.useState("")
   const [querySavingId, setQuerySavingId] = React.useState<number | null>(null)
+  const [reconcilingTxId, setReconcilingTxId] = React.useState<number | null>(null)
   const [registerExpenseRow, setRegisterExpenseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerPurchaseRow, setRegisterPurchaseRow] = React.useState<(typeof list)[0] | null>(null)
   const [registerEditMode, setRegisterEditMode] = React.useState(false)
@@ -203,6 +230,45 @@ export function BankTransactionsTab() {
     }))
   }
 
+  const handleBankReconcileToggle = async (r: (typeof list)[0], reconciled: boolean) => {
+    if (!r.id || !canReconcileBank || !auth?.role) return
+    setReconcilingTxId(r.id)
+    try {
+      const res = await reconcileBankTransaction({
+        userRole: auth.role,
+        id: r.id,
+        reconciled,
+        reconciledBy: auth.user,
+      })
+      if (res.success) {
+        await invalidateBankTransactionsListCache({
+          accountId,
+          startStr,
+          endStr,
+        })
+        const nowIso = new Date().toISOString()
+        setList((prev) =>
+          prev.map((x) =>
+            x.id === r.id
+              ? {
+                  ...x,
+                  reconciledAt: reconciled ? nowIso : null,
+                  reconciledBy: reconciled ? (auth.user || null) : null,
+                  reconciliationNote: reconciled ? x.reconciliationNote ?? null : null,
+                }
+              : x
+          )
+        )
+      } else {
+        await appAlert(t("processFail"))
+      }
+    } catch (e) {
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setReconcilingTxId(null)
+    }
+  }
+
   const handleQueryRowSave = async (r: (typeof list)[0], overrideEdits?: QueryRowEdit) => {
     if (!r.id) return
     const edits = overrideEdits ?? queryRowEdits[r.id]
@@ -241,10 +307,10 @@ export function BankTransactionsTab() {
           )
         )
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setQuerySavingId(null)
     }
@@ -441,7 +507,7 @@ export function BankTransactionsTab() {
 
   const handleSaveAccountSubject = async () => {
     if (!accountSubjectForm.code.trim() || !accountSubjectForm.name.trim()) {
-      alert(tt("accountSubjectCodeNameRequired", "코드와 과목명을 입력하세요."))
+      await appAlert(tt("accountSubjectCodeNameRequired", "코드와 과목명을 입력하세요."))
       return
     }
     setAccountSubjectSaving(true)
@@ -460,28 +526,28 @@ export function BankTransactionsTab() {
         loadAccountSubjectsAll()
         const fetchOpts = async () => {
           const [expense, fixed, transfer, revenue] = await Promise.all([
-            getAccountSubjects({ forExpense: true }),
-            getAccountSubjects({ forFixed: true }),
-            getAccountSubjects({ forTransfer: true }),
-            getAccountSubjects({ forRevenue: true }),
+            getAccountSubjects({ forExpense: true, excludeHeaders: true }),
+            getAccountSubjects({ forFixed: true, excludeHeaders: true }),
+            getAccountSubjects({ forTransfer: true, excludeHeaders: true }),
+            getAccountSubjects({ forRevenue: true, excludeHeaders: true }),
           ])
           setAccountSubjectOptions([...transfer, ...fixed, ...expense])
           setRevenueAccountOptions(revenue || [])
         }
         fetchOpts().catch(() => {})
-        alert(translateApiMessage(res.message, t) || res.message || tt("msg_saved", "저장되었습니다."))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_saved", "저장되었습니다."))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAccountSubjectSaving(false)
     }
   }
 
   const handleDeleteAccountSubject = async (id: number) => {
-    if (!confirm(t("accountSubjectDeleteConfirm") || "이 계정과목을 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("accountSubjectDeleteConfirm") || "이 계정과목을 삭제하시겠습니까?")) return
     setAccountSubjectDeletingId(id)
     try {
       const res = await deleteAccountSubject({ id })
@@ -489,21 +555,21 @@ export function BankTransactionsTab() {
         loadAccountSubjectsAll()
         const fetchOpts = async () => {
           const [expense, fixed, transfer, revenue] = await Promise.all([
-            getAccountSubjects({ forExpense: true }),
-            getAccountSubjects({ forFixed: true }),
-            getAccountSubjects({ forTransfer: true }),
-            getAccountSubjects({ forRevenue: true }),
+            getAccountSubjects({ forExpense: true, excludeHeaders: true }),
+            getAccountSubjects({ forFixed: true, excludeHeaders: true }),
+            getAccountSubjects({ forTransfer: true, excludeHeaders: true }),
+            getAccountSubjects({ forRevenue: true, excludeHeaders: true }),
           ])
           setAccountSubjectOptions([...transfer, ...fixed, ...expense])
           setRevenueAccountOptions(revenue || [])
         }
         fetchOpts().catch(() => {})
-        alert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_ok", "삭제 완료"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_delete_ok", "삭제 완료"))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("accountSubjectDeleteInUse") || "사용 중이라 삭제할 수 없습니다.")
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("accountSubjectDeleteInUse") || "사용 중이라 삭제할 수 없습니다.")
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAccountSubjectDeletingId(null)
     }
@@ -539,10 +605,10 @@ export function BankTransactionsTab() {
   React.useEffect(() => {
     const fetch = async () => {
       const [expense, fixed, transfer, revenue] = await Promise.all([
-        getAccountSubjects({ forExpense: true }),
-        getAccountSubjects({ forFixed: true }),
-        getAccountSubjects({ forTransfer: true }),
-        getAccountSubjects({ forRevenue: true }),
+        getAccountSubjects({ forExpense: true, excludeHeaders: true }),
+        getAccountSubjects({ forFixed: true, excludeHeaders: true }),
+        getAccountSubjects({ forTransfer: true, excludeHeaders: true }),
+        getAccountSubjects({ forRevenue: true, excludeHeaders: true }),
       ])
       setAccountSubjectOptions([...transfer, ...fixed, ...expense])
       setRevenueAccountOptions(revenue || [])
@@ -562,8 +628,15 @@ export function BankTransactionsTab() {
             d.setDate(d.getDate() - 1)
             next[idx] = { ...next[idx], category: sug.category, accountSubjectId: sug.accountSubjectId ? String(sug.accountSubjectId) : undefined, salesDate: d.toISOString().slice(0, 10) }
           }
-        } else if (r.transType === "withdraw") {
-          // 출금은 지출/매입 관리에서 연결하므로 규칙 적용 안 함
+        } else if (r.transType === "withdraw" && r.memo) {
+          const sug = suggestWithdrawWithRules(r.memo, memoRules, accountSubjectOptions)
+          if (sug) {
+            next[idx] = {
+              ...next[idx],
+              category: sug.category,
+              ...(sug.accountSubjectId ? { accountSubjectId: String(sug.accountSubjectId) } : {}),
+            }
+          }
         }
       })
       return next
@@ -586,11 +659,13 @@ export function BankTransactionsTab() {
           invoiceReceived: false,
           purchaseOrderId: r.purchaseOrderId,
         })
-          .then((res) => {
+          .then(async (res) => {
             if (res.success) loadData()
-            else alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+            else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           })
-          .catch((e) => alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e))))
+          .catch(async (e) => {
+            await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+          })
           .finally(() => setUpdatingInvoiceId(null))
         return
       }
@@ -602,11 +677,13 @@ export function BankTransactionsTab() {
           invoiceReceived: true,
           purchaseOrderId: r.purchaseOrderId,
         })
-          .then((res) => {
+          .then(async (res) => {
             if (res.success) loadData()
-            else alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+            else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           })
-          .catch((e) => alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e))))
+          .catch(async (e) => {
+            await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+          })
           .finally(() => setUpdatingInvoiceId(null))
         return
       }
@@ -640,9 +717,9 @@ export function BankTransactionsTab() {
         purchaseOrderId: poId ?? undefined,
       })
       if (res.success) loadData()
-      else alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+      else await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setUpdatingInvoiceId(null)
     }
@@ -661,9 +738,9 @@ export function BankTransactionsTab() {
           invoicePhotoUrl: dataUrl,
         })
         if (res.success) loadData()
-        else alert(translateApiMessage(res.message, t) || res.message || t("msg_upload_fail"))
+        else await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_upload_fail"))
       } catch (e) {
-        alert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
+        await appAlert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
       } finally {
         setInvoicePhotoUploadingId(null)
         if (invoicePhotoInputRef.current) invoicePhotoInputRef.current.value = ""
@@ -674,7 +751,7 @@ export function BankTransactionsTab() {
 
   const handleAddAccount = async () => {
     if (!newAccountName.trim()) {
-      alert(t("bankAddAccount") || "계좌명을 입력하세요.")
+      await appAlert(t("bankAddAccount") || "계좌명을 입력하세요.")
       return
     }
     const store = isOffice && newAccountStore ? newAccountStore : auth?.store || ""
@@ -690,10 +767,10 @@ export function BankTransactionsTab() {
         setNewAccountBankName("")
         getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setAddAccountSaving(false)
     }
@@ -718,17 +795,17 @@ export function BankTransactionsTab() {
         setEditingAccountId(null)
         getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAccountManageSaving(false)
     }
   }
 
   const handleDeleteAccount = async (id: number) => {
-    if (!confirm(t("bankAccountDeleteConfirm") || "이 계좌와 관련된 모든 거래 내역이 삭제됩니다. 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("bankAccountDeleteConfirm") || "이 계좌와 관련된 모든 거래 내역이 삭제됩니다. 삭제하시겠습니까?")) return
     setAccountDeletingId(id)
     try {
       const res = await deleteBankAccount({ id })
@@ -740,10 +817,10 @@ export function BankTransactionsTab() {
         setEditingAccountId(null)
         setAccountManageOpen(false)
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setAccountDeletingId(null)
     }
@@ -788,7 +865,7 @@ export function BankTransactionsTab() {
 
   const handleAddMemoRule = async () => {
     if (!newRuleKeyword.trim() || !newRuleCategory) {
-      alert(t("bankMemoRuleKeywordRequired") || "키워드와 용도를 입력하세요.")
+      await appAlert(t("bankMemoRuleKeywordRequired") || "키워드와 용도를 입력하세요.")
       return
     }
     setSavingMemoRule(true)
@@ -804,23 +881,23 @@ export function BankTransactionsTab() {
         handleCancelEditMemoRule()
         getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSavingMemoRule(false)
     }
   }
 
   const handleDeleteMemoRule = async (id: number) => {
-    if (!confirm(t("bankMemoRuleDeleteConfirm") || "이 규칙을 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("bankMemoRuleDeleteConfirm") || "이 규칙을 삭제하시겠습니까?")) return
     try {
       const res = await deleteBankMemoRule({ id })
       if (res.success) getBankMemoRules().then((r) => setMemoRules(r || [])).catch(() => setMemoRules([]))
-      else alert(res.message)
+      else await appAlert(res.message)
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -900,9 +977,9 @@ export function BankTransactionsTab() {
     return transType === "deposit" ? (depositMap[cat] ?? cat) : (withdrawMap[cat] ?? cat)
   }
 
-  const exportBankTransactionsExcel = React.useCallback(() => {
+  const exportBankTransactionsExcel = React.useCallback(async () => {
     if (filteredList.length === 0) {
-      alert(t("pettyNoData") || "내보낼 데이터가 없습니다.")
+      await appAlert(t("pettyNoData") || "내보낼 데이터가 없습니다.")
       return
     }
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -913,6 +990,8 @@ export function BankTransactionsTab() {
       t("accountSubject") || "계정과목",
       t("pettyColAmount") || "금액",
       t("bankAttributedDate") || "인식일",
+      t("bankReconcileCol") || "대사",
+      `${t("bankReconcileBy") || "By"}`,
       t("bankMemoLabel") || "은행 적요",
       t("bankNoteLabel") || "메모",
     ]
@@ -930,6 +1009,8 @@ export function BankTransactionsTab() {
         subLabel,
         r.amount ?? 0,
         attrDate,
+        r.reconciledAt ? "Y" : "",
+        r.reconciledBy || "",
         r.memo || "",
         r.note || "",
       ])
@@ -956,12 +1037,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const text = (reader.result as string) || ""
         const parsed = parseKDepositCsv(text)
         if (parsed.rows.length === 0) {
-          alert(tt("bankParseNoRows", "파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요."))
+          await appAlert(tt("bankParseNoRows", "파싱된 거래가 없습니다. K-DEPOSIT 형식인지 확인하세요."))
           return
         }
         setImportPreview(parsed)
@@ -971,6 +1052,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
             const d = new Date(r.transDate)
             d.setDate(d.getDate() - 1)
             initialEdits[idx] = { category: "revenue_delivery", salesDate: d.toISOString().slice(0, 10) }
+          } else if (r.transType === "withdraw") {
+            initialEdits[idx] = { category: "unclassified" }
           }
         })
         setImportRowEdits(initialEdits)
@@ -979,7 +1062,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
           setEndStr(parsed.periodEnd)
         }
       } catch (err) {
-        alert(`${tt("bankParseFailPrefix", "파일 파싱 실패:")} ${String(err)}`)
+        await appAlert(`${tt("bankParseFailPrefix", "파일 파싱 실패:")} ${String(err)}`)
       }
     }
     reader.readAsText(file, "UTF-8")
@@ -996,19 +1079,35 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
   const handleImportSave = async () => {
     if (!importPreview || !accountId) return
     const acc = accounts.find((a) => String(a.id) === accountId)
+    const depositCats = ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"] as const
+    const withdrawCats = ["transfer", "expense", "fixed", "purchase_payment", "correction", "loan", "advance", "unclassified"] as const
     const items = importPreview.rows.map((r, idx) => {
       const edit = importRowEdits[idx]
-      const category = r.transType === "withdraw"
-        ? "unclassified"
-        : (edit?.category && ["revenue_delivery", "revenue_card", "revenue_qr", "revenue_cash", "receivable_receive", "correction", "loan", "advance", "unclassified"].includes(edit.category) ? edit.category : "revenue_delivery")
-      const accountSubjectId = r.transType === "deposit" && edit?.accountSubjectId && edit.accountSubjectId !== "__none__" ? Number(edit.accountSubjectId) : undefined
+      const category =
+        r.transType === "withdraw"
+          ? (edit?.category && (withdrawCats as readonly string[]).includes(edit.category) ? edit.category : "unclassified")
+          : edit?.category && (depositCats as readonly string[]).includes(edit.category)
+            ? edit.category
+            : "revenue_delivery"
+
+      let accountSubjectId: number | undefined
+      if (r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)) {
+        if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
+      } else if (r.transType === "withdraw" && !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(category)) {
+        if (edit?.accountSubjectId && edit.accountSubjectId !== "__none__") accountSubjectId = Number(edit.accountSubjectId)
+      }
+
       const note = edit?.note?.trim() || undefined
-      const salesDate = r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(edit?.category || "")
-        ? (edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })())
-        : undefined
-      const expenseDate = undefined
-      const vendorCode = undefined
-      const storeName = r.transType === "deposit" && edit?.category === "receivable_receive" ? (edit?.storeName?.trim() || undefined) : undefined
+      const salesDate =
+        r.transType === "deposit" && !["correction", "loan", "advance", "unclassified", "receivable_receive"].includes(category)
+          ? edit?.salesDate || (() => { const d = new Date(r.transDate); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()
+          : undefined
+      const expenseDate =
+        r.transType === "withdraw" && (category === "expense" || category === "fixed")
+          ? edit?.expenseDate || r.transDate
+          : undefined
+      const vendorCode = r.transType === "withdraw" && category === "purchase_payment" ? edit?.vendorCode?.trim() || undefined : undefined
+      const storeName = r.transType === "deposit" && category === "receivable_receive" ? edit?.storeName?.trim() || undefined : undefined
       return {
         transDate: r.transDate,
         transType: r.transType,
@@ -1048,12 +1147,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         setList(fresh.list || [])
         setSummary(fresh.summary || null)
         setActiveBankTab("query")
-        alert(translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 지출등록을 진행할 수 있습니다."))
+        await appAlert(translateApiMessage(res.message, t) || res.message || (t("bankImportSavedGoToQuery") || "저장되었습니다. 조회 탭에서 내역을 확인·추가 작업할 수 있습니다."))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setImportSaving(false)
     }
@@ -1086,12 +1185,12 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
         const fresh = await getBankTransactions({ accountId: Number(accountId), startStr: periodStart, endStr: importPreview.periodEnd || endStr })
         setSummary(fresh.summary || null)
         getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).then(setAccounts)
-        alert(t("bankCarryOverApplied") || "이월금액이 적용되었습니다.")
+        await appAlert(t("bankCarryOverApplied") || "이월금액이 적용되었습니다.")
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setApplyCarryOverSaving(false)
     }
@@ -1284,7 +1383,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     ) : filteredList.length === 0 ? (
                       <p className="py-8 text-center text-sm text-muted-foreground">{list.length === 0 ? (t("pettyNoData") || "데이터 없음") : (t("bankNoMatchFilter") || "조건에 맞는 거래가 없습니다.")}</p>
                     ) : (
-                      <table className="w-full text-sm min-w-[1100px] table-fixed">
+                      <table className="w-full text-sm min-w-[1160px] table-fixed">
                         <colgroup>
                           <col style={{ width: "92px" }} />
                           <col style={{ width: "64px" }} />
@@ -1294,6 +1393,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           <col style={{ width: "108px" }} />
                           <col style={{ width: "150px" }} />
                           <col style={{ width: "40px" }} />
+                          <col style={{ width: "56px" }} />
                           <col style={{ width: "180px" }} />
                           <col style={{ width: "140px" }} />
                           <col style={{ width: "44px" }} />
@@ -1308,6 +1408,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                             <th className="p-2 text-center whitespace-nowrap">{t("bankAttributedDate") || "인식일"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankRegisterLabel") || "지출 등록"}</th>
                             <th className="p-2 text-center whitespace-nowrap" title={t("poInvoiceReceived") || "인보이스 수령"}>Iv</th>
+                            <th className="p-2 text-center whitespace-nowrap" title={t("accCompBankReconcileHint")}>
+                              {t("bankReconcileCol") || "대사"}
+                            </th>
                             <th className="p-2 text-left whitespace-nowrap">{t("bankMemoLabel") || "은행 적요"}</th>
                             <th className="p-2 text-center whitespace-nowrap">{t("bankNoteLabel") || "메모"}</th>
                             <th className="p-2 text-center w-11"></th>
@@ -1553,6 +1656,33 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                                   <span className="text-muted-foreground">—</span>
                                 )}
                               </td>
+                              <td className="p-2 align-middle text-center">
+                                {canReconcileBank && r.id ? (
+                                  <Checkbox
+                                    checked={!!r.reconciledAt}
+                                    disabled={reconcilingTxId === r.id}
+                                    onCheckedChange={(checked) => {
+                                      if (checked === "indeterminate") return
+                                      void handleBankReconcileToggle(r, checked === true)
+                                    }}
+                                    title={
+                                      r.reconciledAt
+                                        ? `${t("bankReconcileCol")}: ${r.reconciledBy || ""}`.trim()
+                                        : t("bankReconcileCol") || ""
+                                    }
+                                    className="data-[state=checked]:bg-sky-600 data-[state=checked]:border-sky-600 shrink-0 mx-auto"
+                                  />
+                                ) : r.reconciledAt ? (
+                                  <span
+                                    className="text-sky-600 text-lg leading-none"
+                                    title={`${r.reconciledBy || ""}`.trim()}
+                                  >
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
+                              </td>
                               <td
                                 className="p-2 align-middle text-left truncate max-w-[180px] text-muted-foreground text-xs cursor-pointer hover:bg-muted/50 rounded"
                                 onClick={() => r.memo?.trim() && setMemoPreviewText(r.memo)}
@@ -1712,7 +1842,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
               )}
               <p className="text-xs text-muted-foreground">{t("bankImportDupHint") || "이미 등록된 거래(날짜·금액·적요 동일)는 자동으로 제외됩니다."}</p>
               <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                {t("bankImportSaveFirstExpenseHint") || "※ 지출등록: 일괄저장 후 조회 탭으로 이동하여 저장된 내역에서 진행해 주세요."}
+                {t("bankImportWithdrawCoaHint") || "※ 출금: 아래 표에서 용도·계정과목(매입 대금이면 거래처)을 선택하면 저장 시 통장에 반영됩니다. 적요 규칙으로 자동 채워집니다."}
               </p>
               <div className="max-h-[520px] overflow-x-auto overflow-y-auto border rounded">
                 <table className="w-full text-sm min-w-[900px]">
@@ -1735,12 +1865,24 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         <td className="p-2 text-center whitespace-nowrap">{r.transType === "deposit" ? t("bankDeposit") : t("bankWithdraw")}</td>
                         <td className="p-2">
                           {r.transType === "withdraw" ? (
-                            <span
-                              className="inline-flex items-center h-7 px-2 text-xs text-muted-foreground"
-                              title={t("bankImportSaveFirstForExpense") || "일괄저장 후 조회 탭에서 지출등록"}
+                            <Select
+                              value={importRowEdits[idx]?.category || "unclassified"}
+                              onValueChange={(v) => setImportRowEdit(idx, "category", v)}
                             >
-                              {t("bankSaveFirstHint") || "일괄저장 후 조회에서"}
-                            </span>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="transfer">{t("bankCategoryTransfer")}</SelectItem>
+                                <SelectItem value="expense">{t("bankCategoryExpense")}</SelectItem>
+                                <SelectItem value="fixed">{t("bankCategoryFixed")}</SelectItem>
+                                <SelectItem value="purchase_payment">{t("bankCategoryPurchasePayment") || "매입 대금"}</SelectItem>
+                                <SelectItem value="loan">{t("bankCategoryLoan")}</SelectItem>
+                                <SelectItem value="advance">{t("bankCategoryAdvance")}</SelectItem>
+                                <SelectItem value="unclassified">{t("bankCategoryUnclassified")}</SelectItem>
+                                <SelectItem value="correction">{t("bankCategoryCorrection")}</SelectItem>
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <Select
                               value={importRowEdits[idx]?.category || "revenue_delivery"}
@@ -1764,8 +1906,57 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                           )}
                         </td>
                         <td className="p-2">
-                          {r.transType === "withdraw" ? (
-                            <span className="text-xs text-muted-foreground">—</span>
+                          {r.transType === "withdraw" && importRowEdits[idx]?.category === "purchase_payment" ? (
+                            <Select
+                              value={(importRowEdits[idx]?.vendorCode ?? "") || "__none__"}
+                              onValueChange={(v) => setImportRowEdit(idx, "vendorCode", v === "__none__" ? "" : v)}
+                              onOpenChange={(open) => !open && setImportVendorSearch("")}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                <SelectValue placeholder={t("inVendorPlaceholder") || "거래처"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <div className="p-1.5 border-b" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    placeholder={t("search") || "검색"}
+                                    value={importVendorSearch}
+                                    onChange={(e) => setImportVendorSearch(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {vendorOptions
+                                  .filter((v) => !importVendorSearch.trim() || (v.name || v.code || "").toLowerCase().includes(importVendorSearch.trim().toLowerCase()))
+                                  .map((v) => (
+                                    <SelectItem key={v.code} value={v.code}>{v.name || v.code}</SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          ) : r.transType === "withdraw" &&
+                            !["correction", "loan", "advance", "unclassified", "purchase_payment"].includes(importRowEdits[idx]?.category || "") ? (
+                            <Select
+                              value={
+                                (importRowEdits[idx]?.accountSubjectId !== undefined
+                                  ? importRowEdits[idx]?.accountSubjectId
+                                  : "__none__") || "__none__"
+                              }
+                              onValueChange={(v) => setImportRowEdit(idx, "accountSubjectId", v === "__none__" ? "" : v)}
+                            >
+                              <SelectTrigger className="h-8 text-xs max-w-[140px]">
+                                <SelectValue placeholder="—" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">—</SelectItem>
+                                {(importRowEdits[idx]?.category === "transfer"
+                                  ? accountSubjectOptions.filter((a) => a.type === "transfer")
+                                  : importRowEdits[idx]?.category === "fixed"
+                                    ? accountSubjectOptions.filter((a) => a.pAndLSection === "fixed")
+                                    : accountSubjectOptions.filter((a) => a.type === "expense" && a.pAndLSection !== "fixed")
+                                ).map((a) => (
+                                  <SelectItem key={a.id} value={String(a.id)}>{a.code} {asDisplayName(a)}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           ) : r.transType === "deposit" && importRowEdits[idx]?.category === "receivable_receive" ? (
                             <Select
                               value={importRowEdits[idx]?.storeName || "__none__"}
@@ -2609,7 +2800,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     const bankAmt = Math.abs(Number(approvedPickRow.amount || 0))
                     const remain = Math.abs(Number(selected?.remainingAmount || 0))
                     if (!selected || Math.abs(bankAmt - remain) > 0.01) {
-                      alert(tt("bankPlanAmountMismatch", "통장 금액과 선택한 지급예정 잔액이 일치해야 합니다."))
+                      await appAlert(tt("bankPlanAmountMismatch", "통장 금액과 선택한 지급예정 잔액이 일치해야 합니다."))
                       return
                     }
                     setApprovedPickSaving(true)
@@ -2625,7 +2816,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                         userRole: auth?.role,
                       })
                       if (!res.success) {
-                        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+                        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
                         return
                       }
                       setApprovedPickRow(null)
@@ -2720,9 +2911,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     setRegisterExpenseRow(null)
                     setRegisterEditMode(false)
                     loadData()
-                    alert(translateApiMessage(res.message, t) || res.message || t("success"))
+                    await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
                   } else {
-                    alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+                    await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
                   }
                 } finally {
                   setRegisterSaving(false)
@@ -2782,9 +2973,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(String(c))}<
                     setRegisterPurchaseRow(null)
                     setRegisterEditMode(false)
                     loadData()
-                    alert(translateApiMessage(res.message, t) || res.message || t("success"))
+                    await appAlert(translateApiMessage(res.message, t) || res.message || t("success"))
                   } else {
-                    alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+                    await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
                   }
                 } finally {
                   setRegisterSaving(false)

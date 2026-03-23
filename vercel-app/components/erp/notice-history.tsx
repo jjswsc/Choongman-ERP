@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -126,13 +127,13 @@ export function NoticeHistory() {
   const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t("noticeDeleteConfirm"))) return
+    if (!await appConfirm(t("noticeDeleteConfirm"))) return
     const res = await deleteNoticeAdmin({ id: Number(id) })
     if (res.success) {
       setNotices((prev) => prev.filter((n) => n.id !== id))
       setExpandedId(null)
     } else {
-      alert(translateApiMessage(res.message, t) || t("noticeDeleteFail"))
+      await appAlert(translateApiMessage(res.message, t) || t("noticeDeleteFail"))
     }
   }
 

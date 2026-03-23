@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -58,7 +59,7 @@ export function OutboundLocationSettingsDialog({
   const handleSave = async () => {
     const name = form.name.trim()
     if (!name) {
-      alert(t("outboundLocationNameRequired") || "출고지명을 입력하세요.")
+      await appAlert(t("outboundLocationNameRequired") || "출고지명을 입력하세요.")
       return
     }
     setSaving(true)
@@ -76,17 +77,17 @@ export function OutboundLocationSettingsDialog({
         await load()
         onSaved?.()
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (item: WarehouseLocation) => {
-    if (!confirm(`"${item.name}" ${t("outboundLocationConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${item.name}" ${t("outboundLocationConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
     setDeleting(item.id ?? 0)
     try {
       const res = await deleteWarehouseLocation({ id: item.id, location_code: item.location_code })
@@ -94,10 +95,10 @@ export function OutboundLocationSettingsDialog({
         await load()
         onSaved?.()
       } else {
-        alert(res.message || t("msg_delete_fail_detail"))
+        await appAlert(res.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
     } finally {
       setDeleting(null)
     }

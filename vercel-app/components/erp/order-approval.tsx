@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -302,19 +303,19 @@ export function OrderApproval() {
     const datesByOutbound = deliveryDatesByOutboundByOrder[idStr] || {}
     const missingOutbound = outboundLocsInApproved.filter((loc) => !(datesByOutbound[loc] || "").trim())
     if (decision === "Approved" && missingOutbound.length > 0) {
-      alert(
+      await appAlert(
         t("orderDeliveryDateRequired") +
           (missingOutbound.length > 0 ? ` (${t("outWhWarehouseCol")}: ${missingOutbound.join(", ")})` : "")
       )
       return
     }
     if (decision === "Rejected" && !(rejectReasonByOrderId[idStr] || "").trim()) {
-      alert(t("orderRejectReasonRequired") || "거절 사유를 입력해 주세요.")
+      await appAlert(t("orderRejectReasonRequired") || "거절 사유를 입력해 주세요.")
       return
     }
     const selectedItems = approvedItems
     if (decision === "Approved" && selectedItems.length === 0) {
-      alert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
+      await appAlert(t("orderApproveNeedItems") || "승인할 품목을 선택해 주세요.")
       return
     }
     const updatedCart = displayItems.map((it) => ({
@@ -338,10 +339,10 @@ export function OrderApproval() {
         updatedCart: decision === "Approved" ? updatedCart : undefined,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || t("orderDecisionFailed"))
+        await appAlert(translateApiMessage(res.message, t) || t("orderDecisionFailed"))
         return
       }
-      alert(t("orderDecisionSuccess"))
+      await appAlert(t("orderDecisionSuccess"))
       setOrders((prev) => {
         if (decision !== "Approved") {
           return prev.map((o) => (o.orderId === orderId ? { ...o, status: decision } : o))
@@ -377,12 +378,12 @@ export function OrderApproval() {
         userRole: auth?.role,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("msg_saved"))
+        await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail"))
       }
     } catch (e) {
-      alert(t("msg_server_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_server_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSavingDeliveryDatesId(null)
     }

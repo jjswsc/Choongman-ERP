@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 
@@ -103,6 +104,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
 
+    if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
+      const hdr = await assertAccountSubjectNotHeader(Number(accountSubjectId))
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
+    }
+
     const accrualRow: Record<string, unknown> = {
       payee_code: encodedPayeeCode,
       payee_name: payeeName || payeeCode,
@@ -155,6 +163,8 @@ export async function POST(request: NextRequest) {
         amountAbs: amount,
         expenseAccountCode: subjectCode,
         expenseAccountName: subjectName,
+        expenseAccountSubjectId:
+          accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         memo: memo || `지출 발생 ${payeeName || payeeCode}`,
         storeName: storeName || undefined,
         postedBy: userName || undefined,

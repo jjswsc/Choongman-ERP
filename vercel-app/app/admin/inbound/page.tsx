@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
@@ -275,22 +276,22 @@ export default function InboundPage() {
     setInQty("")
   }
 
-  const handleAddToList = () => {
+  const handleAddToList = async () => {
     if (!selectedItem) {
-      alert(t("inAlertSelectItem"))
+      await appAlert(t("inAlertSelectItem"))
       return
     }
     if (!inQty.trim()) {
-      alert(t("inAlertEnterQty"))
+      await appAlert(t("inAlertEnterQty"))
       return
     }
     if (!inVendor) {
-      alert(t("inAlertSelectVendor"))
+      await appAlert(t("inAlertSelectVendor"))
       return
     }
     const q = parseFloat(inQty.replace(/,/g, ""))
     if (isNaN(q) || q <= 0) {
-      alert(t("inAlertEnterQty"))
+      await appAlert(t("inAlertEnterQty"))
       return
     }
     setCart((prev) => [
@@ -321,11 +322,11 @@ export default function InboundPage() {
 
   const handleSave = async () => {
     if (!cart.length) {
-      alert(t("inAlertNoList"))
+      await appAlert(t("inAlertNoList"))
       return
     }
     const msg = t("inConfirmSave").replace("{count}", String(cart.length))
-    if (!confirm(msg)) return
+    if (!await appConfirm(msg)) return
     setSaving(true)
     try {
       const list = cart.map((c) => ({
@@ -356,15 +357,15 @@ export default function InboundPage() {
         invoiceNo: inInvoiceNo.trim() || undefined,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
+        await appAlert(translateApiMessage(res.message, t) || t("inSaveSuccess"))
         setCart([])
         setInPoNo("")
         setInInvoiceNo("")
       } else {
-        alert(translateApiMessage(res.message, t) || t("inSaveFailed"))
+        await appAlert(translateApiMessage(res.message, t) || t("inSaveFailed"))
       }
     } catch {
-      alert(t("inSaveFailed"))
+      await appAlert(t("inSaveFailed"))
     } finally {
       setSaving(false)
     }
@@ -485,16 +486,16 @@ export default function InboundPage() {
     async (row: InboundTableRow) => {
       if (!row.inboundBatchId) return
       const msg = t("inConfirmDelete") || `${row.date} ${row.vendor} 건을 삭제하시겠습니까? 재고와 미지급금에서도 제거됩니다.`
-      if (!confirm(msg)) return
+      if (!await appConfirm(msg)) return
       try {
         const res = await deleteInboundBatch(row.inboundBatchId)
         if (res.success) {
           fetchHistory()
         } else {
-          alert(translateApiMessage(res.message, t) || res.message)
+          await appAlert(translateApiMessage(res.message, t) || res.message)
         }
       } catch (e) {
-        alert(t("processFail") || "처리 실패")
+        await appAlert(t("processFail") || "처리 실패")
       }
     },
     [t, fetchHistory]
@@ -514,9 +515,9 @@ export default function InboundPage() {
           invoiceReceived: !row.invoiceReceived,
         })
         if (res.success) fetchHistory()
-        else alert(translateApiMessage(res.message, t) || res.message)
+        else await appAlert(translateApiMessage(res.message, t) || res.message)
       } catch (e) {
-        alert(t("processFail") || "처리 실패")
+        await appAlert(t("processFail") || "처리 실패")
       } finally {
         setUpdatingInvoiceId(null)
       }
@@ -873,7 +874,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
               onSave={async (params) => {
                 const res = await updateInboundBatch(params)
                 if (!res.success) {
-                  alert(translateApiMessage(res.message, t) || res.message)
+                  await appAlert(translateApiMessage(res.message, t) || res.message)
                   return false
                 }
                 return true

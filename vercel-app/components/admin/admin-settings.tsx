@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -34,7 +35,7 @@ const MENU_IDS = [
   "dashboard", "notices", "work-log", "item-manage", "vendor-manage",
   "outbound", "stock", "inbound", "force", "hr-employee", "attendance-manage",
   "payroll", "hr-leave", "petty-cash", "store-manage", "store-visit",
-  "store-complaint", "settings",
+  "store-complaint", "store-repair", "settings",
 ]
 
 const MENU_TO_TKEY: Record<string, string> = {
@@ -55,6 +56,7 @@ const MENU_TO_TKEY: Record<string, string> = {
   "store-manage": "adminStoreCheck",
   "store-visit": "adminStoreVisit",
   "store-complaint": "adminComplaints",
+  "store-repair": "adminStoreRepairs",
   settings: "adminSettings",
 }
 
@@ -178,10 +180,10 @@ export function AdminSettings() {
         phone,
         bankInfo,
       })
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       if (res.success) loadHeadOffice()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setOfficeSaving(false)
     }
@@ -194,10 +196,10 @@ export function AdminSettings() {
         pushNoticeEnabled,
         pushOrderApprovalEnabled,
       })
-      alert(res.success ? (t("settings_saved") || "저장되었습니다.") : (t("msg_save_fail") || "저장에 실패했습니다."))
+      await appAlert(res.success ? (t("settings_saved") || "저장되었습니다.") : (t("msg_save_fail") || "저장에 실패했습니다."))
       if (res.success) loadNotificationSettings()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setNotificationSaving(false)
     }
@@ -205,7 +207,7 @@ export function AdminSettings() {
 
   const handleSavePerm = async () => {
     if (!permStore || !permEmployee) {
-      alert(t("settings_menu_permission_hint"))
+      await appAlert(t("settings_menu_permission_hint"))
       return
     }
     setPermSaving(true)
@@ -215,9 +217,9 @@ export function AdminSettings() {
         if (checked) out[key] = 1
       }
       const res = await setMenuPermission(permStore, permEmployee, out)
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setPermSaving(false)
     }
@@ -425,6 +427,7 @@ export function AdminSettings() {
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreCheck")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_full")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreVisit")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_view_only")}</td></tr>
                         <tr className="border-b"><td className="p-2.5 text-center">{t("adminComplaints")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_complaints_note")}</td></tr>
+                        <tr className="border-b"><td className="p-2.5 text-center">{t("adminStoreRepairs")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_repair_note")}</td></tr>
                         <tr><td className="p-2.5 text-center">{t("adminSettings")}</td><td className="p-2.5 text-center text-muted-foreground">{t("settings_perm_mgr_denied")}</td></tr>
                       </tbody>
                     </table>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
 export async function POST(request: NextRequest) {
@@ -50,6 +51,12 @@ export async function POST(request: NextRequest) {
     }
     if (accountSubjectId !== undefined) {
       const asid = accountSubjectId ? Number(accountSubjectId) : null
+      if (asid && !isNaN(asid)) {
+        const hdr = await assertAccountSubjectNotHeader(asid)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
+      }
       patch.account_subject_id = asid && !isNaN(asid) ? asid : null
     }
     if (note !== undefined) patch.note = String(note || '').trim() || null

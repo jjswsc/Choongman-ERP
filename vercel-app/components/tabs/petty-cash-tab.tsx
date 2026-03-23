@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -51,7 +52,7 @@ const typeKeys: Record<string, string> = {
   settle: "pettyTypeSettle",
 }
 
-export function PettyCashTab() {
+export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAccountSubjectEmptyFilter?: boolean } = {}) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -117,6 +118,10 @@ export function PettyCashTab() {
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   useEffect(() => {
+    if (!showAccountSubjectEmptyFilter) setFilterAccountSubjectEmpty(false)
+  }, [showAccountSubjectEmptyFilter])
+
+  useEffect(() => {
     if (!auth?.store) return
     getPettyCashOptions().then((opts) => {
       if (canSearchAll) {
@@ -147,9 +152,9 @@ export function PettyCashTab() {
 
   useEffect(() => {
     Promise.all([
-      getAccountSubjects({ forExpense: true }),
-      getAccountSubjects({ forFixed: true }),
-      getAccountSubjects({ forCost: true }),
+      getAccountSubjects({ forExpense: true, excludeHeaders: true }),
+      getAccountSubjects({ forFixed: true, excludeHeaders: true }),
+      getAccountSubjects({ forCost: true, excludeHeaders: true }),
     ]).then(([expense, fixed, cost]) => {
       setAccountSubjectOptions([...(cost || []), ...(fixed || []), ...(expense || [])])
     }).catch(() => setAccountSubjectOptions([]))
@@ -258,12 +263,12 @@ export function PettyCashTab() {
       ? (addDepartment ? "Office-" + addDepartment : null)
       : (addStore || (stores.includes("All") ? stores.find((s) => s !== "All") : stores[0]))
     if (!store || store === "All") {
-      alert(addTargetType === "office" ? (t("pettySelectDepartment") || "부서를 선택하세요.") : t("pettyAlertStore"))
+      await appAlert(addTargetType === "office" ? (t("pettySelectDepartment") || "부서를 선택하세요.") : t("pettyAlertStore"))
       return
     }
     const amt = parseInt(addAmount, 10) || 0
     if (amt <= 0) {
-      alert(t("pettyAlertAmount"))
+      await appAlert(t("pettyAlertAmount"))
       return
     }
     setAddSaving(true)
@@ -273,7 +278,7 @@ export function PettyCashTab() {
         receiptUrl = await compressImageForUpload(addReceiptFile)
       } catch (err) {
         console.error("compressImage:", err)
-        alert(t("pettySaveFail"))
+        await appAlert(t("pettySaveFail"))
         setAddSaving(false)
         return
       }
@@ -301,9 +306,9 @@ export function PettyCashTab() {
         return null
       })
       loadList()
-      alert(t("pettySaved"))
+      await appAlert(t("pettySaved"))
     } else {
-      alert(translateApiMessage(res.message, t) || t("pettyAddFail"))
+      await appAlert(translateApiMessage(res.message, t) || t("pettyAddFail"))
     }
   }
 
@@ -348,10 +353,10 @@ export function PettyCashTab() {
         loadMonthly()
         loadList()
       } else {
-        alert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
+        await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
       }
     } catch {
-      alert(t("msg_modify_fail") || "수정 실패")
+      await appAlert(t("msg_modify_fail") || "수정 실패")
     } finally {
       setInlineSavingId(null)
     }
@@ -374,7 +379,7 @@ export function PettyCashTab() {
     if (!editModalItem || !auth?.store || !auth?.user) return
     const amt = parseInt(editAmount, 10) || 0
     if (amt <= 0) {
-      alert(t("pettyAlertAmount"))
+      await appAlert(t("pettyAlertAmount"))
       return
     }
     setEditSaving(true)
@@ -384,7 +389,7 @@ export function PettyCashTab() {
         receiptUrl = await compressImageForUpload(editReceiptFile)
       } catch (err) {
         console.error("compressImage:", err)
-        alert(t("pettySaveFail"))
+        await appAlert(t("pettySaveFail"))
         setEditSaving(false)
         return
       }
@@ -405,9 +410,9 @@ export function PettyCashTab() {
       loadMonthly()
       loadList()
       closeEditModal()
-      alert(t("msg_updated") || "수정되었습니다.")
+      await appAlert(t("msg_updated") || "수정되었습니다.")
     } else {
-      alert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
+      await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail") || "수정 실패")
     }
   }
 
@@ -538,10 +543,12 @@ ${rows.map((row, ri) => {
                 )}
                 <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
                 <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="date-input-compact date-input-mobile-shrink h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
-                <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                  <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
-                  <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
-                </label>
+                {showAccountSubjectEmptyFilter && (
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                    <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                  </label>
+                )}
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadList} disabled={listLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
@@ -796,10 +803,12 @@ ${rows.map((row, ri) => {
                     <Input type="date" value={monthlyPeriodEnd} onChange={(e) => setMonthlyPeriodEnd(e.target.value)} className="date-input-compact h-9 min-w-0 flex-1 text-xs sm:min-w-[90px]" />
                   </>
                 )}
-                <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                  <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
-                  <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
-                </label>
+                {showAccountSubjectEmptyFilter && (
+                  <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <input type="checkbox" checked={filterAccountSubjectEmpty} onChange={(e) => setFilterAccountSubjectEmpty(e.target.checked)} className="rounded" />
+                    <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
+                  </label>
+                )}
                 <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadMonthly} disabled={monthlyLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {monthlyLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}

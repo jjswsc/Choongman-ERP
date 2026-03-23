@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -242,8 +243,8 @@ export function PosTableLayoutContent() {
     setEditingNameId(newTable.id)
   }
 
-  const handleRemoveTable = (id: string) => {
-    if (!confirm(t("posTableDeleteConfirm") || "이 테이블을 삭제하시겠습니까?")) return
+  const handleRemoveTable = async (id: string) => {
+    if (!(await appConfirm(t("posTableDeleteConfirm") || "이 테이블을 삭제하시겠습니까?"))) return
     setLayout((prev) => prev.filter((t) => t.id !== id))
     if (selectedId === id) setSelectedId(null)
     setSelectedIds((prev) => prev.filter((v) => v !== id))
@@ -500,8 +501,8 @@ export function PosTableLayoutContent() {
     }
   }, [currentFloorLayout, selectBox])
 
-  const handleReset = () => {
-    if (!confirm((t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?") + ` (${activeFloor}F)`)) return
+  const handleReset = async () => {
+    if (!(await appConfirm((t("posTableResetConfirm") || "모든 테이블을 삭제하고 초기화하시겠습니까?") + ` (${activeFloor}F)`))) return
     setLayout((prev) => prev.filter((tbl) => Math.min(3, Math.max(1, Number(tbl.floor ?? 1) || 1)) !== activeFloor))
     setSelectedId(null)
     setSelectedIds([])
@@ -510,11 +511,11 @@ export function PosTableLayoutContent() {
   const handleCopyFromStore = async () => {
     const source = copyFromStoreCode.trim()
     if (!source || source === storeCode) {
-      alert(t("posTableLayoutCopyFromHint") || "다른 매장을 선택해 주세요.")
+      await appAlert(t("posTableLayoutCopyFromHint") || "다른 매장을 선택해 주세요.")
       return
     }
     if (!storeCode) {
-      alert(t("store") || "대상 매장을 선택해 주세요.")
+      await appAlert(t("store") || "대상 매장을 선택해 주세요.")
       return
     }
     setCopyLoading(true)
@@ -522,7 +523,7 @@ export function PosTableLayoutContent() {
       const { layout: sourceLayout } = await getPosTableLayout({ storeCode: source })
       const items = sourceLayout || []
       if (items.length === 0) {
-        alert(t("posTableLayoutCopyEmpty") || "선택한 매장에 저장된 테이블 배치가 없습니다.")
+        await appAlert(t("posTableLayoutCopyEmpty") || "선택한 매장에 저장된 테이블 배치가 없습니다.")
         return
       }
       const copied: PosTableItem[] = items.map((t) => ({
@@ -532,9 +533,9 @@ export function PosTableLayoutContent() {
       setLayout(copied)
       setSelectedId(null)
       setSelectedIds([])
-      alert(t("posTableLayoutCopyDone") || "테이블 배치를 복사했습니다. 저장 버튼을 눌러 적용하세요.")
+      await appAlert(t("posTableLayoutCopyDone") || "테이블 배치를 복사했습니다. 저장 버튼을 눌러 적용하세요.")
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setCopyLoading(false)
     }
@@ -682,20 +683,20 @@ export function PosTableLayoutContent() {
 
   const handleSave = async () => {
     if (!storeCode) {
-      alert(t("store") || "매장을 선택하세요.")
+      await appAlert(t("store") || "매장을 선택하세요.")
       return
     }
     setSaving(true)
     try {
       const res = await savePosTableLayout({ storeCode, layout })
       if (res.success) {
-        alert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved") || "저장되었습니다.")
         loadLayout()
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }

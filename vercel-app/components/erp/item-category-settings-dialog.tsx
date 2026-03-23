@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -58,7 +59,7 @@ export function ItemCategorySettingsDialog({
   const handleSave = async () => {
     const name = form.name.trim()
     if (!name) {
-      alert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
+      await appAlert(t("itemsCategoryRequired") || "카테고리명을 입력하세요.")
       return
     }
     setSaving(true)
@@ -75,17 +76,17 @@ export function ItemCategorySettingsDialog({
         await load()
         onSaved?.()
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_save_fail_detail"))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (item: ItemCategory) => {
-    if (!confirm(`"${item.name}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${item.name}" ${t("itemCategoryConfirmDelete") || "를 삭제하시겠습니까?"}`)) return
     setDeleting(item.id ?? 0)
     try {
       const res = await deleteItemCategory({ id: item.id, name: item.name })
@@ -93,10 +94,10 @@ export function ItemCategorySettingsDialog({
         await load()
         onSaved?.()
       } else {
-        alert(res.message || t("msg_delete_fail_detail"))
+        await appAlert(res.message || t("msg_delete_fail_detail"))
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
+      await appAlert(e instanceof Error ? e.message : t("msg_delete_fail_detail"))
     } finally {
       setDeleting(null)
     }

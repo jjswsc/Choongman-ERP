@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Clock, Search } from "lucide-react"
@@ -173,7 +174,7 @@ export function AttendanceManageContent() {
     if (res.success) {
       loadRecords()
     } else {
-      alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+      await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
     }
   }
 
@@ -194,7 +195,7 @@ export function AttendanceManageContent() {
         return next
       })
       if (!skipReload) loadRecords()
-    } else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    } else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
   const handleReject = async (id: number) => {
@@ -205,7 +206,7 @@ export function AttendanceManageContent() {
       userRole: auth?.role,
     })
     if (res.success) loadRecords()
-    else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
   const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
@@ -217,7 +218,7 @@ export function AttendanceManageContent() {
       userRole: auth?.role,
     })
     if (res.success) loadRecords()
-    else alert(translateApiMessage(res.message, t) || t("att_process_failed"))
+    else await appAlert(translateApiMessage(res.message, t) || t("att_process_failed"))
   }
 
   return (

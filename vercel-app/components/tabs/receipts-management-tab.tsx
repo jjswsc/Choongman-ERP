@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -147,12 +148,12 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
   const handlePrintKitchenSlip = async (o: PosOrder) => {
     const store = (o.storeCode ?? '').trim()
     if (!store || !o.items?.length) {
-      alert(t('posPrintUnavailable') || '인쇄할 수 없습니다.')
+      await appAlert(t('posPrintUnavailable') || '인쇄할 수 없습니다.')
       return
     }
     const win = window.open('', '_blank')
     if (!win) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다.')
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다.')
       return
     }
     try {
@@ -210,7 +211,7 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
       printOne(0)
     } catch (e) {
       win.close()
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -47,7 +48,7 @@ export function AdminProfile() {
         newPw: pwNew,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("pw_success"))
+        await appAlert(translateApiMessage(res.message, t) || t("pw_success"))
         setPwOld("")
         setPwNew("")
         setPwNew2("")

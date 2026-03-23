@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -278,7 +279,7 @@ export function WithdrawalManagementTab() {
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
-    getAccountSubjects({ forExpense: true }).catch(() => []).then(setSubjects)
+    getAccountSubjects({ forExpense: true, excludeHeaders: true }).catch(() => []).then(setSubjects)
     getCardAccounts().catch(() => []).then((list) => setCardAccounts(list || []))
   }, [])
 
@@ -390,7 +391,7 @@ export function WithdrawalManagementTab() {
     let name = payeeName.trim()
     if (categoryMain === "purchase") {
       if (!vendorCode.trim()) {
-        alert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+        await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
         return
       }
       code = vendorCode.trim()
@@ -400,7 +401,7 @@ export function WithdrawalManagementTab() {
       }
     } else if (categoryMain === "expense") {
       if (!code && !name) {
-        alert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+        await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
         return
       }
       if (!code) code = name
@@ -410,11 +411,11 @@ export function WithdrawalManagementTab() {
       name = name || getAutoPayeeName(withdrawalCategory)
     }
     if (!amt || amt <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (!storeName) {
-      alert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
     setSaving(true)
@@ -439,7 +440,7 @@ export function WithdrawalManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
         setAmount("")
@@ -448,7 +449,7 @@ export function WithdrawalManagementTab() {
         setPayeeName("")
         hasAppliedParams.current = false
         router.replace("/admin/expense-management?tab=plan")
-        alert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
+        await appAlert(t("wm_accrualUpdateSuccess") || "수정되었습니다. 지급예정 탭에서 확인하세요.")
       } else {
         const res = await addExpenseAccrual({
           payeeCode: code || name,
@@ -466,14 +467,14 @@ export function WithdrawalManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
         setAmount("")
         setMemo("")
         setPayeeCode("")
         setPayeeName("")
-        alert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
+        await appAlert(t("wm_accrualSuccess") || "등록되었습니다. 지급예정 탭에서 확인하세요.")
       }
     } finally {
       setSaving(false)
@@ -484,23 +485,23 @@ export function WithdrawalManagementTab() {
     if (!bankTransactionIdParam) return
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (!categoryMain) {
-      alert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
+      await appAlert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
       return
     }
     if (!accountId) {
-      alert(t("bankAccount") || "계좌를 선택하세요.")
+      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
       return
     }
     if (categoryMain === "purchase" && !vendorCode) {
-      alert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+      await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
       return
     }
     if (categoryMain === "expense" && !accountSubjectId) {
-      alert(t("wm_accountSubjectPlaceholder") || "계정과목을 선택해 주세요.")
+      await appAlert(t("wm_accountSubjectPlaceholder") || "계정과목을 선택해 주세요.")
       return
     }
 
@@ -532,10 +533,10 @@ export function WithdrawalManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
-      alert(t("saved") || "수정되었습니다.")
+      await appAlert(t("saved") || "수정되었습니다.")
     } finally {
       setSaving(false)
     }
@@ -556,40 +557,40 @@ export function WithdrawalManagementTab() {
     }
     const amt = Number(String(amount).replace(/,/g, ""))
     if (!amt || amt <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (!categoryMain) {
-      alert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
+      await appAlert(t("wm_selectCategory") || "출금 유형을 선택해 주세요.")
       return
     }
     if (effectivePaymentMethod === "bank" && !accountId) {
-      alert(t("bankAccount") || "계좌를 선택하세요.")
+      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
       return
     }
     if (effectivePaymentMethod === "petty" && !storeName) {
-      alert(t("recFilterStoreSelect") || "매장을 선택하세요.")
+      await appAlert(t("recFilterStoreSelect") || "매장을 선택하세요.")
       return
     }
     if (!storeName) {
-      alert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
-      alert(t("wm_transferBankRequired") || "계좌번호와 받는 사람을 입력하세요.")
+      await appAlert(t("wm_transferBankRequired") || "계좌번호와 받는 사람을 입력하세요.")
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
-      alert(t("wm_transferCardRequired") || "충전할 카드를 선택하세요.")
+      await appAlert(t("wm_transferCardRequired") || "충전할 카드를 선택하세요.")
       return
     }
     if (categoryMain === "transfer" && effectivePaymentMethod === "petty") {
       if (!transferToDept || !transferToEmployee) {
-        alert(t("wm_pettyTransferRecipientRequired") || "부서와 직원명을 선택하세요.")
+        await appAlert(t("wm_pettyTransferRecipientRequired") || "부서와 직원명을 선택하세요.")
         return
       }
       if (!transferToAccountNo.trim()) {
-        alert((t("inv_account_no") || "계좌번호") + "를 입력하세요.")
+        await appAlert((t("inv_account_no") || "계좌번호") + "를 입력하세요.")
         return
       }
     }
@@ -646,7 +647,7 @@ export function WithdrawalManagementTab() {
         userStore: auth?.store,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       const newBankTxId = res.bankTransactionId ?? undefined
@@ -671,9 +672,9 @@ export function WithdrawalManagementTab() {
       setInvoicePhotoFile(null)
       setInboundLinkAmounts({})
       if (res.fixedAssetId) {
-        alert(t("wm_successWithAsset") || "등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.")
+        await appAlert(t("wm_successWithAsset") || "등록되었습니다. 감가상각 메뉴에서 자동 연동 확인하세요.")
       } else {
-        alert(t("success") || "등록되었습니다.")
+        await appAlert(t("success") || "등록되었습니다.")
       }
     } finally {
       setSaving(false)
@@ -705,7 +706,7 @@ export function WithdrawalManagementTab() {
     if (categoryMain === "purchase") {
       const vendor = vendorCode.trim()
       if (!vendor) {
-        alert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
+        await appAlert(t("inAlertSelectVendor") || "매입처를 선택해 주세요.")
         return
       }
       setSaving(true)
@@ -718,10 +719,10 @@ export function WithdrawalManagementTab() {
           updateExisting: updateExistingParam,
         })
         if (!res.success) {
-          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           return
         }
-        alert(res.message || t("success"))
+        await appAlert(res.message || t("success"))
         const q = new URLSearchParams()
         q.set("tab", returnTabParam || "query")
         if (accountId) q.set("accountId", accountId)
@@ -741,7 +742,7 @@ export function WithdrawalManagementTab() {
     const code = payeeCode.trim()
     const name = payeeName.trim()
     if (!code && !name) {
-      alert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+      await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
       return
     }
     setSaving(true)
@@ -757,10 +758,10 @@ export function WithdrawalManagementTab() {
         updateExisting: updateExistingParam,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
-      alert(res.message || t("success"))
+      await appAlert(res.message || t("success"))
       const q = new URLSearchParams()
       q.set("tab", returnTabParam || "query")
       if (accountId) q.set("accountId", accountId)

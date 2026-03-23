@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Bell, Clock3, Copy, RotateCw, Save } from "lucide-react"
@@ -120,13 +121,13 @@ export function PosCookingRulesContent() {
         cookingDelayAlertOverMin: delayOver,
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadData()
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
@@ -158,9 +159,9 @@ export function PosCookingRulesContent() {
     try {
       const s = await getPosPrinterSettings({ storeCode: copySourceStore })
       applySettingsToForm(s)
-      alert(t("posCookingCopyLoadedHint") || "선택한 매장 설정을 불러왔습니다. 저장 버튼을 눌러 현재 매장에 반영하세요.")
+      await appAlert(t("posCookingCopyLoadedHint") || "선택한 매장 설정을 불러왔습니다. 저장 버튼을 눌러 현재 매장에 반영하세요.")
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setCopying(false)
     }
@@ -190,12 +191,12 @@ export function PosCookingRulesContent() {
         cookingDelayAlertOverMin: delayOver,
       })
       if (res.success) {
-        alert(t("posCookingCopySaved") || "현재 규칙을 대상 매장에 복사 저장했습니다.")
+        await appAlert(t("posCookingCopySaved") || "현재 규칙을 대상 매장에 복사 저장했습니다.")
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setCopying(false)
     }

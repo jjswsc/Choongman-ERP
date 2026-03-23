@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -25,11 +26,12 @@ import {
   type StoreVisitHistoryItem,
   type StoreVisitStatsItem,
 } from "@/lib/api-client"
+import { attendanceBusinessDateStrBangkok } from "@/lib/attendance-utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return attendanceBusinessDateStrBangkok(Date.now())
 }
 
 function StatsBlock({
@@ -153,7 +155,7 @@ export function AdminStoreVisit() {
 
   const loadStats = useCallback(async () => {
     if (!statsShowDept && !statsShowEmployee && !statsShowStore && !statsShowPurpose) {
-      alert(t("visit_stats_select_hint"))
+      await appAlert(t("visit_stats_select_hint"))
       return
     }
     setStatsLoading(true)

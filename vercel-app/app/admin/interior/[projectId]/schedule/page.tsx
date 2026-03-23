@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useParams } from "next/navigation"
@@ -61,7 +62,7 @@ export default function InteriorSchedulePage() {
 
   const handleSave = async () => {
     if (!editing || !editing.workDetail?.trim()) {
-      alert(t("interiorWorkDetailRequired") || "작업 내용을 입력하세요.")
+      await appAlert(t("interiorWorkDetailRequired") || "작업 내용을 입력하세요.")
       return
     }
     try {
@@ -77,17 +78,17 @@ export default function InteriorSchedulePage() {
       if (res.success) {
         setEditing(null)
         loadData()
-        alert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved") || "저장되었습니다.")
       } else {
-        alert(res.message || "저장 실패")
+        await appAlert(res.message || "저장 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorScheduleItem({ id })
@@ -95,10 +96,10 @@ export default function InteriorSchedulePage() {
         loadData()
         if (editing?.id === id) setEditing(null)
       } else {
-        alert(res.message || "삭제 실패")
+        await appAlert(res.message || "삭제 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }

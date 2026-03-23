@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -250,14 +251,14 @@ export function AdminPurchaseOrder() {
         withholdingTaxAmount: Number(withholdingTaxAmount?.replace(/,/g, "")) || 0,
       })
       if (res.success) {
-        alert(t("purchaseOrderSuccess") + (res.poNo ? ` (${res.poNo})` : ""))
+        await appAlert(t("purchaseOrderSuccess") + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
         setWithholdingTaxAmount("")
       } else {
-        alert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
+        await appAlert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
     } catch (e) {
-      alert(t("purchaseOrderFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("purchaseOrderFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(false)
     }

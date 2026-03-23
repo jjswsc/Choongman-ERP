@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -159,7 +160,7 @@ export function CardManagementTab() {
 
   React.useEffect(() => {
     Promise.all([
-      getAccountSubjects({ forCard: true }).catch(() => []),
+      getAccountSubjects({ forCard: true, excludeHeaders: true }).catch(() => []),
       getVendorsForPurchase().catch(() => []),
     ]).then(([s, v]) => {
       setAccountSubjects(s || [])
@@ -202,27 +203,27 @@ export function CardManagementTab() {
         setAccountDialogOpen(false)
         loadAccounts()
       } else {
-        alert(res.message || t("msg_save_fail"))
+        await appAlert(res.message || t("msg_save_fail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setAccountSaving(false)
     }
   }
 
   const handleDeleteAccount = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     try {
       const res = await deleteCardAccount({ id })
       if (res.success) {
         loadAccounts()
         loadTransactions()
       } else {
-        alert(res.message || t("msg_delete_fail"))
+        await appAlert(res.message || t("msg_delete_fail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 
@@ -246,7 +247,7 @@ export function CardManagementTab() {
     const cardId = transFormCardId && transFormCardId !== "__all__" ? Number(transFormCardId) : 0
     const amt = Number(String(transFormAmount).replace(/,/g, ""))
     if (!cardId || !transFormDate || amt <= 0) {
-      alert(t("cardManagementAlertAmount") || "카드, 날짜, 금액을 입력해 주세요.")
+      await appAlert(t("cardManagementAlertAmount") || "카드, 날짜, 금액을 입력해 주세요.")
       return
     }
     setTransSaving(true)
@@ -266,27 +267,27 @@ export function CardManagementTab() {
         setTransDialogOpen(false)
         loadTransactions()
       } else {
-        alert(res.message || t("msg_save_fail"))
+        await appAlert(res.message || t("msg_save_fail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setTransSaving(false)
     }
   }
 
   const handleDeleteTrans = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteCardTransaction({ id })
       if (res.success) {
         loadTransactions()
       } else {
-        alert(res.message || t("msg_delete_fail"))
+        await appAlert(res.message || t("msg_delete_fail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }

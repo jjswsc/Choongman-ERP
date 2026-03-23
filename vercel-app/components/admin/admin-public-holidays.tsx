@@ -1,4 +1,5 @@
 "use client"
+import { appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -141,7 +142,7 @@ export function AdminPublicHolidays() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("holiday_delete_confirm"))) return
+    if (!await appConfirm(t("holiday_delete_confirm"))) return
     setError(null)
     try {
       const res = await fetch("/api/savePublicHoliday", {

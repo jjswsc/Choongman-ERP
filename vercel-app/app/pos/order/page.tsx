@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
@@ -48,6 +49,8 @@ import {
 import { OfflineBanner } from "@/components/offline-banner"
 import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
+import { PROMOTION_MAIN_CATEGORY } from "@/lib/pos-promo-constants"
+import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -71,6 +74,7 @@ interface CartItem {
   menuId2?: string
   optionId2?: string
   promoId?: string
+  promoCode?: string
   promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
@@ -288,8 +292,9 @@ export default function PosOrderPage() {
         const promoCategories = [...new Set((promoList || []).map((p) => p.category).filter(Boolean))]
         const merged = [...new Set([...(cats || []), ...promoCategories])].sort()
         setCategories(merged)
-        setMainCategories(mains || [])
-        setSelectedMainCategory((prev) => ((mains || []).includes(prev) ? prev : ""))
+        const mainMerged = [...new Set([...(mains || []), PROMOTION_MAIN_CATEGORY])].sort()
+        setMainCategories(mainMerged)
+        setSelectedMainCategory((prev) => (mainMerged.includes(prev) ? prev : ""))
         setSelectedCategory((prev) => (merged.includes(prev) ? prev : ""))
       })
       .catch(() => {
@@ -348,11 +353,32 @@ export default function PosOrderPage() {
     return notSoldOut.filter((m) => (m.category ?? "") === selectedCategory)
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
+  const linkedPromoIds = React.useMemo(() => {
+    const s = new Set<string>()
+    for (const m of menus) {
+      const pid = m.promoId?.trim()
+      if (pid) s.add(pid)
+    }
+    return s
+  }, [menus])
+
+  const businessDateYmd = getPosBusinessDateStr()
+
   const filteredPromos = React.useMemo(() => {
-    const active = promos.filter((p) => p.isActive)
-    if (!selectedCategory) return active
-    return active.filter((p) => p.category === selectedCategory)
-  }, [promos, selectedCategory])
+    return promos.filter((p) => {
+      if (!p.isActive) return false
+      if (linkedPromoIds.has(p.id)) return false
+      const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
+      const sub = (p.category || "").trim()
+      if (selectedMainCategory && cm !== selectedMainCategory) return false
+      if (selectedCategory && sub !== selectedCategory) return false
+      return isPromoVisibleInContext(p, {
+        businessDateYmd,
+        orderType,
+        deliveryAppCode: null,
+      })
+    })
+  }, [promos, selectedCategory, selectedMainCategory, linkedPromoIds, businessDateYmd, orderType])
 
   const getPromoPrice = (p: PosPromoWithItems) =>
     orderType === "delivery" && p.priceDelivery != null ? p.priceDelivery : p.price
@@ -391,6 +417,14 @@ export default function PosOrderPage() {
   }
 
   const addToCart = (menu: PosMenu) => {
+    const mirrorPromoId = menu.promoId?.trim()
+    if (mirrorPromoId) {
+      const pr = promos.find((x) => x.id === mirrorPromoId)
+      if (pr && isPromoVisibleInContext(pr, { businessDateYmd, orderType, deliveryAppCode: null })) {
+        addPromoToCart(pr)
+        return
+      }
+    }
     if (isBanbanMenu(menu)) {
       setOptionPickerBanbanFirst(null)
       setOptionPickerMenu(menu)
@@ -448,6 +482,7 @@ export default function PosOrderPage() {
         price,
         qty: 1,
         promoId: promo.id,
+        promoCode: promo.code,
         promoItems: promo.items || [],
       }]
     })
@@ -563,10 +598,10 @@ export default function PosOrderPage() {
         setDiscountValue("")
         setDiscountReason("")
       } else {
-        alert(res.message ?? (t("posCouponInvalid") || "유효하지 않은 쿠폰입니다."))
+        await appAlert(res.message ?? (t("posCouponInvalid") || "유효하지 않은 쿠폰입니다."))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setCouponLoading(false)
     }
@@ -581,9 +616,9 @@ export default function PosOrderPage() {
     if (appliedCoupon) setAppliedCoupon(null)
   }, [cart])
 
-  const openPaymentModal = () => {
+  const openPaymentModal = async () => {
     if (cart.length === 0) {
-      alert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
+      await appAlert(t("posCartEmpty") || "장바구니가 비어 있습니다.")
       return
     }
     setPayCash(String(total))
@@ -606,7 +641,7 @@ export default function PosOrderPage() {
     const checkoutTotal = checkoutPricing.finalTotal
     const sum = payment.cash + payment.card + payment.qr + payment.other
     if (Math.abs(sum - checkoutTotal) > 0.01) {
-      alert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
+      await appAlert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
       return
     }
     setSubmitting(true)
@@ -631,8 +666,14 @@ export default function PosOrderPage() {
           name: it.name,
           price: it.price,
           qty: it.qty,
+          orderType,
           ...(it.menuId1 != null && { menuId1: it.menuId1, optionId1: it.optionId1, menuId2: it.menuId2, optionId2: it.optionId2 }),
-          ...(it.promoId && it.promoItems && { promoId: it.promoId, promoItems: it.promoItems }),
+          ...(it.promoId &&
+            it.promoItems && {
+              promoId: it.promoId,
+              promoCode: it.promoCode,
+              promoItems: it.promoItems,
+            }),
         })),
       })
       if (res.success) {
@@ -666,10 +707,10 @@ export default function PosOrderPage() {
         handleClearCoupon()
         loadTodaySales()
       } else {
-        alert(res.message || "저장 실패")
+        await appAlert(res.message || "저장 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSubmitting(false)
     }
@@ -692,7 +733,7 @@ export default function PosOrderPage() {
     }
   `
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!receiptRef.current) return
     const printContent = receiptRef.current.innerHTML
     // #region agent log
@@ -702,7 +743,7 @@ export default function PosOrderPage() {
     // #endregion
     const printWindow = window.open("", "_blank")
     if (!printWindow) {
-      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
       return
     }
     printWindow.document.write(`
@@ -749,7 +790,7 @@ export default function PosOrderPage() {
     if (!receiptData || !receiptData.storeCode) return
     const win = window.open("", "_blank")
     if (!win) {
-      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
       return
     }
     try {
@@ -820,7 +861,7 @@ export default function PosOrderPage() {
       printOne(0)
     } catch (e) {
       win.close()
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 

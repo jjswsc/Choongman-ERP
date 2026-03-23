@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { postExpenseAccrualJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 type AccountSubjectRow = { id?: number; code?: string; name?: string; name_en?: string }
 type BankTxRow = { id?: number; account_id?: number; trans_date?: string; trans_type?: string; amount?: number }
@@ -32,6 +33,13 @@ export async function POST(request: NextRequest) {
     }
     if (!payeeCode) {
       return NextResponse.json({ success: false, message: '지급처를 입력해 주세요.' }, { status: 400, headers })
+    }
+
+    if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
+      const hdr = await assertAccountSubjectNotHeader(Number(accountSubjectId))
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
     }
 
     const bankRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, { limit: 1 })) as BankTxRow[] | null
@@ -153,6 +161,8 @@ export async function POST(request: NextRequest) {
         amountAbs: amount,
         expenseAccountCode: subjectCode,
         expenseAccountName: subjectName,
+        expenseAccountSubjectId:
+          accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         memo: `지출 발생(통장연결) ${payeeName || payeeCode}`,
         storeName: storeName || undefined,
         postedBy: userName || undefined,

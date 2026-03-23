@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import Image from "next/image"
@@ -243,7 +244,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     try {
       const res = await changePassword({ store, name: user, oldPw: pwOld, newPw: pwNew })
       if (res.success) {
-        alert(translateApiMessage(res.message, tMsg) || tMsg("pw_success"))
+        await appAlert(translateApiMessage(res.message, tMsg) || tMsg("pw_success"))
         setPwModalOpen(false)
         setPwOld("")
         setPwNew("")
@@ -589,9 +590,9 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
 
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (!store || !user) {
-                  alert(tMsg("msg_store_name_first"))
+                  await appAlert(tMsg("msg_store_name_first"))
                   return
                 }
                 setPwModalOpen(true)

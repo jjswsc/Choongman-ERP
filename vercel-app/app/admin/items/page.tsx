@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Tags, Settings, FileSpreadsheet, History } from "lucide-react"
@@ -131,11 +132,11 @@ export default function ItemsPage() {
     const code = formData.code.trim()
     const name = formData.name.trim()
     if (!code || !name) {
-      alert(t("itemsAlertCodeName"))
+      await appAlert(t("itemsAlertCodeName"))
       return
     }
     if (!editingCode && products.some((p) => p.code === code)) {
-      alert(t("itemsAlertCodeExists"))
+      await appAlert(t("itemsAlertCodeExists"))
       return
     }
     const validStandardUnits = (formData.standardUnits || []).filter((o) => (o.unit || "").trim() && o.totalQuantity > 0)
@@ -171,7 +172,7 @@ export default function ItemsPage() {
       standardUnits: validStandardUnits,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
     const newItem: Product = {
@@ -197,10 +198,10 @@ export default function ItemsPage() {
     }
     if (editingCode) {
       setProducts((prev) => prev.map((p) => (p.code === editingCode ? newItem : p)))
-      alert(t("itemsAlertUpdated"))
+      await appAlert(t("itemsAlertUpdated"))
     } else {
       setProducts((prev) => [...prev, newItem])
-      alert(t("itemsAlertSaved"))
+      await appAlert(t("itemsAlertSaved"))
     }
     const newCat = formData.category.trim()
     if (newCat && !allCategories.includes(newCat)) {
@@ -246,7 +247,7 @@ export default function ItemsPage() {
     const nextDisabled = !product.orderDisabled
     const res = await updateItemOrderDisabled({ code: product.code, disabled: nextDisabled })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
       return
     }
     setProducts((prev) =>
@@ -255,10 +256,10 @@ export default function ItemsPage() {
   }
 
   const handleDelete = async (product: Product) => {
-    if (!confirm(`"${product.name}" ${t("itemsConfirmDelete")}`)) return
+    if (!await appConfirm(`"${product.name}" ${t("itemsConfirmDelete")}`)) return
     const res = await deleteItem({ code: product.code })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
       return
     }
     setProducts((prev) => prev.filter((p) => p.code !== product.code))
@@ -266,7 +267,7 @@ export default function ItemsPage() {
       setFormData(emptyForm)
       setEditingCode(null)
     }
-    alert(t("itemsAlertDeleted"))
+    await appAlert(t("itemsAlertDeleted"))
   }
 
   const handleSearch = () => {
@@ -281,14 +282,14 @@ export default function ItemsPage() {
     try {
       const res = await importItemsFromExcel(file)
       if (res.success) {
-        alert(res.message || (res.added ? `${res.added}건 등록` : '완료'))
+        await appAlert(res.message || (res.added ? `${res.added}건 등록` : '완료'))
         const [list] = await Promise.all([getAdminItems()])
         setProducts(list || [])
       } else {
-        alert(res.message || '가져오기 실패')
+        await appAlert(res.message || '가져오기 실패')
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류')
+      await appAlert(err instanceof Error ? err.message : '오류')
     } finally {
       setExcelImporting(false)
     }

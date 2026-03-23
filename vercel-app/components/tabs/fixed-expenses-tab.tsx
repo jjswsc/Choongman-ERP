@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -66,7 +67,7 @@ export function FixedExpensesTab() {
   }, [storeFilter, auth?.store, auth?.role])
 
   React.useEffect(() => {
-    getAccountSubjects()
+    getAccountSubjects({ excludeHeaders: true })
       .then((r) => setAccountSubjectOptions(r || []))
       .catch(() => setAccountSubjectOptions([]))
   }, [])
@@ -103,12 +104,12 @@ export function FixedExpensesTab() {
 
   const handleSave = async () => {
     if (!addName.trim()) {
-      alert(t("fixedExpNameRequired") || "항목명을 입력하세요.")
+      await appAlert(t("fixedExpNameRequired") || "항목명을 입력하세요.")
       return
     }
     const amount = Number(addAmount?.replace(/,/g, ""))
     if (isNaN(amount) || amount < 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력하세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력하세요.")
       return
     }
     setSaving(true)
@@ -128,17 +129,17 @@ export function FixedExpensesTab() {
         resetForm()
         loadData()
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail") || "저장 실패")
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail") || "저장 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("fixedExpDeleteConfirm") || "이 고정비를 삭제하시겠습니까?")) return
+    if (!await appConfirm(t("fixedExpDeleteConfirm") || "이 고정비를 삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteFixedExpense({ id })
@@ -146,10 +147,10 @@ export function FixedExpensesTab() {
         loadData()
         if (editingId === id) resetForm()
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail") || "삭제 실패")
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail") || "삭제 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }

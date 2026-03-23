@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 중복 판별용 키: trans_date | trans_type | amount(절대값) | memo */
 function dupKey(transDate: string, transType: string, amount: number, memo: string): string {
@@ -78,7 +79,13 @@ export async function POST(request: NextRequest) {
       const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
       const validCategory = transType === 'deposit'
         ? (depositCategories.includes(category) ? category : 'revenue_delivery')
-        : 'unclassified'
+        : (withdrawCategories.includes(category) ? category : 'unclassified')
+
+      const persistDepositSubject =
+        transType === 'deposit' &&
+        !['correction', 'loan', 'advance', 'unclassified', 'receivable_receive'].includes(validCategory)
+      const persistWithdrawSubject =
+        transType === 'withdraw' && ['transfer', 'expense', 'fixed'].includes(validCategory)
 
       const row: Record<string, unknown> = {
         account_id: accountId,
@@ -91,9 +98,15 @@ export async function POST(request: NextRequest) {
         user_name: userName || null,
         category: validCategory,
       }
-      if (transType === 'deposit' && accountSubjectId != null) {
+      if ((persistDepositSubject || persistWithdrawSubject) && accountSubjectId != null) {
         const asid = Number(accountSubjectId)
-        if (!isNaN(asid)) row.account_subject_id = asid
+        if (!isNaN(asid)) {
+          const hdr = await assertAccountSubjectNotHeader(asid)
+          if (!hdr.ok) {
+            return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+          }
+          row.account_subject_id = asid
+        }
       }
       if (transType === 'deposit' && salesDate) {
         const sd = String(salesDate).slice(0, 10)
@@ -104,9 +117,22 @@ export async function POST(request: NextRequest) {
         if (/^\d{4}-\d{2}-\d{2}$/.test(ed)) row.expense_date = ed
       }
       if (transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) row.store_name = storeNameForReceivable
+      if (transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) row.vendor_code = vendorCode
 
       const btInserted = (await supabaseInsert('bank_transactions', row)) as { id?: number }[]
       const bankId = Array.isArray(btInserted) && btInserted[0] ? btInserted[0].id : undefined
+
+      if (bankId && transType === 'withdraw' && validCategory === 'purchase_payment' && vendorCode) {
+        await supabaseInsert('payable_transactions', {
+          vendor_code: vendorCode,
+          amount: -Math.abs(amount),
+          ref_type: 'Payment',
+          ref_id: null,
+          trans_date: transDate.slice(0, 10),
+          memo: memo ? `통장 지급: ${memo.slice(0, 200)}` : '통장 지급',
+          bank_transaction_id: bankId,
+        })
+      }
 
       if (bankId && transType === 'deposit' && validCategory === 'receivable_receive' && storeNameForReceivable) {
         await supabaseInsert('receivable_transactions', {
@@ -120,22 +146,37 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const skipJournal = transType === 'withdraw'
-      if (!skipJournal) {
       try {
-        await postBankTransactionJournal({
-          bankTransactionId: bankId,
-          transDate,
-          transType: transType as 'deposit' | 'withdraw',
-          amountAbs: Math.abs(amount),
-          category: validCategory,
-          memo,
-          storeName: store || undefined,
-          postedBy: userName || undefined,
-        })
+        if (transType === 'deposit') {
+          await postBankTransactionJournal({
+            bankTransactionId: bankId,
+            transDate,
+            transType: 'deposit',
+            amountAbs: Math.abs(amount),
+            category: validCategory,
+            memo,
+            storeName: store || undefined,
+            postedBy: userName || undefined,
+          })
+        } else {
+          const journalSubjectId =
+            validCategory === 'expense' || validCategory === 'fixed'
+              ? (accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null)
+              : null
+          await postBankTransactionJournal({
+            bankTransactionId: bankId,
+            transDate,
+            transType: 'withdraw',
+            amountAbs: Math.abs(amount),
+            category: validCategory,
+            memo,
+            storeName: store || undefined,
+            postedBy: userName || undefined,
+            accountSubjectId: journalSubjectId,
+          })
+        }
       } catch (postingErr) {
         console.error('addBankTransactionsBulk posting:', postingErr)
-      }
       }
       inserted++
     }

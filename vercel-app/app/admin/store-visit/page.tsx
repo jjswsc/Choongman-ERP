@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
 import { VisitStatsContent } from "@/components/visit-stats/visit-stats-content"
 import { VisitListTab } from "@/components/visit-stats/visit-list-tab"
+import { VisitTodayTab } from "@/components/visit-stats/visit-today-tab"
 
 export default function Page() {
   const { lang } = useLang()
@@ -25,12 +26,16 @@ export default function Page() {
         </div>
 
         <Tabs defaultValue="list" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-4">
             <TabsTrigger value="list" className="text-sm font-medium">{t("tab_visit_list")}</TabsTrigger>
+            <TabsTrigger value="today" className="text-sm font-medium">{t("tab_visit_today")}</TabsTrigger>
             <TabsTrigger value="stats" className="text-sm font-medium">{t("tab_visit_stats")}</TabsTrigger>
           </TabsList>
           <TabsContent value="list" className="mt-0 space-y-4">
             <VisitListTab />
+          </TabsContent>
+          <TabsContent value="today" className="mt-0 space-y-4">
+            <VisitTodayTab />
           </TabsContent>
           <TabsContent value="stats" className="mt-0 space-y-4">
             <VisitStatsContent />

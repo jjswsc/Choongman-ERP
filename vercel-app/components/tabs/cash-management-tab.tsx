@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -165,12 +166,12 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!addStore || !addAmount.trim()) {
-      alert(t('msg_store_name_first'))
+      await appAlert(t('msg_store_name_first'))
       return
     }
     const amt = parseFloat(addAmount.replace(/,/g, ''))
     if (Number.isNaN(amt) || amt <= 0) {
-      alert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
+      await appAlert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
       return
     }
     setAddSaving(true)
@@ -189,12 +190,12 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         setAddAmount('')
         setAddMemo('')
         loadList()
-        alert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
+        await appAlert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setAddSaving(false)
     }
@@ -243,12 +244,12 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
   const handleSalesWithdrawalAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!addStore || !salesWithdrawalAmount.trim()) {
-      alert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
+      await appAlert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
       return
     }
     const amt = parseFloat(salesWithdrawalAmount.replace(/,/g, ''))
     if (Number.isNaN(amt) || amt <= 0) {
-      alert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
+      await appAlert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
       return
     }
     setSalesWithdrawalSaving(true)
@@ -270,12 +271,12 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
         loadList()
         loadSalesWithdrawalList()
         loadSalesWithdrawalCash()
-        alert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
+        await appAlert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSalesWithdrawalSaving(false)
     }

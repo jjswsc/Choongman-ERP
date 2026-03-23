@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -161,9 +162,9 @@ export function WorklogApproval() {
     try {
       const res = await updateWorkLogPriority({ id, priority })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : translateApiMessage((res as { message?: string }).message, t) || t("workLogSaveFail"))
+      else await appAlert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : translateApiMessage((res as { message?: string }).message, t) || t("workLogSaveFail"))
     } catch {
-      alert(t("workLogProcessError"))
+      await appAlert(t("workLogProcessError"))
     } finally {
       setUpdating(null)
     }
@@ -174,16 +175,16 @@ export function WorklogApproval() {
     try {
       const res = await updateWorkLogManagerCheck({ id, status: "승인" })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
+      else await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
     } catch {
-      alert(t("workLogProcessError"))
+      await appAlert(t("workLogProcessError"))
     } finally {
       setUpdating(null)
     }
   }
 
   const handleAddComment = async (id: string, existingComment?: string) => {
-    const comment = prompt(t("workLogCommentPrompt"), existingComment ?? "")
+    const comment = await appPrompt(t("workLogCommentPrompt"), existingComment ?? "")
     if (comment === null) return
     setUpdating(id)
     try {
@@ -193,23 +194,23 @@ export function WorklogApproval() {
         comment: comment.trim() || undefined,
       })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
+      else await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogProcessError")))
     } catch {
-      alert(t("workLogProcessError"))
+      await appAlert(t("workLogProcessError"))
     } finally {
       setUpdating(null)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t("workLogDeleteConfirm"))) return
+    if (!await appConfirm(t("workLogDeleteConfirm"))) return
     setUpdating(id)
     try {
       const res = await deleteWorkLogItem({ id })
       if (res.success) loadData()
-      else alert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage((res as { message?: string }).message, t) || t("workLogDeleteFail")))
+      else await appAlert((res as { messageKey?: string; message?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage((res as { message?: string }).message, t) || t("workLogDeleteFail")))
     } catch {
-      alert(t("workLogDeleteFail"))
+      await appAlert(t("workLogDeleteFail"))
     } finally {
       setUpdating(null)
     }

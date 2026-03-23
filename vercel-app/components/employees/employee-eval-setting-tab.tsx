@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -89,17 +90,17 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
       sort_order: idx + 1,
     }))
     if (updates.length === 0) {
-      alert(t("eval_save_items_ok") || t("eval_no_items_to_save"))
+      await appAlert(t("eval_save_items_ok") || t("eval_no_items_to_save"))
       return
     }
     setSaving(true)
     try {
       await updateEvaluationItems({ type, updates })
-      alert(t("eval_save_items_ok"))
+      await appAlert(t("eval_save_items_ok"))
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }
@@ -128,26 +129,26 @@ export function EmployeeEvalSettingTab({ type, readOnly = false }: EmployeeEvalS
         itemName,
       })
       setAddOpen(false)
-      alert(t("eval_add_item_ok"))
+      await appAlert(t("eval_add_item_ok"))
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (itemId: string | number) => {
-    if (!confirm(t("eval_delete_confirm"))) return
+    if (!await appConfirm(t("eval_delete_confirm"))) return
     setSaving(true)
     try {
       await deleteEvaluationItem({ type, itemId })
-      alert(t("eval_delete_ok"))
+      await appAlert(t("eval_delete_ok"))
       await loadItems()
     } catch (e) {
       console.error(e)
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaving(false)
     }

@@ -20,7 +20,11 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { getPosMenuCostAnalysis, type PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
-import { POS_MAIN_CATEGORIES, mainCategoryMatches } from "@/lib/pos-menu-categories"
+import {
+  POS_MAIN_CATEGORIES,
+  getPresetCategoriesForMain,
+  mainCategoryMatches,
+} from "@/lib/pos-menu-categories"
 
 const MISE_RATE_DEFAULT = 3
 
@@ -45,21 +49,14 @@ export default function PosCostAnalysisPage() {
   const [searchTerm, setSearchTerm] = React.useState("")
   const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [mainCategoryFilter, setMainCategoryFilter] = React.useState("all")
-  const [miseRate, setMiseRate] = React.useState(MISE_RATE_DEFAULT)
   const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = React.useState("list")
   const [selectedForCalculator, setSelectedForCalculator] = React.useState<PosMenuCostAnalysisRow | null>(null)
   const searchInputRef = React.useRef<HTMLInputElement>(null)
-
-  if (!canAccessPosCostAnalysis(auth?.role || "")) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-8">
-        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
-      </div>
-    )
-  }
+  const allowed = canAccessPosCostAnalysis(auth?.role || "")
 
   const loadList = React.useCallback(async () => {
+    if (!allowed) return
     setLoading(true)
     const timeoutMs = 60000
     const timeoutPromise = new Promise<never>((_, reject) =>
@@ -77,33 +74,33 @@ export default function PosCostAnalysisPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
-
-  React.useEffect(() => {
-    // 초기 마운트 시 자동 조회하지 않음. "조회" 버튼으로 로드.
-  }, [])
+  }, [allowed])
 
   /** 계산기 탭 진입 시 데이터 없으면 자동 조회 — 메뉴 검색 드롭다운용 */
   React.useEffect(() => {
-    if (activeTab === "calculator" && rows.length === 0 && !loading) {
+    if (allowed && activeTab === "calculator" && rows.length === 0 && !loading) {
       loadList()
     }
-  }, [activeTab, rows.length, loading, loadList])
+  }, [allowed, activeTab, rows.length, loading, loadList])
 
   const categories = React.useMemo(() => {
     const set = new Set(rows.map((r) => r.category).filter(Boolean))
     return Array.from(set).sort()
   }, [rows])
 
-  /** 선택한 대분류에 속한 카테고리만 (대분류 선택 시 카테고리 드롭다운용, Chicken/치킨 한영 매칭) */
+  /** 선택한 대분류에 속한 카테고리만 (DB 값 + 프리셋 병합 — category 미입력 시에도 드롭다운 유지) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (mainCategoryFilter === "all") return categories
-    const set = new Set(
-      rows
-        .filter((r) => mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode))
-        .map((r) => r.category)
-        .filter(Boolean)
-    )
+    const set = new Set<string>()
+    for (const r of rows) {
+      if (!mainCategoryMatches(mainCategoryFilter, r.categoryMain, r.menuCode)) continue
+      const c = String(r.category ?? "").trim()
+      if (c) set.add(c)
+    }
+    const preset = getPresetCategoriesForMain(mainCategoryFilter)
+    if (preset) {
+      for (const c of preset) set.add(c)
+    }
     return Array.from(set).sort()
   }, [rows, mainCategoryFilter, categories])
 
@@ -168,12 +165,12 @@ export default function PosCostAnalysisPage() {
   const rowKey = (r: RowWithDisplayCode) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId)
 
   const withMise = (cost: number) =>
-    Math.round(cost * (1 + miseRate / 100) * 10) / 10
+    Math.round(cost * (1 + MISE_RATE_DEFAULT / 100) * 10) / 10
 
   /** 현재 목록(flatList) 기준 평균 — 한눈에 원가 파악용 */
   const listSummary = React.useMemo(() => {
     if (flatList.length === 0) return null
-    const miseMult = 1 + miseRate / 100
+    const miseMult = 1 + MISE_RATE_DEFAULT / 100
     let sumPriceH = 0
     let sumPriceD = 0
     let sumCostHMise = 0
@@ -196,7 +193,7 @@ export default function PosCostAnalysisPage() {
     const avgRatioH = avgPriceH > 0 ? (avgCostH / avgPriceH) * 100 : 0
     const avgRatioD = avgPriceD > 0 ? (avgCostD / avgPriceD) * 100 : 0
     return { n, avgPriceH, avgPriceD, avgCostH, avgCostD, avgRatioH, avgRatioD }
-  }, [flatList, miseRate])
+  }, [flatList])
 
   const handleExportCsv = () => {
     const csvRows: string[] = [
@@ -230,6 +227,14 @@ export default function PosCostAnalysisPage() {
     a.download = `pos-cost-analysis-${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  if (!allowed) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8">
+        <p className="text-muted-foreground">{t("noPermission") || "접근 권한이 없습니다."}</p>
+      </div>
+    )
   }
 
   return (
@@ -341,18 +346,6 @@ export default function PosCostAnalysisPage() {
               <Search className={cn("h-3.5 w-3.5", loading && "animate-pulse")} />
               {loading ? (t("loading") || "조회 중...") : (t("posCostBtnQuery") || "조회")}
             </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t("posCostMise") || "Loss(%)"}</span>
-            <Input
-              type="number"
-              min={0}
-              max={50}
-              step={0.5}
-              className="h-9 w-16 text-right text-xs"
-              value={miseRate}
-              onChange={(e) => setMiseRate(Number(e.target.value) || 0)}
-            />
           </div>
           <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={handleExportCsv}>
             <Download className="h-3.5 w-3.5" />

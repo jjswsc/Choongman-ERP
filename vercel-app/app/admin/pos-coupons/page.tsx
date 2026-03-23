@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Tag, Save, Plus, Trash2, RotateCw } from "lucide-react"
@@ -78,11 +79,11 @@ export default function PosCouponsPage() {
     const code = form.code.trim().toUpperCase()
     const val = Number(form.discountValue) || 0
     if (!code) {
-      alert(t("posCouponCodeRequired") || "쿠폰 코드를 입력하세요.")
+      await appAlert(t("posCouponCodeRequired") || "쿠폰 코드를 입력하세요.")
       return
     }
     if (form.discountType === "percent" && (val < 1 || val > 100)) {
-      alert(t("posCouponPercentRange") || "할인율은 1~100입니다.")
+      await appAlert(t("posCouponPercentRange") || "할인율은 1~100입니다.")
       return
     }
     setSaving(true)
@@ -98,14 +99,14 @@ export default function PosCouponsPage() {
         marketingCampaignId: form.marketingCampaignId || null,
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadData()
         handleNew()
       } else {
-        alert(res.message)
+        await appAlert(res.message)
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
@@ -113,13 +114,13 @@ export default function PosCouponsPage() {
 
   const handleDelete = async (c: PosCoupon) => {
     if (c.id == null) return
-    if (!confirm(`${c.code} ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`${c.code} ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
     const res = await deletePosCoupon({ id: c.id })
     if (res.success) {
       loadData()
       if (editingId === c.id) handleNew()
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 

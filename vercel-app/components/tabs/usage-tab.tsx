@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useState, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -185,11 +186,11 @@ export function UsageTab() {
   const setUsageRow = (idx: number, upd: Partial<UsageRow>) =>
     setUsageRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...upd } : r)))
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!selectedItem) return
     const qtyToAdd = Math.round(totalUsageSpecQty * 1e6) / 1e6
     if (qtyToAdd <= 0) {
-      alert(t("stockAdjustQtyRequired") || "수량을 입력해 주세요.")
+      await appAlert(t("stockAdjustQtyRequired") || "수량을 입력해 주세요.")
       return
     }
     setCart((prev) => {
@@ -219,15 +220,15 @@ export function UsageTab() {
         items: cart.map((c) => ({ code: c.code, name: c.name, qty: c.qty })),
       })
       if (res.success) {
-        alert(t('confirmUsage') + ' ✓')
+        await appAlert(t('confirmUsage') + ' ✓')
         setCart([])
         loadHistory()
         getAppData(effectiveStore).then((r) => setStock(r.stock || {}))
       } else {
-        alert(translateApiMessage(res.message, t) || t('orderFail'))
+        await appAlert(translateApiMessage(res.message, t) || t('orderFail'))
       }
     } catch (e) {
-      alert((t('orderFail') as string) + ': ' + (e instanceof Error ? e.message : String(e)))
+      await appAlert((t('orderFail') as string) + ': ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(false)
     }

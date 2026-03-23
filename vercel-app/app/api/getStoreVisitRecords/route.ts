@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseSelect, supabaseSelectFilter } from "@/lib/supabase-server"
+import {
+  buildVisitDisplayNameMap,
+  visitDisplayName,
+  visitNameSupabaseFilter,
+  visitNameVariantsForFilter,
+} from "@/lib/visit-display-name"
+import { addDayBangkok, visitRowBusinessDateStrBangkok } from "@/lib/attendance-utils"
 
 /** 매장 방문 통계용 raw records (VisitRecord 형식) - Supabase store_visits + employees 부서 매핑 */
 export async function GET(request: NextRequest) {
@@ -13,28 +20,35 @@ export async function GET(request: NextRequest) {
   const userStore = searchParams.get("userStore")?.trim()
   const userRole = String(searchParams.get("userRole") || "").toLowerCase()
 
-  const filters = [
-    `visit_date=gte.${startStr}`,
-    `visit_date=lte.${endStr}`,
-    `or=(visit_type.eq.${encodeURIComponent("방문종료")},visit_type.eq.${encodeURIComponent("강제 방문종료")},duration_min.gt.0)`,
-  ]
-  if (userRole.includes("manager") && userStore) {
-    filters.push(`store_name=eq.${encodeURIComponent(userStore)}`)
-  }
-  if (store && store !== "__ALL__") filters.push(`store_name=eq.${encodeURIComponent(store)}`)
-  if (employeeName && employeeName !== "__ALL__") filters.push(`name=eq.${encodeURIComponent(employeeName)}`)
-  if (purpose && purpose !== "__ALL__") {
-    if (purpose === "기타") {
-      filters.push(`or=(purpose.eq.${encodeURIComponent("기타")},purpose.like.${encodeURIComponent("기타:*")})`)
-    } else {
-      filters.push(`purpose=eq.${encodeURIComponent(purpose)}`)
-    }
-  }
-
   try {
     const empList = (await supabaseSelect("employees", { order: "id.asc", select: "store,job,nick,name", limit: 2000 })) as
       | { store?: string; job?: string; nick?: string; name?: string }[]
       | []
+
+    const displayMap = buildVisitDisplayNameMap(empList)
+
+    const visitDateMin = addDayBangkok(startStr, -1)
+    const visitDateMax = addDayBangkok(endStr, 1)
+    const filters = [
+      `visit_date=gte.${visitDateMin}`,
+      `visit_date=lte.${visitDateMax}`,
+      `or=(visit_type.eq.${encodeURIComponent("방문종료")},visit_type.eq.${encodeURIComponent("강제 방문종료")},duration_min.gt.0)`,
+    ]
+    if (userRole.includes("manager") && userStore) {
+      filters.push(`store_name=eq.${encodeURIComponent(userStore)}`)
+    }
+    if (store && store !== "__ALL__") filters.push(`store_name=eq.${encodeURIComponent(store)}`)
+    if (employeeName && employeeName !== "__ALL__") {
+      const nameF = visitNameSupabaseFilter(visitNameVariantsForFilter(employeeName, empList))
+      if (nameF) filters.push(nameF)
+    }
+    if (purpose && purpose !== "__ALL__") {
+      if (purpose === "기타") {
+        filters.push(`or=(purpose.eq.${encodeURIComponent("기타")},purpose.like.${encodeURIComponent("기타:*")})`)
+      } else {
+        filters.push(`purpose=eq.${encodeURIComponent(purpose)}`)
+      }
+    }
 
     const namesInDept: string[] = []
     if (department && department !== "__ALL__") {
@@ -43,14 +57,16 @@ export async function GET(request: NextRequest) {
         if (st.indexOf("office") === -1 && st !== "본사" && st !== "오피스") continue
         const rowDept = String(e.job || "").trim() || "Staff"
         if (rowDept !== department) continue
-        const n = String(e.nick || "").trim() || String(e.name || "").trim()
-        if (n && !namesInDept.includes(n)) namesInDept.push(n)
+        const nick = String(e.nick || "").trim()
+        const legal = String(e.name || "").trim()
+        if (nick && !namesInDept.includes(nick)) namesInDept.push(nick)
+        if (legal && !namesInDept.includes(legal)) namesInDept.push(legal)
       }
     }
     const rows = (await supabaseSelectFilter("store_visits", filters.join("&"), {
       order: "visit_date.desc,visit_time.desc",
       limit: 5000,
-      select: "visit_date,visit_time,name,store_name,purpose,duration_min",
+      select: "visit_date,visit_time,name,store_name,purpose,duration_min,created_at",
     })) as {
       id?: string
       visit_date?: string
@@ -63,23 +79,30 @@ export async function GET(request: NextRequest) {
     const nameToDept: Record<string, string> = {}
     for (const e of empList) {
       const rowDept = String(e.job || "").trim() || "Staff"
-      const nameToShow = String(e.nick || "").trim() || String(e.name || "").trim()
-      if (nameToShow) nameToDept[nameToShow] = rowDept
+      const nick = String(e.nick || "").trim()
+      const legal = String(e.name || "").trim()
+      if (nick) nameToDept[nick] = rowDept
+      if (legal) nameToDept[legal] = rowDept
     }
 
     const result = (rows || [])
       .filter((d) => !department || department === "__ALL__" || namesInDept.length === 0 || namesInDept.includes(String(d.name || "").trim()))
+      .filter((d) => {
+        const bd = visitRowBusinessDateStrBangkok(d as { visit_date?: string; visit_time?: string; created_at?: string })
+        return bd >= startStr && bd <= endStr
+      })
       .map((d, idx) => {
         const raw = d as { duration_min?: number | string; [k: string]: unknown }
         const durationVal = raw.duration_min ?? raw.durationMin
         const durationNum = durationVal != null && durationVal !== "" ? Math.max(0, Math.floor(Number(durationVal))) : 0
+        const rawName = String(d.name || "").trim()
         return {
           id: idx + 1,
-          employee: String(d.name || "").trim(),
-          department: nameToDept[String(d.name || "").trim()] || "기타",
+          employee: visitDisplayName(rawName, displayMap),
+          department: nameToDept[rawName] || "기타",
           store: String(d.store_name || "").trim(),
           purpose: String(d.purpose || "").trim() || "기타",
-          date: String(d.visit_date || "").slice(0, 10),
+          date: visitRowBusinessDateStrBangkok(d as { visit_date?: string; visit_time?: string; created_at?: string }),
           durationMin: durationNum,
         }
       })

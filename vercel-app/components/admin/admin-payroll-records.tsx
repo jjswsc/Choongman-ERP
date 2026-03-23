@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -213,12 +214,12 @@ ${rows.map((row, ri) => {
 
   const handleSendNotice = async () => {
     if (!monthStr) {
-      alert(t("pay_month_select"))
+      await appAlert(t("pay_month_select"))
       return
     }
     const toSend = Array.from(selected).map((i) => filteredList[i])
     if (toSend.length === 0) {
-      alert(t("pay_notice_select_hint"))
+      await appAlert(t("pay_notice_select_hint"))
       return
     }
     setSendingNotice(true)
@@ -238,7 +239,7 @@ ${rows.map((row, ri) => {
         userRole: auth?.role || "",
       })
       if (res.success) {
-        alert(t("noticeSentSuccess"))
+        await appAlert(t("noticeSentSuccess"))
         setSelected(new Set())
         setSelectAll(false)
         window.dispatchEvent(new CustomEvent("notice-sent"))

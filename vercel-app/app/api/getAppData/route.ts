@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseRpc } from '@/lib/supabase-server'
 import { getVerifiedAuth } from '@/lib/verify-auth'
+import { isPosAdditiveOptionItemCategory } from '@/lib/pos-additive-item-category'
 
 export interface AppItem {
   code: string
@@ -105,6 +106,8 @@ async function getItems(storeName: string, scope?: string): Promise<AppItem[]> {
     if (!row?.code) continue
     // 매장 발주 품목(scope=order)에서 order_disabled=true면 제외
     if (isOrderScope && row.order_disabled === true) continue
+    // POS 추가형 옵션용 품목 마스터 — 발주 품목이 아님(판매 단위는 POS 메뉴·옵션)
+    if (isOrderScope && isPosAdditiveOptionItemCategory(row.category)) continue
     const taxType = row.tax === '면세' ? '면세' : row.tax === '영세율' ? '영세율' : '과세'
     const ps = String(row.purchase_source || '').trim()
     list.push({

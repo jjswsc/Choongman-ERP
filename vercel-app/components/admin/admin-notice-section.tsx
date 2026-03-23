@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -88,7 +89,7 @@ export function AdminNoticeSection() {
 
   const handleSendNotice = async () => {
     if (!noticeTitle.trim()) {
-      alert(t("adminNoticeSubjectRequired"))
+      await appAlert(t("adminNoticeSubjectRequired"))
       return
     }
     if (!auth?.store || !auth?.user) return
@@ -117,9 +118,9 @@ export function AdminNoticeSection() {
       setNoticeTitle("")
       setNoticeContent("")
       setNoticeRecipientsSelected([])
-      alert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
+      await appAlert(translateApiMessage(res.message, t) || t("noticeSentSuccess"))
     } else {
-      alert(translateApiMessage(res.message, t) || t("noticeSendFail"))
+      await appAlert(translateApiMessage(res.message, t) || t("noticeSendFail"))
     }
   }
 

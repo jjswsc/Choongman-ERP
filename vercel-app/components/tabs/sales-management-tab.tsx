@@ -13,10 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  parseOrderTypesParam,
+  normalizeOrderTypesQueryString,
+  type PosOrderTypeValue,
+} from "@/lib/pos-sales-order-type-filter"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useLang } from "@/lib/lang-context"
 import { useOnlineStatus } from "@/lib/offline"
-import { useT } from "@/lib/i18n"
+import { useT, i18n } from "@/lib/i18n"
+import {
+  translatePeriodAxisLabel,
+  translateChannelKey,
+  translatePaymentKey,
+} from "@/lib/sales-analytics-labels"
 import {
   getPosSalesFilterOptions,
   getPosSalesByPeriod,
@@ -49,6 +59,9 @@ import {
   Legend,
 } from "recharts"
 
+/** 번역 누락 시 주제·힌트 라벨 폴백 (ko 기준) */
+const I18N_KO = i18n.ko as Record<string, string>
+
 const PERIOD_GROUP = [
   { value: "month", labelKey: "salesPeriodMonth" },
   { value: "week", labelKey: "salesPeriodWeek" },
@@ -59,11 +72,17 @@ const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
-function formatBath(n: number) {
-  return `฿${(n ?? 0).toLocaleString()}`
+function formatSalesAmount(n: number) {
+  return (n ?? 0).toLocaleString()
 }
 
 type AnalyticsView = "period" | "delivery" | "channel" | "menu" | "payment" | "store" | "store-category" | null
+
+const SALES_ORDER_TYPE_TOGGLES: { type: PosOrderTypeValue; labelKey: string; fallback: string }[] = [
+  { type: "dine_in", labelKey: "salesAmountKindDineIn", fallback: "홀" },
+  { type: "takeout", labelKey: "salesAmountKindTakeout", fallback: "포장" },
+  { type: "delivery", labelKey: "salesAmountKindDelivery", fallback: "배달" },
+]
 
 type SalesTopicConfig = {
   id: string
@@ -95,7 +114,7 @@ const SALES_IA: SalesSubMenuConfig[] = [
   {
     id: "sales-pivot",
     labelKey: "salesManagementSubmenuAggregateInfo",
-    fallbackLabel: "집계 피벗",
+    fallbackLabel: "집계 정보",
     topics: [
       { id: "pivot-store-summary", labelKey: "salesTopicPivotStoreSummary", hintKey: "salesTopicPivotStoreSummaryHint", view: "store" },
       { id: "pivot-store-category", labelKey: "salesTopicPivotStoreCategory", hintKey: "salesTopicPivotStoreCategoryHint", view: "store-category" },
@@ -146,6 +165,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [loading, setLoading] = React.useState(false)
   const [periodGroup, setPeriodGroup] = React.useState<"month" | "week" | "day" | "dow">("day")
   const [menuSearch, setMenuSearch] = React.useState("")
+  /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
+  const [orderTypesKey, setOrderTypesKey] = React.useState("")
 
   const [activeSubMenuId, setActiveSubMenuId] = React.useState<string>(SALES_IA[0].id)
   const [selectedTopicBySubMenu, setSelectedTopicBySubMenu] = React.useState<Record<string, string>>(() =>
@@ -156,12 +177,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     { label: string; key: string; sales: number }[]
   >([])
   const [deliveryAppData, setDeliveryAppData] = React.useState<{
-    items: { label: string; sales: number; pct: number }[]
+    items: { channelKey: string; sales: number; pct: number }[]
     total: number
   }>({ items: [], total: 0 })
-  const [channelData, setChannelData] = React.useState<{ label: string; sales: number }[]>([])
+  const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
   const [menuData, setMenuData] = React.useState<{ name: string; qty: number; sales: number }[]>([])
-  const [paymentData, setPaymentData] = React.useState<{ label: string; sales: number }[]>([])
+  const [paymentData, setPaymentData] = React.useState<{ paymentKey: string; sales: number }[]>([])
   const [storeData, setStoreData] = React.useState<
     { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
   >([])
@@ -171,8 +192,43 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const value = t(key as never)
       return value === key ? fallback : value
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- t 의존 시 무한 루프
-    []
+    [t]
+  )
+
+  const periodChartRows = React.useMemo(
+    () =>
+      periodData.map((r) => ({
+        ...r,
+        axisLabel: translatePeriodAxisLabel(r, periodGroup, tr),
+      })),
+    [periodData, periodGroup, tr]
+  )
+
+  const channelChartRows = React.useMemo(
+    () =>
+      channelData.map((r) => ({
+        ...r,
+        axisLabel: translateChannelKey(r.channelKey, tr),
+      })),
+    [channelData, tr]
+  )
+
+  const paymentChartRows = React.useMemo(
+    () =>
+      paymentData.map((r) => ({
+        ...r,
+        axisLabel: translatePaymentKey(r.paymentKey, tr),
+      })),
+    [paymentData, tr]
+  )
+
+  const deliveryPieRows = React.useMemo(
+    () =>
+      deliveryAppData.items.map((r) => ({
+        ...r,
+        axisLabel: translateChannelKey(r.channelKey, tr),
+      })),
+    [deliveryAppData.items, tr]
   )
 
   const currentSubMenu = SALES_IA.find((menu) => menu.id === activeSubMenuId) ?? SALES_IA[0]
@@ -180,6 +236,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
   const selectedView = selectedTopic?.view ?? null
   const hasData = !!(startStr && endStr)
+
+  const orderTypesParam = React.useMemo(
+    () => parseOrderTypesParam(orderTypesKey || null) ?? undefined,
+    [orderTypesKey]
+  )
 
   const validTopicByMenu = React.useMemo(
     () =>
@@ -196,6 +257,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     pos?: string
     periodGroup?: string
     dateRange?: string
+    orderTypesKey?: string
   }>({})
 
   React.useEffect(() => {
@@ -203,6 +265,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
     const qPos = searchParams.get("pos")
+    const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
     if (qStart && /^\d{4}-\d{2}-\d{2}$/.test(qStart) && userSelectedRef.current.dateRange !== `${startStr}~${endStr}`) {
@@ -240,16 +303,30 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (nextPos !== posFilter && userSelectedRef.current.pos !== posFilter) {
       setPosFilter(nextPos)
     }
+    if (qOrderTypes !== orderTypesKey && userSelectedRef.current.orderTypesKey !== orderTypesKey) {
+      setOrderTypesKey(qOrderTypes)
+    }
     if (
       qMenu === activeSubMenuId &&
       (qPos ?? "") === posFilter &&
       qGroup === periodGroup &&
       qStart === startStr &&
-      qEnd === endStr
+      qEnd === endStr &&
+      qOrderTypes === orderTypesKey
     ) {
       userSelectedRef.current = {}
     }
-  }, [searchParams, activeSubMenuId, posFilter, periodGroup, startStr, endStr, validTopicByMenu, selectedTopicBySubMenu])
+  }, [
+    searchParams,
+    activeSubMenuId,
+    posFilter,
+    periodGroup,
+    startStr,
+    endStr,
+    orderTypesKey,
+    validTopicByMenu,
+    selectedTopicBySubMenu,
+  ])
 
   React.useEffect(() => {
     const currentTopic = selectedTopic?.id
@@ -259,6 +336,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
     const qPos = searchParams.get("pos") ?? ""
+    const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
     if (
@@ -266,6 +344,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       qTopic === currentTopic &&
       qGroup === periodGroup &&
       qPos === posFilter &&
+      qOrderTypes === orderTypesKey &&
       qStart === startStr &&
       qEnd === endStr
     ) return
@@ -277,6 +356,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     if (startStr) expected.set("start", startStr)
     if (endStr) expected.set("end", endStr)
     if (posFilter) expected.set("pos", posFilter)
+    if (orderTypesKey) expected.set("orderTypes", orderTypesKey)
     const expectedStr = expected.toString()
     const currentStr = [
       searchParams.get("menu"),
@@ -285,11 +365,31 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       searchParams.get("start"),
       searchParams.get("end"),
       searchParams.get("pos") ?? "",
+      normalizeOrderTypesQueryString(searchParams.get("orderTypes")),
     ].join("|")
-    const expectedValues = [activeSubMenuId, currentTopic, periodGroup, startStr, endStr, posFilter].join("|")
+    const expectedValues = [
+      activeSubMenuId,
+      currentTopic,
+      periodGroup,
+      startStr,
+      endStr,
+      posFilter,
+      orderTypesKey,
+    ].join("|")
     if (currentStr === expectedValues) return
     router.replace(`${pathname}?${expectedStr}`, { scroll: false })
-  }, [activeSubMenuId, pathname, periodGroup, posFilter, startStr, endStr, router, searchParams, selectedTopic?.id])
+  }, [
+    activeSubMenuId,
+    pathname,
+    periodGroup,
+    posFilter,
+    orderTypesKey,
+    startStr,
+    endStr,
+    router,
+    searchParams,
+    selectedTopic?.id,
+  ])
 
   const loadPosOptions = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -319,11 +419,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       endStr,
       groupBy: periodGroup,
       pos: posFilter || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setPeriodData)
       .catch(() => setPeriodData([]))
       .finally(() => setLoading(false))
-  }, [startStr, endStr, periodGroup, posFilter])
+  }, [startStr, endStr, periodGroup, posFilter, orderTypesParam])
 
   const loadDeliveryAppData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -332,10 +433,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       startStr,
       endStr,
       pos: posFilter || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setDeliveryAppData)
       .catch(() => setDeliveryAppData({ items: [], total: 0 }))
-  }, [startStr, endStr, posFilter, offlineAware])
+  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
 
   const loadChannelData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -343,10 +445,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       startStr,
       endStr,
       pos: posFilter || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setChannelData)
       .catch(() => setChannelData([]))
-  }, [startStr, endStr, posFilter])
+  }, [startStr, endStr, posFilter, orderTypesParam])
 
   const loadMenuData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -356,10 +459,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       endStr,
       pos: posFilter || undefined,
       search: menuSearch || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setMenuData)
       .catch(() => setMenuData([]))
-  }, [startStr, endStr, posFilter, menuSearch, offlineAware])
+  }, [startStr, endStr, posFilter, menuSearch, offlineAware, orderTypesParam])
 
   const loadPaymentData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -368,10 +472,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       startStr,
       endStr,
       pos: posFilter || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setPaymentData)
       .catch(() => setPaymentData([]))
-  }, [startStr, endStr, posFilter, offlineAware])
+  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
 
   const loadStoreData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -380,10 +485,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       startStr,
       endStr,
       pos: posFilter || undefined,
+      orderTypes: orderTypesParam,
     })
       .then(setStoreData)
       .catch(() => setStoreData([]))
-  }, [startStr, endStr, posFilter, offlineAware])
+  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
 
   const loadAllAnalytics = React.useCallback(() => {
     loadPeriodData()
@@ -420,22 +526,40 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       const gStore = guarded(setStoreData)
       setLoading(true)
       Promise.all([
-        getPosSalesByPeriod({ startStr, endStr, groupBy: periodGroup, pos: posFilter || undefined }).then(gPeriod).catch(() => gPeriod([])),
+        getPosSalesByPeriod({
+          startStr,
+          endStr,
+          groupBy: periodGroup,
+          pos: posFilter || undefined,
+          orderTypes: orderTypesParam,
+        })
+          .then(gPeriod)
+          .catch(() => gPeriod([])),
         (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
           startStr,
           endStr,
           pos: posFilter || undefined,
+          orderTypes: orderTypesParam,
         }).then(gDelivery).catch(() => gDelivery({ items: [], total: 0 })),
-        getPosSalesByChannel({ startStr, endStr, pos: posFilter || undefined }).then(gChannel).catch(() => gChannel([])),
+        getPosSalesByChannel({
+          startStr,
+          endStr,
+          pos: posFilter || undefined,
+          orderTypes: orderTypesParam,
+        })
+          .then(gChannel)
+          .catch(() => gChannel([])),
         (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
           startStr,
           endStr,
           pos: posFilter || undefined,
+          orderTypes: orderTypesParam,
         }).then(gPayment).catch(() => gPayment([])),
         (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
           startStr,
           endStr,
           pos: posFilter || undefined,
+          orderTypes: orderTypesParam,
         }).then(gStore).catch(() => gStore([])),
       ]).finally(() => {
         if (loadIdRef.current === id) setLoading(false)
@@ -448,20 +572,26 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       setPaymentData([])
       setStoreData([])
     }
-  }, [startStr, endStr, posFilter, periodGroup, offlineAware])
+  }, [startStr, endStr, posFilter, periodGroup, offlineAware, orderTypesParam])
 
   React.useEffect(() => {
     if (!startStr || !endStr) return
     const id = ++menuLoadIdRef.current
     const fetcher = offlineAware ? getPosSalesByMenuWithCache : getPosSalesByMenu
-    fetcher({ startStr, endStr, pos: posFilter || undefined, search: menuSearch || undefined })
+    fetcher({
+      startStr,
+      endStr,
+      pos: posFilter || undefined,
+      search: menuSearch || undefined,
+      orderTypes: orderTypesParam,
+    })
       .then((data) => {
         if (menuLoadIdRef.current === id) setMenuData(data)
       })
       .catch(() => {
         if (menuLoadIdRef.current === id) setMenuData([])
       })
-  }, [startStr, endStr, posFilter, menuSearch, offlineAware])
+  }, [startStr, endStr, posFilter, menuSearch, offlineAware, orderTypesParam])
 
   const online = useOnlineStatus()
   const prevOnlineRef = React.useRef(online)
@@ -472,6 +602,29 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }
     prevOnlineRef.current = online
   }, [online, offlineAware, hasData, loadAllAnalytics])
+
+  const setSalesAllOrderTypes = React.useCallback(() => {
+    userSelectedRef.current.orderTypesKey = ""
+    setOrderTypesKey("")
+  }, [])
+
+  const toggleOrderTypeChannel = React.useCallback((t: PosOrderTypeValue) => {
+    setOrderTypesKey((prev) => {
+      const normalized = normalizeOrderTypesQueryString(prev)
+      const parts = normalized ? normalized.split(",") : []
+      const nextSet = new Set(parts as PosOrderTypeValue[])
+      if (nextSet.size === 0) {
+        nextSet.add(t)
+      } else if (nextSet.has(t)) {
+        nextSet.delete(t)
+      } else {
+        nextSet.add(t)
+      }
+      const next = [...nextSet].sort().join(",")
+      userSelectedRef.current.orderTypesKey = next
+      return next
+    })
+  }, [])
 
   return (
     <div className="space-y-4">
@@ -541,30 +694,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             ))}
           </div>
 
-          <div className="mb-4 rounded-lg border bg-muted/20 p-3">
-            <div className="mb-2 text-sm font-medium">{tr("salesSelectTopic", "주제 선택")}</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={selectedTopic.id}
-                onValueChange={(topicId) => {
-                  userSelectedRef.current.topic = topicId
-                  setSelectedTopicBySubMenu((prev) => ({
-                    ...prev,
-                    [currentSubMenu.id]: topicId,
-                  }))
-                }}
-              >
-                <SelectTrigger className="w-[260px]">
-                  <SelectValue placeholder={tr("salesSelectTopic", "주제 선택")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {currentSubMenu.topics.map((topic) => (
-                    <SelectItem key={topic.id} value={topic.id}>
-                      {tr(topic.labelKey, topic.labelKey)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+            <div className="mb-2 text-sm font-medium">
+              {tr("salesReportTopicLabel", "리포트(주제)")}
+            </div>
+            <div className="flex flex-wrap gap-2">
               {currentSubMenu.topics.map((topic) => (
                 <Button
                   key={topic.id}
@@ -579,14 +713,76 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     }))
                   }}
                 >
-                  {tr(topic.labelKey, topic.labelKey)}
+                  {tr(topic.labelKey, I18N_KO[topic.labelKey] ?? topic.labelKey)}
                 </Button>
               ))}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {tr("salesManagementSelectedReport", "선택된 리포트")}: {tr(selectedTopic.labelKey, selectedTopic.labelKey)}
-              {selectedTopic.hintKey ? ` · ${tr(selectedTopic.hintKey, "")}` : ""}
+              {tr("salesManagementSelectedReport", "선택된 리포트")}:{" "}
+              {tr(selectedTopic.labelKey, I18N_KO[selectedTopic.labelKey] ?? selectedTopic.labelKey)}
+              {selectedTopic.hintKey
+                ? ` · ${tr(selectedTopic.hintKey, I18N_KO[selectedTopic.hintKey] ?? "")}`
+                : ""}
             </p>
+          </div>
+
+          <div className="mb-3 rounded-lg border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="shrink-0 text-sm font-medium">
+                  {tr("salesAmountKindLabel", "매출액 종류")}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={orderTypesKey === "" ? "default" : "outline"}
+                    onClick={setSalesAllOrderTypes}
+                  >
+                    {tr("salesAmountKindAll", "전체")}
+                  </Button>
+                  {SALES_ORDER_TYPE_TOGGLES.map(({ type, labelKey, fallback }) => {
+                    const active = orderTypesKey !== "" && orderTypesKey.split(",").includes(type)
+                    return (
+                      <Button
+                        key={type}
+                        type="button"
+                        size="sm"
+                        variant={active ? "default" : "outline"}
+                        onClick={() => toggleOrderTypeChannel(type)}
+                      >
+                        {tr(labelKey, fallback)}
+                      </Button>
+                    )
+                  })}
+                </div>
+              </div>
+              {selectedView !== null ? (
+                <>
+                  <span className="hidden h-4 w-px shrink-0 bg-border sm:inline-block" aria-hidden />
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-sm font-medium">
+                      {tr("salesPeriodGranularityLabel", "집계 기간")}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {PERIOD_GROUP.map((g) => (
+                        <Button
+                          key={g.value}
+                          size="sm"
+                          variant={periodGroup === g.value ? "default" : "outline"}
+                          onClick={() => {
+                            userSelectedRef.current.periodGroup = g.value
+                            setPeriodGroup(g.value)
+                          }}
+                        >
+                          {tr(g.labelKey, I18N_KO[g.labelKey] ?? g.labelKey)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-6 overflow-auto max-h-[calc(100vh-380px)] min-h-[200px] rounded-lg border p-4">
@@ -597,28 +793,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -631,11 +812,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </tr>
                     </thead>
                     <tbody>
-                      {periodData.map((r) => (
+                      {periodChartRows.map((r) => (
                         <tr key={r.key} className="border-b">
-                          <td className="py-1.5">{r.label}</td>
+                          <td className="py-1.5">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-mono">
-                            {formatBath(r.sales)}
+                            {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
                       ))}
@@ -648,7 +829,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             {selectedView === "delivery" && (
               !hasData ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  기간을 선택해 주세요.
+                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
                 </p>
               ) : deliveryAppData.items.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -656,28 +837,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -687,25 +853,27 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={deliveryAppData.items}
+                          data={deliveryPieRows}
                           dataKey="sales"
-                          nameKey="label"
+                          nameKey="axisLabel"
                           cx="50%"
                           cy="50%"
                           outerRadius={100}
-                          label={({ label, pct }) => `${label} ${pct.toFixed(1)}%`}
+                          label={({ name, percent }) =>
+                            `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(1)}%`
+                          }
                         >
-                          {deliveryAppData.items.map((_, i) => (
+                          {deliveryPieRows.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v: number) => formatBath(v)} />
+                        <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="min-w-[200px] flex-1">
                     <p className="mb-2 text-lg font-bold">
-                      {tr("salesTotal", "총")} {tr("pL_sales", "매출")} {formatBath(deliveryAppData.total)}
+                      {tr("salesTotal", "총")} {tr("pL_sales", "매출")} {formatSalesAmount(deliveryAppData.total)}
                     </p>
                     <table className="w-full text-sm">
                       <thead>
@@ -716,11 +884,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         </tr>
                       </thead>
                       <tbody>
-                        {deliveryAppData.items.map((r) => (
-                          <tr key={r.label} className="border-b">
-                            <td className="py-1.5">{r.label}</td>
+                        {deliveryPieRows.map((r) => (
+                          <tr key={r.channelKey} className="border-b">
+                            <td className="py-1.5">{r.axisLabel}</td>
                             <td className="py-1.5 text-right font-mono">
-                              {formatBath(r.sales)}
+                              {formatSalesAmount(r.sales)}
                             </td>
                             <td className="py-1.5 text-right text-muted-foreground">
                               {r.pct.toFixed(1)}%
@@ -742,39 +910,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="mb-4 h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={channelData} layout="vertical" margin={{ left: 80 }}>
+                      <BarChart data={channelChartRows} layout="vertical" margin={{ left: 80 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <YAxis dataKey="label" type="category" width={80} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <YAxis dataKey="axisLabel" type="category" width={80} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#22c55e" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -787,11 +940,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </tr>
                     </thead>
                     <tbody>
-                      {channelData.slice(0, 30).map((r) => (
-                        <tr key={r.label} className="border-b">
-                          <td className="py-1.5">{r.label}</td>
+                      {channelChartRows.slice(0, 30).map((r) => (
+                        <tr key={r.channelKey} className="border-b">
+                          <td className="py-1.5">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-mono">
-                            {formatBath(r.sales)}
+                            {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
                       ))}
@@ -808,35 +961,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="mb-4">
                     <Input
-                      placeholder="메뉴 검색"
+                      placeholder={tr("salesMenuSearch", "메뉴 검색")}
                       value={menuSearch}
                       onChange={(e) => setMenuSearch(e.target.value)}
                       className="w-48"
@@ -845,9 +983,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="py-2 text-left">메뉴</th>
-                        <th className="py-2 text-right">수량</th>
-                        <th className="py-2 text-right">매출</th>
+                        <th className="py-2 text-left">{tr("salesMenu", "메뉴")}</th>
+                        <th className="py-2 text-right">{tr("salesQuantity", "수량")}</th>
+                        <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -858,7 +996,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             {r.qty.toLocaleString()}
                           </td>
                           <td className="py-1.5 text-right font-mono">
-                            {formatBath(r.sales)}
+                            {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
                       ))}
@@ -880,28 +1018,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -922,9 +1045,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                           <tr key={r.storeName} className="border-t border-slate-100 hover:bg-slate-50">
                             <td className="px-4 py-2.5 font-medium">{r.storeName}</td>
                             <td className="px-4 py-2.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatBath(r.subtotal)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatBath(r.vat)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold">{formatBath(r.total)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.subtotal)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono">{formatSalesAmount(r.vat)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold">{formatSalesAmount(r.total)}</td>
                           </tr>
                         ))}
                         {storeData.length > 0 && (
@@ -934,13 +1057,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               {storeData.reduce((a, r) => a + r.count, 0).toLocaleString()}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatBath(storeData.reduce((a, r) => a + r.subtotal, 0))}
+                              {formatSalesAmount(storeData.reduce((a, r) => a + r.subtotal, 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatBath(storeData.reduce((a, r) => a + r.vat, 0))}
+                              {formatSalesAmount(storeData.reduce((a, r) => a + r.vat, 0))}
                             </td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatBath(storeData.reduce((a, r) => a + r.total, 0))}
+                              {formatSalesAmount(storeData.reduce((a, r) => a + r.total, 0))}
                             </td>
                           </tr>
                         )}
@@ -963,28 +1086,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1008,7 +1116,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                               <Cell key={i} fill={COLORS[i % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(v: number) => formatBath(v)} />
+                          <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -1017,9 +1125,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
-                            <th className="px-3 py-2 text-left">매장명</th>
-                            <th className="px-3 py-2 text-right">수량</th>
-                            <th className="px-3 py-2 text-right">판매 금액</th>
+                            <th className="px-3 py-2 text-left">{tr("salesStoreName", "매장명")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesQuantity", "수량")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesSalesAmount", "판매 금액")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1027,7 +1135,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                             <tr key={r.storeName} className="border-t">
                               <td className="px-3 py-1.5">{r.storeName}</td>
                               <td className="px-3 py-1.5 text-right font-mono">{r.count.toLocaleString()}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatBath(r.total)}</td>
+                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.total)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1038,11 +1146,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <h3 className="mb-3 text-sm font-semibold">{tr("salesByCategory", "분류별 (채널)")}</h3>
                     <div className="mb-4 h-[260px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={channelData} layout="vertical" margin={{ left: 60 }}>
+                        <BarChart data={channelChartRows} layout="vertical" margin={{ left: 60 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis type="number" tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                          <YAxis dataKey="label" type="category" width={60} tick={{ fontSize: 10 }} />
-                          <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                          <YAxis dataKey="axisLabel" type="category" width={60} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                           <Bar dataKey="sales" fill="#f59e0b" name={tr("salesSalesAmount", "판매 금액")} />
                         </BarChart>
                       </ResponsiveContainer>
@@ -1051,15 +1159,15 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50">
                           <tr>
-                            <th className="px-3 py-2 text-left">분류명</th>
-                            <th className="px-3 py-2 text-right">판매 금액</th>
+                            <th className="px-3 py-2 text-left">{tr("salesCategoryName", "분류명")}</th>
+                            <th className="px-3 py-2 text-right">{tr("salesSalesAmount", "판매 금액")}</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {channelData.map((r) => (
-                            <tr key={r.label} className="border-t">
-                              <td className="px-3 py-1.5">{r.label}</td>
-                              <td className="px-3 py-1.5 text-right font-mono">{formatBath(r.sales)}</td>
+                          {channelChartRows.map((r) => (
+                            <tr key={r.channelKey} className="border-t">
+                              <td className="px-3 py-1.5">{r.axisLabel}</td>
+                              <td className="px-3 py-1.5 text-right font-mono">{formatSalesAmount(r.sales)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1074,7 +1182,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
             {selectedView === "payment" && (
               !hasData ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  기간을 선택해 주세요.
+                  {tr("salesSelectPeriod", "기간을 선택해 주세요.")}
                 </p>
               ) : paymentData.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
@@ -1082,28 +1190,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
-                  <div className="mb-4 flex gap-2">
-                    {PERIOD_GROUP.map((g) => (
-                      <Button
-                        key={g.value}
-                        size="sm"
-                        variant={periodGroup === g.value ? "default" : "outline"}
-                        onClick={() => {
-                          userSelectedRef.current.periodGroup = g.value
-                          setPeriodGroup(g.value)
-                        }}
-                      >
-                        {tr(g.labelKey, g.labelKey)}
-                      </Button>
-                    ))}
-                  </div>
                   <div className="mb-4 h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodData}>
+                      <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatBath(v), tr("pL_sales", "매출")]} />
+                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1113,18 +1206,18 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={paymentData}
+                          data={paymentChartRows}
                           dataKey="sales"
-                          nameKey="label"
+                          nameKey="axisLabel"
                           cx="50%"
                           cy="50%"
                           outerRadius={90}
                         >
-                          {paymentData.map((_, i) => (
+                          {paymentChartRows.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v: number) => formatBath(v)} />
+                        <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
                         <Legend />
                       </PieChart>
                     </ResponsiveContainer>
@@ -1132,16 +1225,16 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <table className="text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="py-2 pr-4 text-left">결제수단</th>
-                        <th className="py-2 text-right">매출</th>
+                        <th className="py-2 pr-4 text-left">{tr("salesPaymentMethod", "결제수단")}</th>
+                        <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {paymentData.map((r) => (
-                        <tr key={r.label} className="border-b">
-                          <td className="py-1.5 pr-4">{r.label}</td>
+                      {paymentChartRows.map((r) => (
+                        <tr key={r.paymentKey} className="border-b">
+                          <td className="py-1.5 pr-4">{r.axisLabel}</td>
                           <td className="py-1.5 text-right font-mono">
-                            {formatBath(r.sales)}
+                            {formatSalesAmount(r.sales)}
                           </td>
                         </tr>
                       ))}
@@ -1154,7 +1247,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
             {selectedView === null && (
               <div className="py-10 text-center">
-                <p className="text-base font-medium">{tr(selectedTopic.labelKey, selectedTopic.labelKey)}</p>
+                <p className="text-base font-medium">
+                  {tr(selectedTopic.labelKey, I18N_KO[selectedTopic.labelKey] ?? selectedTopic.labelKey)}
+                </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {tr("salesManagementComingSoon", "해당 리포트는 현재 준비중입니다.")}
                 </p>

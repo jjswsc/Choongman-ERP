@@ -4,13 +4,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
-const ORDER_TYPE_LABELS: Record<string, string> = {
-  dine_in: '매장',
-  takeout: '포장',
-  delivery: '배달',
+/** UI에서 i18n 매핑용 고정 키 */
+function bucketOrderType(raw: string): 'dine_in' | 'takeout' | 'delivery' | 'unknown' {
+  const t = String(raw ?? '').trim()
+  if (t === 'dine_in' || t === 'takeout' || t === 'delivery') return t
+  return 'unknown'
 }
 
 export async function GET(request: NextRequest) {
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
+    const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
@@ -38,14 +41,15 @@ export async function GET(request: NextRequest) {
 
     const byChannel: Record<string, number> = {}
     for (const r of rows) {
+      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
-      const ch = ORDER_TYPE_LABELS[String(r.order_type ?? '')] || String(r.order_type ?? '').trim() || '(없음)'
+      const ch = bucketOrderType(String(r.order_type ?? ''))
       const amt = Number(r.total) || 0
       byChannel[ch] = (byChannel[ch] || 0) + amt
     }
 
     const result = Object.entries(byChannel)
-      .map(([label, sales]) => ({ label, sales }))
+      .map(([channelKey, sales]) => ({ channelKey, sales }))
       .sort((a, b) => b.sales - a.sales)
 
     return NextResponse.json(result, { headers })

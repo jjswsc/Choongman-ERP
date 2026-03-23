@@ -1,4 +1,5 @@
 'use client'
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -70,13 +71,13 @@ export function TakeoutOrderPanel({
         served: nextPackaged,
       })
       if (!res.success) {
-        alert(res.message || (t('processFail') || '처리 실패'))
+        await appAlert(res.message || (t('processFail') || '처리 실패'))
         return
       }
       setItemPackaged((prev) => ({ ...prev, [itemId]: nextPackaged }))
       onPackaged?.()
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSavingItemId(null)
     }
@@ -89,14 +90,14 @@ export function TakeoutOrderPanel({
   const [cancelling, setCancelling] = useState(false)
 
   const handleCancelOrder = async () => {
-    if (!order || !confirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
+    if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
     setCancelling(true)
     try {
       await updatePosOrderStatus({ id: Number(order.id), status: 'cancelled' })
       onCancel?.()
       onClose?.()
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setCancelling(false)
     }

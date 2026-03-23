@@ -38,6 +38,9 @@ import {
   Calculator,
   GitCompare,
   Settings2,
+  Wrench,
+  Landmark,
+  GitBranch,
 } from "lucide-react"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarTrigger } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -117,6 +120,7 @@ const menuSections: MenuSection[] = [
     items: [
       { titleKey: "adminStoreCheck", icon: Store, href: "/admin/store-check" },
       { titleKey: "adminStoreVisit", icon: MapPin, href: "/admin/store-visit" },
+      { titleKey: "adminStoreRepairs", icon: Wrench, href: "/admin/store-repairs" },
       { titleKey: "adminComplaints", icon: MessageSquareWarning, href: "/admin/complaints" },
     ],
   },
@@ -164,6 +168,8 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminDepreciation", icon: Calculator, href: "/admin/depreciation" },
       { titleKey: "adminIncomeStatement", icon: TrendingUp, href: "/admin/income-statement" },
       { titleKey: "adminBalanceSheet", icon: Scale, href: "/admin/balance-sheet" },
+      { titleKey: "adminChartOfAccounts", icon: GitBranch, href: "/admin/chart-of-accounts" },
+      { titleKey: "adminAccountingCompliance", icon: Landmark, href: "/admin/accounting-compliance" },
     ],
   },
   {

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { createPortal } from "react-dom"
@@ -197,13 +198,13 @@ export function OrderTab() {
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, taxType: c.taxType })),
       })
       if (res.success) {
-        alert(t('orderSuccess'))
+        await appAlert(t('orderSuccess'))
         setCart([])
       } else {
-        alert(t('orderFail') + (res.message ? ': ' + translateApiMessage(res.message, t) : ''))
+        await appAlert(t('orderFail') + (res.message ? ': ' + translateApiMessage(res.message, t) : ''))
       }
     } catch (e) {
-      alert(t('orderFail') + ': ' + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t('orderFail') + ': ' + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(false)
     }
@@ -349,14 +350,14 @@ export function OrderTab() {
   const handleReceiveSubmit = async () => {
     if (!receiveModal) return
     if (!receivePhotoFiles.length) {
-      alert(t("receivePhotoRequired"))
+      await appAlert(t("receivePhotoRequired"))
       return
     }
     const isPartial = receiveModal.order && !isAllInspected(receiveModal.order)
     if (isPartial) {
       const inspectedSet = inspectedItems[receiveModal.order!.id] ?? new Set<number>()
       if (inspectedSet.size === 0) {
-        alert(t("inspectPartialMinItems"))
+        await appAlert(t("inspectPartialMinItems"))
         return
       }
     }
@@ -369,7 +370,7 @@ export function OrderTab() {
         if (dataUrl?.startsWith("data:image")) dataUrls.push(dataUrl)
       }
       if (!dataUrls.length) {
-        alert(t("orderFail"))
+        await appAlert(t("orderFail"))
         setReceiveSubmitting(false)
         return
       }
@@ -414,19 +415,21 @@ export function OrderTab() {
             return next
           })
           setReceiveSubmitting(false)
-          setTimeout(() => alert(t("receiveDone")), 50)
+          setTimeout(() => {
+            void appAlert(t("receiveDone"))
+          }, 50)
         } else {
-          alert(translateApiMessage(res?.message, t) || t("orderFail"))
+          await appAlert(translateApiMessage(res?.message, t) || t("orderFail"))
         }
       } catch (err) {
         console.error("processOrderReceive error:", err)
-        alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
+        await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       } finally {
         setReceiveSubmitting(false)
       }
     } catch (err) {
       console.error("compressImage error:", err)
-      alert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
+      await appAlert(t("orderFail") + ": " + (err instanceof Error ? err.message : String(err)))
       setReceiveSubmitting(false)
     }
   }

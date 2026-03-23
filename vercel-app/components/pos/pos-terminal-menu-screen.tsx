@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
 import Image from 'next/image'
@@ -34,6 +35,10 @@ import {
   type PosMenuScreenConfig,
 } from '@/lib/pos-menu-screen-config'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
+import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
+import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
@@ -55,9 +60,11 @@ export interface PosTerminalMenuScreenProps {
   /** 뒤로가기 버튼 라벨 (기본: 테이블 선택) */
   backButtonLabel?: string
   /** 메뉴/옵션 선택 후 장바구니에 추가할 때 (이름·가격은 옵션 반영된 최종값) */
-  onAddItem?: (item: { id: string; name: string; price: number }) => void
+  onAddItem?: (item: CartPanelAddItemPayload) => void
   /** 주문 유형: 홀/포장=홀가격, 배달=배달앱가격 적용 (admin-config 시 무시) */
   orderType?: PosOrderTypeForPrice
+  /** 배달 탭에서 선택된 앱 code — 프로모 앱 제한 필터용 */
+  deliveryAppCode?: string | null
   /** 하단 화면 구성바 표시 */
   showConfigBar?: boolean
   /** 터치 UI 밀도 (모바일: large) */
@@ -73,6 +80,7 @@ export function PosTerminalMenuScreen({
   backButtonLabel,
   onAddItem,
   orderType = 'dine-in',
+  deliveryAppCode = null,
   showConfigBar = true,
   touchMode = 'default',
   className,
@@ -151,7 +159,7 @@ export function PosTerminalMenuScreen({
     setMenus(list || [])
     setPromos(promoList || [])
     setAllOptions(opts || [])
-    const mains = catRes.mainCategories ?? []
+    const mains = [...new Set([...(catRes.mainCategories ?? []), PROMOTION_MAIN_CATEGORY])].sort()
     setMainCategories(mains)
     setSelectedMainCategory(mains[0] ?? '')
     setSelectedCategory('')
@@ -319,11 +327,41 @@ export function PosTerminalMenuScreen({
     return notSoldOut.filter((m) => (m.category ?? '') === selectedCategory)
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
+  const linkedPromoIds = React.useMemo(() => {
+    const s = new Set<string>()
+    for (const m of menus) {
+      const pid = m.promoId?.trim()
+      if (pid) s.add(pid)
+    }
+    return s
+  }, [menus])
+
+  const businessDateYmd = getPosBusinessDateStr()
+
   const filteredPromos = React.useMemo(() => {
-    const active = promos.filter((p) => p.isActive)
-    if (!selectedCategory) return active
-    return active.filter((p) => p.category === selectedCategory)
-  }, [promos, selectedCategory])
+    const ot = orderType === 'dine-in' ? 'dine_in' : orderType === 'delivery' ? 'delivery' : 'takeout'
+    return promos.filter((p) => {
+      if (!p.isActive) return false
+      if (linkedPromoIds.has(p.id)) return false
+      const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
+      const sub = (p.category || '').trim()
+      if (selectedMainCategory && cm !== selectedMainCategory) return false
+      if (selectedCategory && sub !== selectedCategory) return false
+      return isPromoVisibleInContext(p, {
+        businessDateYmd,
+        orderType: ot,
+        deliveryAppCode: deliveryAppCode || null,
+      })
+    })
+  }, [
+    promos,
+    selectedCategory,
+    selectedMainCategory,
+    linkedPromoIds,
+    businessDateYmd,
+    orderType,
+    deliveryAppCode,
+  ])
 
   React.useEffect(() => {
     const sectionEl = menuListRef.current
@@ -393,6 +431,22 @@ export function PosTerminalMenuScreen({
   }, [menus, optionPickerMenu, todayStr])
 
   const addWithOption = (menu: PosMenu, opt: PosMenuOption | null, defaultOptionName?: string) => {
+    const mirrorPid = menu.promoId?.trim()
+    if (mirrorPid && !opt) {
+      const pr = promos.find((x) => x.id === mirrorPid)
+      const ot = orderType === 'dine-in' ? 'dine_in' : orderType === 'delivery' ? 'delivery' : 'takeout'
+      if (
+        pr &&
+        isPromoVisibleInContext(pr, {
+          businessDateYmd,
+          orderType: ot,
+          deliveryAppCode: deliveryAppCode || null,
+        })
+      ) {
+        addPromo(pr)
+        return
+      }
+    }
     const id = opt ? `${menu.id}-${opt.id}` : menu.id
     const name = opt
       ? `${menu.name} (${opt.name})`
@@ -417,7 +471,14 @@ export function PosTerminalMenuScreen({
   }
 
   const addPromo = (p: PosPromoWithItems) => {
-    onAddItem?.({ id: `promo-${p.id}`, name: p.name, price: getPromoPrice(p) })
+    onAddItem?.({
+      id: `promo-${p.id}`,
+      name: p.name,
+      price: getPromoPrice(p),
+      promoId: p.id,
+      promoCode: p.code,
+      promoItems: p.items || [],
+    })
   }
 
   const openMenuPicker = (menu: PosMenu) => {
@@ -523,7 +584,7 @@ export function PosTerminalMenuScreen({
     const name = menuEditForm.name.trim()
     const code = menuEditForm.code.trim()
     if (!name || !code) {
-      alert((t('msg_fill_required') || '필수 항목을 입력해 주세요.'))
+      await appAlert((t('msg_fill_required') || '필수 항목을 입력해 주세요.'))
       return
     }
     setMenuEditSaving(true)
@@ -549,13 +610,13 @@ export function PosTerminalMenuScreen({
         isBanban: menuEditForm.isBanban,
       })
       if (!res?.success) {
-        alert(res?.message || (t('posSaveFail') || '저장 실패'))
+        await appAlert(res?.message || (t('posSaveFail') || '저장 실패'))
         return
       }
       await loadMenuData()
       setMenuEditOpen(false)
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setMenuEditSaving(false)
     }
@@ -592,10 +653,10 @@ export function PosTerminalMenuScreen({
       if (res?.success && res?.url) {
         setMenuEditForm((p) => ({ ...p, imageUrl: res.url! }))
       } else {
-        alert(res?.message || t('msg_upload_fail') || '업로드 실패')
+        await appAlert(res?.message || t('msg_upload_fail') || '업로드 실패')
       }
     } catch (err) {
-      alert(String(err))
+      await appAlert(String(err))
     } finally {
       setImageUploading(false)
       e.target.value = ''

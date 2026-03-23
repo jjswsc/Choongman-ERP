@@ -28,6 +28,7 @@ export { apiFetchWithOffline }
 export { loginCheck, changePassword } from './api/auth'
 export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
+export { invalidateBankTransactionsListCache } from './offline/erp-offline'
 
 export interface NoticeAttachment {
   name?: string
@@ -1500,6 +1501,153 @@ export async function getBalanceSheet(params: {
   return res.json() as Promise<BalanceSheetData>
 }
 
+export type ThaiFilingResponsibility = 'in_house' | 'tax_agent' | 'tbd'
+
+export async function getAccountingFilingPreferences(params: { userRole: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole })
+  const res = await apiFetchWithOffline(`/api/getAccountingFilingPreferences?${q}`)
+  return res.json() as Promise<{
+    definitions: unknown[]
+    responsibilities: Record<string, ThaiFilingResponsibility>
+    notes: string | null
+    updatedAt: string | null
+  }>
+}
+
+export async function saveAccountingFilingPreferences(params: {
+  userRole: string
+  responsibilities: Record<string, ThaiFilingResponsibility>
+  notes?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/saveAccountingFilingPreferences', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; responsibilities?: Record<string, ThaiFilingResponsibility> }>
+}
+
+export async function getAccountingPeriods(params: { userRole: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole })
+  const res = await apiFetchWithOffline(`/api/getAccountingPeriods?${q}`)
+  return res.json() as Promise<{
+    periods: { yearMonth: string; isClosed: boolean; closedAt: string | null; closedBy: string | null }[]
+  }>
+}
+
+export async function setAccountingPeriodClosed(params: {
+  userRole: string
+  yearMonth: string
+  closed: boolean
+  closedBy?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/setAccountingPeriodClosed', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
+export type TrialBalanceRow = {
+  accountCode: string
+  accountName: string | null
+  debit: number
+  credit: number
+  netDebit: number
+}
+
+export async function getTrialBalance(params: {
+  userRole: string
+  yearMonth?: string
+  storeFilter?: string
+  userStore?: string
+}) {
+  const q = new URLSearchParams({ userRole: params.userRole })
+  if (params.yearMonth) q.set('yearMonth', params.yearMonth)
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  const res = await apiFetchWithOffline(`/api/getTrialBalance?${q}`)
+  return res.json() as Promise<{
+    yearMonth: string
+    rows: TrialBalanceRow[]
+    totalDebit: number
+    totalCredit: number
+    diff: number
+  }>
+}
+
+export async function getVatLedger(params: { userRole: string; taxMonth: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  const res = await apiFetchWithOffline(`/api/vatLedger?${q}`)
+  return res.json() as Promise<{ entries: Record<string, unknown>[] }>
+}
+
+export async function saveVatLedgerEntry(params: Record<string, unknown> & { userRole: string }) {
+  const res = await apiFetchWithOffline('/api/vatLedger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+}
+
+export async function deleteVatLedgerEntry(params: { userRole: string; id: number }) {
+  const res = await apiFetchWithOffline('/api/vatLedger', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
+export async function getWithholdingTaxLedger(params: { userRole: string; taxMonth: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  const res = await apiFetchWithOffline(`/api/withholdingTaxLedger?${q}`)
+  return res.json() as Promise<{ entries: Record<string, unknown>[] }>
+}
+
+export async function saveWithholdingTaxLedgerEntry(params: Record<string, unknown> & { userRole: string }) {
+  const res = await apiFetchWithOffline('/api/withholdingTaxLedger', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
+}
+
+export async function deleteWithholdingTaxLedgerEntry(params: { userRole: string; id: number }) {
+  const res = await apiFetchWithOffline('/api/withholdingTaxLedger', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
+export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportVatLedgerCsv?${q}`
+  }
+  return `/api/exportVatLedgerCsv?${q}`
+}
+
+export async function reconcileBankTransaction(params: {
+  userRole: string
+  id: number
+  reconciled: boolean
+  reconciledBy?: string | null
+  reconciliationNote?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/reconcileBankTransaction', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean }>
+}
+
 // ─── 감가상각·고정자산 ───
 export async function getFixedAssets(params: { storeFilter?: string; status?: string }) {
   const q = new URLSearchParams()
@@ -2012,9 +2160,12 @@ export async function getPosSalesByStore(params: {
   startStr: string
   endStr: string
   pos?: string
+  /** dine_in / takeout / delivery — 복수 시 합산(OR) */
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`)
   return res.json() as Promise<
     { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
@@ -2032,6 +2183,7 @@ export async function getPosSalesByPeriod(params: {
   endStr: string
   groupBy: 'month' | 'week' | 'day' | 'dow'
   pos?: string
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({
     startStr: params.startStr,
@@ -2039,6 +2191,7 @@ export async function getPosSalesByPeriod(params: {
     groupBy: params.groupBy,
   })
   if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`)
   return res.json() as Promise<{ label: string; key: string; sales: number }[]>
 }
@@ -2047,22 +2200,29 @@ export async function getPosSalesByDeliveryApp(params: {
   startStr: string
   endStr: string
   pos?: string
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByDeliveryApp?${q}`)
-  return res.json() as Promise<{ items: { label: string; sales: number; pct: number }[]; total: number }>
+  return res.json() as Promise<{
+    items: { channelKey: string; sales: number; pct: number }[]
+    total: number
+  }>
 }
 
 export async function getPosSalesByChannel(params: {
   startStr: string
   endStr: string
   pos?: string
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByChannel?${q}`)
-  return res.json() as Promise<{ label: string; sales: number }[]>
+  return res.json() as Promise<{ channelKey: string; sales: number }[]>
 }
 
 export async function getPosSalesByMenu(params: {
@@ -2070,10 +2230,12 @@ export async function getPosSalesByMenu(params: {
   endStr: string
   pos?: string
   search?: string
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
   if (params.search) q.set('search', params.search)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
   return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
 }
@@ -2082,11 +2244,13 @@ export async function getPosSalesByPayment(params: {
   startStr: string
   endStr: string
   pos?: string
+  orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
   if (params.pos) q.set('pos', params.pos)
+  if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByPayment?${q}`)
-  return res.json() as Promise<{ label: string; sales: number }[]>
+  return res.json() as Promise<{ paymentKey: string; sales: number }[]>
 }
 
 // ─── 통장 거래 ───
@@ -2114,8 +2278,13 @@ export interface BankTransactionItem {
   storeName?: string
   invoiceReceived?: boolean
   invoiceNo?: string
+  invoicePhotoUrl?: string
   purchaseOrderId?: number
   isLinked?: boolean
+  /** 은행 대사(reconciliation) 완료 시각 (ISO) */
+  reconciledAt?: string | null
+  reconciledBy?: string | null
+  reconciliationNote?: string | null
 }
 
 export interface BankTransactionsSummary {
@@ -2374,9 +2543,16 @@ export interface AccountSubjectItem {
   code: string
   name: string
   nameEn?: string | null
+  nameTh?: string | null
   type: string
   pAndLSection?: string | null
   sortOrder: number
+  statementType?: string | null
+  normalSide?: string | null
+  parentId?: number | null
+  isHeader?: boolean
+  isSystem?: boolean
+  coaClass?: string | null
 }
 
 export async function getAccountSubjects(params?: {
@@ -2387,6 +2563,7 @@ export async function getAccountSubjects(params?: {
   forTransfer?: boolean
   forRevenue?: boolean
   forCard?: boolean
+  excludeHeaders?: boolean
 }) {
   const q = new URLSearchParams()
   if (params?.type) q.set('type', params.type)
@@ -2396,6 +2573,7 @@ export async function getAccountSubjects(params?: {
   if (params?.forTransfer) q.set('forTransfer', 'true')
   if (params?.forRevenue) q.set('forRevenue', 'true')
   if (params?.forCard) q.set('forCard', 'true')
+  if (params?.excludeHeaders) q.set('excludeHeaders', 'true')
   const res = await apiFetchWithOffline(`/api/getAccountSubjects?${q}`)
   return res.json() as Promise<AccountSubjectItem[]>
 }
@@ -2405,9 +2583,15 @@ export async function saveAccountSubject(params: {
   code: string
   name: string
   nameEn?: string | null
+  nameTh?: string | null
   type: string
   pAndLSection?: string | null
   sortOrder?: number
+  parentId?: number | null
+  isHeader?: boolean
+  statementType?: string | null
+  normalSide?: string | null
+  coaClass?: string | null
 }) {
   const res = await apiFetchWithOffline('/api/saveAccountSubject', {
     method: 'POST',
@@ -3035,6 +3219,8 @@ export interface PosMenu {
   cookingTimeMin?: number | null
   /** 반반 메뉴: POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문, 원가는 각 0.5씩 */
   isBanban?: boolean
+  /** 프로모션 마스터와 연동된 미러 메뉴 */
+  promoId?: string | null
 }
 
 export interface PosMenuOption {
@@ -3047,6 +3233,8 @@ export interface PosMenuOption {
   sortOrder: number
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
+  /** 추가형: 연결 소스 메뉴 DB id. 있으면 item_code(레거시)보다 우선 */
+  additiveSourceMenuId?: number | null
   quantity?: number
   /** 복합 옵션의 단계별 값. 예: {"size":"M","part":"순살"} */
   optionStepValues?: Record<string, string> | null
@@ -3127,6 +3315,7 @@ export async function savePosMenuOption(params: {
   sortOrder?: number
   optionType?: 'substitution' | 'additive'
   itemCode?: string | null
+  additiveSourceMenuId?: number | null
   quantity?: number
   optionStepValues?: Record<string, string> | null
   sellHall?: boolean
@@ -3415,12 +3604,20 @@ export interface PosPromo {
   code: string
   name: string
   category: string
+  categoryMain?: string
   price: number
   marketingCampaignId?: string | null
   priceDelivery?: number | null
   vatIncluded: boolean
   isActive: boolean
   sortOrder: number
+  channelHall?: boolean
+  channelTakeout?: boolean
+  channelDelivery?: boolean
+  deliveryAppCodes?: string[] | null
+  discountPercent?: number | null
+  validFrom?: string | null
+  validTo?: string | null
 }
 
 export interface PosPromoItem {
@@ -3435,6 +3632,20 @@ export interface PosPromoItem {
 export async function getPosPromos() {
   const res = await apiFetchWithOffline('/api/getPosPromos')
   return res.json() as Promise<PosPromo[]>
+}
+
+export async function getPosPromoSchemaStatus() {
+  const res = await apiFetchWithOffline('/api/posPromoSchemaStatus')
+  return res.json() as Promise<{
+    posPromosExtended: boolean
+    posMenusPromoId: boolean
+    ok: boolean
+  }>
+}
+
+export async function getNextPosPromoCode() {
+  const res = await apiFetchWithOffline('/api/getNextPosPromoCode')
+  return res.json() as Promise<{ code: string | null; message?: string }>
 }
 
 export interface PosPromoWithItems extends PosPromo {
@@ -3458,12 +3669,20 @@ export async function savePosPromo(params: {
   code: string
   name: string
   category?: string
+  categoryMain?: string
   price?: number
   priceDelivery?: number | null
   vatIncluded?: boolean
   isActive?: boolean
   sortOrder?: number
   marketingCampaignId?: string | null
+  channelHall?: boolean
+  channelTakeout?: boolean
+  channelDelivery?: boolean
+  deliveryAppCodes?: string[] | null
+  discountPercent?: number | null
+  validFrom?: string | null
+  validTo?: string | null
 }) {
   const res = await apiFetchWithOffline('/api/savePosPromo', {
     method: 'POST',
@@ -4259,6 +4478,15 @@ export interface PosOrderItem {
   qty: number
   servedAt?: string | null
   servedBy?: string | null
+  orderType?: string
+  deliveryAppCode?: string
+  promoId?: string
+  promoCode?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+  menuId1?: string
+  optionId1?: string
+  menuId2?: string
+  optionId2?: string
 }
 
 export interface PosOrder {
@@ -5453,6 +5681,45 @@ export async function getStoreVisitHistory(params: {
   return res.json() as Promise<StoreVisitHistoryItem[]>
 }
 
+export interface StoreVisitTodaySnapshotActive {
+  name: string
+  department: string
+  store: string
+  purpose: string
+  startedAt: string
+}
+
+export interface StoreVisitTodaySnapshotSegment {
+  name: string
+  department: string
+  store: string
+  purpose: string
+  startAt: string
+  endAt: string | null
+  ongoing: boolean
+}
+
+export interface StoreVisitTodaySnapshotByStore {
+  store: string
+  activeCount: number
+  segmentsTodayCount: number
+}
+
+export async function getStoreVisitTodaySnapshot(params?: { userStore?: string; userRole?: string }) {
+  const q = new URLSearchParams()
+  if (params?.userStore) q.set("userStore", params.userStore)
+  if (params?.userRole) q.set("userRole", params.userRole)
+  const qs = q.toString()
+  const res = await apiFetchWithOffline(`/api/getStoreVisitTodaySnapshot${qs ? `?${qs}` : ""}`)
+  return res.json() as Promise<{
+    today: string
+    active: StoreVisitTodaySnapshotActive[]
+    segments: StoreVisitTodaySnapshotSegment[]
+    byStore: StoreVisitTodaySnapshotByStore[]
+    error?: string
+  }>
+}
+
 export interface StoreVisitStatsItem {
   label: string
   minutes: number
@@ -5562,6 +5829,107 @@ export async function updateComplaintLog(rowOrId: string | number, data: Record<
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rowOrId, data }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+// ─── 매장 수리·수선 신고 ───
+export interface StoreRepairTicketItem {
+  row?: number
+  id?: number
+  ticketNumber: string
+  store: string
+  reporter: string
+  category: string
+  priority: string
+  area: string
+  title: string
+  description: string
+  photoUrls: string[]
+  status: string
+  handler: string
+  reportedAt: string
+  startedAt: string
+  completedAt: string
+  resolutionNote: string
+  vendorName: string
+  estimatedCost: number | null
+  actualCost: number | null
+}
+
+export async function getStoreRepairTicketList(params: {
+  startStr?: string
+  endStr?: string
+  store?: string
+  status?: string
+  category?: string
+  priority?: string
+  q?: string
+}) {
+  const q = new URLSearchParams()
+  if (params.startStr) q.set('startStr', params.startStr)
+  if (params.endStr) q.set('endStr', params.endStr)
+  if (params.store) q.set('store', params.store)
+  if (params.status) q.set('status', params.status)
+  if (params.category) q.set('category', params.category)
+  if (params.priority) q.set('priority', params.priority)
+  if (params.q) q.set('q', params.q)
+  const res = await apiFetchWithOffline(`/api/getStoreRepairTicketList?${q}`)
+  return res.json() as Promise<StoreRepairTicketItem[]>
+}
+
+export async function saveStoreRepairTicket(data: Record<string, unknown>) {
+  const res = await apiFetchWithOffline('/api/saveStoreRepairTicket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; ticketNumber?: string }>
+}
+
+export async function updateStoreRepairTicket(rowOrId: string | number, data: Record<string, unknown>) {
+  const res = await apiFetchWithOffline('/api/updateStoreRepairTicket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rowOrId, data }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** FormData 업로드 — 오프라인 큐 미사용 */
+export async function uploadStoreRepairPhoto(store: string, file: File) {
+  const { apiFetch } = await import('./api/fetch')
+  const fd = new FormData()
+  fd.set('store', store)
+  fd.set('file', file)
+  const res = await apiFetch('/api/uploadStoreRepairPhoto', { method: 'POST', body: fd })
+  return res.json() as Promise<{ success: boolean; url?: string; message?: string }>
+}
+
+export interface StoreRepairProgressLog {
+  id?: number
+  ticketId?: number
+  author: string
+  note: string
+  photoUrls: string[]
+  createdAt: string
+}
+
+export async function getStoreRepairProgressLogs(ticketId: number) {
+  const res = await apiFetchWithOffline(`/api/getStoreRepairProgressLogs?ticketId=${ticketId}`)
+  return res.json() as Promise<StoreRepairProgressLog[]>
+}
+
+export async function addStoreRepairProgressLog(data: {
+  ticketId: number
+  author: string
+  note: string
+  photoUrls?: string[]
+}) {
+  const res = await apiFetchWithOffline('/api/addStoreRepairProgressLog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data }),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
 }

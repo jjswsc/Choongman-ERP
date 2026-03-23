@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -153,7 +154,7 @@ export function AdminPayrollCalc() {
         }))
         setList(rows)
         setError(null)
-        alert("✅ " + t("pay_load_done"))
+        await appAlert("✅ " + t("pay_load_done"))
       } else {
         setList([])
         setError(data.msg || t("pay_no_data"))
@@ -225,7 +226,7 @@ export function AdminPayrollCalc() {
           status: String(r.status || "대기"),
         }))
         setList(rows)
-        alert("✅ " + t("pay_calc_done"))
+        await appAlert("✅ " + t("pay_calc_done"))
       } else {
         setList([])
         const errMsg = data.detail ? `${data.msg}\n(${data.detail})` : (data.msg || t("pay_error"))
@@ -283,7 +284,7 @@ export function AdminPayrollCalc() {
 
   const handleSave = async () => {
     if (list.length === 0) return
-    if (!confirm("⚠️ " + monthStr + t("pay_month_suffix") + " " + t("pay_save_confirm_msg"))) return
+    if (!await appConfirm("⚠️ " + monthStr + t("pay_month_suffix") + " " + t("pay_save_confirm_msg"))) return
     setSaving(true)
     setError(null)
     try {
@@ -328,7 +329,7 @@ export function AdminPayrollCalc() {
         setError(null)
         const created = Number(data?.payrollExpenseSync?.created || 0)
         const updated = Number(data?.payrollExpenseSync?.updated || 0)
-        alert(`${t("pay_save_success")}\n지출관리 지급예정 연동: 신규 ${created}건, 갱신 ${updated}건`)
+        await appAlert(`${t("pay_save_success")}\n지출관리 지급예정 연동: 신규 ${created}건, 갱신 ${updated}건`)
       } else {
         setError(translateApiMessage(data.msg) || t("pay_save_fail"))
       }

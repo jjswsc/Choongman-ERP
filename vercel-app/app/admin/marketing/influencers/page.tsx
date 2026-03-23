@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Users, Save, Plus, Trash2, RotateCw } from "lucide-react"
@@ -138,7 +139,7 @@ export default function MarketingInfluencersPage() {
   const handleSave = async () => {
     const name = form.name.trim()
     if (!name) {
-      alert("이름을 입력하세요.")
+      await appAlert("이름을 입력하세요.")
       return
     }
     setSaving(true)
@@ -167,27 +168,27 @@ export default function MarketingInfluencersPage() {
         note: form.note.trim(),
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadData()
         handleNew()
       } else {
-        alert(res.message)
+        await appAlert(res.message)
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (i: MarketingInfluencer) => {
-    if (!confirm(`"${i.name}" ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${i.name}" ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
     const res = await deleteMarketingInfluencer({ id: i.id })
     if (res.success) {
       loadData()
       if (editingId === i.id) handleNew()
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 

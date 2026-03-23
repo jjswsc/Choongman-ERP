@@ -1,6 +1,9 @@
 /**
  * API 응답의 한글 message를 i18n key로 매핑하여 선택한 언어로 표시
  */
+
+import { ACCOUNT_SUBJECT_HEADER_MESSAGE_KO } from '@/lib/account-subject-header-messages'
+
 /** API message(한글) -> i18n key 매핑 */
 const API_MESSAGE_TO_KEY: Record<string, string> = {
   // 휴가
@@ -113,6 +116,8 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "관리자 승인 후 집행할 수 있습니다.": "approvalRequiredBeforeExecution",
   "반려된 지급 예정은 집행할 수 없습니다.": "rejectedPlanCannotExecute",
   "지급 처리되었습니다.": "paymentProcessed",
+  [ACCOUNT_SUBJECT_HEADER_MESSAGE_KO]: "accountSubjectHeaderNotAllowed",
+  "존재하지 않는 계정과목입니다.": "accountSubjectNotFound",
 }
 
 /**

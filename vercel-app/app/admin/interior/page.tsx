@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
@@ -61,11 +62,11 @@ export default function InteriorPage() {
       throw new Error(res.message || "저장 실패")
     }
     loadData()
-    alert(t("msg_saved") || "저장되었습니다.")
+    await appAlert(t("msg_saved") || "저장되었습니다.")
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "이 프로젝트를 삭제하시겠습니까? (관련 데이터 모두 삭제)")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "이 프로젝트를 삭제하시겠습니까? (관련 데이터 모두 삭제)")) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorProject({ id })
@@ -73,10 +74,10 @@ export default function InteriorPage() {
         loadData()
         if (editingProject?.id === id) setDialogOpen(false)
       } else {
-        alert(res.message || "삭제 실패")
+        await appAlert(res.message || "삭제 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }

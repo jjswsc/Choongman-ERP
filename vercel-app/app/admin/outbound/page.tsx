@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { ArrowUpFromLine } from "lucide-react"
@@ -243,22 +244,22 @@ export default function OutboundPage() {
     setOutQty("")
   }
 
-  const handleAddToList = () => {
+  const handleAddToList = async () => {
     if (!selectedItem) {
-      alert(t("inAlertSelectItem"))
+      await appAlert(t("inAlertSelectItem"))
       return
     }
     if (!outQty.trim()) {
-      alert(t("inAlertEnterQty"))
+      await appAlert(t("inAlertEnterQty"))
       return
     }
     if (!outStore) {
-      alert(t("outStorePlaceholder"))
+      await appAlert(t("outStorePlaceholder"))
       return
     }
     const q = parseFloat(outQty.replace(/,/g, ""))
     if (isNaN(q) || q <= 0) {
-      alert(t("inAlertEnterQty"))
+      await appAlert(t("inAlertEnterQty"))
       return
     }
     setCart((prev) => [
@@ -283,10 +284,10 @@ export default function OutboundPage() {
 
   const handleSave = async () => {
     if (!cart.length) {
-      alert(t("outEmptyList"))
+      await appAlert(t("outEmptyList"))
       return
     }
-    if (!confirm(t("outConfirmMsg"))) return
+    if (!await appConfirm(t("outConfirmMsg"))) return
     setSaving(true)
     try {
       const list = cart.map((c) => ({
@@ -300,13 +301,13 @@ export default function OutboundPage() {
       }))
       const res = await forceOutboundBatch(list, { processorName: auth?.user })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
+        await appAlert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
         setCart([])
       } else {
-        alert(translateApiMessage(res.message, t) || t("outSaveFailed"))
+        await appAlert(translateApiMessage(res.message, t) || t("outSaveFailed"))
       }
     } catch {
-      alert(t("outProcessFail"))
+      await appAlert(t("outProcessFail"))
     } finally {
       setSaving(false)
     }
@@ -314,7 +315,7 @@ export default function OutboundPage() {
 
   const fetchWarehouseOutbound = React.useCallback(async () => {
     if (!whStart || !whEnd) {
-      alert(t("visit_stats_date_hint") || "시작일과 종료일을 선택해 주세요.")
+      await appAlert(t("visit_stats_date_hint") || "시작일과 종료일을 선택해 주세요.")
       return
     }
     setWhLoading(true)
@@ -334,7 +335,7 @@ export default function OutboundPage() {
       console.error("getOutboundByWarehouse:", err)
       setWhData(null)
       const msg = err instanceof Error ? err.message : String(err)
-      alert(t("orderNoData") + "\n\n" + t("msg_error_prefix") + msg)
+      await appAlert(t("orderNoData") + "\n\n" + t("msg_error_prefix") + msg)
     } finally {
       setWhLoading(false)
     }
@@ -368,12 +369,12 @@ export default function OutboundPage() {
     try {
       const res = await updateInvoiceSettings(invSettings)
       if (res.success) {
-        alert(t("inv_settings_saved"))
+        await appAlert(t("inv_settings_saved"))
       } else {
-        alert(res.message || t("outSaveFailed"))
+        await appAlert(res.message || t("outSaveFailed"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setInvSettingsSaving(false)
     }
@@ -434,9 +435,9 @@ export default function OutboundPage() {
 
   const whOrderToUse = React.useMemo(() => whFilteredData.order.filter((wn) => whSelectedWarehouses.has(wn)), [whFilteredData.order, whSelectedWarehouses])
 
-  const handleWarehousePrint = () => {
+  const handleWarehousePrint = async () => {
     if (!whData || whOrderToUse.length === 0) {
-      alert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForPrint"))
+      await appAlert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForPrint"))
       return
     }
     const filterLabel = whData.filterBy === "delivery" ? t("outWhFilterDelivery") : t("outWhFilterOrder")
@@ -602,9 +603,9 @@ export default function OutboundPage() {
     }, 300)
   }
 
-  const handleWarehouseExcel = () => {
+  const handleWarehouseExcel = async () => {
     if (!whData || whOrderToUse.length === 0) {
-      alert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForExcel"))
+      await appAlert(whFilteredData.order.length === 0 ? t("outWhNoDataHint") : t("outSelectWarehouseForExcel"))
       return
     }
     const escapeCsv = (s: string) => {
@@ -835,7 +836,7 @@ export default function OutboundPage() {
   const handleEtaxXmlDownload = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
-      alert(t("outSelectForPrint"))
+      await appAlert(t("outSelectForPrint"))
       return
     }
     try {
@@ -856,7 +857,7 @@ export default function OutboundPage() {
       }))
       const res = await generateEtaxXmlApi(groups, true)
       if (!res.success || res.error) {
-        alert(res.error || t("invLoadFailed"))
+        await appAlert(res.error || t("invLoadFailed"))
         return
       }
       if (res.xmls && res.xmls.length > 0) {
@@ -883,14 +884,14 @@ export default function OutboundPage() {
       }
     } catch (e) {
       console.error(e)
-      alert(t("invLoadFailed"))
+      await appAlert(t("invLoadFailed"))
     }
   }
 
-  const handleExcelDownload = () => {
+  const handleExcelDownload = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
-      alert(t("outSelectForExcel"))
+      await appAlert(t("outSelectForExcel"))
       return
     }
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -1035,7 +1036,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
   const handlePrintInvoice = async () => {
     const checked = Array.from(selectedForPrint).sort((a, b) => a - b).map((i) => filteredGroupedHistory[i]).filter(Boolean)
     if (checked.length === 0) {
-      alert(t("outSelectForPrint"))
+      await appAlert(t("outSelectForPrint"))
       return
     }
     try {
@@ -1067,13 +1068,13 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
       sessionStorage.setItem("invoice-print-data", JSON.stringify(invoiceDatas))
       const printWindow = window.open("/admin/invoice-print", "_blank")
       if (!printWindow) {
-        alert(t("invLoadFailed") + "\n\n" + (t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
+        await appAlert(t("invLoadFailed") + "\n\n" + (t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요."))
         return
       }
       printWindow.focus()
     } catch (e) {
       console.error(e)
-      alert(t("invLoadFailed"))
+      await appAlert(t("invLoadFailed"))
     }
   }
 
@@ -1616,17 +1617,17 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
                   }
                 }}
                 onForceReceived={async (date, target) => {
-                  if (!confirm(t("outForceReceivedConfirm"))) return
+                  if (!await appConfirm(t("outForceReceivedConfirm"))) return
                   try {
                     const res = await updateForceOutboundReceived({ date, vendorTarget: target })
                     if (res.success) {
-                      alert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
+                      await appAlert(translateApiMessage(res.message, t) || t("outSaveSuccess"))
                       fetchHistory()
                     } else {
-                      alert(translateApiMessage(res.message, t) || t("outSaveFailed"))
+                      await appAlert(translateApiMessage(res.message, t) || t("outSaveFailed"))
                     }
                   } catch (e) {
-                    alert(String(e))
+                    await appAlert(String(e))
                   }
                 }}
                 usageRows={usageTableRows}

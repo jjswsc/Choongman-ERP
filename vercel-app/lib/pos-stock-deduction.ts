@@ -8,21 +8,39 @@ async function deductMenuIngredients(
 ): Promise<void> {
   let optionType = 'substitution'
   let optionItemCode: string | null = null
+  let additiveSourceMenuId: number | null = null
   let optionQty = 1
 
   if (optionId) {
     try {
       const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
         limit: 1,
-        select: 'option_type,item_code,quantity',
-      })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
+        select: 'option_type,item_code,additive_source_menu_id,quantity',
+      })) as { option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number }[] | null
       const opt = optRows?.[0]
       if (opt) {
         optionType = (opt.option_type || 'substitution') as string
         optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
+        const aid = opt.additive_source_menu_id
+        additiveSourceMenuId =
+          aid != null && Number.isFinite(Number(aid)) && Number(aid) > 0 ? Number(aid) : null
         optionQty = Number(opt.quantity) ?? 1
       }
     } catch {
+      try {
+        const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
+          limit: 1,
+          select: 'option_type,item_code,quantity',
+        })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
+        const opt = optRows?.[0]
+        if (opt) {
+          optionType = (opt.option_type || 'substitution') as string
+          optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
+          optionQty = Number(opt.quantity) ?? 1
+        }
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -49,9 +67,13 @@ async function deductMenuIngredients(
     usageByItem[code] = (usageByItem[code] ?? 0) + need
   }
 
-  if (optionType === 'additive' && optionItemCode && optionId) {
-    const need = menuQty * optionQty
-    usageByItem[optionItemCode] = (usageByItem[optionItemCode] ?? 0) + need
+  if (optionType === 'additive' && optionId) {
+    const mult = menuQty * optionQty
+    if (additiveSourceMenuId && mult > 0) {
+      await deductMenuIngredients(String(additiveSourceMenuId), null, mult, usageByItem)
+    } else if (optionItemCode && mult > 0) {
+      usageByItem[optionItemCode] = (usageByItem[optionItemCode] ?? 0) + mult
+    }
   }
 }
 

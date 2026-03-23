@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import * as React from 'react'
 import { ChevronDown, ChevronUp, Plus, RotateCw, Save, Truck } from 'lucide-react'
@@ -129,13 +130,13 @@ export function PosDeliveryAppsContent() {
         }))
       const res = await savePosDeliveryApps({ storeCode: canSearchAll && storeCode ? storeCode : undefined, items: payload })
       if (res.success) {
-        alert(t('itemsAlertSaved') || '저장되었습니다.')
+        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
         loadData()
       } else {
-        alert(res.message || t('msg_save_fail_detail'))
+        await appAlert(res.message || t('msg_save_fail_detail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }

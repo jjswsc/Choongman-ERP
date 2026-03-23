@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 고정비 추가/수정 */
 export async function POST(request: NextRequest) {
@@ -20,6 +21,16 @@ export async function POST(request: NextRequest) {
 
     if (!name) {
       return NextResponse.json({ success: false, message: '항목명을 입력하세요.' }, { status: 400, headers })
+    }
+
+    if (accountSubjectId != null) {
+      const asid = Number(accountSubjectId)
+      if (!isNaN(asid)) {
+        const hdr = await assertAccountSubjectNotHeader(asid)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
+      }
     }
 
     if (id && !isNaN(id)) {

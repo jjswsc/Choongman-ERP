@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -97,7 +98,7 @@ export function ExpenseRegisterSearchTab() {
   React.useEffect(() => {
     Promise.all([
       getBankAccounts({ userStore: auth?.store, userRole: auth?.role }).catch(() => []),
-      getAccountSubjects({ forExpense: true }).catch(() => []),
+      getAccountSubjects({ forExpense: true, excludeHeaders: true }).catch(() => []),
       getVendorsForPurchase().catch(() => []),
     ]).then(([a, s, v]) => {
       setAccounts(a || [])
@@ -157,10 +158,10 @@ export function ExpenseRegisterSearchTab() {
           prev.map((x) => (x.id === r.id ? { ...x, invoiceReceived: checked } : x))
         )
       } else {
-        alert(res.message || t("processFail"))
+        await appAlert(res.message || t("processFail"))
       }
     } catch (e) {
-      alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setUpdatingInvoiceId(null)
     }
@@ -181,10 +182,10 @@ export function ExpenseRegisterSearchTab() {
             prev.map((x) => (x.id === r.id ? { ...x, invoicePhotoUrl: dataUrl } : x))
           )
         } else {
-          alert(res.message || t("msg_upload_fail"))
+          await appAlert(res.message || t("msg_upload_fail"))
         }
       } catch (e) {
-        alert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
+        await appAlert(t("msg_upload_fail") + ": " + (e instanceof Error ? e.message : String(e)))
       } finally {
         setInvoicePhotoUploadingId(null)
         if (fileInputRef.current) fileInputRef.current.value = ""
@@ -408,7 +409,7 @@ export function ExpenseRegisterSearchTab() {
                               disabled={!r.id || deletingId === r.id}
                               onClick={async () => {
                                 if (!r.id) return
-                                const ok = window.confirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
+                                const ok = await appConfirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
                                 if (!ok) return
                                 setDeletingId(r.id)
                                 try {
@@ -417,12 +418,12 @@ export function ExpenseRegisterSearchTab() {
                                     userRole: auth?.role,
                                   })
                                   if (!res.success) {
-                                    alert(res.message || t("msg_delete_fail") || "삭제 실패")
+                                    await appAlert(res.message || t("msg_delete_fail") || "삭제 실패")
                                     return
                                   }
                                   setList((prev) => prev.filter((x) => x.id !== r.id))
                                 } catch (e) {
-                                  alert((t("msg_delete_fail") || "삭제 실패") + ": " + (e instanceof Error ? e.message : String(e)))
+                                  await appAlert((t("msg_delete_fail") || "삭제 실패") + ": " + (e instanceof Error ? e.message : String(e)))
                                 } finally {
                                   setDeletingId(null)
                                 }

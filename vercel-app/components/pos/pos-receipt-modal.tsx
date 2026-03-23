@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import { useEffect, useRef } from 'react'
 import { Printer } from 'lucide-react'
@@ -117,7 +118,7 @@ export function PosReceiptModal({
     // #endregion
   }, [open, receiptData])
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!receiptData) return
     const esc = (value: string) => escapeHtml(String(value || ''))
     const tableForPrint = receiptData.tableName
@@ -221,7 +222,7 @@ export function PosReceiptModal({
     // #endregion
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
       return
     }
     // #region agent log
@@ -304,7 +305,7 @@ export function PosReceiptModal({
     if (!receiptData || !receiptData.storeCode) return
     const win = window.open('', '_blank')
     if (!win) {
-      alert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
       return
     }
     try {
@@ -375,7 +376,7 @@ export function PosReceiptModal({
       printOne(0)
     } catch (e) {
       win.close()
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -68,7 +69,7 @@ export function InteriorProjectFormDialog({
     const trimmedCode = code.trim()
     const trimmedName = name.trim()
     if (!trimmedCode || !trimmedName) {
-      alert(t("msg_save_fail_detail") || "코드와 프로젝트명을 입력하세요.")
+      await appAlert(t("msg_save_fail_detail") || "코드와 프로젝트명을 입력하세요.")
       return
     }
     setSaving(true)
@@ -85,7 +86,7 @@ export function InteriorProjectFormDialog({
       })
       onOpenChange(false)
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 카드 거래 생성/수정 */
 export async function POST(request: NextRequest) {
@@ -32,6 +33,13 @@ export async function POST(request: NextRequest) {
     const vendorCode = transType === 'expense' && body.vendorCode != null ? String(body.vendorCode || '').trim() || null : null
     const accountSubjectId = transType === 'expense' && body.accountSubjectId != null ? Number(body.accountSubjectId) : null
     const note = transType === 'expense' && body.note != null ? String(body.note || '').trim() || null : null
+
+    if (transType === 'expense' && accountSubjectId != null && !isNaN(accountSubjectId)) {
+      const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
+    }
 
     const row: Record<string, unknown> = {
       card_account_id: cardAccountId,

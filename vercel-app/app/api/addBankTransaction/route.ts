@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 통장 거래 등록 (매입 대금/매출 수령 시 미지급금/미수금 자동 연동) */
 export async function POST(request: NextRequest) {
@@ -65,7 +66,13 @@ export async function POST(request: NextRequest) {
     }
     if (accountSubjectId != null) {
       const asid = Number(accountSubjectId)
-      if (!isNaN(asid)) row.account_subject_id = asid
+      if (!isNaN(asid)) {
+        const hdr = await assertAccountSubjectNotHeader(asid)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
+        row.account_subject_id = asid
+      }
     }
     if (transType === 'deposit' && salesDate) {
       const sd = String(salesDate).slice(0, 10)
@@ -106,6 +113,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const journalAccountSubjectId =
+      accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
+
     // 복식부기 1차: 통장 거래 자동 분개 (실패해도 원거래는 유지)
     try {
       await postBankTransactionJournal({
@@ -117,6 +127,7 @@ export async function POST(request: NextRequest) {
         memo,
         storeName: store || undefined,
         postedBy: userName || undefined,
+        accountSubjectId: journalAccountSubjectId,
       })
     } catch (postingErr) {
       console.error('addBankTransaction posting:', postingErr)

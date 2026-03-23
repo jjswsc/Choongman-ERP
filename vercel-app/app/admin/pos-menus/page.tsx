@@ -1,7 +1,9 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Pizza, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign } from "lucide-react"
+import Link from "next/link"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, ExternalLink, AlertTriangle, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -37,7 +39,6 @@ import {
   getPosMenuIngredients,
   getMenuCost,
   getAdminItems,
-  saveItem,
   savePosMenu,
   savePosMenuOption,
   savePosMenuIngredient,
@@ -45,9 +46,12 @@ import {
   deletePosMenuOption,
   deletePosMenuIngredient,
   updatePosMenuSoldOut,
+  getPosPromos,
+  getPosPromoSchemaStatus,
   type PosMenu,
   type PosMenuOption,
   type PosMenuIngredient,
+  type PosPromo,
 } from "@/lib/api-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
@@ -72,6 +76,19 @@ function isChickenDefaultOption(name: string | undefined): boolean {
   if (!name?.trim()) return false
   const n = name.trim()
   return /^S\s*[-]?\s*순살\s*$/i.test(n) || n === "S 순살" || n === "S - 순살" || n === "S-순살"
+}
+
+/** 추가형 옵션: 연결 메뉴코드(또는 레거시 품목코드)×수량 */
+function additiveOptionLinkSuffix(opt: PosMenuOption, menus: PosMenu[]): string {
+  if (opt.optionType !== "additive") return ""
+  const mid = opt.additiveSourceMenuId
+  if (mid != null && Number(mid) > 0) {
+    const m = menus.find((x) => x.id === String(mid))
+    return m ? `${m.code}×${opt.quantity ?? 1}` : `id:${mid}×${opt.quantity ?? 1}`
+  }
+  const ic = opt.itemCode?.trim()
+  if (ic) return `${ic}×${opt.quantity ?? 1}`
+  return ""
 }
 
 const emptyForm = {
@@ -120,7 +137,8 @@ export default function PosMenusPage() {
   const [newOptionModifier, setNewOptionModifier] = React.useState("0")
   const [newOptionModifierDelivery, setNewOptionModifierDelivery] = React.useState("")
   const [newOptionType, setNewOptionType] = React.useState<"substitution" | "additive">("substitution")
-  const [newOptionItemCode, setNewOptionItemCode] = React.useState("")
+  /** 추가형: 연결할 소스 메뉴 id (pos_menus) */
+  const [newOptionSourceMenuId, setNewOptionSourceMenuId] = React.useState("")
   const [newOptionQuantity, setNewOptionQuantity] = React.useState("1")
   const [selectedIngredientOptionId, setSelectedIngredientOptionId] = React.useState<string>("")
   const [newIngredientCode, setNewIngredientCode] = React.useState("")
@@ -132,7 +150,7 @@ export default function PosMenusPage() {
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
-  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "topping" | "set" | "priceHistory" | "priceApply">("screen")
+  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "set" | "priceHistory" | "priceApply">("screen")
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
   const [newOptionStepValues, setNewOptionStepValues] = React.useState<Record<string, string>>({})
@@ -146,14 +164,50 @@ export default function PosMenusPage() {
   const [newOptionPart, setNewOptionPart] = React.useState("")
   const [newOptionModifierPackaging, setNewOptionModifierPackaging] = React.useState("")
   const [chickenBatchApplying, setChickenBatchApplying] = React.useState(false)
-  const [toppingDialogOpen, setToppingDialogOpen] = React.useState(false)
-  const [newToppingCode, setNewToppingCode] = React.useState("")
-  const [newToppingName, setNewToppingName] = React.useState("")
-  const [newToppingUnit, setNewToppingUnit] = React.useState("g")
-  const [newToppingCost, setNewToppingCost] = React.useState("")
-  const [newToppingPrice, setNewToppingPrice] = React.useState("")
-  const [toppingSaveLoading, setToppingSaveLoading] = React.useState(false)
-  const [toppingListLoading, setToppingListLoading] = React.useState(false)
+  const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
+  const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
+  const [schemaStatus, setSchemaStatus] = React.useState<{
+    posPromosExtended: boolean
+    posMenusPromoId: boolean
+    ok: boolean
+  } | null>(null)
+  const [setTabSchemaDismissed, setSetTabSchemaDismissed] = React.useState(false)
+
+  const promoById = React.useMemo(() => {
+    const m: Record<string, PosPromo> = {}
+    for (const p of promoListForSetTab) {
+      m[String(p.id)] = p
+    }
+    return m
+  }, [promoListForSetTab])
+
+  const mirrorMenusSorted = React.useMemo(() => {
+    return sortByCode(
+      menus.filter((m) => m.promoId != null && String(m.promoId).trim() !== ""),
+      (m) => m.code
+    )
+  }, [menus])
+
+  React.useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem("admin_pos_menu_set_schema_banner_dismiss") === "1") {
+        setSetTabSchemaDismissed(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (mainTab !== "set") return
+    setSetTabPromosLoading(true)
+    Promise.all([getPosPromos().catch(() => []), getPosPromoSchemaStatus().catch(() => null)])
+      .then(([plist, schema]) => {
+        setPromoListForSetTab(Array.isArray(plist) ? plist : [])
+        if (schema) setSchemaStatus(schema)
+      })
+      .finally(() => setSetTabPromosLoading(false))
+  }, [mainTab])
 
   const loadMenusAndCategories = React.useCallback(async (setLoadingState?: (v: boolean) => void) => {
     const setBusy = setLoadingState ?? (() => {})
@@ -174,7 +228,7 @@ export default function PosMenusPage() {
       const msg = e instanceof Error ? e.message : String(e)
       const isNetworkError = /failed to fetch|network error|load failed|connection/i.test(msg)
       const hint = isNetworkError ? "\n\n" + (t("msg_load_fail_network") || "연결할 수 없습니다. 로그인 상태를 확인하거나, 개발 서버가 실행 중인지 확인해 주세요.") : ""
-      alert((t("msg_load_fail") || "목록을 불러오지 못했습니다.") + "\n" + msg + hint)
+      await appAlert((t("msg_load_fail") || "목록을 불러오지 못했습니다.") + "\n" + msg + hint)
     } finally {
       setBusy(false)
     }
@@ -233,8 +287,6 @@ export default function PosMenusPage() {
     }
   }, [expandedMenuId])
 
-  const ADDITIVE_OPTION_CATEGORY = "POS추가옵션"
-
   const loadItems = React.useCallback(() => {
     getAdminItems()
       .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name, category: x.category || "" }))))
@@ -262,62 +314,12 @@ export default function PosMenusPage() {
     if (mainTab === "optionsConfig" && optionsConfigSelectedMenuId) loadItems()
   }, [mainTab, optionsConfigSelectedMenuId, loadItems])
 
-  React.useEffect(() => {
-    if (mainTab === "topping") {
-      setToppingListLoading(true)
-      getAdminItems()
-        .then((list) => setItems((list || []).map((x) => ({ code: x.code, name: x.name, category: x.category || "" }))))
-        .catch(() => setItems([]))
-        .finally(() => setToppingListLoading(false))
-    }
-  }, [mainTab])
-
-  const additiveOptionItems = React.useMemo(
-    () => items.filter((it) => (it.category || "").trim() === ADDITIVE_OPTION_CATEGORY),
-    [items]
-  )
-
-  const handleOpenToppingDialog = () => {
-    setNewToppingCode("")
-    setNewToppingName("")
-    setNewToppingUnit("g")
-    setNewToppingCost("")
-    setNewToppingPrice("")
-    setToppingDialogOpen(true)
-  }
-
-  const handleSaveNewTopping = async () => {
-    const code = newToppingCode.trim()
-    const name = newToppingName.trim()
-    if (!code || !name) {
-      alert(t("posToppingNewCodeNameRequired") || "코드와 토핑명을 입력해 주세요.")
-      return
-    }
-    if (items.some((it) => it.code === code)) {
-      alert(t("posToppingCodeExists") || "이미 사용 중인 품목 코드입니다. 다른 코드를 입력해 주세요.")
-      return
-    }
-    setToppingSaveLoading(true)
-    try {
-      const res = await saveItem({
-        code,
-        name,
-        category: ADDITIVE_OPTION_CATEGORY,
-        unit: newToppingUnit.trim() || "g",
-        cost: Number(newToppingCost) || 0,
-        price: Number(newToppingPrice) || 0,
-      })
-      if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("msg_save_fail_detail"))
-        return
-      }
-      setItems((prev) => [...prev, { code, name, category: ADDITIVE_OPTION_CATEGORY }])
-      setToppingDialogOpen(false)
-      alert(t("posToppingCreated") || "토핑이 등록되었습니다. 메뉴의 옵션(추가형)에서 선택하고, 원가 분석에 반영됩니다.")
-    } finally {
-      setToppingSaveLoading(false)
-    }
-  }
+  /** 추가형 옵션에 연결 가능한 POS 메뉴(자기 자신 제외) */
+  const additiveMenusForOptions = React.useMemo(() => {
+    return [...menus]
+      .filter((m) => m.isActive && (!editingId || m.id !== editingId))
+      .sort((a, b) => (a.code || "").localeCompare(b.code || "", undefined, { numeric: true }))
+  }, [menus, editingId])
 
   const handleNewRegister = () => {
     setFormData(emptyForm)
@@ -347,15 +349,27 @@ export default function PosMenusPage() {
     }
   }
 
+  const editingMenuLinkedPromoId = React.useMemo(() => {
+    if (!editingId) return null
+    const pid = menus.find((x) => x.id === editingId)?.promoId?.trim()
+    return pid || null
+  }, [editingId, menus])
+
   const handleSave = async () => {
+    if (editingMenuLinkedPromoId) {
+      await appAlert(
+        t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요."
+      )
+      return
+    }
     const code = formData.code.trim()
     const name = formData.name.trim()
     if (!code || !name) {
-      alert(t("posMenuAlertCodeName"))
+      await appAlert(t("posMenuAlertCodeName"))
       return
     }
     if (!editingId && menus.some((m) => m.code === code)) {
-      alert(t("itemsAlertCodeExists"))
+      await appAlert(t("itemsAlertCodeExists"))
       return
     }
     const effectiveCategoryMain = formData.categoryMain.trim()
@@ -375,7 +389,7 @@ export default function PosMenusPage() {
       isBanban: formData.isBanban,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
     const newMenu: PosMenu = {
@@ -395,10 +409,10 @@ export default function PosMenusPage() {
     }
     if (editingId) {
       setMenus((prev) => prev.map((m) => (m.id === editingId ? { ...newMenu, id: editingId } : m)))
-      alert(t("itemsAlertUpdated"))
+      await appAlert(t("itemsAlertUpdated"))
     } else {
       getPosMenus().then(setMenus)
-      alert(t("itemsAlertSaved"))
+      await appAlert(t("itemsAlertSaved"))
     }
     const newCat = effectiveCategory
     if (newCat && !allCategories.includes(newCat)) {
@@ -435,14 +449,14 @@ export default function PosMenusPage() {
   const currentMenuGroups: string[] = []
   const handleAddOption = async () => {
     if (!editingId || !newOptionName.trim()) return
-    if (newOptionType === "additive" && !newOptionItemCode.trim()) {
-      alert(t("posOptionAdditiveItemRequired") || "추가형 옵션은 품목을 선택해야 합니다.")
+    if (newOptionType === "additive" && !newOptionSourceMenuId.trim()) {
+      await appAlert(t("posOptionAdditiveMenuRequired") || "추가형 옵션은 연결할 메뉴(메뉴코드)를 선택해야 합니다.")
       return
     }
     if (newOptionType === "substitution" && currentMenuGroups.length > 0) {
       const missing = currentMenuGroups.filter((g) => !(newOptionStepValues[g] ?? "").trim())
       if (missing.length > 0) {
-        alert(
+        await appAlert(
           t("posOptionStepValuesRequired") ||
             `옵션 선택 단계가 설정된 메뉴는 대체형 옵션에 모든 단계 값을 입력해야 합니다. (빈 값: ${missing.join(", ")})`
         )
@@ -460,7 +474,9 @@ export default function PosMenusPage() {
       priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
       sortOrder: menuOptions.length,
       optionType: newOptionType,
-      itemCode: newOptionType === "additive" ? newOptionItemCode.trim() : null,
+      itemCode: null,
+      additiveSourceMenuId:
+        newOptionType === "additive" ? Number(newOptionSourceMenuId) || null : null,
       quantity: newOptionType === "additive" ? Number(newOptionQuantity) || 1 : 1,
       optionStepValues,
     })
@@ -470,11 +486,11 @@ export default function PosMenusPage() {
       setNewOptionModifier("0")
       setNewOptionModifierDelivery("")
       setNewOptionType("substitution")
-      setNewOptionItemCode("")
+      setNewOptionSourceMenuId("")
       setNewOptionQuantity("1")
       setNewOptionStepValues({})
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
@@ -495,33 +511,33 @@ export default function PosMenusPage() {
       setNewIngredientLossRate("0")
       setNewIngredientType("food")
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   const handleDeleteIngredient = async (ing: PosMenuIngredient) => {
-    if (!confirm(`${ing.itemCode} ${t("posMenuConfirmDelete")}`)) return
+    if (!await appConfirm(`${ing.itemCode} ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenuIngredient({ id: ing.id })
     if (res.success) {
       setMenuIngredients((prev) => prev.filter((i) => i.id !== ing.id))
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   const handleDeleteOption = async (opt: PosMenuOption) => {
-    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenuOption({ id: opt.id })
     if (res.success) {
       setMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   /** 메뉴 목록 펼침에서 옵션 삭제 시 DB 반영 및 화면 갱신 */
   const handleDeleteOptionInList = async (opt: PosMenuOption, menuId: string) => {
-    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenuOption({ id: opt.id })
     if (res.success) {
       const opts = await getPosMenuOptions({ menuId })
@@ -529,7 +545,7 @@ export default function PosMenusPage() {
       if (!opts || opts.length === 0) setExpandedMenuId(null)
       getPosMenus().then(setMenus)
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
@@ -555,7 +571,8 @@ export default function PosMenusPage() {
         priceModifierPackaging: opt.priceModifierPackaging ?? null,
         sortOrder: opt.sortOrder ?? 0,
         optionType: opt.optionType ?? "substitution",
-        itemCode: opt.itemCode ?? undefined,
+        itemCode: opt.itemCode ?? null,
+        additiveSourceMenuId: opt.additiveSourceMenuId ?? null,
         quantity: opt.quantity ?? undefined,
         optionStepValues: opt.optionStepValues ?? undefined,
         sellHall: next,
@@ -567,7 +584,7 @@ export default function PosMenusPage() {
         setExpandedMenuData(opts && opts.length > 0 ? { options: opts } : null)
         getPosMenus().then(setMenus)
       } else {
-        alert(res.message)
+        await appAlert(res.message)
       }
     } finally {
       setSoldOutTogglingOptionId(null)
@@ -614,7 +631,7 @@ export default function PosMenusPage() {
         (o) => o.optionStepValues?.size === newOptionSize && o.optionStepValues?.part === newOptionPart
       )
       if (exists) {
-        alert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
+        await appAlert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
         return
       }
       const res = await savePosMenuOption({
@@ -638,11 +655,11 @@ export default function PosMenusPage() {
         setNewOptionModifierDelivery("")
         setNewOptionModifierPackaging("")
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
       console.error("handleAddOptionForConfig:", e)
-      alert(e instanceof Error ? e.message : String(e))
+      await appAlert(e instanceof Error ? e.message : String(e))
     }
   }
 
@@ -710,16 +727,16 @@ export default function PosMenusPage() {
         list = await getPosMenus()
         setMenus(list || [])
       } catch (e) {
-        alert(t("posChickenBatchNoMenus") || "메뉴 목록을 불러올 수 없습니다.")
+        await appAlert(t("posChickenBatchNoMenus") || "메뉴 목록을 불러올 수 없습니다.")
         return
       }
     }
     const chickenMenus = (list || []).filter((m) => isChickenMenu(m.code))
     if (chickenMenus.length === 0) {
-      alert(t("posChickenBatchNoMenus") || "코드가 c로 시작하는 메뉴가 없습니다.")
+      await appAlert(t("posChickenBatchNoMenus") || "코드가 c로 시작하는 메뉴가 없습니다.")
       return
     }
-    if (!confirm((t("posChickenBatchConfirm") || "코드가 c로 시작하는 {n}개 치킨 메뉴에 옵션(M 순살/윙/봉 3개)을 일괄 적용합니다. 기본가=S 순살. 기존 옵션은 삭제됩니다. 계속하시겠습니까?").replace("{n}", String(chickenMenus.length)))) return
+    if (!await appConfirm((t("posChickenBatchConfirm") || "코드가 c로 시작하는 {n}개 치킨 메뉴에 옵션(M 순살/윙/봉 3개)을 일괄 적용합니다. 기본가=S 순살. 기존 옵션은 삭제됩니다. 계속하시겠습니까?").replace("{n}", String(chickenMenus.length)))) return
     setChickenBatchApplying(true)
     try {
       let done = 0
@@ -771,13 +788,13 @@ export default function PosMenusPage() {
       }
       const updated = await getPosMenus()
       setMenus(updated || [])
-      alert((t("posChickenBatchDone") || "치킨 메뉴 {n}건에 옵션(M 순살/윙/봉)을 적용했습니다.").replace("{n}", String(done)))
+      await appAlert((t("posChickenBatchDone") || "치킨 메뉴 {n}건에 옵션(M 순살/윙/봉)을 적용했습니다.").replace("{n}", String(done)))
       if (optionsConfigSelectedMenuId && chickenMenus.some((m) => m.id === optionsConfigSelectedMenuId)) {
         getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
       }
     } catch (e) {
       console.error("handleChickenBatchApply:", e)
-      alert(e instanceof Error ? e.message : String(e))
+      await appAlert(e instanceof Error ? e.message : String(e))
     } finally {
       setChickenBatchApplying(false)
     }
@@ -813,59 +830,62 @@ export default function PosMenusPage() {
           priceModifierPackaging: o.priceModifierPackaging ?? null,
           sortOrder: o.sortOrder,
           optionType: o.optionType ?? "substitution",
+          itemCode: o.itemCode ?? null,
+          additiveSourceMenuId: o.additiveSourceMenuId ?? null,
+          quantity: o.quantity ?? 1,
           optionStepValues: o.optionStepValues ?? undefined,
           sellHall: o.sellHall ?? true,
           sellDelivery: o.sellDelivery ?? true,
           sellPackaging: o.sellPackaging ?? true,
         })
         if (!res.success) {
-          alert(res.message)
+          await appAlert(res.message)
           return
         }
       }
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
-      alert(t("msg_save_success") || "저장되었습니다.")
+      await appAlert(t("msg_save_success") || "저장되었습니다.")
     } catch (e) {
       console.error("handleSaveOptionsForConfig:", e)
-      alert(e instanceof Error ? e.message : String(e))
+      await appAlert(e instanceof Error ? e.message : String(e))
     }
   }
 
   const handleResetOptionsForConfig = async () => {
     if (!optionsConfigSelectedMenuId || optionsConfigMenuOptions.length === 0) return
-    if (!confirm(t("posMenuOptionsConfigResetConfirm") || "선택한 메뉴의 모든 옵션을 삭제합니다. 계속하시겠습니까?")) return
+    if (!await appConfirm(t("posMenuOptionsConfigResetConfirm") || "선택한 메뉴의 모든 옵션을 삭제합니다. 계속하시겠습니까?")) return
     try {
       for (const o of optionsConfigMenuOptions) {
         const res = await deletePosMenuOption({ id: o.id })
         if (!res.success) {
-          alert(res.message)
+          await appAlert(res.message)
           return
         }
       }
       setOptionsConfigMenuOptions([])
       getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
-      alert(t("posMenuOptionsConfigResetDone") || "초기화되었습니다.")
+      await appAlert(t("posMenuOptionsConfigResetDone") || "초기화되었습니다.")
     } catch (e) {
       console.error("handleResetOptionsForConfig:", e)
-      alert(e instanceof Error ? e.message : String(e))
+      await appAlert(e instanceof Error ? e.message : String(e))
     }
   }
 
   const handleDeleteOptionForConfig = async (opt: PosMenuOption) => {
-    if (!confirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
+    if (!await appConfirm(`"${opt.name}" ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenuOption({ id: opt.id })
     if (res.success) {
       setOptionsConfigMenuOptions((prev) => prev.filter((o) => o.id !== opt.id))
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   const handleDelete = async (menu: PosMenu) => {
-    if (!confirm(`"${menu.name}" ${t("posMenuConfirmDelete")}`)) return
+    if (!await appConfirm(`"${menu.name}" ${t("posMenuConfirmDelete")}`)) return
     const res = await deletePosMenu({ id: menu.id })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
       return
     }
     setMenus((prev) => prev.filter((m) => m.id !== menu.id))
@@ -873,7 +893,7 @@ export default function PosMenusPage() {
       setFormData(emptyForm)
       setEditingId(null)
     }
-    alert(t("itemsAlertDeleted"))
+    await appAlert(t("itemsAlertDeleted"))
   }
 
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -891,10 +911,10 @@ export default function PosMenusPage() {
           )
         )
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSoldOutTogglingId(null)
     }
@@ -1032,7 +1052,6 @@ export default function PosMenusPage() {
           <TabsList className="mb-4 h-9">
             <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid className="h-3.5 w-3.5" />{t("posMenuTabScreen")}</TabsTrigger>
             <TabsTrigger value="optionsConfig" className="gap-1.5 text-xs"><Layers className="h-3.5 w-3.5" />{t("posMenuTabOptionsConfig")}</TabsTrigger>
-            <TabsTrigger value="topping" className="gap-1.5 text-xs"><Pizza className="h-3.5 w-3.5" />{t("posMenuTabTopping")}</TabsTrigger>
             <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
             <TabsTrigger value="priceHistory" className="gap-1.5 text-xs"><History className="h-3.5 w-3.5" />{t("posMenuTabPriceHistory") || "메뉴 가격이력"}</TabsTrigger>
             <TabsTrigger value="priceApply" className="gap-1.5 text-xs"><DollarSign className="h-3.5 w-3.5" />{t("posMenuTabPriceApply") || "가격 적용"}</TabsTrigger>
@@ -1055,6 +1074,12 @@ export default function PosMenusPage() {
               </Button>
             </div>
             <div className="flex flex-col gap-4 p-6">
+              {editingMenuLinkedPromoId && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {t("posMenuPromoLinkedBanner") ||
+                    "프로모션 연동 메뉴입니다. 이름·가격·분류·활성은 마케팅 > 프로모션 관리에서 수정하세요."}
+                </div>
+              )}
               {editingId ? (
                 <>
                 <Tabs value={formTab} onValueChange={(v) => setFormTab(v as typeof formTab)}>
@@ -1070,7 +1095,13 @@ export default function PosMenusPage() {
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuName")}</label>
-                      <Input placeholder={t("itemsNamePh")} className="mt-1 h-10" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} />
+                      <Input
+                        placeholder={t("itemsNamePh")}
+                        className="mt-1 h-10"
+                        value={formData.name}
+                        onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                        disabled={!!editingMenuLinkedPromoId}
+                      />
                     </div>
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCategoryMain")}</label>
@@ -1082,6 +1113,7 @@ export default function PosMenusPage() {
                             value={formData.categoryMain}
                             onChange={(e) => setFormData((p) => ({ ...p, categoryMain: e.target.value }))}
                             onFocus={() => setCategoryMainOpen(true)}
+                            disabled={!!editingMenuLinkedPromoId}
                           />
                           <DropdownMenuTrigger asChild>
                             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
@@ -1126,6 +1158,7 @@ export default function PosMenusPage() {
                             value={formData.category}
                             onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
                             onFocus={() => setCategoryOpen(true)}
+                            disabled={!!editingMenuLinkedPromoId}
                           />
                           <DropdownMenuTrigger asChild>
                             <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-l-none border-l">
@@ -1163,24 +1196,24 @@ export default function PosMenusPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceHall")}</label>
-                        <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} />
+                        <Input type="number" placeholder="0" className="mt-1 h-10 text-right" value={formData.price} onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
                       </div>
                       <div>
                         <label className="text-xs font-semibold">{t("posMenuPriceDelivery")}</label>
-                        <Input type="number" placeholder="홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} />
+                        <Input type="number" placeholder="홀과 동일" className="mt-1 h-10 text-right" value={formData.priceDelivery} onChange={(e) => setFormData((p) => ({ ...p, priceDelivery: e.target.value }))} disabled={!!editingMenuLinkedPromoId} />
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} />
+                        <input type="checkbox" checked={formData.vatIncluded} onChange={(e) => setFormData((p) => ({ ...p, vatIncluded: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
                         {t("posMenuVatIncluded")}
                       </label>
                       <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} />
+                        <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData((p) => ({ ...p, isActive: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
                         {t("posMenuActive")}
                       </label>
                       <label className="flex items-center gap-2 text-xs" title={t("posMenuBanbanHint") || "POS에서 다른 치킨(S 순살) 2개를 골라 한 상으로 주문. 원가는 각 0.5씩."}>
-                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} />
+                        <input type="checkbox" checked={formData.isBanban} onChange={(e) => setFormData((p) => ({ ...p, isBanban: e.target.checked }))} disabled={!!editingMenuLinkedPromoId} />
                         {t("posMenuBanban") || "반반 메뉴 (맛 2개 선택)"}
                       </label>
                     </div>
@@ -1214,8 +1247,8 @@ export default function PosMenusPage() {
                           <li key={o.id} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1 text-xs">
                             <span>
                               <span className={o.optionType === "additive" ? "text-amber-600" : ""}>{optionPartLabel(o.name)}</span>
-                              {o.optionType === "additive" && o.itemCode && (
-                                <span className="ml-1 text-muted-foreground">+{o.itemCode}×{o.quantity ?? 1}</span>
+                              {o.optionType === "additive" && additiveOptionLinkSuffix(o, menus) && (
+                                <span className="ml-1 text-muted-foreground">+{additiveOptionLinkSuffix(o, menus)}</span>
                               )}
                               {o.optionType === "substitution" && o.optionStepValues && Object.keys(o.optionStepValues).length > 0 && (
                                 <span className="ml-1 text-muted-foreground">({Object.entries(o.optionStepValues).map(([k, v]) => `${k}:${v}`).join(" / ")})</span>
@@ -1263,17 +1296,24 @@ export default function PosMenusPage() {
                         {newOptionType === "additive" && (
                           <div className="flex flex-col gap-2">
                             <div className="flex gap-2 items-center flex-wrap">
-                              <Select value={newOptionItemCode} onValueChange={setNewOptionItemCode}>
+                              <Select value={newOptionSourceMenuId} onValueChange={setNewOptionSourceMenuId}>
                                 <SelectTrigger className="h-8 flex-1 min-w-[120px] text-xs">
-                                  <SelectValue placeholder={t("posOptionAdditiveItem") || "추가 품목"} />
+                                  <SelectValue placeholder={t("posOptionAdditiveMenu") || "연결 메뉴"} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {additiveOptionItems.map((it) => <SelectItem key={it.code} value={it.code}>{it.code} — {it.name}</SelectItem>)}
+                                  {additiveMenusForOptions.map((m) => (
+                                    <SelectItem key={m.id} value={m.id}>
+                                      {m.code} — {m.name}
+                                    </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
                               <Input type="number" min={0.001} step={0.1} placeholder="1" className="h-8 w-16 text-right text-xs" value={newOptionQuantity} onChange={(e) => setNewOptionQuantity(e.target.value)} />
                             </div>
-                            <p className="text-[10px] text-muted-foreground">{t("posAdditiveOptionCategoryHint") || "품목 관리에서 카테고리를 'POS추가옵션'으로 설정한 품목만 선택할 수 있습니다."}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {t("posAdditiveOptionMenuHint") ||
+                                "추가형은 별도 등록한 POS 메뉴(메뉴코드)를 연결합니다. 해당 메뉴의 기본 재료(BOM)가 옵션 수량 배수만큼 원가·재고에 가산됩니다."}
+                            </p>
                           </div>
                         )}
                         <div className="flex gap-2 text-xs">
@@ -2027,111 +2067,110 @@ export default function PosMenusPage() {
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="topping" className="mt-0">
-            <div className="rounded-xl border bg-card p-6 space-y-4">
-              <p className="text-sm text-muted-foreground">{t("posMenuTabToppingDesc")}</p>
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-sm font-semibold">{t("posMenuTabTopping")}</h3>
-                <Button size="sm" onClick={handleOpenToppingDialog} className="gap-1.5">
-                  <Plus className="h-4 w-4" />
-                  {t("posToppingNewCreate") || "토핑 새로 만들기"}
+          <TabsContent value="set" className="mt-0">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold">{t("posMenuSetTabTitle") || "프로모션 세트(미러 메뉴)"}</h3>
+                  <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">
+                    {t("posMenuSetTabDesc") ||
+                      "세트·프로모션의 마스터 데이터는 마케팅 > 프로모션 세트에서 관리합니다. 저장 시 POS 메뉴에 자동으로 반영되는 연동 행만 이 목록에 표시됩니다. 이름·가격·분류 수정은 마케팅 화면에서 하세요."}
+                  </p>
+                </div>
+                <Button variant="default" size="sm" className="h-9 shrink-0 gap-1.5" asChild>
+                  <Link href="/admin/marketing/promos">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {t("posMenuSetOpenMarketing") || "마케팅에서 편집"}
+                  </Link>
                 </Button>
               </div>
-              {toppingListLoading ? (
-                <p className="text-sm text-muted-foreground">{t("loading")}</p>
-              ) : additiveOptionItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{t("posAdditiveOptionNoItems")}</p>
-              ) : (
-                <div className="rounded-md border">
-                  <table className="w-full text-sm">
+
+              {schemaStatus && !schemaStatus.ok && !setTabSchemaDismissed && (
+                <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="font-semibold">{t("posPromoSchemaBannerTitle") || "DB 확장 필요"}</p>
+                    <p className="text-xs leading-relaxed opacity-90">
+                      {t("posPromoSchemaBannerBody") ||
+                        "Supabase에서 vercel-app/sql/pos_promo_extensions.sql 을 실행해야 미러 메뉴(promo_id) 연동이 동작합니다."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1 hover:bg-amber-200/60 dark:hover:bg-amber-900/50"
+                    aria-label={t("cancel")}
+                    onClick={() => {
+                      try {
+                        localStorage.setItem("admin_pos_menu_set_schema_banner_dismiss", "1")
+                      } catch {
+                        /* ignore */
+                      }
+                      setSetTabSchemaDismissed(true)
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {(setTabPromosLoading || loading) && (
+                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+              )}
+
+              {!setTabPromosLoading && !loading && menus.length === 0 && (
+                <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-6 text-center text-sm text-muted-foreground">
+                  {t("posMenuSetNeedLoadMenus") ||
+                    "먼저 [화면] 탭에서 메뉴 목록을 조회해 주세요. 목록을 불러와야 프로모 연동 행을 표시할 수 있습니다."}
+                </div>
+              )}
+
+              {!setTabPromosLoading && !loading && menus.length > 0 && mirrorMenusSorted.length === 0 && (
+                <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+                  {t("posMenuSetEmpty") ||
+                    "연동된 프로모션 메뉴가 없습니다. 마케팅 > 프로모션 세트에서 프로모를 저장하면 여기에 표시됩니다."}
+                </div>
+              )}
+
+              {mirrorMenusSorted.length > 0 && (
+                <div className="overflow-x-auto rounded-xl border bg-card">
+                  <table className="w-full min-w-[720px] text-sm">
                     <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="px-3 py-2 text-left font-medium">{t("posCostItemCode") || "품목코드"}</th>
-                        <th className="px-3 py-2 text-left font-medium">{t("itemsName") || "품목명"}</th>
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCodeCol") || "코드"}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuName")}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategoryMain")}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategory")}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("posMenuActive")}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuSetColPromoCode") || "프로모 코드"}</th>
+                        <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("itemsColAction")}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {additiveOptionItems.map((it) => (
-                        <tr key={it.code} className="border-b last:border-0">
-                          <td className="px-3 py-2 font-mono">{it.code}</td>
-                          <td className="px-3 py-2">{it.name}</td>
-                        </tr>
-                      ))}
+                      {mirrorMenusSorted.map((m) => {
+                        const pid = String(m.promoId ?? "").trim()
+                        const promo = pid ? promoById[pid] : undefined
+                        return (
+                          <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="px-3 py-2 font-mono text-xs">{m.code}</td>
+                            <td className="px-3 py-2">{m.name}</td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground">{m.categoryMain ?? "—"}</td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground">{m.category ?? "—"}</td>
+                            <td className="px-3 py-2 text-center text-xs">{m.isActive ? "Y" : "—"}</td>
+                            <td className="px-3 py-2 font-mono text-xs">
+                              {promo?.code ?? (pid ? `#${pid}` : "—")}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <Button variant="outline" size="sm" className="h-7 text-[11px]" asChild>
+                                <Link href="/admin/marketing/promos">{t("posMenuSetEditInMarketing") || "편집"}</Link>
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                {t("posToppingUsageHint") || "등록한 토핑은 메뉴의 옵션(추가형)에서 추가 품목으로 선택할 수 있으며, 원가 분석에 자동 반영됩니다. 단가·단위 수정은 품목 관리에서 하세요."}
-              </p>
-            </div>
-            <Dialog open={toppingDialogOpen} onOpenChange={setToppingDialogOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{t("posToppingNewCreate") || "토핑 새로 만들기"}</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-2">
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">{t("posCostItemCode") || "품목코드"} *</label>
-                    <Input
-                      value={newToppingCode}
-                      onChange={(e) => setNewToppingCode(e.target.value)}
-                      placeholder="예: TOP-CHEESE"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">{t("itemsName") || "품목명"} *</label>
-                    <Input
-                      value={newToppingName}
-                      onChange={(e) => setNewToppingName(e.target.value)}
-                      placeholder={t("posToppingNamePh") || "토핑 이름"}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">{t("posCostUnit") || "단위"}</label>
-                    <Input
-                      value={newToppingUnit}
-                      onChange={(e) => setNewToppingUnit(e.target.value)}
-                      placeholder="g, 개 등"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">{t("itemsCost") || "원가"} (฿)</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={newToppingCost}
-                      onChange={(e) => setNewToppingCost(e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium">{t("posMenuPrice") || "판매가"} (฿)</label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={newToppingPrice}
-                      onChange={(e) => setNewToppingPrice(e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" onClick={() => setToppingDialogOpen(false)} disabled={toppingSaveLoading}>
-                      {t("cancel") || "취소"}
-                    </Button>
-                    <Button onClick={handleSaveNewTopping} disabled={toppingSaveLoading}>
-                      {toppingSaveLoading ? t("loading") : t("save") || "저장"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </TabsContent>
-          <TabsContent value="set" className="mt-0">
-            <div className="rounded-xl border bg-card p-6">
-              <p className="text-sm text-muted-foreground">{t("posSetPlaceholder") || "세트 메뉴 관리 (준비 중)"}</p>
             </div>
           </TabsContent>
           <TabsContent value="priceHistory" className="mt-0">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert } from '@/lib/supabase-server'
 import { postPettyCashJournal, postPayableSettlementJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -52,7 +53,13 @@ export async function POST(request: NextRequest) {
     if (receiptUrl) row.receipt_url = receiptUrl
     if (accountSubjectId != null) {
       const asid = Number(accountSubjectId)
-      if (!isNaN(asid)) row.account_subject_id = asid
+      if (!isNaN(asid)) {
+        const hdr = await assertAccountSubjectNotHeader(asid)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
+        row.account_subject_id = asid
+      }
     }
     const inserted = (await supabaseInsert('petty_cash_transactions', row)) as { id?: number }[]
     const pettyCashId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : undefined
@@ -91,6 +98,8 @@ export async function POST(request: NextRequest) {
           memo,
           storeName: store,
           postedBy: userName || undefined,
+          accountSubjectId:
+            accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null,
         })
       } catch (postingErr) {
         console.error('addPettyCashTransaction posting:', postingErr)

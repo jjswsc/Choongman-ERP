@@ -13,7 +13,9 @@ import {
   MapPin,
   Banknote,
   Settings,
+  Wrench,
 } from "lucide-react"
+import { isPhysicalStoreForRepair } from "@/lib/store-repair-visibility"
 
 const tabs = [
   { id: "home", labelKey: "tabHome" as const, icon: Home },
@@ -22,6 +24,7 @@ const tabs = [
   { id: "hr", labelKey: "tabHr" as const, icon: Users },
   { id: "timesheet", labelKey: "tabTimesheet" as const, icon: Clock },
   { id: "visit", labelKey: "tabVisit" as const, icon: MapPin, officeOnly: true },
+  { id: "repair", labelKey: "tabRepair" as const, icon: Wrench, physicalStoreOnly: true },
   { id: "pettycash", labelKey: "tabPettyCash" as const, icon: Banknote },
   { id: "admin", labelKey: "tabAdmin" as const, icon: Settings, managerOrAdminOnly: true },
 ]
@@ -54,11 +57,17 @@ export function AppNavigation({ activeTab, onTabChange }: AppNavigationProps) {
       String(auth.role || "").toLowerCase().includes(r)
     )
 
-  const visibleTabs = tabs.filter((tab) => {
-    const t = tab as { officeOnly?: boolean; adminOnly?: boolean; managerOrAdminOnly?: boolean }
-    if (t.officeOnly && !isOffice) return false
-    if (t.adminOnly && !isAdmin) return false
-    if (t.managerOrAdminOnly && !isAdmin) return false
+  const visibleTabs = tabs.filter((tabItem) => {
+    const x = tabItem as {
+      officeOnly?: boolean
+      adminOnly?: boolean
+      managerOrAdminOnly?: boolean
+      physicalStoreOnly?: boolean
+    }
+    if (x.officeOnly && !isOffice) return false
+    if (x.adminOnly && !isAdmin) return false
+    if (x.managerOrAdminOnly && !isAdmin) return false
+    if (x.physicalStoreOnly && !isPhysicalStoreForRepair(auth?.store)) return false
     return true
   })
 

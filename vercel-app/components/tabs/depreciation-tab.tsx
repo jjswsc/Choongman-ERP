@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -114,13 +115,13 @@ export function DepreciationTab() {
         dryRun,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || (dryRun ? tt("deprPreviewDone", "미리보기 완료") : tt("deprPostingDone", "분개 완료")))
+        await appAlert(translateApiMessage(res.message, t) || res.message || (dryRun ? tt("deprPreviewDone", "미리보기 완료") : tt("deprPostingDone", "분개 완료")))
         if (!dryRun) loadEntries()
       } else {
-        alert(`${tt("msg_error_prefix", "오류: ")}${(res as { error?: string }).error || ""}`)
+        await appAlert(`${tt("msg_error_prefix", "오류: ")}${(res as { error?: string }).error || ""}`)
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setRunning(false)
     }
@@ -128,16 +129,16 @@ export function DepreciationTab() {
 
   const handleSaveAsset = async () => {
     if (!form.name.trim()) {
-      alert(tt("deprAssetNameRequired", "자산명을 입력하세요."))
+      await appAlert(tt("deprAssetNameRequired", "자산명을 입력하세요."))
       return
     }
     if (!form.acquisitionDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.acquisitionDate)) {
-      alert(tt("deprAcquisitionDateRequired", "취득일을 입력하세요 (YYYY-MM-DD)."))
+      await appAlert(tt("deprAcquisitionDateRequired", "취득일을 입력하세요 (YYYY-MM-DD)."))
       return
     }
     const cost = Number(String(form.acquisitionCost).replace(/,/g, ""))
     if (isNaN(cost) || cost < 0) {
-      alert(tt("deprAcquisitionCostRequired", "취득가를 입력하세요."))
+      await appAlert(tt("deprAcquisitionCostRequired", "취득가를 입력하세요."))
       return
     }
     setSaving(true)
@@ -167,10 +168,10 @@ export function DepreciationTab() {
         })
         loadAssets()
       } else {
-        alert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || tt("msg_save_fail", "저장 실패"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }

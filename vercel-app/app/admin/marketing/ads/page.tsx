@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { TrendingUp, Save, Plus, Trash2, RotateCw } from "lucide-react"
@@ -107,7 +108,7 @@ export default function MarketingAdsPage() {
 
   const handleSave = async () => {
     if (!form.platform.trim()) {
-      alert("플랫폼을 선택하세요.")
+      await appAlert("플랫폼을 선택하세요.")
       return
     }
     setSaving(true)
@@ -125,27 +126,27 @@ export default function MarketingAdsPage() {
         actualSpent: Number(form.actualSpent) || 0,
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadData()
         handleNew()
       } else {
-        alert(res.message)
+        await appAlert(res.message)
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (a: MarketingAd) => {
-    if (!confirm(`${a.platform} 광고를 삭제하시겠습니까?`)) return
+    if (!await appConfirm(`${a.platform} 광고를 삭제하시겠습니까?`)) return
     const res = await deleteMarketingAd({ id: a.id })
     if (res.success) {
       loadData()
       if (editingId === a.id) handleNew()
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 

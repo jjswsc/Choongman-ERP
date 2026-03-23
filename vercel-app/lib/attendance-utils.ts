@@ -24,6 +24,90 @@ export function getBangkokHour(iso: string | Date | null | undefined): number {
   return parseInt(str, 10) || 0
 }
 
+/**
+ * 근태(getTodayAttendanceSummary)와 동일: 방콕 달력 00:00~07:59 시각은 전날 근무일로 간주
+ * (익일 새벽 퇴근·기록을 전날 집계에 포함하는 규칙과 맞춤)
+ *
+ * 예: 달력 22일 02:00 기록 → 근무일은 21일. 22일로 검색하면 안 나오고 21일로 검색되어야 함.
+ */
+export function attendanceBusinessDateStrBangkok(isoOrMs: Date | number): string {
+  const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : isoOrMs
+  if (isNaN(d.getTime())) return todayStrBangkok()
+  const cal = d.toLocaleDateString('en-CA', { timeZone: ATTENDANCE_TZ })
+  const h = getBangkokHour(d)
+  if (h >= 0 && h <= 7) return addDayBangkok(cal, -1)
+  return cal
+}
+
+/**
+ * 근무일 D에 속하는 실시간 구간: D 00:00 ~ (D+1) 08:00 방콕 (08:00 미포함).
+ * getTodayAttendanceSummary가 D일 조회 시 익일 00~07시 로그를 포함하는 범위와 동일.
+ */
+export function attendanceBusinessDayBoundsMs(businessDateStr: string): { startMs: number; endMsExclusive: number } {
+  const s = businessDateStr.trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return attendanceBusinessDayBoundsMs(todayStrBangkok())
+  }
+  const startMs = new Date(`${s}T00:00:00+07:00`).getTime()
+  const nextCal = addDayBangkok(s, 1)
+  const endMsExclusive = new Date(`${nextCal}T08:00:00+07:00`).getTime()
+  return { startMs, endMsExclusive }
+}
+
+export function segmentOverlapsAttendanceBusinessDay(
+  segmentStartMs: number,
+  segmentEndMs: number | null,
+  ongoing: boolean,
+  winStartMs: number,
+  winEndExclusiveMs: number,
+  nowMs: number
+): boolean {
+  const effectiveEnd = ongoing ? nowMs : segmentEndMs ?? nowMs
+  return effectiveEnd > winStartMs && segmentStartMs < winEndExclusiveMs
+}
+
+function normalizeVisitTimePart(visitTime: string | undefined, createdAt: string | undefined): string {
+  const t = String(visitTime ?? '').trim()
+  if (t.includes('T')) {
+    const iso = t.substring(t.indexOf('T') + 1)
+    if (iso.length >= 8) return iso.substring(0, 8)
+    if (iso.length >= 5) return iso.substring(0, 5) + ':00'
+    return '00:00:00'
+  }
+  if (t.length >= 8) return t.substring(0, 8)
+  if (t.length >= 5) return t.substring(0, 5) + ':00'
+  if (createdAt && String(createdAt).includes('T')) {
+    const tPart = String(createdAt).substring(String(createdAt).indexOf('T') + 1)
+    if (tPart.length >= 8) return tPart.substring(0, 8)
+    if (tPart.length >= 5) return tPart.substring(0, 5) + ':00'
+  }
+  return '00:00:00'
+}
+
+/** store_visits visit_date + visit_time(+created_at) → 시각(ms), 방콕 +07:00 해석 */
+export function visitInstantMsBangkok(
+  visitDate: string,
+  visitTime?: string | null,
+  createdAt?: string | null
+): number {
+  const date = String(visitDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 0
+  const time = normalizeVisitTimePart(visitTime ?? undefined, createdAt ?? undefined)
+  const inst = new Date(`${date}T${time}+07:00`)
+  const ms = inst.getTime()
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+export function visitRowBusinessDateStrBangkok(row: {
+  visit_date?: string
+  visit_time?: string
+  created_at?: string
+}): string {
+  const ms = visitInstantMsBangkok(String(row.visit_date || ''), row.visit_time, row.created_at)
+  if (!ms) return String(row.visit_date || '').slice(0, 10) || todayStrBangkok()
+  return attendanceBusinessDateStrBangkok(ms)
+}
+
 /** 방콕 기준 N일 전 날짜 YYYY-MM-DD */
 export function daysAgoStrBangkok(days: number): string {
   const d = new Date()

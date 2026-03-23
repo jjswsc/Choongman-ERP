@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy } from "lucide-react"
@@ -176,7 +177,7 @@ export default function MarketingCampaignsPage() {
   const handleSave = async () => {
     const topic = form.topic.trim()
     if (!topic) {
-      alert(t("required") || "캠페인 제목을 입력하세요.")
+      await appAlert(t("required") || "캠페인 제목을 입력하세요.")
       return
     }
 
@@ -211,27 +212,27 @@ export default function MarketingCampaignsPage() {
         conclusion: form.conclusion.trim(),
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadList()
         handleNew()
       } else {
-        alert(res.message)
+        await appAlert(res.message)
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
   }
 
   const handleDelete = async (c: MarketingCampaign) => {
-    if (!confirm(`"${c.topic}" ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
+    if (!await appConfirm(`"${c.topic}" ${t("posMenuConfirmDelete") || "삭제하시겠습니까?"}`)) return
     const res = await deleteMarketingCampaign({ id: c.id })
     if (res.success) {
       loadList()
       if (editingId === c.id) handleNew()
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
@@ -246,7 +247,7 @@ export default function MarketingCampaignsPage() {
       })
     } else {
       setCostResults(null)
-      if (!res.success) alert(res.message || "비용 데이터를 불러올 수 없습니다.")
+      if (!res.success) await appAlert(res.message || "비용 데이터를 불러올 수 없습니다.")
     }
   }
 
@@ -266,7 +267,7 @@ export default function MarketingCampaignsPage() {
       })
     } else {
       setPosResults(null)
-      alert(res.message || "데이터를 불러올 수 없습니다.")
+      await appAlert(res.message || "데이터를 불러올 수 없습니다.")
     }
   }
 
@@ -277,13 +278,13 @@ export default function MarketingCampaignsPage() {
     try {
       const res = await importMarketingExcel(file)
       if (res.success) {
-        alert(res.message || "가져오기 완료")
+        await appAlert(res.message || "가져오기 완료")
         loadList()
       } else {
-        alert(res.message || "가져오기 실패")
+        await appAlert(res.message || "가져오기 실패")
       }
     } catch (err) {
-      alert("가져오기 실패: " + String(err))
+      await appAlert("가져오기 실패: " + String(err))
     } finally {
       setImporting(false)
       e.target.value = ""

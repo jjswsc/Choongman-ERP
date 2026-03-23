@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -121,10 +122,10 @@ export function ItemForm({ formData, setFormData, isEditing, onSave, onReset, on
           memo: v.memo,
         })),
       })
-      if (res.success) alert(t("vendorAlertUpdated") || t("itemsBtnSave") + " 완료")
-      else alert(res.message || "저장 실패")
+      if (res.success) await appAlert(t("vendorAlertUpdated") || t("itemsBtnSave") + " 완료")
+      else await appAlert(res.message || "저장 실패")
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      await appAlert(e instanceof Error ? e.message : String(e))
     } finally {
       setItemVendorsSaving(false)
     }

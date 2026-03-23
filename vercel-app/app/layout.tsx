@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Inter, Geist_Mono, Noto_Sans_KR, Orbitron } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
+import { AppMessageProvider } from "@/components/app-message-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { SwPreregister } from "@/components/sw-preregister"
 
@@ -55,7 +56,9 @@ export default function RootLayout({
         <ErrorBoundary>
           <SwPreregister />
           <AuthProvider>
-            <LangProvider>{children}</LangProvider>
+            <LangProvider>
+              <AppMessageProvider>{children}</AppMessageProvider>
+            </LangProvider>
           </AuthProvider>
         </ErrorBoundary>
       </body>

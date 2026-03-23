@@ -5,6 +5,7 @@ import {
   postWithdrawalJournal,
   type WithdrawalCategory,
 } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 const INTERNAL_BANK_SOURCE_MARKER = 'source:expense_internal'
 
@@ -96,6 +97,13 @@ export async function POST(request: NextRequest) {
     }
     if (category === 'fixed_asset' && !assetName && !memo) {
       return NextResponse.json({ success: false, message: '자산명 또는 적요를 입력해 주세요.' }, { status: 400, headers })
+    }
+
+    if (accountSubjectId != null && !isNaN(Number(accountSubjectId))) {
+      const hdr = await assertAccountSubjectNotHeader(Number(accountSubjectId))
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
     }
 
     const store = storeName || '본사'
@@ -278,6 +286,8 @@ export async function POST(request: NextRequest) {
         postedBy: userName || undefined,
         expenseAccountCode: accountSubjectCode || undefined,
         expenseAccountName: accountSubjectName || undefined,
+        expenseAccountSubjectId:
+          accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : undefined,
         transferToAccountId: category === 'transfer' ? transferToAccountId : undefined,
         transferToPettyStore: category === 'transfer_to_petty' ? transferToPettyStore : undefined,
         transferToCardAccountId: category === 'transfer_to_card' ? transferToCardAccountId : undefined,

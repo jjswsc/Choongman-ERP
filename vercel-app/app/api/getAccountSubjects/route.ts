@@ -13,9 +13,25 @@ export async function GET(request: NextRequest) {
   const forTransfer = searchParams.get('forTransfer') === 'true'
   const forRevenue = searchParams.get('forRevenue') === 'true'
   const forCard = searchParams.get('forCard') === 'true'
+  const excludeHeaders = searchParams.get('excludeHeaders') === 'true'
 
   try {
-    type Row = { id?: number; code?: string; name?: string; name_en?: string; type?: string; p_and_l_section?: string; sort_order?: number }
+    type Row = {
+      id?: number
+      code?: string
+      name?: string
+      name_en?: string
+      name_th?: string | null
+      type?: string
+      p_and_l_section?: string
+      sort_order?: number
+      statement_type?: string | null
+      normal_side?: string | null
+      parent_id?: number | null
+      is_header?: boolean | null
+      is_system?: boolean | null
+      coa_class?: string | null
+    }
     let rows: Row[] = []
 
     if (typeFilter && typeFilter !== 'All') {
@@ -35,9 +51,16 @@ export async function GET(request: NextRequest) {
       code: String(r.code || '').trim(),
       name: String(r.name || '').trim(),
       nameEn: (r.name_en || '').toString().trim() || null,
+      nameTh: r.name_th != null && String(r.name_th).trim() !== '' ? String(r.name_th).trim() : null,
       type: String(r.type || 'expense').toLowerCase(),
       pAndLSection: (r.p_and_l_section || '').toString().trim() || null,
       sortOrder: Number(r.sort_order) ?? 0,
+      statementType: r.statement_type != null ? String(r.statement_type).trim().toLowerCase() || null : null,
+      normalSide: r.normal_side != null ? String(r.normal_side).trim().toLowerCase() || null : null,
+      parentId: r.parent_id != null && !Number.isNaN(Number(r.parent_id)) ? Number(r.parent_id) : null,
+      isHeader: Boolean(r.is_header),
+      isSystem: Boolean(r.is_system),
+      coaClass: r.coa_class != null && String(r.coa_class).trim() !== '' ? String(r.coa_class).trim() : null,
     }))
 
     if (forExpense) {
@@ -57,6 +80,10 @@ export async function GET(request: NextRequest) {
     }
     if (forCard) {
       list = list.filter((x) => x.type === 'expense' && (x.pAndLSection === 'expense' || x.pAndLSection === 'cost' || !x.pAndLSection))
+    }
+
+    if (excludeHeaders) {
+      list = list.filter((x) => !x.isHeader)
     }
 
     return NextResponse.json(list, { headers })

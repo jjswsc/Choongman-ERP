@@ -64,15 +64,42 @@ export async function POST(req: NextRequest) {
     if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
     baseRow.is_banban = isBanban
 
+    type ExistingMenuRow = {
+      id?: number
+      price?: number
+      price_delivery?: number | null
+      name?: string
+      category_main?: string
+      category?: string
+      image?: string
+      promo_id?: number | null
+    }
+
     const doSave = async (row: Record<string, unknown>): Promise<{ success: boolean; message: string; newId?: string }> => {
       if (editingId) {
-        const existing = (await supabaseSelectFilter(
-          'pos_menus',
-          `id=eq.${editingId}`,
-          { limit: 1 }
-        )) as { id?: number; price?: number; price_delivery?: number | null; name?: string; category_main?: string; category?: string; image?: string }[] | null
+        let existing: ExistingMenuRow[] | null = null
+        try {
+          existing = (await supabaseSelectFilter(
+            'pos_menus',
+            `id=eq.${editingId}`,
+            { limit: 1, select: 'id,price,price_delivery,name,category_main,category,image,promo_id' }
+          )) as ExistingMenuRow[] | null
+        } catch {
+          existing = (await supabaseSelectFilter(
+            'pos_menus',
+            `id=eq.${editingId}`,
+            { limit: 1 }
+          )) as ExistingMenuRow[] | null
+        }
         if (existing && existing.length > 0) {
           const prev = existing[0]
+          const pid = prev.promo_id
+          if (pid != null && Number(pid) > 0) {
+            return {
+              success: false,
+              message: '프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.',
+            }
+          }
           // 수정 시 이미지 URL이 비어 있으면 기존 이미지 유지 (폼 리셋/오류로 빈 값 저장 방지)
           const incomingImage = String(body.imageUrl ?? '').trim()
           if (!incomingImage && prev.image != null && String(prev.image).trim()) {

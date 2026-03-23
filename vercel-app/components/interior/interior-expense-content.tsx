@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Plus, Pencil, Trash2, Banknote, Package, CreditCard } from "lucide-react"
@@ -85,7 +86,7 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
 
   const handleSave = async () => {
     if (!editing || !editing.description?.trim()) {
-      alert(t("interiorDescriptionRequired") || "설명을 입력하세요.")
+      await appAlert(t("interiorDescriptionRequired") || "설명을 입력하세요.")
       return
     }
     const balance = (editing.quote ?? 0) - (editing.paid ?? 0)
@@ -99,12 +100,12 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
       if (res.success) {
         setEditing(null)
         loadData()
-        alert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved") || "저장되었습니다.")
       } else {
-        alert(res.message || "저장 실패")
+        await appAlert(res.message || "저장 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 
@@ -112,16 +113,16 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
     if (!paymentItem?.id) return
     const amt = Number(paymentAmount) || 0
     if (amt <= 0) {
-      alert(t("interiorPaymentAmountRequired") || "결제 금액을 입력하세요.")
+      await appAlert(t("interiorPaymentAmountRequired") || "결제 금액을 입력하세요.")
       return
     }
     const balance = (paymentItem.quote ?? 0) - (paymentItem.paid ?? 0)
     if (amt > balance) {
-      alert(t("interiorPaymentExceedsBalance") || "잔액을 초과할 수 없습니다.")
+      await appAlert(t("interiorPaymentExceedsBalance") || "잔액을 초과할 수 없습니다.")
       return
     }
     if (!paymentAccountId) {
-      alert(t("interiorPaymentAccountRequired") || "계좌를 선택하세요.")
+      await appAlert(t("interiorPaymentAccountRequired") || "계좌를 선택하세요.")
       return
     }
     setPaying(true)
@@ -138,19 +139,19 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
         setPaymentAmount("")
         setPaymentMemo("")
         loadData()
-        alert(t("msg_saved") || "결제가 등록되었습니다.")
+        await appAlert(t("msg_saved") || "결제가 등록되었습니다.")
       } else {
-        alert(res.message || "결제 등록 실패")
+        await appAlert(res.message || "결제 등록 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setPaying(false)
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorExpenseItem({ id })
@@ -158,10 +159,10 @@ function InteriorExpenseTab({ projectId, t }: { projectId: string; t: (key: stri
         loadData()
         if (editing?.id === id) setEditing(null)
       } else {
-        alert(res.message || "삭제 실패")
+        await appAlert(res.message || "삭제 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }
@@ -346,7 +347,7 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
 
   const handleSave = async () => {
     if (!editing || !editing.description?.trim()) {
-      alert(t("interiorDescriptionRequired") || "품목명을 입력하세요.")
+      await appAlert(t("interiorDescriptionRequired") || "품목명을 입력하세요.")
       return
     }
     const sumAmount = recalcSum(editing.qty ?? 1, editing.price ?? 0)
@@ -360,17 +361,17 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
       if (res.success) {
         setEditing(null)
         loadData()
-        alert(t("msg_saved") || "저장되었습니다.")
+        await appAlert(t("msg_saved") || "저장되었습니다.")
       } else {
-        alert(res.message || "저장 실패")
+        await appAlert(res.message || "저장 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorDirectPurchase({ id })
@@ -378,10 +379,10 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
         loadData()
         if (editing?.id === id) setEditing(null)
       } else {
-        alert(res.message || "삭제 실패")
+        await appAlert(res.message || "삭제 실패")
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeletingId(null)
     }

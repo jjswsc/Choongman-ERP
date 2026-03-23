@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Input } from "@/components/ui/input"
@@ -23,7 +24,7 @@ import { useT } from "@/lib/i18n"
 import type { AdminEmployeeItem } from "@/lib/api-client"
 import { BANK_OPTIONS, BANK_OTHER } from "@/lib/bank-options"
 
-const SAL_TYPE_OPTIONS = ["Monthly", "Hourly"]
+const SAL_TYPE_OPTIONS = ["Monthly", "Hourly", "Part-time"] as const
 const ROLE_OPTIONS = ["Staff", "Manager", "Officer", "Director"]
 const GRADE_OPTIONS = ["", "S", "A", "B", "C", "F"]
 
@@ -201,7 +202,7 @@ export function EmployeeForm({
                   const dataUrl = await compressImageForUpload(file, 800, 0.7)
                   update("photo", dataUrl)
                 } catch {
-                  alert(t("msg_upload_fail"))
+                  await appAlert(t("msg_upload_fail"))
                 }
               }}
             />
@@ -412,7 +413,7 @@ export function EmployeeForm({
                     const dataUrl = await compressImageForUpload(file, 1024, 0.7)
                     update("idCardPhoto", dataUrl)
                   } catch {
-                    alert(t("msg_upload_fail"))
+                    await appAlert(t("msg_upload_fail"))
                   }
                 }}
               />
@@ -489,7 +490,9 @@ export function EmployeeForm({
             </SelectTrigger>
             <SelectContent>
               {SAL_TYPE_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
+                <SelectItem key={s} value={s}>
+                  {s === "Monthly" ? t("emp_sal_monthly") : s === "Hourly" ? t("emp_sal_hourly") : t("emp_sal_parttime")}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

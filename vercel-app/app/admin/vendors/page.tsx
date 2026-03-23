@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Building2 } from "lucide-react"
@@ -76,11 +77,11 @@ export default function VendorsPage() {
     const code = formData.code.trim()
     const name = formData.name.trim()
     if (!code || !name) {
-      alert(t("vendorAlertCodeName"))
+      await appAlert(t("vendorAlertCodeName"))
       return
     }
     if (!editingCode && vendors.some((v) => v.code === code)) {
-      alert(t("vendorAlertCodeExists"))
+      await appAlert(t("vendorAlertCodeExists"))
       return
     }
     const res = await saveVendor({
@@ -99,7 +100,7 @@ export default function VendorsPage() {
       editingCode: editingCode || undefined,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail_detail"))
       return
     }
     const newVendor: Vendor = {
@@ -118,10 +119,10 @@ export default function VendorsPage() {
     }
     if (editingCode) {
       setVendors((prev) => prev.map((v) => (v.code === editingCode ? newVendor : v)))
-      alert(t("vendorAlertUpdated"))
+      await appAlert(t("vendorAlertUpdated"))
     } else {
       setVendors((prev) => [...prev, newVendor])
-      alert(t("vendorAlertSaved"))
+      await appAlert(t("vendorAlertSaved"))
     }
     setFormData(emptyForm)
     setEditingCode(null)
@@ -149,10 +150,10 @@ export default function VendorsPage() {
     const displayName = (vendor.type === "sales" || vendor.type === "both") && (vendor.gps_name?.trim() || vendor.sales_outlet?.trim())
       ? vendor.gps_name || vendor.sales_outlet || vendor.name
       : vendor.name
-    if (!confirm(`"${displayName}" ${t("vendorConfirmDelete")}`)) return
+    if (!await appConfirm(`"${displayName}" ${t("vendorConfirmDelete")}`)) return
     const res = await deleteVendor({ code: vendor.code })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_delete_fail_detail"))
       return
     }
     setVendors((prev) => prev.filter((v) => v.code !== vendor.code))
@@ -160,7 +161,7 @@ export default function VendorsPage() {
       setFormData(emptyForm)
       setEditingCode(null)
     }
-    alert(t("vendorAlertDeleted"))
+    await appAlert(t("vendorAlertDeleted"))
   }
 
   const handleSearch = () => {

@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Upload, Trash2, Download } from "lucide-react"
@@ -69,12 +70,12 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
       })
       if (res.success) {
         loadData()
-        alert(t("msg_saved") || "업로드되었습니다.")
+        await appAlert(t("msg_saved") || "업로드되었습니다.")
       } else {
-        alert(res.message || "업로드 실패")
+        await appAlert(res.message || "업로드 실패")
       }
     } catch (err) {
-      alert(String(err))
+      await appAlert(String(err))
     } finally {
       setUploading(false)
       e.target.value = ""
@@ -82,17 +83,17 @@ export function InteriorFilesContent({ projectId, t }: InteriorFilesContentProps
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item") || "삭제하시겠습니까?")) return
     setDeletingId(id)
     try {
       const res = await deleteInteriorFile({ id })
       if (res.success) {
         loadData()
       } else {
-        alert(res.message || "삭제 실패")
+        await appAlert(res.message || "삭제 실패")
       }
     } catch (err) {
-      alert(String(err))
+      await appAlert(String(err))
     } finally {
       setDeletingId(null)
     }

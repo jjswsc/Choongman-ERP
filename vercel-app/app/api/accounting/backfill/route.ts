@@ -3,6 +3,10 @@ import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { hasJournalForSource, postBankTransactionJournal, postPettyCashJournal, postPosOrderJournal, postStorePurchaseJournal } from '@/lib/accounting-posting'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
+function isPeriodClosedError(e: unknown): boolean {
+  return e instanceof Error && e.message === 'ACCOUNTING_PERIOD_CLOSED'
+}
+
 function getRangeByMonths(months: number): { startStr: string; endStr: string } {
   const endStr = getBangkokTodayDateString()
   const y = Number(endStr.slice(0, 4))
@@ -31,7 +35,7 @@ export async function POST(request: NextRequest) {
     const bankRows = (await supabaseSelectFilter(
       'bank_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}`,
-      { select: 'id,trans_date,trans_type,amount,category,memo,store,user_name', limit: 50000 }
+      { select: 'id,trans_date,trans_type,amount,category,memo,store,user_name,account_subject_id', limit: 50000 }
     )) as {
       id?: number
       trans_date?: string
@@ -41,6 +45,7 @@ export async function POST(request: NextRequest) {
       memo?: string
       store?: string
       user_name?: string
+      account_subject_id?: number | null
     }[] | null
     for (const row of bankRows || []) {
       const id = Number(row.id || 0)
@@ -50,16 +55,28 @@ export async function POST(request: NextRequest) {
         continue
       }
       if (!dryRun) {
-        await postBankTransactionJournal({
-          bankTransactionId: id,
-          transDate: String(row.trans_date || '').slice(0, 10),
-          transType: (String(row.trans_type || 'withdraw').toLowerCase() === 'deposit' ? 'deposit' : 'withdraw'),
-          amountAbs: Math.abs(Number(row.amount) || 0),
-          category: String(row.category || ''),
-          memo: String(row.memo || ''),
-          storeName: String(row.store || ''),
-          postedBy: String(row.user_name || ''),
-        })
+        try {
+          await postBankTransactionJournal({
+            bankTransactionId: id,
+            transDate: String(row.trans_date || '').slice(0, 10),
+            transType: (String(row.trans_type || 'withdraw').toLowerCase() === 'deposit' ? 'deposit' : 'withdraw'),
+            amountAbs: Math.abs(Number(row.amount) || 0),
+            category: String(row.category || ''),
+            memo: String(row.memo || ''),
+            storeName: String(row.store || ''),
+            postedBy: String(row.user_name || ''),
+            accountSubjectId:
+              row.account_subject_id != null && !isNaN(Number(row.account_subject_id))
+                ? Number(row.account_subject_id)
+                : null,
+          })
+        } catch (e) {
+          if (isPeriodClosedError(e)) {
+            skipped += 1
+            continue
+          }
+          throw e
+        }
       }
       bankCreated += 1
     }
@@ -67,7 +84,7 @@ export async function POST(request: NextRequest) {
     const pettyRows = (await supabaseSelectFilter(
       'petty_cash_transactions',
       `trans_date=gte.${startStr}&trans_date=lte.${endStr}&trans_type=eq.expense`,
-      { select: 'id,trans_date,trans_type,amount,memo,store,user_name', limit: 50000 }
+      { select: 'id,trans_date,trans_type,amount,memo,store,user_name,account_subject_id', limit: 50000 }
     )) as {
       id?: number
       trans_date?: string
@@ -76,6 +93,7 @@ export async function POST(request: NextRequest) {
       memo?: string
       store?: string
       user_name?: string
+      account_subject_id?: number | null
     }[] | null
     for (const row of pettyRows || []) {
       const id = Number(row.id || 0)
@@ -85,15 +103,27 @@ export async function POST(request: NextRequest) {
         continue
       }
       if (!dryRun) {
-        await postPettyCashJournal({
-          pettyCashId: id,
-          transDate: String(row.trans_date || '').slice(0, 10),
-          transType: String(row.trans_type || ''),
-          amountAbs: Math.abs(Number(row.amount) || 0),
-          memo: String(row.memo || ''),
-          storeName: String(row.store || ''),
-          postedBy: String(row.user_name || ''),
-        })
+        try {
+          await postPettyCashJournal({
+            pettyCashId: id,
+            transDate: String(row.trans_date || '').slice(0, 10),
+            transType: String(row.trans_type || ''),
+            amountAbs: Math.abs(Number(row.amount) || 0),
+            memo: String(row.memo || ''),
+            storeName: String(row.store || ''),
+            postedBy: String(row.user_name || ''),
+            accountSubjectId:
+              row.account_subject_id != null && !isNaN(Number(row.account_subject_id))
+                ? Number(row.account_subject_id)
+                : null,
+          })
+        } catch (e) {
+          if (isPeriodClosedError(e)) {
+            skipped += 1
+            continue
+          }
+          throw e
+        }
       }
       pettyCreated += 1
     }
@@ -138,13 +168,21 @@ export async function POST(request: NextRequest) {
         continue
       }
       if (!dryRun) {
-        await postStorePurchaseJournal({
-          orderId,
-          transDate: String(row.trans_date || '').slice(0, 10),
-          amount: Number(row.amount || 0),
-          storeName: String(row.store_name || ''),
-          memo: '매입/매출채권 백필 분개',
-        })
+        try {
+          await postStorePurchaseJournal({
+            orderId,
+            transDate: String(row.trans_date || '').slice(0, 10),
+            amount: Number(row.amount || 0),
+            storeName: String(row.store_name || ''),
+            memo: '매입/매출채권 백필 분개',
+          })
+        } catch (e) {
+          if (isPeriodClosedError(e)) {
+            skipped += 1
+            continue
+          }
+          throw e
+        }
       }
       purchaseCreated += 1
     }

@@ -1,4 +1,5 @@
 'use client'
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import { CreditCard, RotateCw, Save, Plus, Trash2 } from 'lucide-react'
@@ -110,7 +111,7 @@ export function PosPaymentSettingsContent() {
   const handleSave = async () => {
     const name = editName.trim()
     if (!name) {
-      alert(t('posPaymentMethodNameRequired') || '이름을 입력하세요.')
+      await appAlert(t('posPaymentMethodNameRequired') || '이름을 입력하세요.')
       return
     }
     if (!effectiveStore) return
@@ -124,17 +125,17 @@ export function PosPaymentSettingsContent() {
         hidden: editHidden,
       })
       if (res.success) {
-        alert(t('itemsAlertSaved') || '저장되었습니다.')
+        await appAlert(t('itemsAlertSaved') || '저장되었습니다.')
         const list = await loadData()
         if (!selected && res.id) {
           const next = list.find((i) => i.id === res.id)
           if (next) setSelected(next)
         }
       } else {
-        alert(res.message || t('msg_save_fail_detail'))
+        await appAlert(res.message || t('msg_save_fail_detail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
@@ -142,7 +143,7 @@ export function PosPaymentSettingsContent() {
 
   const handleDelete = async () => {
     if (!selected) return
-    if (!confirm(t('posPaymentMethodDeleteConfirm') || `"${selected.name}" 항목을 삭제하시겠습니까?`)) return
+    if (!await appConfirm(t('posPaymentMethodDeleteConfirm') || `"${selected.name}" 항목을 삭제하시겠습니까?`)) return
     setDeleting(true)
     try {
       const res = await deletePosPaymentMethodItem({ id: selected.id })
@@ -151,10 +152,10 @@ export function PosPaymentSettingsContent() {
         setEditName('')
         await loadData()
       } else {
-        alert(res.message || t('msg_save_fail_detail'))
+        await appAlert(res.message || t('msg_save_fail_detail'))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setDeleting(false)
     }

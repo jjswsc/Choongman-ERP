@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useCallback, useMemo, useEffect } from "react"
 import { useLang } from "@/lib/lang-context"
@@ -245,10 +246,10 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         if (!menuRes.success) throw new Error(menuRes.message)
       }
 
-      alert(t("msg_save_success") || "저장되었습니다.")
+      await appAlert(t("msg_save_success") || "저장되었습니다.")
       onSaveSuccess?.()
     } catch (e) {
-      alert(String(e) || (t("msg_save_fail_detail") || "저장에 실패했습니다."))
+      await appAlert(String(e) || (t("msg_save_fail_detail") || "저장에 실패했습니다."))
     } finally {
       setSaving(false)
     }
@@ -282,9 +283,9 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
                     (r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key
                   )
                   if (fresh) onReloadMenu(fresh)
-                  else alert(t("posCostLoadFail") || "데이터를 찾을 수 없습니다.")
+                  else await appAlert(t("posCostLoadFail") || "데이터를 찾을 수 없습니다.")
                 } catch {
-                  alert(t("msg_load_fail") || "불러오기에 실패했습니다.")
+                  await appAlert(t("msg_load_fail") || "불러오기에 실패했습니다.")
                 }
               }}
               className="h-9 gap-1.5 px-3 text-xs"
@@ -341,7 +342,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
                         onSaveSuccess?.()
                       }
                     } catch (e) {
-                      alert(String(e))
+                      await appAlert(String(e))
                     }
                   }
                 : undefined

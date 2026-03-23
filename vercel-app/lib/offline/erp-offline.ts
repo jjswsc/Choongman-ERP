@@ -4,7 +4,7 @@
  */
 
 import { isOnline } from './network'
-import { getFromErpCache, setErpCache, deleteErpCacheByPrefix } from './cache'
+import { getFromErpCache, setErpCache, deleteErpCache, deleteErpCacheByPrefix } from './cache'
 import { apiFetch } from '../api/fetch'
 
 const CACHE_KEYS = {
@@ -263,11 +263,7 @@ export async function getBankTransactionsWithCache(params: {
   startStr: string
   endStr: string
 }): Promise<{ list: unknown[]; summary: unknown }> {
-  const key = cacheKey('erp:bankTx', {
-    accountId: String(params.accountId),
-    start: params.startStr,
-    end: params.endStr,
-  })
+  const key = bankTransactionsCacheKey(params)
   const fallback = { list: [] as unknown[], summary: null }
   return fetchWithCache(key, async () => {
     const q = new URLSearchParams({
@@ -278,6 +274,27 @@ export async function getBankTransactionsWithCache(params: {
     const res = await apiFetch(`/api/getBankTransactions?${q}`)
     return res.json() as Promise<{ list: unknown[]; summary: unknown }>
   }, fallback)
+}
+
+/** 통장 거래 목록 오프라인 캐시 무효화 (대사 등 반영 후 재조회) */
+export function bankTransactionsCacheKey(params: {
+  accountId: string | number
+  startStr: string
+  endStr: string
+}): string {
+  return cacheKey('erp:bankTx', {
+    accountId: String(params.accountId),
+    start: params.startStr,
+    end: params.endStr,
+  })
+}
+
+export async function invalidateBankTransactionsListCache(params: {
+  accountId: string | number
+  startStr: string
+  endStr: string
+}): Promise<void> {
+  await deleteErpCache(bankTransactionsCacheKey(params))
 }
 
 // ─── 시재 ───

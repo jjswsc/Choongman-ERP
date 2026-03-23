@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -70,10 +71,10 @@ export function AdminPurchaseOrderHistory() {
         if (res.success) {
           load()
         } else {
-          alert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
         }
       } catch (e) {
-        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
       } finally {
         setApprovingId(null)
       }
@@ -90,7 +91,7 @@ export function AdminPurchaseOrderHistory() {
     async (po: PurchaseOrderRow) => {
       const id = po.id
       if (!id) return
-      const ok = window.confirm(t("posCancelConfirm") || t("cancel") || "취소하시겠습니까?")
+      const ok = await appConfirm(t("posCancelConfirm") || t("cancel") || "취소하시겠습니까?")
       if (!ok) return
 
       setCancellingId(id)
@@ -99,10 +100,10 @@ export function AdminPurchaseOrderHistory() {
         if (res.success) {
           load()
         } else {
-          alert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message || "", t) || res.message || t("processFail"))
         }
       } catch (e) {
-        alert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
+        await appAlert(t("processFail") + ": " + (e instanceof Error ? e.message : String(e)))
       } finally {
         setCancellingId(null)
       }
@@ -212,7 +213,7 @@ ${allRows.map((row, ri) => {
     URL.revokeObjectURL(url)
   }
 
-  const printPo = (po: PurchaseOrderRow) => {
+  const printPo = async (po: PurchaseOrderRow) => {
     const cart = parseCart(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
     const locale = {
@@ -261,7 +262,7 @@ ${allRows.map((row, ri) => {
     if (printWindow) {
       printWindow.focus()
     } else {
-      alert(t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요.")
+      await appAlert(t("outPrintPopoverBlocked") || "팝업이 차단되었을 수 있습니다. 팝업 허용 후 다시 시도해 주세요.")
     }
   }
 

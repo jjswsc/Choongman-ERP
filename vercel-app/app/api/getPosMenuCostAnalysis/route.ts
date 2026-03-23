@@ -33,9 +33,26 @@ export async function GET() {
         supabaseSelect('pos_menu_ingredients', { limit: 5000, select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type' }),
         (async () => {
           try {
-            return await supabaseSelect('pos_menu_options', { limit: 2000, order: 'menu_id.asc,sort_order.asc,name.asc', select: 'id,menu_id,name,option_type,item_code,quantity,sort_order,price_modifier,price_modifier_delivery' })
+            return await supabaseSelect('pos_menu_options', {
+              limit: 2000,
+              order: 'menu_id.asc,sort_order.asc,name.asc',
+              select:
+                'id,menu_id,name,option_type,item_code,additive_source_menu_id,quantity,sort_order,price_modifier,price_modifier_delivery',
+            })
           } catch {
-            return supabaseSelect('pos_menu_options', { limit: 2000, order: 'menu_id.asc,sort_order.asc,name.asc', select: 'id,menu_id,name,option_type,item_code,quantity,sort_order' })
+            try {
+              return await supabaseSelect('pos_menu_options', {
+                limit: 2000,
+                order: 'menu_id.asc,sort_order.asc,name.asc',
+                select: 'id,menu_id,name,option_type,item_code,quantity,sort_order,price_modifier,price_modifier_delivery',
+              })
+            } catch {
+              return supabaseSelect('pos_menu_options', {
+                limit: 2000,
+                order: 'menu_id.asc,sort_order.asc,name.asc',
+                select: 'id,menu_id,name,option_type,item_code,quantity,sort_order',
+              })
+            }
           }
         })(),
         supabaseSelect('items', { limit: 5000, select: 'code,name,cost,price,total_quantity,unit,purchase_source,category' }),
@@ -46,7 +63,7 @@ export async function GET() {
     const [menuRows, ingRows, optRows, itemRows] = menuData as [
       { id?: number; code?: string; name?: string; category?: string; category_main?: string; price?: number; price_delivery?: number | null; vat_included?: boolean; cooking_time_min?: number | null }[] | null,
       { id?: number; menu_id?: number; option_id?: number | null; item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null,
-      { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; quantity?: number; sort_order?: number; price_modifier?: number; price_modifier_delivery?: number | null }[] | null,
+      { id?: number; menu_id?: number; name?: string; option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number; sort_order?: number; price_modifier?: number; price_modifier_delivery?: number | null }[] | null,
       { code?: string; name?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; purchase_source?: string; category?: string }[] | null,
     ]
     const sauceRows = sauceData as { id?: number; code?: string; name?: string; cost_per_unit?: number; unit?: string; overhead_percent?: number }[] | null
@@ -268,8 +285,36 @@ export async function GET() {
           const baseCost = base.costHall
           const basePkg = base.costDelivery - base.costHall
           let addFood = 0
+          let addPkg = 0
           const addBreakdown: BreakdownRow[] = [...base.breakdown]
-          if (opt.item_code) {
+          const srcMid = Number((opt as { additive_source_menu_id?: number | null }).additive_source_menu_id ?? 0)
+          const qtyMult = Number(opt.quantity) ?? 1
+          if (srcMid > 0) {
+            const srcKey = `${srcMid}:null`
+            for (const ing of ingByMenuOpt[srcKey] || []) {
+              const code = String(ing.item_code ?? '').trim()
+              const qty = (Number(ing.quantity) ?? 1) * qtyMult
+              const lossRate = Number(ing.loss_rate) ?? 0
+              const itype: 'food' | 'packaging' =
+                (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
+              const info = itemMap[code]
+              const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
+              const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+              if (itype === 'packaging') addPkg += costTotal
+              else addFood += costTotal
+              addBreakdown.push({
+                itemCode: code,
+                itemName: info?.name ?? code,
+                unit: info?.unit ?? '',
+                costPerUnit,
+                quantity: qty,
+                lossRate,
+                costTotal: Math.round(costTotal * 10) / 10,
+                source: itemMap[code] ? (itemMap[code].purchaseSource as 'hq' | 'store') : 'store',
+                ingredientType: itype,
+              })
+            }
+          } else if (opt.item_code) {
             const info = itemMap[String(opt.item_code).trim()]
             const qty = Number(opt.quantity) ?? 1
             const costTotal = (info?.cost ?? 0) * qty
@@ -299,7 +344,7 @@ export async function GET() {
             optionName: String(opt.name ?? ''),
             optionType: 'additive',
             costHall: Math.round((baseCost + addFood) * 10) / 10,
-            costDelivery: Math.round((baseCost + addFood + basePkg) * 10) / 10,
+            costDelivery: Math.round((baseCost + addFood + basePkg + addPkg) * 10) / 10,
             breakdown: addBreakdown,
             cookingTimeMin,
           })

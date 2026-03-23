@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 /** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
 export async function POST(request: NextRequest) {
@@ -59,7 +60,14 @@ export async function POST(request: NextRequest) {
     }
     if (receiptUrl !== undefined) patch.receipt_url = receiptUrl || null
     if (accountSubjectId !== undefined) {
-      patch.account_subject_id = accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
+      const asid = accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null
+      if (asid) {
+        const hdr = await assertAccountSubjectNotHeader(asid)
+        if (!hdr.ok) {
+          return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+        }
+      }
+      patch.account_subject_id = asid
     }
 
     await supabaseUpdate('petty_cash_transactions', id, patch)

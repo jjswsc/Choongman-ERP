@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter, supabaseUpsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from '@/lib/pos-menu-categories'
+import {
+  POS_MAIN_CATEGORIES,
+  POS_CATEGORIES_BY_MAIN,
+  mergePromotionIntoCategoriesConfig,
+} from '@/lib/pos-menu-categories'
 
 const SETTINGS_KEY = 'pos_menu_categories'
 
@@ -100,13 +104,11 @@ export async function GET() {
 
     const raw = rows?.[0]?.value_json
     if (raw && typeof raw === 'object' && Array.isArray(raw.mainCategories) && typeof raw.categoriesByMain === 'object') {
-      return NextResponse.json(
-        {
-          mainCategories: raw.mainCategories,
-          categoriesByMain: raw.categoriesByMain,
-        },
-        { headers }
-      )
+      const merged = mergePromotionIntoCategoriesConfig({
+        mainCategories: raw.mainCategories,
+        categoriesByMain: raw.categoriesByMain,
+      })
+      return NextResponse.json(merged, { headers })
     }
     return NextResponse.json(defaultConfig, { headers })
   } catch (e) {
@@ -140,7 +142,10 @@ export async function POST(request: NextRequest) {
           )
         : defaultConfig.categoriesByMain
 
-    const newConfig: PosMenuCategoriesConfig = { mainCategories, categoriesByMain }
+    const newConfig: PosMenuCategoriesConfig = mergePromotionIntoCategoriesConfig({
+      mainCategories,
+      categoriesByMain,
+    })
     let menusUpdated = 0
 
     if (body.applyToMenus) {

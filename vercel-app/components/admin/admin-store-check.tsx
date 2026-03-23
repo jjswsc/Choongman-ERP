@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -149,7 +150,7 @@ export function AdminStoreCheck() {
 
   const loadChecklistForm = async () => {
     if (!storeSelect || !dateSelect) {
-      alert(t("store_load_hint"))
+      await appAlert(t("store_load_hint"))
       return
     }
     setLoadFormLoading(true)
@@ -216,10 +217,10 @@ export function AdminStoreCheck() {
 
   const handleSaveCheck = async () => {
     if (!storeSelect || !dateSelect || checkRows.length === 0) {
-      alert(t("store_load_hint"))
+      await appAlert(t("store_load_hint"))
       return
     }
-    if (!confirm(editId ? t("store_check_updated") + "?" : t("store_save_check") + "?")) return
+    if (!await appConfirm(editId ? t("store_check_updated") + "?" : t("store_save_check") + "?")) return
     setSaveLoading(true)
     try {
       const failCount = checkRows.filter((r) => r.val === "X").length
@@ -241,14 +242,14 @@ export function AdminStoreCheck() {
         memo: totalMemo,
         jsonData: JSON.stringify(jsonData),
       })
-      alert(editId ? t("store_check_updated") : t("store_check_saved"))
+      await appAlert(editId ? t("store_check_updated") : t("store_check_saved"))
       setEditId("")
       setTotalMemo("")
       setCheckRows([])
       setTab("history")
       searchHistory()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaveLoading(false)
     }
@@ -272,13 +273,13 @@ export function AdminStoreCheck() {
   }
 
   const handleDeleteHistory = async (id: string) => {
-    if (!confirm(t("store_check_delete_confirm"))) return
+    if (!await appConfirm(t("store_check_delete_confirm"))) return
     try {
       await deleteCheckHistory(id)
-      alert(t("store_check_deleted"))
+      await appAlert(t("store_check_deleted"))
       searchHistory()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -323,10 +324,10 @@ export function AdminStoreCheck() {
         sort_order: idx + 1,
       }))
       await updateChecklistItems(updates)
-      alert(t("store_check_saved"))
+      await appAlert(t("store_check_saved"))
       loadSettingItems()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSettingSaving(false)
     }
@@ -341,19 +342,19 @@ export function AdminStoreCheck() {
       setNewName("")
       loadSettingItems()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSettingAdding(false)
     }
   }
 
   const handleDeleteCheckItem = async (id: string | number) => {
-    if (!confirm(t("msg_delete_confirm_check_item"))) return
+    if (!await appConfirm(t("msg_delete_confirm_check_item"))) return
     try {
       await deleteChecklistItem(id)
       loadSettingItems()
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     }
   }
 

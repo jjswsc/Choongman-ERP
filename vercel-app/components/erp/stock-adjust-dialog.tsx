@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
@@ -89,7 +90,7 @@ export function StockAdjustDialog({
     if (!item) return
     const rounded = Math.round(totalSpecQty * 1e6) / 1e6
     if (rounded === 0) {
-      alert(t("stockAdjustQtyRequired"))
+      await appAlert(t("stockAdjustQtyRequired"))
       return
     }
     setSubmitting(true)

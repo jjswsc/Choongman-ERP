@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,7 +43,7 @@ export default function MemberTiersPage() {
                   minAmount: Number(minAmount || 0),
                   pointRate: Number(pointRate || 0),
                 })
-                if (!res.success) alert(res.message || "저장 실패")
+                if (!res.success) await appAlert(res.message || "저장 실패")
                 await load()
               }}
             >
@@ -57,8 +58,8 @@ export default function MemberTiersPage() {
               variant="outline"
               onClick={async () => {
                 const res = await recalculateMemberTier()
-                if (!res.success) alert(res.message || "재계산 실패")
-                else alert(`재계산 완료: ${res.updated ?? 0}명`)
+                if (!res.success) await appAlert(res.message || "재계산 실패")
+                else await appAlert(`재계산 완료: ${res.updated ?? 0}명`)
               }}
             >
               전체 회원 등급 재계산

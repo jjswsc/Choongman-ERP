@@ -18,17 +18,17 @@ import { TrendChart } from "./trend-chart"
 import { HeatmapTable } from "./heatmap-table"
 import { PurposeDonut } from "./purpose-donut"
 import { cn } from "@/lib/utils"
+import { attendanceBusinessDateStrBangkok, addDayBangkok } from "@/lib/attendance-utils"
 
 const ALL = "__ALL__"
 
 function defaultStartDate() {
-  const d = new Date()
-  d.setDate(d.getDate() - 30)
-  return d.toISOString().slice(0, 10)
+  const end = attendanceBusinessDateStrBangkok(Date.now())
+  return addDayBangkok(end, -30)
 }
 
 function defaultEndDate() {
-  return new Date().toISOString().slice(0, 10)
+  return attendanceBusinessDateStrBangkok(Date.now())
 }
 
 export function VisitStatsContent() {

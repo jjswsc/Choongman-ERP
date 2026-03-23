@@ -4,10 +4,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getDayOfWeekBangkok } from '@/lib/attendance-utils'
+import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
-type Row = { created_at?: string; total?: number; store_code?: string; status?: string }
+type Row = {
+  created_at?: string
+  total?: number
+  store_code?: string
+  status?: string
+  order_type?: string
+}
 
 function getStartOfWeek(d: Date): Date {
   const x = new Date(d)
@@ -28,6 +35,7 @@ export async function GET(request: NextRequest) {
     const endStr = searchParams.get('endStr')?.trim()
     const groupBy = searchParams.get('groupBy') || 'day'
     const pos = searchParams.get('pos')?.trim()
+    const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
@@ -39,12 +47,13 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'created_at,total,store_code,status',
+      select: 'created_at,total,store_code,status,order_type',
     })) as Row[]
 
     const salesByKey: Record<string, number> = {}
 
     for (const r of rows) {
+      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
       const dt = r.created_at
       const amt = Number(r.total) || 0
@@ -71,16 +80,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const dowLabels: Record<number, string> = {
-      0: '일',
-      1: '월',
-      2: '화',
-      3: '수',
-      4: '목',
-      5: '금',
-      6: '토',
-    }
-
     let result: { label: string; key: string; sales: number }[]
     if (groupBy === 'month') {
       result = Object.entries(salesByKey)
@@ -92,7 +91,7 @@ export async function GET(request: NextRequest) {
         .map(([k, v]) => ({ label: k, key: k, sales: v }))
     } else if (groupBy === 'dow') {
       result = [0, 1, 2, 3, 4, 5, 6].map((dow) => ({
-        label: dowLabels[dow],
+        label: String(dow),
         key: String(dow),
         sales: salesByKey[String(dow)] || 0,
       }))

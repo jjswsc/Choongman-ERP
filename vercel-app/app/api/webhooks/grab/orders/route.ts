@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { grabWebhookUnauthorized, logGrabWebhook } from '@/lib/grab-webhook'
+
+export const dynamic = 'force-dynamic'
+
+/**
+ * Grab → 파트너: Submit order
+ * 등록 예: https://<host>/api/webhooks/grab/orders
+ */
+export async function POST(req: NextRequest) {
+  const denied = grabWebhookUnauthorized(req, 'submit_order')
+  if (denied) return denied
+
+  let body: Record<string, unknown>
+  try {
+    body = (await req.json()) as Record<string, unknown>
+  } catch {
+    logGrabWebhook('submit_order', req, { error: 'invalid_json' })
+    return new NextResponse(null, { status: 400 })
+  }
+  const orderID = String(body.orderID ?? '')
+  const shortOrderNumber = String(body.shortOrderNumber ?? '')
+  const merchantID = String(body.merchantID ?? '')
+  logGrabWebhook('submit_order', req, {
+    orderID,
+    shortOrderNumber,
+    merchantID,
+    partnerMerchantID: String(body.partnerMerchantID ?? ''),
+  })
+  // TODO: idempotent 저장 후 POS 반영 (동일 orderID 재전송 대비)
+  return new NextResponse(null, { status: 204 })
+}

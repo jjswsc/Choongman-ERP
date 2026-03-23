@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -183,13 +184,13 @@ export function AdminOrderCreate() {
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, taxType: c.taxType })),
       })
       if (res.success) {
-        alert(t("orderSuccess"))
+        await appAlert(t("orderSuccess"))
         setCart([])
       } else {
-        alert(t("orderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
+        await appAlert(t("orderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
     } catch (e) {
-      alert(t("orderFail") + ": " + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("orderFail") + ": " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSubmitting(false)
     }

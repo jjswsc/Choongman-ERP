@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,7 +45,7 @@ export default function MemberPointsPage() {
                 const p = Number(deltaPoints || 0)
                 if (!id || !p) return
                 const res = await adjustMemberPoints({ memberId: id, points: p, note })
-                if (!res.success) alert(res.message || "조정 실패")
+                if (!res.success) await appAlert(res.message || "조정 실패")
                 setDeltaPoints("0")
                 setNote("")
                 await load()

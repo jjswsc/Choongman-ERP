@@ -4,15 +4,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
-const ORDER_LABELS: Record<string, string> = {
-  dine_in: '매장',
-  takeout: '포장',
-  delivery: '배달',
+const ORDER_KEYS = ['dine_in', 'takeout', 'delivery'] as const
+
+function bucketOrderType(raw: string): (typeof ORDER_KEYS)[number] | 'unknown' {
+  const t = String(raw ?? '').trim()
+  if (t === 'dine_in' || t === 'takeout' || t === 'delivery') return t
+  return 'unknown'
 }
-const ORDER = ['매장', '포장', '배달']
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -23,6 +25,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
+    const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
@@ -39,17 +42,32 @@ export async function GET(request: NextRequest) {
 
     const byApp: Record<string, number> = {}
     for (const r of rows) {
+      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
-      const label = ORDER_LABELS[String(r.order_type ?? '')] || '기타'
+      const k = bucketOrderType(String(r.order_type ?? ''))
       const amt = Number(r.total) || 0
-      byApp[label] = (byApp[label] || 0) + amt
+      byApp[k] = (byApp[k] || 0) + amt
     }
     const total = Object.values(byApp).reduce((a, b) => a + b, 0)
-    const result = ORDER.filter((k) => byApp[k] != null).map((label) => ({
-      label,
-      sales: byApp[label] || 0,
-      pct: total > 0 ? ((byApp[label] || 0) / total) * 100 : 0,
-    }))
+    const result: { channelKey: string; sales: number; pct: number }[] = []
+    for (const channelKey of ORDER_KEYS) {
+      const s = byApp[channelKey] || 0
+      if (s > 0) {
+        result.push({
+          channelKey,
+          sales: s,
+          pct: total > 0 ? (s / total) * 100 : 0,
+        })
+      }
+    }
+    const u = byApp.unknown || 0
+    if (u > 0) {
+      result.push({
+        channelKey: 'unknown',
+        sales: u,
+        pct: total > 0 ? (u / total) * 100 : 0,
+      })
+    }
 
     return NextResponse.json({ items: result, total }, { headers })
   } catch (e) {

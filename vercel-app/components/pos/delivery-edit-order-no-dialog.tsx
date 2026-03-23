@@ -1,4 +1,5 @@
 'use client'
+import { appAlert } from "@/lib/app-message"
 
 import {
   Dialog,
@@ -83,13 +84,13 @@ export function DeliveryEditOrderNoDialog({
                     memo: order.memo,
                   })
                   if (!(res as { success?: boolean }).success) {
-                    alert((res as { message?: string }).message || (t('posOrderSaveFailed') || '저장에 실패했습니다.'))
+                    await appAlert((res as { message?: string }).message || (t('posOrderSaveFailed') || '저장에 실패했습니다.'))
                     return
                   }
                   onOpenChange(false)
                   await onSaved(newTableName || appLabelEn)
                 } catch (e) {
-                  alert(String(e))
+                  await appAlert(String(e))
                 }
               }}
             >

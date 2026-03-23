@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -117,7 +118,7 @@ export function ExpenseManagementTab() {
 
   React.useEffect(() => {
     getVendorsForPurchase().catch(() => []).then(setVendors)
-    getAccountSubjects().catch(() => []).then(setSubjects)
+    getAccountSubjects({ excludeHeaders: true }).catch(() => []).then(setSubjects)
   }, [])
 
   React.useEffect(() => {
@@ -236,7 +237,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       setLinkBankRow(null)
@@ -251,15 +252,15 @@ export function ExpenseManagementTab() {
     const amountRaw = payAmountById[row.id] || String(row.remainingAmount || "")
     const payAmt = Number(String(amountRaw).replace(/,/g, ""))
     if (!payAmt || payAmt <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (method === "bank" && !payBankById[row.id]) {
-      alert(t("bankAccount") || "계좌")
+      await appAlert(t("bankAccount") || "계좌")
       return
     }
     if (method === "petty" && !payStoreById[row.id]) {
-      alert(t("recFilterStoreSelect") || "매장 선택")
+      await appAlert(t("recFilterStoreSelect") || "매장 선택")
       return
     }
     setPayingId(row.id)
@@ -276,7 +277,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       setApprovalEditById((prev) => ({ ...prev, [row.id]: false }))
@@ -406,11 +407,11 @@ export function ExpenseManagementTab() {
 
   const handleApprove = React.useCallback(async (row: ExpenseAccrualPlanItem, action: "approve" | "reject") => {
     const note = action === "reject"
-      ? window.prompt(t("memo") || "메모", "") || ""
+      ? await appPrompt(t("memo") || "메모", "") || ""
       : ""
     const ok = action === "approve"
-      ? window.confirm(t("confirmApprove") || "승인하시겠습니까?")
-      : window.confirm(t("confirmReject") || "반려하시겠습니까?")
+      ? await appConfirm(t("confirmApprove") || "승인하시겠습니까?")
+      : await appConfirm(t("confirmReject") || "반려하시겠습니까?")
     if (!ok) return
     setPayingId(row.id)
     try {
@@ -422,7 +423,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       setPayEditorOpenById((prev) => ({ ...prev, [row.id]: false }))
@@ -470,15 +471,15 @@ export function ExpenseManagementTab() {
     if (!editingPlanRow?.id) return
     const amount = Number(String(editPlanAmount || "").replace(/,/g, ""))
     if (!amount || amount <= 0) {
-      alert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
       return
     }
     if (!editPlanExpenseDate || !/^\d{4}-\d{2}-\d{2}$/.test(editPlanExpenseDate)) {
-      alert(t("msg_select_date") || "날짜를 선택해 주세요.")
+      await appAlert(t("msg_select_date") || "날짜를 선택해 주세요.")
       return
     }
     if (!editPlanStoreName?.trim()) {
-      alert(t("expenseStoreSelect") || "매장을 선택해 주세요.")
+      await appAlert(t("expenseStoreSelect") || "매장을 선택해 주세요.")
       return
     }
     setEditPlanSaving(true)
@@ -496,7 +497,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       setEditingPlanRow(null)
@@ -509,7 +510,7 @@ export function ExpenseManagementTab() {
 
   const handleDeletePlan = React.useCallback(async (row: ExpenseAccrualPlanItem) => {
     if (!row?.id) return
-    const ok = window.confirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
+    const ok = await appConfirm(t("emp_confirm_delete") || "삭제하시겠습니까?")
     if (!ok) return
     setDeletingPlanId(row.id)
     try {
@@ -518,7 +519,7 @@ export function ExpenseManagementTab() {
         userRole: auth?.role,
       })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("msg_delete_fail"))
         return
       }
       await loadPlans()
@@ -529,16 +530,16 @@ export function ExpenseManagementTab() {
   }, [auth?.role, loadPlans])
 
   const handleCleanNoStore = React.useCallback(async () => {
-    const ok = window.confirm(t("expenseCleanNoStoreConfirm") || "매장 미선택인 지급예정을 모두 삭제합니다. 진행할까요?")
+    const ok = await appConfirm(t("expenseCleanNoStoreConfirm") || "매장 미선택인 지급예정을 모두 삭제합니다. 진행할까요?")
     if (!ok) return
     setCleaningNoStore(true)
     try {
       const res = await deleteExpenseAccrualsWithoutStore({ userRole: auth?.role })
       if (!res.success) {
-        alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
-      alert(res.message || `${res.deletedCount ?? 0}건 삭제되었습니다.`)
+      await appAlert(res.message || `${res.deletedCount ?? 0}건 삭제되었습니다.`)
       await loadPlans()
     } finally {
       setCleaningNoStore(false)
@@ -548,10 +549,10 @@ export function ExpenseManagementTab() {
 
   const handleApproveAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
-      alert(t("payableEmpty") || "승인할 항목이 없습니다.")
+      await appAlert(t("payableEmpty") || "승인할 항목이 없습니다.")
       return
     }
-    const ok = window.confirm(
+    const ok = await appConfirm(
       `${startStr} ${t("expenseApproveAllDay") || "당일 전체 승인"} (${approvablePlansForDay.length}${t("receivPayCount") || "건"})`
     )
     if (!ok) return
@@ -565,7 +566,7 @@ export function ExpenseManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           break
         }
       }
@@ -578,10 +579,10 @@ export function ExpenseManagementTab() {
 
   const handleRejectAllForDay = React.useCallback(async () => {
     if (approvablePlansForDay.length === 0) {
-      alert(t("payableEmpty") || "반려할 항목이 없습니다.")
+      await appAlert(t("payableEmpty") || "반려할 항목이 없습니다.")
       return
     }
-    const ok = window.confirm(
+    const ok = await appConfirm(
       `${startStr} ${t("expenseRejectAllDay") || "당일 전체 반려"} (${approvablePlansForDay.length}${t("receivPayCount") || "건"})`
     )
     if (!ok) return
@@ -595,7 +596,7 @@ export function ExpenseManagementTab() {
           userRole: auth?.role,
         })
         if (!res.success) {
-          alert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
           break
         }
       }

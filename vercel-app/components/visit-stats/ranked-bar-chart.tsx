@@ -19,9 +19,13 @@ type RankedBarChartProps = {
   title: string
   color: string
   data: { name: string; totalMin: number; visits: number }[]
+  /** 긴 매장명 등 Y축 라벨 폭 (px) */
+  yAxisWidth?: number
+  /** 기본 220. 매장 수가 많을 때만 지정 */
+  heightPx?: number
 }
 
-export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
+export function RankedBarChart({ title, color, data, yAxisWidth = 100, heightPx = 220 }: RankedBarChartProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const inputTimeLabel = t("visit_chart_input_time")
@@ -39,7 +43,7 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
           {data.length}{t("visit_chart_items")}
         </span>
       </div>
-      <ChartContainer config={chartConfig} className="h-[220px] w-full aspect-auto">
+      <ChartContainer config={chartConfig} className="w-full aspect-auto" style={{ height: heightPx }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 50, left: 0, bottom: 0 }}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
@@ -47,7 +51,7 @@ export function RankedBarChart({ title, color, data }: RankedBarChartProps) {
             <YAxis
               type="category"
               dataKey="name"
-              width={100}
+              width={yAxisWidth}
               tick={{ fontSize: 12, fill: "hsl(220, 13%, 40%)" }}
               axisLine={false}
               tickLine={false}

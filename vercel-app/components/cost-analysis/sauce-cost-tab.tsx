@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { useLang } from "@/lib/lang-context"
@@ -20,7 +21,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Plus, Pencil, Trash2, RefreshCw, Settings } from "lucide-react"
+import { Plus, Pencil, Trash2, RefreshCw, Search, Settings, X } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -32,13 +33,17 @@ import { getSauces, saveSauce, deleteSauce, recalculateSauces, getCostSettings, 
 import { setRuntimeApiItems, setRuntimeSauces, getIngredientCodeByItemCode, getIngredientItemCode, MISE_DEFAULT } from "@/lib/cost-data"
 import type { RecipeItem } from "@/lib/cost-data"
 import { IngredientTable } from "@/components/cost-analysis/ingredient-table"
+import { cn } from "@/lib/utils"
 
 export function SauceCostTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [sauces, setSauces] = React.useState<SauceRow[]>([])
   const [items, setItems] = React.useState<AdminItem[]>([])
-  const [loading, setLoading] = React.useState(true)
+  const [loading, setLoading] = React.useState(false)
+  const [listQueried, setListQueried] = React.useState(false)
+  const [searchTerm, setSearchTerm] = React.useState("")
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [loadError, setLoadError] = React.useState<string | null>(null)
   const [recalcLoading, setRecalcLoading] = React.useState(false)
   const [saveLoading, setSaveLoading] = React.useState(false)
@@ -58,6 +63,7 @@ export function SauceCostTab() {
 
   const load = React.useCallback(async () => {
     setLoadError(null)
+    setLoading(true)
     try {
       const [sauceList, itemList, settings] = await Promise.all([
         getSauces(),
@@ -69,18 +75,26 @@ export function SauceCostTab() {
       const oh = settings?.globalOverheadPercent ?? 5
       setOverheadPercent(oh)
       setOverheadPercentStr(String(oh))
+      setListQueried(true)
     } catch (e) {
       setSauces([])
       setItems([])
       setLoadError(String(e))
+      setListQueried(false)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  React.useEffect(() => {
-    load()
-  }, [load])
+  const displaySauces = React.useMemo(() => {
+    const q = searchTerm.trim().toLowerCase()
+    if (!q) return sauces
+    return sauces.filter(
+      (s) =>
+        String(s.code ?? "").toLowerCase().includes(q) ||
+        String(s.name ?? "").toLowerCase().includes(q)
+    )
+  }, [sauces, searchTerm])
 
   const getNextSauceCode = React.useCallback((list: SauceRow[]) => {
     const match = /^S(\d+)$/i
@@ -98,7 +112,7 @@ export function SauceCostTab() {
       await recalculateSauces()
       await load()
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setRecalcLoading(false)
     }
@@ -114,7 +128,7 @@ export function SauceCostTab() {
       setOverheadPercentStr(String(val))
       setSettingsOpen(false)
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSettingsLoading(false)
     }
@@ -159,7 +173,7 @@ export function SauceCostTab() {
     const code = formCode.trim()
     const name = formName.trim()
     if (!code || !name) {
-      alert(t("posCostSauceCodeNameRequired") || "코드와 소스명이 필요합니다.")
+      await appAlert(t("posCostSauceCodeNameRequired") || "코드와 소스명이 필요합니다.")
       return
     }
     const ingredients = formFoodItems.map((r) => {
@@ -183,7 +197,7 @@ export function SauceCostTab() {
       setEditOpen(false)
       await load()
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaveLoading(false)
     }
@@ -191,12 +205,12 @@ export function SauceCostTab() {
 
   const handleDelete = async (s: SauceRow) => {
     if (!s.id) return
-    if (!confirm(t("posCostSauceConfirmDelete") || `"${s.name}" 소스를 삭제할까요?`)) return
+    if (!await appConfirm(t("posCostSauceConfirmDelete") || `"${s.name}" 소스를 삭제할까요?`)) return
     try {
       await deleteSauce({ id: s.id })
       await load()
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     }
   }
 
@@ -211,15 +225,48 @@ export function SauceCostTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchInputRef}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t("posCostSauceSearchPh") || "코드·소스명 검색"}
+              className="h-9 pl-9 pr-9 text-sm border-border"
+              onKeyDown={(e) => e.key === "Enter" && load()}
+            />
+            {searchTerm && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => setSearchTerm("")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className="h-9 px-4 gap-1.5 text-xs font-semibold shrink-0"
+            onClick={load}
+            disabled={loading}
+          >
+            <Search className={cn("h-3.5 w-3.5", loading && "animate-pulse")} />
+            {loading ? (t("loading") || "불러오는 중...") : (t("posCostBtnQuery") || "검색")}
+          </Button>
+        </div>
         <Button variant="outline" size="sm" className="h-9" onClick={() => setSettingsOpen(true)}>
           <Settings className="h-3.5 w-3.5 mr-1.5" />
           {t("posCostSauceOhSetting") || "OH 설정"}
         </Button>
-        <Button variant="outline" size="sm" className="h-9" onClick={handleRecalculate} disabled={recalcLoading}>
+        <Button variant="outline" size="sm" className="h-9" onClick={handleRecalculate} disabled={recalcLoading || !listQueried}>
           <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${recalcLoading ? "animate-spin" : ""}`} />
           {t("posCostSauceRecalc") || "전체 재계산"}
         </Button>
-        <Button size="sm" className="h-9" onClick={handleNew}>
+        <Button size="sm" className="h-9" onClick={handleNew} disabled={!listQueried}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
           {t("posCostSauceNew") || "소스 추가"}
         </Button>
@@ -234,6 +281,10 @@ export function SauceCostTab() {
           <p className="text-sm text-destructive font-medium mb-2">{t("loadError") || "데이터를 불러오지 못했습니다."}</p>
           <p className="text-xs text-muted-foreground mb-3">{loadError}</p>
           <Button variant="outline" size="sm" onClick={load}>{t("retry") || "다시 시도"}</Button>
+        </div>
+      ) : !listQueried ? (
+        <div className="rounded-lg border bg-muted/30 px-6 py-12 text-center text-sm text-muted-foreground">
+          {t("posCostSauceClickSearchToLoad") || "[검색] 버튼을 눌러 소스 원가 목록을 불러오세요."}
         </div>
       ) : (
         <div className="rounded-xl border bg-card overflow-hidden">
@@ -250,7 +301,7 @@ export function SauceCostTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sauces.map((s) => (
+              {displaySauces.map((s) => (
                 <TableRow key={s.id ?? s.code} className="border-b">
                   <TableCell className="font-mono text-xs text-center">{s.code}</TableCell>
                   <TableCell className="font-medium">{s.name}</TableCell>
@@ -277,12 +328,26 @@ export function SauceCostTab() {
               {t("posCostSauceEmpty") || "등록된 소스가 없습니다. 소스 추가를 눌러 원재료로 소스 레시피를 등록하세요."}
             </div>
           )}
+          {sauces.length > 0 && displaySauces.length === 0 && (
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+              {t("posCostNoData") || "검색 조건에 맞는 데이터가 없습니다."}
+            </div>
+          )}
         </div>
       )}
 
       <Dialog open={settingsOpen} onOpenChange={(open) => {
         setSettingsOpen(open)
-        if (open) setOverheadPercentStr(String(overheadPercent))
+        if (open) {
+          setOverheadPercentStr(String(overheadPercent))
+          if (!listQueried) {
+            void getCostSettings().then((settings) => {
+              const oh = settings?.globalOverheadPercent ?? 5
+              setOverheadPercent(oh)
+              setOverheadPercentStr(String(oh))
+            }).catch(() => {})
+          }
+        }
       }}>
         <DialogContent>
           <DialogHeader>

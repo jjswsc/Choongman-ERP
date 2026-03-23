@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { postExpenseAccrualJournal } from '@/lib/accounting-posting'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 import { supabaseInsert, supabaseSelectFilter, supabaseUpdate, supabaseUpsert } from '@/lib/supabase-server'
 import { requireAuth } from '@/lib/verify-auth'
 import { parseOr400, savePayrollSchema } from '@/lib/api-validate'
@@ -70,12 +71,13 @@ function buildPayrollPayeeCode(monthStr: string, store: string, name: string): s
 async function resolvePayrollAccountSubject(): Promise<{ id: number | null; code: string; name: string }> {
   try {
     const rows = (await supabaseSelectFilter('account_subjects', 'type=eq.expense', {
-      select: 'id,code,name,type',
+      select: 'id,code,name,type,is_header',
       order: 'sort_order.asc,code.asc',
       limit: 400,
-    })) as AccountSubjectRow[] | null
+    })) as (AccountSubjectRow & { is_header?: boolean | null })[] | null
     const list = rows || []
     const picked = list.find((r) => {
+      if (r.is_header === true) return false
       const text = `${String(r.code || '')} ${String(r.name || '')}`.toLowerCase()
       return text.includes('급여') || text.includes('salary') || text.includes('wage')
     })
@@ -154,6 +156,12 @@ export async function POST(request: NextRequest) {
     }
 
     const expenseSubject = await resolvePayrollAccountSubject()
+    if (expenseSubject.id != null) {
+      const hdr = await assertAccountSubjectNotHeader(expenseSubject.id)
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, msg: hdr.message }, { status: hdr.status, headers })
+      }
+    }
     const expenseDate = toMonthDate(monthStr, false)
     const dueDate = toMonthDate(monthStr, true)
     const monthlyPrefix = `payroll-${monthStr}-`
@@ -232,6 +240,7 @@ export async function POST(request: NextRequest) {
           amountAbs: netPay,
           expenseAccountCode: expenseSubject.code,
           expenseAccountName: expenseSubject.name,
+          expenseAccountSubjectId: expenseSubject.id ?? null,
           memo,
           storeName: store || undefined,
           postedBy: auth.name || undefined,

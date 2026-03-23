@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -212,7 +213,7 @@ export function AdminComplaints() {
 
   const handleSave = async () => {
     if (!form.store) {
-      alert(t("store_load_hint"))
+      await appAlert(t("store_load_hint"))
       return
     }
     setSaveLoading(true)
@@ -241,24 +242,24 @@ export function AdminComplaints() {
       if (editId) {
         const res = await updateComplaintLog(editId, data)
         if (res.success) {
-          alert(translateApiMessage(res.message, t) || t("store_check_updated"))
+          await appAlert(translateApiMessage(res.message, t) || t("store_check_updated"))
           resetForm()
           loadList()
         } else {
-          alert(translateApiMessage(res.message, t) || t("msg_modify_fail"))
+          await appAlert(translateApiMessage(res.message, t) || t("msg_modify_fail"))
         }
       } else {
         const res = await saveComplaintLog(data)
         if (res.success) {
-          alert(translateApiMessage(res.message, t) || t("store_check_saved"))
+          await appAlert(translateApiMessage(res.message, t) || t("store_check_saved"))
           resetForm()
           loadList()
         } else {
-          alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+          await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
         }
       }
     } catch (e) {
-      alert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
+      await appAlert(t("msg_error_prefix") + (e instanceof Error ? e.message : String(e)))
     } finally {
       setSaveLoading(false)
     }

@@ -32,21 +32,39 @@ export async function GET(request: NextRequest) {
 
     let optionType = 'substitution'
     let optionItemCode: string | null = null
+    let additiveSourceMenuId: number | null = null
     let optionQty = 1
 
     if (optionId && optionId !== 'null') {
       try {
         const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
           limit: 1,
-          select: 'option_type,item_code,quantity',
-        })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
+          select: 'option_type,item_code,additive_source_menu_id,quantity',
+        })) as { option_type?: string; item_code?: string | null; additive_source_menu_id?: number | null; quantity?: number }[] | null
         const opt = optRows?.[0]
         if (opt) {
           optionType = (opt.option_type || 'substitution') as string
           optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
+          const aid = opt.additive_source_menu_id
+          additiveSourceMenuId =
+            aid != null && Number.isFinite(Number(aid)) && Number(aid) > 0 ? Number(aid) : null
           optionQty = Number(opt.quantity) ?? 1
         }
       } catch {
+        try {
+          const optRows = (await supabaseSelectFilter('pos_menu_options', `id=eq.${encodeURIComponent(optionId)}`, {
+            limit: 1,
+            select: 'option_type,item_code,quantity',
+          })) as { option_type?: string; item_code?: string | null; quantity?: number }[] | null
+          const opt = optRows?.[0]
+          if (opt) {
+            optionType = (opt.option_type || 'substitution') as string
+            optionItemCode = opt.item_code ? String(opt.item_code).trim() : null
+            optionQty = Number(opt.quantity) ?? 1
+          }
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -89,20 +107,54 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (optionType === 'additive' && optionItemCode && optionId && optionId !== 'null') {
-      const optItem = itemByCode[optionItemCode]
-      const costPerUnit = optItem ? getItemCostPerUnit(optItem, false) : 0
-      const costTotal = costPerUnit * optionQty
-      foodCost += costTotal
-      totalCost += costTotal
-      breakdown.push({
-        itemCode: optionItemCode,
-        itemName: optItem?.name ?? optionItemCode,
-        quantity: optionQty,
-        lossRate: 0,
-        costPerUnit,
-        costTotal: Math.round(costTotal * 10) / 10,
-      })
+    if (optionType === 'additive' && optionId && optionId !== 'null') {
+      if (additiveSourceMenuId) {
+        let addIng: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
+        try {
+          addIng = (await supabaseSelectFilter(
+            'pos_menu_ingredients',
+            `menu_id=eq.${encodeURIComponent(String(additiveSourceMenuId))}&option_id=is.null`,
+            { order: 'id.asc', limit: 200 }
+          )) as typeof addIng
+        } catch {
+          addIng = null
+        }
+        for (const ing of addIng || []) {
+          const code = String(ing.item_code ?? '').trim()
+          if (!code) continue
+          const qty = (Number(ing.quantity) ?? 1) * optionQty
+          const lossRate = Number(ing.loss_rate) ?? 0
+          const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
+          const item = itemByCode[code]
+          const costPerUnit = item ? getItemCostPerUnit(item, itype === 'packaging') : 0
+          const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+          if (itype === 'packaging') packageCost += costTotal
+          else foodCost += costTotal
+          totalCost += costTotal
+          breakdown.push({
+            itemCode: code,
+            itemName: item?.name ?? code,
+            quantity: qty,
+            lossRate,
+            costPerUnit,
+            costTotal: Math.round(costTotal * 10) / 10,
+          })
+        }
+      } else if (optionItemCode) {
+        const optItem = itemByCode[optionItemCode]
+        const costPerUnit = optItem ? getItemCostPerUnit(optItem, false) : 0
+        const costTotal = costPerUnit * optionQty
+        foodCost += costTotal
+        totalCost += costTotal
+        breakdown.push({
+          itemCode: optionItemCode,
+          itemName: optItem?.name ?? optionItemCode,
+          quantity: optionQty,
+          lossRate: 0,
+          costPerUnit,
+          costTotal: Math.round(costTotal * 10) / 10,
+        })
+      }
     }
 
     const cost = Math.round(totalCost * 10) / 10

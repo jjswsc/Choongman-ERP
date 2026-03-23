@@ -1,9 +1,11 @@
 'use client'
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
-import { Tag, FilePlus, Save, RotateCcw, Pencil, Trash2, Plus, Calculator } from 'lucide-react'
+import { Tag, FilePlus, Save, RotateCcw, Pencil, Trash2, Plus, Calculator, AlertTriangle, X, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -20,44 +22,74 @@ import {
   getPosMenus,
   getPosMenuOptions,
   getMarketingCampaigns,
+  getPosMenuCategoriesConfig,
+  getPosDeliveryApps,
   getMenuCost,
   savePosPromo,
   savePosPromoItem,
   deletePosPromo,
   deletePosPromoItem,
+  getPosPromoSchemaStatus,
+  getNextPosPromoCode,
   type PosPromo,
   type PosPromoItem,
   type PosMenu,
   type PosMenuOption,
+  useStoreList,
 } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
+import { PROMOTION_MAIN_CATEGORY, PROMOTION_DEFAULT_SUBCATEGORIES } from '@/lib/pos-promo-constants'
+import { useAuth } from '@/lib/auth-context'
+import { isOfficeRole } from '@/lib/permissions'
 
 const emptyForm = {
   code: '',
   name: '',
-  category: '프로모션',
+  category: PROMOTION_DEFAULT_SUBCATEGORIES[0] as string,
   price: '',
   priceDelivery: '',
   vatIncluded: true,
   isActive: true,
   marketingCampaignId: '' as string,
+  channelHall: true,
+  channelTakeout: true,
+  channelDelivery: true,
+  deliveryAppCodes: [] as string[],
+  validFrom: '' as string,
+  validTo: '' as string,
 }
 
 export default function MarketingPromosPage() {
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
+  const { stores } = useStoreList()
+  const canSearchAll = isOfficeRole(auth?.role || '')
+  const [storeCode, setStoreCode] = React.useState('')
+  const [promoSubCategories, setPromoSubCategories] = React.useState<string[]>([...PROMOTION_DEFAULT_SUBCATEGORIES])
+  const [deliveryApps, setDeliveryApps] = React.useState<{ code: string; name: string }[]>([])
   const [promos, setPromos] = React.useState<PosPromo[]>([])
-  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
+  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string; startDate?: string | null; endDate?: string | null }[]>([])
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [promoItems, setPromoItems] = React.useState<PosPromoItem[]>([])
-  const [costs, setCosts] = React.useState<Record<string, number>>({})
+  const [costsHall, setCostsHall] = React.useState<Record<string, number>>({})
+  const [costsDelivery, setCostsDelivery] = React.useState<Record<string, number>>({})
   const [loading, setLoading] = React.useState(true)
   const [formData, setFormData] = React.useState(emptyForm)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [newItemMenuId, setNewItemMenuId] = React.useState('')
   const [newItemOptionId, setNewItemOptionId] = React.useState<string | null>(null)
   const [newItemQty, setNewItemQty] = React.useState('1')
+  const [schemaStatus, setSchemaStatus] = React.useState<{
+    posPromosExtended: boolean
+    posMenusPromoId: boolean
+    ok: boolean
+  } | null>(null)
+  const [schemaBannerDismissed, setSchemaBannerDismissed] = React.useState(false)
+  const [newRegisterPulse, setNewRegisterPulse] = React.useState(false)
+  const formCardRef = React.useRef<HTMLDivElement>(null)
+  const composeAnchorRef = React.useRef<HTMLDivElement>(null)
 
   const optionsByMenuId = React.useMemo(() => {
     const m: Record<string, PosMenuOption[]> = {}
@@ -69,18 +101,61 @@ export default function MarketingPromosPage() {
     return m
   }, [allOptions])
 
+  const fillSuggestedPromoCode = React.useCallback(async () => {
+    try {
+      const r = await getNextPosPromoCode()
+      const next = r?.code?.trim()
+      if (next) setFormData((p) => ({ ...p, code: next }))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (canSearchAll && stores.length && !storeCode) setStoreCode(stores[0])
+    else if (!canSearchAll && auth?.store) setStoreCode(auth.store)
+  }, [canSearchAll, stores, auth?.store, storeCode])
+
+  React.useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('admin_promo_schema_banner_dismiss') === '1') {
+        setSchemaBannerDismissed(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    getPosPromoSchemaStatus()
+      .then(setSchemaStatus)
+      .catch(() => setSchemaStatus(null))
+  }, [])
+
   React.useEffect(() => {
     Promise.all([
       getPosPromos(),
       getPosMenus(),
       getPosMenuOptions(),
       getMarketingCampaigns(),
+      getPosMenuCategoriesConfig(),
     ])
-      .then(([promoList, menuList, opts, campList]) => {
+      .then(([promoList, menuList, opts, campList, catCfg]) => {
         setPromos(promoList || [])
-        setMenus((menuList || []).filter((m) => m.isActive))
+        setMenus(
+          (menuList || []).filter((m) => m.isActive && !(m.promoId != null && String(m.promoId).trim() !== ''))
+        )
         setAllOptions(opts || [])
-        setCampaigns((campList || []).map((c) => ({ id: c.id, topic: c.topic })))
+        setCampaigns(
+          (campList || []).map((c) => ({
+            id: c.id,
+            topic: c.topic,
+            startDate: (c as { startDate?: string | null }).startDate,
+            endDate: (c as { endDate?: string | null }).endDate,
+          }))
+        )
+        const subs = catCfg?.categoriesByMain?.[PROMOTION_MAIN_CATEGORY]
+        if (subs?.length) setPromoSubCategories(subs)
       })
       .catch(() => {
         setPromos([])
@@ -90,10 +165,43 @@ export default function MarketingPromosPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  /** 첫 로드·신규 모드: 코드 비어 있으면 자동 채번 */
+  React.useEffect(() => {
+    if (loading || editingId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const r = await getNextPosPromoCode()
+        const next = r?.code?.trim()
+        if (cancelled || !next) return
+        setFormData((p) => (p.code.trim() ? p : { ...p, code: next }))
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [loading, editingId])
+
+  React.useEffect(() => {
+    const sc = canSearchAll && storeCode ? storeCode : auth?.store
+    if (!sc) {
+      setDeliveryApps([])
+      return
+    }
+    getPosDeliveryApps({ storeCode: sc, includeDisabled: false })
+      .then((list) =>
+        setDeliveryApps((list || []).map((a) => ({ code: String(a.code || '').trim(), name: String(a.name || a.code || '') })).filter((a) => a.code))
+      )
+      .catch(() => setDeliveryApps([]))
+  }, [canSearchAll, storeCode, auth?.store])
+
   React.useEffect(() => {
     if (!editingId) {
       setPromoItems([])
-      setCosts({})
+      setCostsHall({})
+      setCostsDelivery({})
       return
     }
     getPosPromoItems({ promoId: editingId })
@@ -104,15 +212,18 @@ export default function MarketingPromosPage() {
   React.useEffect(() => {
     for (const it of promoItems) {
       const key = `${it.menuId}:${it.optionId || 'null'}`
-      if (costs[key] != null) continue
+      if (costsHall[key] != null && costsDelivery[key] != null) continue
       getMenuCost({ menuId: it.menuId, optionId: it.optionId || undefined })
-        .then((r) =>
-          setCosts((c) => ({
-            ...c,
-            [key]: (r as { costHall?: number }).costHall ?? (r as { cost?: number }).cost ?? 0,
-          }))
-        )
-        .catch(() => setCosts((c) => ({ ...c, [key]: 0 })))
+        .then((r) => {
+          const hall = (r as { costHall?: number }).costHall ?? (r as { cost?: number }).cost ?? 0
+          const del = (r as { costDelivery?: number }).costDelivery ?? hall
+          setCostsHall((c) => ({ ...c, [key]: hall }))
+          setCostsDelivery((c) => ({ ...c, [key]: del }))
+        })
+        .catch(() => {
+          setCostsHall((c) => ({ ...c, [key]: 0 }))
+          setCostsDelivery((c) => ({ ...c, [key]: 0 }))
+        })
     }
   }, [promoItems])
 
@@ -128,25 +239,50 @@ export default function MarketingPromosPage() {
     return sum
   }, [promoItems, menus, optionsByMenuId])
 
-  const costTotal = React.useMemo(() => {
+  const costTotalHall = React.useMemo(() => {
     let sum = 0
     for (const it of promoItems) {
       const key = `${it.menuId}:${it.optionId || 'null'}`
-      sum += (costs[key] ?? 0) * (it.quantity ?? 1)
+      sum += (costsHall[key] ?? 0) * (it.quantity ?? 1)
     }
     return sum
-  }, [promoItems, costs])
+  }, [promoItems, costsHall])
+
+  const costTotalDelivery = React.useMemo(() => {
+    let sum = 0
+    for (const it of promoItems) {
+      const key = `${it.menuId}:${it.optionId || 'null'}`
+      sum += (costsDelivery[key] ?? 0) * (it.quantity ?? 1)
+    }
+    return sum
+  }, [promoItems, costsDelivery])
 
   const salePrice = Number(formData.price) || 0
+  const salePriceDel = formData.priceDelivery !== '' ? Number(formData.priceDelivery) : salePrice
   const discountAmt = Math.max(0, regularPriceSum - salePrice)
   const discountPercent = regularPriceSum > 0 ? (discountAmt / regularPriceSum) * 100 : 0
-  const marginBaht = salePrice - costTotal
+  const marginBaht = salePrice - costTotalHall
   const marginPercent = salePrice > 0 ? (marginBaht / salePrice) * 100 : 0
-  const hasAllCosts = promoItems.length === 0 || promoItems.every((it) => costs[`${it.menuId}:${it.optionId || 'null'}`] != null)
+  const marginBahtDel = salePriceDel - costTotalDelivery
+  const marginPercentDel = salePriceDel > 0 ? (marginBahtDel / salePriceDel) * 100 : 0
+  const hasAllCosts =
+    promoItems.length === 0 ||
+    promoItems.every((it) => {
+      const key = `${it.menuId}:${it.optionId || 'null'}`
+      return costsHall[key] != null && costsDelivery[key] != null
+    })
 
   const handleNewRegister = () => {
-    setFormData(emptyForm)
+    setFormData({ ...emptyForm })
     setEditingId(null)
+    setPromoItems([])
+    setNewItemMenuId('')
+    setNewItemOptionId(null)
+    setNewItemQty('1')
+    setNewRegisterPulse(true)
+    window.setTimeout(() => setNewRegisterPulse(false), 2200)
+    window.setTimeout(() => formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100)
+    void fillSuggestedPromoCode()
   }
 
   const handleReset = () => {
@@ -156,65 +292,87 @@ export default function MarketingPromosPage() {
         setFormData({
           code: p.code,
           name: p.name,
-          category: p.category,
+          category: p.category || PROMOTION_DEFAULT_SUBCATEGORIES[0],
           price: String(p.price),
           priceDelivery: p.priceDelivery != null ? String(p.priceDelivery) : '',
           vatIncluded: p.vatIncluded,
           isActive: p.isActive,
           marketingCampaignId: p.marketingCampaignId || '',
+          channelHall: p.channelHall !== false,
+          channelTakeout: p.channelTakeout !== false,
+          channelDelivery: p.channelDelivery !== false,
+          deliveryAppCodes: p.deliveryAppCodes?.length ? [...p.deliveryAppCodes] : [],
+          validFrom: p.validFrom?.trim() || '',
+          validTo: p.validTo?.trim() || '',
         })
       }
     } else {
-      setFormData(emptyForm)
+      setFormData({ ...emptyForm })
+      void fillSuggestedPromoCode()
     }
   }
 
   const handleSave = async () => {
-    const code = formData.code.trim()
+    let code = formData.code.trim()
     const name = formData.name.trim()
+    if (!code && !editingId) {
+      try {
+        const r = await getNextPosPromoCode()
+        const next = r?.code?.trim()
+        if (next) {
+          code = next
+          setFormData((p) => ({ ...p, code: next }))
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     if (!code || !name) {
-      alert(t('posMenuAlertCodeName'))
+      await appAlert(t('posMenuAlertCodeName'))
       return
     }
     if (!editingId && promos.some((p) => p.code === code)) {
-      alert(t('itemsAlertCodeExists'))
+      await appAlert(t('itemsAlertCodeExists'))
       return
     }
+    const vf = formData.validFrom.trim()
+    const vt = formData.validTo.trim()
+    if (vf && vt && vf > vt) {
+      await appAlert(t('posPromoValidRangeInvalid') || '적용 종료일은 시작일 이후여야 합니다.')
+      return
+    }
+    const dpct = regularPriceSum > 0 ? Math.round(discountPercent * 100) / 100 : null
     const res = await savePosPromo({
       id: editingId || undefined,
       code,
       name,
-      category: formData.category.trim(),
+      category: formData.category.trim() || PROMOTION_DEFAULT_SUBCATEGORIES[0],
+      categoryMain: PROMOTION_MAIN_CATEGORY,
       price: Number(formData.price) || 0,
       priceDelivery: formData.priceDelivery !== '' ? Number(formData.priceDelivery) : null,
       vatIncluded: formData.vatIncluded,
       isActive: formData.isActive,
       marketingCampaignId: formData.marketingCampaignId || null,
+      channelHall: formData.channelHall,
+      channelTakeout: formData.channelTakeout,
+      channelDelivery: formData.channelDelivery,
+      deliveryAppCodes: formData.channelDelivery && formData.deliveryAppCodes.length > 0 ? formData.deliveryAppCodes : null,
+      discountPercent: dpct,
+      validFrom: vf || null,
+      validTo: vt || null,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t('msg_save_fail_detail'))
+      await appAlert(translateApiMessage(res.message, t) || t('msg_save_fail_detail'))
       return
     }
     if (editingId) {
-      setPromos((prev) =>
-        prev.map((p) =>
-          p.id === editingId
-            ? {
-                ...p,
-                code,
-                name,
-                category: formData.category.trim(),
-                price: Number(formData.price) || 0,
-                priceDelivery: formData.priceDelivery !== '' ? Number(formData.priceDelivery) : null,
-              }
-            : p
-        )
-      )
-      alert(t('itemsAlertUpdated'))
+      await getPosPromos().then(setPromos)
+      await appAlert(t('itemsAlertUpdated'))
     } else if (res.id) {
       setEditingId(res.id)
-      getPosPromos().then(setPromos)
-      alert(t('itemsAlertSaved'))
+      await getPosPromos().then(setPromos)
+      await appAlert(t('itemsAlertSaved'))
+      window.setTimeout(() => composeAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150)
     }
   }
 
@@ -222,12 +380,18 @@ export default function MarketingPromosPage() {
     setFormData({
       code: promo.code,
       name: promo.name,
-      category: promo.category || '프로모션',
+      category: promo.category || PROMOTION_DEFAULT_SUBCATEGORIES[0],
       price: String(promo.price),
       priceDelivery: promo.priceDelivery != null ? String(promo.priceDelivery) : '',
       vatIncluded: promo.vatIncluded,
       isActive: promo.isActive,
       marketingCampaignId: promo.marketingCampaignId ?? '',
+      channelHall: promo.channelHall !== false,
+      channelTakeout: promo.channelTakeout !== false,
+      channelDelivery: promo.channelDelivery !== false,
+      deliveryAppCodes: promo.deliveryAppCodes?.length ? [...promo.deliveryAppCodes] : [],
+      validFrom: promo.validFrom?.trim() || '',
+      validTo: promo.validTo?.trim() || '',
     })
     setEditingId(promo.id)
     setNewItemMenuId('')
@@ -240,7 +404,7 @@ export default function MarketingPromosPage() {
     const opts = optionsByMenuId[newItemMenuId]
     const hasOptions = opts && opts.length > 0
     if (hasOptions && !newItemOptionId) {
-      alert(t('posPromoSelectOption') || '옵션을 선택해 주세요.')
+      await appAlert(t('posPromoSelectOption') || '옵션을 선택해 주세요.')
       return
     }
     const res = await savePosPromoItem({
@@ -256,32 +420,49 @@ export default function MarketingPromosPage() {
       setNewItemOptionId(null)
       setNewItemQty('1')
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   const handleDeleteItem = async (item: PosPromoItem) => {
-    if (!confirm(t('posMenuConfirmDelete'))) return
+    if (!await appConfirm(t('posMenuConfirmDelete'))) return
     const res = await deletePosPromoItem({ id: item.id })
     if (res.success) {
       getPosPromoItems({ promoId: editingId! }).then(setPromoItems)
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
   }
 
   const handleDelete = async (promo: PosPromo) => {
-    if (!confirm(`"${promo.name}" ${t('posMenuConfirmDelete')}`)) return
+    if (!await appConfirm(`"${promo.name}" ${t('posPromoConfirmDeactivate') || '비활성 처리할까요? (주문 기록은 유지됩니다)'}`)) return
     const res = await deletePosPromo({ id: promo.id })
     if (res.success) {
-      setPromos((prev) => prev.filter((p) => p.id !== promo.id))
+      setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, isActive: false } : p)))
       if (editingId === promo.id) {
-        setFormData(emptyForm)
-        setEditingId(null)
+        setFormData((f) => ({ ...f, isActive: false }))
       }
+      await getPosMenus().then((list) =>
+        setMenus((list || []).filter((m) => m.isActive && !(m.promoId != null && String(m.promoId).trim() !== '')))
+      )
     } else {
-      alert(res.message)
+      await appAlert(res.message)
     }
+  }
+
+  const selectedCampaign = campaigns.find((c) => c.id === formData.marketingCampaignId)
+  const campaignRangeMismatch =
+    !!selectedCampaign &&
+    ((selectedCampaign.startDate && formData.validFrom && selectedCampaign.startDate.slice(0, 10) !== formData.validFrom) ||
+      (selectedCampaign.endDate && formData.validTo && selectedCampaign.endDate.slice(0, 10) !== formData.validTo))
+
+  const toggleDeliveryApp = (code: string) => {
+    setFormData((p) => {
+      const set = new Set(p.deliveryAppCodes)
+      if (set.has(code)) set.delete(code)
+      else set.add(code)
+      return { ...p, deliveryAppCodes: [...set] }
+    })
   }
 
   const getItemDisplayName = (item: PosPromoItem): string => {
@@ -315,9 +496,74 @@ export default function MarketingPromosPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-          <div className="lg:sticky lg:top-0 lg:self-start space-y-6">
-            <div className="rounded-xl border bg-card shadow-sm">
+        {schemaStatus && !schemaStatus.ok && !schemaBannerDismissed && (
+          <div className="mb-4 flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="font-semibold">{t('posPromoSchemaBannerTitle') || 'DB 확장 필요'}</p>
+              <p className="text-xs leading-relaxed opacity-90">
+                {t('posPromoSchemaBannerBody') ||
+                  'Supabase에서 vercel-app/sql/pos_promo_extensions.sql 을 실행해야 채널·기간·미러 메뉴 연동이 정상 동작합니다.'}
+                {!schemaStatus.posPromosExtended && (
+                  <span className="block mt-1">· pos_promos 확장 컬럼(channel_hall 등) 없음</span>
+                )}
+                {!schemaStatus.posMenusPromoId && (
+                  <span className="block mt-1">· pos_menus.promo_id 컬럼 없음</span>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="shrink-0 rounded-md p-1 hover:bg-amber-200/60 dark:hover:bg-amber-900/50"
+              aria-label={t('cancel')}
+              onClick={() => {
+                try {
+                  localStorage.setItem('admin_promo_schema_banner_dismiss', '1')
+                } catch {
+                  /* ignore */
+                }
+                setSchemaBannerDismissed(true)
+              }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-[11px]">
+          <span
+            className={cn(
+              'rounded-full border px-2.5 py-0.5 font-semibold',
+              !editingId ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/50 text-muted-foreground'
+            )}
+          >
+            ① {t('posPromoStepBasic') || '기본 정보'}
+          </span>
+          <span className="text-muted-foreground">→</span>
+          <span
+            className={cn(
+              'rounded-full border px-2.5 py-0.5 font-semibold',
+              editingId ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-muted/50 text-muted-foreground'
+            )}
+          >
+            ② {t('posPromoStepCompose') || '구성·원가'}
+          </span>
+          {!editingId && (
+            <span className="text-muted-foreground">
+              · {t('posPromoStepHint') || '저장 후 구성 메뉴를 추가할 수 있습니다.'}
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,420px)_1fr]">
+          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:self-start space-y-6">
+            <div
+              ref={formCardRef}
+              className={cn(
+                'rounded-xl border bg-card shadow-sm transition-shadow duration-300',
+                newRegisterPulse && 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+              )}
+            >
               <div className="flex items-center justify-between border-b px-6 py-4">
                 <div>
                   <h3 className="text-sm font-bold text-card-foreground">
@@ -326,6 +572,11 @@ export default function MarketingPromosPage() {
                   <p className="text-[11px] text-muted-foreground">
                     {editingId ? t('itemsFormEditDesc') : t('itemsFormNewDesc')}
                   </p>
+                  {!editingId && newRegisterPulse && (
+                    <p className="mt-1 text-[11px] font-medium text-primary">
+                      {t('posPromoNewModeOn') || '신규 등록 모드입니다. 코드는 자동 채번됩니다. 이름 입력 후 저장하세요.'}
+                    </p>
+                  )}
                 </div>
                 <Button variant="outline" size="sm" className="h-8 gap-1.5 px-3 text-[11px]" onClick={handleNewRegister}>
                   <FilePlus className="h-3.5 w-3.5" />
@@ -335,13 +586,30 @@ export default function MarketingPromosPage() {
               <div className="flex flex-col gap-4 p-6">
                 <div>
                   <label className="text-xs font-semibold">{t('posMenuCode')}</label>
-                  <Input
-                    placeholder="PROMO001"
-                    className="mt-1 h-10"
-                    value={formData.code}
-                    onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
-                    disabled={!!editingId}
-                  />
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {t('posPromoCodeAutoHint') || '신규는 P0001 형식으로 자동 부여됩니다. 필요 시 수정하거나 다시 채번하세요.'}
+                  </p>
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      placeholder="P0001"
+                      className="h-10 flex-1 font-mono"
+                      value={formData.code}
+                      onChange={(e) => setFormData((p) => ({ ...p, code: e.target.value }))}
+                      disabled={!!editingId}
+                    />
+                    {!editingId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 shrink-0 gap-1 px-3 text-xs"
+                        onClick={() => void fillSuggestedPromoCode()}
+                        title={t('posPromoCodeSuggestBtn') || '다음 번호로 채번'}
+                      >
+                        <Wand2 className="h-3.5 w-3.5" />
+                        {t('posPromoCodeSuggestBtn') || '자동'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold">{t('posPromoName') || '메뉴명'}</label>
@@ -353,13 +621,110 @@ export default function MarketingPromosPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold">{t('posMenuCategory')}</label>
-                  <Input
-                    className="mt-1 h-10"
-                    value={formData.category}
-                    onChange={(e) => setFormData((p) => ({ ...p, category: e.target.value }))}
-                  />
+                  <label className="text-xs font-semibold">{t('posMenuCategoryMain') || '대분류'}</label>
+                  <div className="mt-1 h-10 flex items-center rounded-md border bg-muted/40 px-3 text-sm">
+                    {PROMOTION_MAIN_CATEGORY}
+                  </div>
                 </div>
+                <div>
+                  <label className="text-xs font-semibold">{t('posMenuCategory') || '소분류'}</label>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(v) => setFormData((p) => ({ ...p, category: v }))}
+                  >
+                    <SelectTrigger className="mt-1 h-10">
+                      <SelectValue placeholder={t('itemsCategoryRequired')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {promoSubCategories.map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-semibold">{t('posPromoValidFrom') || '적용 시작'}</label>
+                    <Input
+                      type="date"
+                      className="mt-1 h-10"
+                      value={formData.validFrom}
+                      onChange={(e) => setFormData((p) => ({ ...p, validFrom: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold">{t('posPromoValidTo') || '적용 종료'}</label>
+                    <Input
+                      type="date"
+                      className="mt-1 h-10"
+                      value={formData.validTo}
+                      onChange={(e) => setFormData((p) => ({ ...p, validTo: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                {campaignRangeMismatch && (
+                  <p className="text-[11px] text-amber-700">
+                    {t('posPromoCampaignDateHint') || '선택한 캠페인 기간과 적용 기간이 다릅니다. 프로모션 적용 기간을 기준으로 POS에 반영됩니다.'}
+                  </p>
+                )}
+                <div>
+                  <p className="text-xs font-semibold mb-2">{t('posPromoChannels') || '판매 채널'}</p>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={formData.channelHall}
+                        onCheckedChange={(v) => setFormData((p) => ({ ...p, channelHall: v === true }))}
+                      />
+                      {t('posOrderTypeDineIn') || '홀'}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={formData.channelTakeout}
+                        onCheckedChange={(v) => setFormData((p) => ({ ...p, channelTakeout: v === true }))}
+                      />
+                      {t('posOrderTypeTakeout') || '포장'}
+                    </label>
+                    <label className="flex items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={formData.channelDelivery}
+                        onCheckedChange={(v) => setFormData((p) => ({ ...p, channelDelivery: v === true }))}
+                      />
+                      {t('posOrderTypeDelivery') || '배달'}
+                    </label>
+                  </div>
+                </div>
+                {formData.channelDelivery && deliveryApps.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold mb-1">{t('posPromoDeliveryApps') || '배달 앱 (비우면 전체)'}</p>
+                    {canSearchAll && stores.length > 0 && (
+                      <Select value={storeCode || '_'} onValueChange={(v) => setStoreCode(v === '_' ? '' : v)}>
+                        <SelectTrigger className="mb-2 h-8 text-xs">
+                          <SelectValue placeholder="매장" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stores.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <div className="flex flex-wrap gap-3">
+                      {deliveryApps.map((a) => (
+                        <label key={a.code} className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={formData.deliveryAppCodes.includes(a.code)}
+                            onCheckedChange={() => toggleDeliveryApp(a.code)}
+                          />
+                          {a.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-semibold">{t('posMenuPriceHall') || '판매가 (฿)'}</label>
                   <Input
@@ -417,9 +782,23 @@ export default function MarketingPromosPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {editingId && (
-                  <div className="rounded border border-dashed p-3">
+                {!editingId ? (
+                  <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/15 px-3 py-4 text-center text-xs text-muted-foreground">
+                    <p className="mb-1 font-semibold text-foreground">{t('posPromoItems') || '구성 메뉴'}</p>
+                    <p className="leading-relaxed">
+                      {t('posPromoComposeAfterSave') ||
+                        '코드·이름 등 기본 정보를 입력한 뒤 하단 [저장]을 누르면 여기에서 세트 구성 메뉴를 추가할 수 있습니다.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div ref={composeAnchorRef} className="scroll-mt-28 rounded border border-dashed p-3">
                     <h4 className="mb-2 text-xs font-semibold">{t('posPromoItems') || '구성 메뉴'}</h4>
+                    {menus.length === 0 && (
+                      <p className="mb-2 rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                        {t('posPromoNoMenusForCompose') ||
+                          '연결 가능한 일반 메뉴가 없습니다. 메뉴 관리에서 활성 메뉴를 등록하세요. (프로모 미러 메뉴는 구성에 넣을 수 없습니다.)'}
+                      </p>
+                    )}
                     <ul className="mb-2 space-y-1">
                       {promoItems.map((item) => (
                         <li
@@ -441,7 +820,7 @@ export default function MarketingPromosPage() {
                       ))}
                     </ul>
                     <div className="flex flex-col gap-2">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Select
                           value={newItemMenuId || '_'}
                           onValueChange={(v) => {
@@ -449,7 +828,7 @@ export default function MarketingPromosPage() {
                             setNewItemOptionId(null)
                           }}
                         >
-                          <SelectTrigger className="h-8 flex-1 text-xs">
+                          <SelectTrigger className="h-8 min-w-[140px] flex-1 text-xs">
                             <SelectValue placeholder={t('posPromoSelectMenu')} />
                           </SelectTrigger>
                           <SelectContent>
@@ -466,7 +845,7 @@ export default function MarketingPromosPage() {
                             value={newItemOptionId || '_'}
                             onValueChange={(v) => setNewItemOptionId(v === '_' ? null : v)}
                           >
-                            <SelectTrigger className="h-8 min-w-[100px] text-xs">
+                            <SelectTrigger className="h-8 min-w-[100px] flex-1 text-xs">
                               <SelectValue placeholder={t('posPromoSelectOption')} />
                             </SelectTrigger>
                             <SelectContent>
@@ -525,13 +904,19 @@ export default function MarketingPromosPage() {
                     <span className="font-mono tabular-nums">฿{regularPriceSum.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('posPromoCostSum') || '원가 합계'}</span>
+                    <span className="text-muted-foreground">{t('posPromoCostSumHall') || '원가 합계(홀)'}</span>
                     <span className="font-mono tabular-nums">
-                      {hasAllCosts ? `฿${costTotal.toFixed(0)}` : t('loading') || '...'}
+                      {hasAllCosts ? `฿${costTotalHall.toFixed(0)}` : t('loading') || '...'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('posMenuPriceHall') || '판매가'}</span>
+                    <span className="text-muted-foreground">{t('posPromoCostSumDelivery') || '원가 합계(배달·포장)'}</span>
+                    <span className="font-mono tabular-nums">
+                      {hasAllCosts ? `฿${costTotalDelivery.toFixed(0)}` : t('loading') || '...'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t('posMenuPriceHall') || '판매가(홀)'}</span>
                     <span className="font-mono font-semibold tabular-nums">฿{salePrice.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-amber-700">
@@ -541,7 +926,7 @@ export default function MarketingPromosPage() {
                     </span>
                   </div>
                   <div className="flex justify-between pt-1.5 border-t font-medium">
-                    <span>{t('posPromoMargin') || '마진'}</span>
+                    <span>{t('posPromoMargin') || '마진(홀)'}</span>
                     <span
                       className={cn(
                         'font-mono tabular-nums',
@@ -551,21 +936,33 @@ export default function MarketingPromosPage() {
                       ฿{marginBaht.toFixed(0)} ({marginPercent.toFixed(1)}%)
                     </span>
                   </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{t('posPromoMarginDelivery') || '마진(배달가 기준)'}</span>
+                    <span className={cn('font-mono tabular-nums', marginBahtDel >= 0 ? 'text-green-600' : 'text-destructive')}>
+                      ฿{marginBahtDel.toFixed(0)} ({marginPercentDel.toFixed(1)}%)
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="border-b px-6 py-4">
+          <div className="min-w-0 rounded-xl border bg-card overflow-hidden">
+            <div className="border-b px-4 py-3 sm:px-6 sm:py-4">
               <h3 className="text-sm font-bold">{t('itemsList') || '목록'}</h3>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {t('posPromoListHint') || '행을 눌러 편집합니다.'}
+              </p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto overscroll-x-contain">
+              <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30">
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-20">{t('posMenuCode')}</th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[160px]">{t('posPromoName')}</th>
+                    <th className="px-5 py-3 text-[11px] font-bold text-center min-w-[100px]">
+                      {t('posPromoValidPeriod') || '적용기간'}
+                    </th>
                     <th className="px-5 py-3 text-[11px] font-bold text-center w-32">
                       {t('posMenuPriceHall')} / {t('posMenuPriceDelivery')}
                     </th>
@@ -590,6 +987,11 @@ export default function MarketingPromosPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3">{p.name}</td>
+                      <td className="px-5 py-3 text-center text-[10px] text-muted-foreground whitespace-nowrap">
+                        {p.validFrom || p.validTo
+                          ? `${p.validFrom?.replace(/-/g, '.') || '…'} ~ ${p.validTo?.replace(/-/g, '.') || '…'}`
+                          : '—'}
+                      </td>
                       <td className="px-5 py-3 text-right font-bold tabular-nums text-xs">
                         {p.price > 0 ? `${p.price.toLocaleString()} ฿` : '-'}
                         {p.priceDelivery != null ? ` / ${p.priceDelivery.toLocaleString()} ฿` : ''}

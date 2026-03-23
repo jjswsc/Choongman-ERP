@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Calculator } from "lucide-react"
@@ -283,7 +284,7 @@ export default function PosPrintersPage() {
 
   const handleSave = async () => {
     if (!effectiveStore) {
-      alert(t("store") || "매장을 선택하세요.")
+      await appAlert(t("store") || "매장을 선택하세요.")
       return
     }
     setSaving(true)
@@ -339,13 +340,13 @@ export default function PosPrintersPage() {
         otherMode,
       })
       if (res.success) {
-        alert(t("itemsAlertSaved") || "저장되었습니다.")
+        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
         loadData()
       } else {
-        alert(res.message || t("msg_save_fail_detail"))
+        await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } catch (e) {
-      alert(String(e))
+      await appAlert(String(e))
     } finally {
       setSaving(false)
     }
@@ -510,7 +511,7 @@ export default function PosPrintersPage() {
     setPreviewOpen(true)
   }
 
-  const handleTestPrint = (kind: PreviewKind) => {
+  const handleTestPrint = async (kind: PreviewKind) => {
     // #region agent log
     const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H9',location:'admin/pos-printers/page.tsx:handleTestPrint',message:'admin test print triggered',data:{kind,storeCode:effectiveStore||'',logoSize:receiptLogoSize},timestamp:Date.now()}
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
@@ -520,7 +521,7 @@ export default function PosPrintersPage() {
     const title = kind === "receipt" ? t("posReceipt") || "영수증" : t("posKitchenOrder") || "주방 주문서"
     const w = window.open("", "_blank")
     if (!w) {
-      alert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
       return
     }
     w.document.write(html)

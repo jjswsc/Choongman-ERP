@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import {
+  buildVisitDisplayNameMap,
+  visitDisplayName,
+  visitNameSupabaseFilter,
+  visitNameVariantsForFilter,
+} from '@/lib/visit-display-name'
+import { addDayBangkok, visitRowBusinessDateStrBangkok } from '@/lib/attendance-utils'
 
 function fmtTime(visitTime: string | null | undefined, createdAt?: string | null): string {
   const t = String(visitTime != null ? visitTime : '').trim()
@@ -34,22 +41,32 @@ export async function GET(request: NextRequest) {
   const empFilter = employeeName === 'All' || !employeeName ? 'All' : employeeName
   const deptFilter = department === 'All' || !department ? null : department
 
+  const empList = ((await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,nick,name', limit: 2000 })) as
+    { store?: string; job?: string; nick?: string; name?: string }[]) || []
+  const displayMap = buildVisitDisplayNameMap(empList)
+
   const namesInDept: string[] = []
   if (deptFilter) {
-    const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,job,nick,name' })) as { store?: string; job?: string; nick?: string; name?: string }[] || []
     for (const e of empList) {
       const st = String(e.store || '').toLowerCase()
       if (st.indexOf('office') === -1 && st !== '본사' && st !== '오피스') continue
       const rowDept = String(e.job || '').trim() || 'Staff'
       if (rowDept !== deptFilter) continue
-      const n = (String(e.nick || '').trim() || String(e.name || '').trim())
-      if (n && !namesInDept.includes(n)) namesInDept.push(n)
+      const nick = String(e.nick || '').trim()
+      const legal = String(e.name || '').trim()
+      if (nick && !namesInDept.includes(nick)) namesInDept.push(nick)
+      if (legal && !namesInDept.includes(legal)) namesInDept.push(legal)
     }
   }
 
-  const filters = [`visit_date=gte.${startStr}`, `visit_date=lte.${endStr}`]
+  const visitDateMin = addDayBangkok(startStr, -1)
+  const visitDateMax = addDayBangkok(endStr, 1)
+  const filters = [`visit_date=gte.${visitDateMin}`, `visit_date=lte.${visitDateMax}`]
   if (storeFilter !== 'All') filters.push(`store_name=eq.${encodeURIComponent(storeFilter)}`)
-  if (empFilter !== 'All') filters.push(`name=eq.${encodeURIComponent(empFilter)}`)
+  if (empFilter !== 'All') {
+    const nameF = visitNameSupabaseFilter(visitNameVariantsForFilter(empFilter, empList))
+    if (nameF) filters.push(nameF)
+  }
   if (purposeFilter) {
     if (purposeFilter === '기타') {
       filters.push(`or=(purpose.eq.${encodeURIComponent('기타')},purpose.like.${encodeURIComponent('기타:*')})`)
@@ -66,14 +83,19 @@ export async function GET(request: NextRequest) {
 
     const result = (list || [])
       .filter((d) => !deptFilter || namesInDept.length === 0 || namesInDept.includes(String(d.name || '').trim()))
+      .filter((d) => {
+        const bd = visitRowBusinessDateStrBangkok(d as { visit_date?: string; visit_time?: string; created_at?: string })
+        return bd >= startStr && bd <= endStr
+      })
       .map((d) => {
         const raw = d as { visit_time?: string; created_at?: string; duration_min?: number | string }
         const durationVal = raw.duration_min
         const durationNum = durationVal != null ? (typeof durationVal === 'number' ? durationVal : Math.floor(Number(durationVal)) || 0) : 0
+        const rawName = String(d.name || '').trim()
         return {
-          date: String(d.visit_date || '').slice(0, 10),
+          date: visitRowBusinessDateStrBangkok(d as { visit_date?: string; visit_time?: string; created_at?: string }),
           time: fmtTime(raw.visit_time, raw.created_at),
-          name: d.name,
+          name: visitDisplayName(rawName, displayMap),
           store: d.store_name,
           type: d.visit_type,
           purpose: d.purpose,

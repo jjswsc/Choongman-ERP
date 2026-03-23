@@ -32,6 +32,11 @@ export async function POST(req: NextRequest) {
     const sortOrder = Number(body?.sortOrder) ?? 0
     const optionType = (body?.optionType || 'substitution') as string
     const itemCode = body?.itemCode ? String(body.itemCode).trim() : null
+    const rawAddMenu = body?.additiveSourceMenuId
+    const parsedAddMenu =
+      rawAddMenu != null && rawAddMenu !== '' ? Number(rawAddMenu) : NaN
+    const additiveSourceMenuId =
+      Number.isFinite(parsedAddMenu) && parsedAddMenu > 0 ? Math.floor(parsedAddMenu) : null
     const quantity = Math.max(0.001, Number(body?.quantity) ?? 1)
     const optionStepValues = body?.optionStepValues && typeof body.optionStepValues === 'object' && !Array.isArray(body.optionStepValues)
       ? (body.optionStepValues as Record<string, string>)
@@ -44,15 +49,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'menuId and name required' }, { headers })
     }
 
+    const isAdditive = optionType === 'additive'
     const rowFull: Record<string, unknown> = {
       name,
       price_modifier: priceModifier,
       price_modifier_delivery: priceModifierDelivery,
       price_modifier_packaging: priceModifierPackaging,
       sort_order: sortOrder,
-      option_type: optionType === 'additive' ? 'additive' : 'substitution',
-      item_code: optionType === 'additive' && itemCode ? itemCode : null,
-      quantity: optionType === 'additive' ? quantity : 1,
+      option_type: isAdditive ? 'additive' : 'substitution',
+      item_code:
+        isAdditive && additiveSourceMenuId ? null : isAdditive && itemCode ? itemCode : null,
+      additive_source_menu_id: isAdditive && additiveSourceMenuId ? additiveSourceMenuId : null,
+      quantity: isAdditive ? quantity : 1,
       sell_hall: sellHall,
       sell_delivery: sellDelivery,
       sell_packaging: sellPackaging,
@@ -135,6 +143,7 @@ export async function POST(req: NextRequest) {
       delete rowWithoutNew.sell_packaging
       delete rowWithoutNew.option_type
       delete rowWithoutNew.item_code
+      delete rowWithoutNew.additive_source_menu_id
       delete rowWithoutNew.quantity
       if (priceModifierDelivery != null) (rowWithoutNew as Record<string, unknown>).price_modifier_delivery = priceModifierDelivery
       try {

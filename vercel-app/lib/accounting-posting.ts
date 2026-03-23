@@ -1,5 +1,14 @@
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
 import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import {
+  accountLine,
+  GL,
+  linesForBankDeposit,
+  linesForBankWithdraw,
+  type BankWithdrawExpenseOverride,
+} from '@/lib/chart-of-accounts-mapping'
+import { isAccountingPeriodClosed } from '@/lib/accounting-period-server'
+import { resolveAccountSubjectIdsByCodes } from '@/lib/journal-account-subject-resolve'
 
 type JournalLineInput = {
   accountCode: string
@@ -7,6 +16,8 @@ type JournalLineInput = {
   side: 'debit' | 'credit'
   amount: number
   memo?: string
+  /** 있으면 코드 조회보다 우선 (이미 알고 있는 account_subjects.id) */
+  accountSubjectId?: number | null
 }
 
 type PostJournalParams = {
@@ -69,6 +80,10 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
     throw new Error(`분개 차대 불일치: debit=${debitSum}, credit=${creditSum}`)
   }
 
+  if (await isAccountingPeriodClosed(monthOf(accountingDate))) {
+    throw new Error('ACCOUNTING_PERIOD_CLOSED')
+  }
+
   const inserted = (await supabaseInsert('journal_entries', {
     entry_no: mkEntryNo(params.sourceType, params.sourceId),
     accounting_date: accountingDate,
@@ -81,17 +96,29 @@ export async function postJournalEntry(params: PostJournalParams): Promise<numbe
   const entryId = Number(inserted?.[0]?.id || 0)
   if (!entryId) return null
 
+  const codesForLookup = lines
+    .filter((l) => l.accountSubjectId == null || Number(l.accountSubjectId) <= 0)
+    .map((l) => l.accountCode)
+  const codeToSubjectId = await resolveAccountSubjectIdsByCodes(codesForLookup)
+
   await supabaseInsertMany(
     'journal_lines',
-    lines.map((line, i) => ({
-      journal_entry_id: entryId,
-      line_no: i + 1,
-      account_code: line.accountCode,
-      account_name: line.accountName,
-      side: line.side,
-      amount: Math.abs(Number(line.amount) || 0),
-      memo: line.memo || null,
-    }))
+    lines.map((line, i) => {
+      const codeKey = String(line.accountCode || '').trim().toUpperCase()
+      const explicit = line.accountSubjectId != null ? Number(line.accountSubjectId) : NaN
+      const resolved =
+        Number.isFinite(explicit) && explicit > 0 ? explicit : codeKey ? (codeToSubjectId.get(codeKey) ?? null) : null
+      return {
+        journal_entry_id: entryId,
+        line_no: i + 1,
+        account_code: line.accountCode,
+        account_name: line.accountName,
+        side: line.side,
+        amount: Math.abs(Number(line.amount) || 0),
+        memo: line.memo || null,
+        account_subject_id: resolved,
+      }
+    })
   )
 
   await upsertLedgerBalances(accountingDate, params.storeName || 'All', lines)
@@ -107,44 +134,44 @@ export async function postBankTransactionJournal(params: {
   memo?: string
   storeName?: string
   postedBy?: string
+  /** 출금·경비/고정비 등 비용 차변에 쓸 계정과목 (통장 거래와 동일) */
+  accountSubjectId?: number | null
 }) {
   const amount = Math.abs(Number(params.amountAbs) || 0)
   if (amount <= 0) return null
 
   const cat = String(params.category || '').toLowerCase()
-  const cash = { accountCode: '1010', accountName: '현금및예금' }
-  const expense = { accountCode: '5520', accountName: '기타경비' }
-  const payable = { accountCode: '2110', accountName: '매입채무' }
-  const receivable = { accountCode: '1130', accountName: '매출채권' }
-  const revenue = { accountCode: '4110', accountName: '매출' }
+
+  let expenseOverride: BankWithdrawExpenseOverride | null = null
+  if (params.transType === 'withdraw') {
+    const sid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
+    if (Number.isFinite(sid) && sid > 0) {
+      try {
+        const rows = (await supabaseSelectFilter('account_subjects', `id=eq.${sid}`, {
+          limit: 1,
+          select: 'id,code,name',
+        })) as { id?: number; code?: string; name?: string }[] | null
+        const r = rows?.[0]
+        if (r?.code) {
+          expenseOverride = {
+            accountCode: String(r.code).trim(),
+            accountName: String(r.name || r.code).trim(),
+            accountSubjectId: sid,
+          }
+        }
+      } catch (e) {
+        console.error('postBankTransactionJournal account_subjects lookup:', e)
+      }
+    }
+  }
 
   let lines: JournalLineInput[] = []
   if (params.transType === 'deposit') {
-    if (cat === 'receivable_receive') {
-      lines = [
-        { ...cash, side: 'debit', amount },
-        { ...receivable, side: 'credit', amount },
-      ]
-    } else {
-      lines = [
-        { ...cash, side: 'debit', amount },
-        { ...revenue, side: 'credit', amount },
-      ]
-    }
+    lines = linesForBankDeposit(cat, amount) as JournalLineInput[]
   } else {
-    if (cat === 'purchase_payment') {
-      lines = [
-        { ...payable, side: 'debit', amount },
-        { ...cash, side: 'credit', amount },
-      ]
-    } else if (['transfer', 'loan', 'advance', 'correction', 'unclassified'].includes(cat)) {
-      return null
-    } else {
-      lines = [
-        { ...expense, side: 'debit', amount },
-        { ...cash, side: 'credit', amount },
-      ]
-    }
+    const w = linesForBankWithdraw(cat, amount, expenseOverride)
+    if (w.length === 0) return null
+    lines = w as JournalLineInput[]
   }
 
   return postJournalEntry({
@@ -166,9 +193,32 @@ export async function postPettyCashJournal(params: {
   memo?: string
   storeName?: string
   postedBy?: string
+  accountSubjectId?: number | null
 }) {
   const amount = Math.abs(Number(params.amountAbs) || 0)
   if (amount <= 0 || String(params.transType).toLowerCase() !== 'expense') return null
+
+  let expenseLine: JournalLineInput = { ...GL.miscExpense(), side: 'debit', amount }
+  const sid = params.accountSubjectId != null ? Number(params.accountSubjectId) : NaN
+  if (Number.isFinite(sid) && sid > 0) {
+    try {
+      const rows = (await supabaseSelectFilter('account_subjects', `id=eq.${sid}`, {
+        limit: 1,
+        select: 'id,code,name',
+      })) as { id?: number; code?: string; name?: string }[] | null
+      const r = rows?.[0]
+      if (r?.code) {
+        expenseLine = {
+          ...accountLine(String(r.code).trim(), { nameKo: String(r.name || r.code).trim() }),
+          side: 'debit',
+          amount,
+          accountSubjectId: sid,
+        }
+      }
+    } catch (e) {
+      console.error('postPettyCashJournal account_subjects lookup:', e)
+    }
+  }
 
   return postJournalEntry({
     accountingDate: params.transDate,
@@ -177,10 +227,7 @@ export async function postPettyCashJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '시재 지출 자동분개',
     postedBy: params.postedBy || null,
-    lines: [
-      { accountCode: '5520', accountName: '기타경비', side: 'debit', amount },
-      { accountCode: '1010', accountName: '현금및예금', side: 'credit', amount },
-    ],
+    lines: [expenseLine, { ...GL.cash(), side: 'credit', amount }],
   })
 }
 
@@ -190,12 +237,18 @@ export async function postExpenseAccrualJournal(params: {
   amountAbs: number
   expenseAccountCode?: string
   expenseAccountName?: string
+  expenseAccountSubjectId?: number | null
   memo?: string
   storeName?: string
   postedBy?: string
 }) {
   const amount = Math.abs(Number(params.amountAbs) || 0)
   if (amount <= 0) return null
+
+  const sid =
+    params.expenseAccountSubjectId != null && Number(params.expenseAccountSubjectId) > 0
+      ? Number(params.expenseAccountSubjectId)
+      : undefined
 
   return postJournalEntry({
     accountingDate: params.accountingDate,
@@ -206,12 +259,14 @@ export async function postExpenseAccrualJournal(params: {
     postedBy: params.postedBy || null,
     lines: [
       {
-        accountCode: params.expenseAccountCode || '5520',
-        accountName: params.expenseAccountName || '기타경비',
+        ...accountLine(params.expenseAccountCode || '5520', {
+          nameKo: params.expenseAccountName || accountLine('5520').accountName,
+        }),
         side: 'debit',
         amount,
+        ...(sid != null ? { accountSubjectId: sid } : {}),
       },
-      { accountCode: '2110', accountName: '매입채무', side: 'credit', amount },
+      { ...GL.payables(), side: 'credit', amount },
     ],
   })
 }
@@ -236,8 +291,8 @@ export async function postPayableSettlementJournal(params: {
     memo: params.memo || '미지급금 지급 자동분개',
     postedBy: params.postedBy || null,
     lines: [
-      { accountCode: '2110', accountName: '매입채무', side: 'debit', amount },
-      { accountCode: '1010', accountName: '현금및예금', side: 'credit', amount },
+      { ...GL.payables(), side: 'debit', amount },
+      { ...GL.cash(), side: 'credit', amount },
     ],
   })
 }
@@ -258,8 +313,8 @@ export async function postPosOrderJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || 'POS 매출 자동분개',
     lines: [
-      { accountCode: '1010', accountName: '현금및예금', side: 'debit', amount },
-      { accountCode: '4110', accountName: '매출', side: 'credit', amount },
+      { ...GL.cash(), side: 'debit', amount },
+      { ...GL.revenue(), side: 'credit', amount },
     ],
   })
 }
@@ -280,8 +335,8 @@ export async function postStorePurchaseJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || '매장 매입 자동분개',
     lines: [
-      { accountCode: '1460', accountName: '재고자산', side: 'debit', amount: amt },
-      { accountCode: '2110', accountName: '매입채무', side: 'credit', amount: amt },
+      { ...GL.inventory(), side: 'debit', amount: amt },
+      { ...GL.payables(), side: 'credit', amount: amt },
     ],
   })
 }
@@ -303,8 +358,8 @@ export async function postDepreciationJournal(params: {
     storeName: params.storeName || null,
     memo: params.memo || `감가상각 ${params.assetName || ''}`.trim(),
     lines: [
-      { accountCode: '5500', accountName: '감가상각비', side: 'debit', amount },
-      { accountCode: '1470', accountName: '감가상각누계액', side: 'credit', amount },
+      { ...GL.depreciationExpense(), side: 'debit', amount },
+      { ...GL.accumulatedDepreciation(), side: 'credit', amount },
     ],
   })
 }
@@ -350,6 +405,8 @@ export async function postWithdrawalJournal(params: {
   /** 경비/경비선급 시 계정과목 */
   expenseAccountCode?: string
   expenseAccountName?: string
+  /** 경비·고정자산 취득 등 사용자 선택 account_subjects.id (분개 라인에 그대로 연결) */
+  expenseAccountSubjectId?: number | null
   /** 이체 시 입금 계좌(통장→통장) */
   transferToAccountId?: number | null
   /** 이체 시 패티캐쉬 대상 매장(통장→패티) */
@@ -364,22 +421,25 @@ export async function postWithdrawalJournal(params: {
   const amount = Math.abs(Number(params.amountAbs) || 0)
   if (amount <= 0) return null
 
-  const cash = { accountCode: '1010', accountName: '현금및예금' }
-  const payable = { accountCode: '2110', accountName: '매입채무' }
-  const prepayment = { accountCode: '1160', accountName: '선급금' }
-  const loanPayable = { accountCode: '2150', accountName: '차입금' }
-  const loanReceivable = { accountCode: '1150', accountName: '대여금' }
-  const fixedAsset = {
-    accountCode: params.expenseAccountCode || '1490',
-    accountName: params.expenseAccountName || '기타유형자산',
-  }
-  const retainedEarnings = { accountCode: '3120', accountName: '이익잉여금' }
-  const vatPayable = { accountCode: '2180', accountName: '부가세예수금' }
-  const withholdingTaxPayable = { accountCode: '2190', accountName: '원천세예수금' }
-  const expense = {
-    accountCode: params.expenseAccountCode || '5520',
-    accountName: params.expenseAccountName || '기타경비',
-  }
+  const cash = GL.cash()
+  const payable = GL.payables()
+  const prepayment = accountLine('1160')
+  const loanPayable = accountLine('2150')
+  const loanReceivable = accountLine('1150')
+  const expenseSubjectId =
+    params.expenseAccountSubjectId != null && Number(params.expenseAccountSubjectId) > 0
+      ? Number(params.expenseAccountSubjectId)
+      : undefined
+
+  const fixedAsset = accountLine(params.expenseAccountCode || '1490', {
+    nameKo: params.expenseAccountName || accountLine('1490').accountName,
+  })
+  const retainedEarnings = accountLine('3120')
+  const vatPayable = accountLine('2180')
+  const withholdingTaxPayable = accountLine('2190')
+  const expense = accountLine(params.expenseAccountCode || '5520', {
+    nameKo: params.expenseAccountName || accountLine('5520').accountName,
+  })
 
   let lines: JournalLineInput[] = []
 
@@ -398,7 +458,12 @@ export async function postWithdrawalJournal(params: {
       break
     case 'expense':
       lines = [
-        { ...expense, side: 'debit', amount },
+        {
+          ...expense,
+          side: 'debit',
+          amount,
+          ...(expenseSubjectId != null ? { accountSubjectId: expenseSubjectId } : {}),
+        },
         { ...cash, side: 'credit', amount },
       ]
       break
@@ -410,7 +475,12 @@ export async function postWithdrawalJournal(params: {
       break
     case 'fixed_asset':
       lines = [
-        { ...fixedAsset, side: 'debit', amount },
+        {
+          ...fixedAsset,
+          side: 'debit',
+          amount,
+          ...(expenseSubjectId != null ? { accountSubjectId: expenseSubjectId } : {}),
+        },
         { ...cash, side: 'credit', amount },
       ]
       break
@@ -465,7 +535,7 @@ export async function postWithdrawalJournal(params: {
       ]
       break
     case 'tax_corporate': {
-      const corporateTaxPayable = { accountCode: '2170', accountName: '법인세납부예정금' }
+      const corporateTaxPayable = accountLine('2170')
       lines = [
         { ...corporateTaxPayable, side: 'debit', amount },
         { ...cash, side: 'credit', amount },

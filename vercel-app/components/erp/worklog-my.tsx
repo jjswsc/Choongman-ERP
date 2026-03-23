@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import {
@@ -298,7 +299,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
   const handleSaveProgress = async () => {
     if (!selectedStaff) return
     if (unfinishedCount > 0) {
-      const proceed = confirm(
+      const proceed = await appConfirm(
         `미완료 업무가 ${unfinishedCount}건 있습니다.\n` +
         `Save Progress만 하면 Continue가 생성되지 않습니다.\n` +
         `익일 Continue 생성을 원하면 Daily Close를 눌러주세요.\n\n` +
@@ -322,10 +323,10 @@ export function WorklogMy({ userName }: WorklogMyProps) {
         loadData()
       } else {
         const r = res as { messageKey?: string; message?: string }
-        alert(r.messageKey ? t(r.messageKey) : (translateApiMessage(r.message, t) || t("workLogSaveFail")))
+        await appAlert(r.messageKey ? t(r.messageKey) : (translateApiMessage(r.message, t) || t("workLogSaveFail")))
       }
     } catch (e) {
-      alert(t("workLogSaveError"))
+      await appAlert(t("workLogSaveError"))
     } finally {
       setSaving(false)
     }
@@ -333,7 +334,7 @@ export function WorklogMy({ userName }: WorklogMyProps) {
 
   const handleDailyClose = async () => {
     if (!selectedStaff) return
-        if (!confirm(t("workLogDailyCloseConfirm"))) return
+        if (!await appConfirm(t("workLogDailyCloseConfirm"))) return
     setSaving(true)
     try {
       const toClose = [...localContinue, ...localToday].filter((it) => it.content || it.id)
@@ -344,13 +345,13 @@ export function WorklogMy({ userName }: WorklogMyProps) {
       })
       if (res.success) {
         loadData()
-        alert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogCloseDone")))
+        await appAlert((res as { messageKey?: string }).messageKey ? t((res as { messageKey?: string }).messageKey!) : (translateApiMessage(res.message, t) || t("workLogCloseDone")))
       } else {
         const r = res as { messageKey?: string; message?: string }
-        alert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}` : t(r.messageKey || "workLogCloseFail"))
+        await appAlert(r.message ? `${t(r.messageKey || "workLogCloseFail")}: ${translateApiMessage(r.message, t)}` : t(r.messageKey || "workLogCloseFail"))
       }
     } catch (e) {
-      alert(t("workLogCloseError"))
+      await appAlert(t("workLogCloseError"))
     } finally {
       setSaving(false)
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
+import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
 type ExpenseAccrualRow = {
   id?: number
@@ -124,6 +125,13 @@ export async function POST(request: NextRequest) {
     }
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
+    }
+
+    if (accountSubjectId) {
+      const hdr = await assertAccountSubjectNotHeader(accountSubjectId)
+      if (!hdr.ok) {
+        return NextResponse.json({ success: false, message: hdr.message }, { status: hdr.status, headers })
+      }
     }
 
     const decoded = decodePayeeCode(row.payee_code)

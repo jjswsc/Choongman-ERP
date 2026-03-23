@@ -22,11 +22,12 @@ import {
   getStoreVisitHistory,
   type StoreVisitHistoryItem,
 } from "@/lib/api-client"
+import { attendanceBusinessDateStrBangkok } from "@/lib/attendance-utils"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return attendanceBusinessDateStrBangkok(Date.now())
 }
 
 export function VisitListTab() {

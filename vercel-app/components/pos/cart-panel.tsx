@@ -50,8 +50,17 @@ type TaxInvoiceProfile = {
   address: string
 }
 
+export type CartPanelAddItemPayload = {
+  id: string
+  name: string
+  price: number
+  promoId?: string
+  promoCode?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+}
+
 export interface CartPanelHandle {
-  addItem: (item: { id: string; name: string; price: number }) => void
+  addItem: (item: CartPanelAddItemPayload) => void
   clearCart: () => void
   openDineInPaymentFromOrder: (payload: {
     tableName: string
@@ -85,7 +94,17 @@ interface CartPanelProps {
   takeoutLabel?: string
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
   onOrderSubmit?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: {
+      id: string
+      name: string
+      price: number
+      quantity: number
+      orderType?: string
+      deliveryAppCode?: string
+      promoId?: string
+      promoCode?: string
+      promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
+    }[]
     tableName: string
     memo?: string
     discountAmt: number
@@ -163,6 +182,9 @@ interface CartPanelProps {
 
 interface CartItem extends OrderItem {
   note?: string
+  promoId?: string
+  promoCode?: string
+  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
@@ -193,6 +215,22 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const v = t(key)
     return !v || v === key ? fallback : v
   }
+
+  const mapCartItemToOrderPayload = (i: CartItem) => {
+    const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
+    return {
+      id: i.id,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+      orderType: orderTypeNorm,
+      ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
+      ...(i.promoId && i.promoItems
+        ? { promoId: i.promoId, promoCode: i.promoCode, promoItems: i.promoItems }
+        : {}),
+    }
+  }
+
   const [orderTypeInternal, setOrderTypeInternal] = useState<CartOrderType>('dine-in')
   const orderType = lockOrderType && orderTypeProp != null ? orderTypeProp : orderTypeInternal
   const canSubmit =
@@ -608,7 +646,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       orderLabel: orderType === 'delivery'
         ? (deliveryLabel || t('posOrderTypeDelivery') || '배달')
         : (takeoutLabelProp?.trim() || (t('posOrderTypeTakeout') || '포장')),
-      items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+      items: cartItems.map(mapCartItemToOrderPayload),
       memo: buildOrderMemo(customerMemo),
       discountAmt: discount,
       discountReason: discountReason,
@@ -659,7 +697,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
       onDineInOrderComplete(
         {
-          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: cartItems.map(mapCartItemToOrderPayload),
           tableName: dineInTableName,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -682,7 +720,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     } else if (orderType === 'delivery' && pendingOrderId != null && paymentTableNameOverride && onDeliveryOrderComplete) {
       onDeliveryOrderComplete(
         {
-          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: cartItems.map(mapCartItemToOrderPayload),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -704,7 +742,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     } else if (orderType === 'takeout' && pendingOrderId != null && paymentTableNameOverride && onTakeoutOrderComplete) {
       onTakeoutOrderComplete(
         {
-          items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: cartItems.map(mapCartItemToOrderPayload),
           orderLabel: paymentTableNameOverride,
           memo: buildOrderMemo(customerMemo),
           discountAmt: discount,
@@ -730,14 +768,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     handleClearCart()
   }
 
-  const addItem = (item: { id: string; name: string; price: number }) => {
-    const lineId = `cart-${Date.now()}-${item.id}`
-    setCartItems(prev => {
-      const existing = prev.find(p => p.name === item.name && p.price === item.price)
-      if (existing) {
-        return prev.map(p => p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p)
+  const addItem = (item: CartPanelAddItemPayload) => {
+    const lineId = item.promoId ? `promo-cart-${item.promoId}` : `cart-${Date.now()}-${item.id}`
+    setCartItems((prev) => {
+      if (item.promoId) {
+        const existing = prev.find((p) => p.promoId === item.promoId)
+        if (existing) {
+          return prev.map((p) =>
+            p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p
+          )
+        }
+        return [
+          ...prev,
+          {
+            id: lineId,
+            name: item.name,
+            price: item.price,
+            quantity: 1,
+            promoId: item.promoId,
+            promoCode: item.promoCode,
+            promoItems: item.promoItems,
+          },
+        ]
       }
-      return [...prev, { ...item, id: lineId, quantity: 1 }]
+      const existing = prev.find((p) => p.name === item.name && p.price === item.price && !p.promoId)
+      if (existing) {
+        return prev.map((p) => (p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p))
+      }
+      return [...prev, { id: lineId, name: item.name, price: item.price, quantity: 1 }]
     })
   }
 
@@ -1238,7 +1296,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               onClick={() => {
                 if (total <= 0 || !selectedTable || cartItems.length === 0 || guestCount <= 0) return
                 onOrderSubmit?.({
-                  items: cartItems.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+                  items: cartItems.map(mapCartItemToOrderPayload),
                   tableName: selectedTable.name,
                   memo: buildOrderMemo(customerMemo),
                   discountAmt: discount,

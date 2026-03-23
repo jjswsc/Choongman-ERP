@@ -25,10 +25,17 @@ export function cacheKeySales(storeCode: string, dateStr: string): string {
 /** 매출 분석 캐시 키 (기간/매장별) */
 export function cacheKeyAnalytics(
   type: 'posOptions' | 'period' | 'delivery' | 'channel' | 'menu' | 'payment' | 'store',
-  params: { startStr: string; endStr: string; pos?: string; groupBy?: string; search?: string }
+  params: {
+    startStr: string
+    endStr: string
+    pos?: string
+    groupBy?: string
+    search?: string
+    orderTypes?: string
+  }
 ): string {
-  const { startStr, endStr, pos = '', groupBy = '', search = '' } = params
-  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}`
+  const { startStr, endStr, pos = '', groupBy = '', search = '', orderTypes = '' } = params
+  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}:${orderTypes}`
 }
 
 export async function getFromCache<T>(
@@ -115,6 +122,19 @@ export async function setErpCache<T>(cacheKey: string, data: T): Promise<void> {
     const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
     const store = tx.objectStore(STORES.ERP_CACHE)
     const req = store.put(entry)
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** 단일 ERP 캐시 키 삭제 (통장 목록 등 갱신 후 재조회용) */
+export async function deleteErpCache(cacheKey: string): Promise<void> {
+  const db = await getDB()
+  if (!db.objectStoreNames.contains(STORES.ERP_CACHE)) return
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.ERP_CACHE, 'readwrite')
+    const store = tx.objectStore(STORES.ERP_CACHE)
+    const req = store.delete(cacheKey)
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
   })

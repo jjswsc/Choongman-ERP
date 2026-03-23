@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { BarChart3 } from "lucide-react"
@@ -138,10 +139,10 @@ export default function StockPage() {
       qty: newSafeQty,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       return
     }
-    alert(t("stockSafeSaveSuccess"))
+    await appAlert(t("stockSafeSaveSuccess"))
     fetchStock()
   }
 
@@ -157,10 +158,10 @@ export default function StockPage() {
       userRole: auth?.role,
     })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("stockAdjustFailed"))
+      await appAlert(translateApiMessage(res.message, t) || t("stockAdjustFailed"))
       return
     }
-    alert(t("stockAdjustSuccess"))
+    await appAlert(t("stockAdjustSuccess"))
     // 조정한 항목만 로컬 업데이트 (전체 refetch 없음 → 스크롤 위치 유지)
     setList((prev) =>
       prev.map((r) =>
@@ -177,7 +178,7 @@ export default function StockPage() {
     const nextDisabled = !item.orderDisabled
     const res = await updateItemOrderDisabled({ code: item.code, disabled: nextDisabled })
     if (!res.success) {
-      alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+      await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       return
     }
     setList((prev) =>

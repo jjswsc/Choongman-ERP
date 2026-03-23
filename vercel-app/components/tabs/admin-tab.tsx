@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
@@ -150,7 +151,7 @@ export function AdminTab() {
       setOtMinutesByRow((p) => { const next = { ...p }; delete next[id]; return next })
       if (!skipReload) loadAttendance()
     } else {
-      alert(translateApiMessage(res.message) || t("processFail"))
+      await appAlert(translateApiMessage(res.message) || t("processFail"))
     }
   }
 
@@ -163,7 +164,7 @@ export function AdminTab() {
       userRole: auth.role || "",
     })
     if (res.success) loadAttendance()
-    else alert(translateApiMessage(res.message) || t("processFail"))
+    else await appAlert(translateApiMessage(res.message) || t("processFail"))
   }
 
   const handleApproveNoClockOut = async (row: AttendanceDailyRow) => {
@@ -176,7 +177,7 @@ export function AdminTab() {
       userRole: auth.role || "",
     })
     if (res.success) loadAttendance()
-    else alert(translateApiMessage(res.message) || t("processFail"))
+    else await appAlert(translateApiMessage(res.message) || t("processFail"))
   }
 
   const handleEmergencyApprove = async (row: AttendanceNoRecordRow) => {
@@ -189,7 +190,7 @@ export function AdminTab() {
       userRole: auth.role || "",
     })
     if (res.success) loadAttendance()
-    else alert(translateApiMessage(res.message) || t("processFail"))
+    else await appAlert(translateApiMessage(res.message) || t("processFail"))
   }
 
   return (

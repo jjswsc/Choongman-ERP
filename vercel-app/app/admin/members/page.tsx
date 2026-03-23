@@ -1,4 +1,5 @@
 "use client"
+import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
 import { Users } from "lucide-react"
@@ -162,13 +163,13 @@ export default function MembersPage() {
   const onSave = async () => {
     const name = form.name.trim()
     if (!name) {
-      alert("회원 이름은 필수입니다.")
+      await appAlert("회원 이름은 필수입니다.")
       return
     }
     setSaving(true)
     try {
       if (!form.id) {
-        alert("신규 등록은 LINE OA를 통해 진행됩니다. 목록에서 회원을 선택해 수정해 주세요.")
+        await appAlert("신규 등록은 LINE OA를 통해 진행됩니다. 목록에서 회원을 선택해 수정해 주세요.")
         return
       }
       const res = await updateMember({
@@ -186,7 +187,7 @@ export default function MembersPage() {
         status: form.status,
       })
       if (!res.success || !res.member) {
-        alert(res.message || "회원 수정에 실패했습니다.")
+        await appAlert(res.message || "회원 수정에 실패했습니다.")
         return
       }
       setForm({ ...emptyForm })
@@ -316,7 +317,7 @@ export default function MembersPage() {
                     try {
                       const res = await syncLineMembers({ limit: 10000 })
                       if (!res.success) {
-                        alert(res.message || "LINE 회원 동기화에 실패했습니다.")
+                        await appAlert(res.message || "LINE 회원 동기화에 실패했습니다.")
                       } else {
                         setSyncMessage(
                           `동기화 완료: 조회 ${Number(res.scanned || 0).toLocaleString()}명, 반영 ${Number(
@@ -355,14 +356,14 @@ export default function MembersPage() {
                   onClick={async () => {
                     const file = importFileRef.current?.files?.[0]
                     if (!file) {
-                      alert("먼저 LINE CRM 파일(xlsx/xls/csv)을 선택해 주세요.")
+                      await appAlert("먼저 LINE CRM 파일(xlsx/xls/csv)을 선택해 주세요.")
                       return
                     }
                     setImporting(true)
                     try {
                       const res = await importLineCrmFile({ file })
                       if (!res.success) {
-                        alert(res.message || "LINE CRM 파일 반영에 실패했습니다.")
+                        await appAlert(res.message || "LINE CRM 파일 반영에 실패했습니다.")
                         return
                       }
                       setSyncMessage(

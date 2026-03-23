@@ -1,4 +1,5 @@
 "use client"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Users } from "lucide-react"
@@ -272,15 +273,15 @@ export default function EmployeesPage() {
   }
 
   const handleDelete = async (rowId: number) => {
-    if (!confirm(t("emp_confirm_delete"))) return
+    if (!await appConfirm(t("emp_confirm_delete"))) return
     setLoading(true)
     try {
       const res = await deleteAdminEmployee({ r: rowId, userStore, userRole })
-      alert(translateApiMessage(res.message ?? (res as { message?: string }).message, t) || t("msg_delete_ok"))
+      await appAlert(translateApiMessage(res.message ?? (res as { message?: string }).message, t) || t("msg_delete_ok"))
       await loadEmployeeList({ updateDisplay: true })
     } catch (e) {
       console.error(e)
-      alert(t("emp_result_empty") || t("msg_empty_result"))
+      await appAlert(t("emp_result_empty") || t("msg_empty_result"))
     } finally {
       setLoading(false)
     }
@@ -297,15 +298,15 @@ export default function EmployeesPage() {
         userName: auth?.user || userStore,
       })
       if (res.success) {
-        alert(translateApiMessage(res.message, t) || t("msg_saved"))
+        await appAlert(translateApiMessage(res.message, t) || t("msg_saved"))
         setForm({ ...emptyForm })
         await loadEmployeeList({ updateDisplay: true })
       } else {
-        alert(translateApiMessage(res.message, t) || t("msg_save_fail"))
+        await appAlert(translateApiMessage(res.message, t) || t("msg_save_fail"))
       }
     } catch (e) {
       console.error(e)
-      alert(t("msg_save_fail"))
+      await appAlert(t("msg_save_fail"))
     } finally {
       setSaving(false)
     }
@@ -340,7 +341,6 @@ export default function EmployeesPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminEmployees")}</h1>
-            <p className="text-xs text-muted-foreground">{t("tab_hr_list")}</p>
           </div>
         </div>
 

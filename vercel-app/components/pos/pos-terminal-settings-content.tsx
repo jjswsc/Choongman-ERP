@@ -1,4 +1,5 @@
 'use client'
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
@@ -64,17 +65,17 @@ export function PosTerminalSettingsContent() {
     loadData()
   }, [loadData])
 
-  const handleClearMain = () => {
+  const handleClearMain = async () => {
     if (!effectiveStore) return
-    if (!confirm(t('posTerminalClearMainConfirm') || '등록된 메인 포스를 해제하시겠습니까? 해당 기기에서 다시 등록할 수 있습니다.')) return
+    if (!(await appConfirm(t('posTerminalClearMainConfirm') || '등록된 메인 포스를 해제하시겠습니까? 해당 기기에서 다시 등록할 수 있습니다.'))) return
     setClearing(true)
     clearPosMainDevice({ storeCode: effectiveStore })
-      .then((res) => {
+      .then(async (res) => {
         if (res.success) {
           setMainDeviceToken(null)
           loadData()
         } else {
-          alert((res as { message?: string }).message || '해제에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
         }
       })
       .finally(() => setClearing(false))
@@ -91,33 +92,33 @@ export function PosTerminalSettingsContent() {
     }
   }
 
-  const handleSetMain = (deviceToken: string) => {
+  const handleSetMain = async (deviceToken: string) => {
     if (!effectiveStore) return
-    if (!confirm(t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?')) return
+    if (!(await appConfirm(t('posTerminalSetMainConfirm') || '이 기기를 메인 포스로 지정하시겠습니까?'))) return
     setActionToken(deviceToken)
     setPosMainDevice({ storeCode: effectiveStore, deviceToken })
-      .then((res) => {
+      .then(async (res) => {
         if (res.success) {
           setMainDeviceToken(deviceToken)
           loadData()
         } else {
-          alert((res as { message?: string }).message || '지정에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || '지정에 실패했습니다.')
         }
       })
       .finally(() => setActionToken(null))
   }
 
-  const handleRevoke = (deviceToken: string) => {
+  const handleRevoke = async (deviceToken: string) => {
     if (!effectiveStore) return
-    if (!confirm(t('posTerminalRevokeConfirm') || '이 기기의 접속을 해제하시겠습니까? 해당 기기는 목록에서 제거되며, 다시 터미널에 접속하면 목록에 나타납니다.')) return
+    if (!(await appConfirm(t('posTerminalRevokeConfirm') || '이 기기의 접속을 해제하시겠습니까? 해당 기기는 목록에서 제거되며, 다시 터미널에 접속하면 목록에 나타납니다.'))) return
     setActionToken(deviceToken)
     revokePosDevice({ storeCode: effectiveStore, deviceToken })
-      .then((res) => {
+      .then(async (res) => {
         if (res.success) {
           if (mainDeviceToken === deviceToken) setMainDeviceToken(null)
           loadData()
         } else {
-          alert((res as { message?: string }).message || '해제에 실패했습니다.')
+          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
         }
       })
       .finally(() => setActionToken(null))

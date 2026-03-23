@@ -1,4 +1,5 @@
 "use client"
+import { appConfirm } from "@/lib/app-message"
 
 import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -120,7 +121,7 @@ export function AdminPayrollHolidays({ readOnly = false }: AdminPayrollHolidaysP
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("holiday_delete_confirm"))) return
+    if (!await appConfirm(t("holiday_delete_confirm"))) return
     setSaving(true)
     setError(null)
     try {

@@ -53,7 +53,27 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter('bank_transactions', filter, {
       order: isDesc ? 'id.desc' : 'id.asc',
       limit: pageSize,
-    })) as { id?: number; trans_date?: string; trans_type?: string; amount?: number; memo?: string; note?: string; category?: string; account_subject_id?: number; sales_date?: string; expense_date?: string; vendor_code?: string; store_name?: string; invoice_received?: boolean; invoice_no?: string; invoice_photo_url?: string; purchase_order_id?: number }[]
+    })) as {
+      id?: number
+      trans_date?: string
+      trans_type?: string
+      amount?: number
+      memo?: string
+      note?: string
+      category?: string
+      account_subject_id?: number
+      sales_date?: string
+      expense_date?: string
+      vendor_code?: string
+      store_name?: string
+      invoice_received?: boolean
+      invoice_no?: string
+      invoice_photo_url?: string
+      purchase_order_id?: number
+      reconciled_at?: string | null
+      reconciled_by?: string | null
+      reconciliation_note?: string | null
+    }[]
 
     const linkedIds = new Set<number>()
     const rowIds = (rows || []).map((r) => Number(r.id)).filter((id) => id && !isNaN(id))
@@ -88,6 +108,12 @@ export async function GET(request: NextRequest) {
       invoicePhotoUrl: r.invoice_photo_url ? String(r.invoice_photo_url).trim() : undefined,
       purchaseOrderId: r.purchase_order_id ?? undefined,
       isLinked: linkedIds.has(Number(r.id || 0)),
+      reconciledAt: r.reconciled_at != null && String(r.reconciled_at).trim() ? String(r.reconciled_at) : null,
+      reconciledBy: r.reconciled_by != null && String(r.reconciled_by).trim() ? String(r.reconciled_by).trim() : null,
+      reconciliationNote:
+        r.reconciliation_note != null && String(r.reconciliation_note).trim()
+          ? String(r.reconciliation_note).trim()
+          : null,
     }))
 
     const periodDeposits = list.filter((t) => t.transType === 'deposit').reduce((s, t) => s + t.amount, 0)

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
@@ -17,6 +18,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
+    const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
       return NextResponse.json({ success: false, message: 'startStr, endStr 필요' }, { headers })
@@ -28,8 +30,15 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'store_code,subtotal,vat,total,status',
-    })) as { store_code?: string; subtotal?: number; vat?: number; total?: number; status?: string }[]
+      select: 'store_code,subtotal,vat,total,status,order_type',
+    })) as {
+      store_code?: string
+      subtotal?: number
+      vat?: number
+      total?: number
+      status?: string
+      order_type?: string
+    }[]
 
     const byStore: Record<
       string,
@@ -37,6 +46,7 @@ export async function GET(request: NextRequest) {
     > = {}
 
     for (const r of rows) {
+      if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
       const store = String(r.store_code ?? '').trim() || '(미지정)'
       if (!byStore[store]) byStore[store] = { count: 0, subtotal: 0, vat: 0, total: 0 }
