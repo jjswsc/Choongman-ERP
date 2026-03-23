@@ -413,23 +413,32 @@ export function WorklogApproval() {
                       <div className="bg-muted/20 px-5 py-2 text-xs font-bold text-muted-foreground">
                         {(dept === "기타" ? t("workLogOther") : dept)} · {staffList.find((s) => s.name === name || s.displayName === name)?.displayName || name}
                       </div>
-                      <table className="w-full text-left text-sm">
+                      <table className="w-full table-fixed text-left text-sm">
+                        <colgroup>
+                          <col className="w-32" />
+                          <col className="w-28" />
+                          <col />
+                          <col className="w-24" />
+                          <col className="w-20" />
+                          <col className="w-28" />
+                          <col className="w-40" />
+                        </colgroup>
                         <thead>
                           <tr className="border-b bg-muted/10">
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-32 whitespace-nowrap">{t("workLogColDate")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-28 whitespace-nowrap">{t("workLogColWorkType")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center">{t("workLogColContent")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-16">{t("workLogPriority")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-20">{t("workLogColProgress")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-24">{t("workLogColReviewStatus")}</th>
-                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center w-36">{t("workLogColAction")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColDate")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColWorkType")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center min-w-0 align-top break-words">{t("workLogColContent")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogPriority")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColProgress")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColReviewStatus")}</th>
+                            <th className="px-5 py-2 text-[11px] font-bold text-muted-foreground text-center whitespace-nowrap align-top">{t("workLogColAction")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {items.map((it) => (
                             <tr key={it.id} className="border-b last:border-b-0 hover:bg-muted/5">
-                              <td className="px-5 py-2 text-xs tabular-nums text-center whitespace-nowrap">{it.date}</td>
-                              <td className="px-5 py-2 text-center whitespace-nowrap">
+                              <td className="px-5 py-2 text-xs tabular-nums text-center whitespace-nowrap align-top">{it.date}</td>
+                              <td className="px-5 py-2 text-center whitespace-nowrap align-top">
                                 <span
                                   className={cn(
                                     "inline-flex rounded px-2 py-0.5 text-[10px] font-semibold",
@@ -441,13 +450,13 @@ export function WorklogApproval() {
                                   {getWorkTypeDisplay(it.status)}
                                 </span>
                               </td>
-                              <td className="px-5 py-2">
-                                <p className="text-sm text-foreground whitespace-pre-wrap">{getTransContent(it.content || "")}</p>
+                              <td className="px-5 py-2 min-w-0 align-top break-words">
+                                <p className="text-sm text-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{getTransContent(it.content || "")}</p>
                                 {it.managerComment && (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground whitespace-pre-wrap">{getTransComment(it.managerComment)}</p>
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{getTransComment(it.managerComment)}</p>
                                 )}
                               </td>
-                              <td className="px-5 py-2 text-center">
+                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
                                 <Select
                                   value={it.priority || "_none"}
                                   onValueChange={(v) => handlePriorityChange(it.id, v === "_none" ? "" : v)}
@@ -466,10 +475,10 @@ export function WorklogApproval() {
                                   </SelectContent>
                                 </Select>
                               </td>
-                              <td className="px-5 py-2 text-center">
+                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
                                 <span className="text-xs font-bold tabular-nums">{it.progress}%</span>
                               </td>
-                              <td className="px-5 py-2 text-center">
+                              <td className="px-5 py-2 text-center align-top whitespace-nowrap">
                                 <span
                                   className={cn(
                                     "inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold",
@@ -480,8 +489,8 @@ export function WorklogApproval() {
                                   {getReviewStatusDisplay(it)}
                                 </span>
                               </td>
-                              <td className="px-5 py-2">
-                                <div className="flex flex-row items-center gap-2">
+                              <td className="px-5 py-2 align-top whitespace-nowrap">
+                                <div className="flex flex-row items-center justify-center gap-2">
                                   {it.managerCheck === "대기" && (
                                     <Button
                                       size="sm"

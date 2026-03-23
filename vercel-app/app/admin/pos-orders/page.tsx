@@ -25,12 +25,19 @@ import {
   getPosOrders,
   getPosMenus,
   getPosPrinterSettings,
+  getPosDeliveryApps,
   updatePosOrder,
   updatePosOrderStatus,
   useStoreList,
   type PosOrder,
   type PosMenu,
+  type PosDeliveryApp,
 } from "@/lib/api-client"
+import {
+  getPosDeliveryPlatformName,
+  formatPosOrderTypeChannelSuffix,
+  getPosChannelOrderNoDisplay,
+} from "@/lib/pos-delivery-platform"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -49,6 +56,12 @@ const statusLabels: Record<string, string> = {
   ready: "준비완료",
   completed: "완료",
   cancelled: "취소",
+}
+
+function formatPosOrderGuestCount(o: PosOrder): string {
+  if (o.orderType !== "dine_in") return "—"
+  const n = Math.max(0, Math.trunc(Number(o.guestCount) || 0))
+  return String(n)
 }
 
 function formatBangkokDateTime(value: string | null | undefined) {
@@ -153,8 +166,31 @@ export default function PosOrdersPage() {
   const [editDiscountReason, setEditDiscountReason] = React.useState("")
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [addMenuId, setAddMenuId] = React.useState("")
+  const [deliveryAppsByStore, setDeliveryAppsByStore] = React.useState<
+    Record<string, PosDeliveryApp[]>
+  >({})
 
   const canSearchAll = isOfficeRole(auth?.role || "")
+
+  const formatListOrderType = React.useCallback(
+    (o: PosOrder) => {
+      const base = orderTypeLabels[o.orderType] || o.orderType
+      const channelSuffix =
+        o.orderType === "delivery" || o.orderType === "takeout"
+          ? formatPosOrderTypeChannelSuffix(o)
+          : ""
+      if (o.orderType !== "delivery") return `${base}${channelSuffix}`
+      const s = String(o.storeCode || "").trim()
+      const apps =
+        (s && deliveryAppsByStore[s]?.length ? deliveryAppsByStore[s] : null) ||
+        deliveryAppsByStore.__default__ ||
+        []
+      const platform = getPosDeliveryPlatformName(o, apps)
+      const mid = platform ? `${base} · ${platform}` : base
+      return `${mid}${channelSuffix}`
+    },
+    [deliveryAppsByStore]
+  )
 
   const filteredOrders = React.useMemo(() => {
     if (!searchTerm.trim()) return orders
@@ -341,7 +377,7 @@ export default function PosOrdersPage() {
           </style></head><body>
           <div class="k-header">${slip.label}</div>
           <div class="k-row"><strong>${o.orderNo}</strong></div>
-          <div class="k-row">${storeCode} · ${orderTypeLabels[o.orderType] || o.orderType}${o.tableName ? ` · ${t("posTable") || "테이블"}: ${o.tableName}` : ""}</div>
+          <div class="k-row">${storeCode} · ${formatListOrderType(o)}${o.tableName && o.orderType !== "delivery" ? ` · ${t("posTable") || "테이블"}: ${o.tableName}` : ""}</div>
           <div class="k-row">${o.createdAt ? new Date(o.createdAt).toLocaleString("ko-KR") : "-"}</div>
           <hr style="margin: 10px 0;" />
           ${slip.items.map((it) => `<div class="k-row">${it.name ?? "-"} × ${it.qty ?? 1}</div>`).join("")}
@@ -388,6 +424,41 @@ export default function PosOrdersPage() {
   React.useEffect(() => {
     getPosMenus().then(setMenus).catch(() => setMenus([]))
   }, [])
+
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const globalApps = await getPosDeliveryApps({ includeDisabled: true })
+        if (cancelled) return
+        const stores = [
+          ...new Set(
+            orders
+              .map((o) => String(o.storeCode || "").trim())
+              .filter(Boolean)
+          ),
+        ]
+        const storeLists = await Promise.all(
+          stores.map((s) =>
+            getPosDeliveryApps({ storeCode: s, includeDisabled: true })
+          )
+        )
+        if (cancelled) return
+        const next: Record<string, PosDeliveryApp[]> = {
+          __default__: globalApps,
+        }
+        stores.forEach((s, i) => {
+          next[s] = storeLists[i]
+        })
+        setDeliveryAppsByStore(next)
+      } catch {
+        if (!cancelled) setDeliveryAppsByStore({ __default__: [] })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [orders])
 
   const todayStr = new Date().toISOString().slice(0, 10)
   const isToday = startStr === todayStr && endStr === todayStr && statusFilter === "all"
@@ -626,6 +697,9 @@ export default function PosOrdersPage() {
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-16">
                         {t("posTable") || "테이블"}
                       </th>
+                      <th className="px-5 py-3 text-[11px] font-bold text-center w-14">
+                        {t("posOrderGuestCount") || "손님 수"}
+                      </th>
                       <th className="px-5 py-3 text-[11px] font-bold text-center w-24">
                         합계
                       </th>
@@ -642,7 +716,7 @@ export default function PosOrdersPage() {
                     {filteredOrders.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={9}
                           className="px-5 py-12 text-center text-muted-foreground"
                         >
                           {t("itemsNoResults") || "조회된 내역이 없습니다."}
@@ -671,11 +745,24 @@ export default function PosOrdersPage() {
                               </button>
                             </td>
                             <td className="px-5 py-3 text-center">{o.storeCode || "-"}</td>
-                            <td className="px-5 py-3 text-center">
-                              {orderTypeLabels[o.orderType] || o.orderType}
+                            <td className="px-5 py-3 text-center whitespace-nowrap">
+                              {formatListOrderType(o)}
                             </td>
                             <td className="px-5 py-3 text-center text-muted-foreground">
-                              {o.orderType === "dine_in" && o.tableName ? o.tableName : "-"}
+                              {o.orderType === "dine_in" && o.tableName ? (
+                                o.tableName
+                              ) : o.orderType === "delivery" || o.orderType === "takeout" ? (
+                                (() => {
+                                  const { text, usedHash } = getPosChannelOrderNoDisplay(o)
+                                  if (!text) return "-"
+                                  return usedHash ? `#${text}` : text
+                                })()
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-center tabular-nums text-muted-foreground">
+                              {formatPosOrderGuestCount(o)}
                             </td>
                             <td className="px-5 py-3 text-right font-bold tabular-nums">
                               {o.total?.toLocaleString()} ฿
@@ -720,13 +807,26 @@ export default function PosOrdersPage() {
                           </tr>
                           {expandedId === o.id && (
                             <tr className="border-b bg-muted/10">
-                              <td colSpan={8} className="px-5 py-4">
+                              <td colSpan={9} className="px-5 py-4">
                                 <div className="space-y-2 text-xs">
-                                  {(o.tableName || o.memo || (o.discountAmt && o.discountAmt > 0) || (o.deliveryFee ?? 0) > 0 || (o.packagingFee ?? 0) > 0 || ((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0) && (
+                                  {(o.tableName ||
+                                    o.orderType === "dine_in" ||
+                                    o.memo ||
+                                    (o.discountAmt && o.discountAmt > 0) ||
+                                    (o.deliveryFee ?? 0) > 0 ||
+                                    (o.packagingFee ?? 0) > 0 ||
+                                    (o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0) >
+                                      0) && (
                                     <div className="mb-2 pb-2 border-b">
-                                      {o.tableName && (
+                                      {o.tableName && o.orderType !== "delivery" && (
                                         <div className="text-muted-foreground">
                                           {t("posTable") || "테이블"}: {o.tableName}
+                                        </div>
+                                      )}
+                                      {o.orderType === "dine_in" && (
+                                        <div className="text-muted-foreground mt-0.5">
+                                          {t("posOrderGuestCount") || "손님 수"}:{" "}
+                                          {formatPosOrderGuestCount(o)}
                                         </div>
                                       )}
                                       {o.memo && (

@@ -1,11 +1,15 @@
 /**
  * 매장별 매출 집계. pos_orders 기반.
- * 매장명, 점유수(건수), 공급가액(subtotal), 세금(vat), 매출액(total)
+ * 매장명, 주문건수, guestSum(홀 guest_count 합), dine_in 전용 건수·매출·손님수, 홀 건당·홀 1인당·건당, 공급가액·세금·할인·매출액
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
-import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
+import {
+  normalizePosOrderTypeKey,
+  parseOrderTypesParam,
+  rowMatchesOrderFilter,
+} from '@/lib/pos-sales-order-type-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
@@ -30,30 +34,66 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: 50000,
-      select: 'store_code,subtotal,vat,total,status,order_type',
+      select:
+        'store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,guest_count,status,order_type',
     })) as {
       store_code?: string
       subtotal?: number
       vat?: number
       total?: number
+      discount_amt?: number
+      coupon_discount_amt?: number
+      guest_count?: number
       status?: string
       order_type?: string
     }[]
 
     const byStore: Record<
       string,
-      { count: number; subtotal: number; vat: number; total: number }
+      {
+        count: number
+        subtotal: number
+        vat: number
+        discount: number
+        total: number
+        guestSum: number
+        dineInOrderCount: number
+        dineInTotal: number
+        dineInGuestSum: number
+      }
     > = {}
 
     for (const r of rows) {
       if (!rowMatchesOrderFilter(r.order_type, orderTypesAllowed)) continue
       if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
       const store = String(r.store_code ?? '').trim() || '(미지정)'
-      if (!byStore[store]) byStore[store] = { count: 0, subtotal: 0, vat: 0, total: 0 }
+      if (!byStore[store])
+        byStore[store] = {
+          count: 0,
+          subtotal: 0,
+          vat: 0,
+          discount: 0,
+          total: 0,
+          guestSum: 0,
+          dineInOrderCount: 0,
+          dineInTotal: 0,
+          dineInGuestSum: 0,
+        }
       byStore[store].count += 1
       byStore[store].subtotal += Number(r.subtotal) || 0
       byStore[store].vat += Number(r.vat) || 0
+      byStore[store].discount += (Number(r.discount_amt) || 0) + (Number(r.coupon_discount_amt) || 0)
       byStore[store].total += Number(r.total) || 0
+      const gc = Math.max(0, Math.trunc(Number(r.guest_count) || 0))
+      byStore[store].guestSum += gc
+      {
+        const k = normalizePosOrderTypeKey(r.order_type)
+        if (k === 'dine_in' || k === '') {
+          byStore[store].dineInOrderCount += 1
+          byStore[store].dineInTotal += Number(r.total) || 0
+          byStore[store].dineInGuestSum += gc
+        }
+      }
     }
 
     const result = Object.entries(byStore)
@@ -62,7 +102,17 @@ export async function GET(request: NextRequest) {
         count: v.count,
         subtotal: v.subtotal,
         vat: v.vat,
+        discount: v.discount,
         total: v.total,
+        guestSum: v.guestSum,
+        dineInOrderCount: v.dineInOrderCount,
+        dineInTotal: v.dineInTotal,
+        dineInGuestSum: v.dineInGuestSum,
+        salesPerDineInOrder:
+          v.dineInOrderCount > 0 ? Math.round((v.dineInTotal / v.dineInOrderCount) * 100) / 100 : 0,
+        salesPerGuest:
+          v.dineInGuestSum > 0 ? Math.round((v.dineInTotal / v.dineInGuestSum) * 100) / 100 : 0,
+        salesPerOrder: v.count > 0 ? Math.round((v.total / v.count) * 100) / 100 : 0,
       }))
       .sort((a, b) => b.total - a.total)
 

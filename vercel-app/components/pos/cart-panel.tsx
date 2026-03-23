@@ -114,6 +114,8 @@ interface CartPanelProps {
     couponCode?: string
     couponDiscountAmt?: number
     pointUsed?: number
+    /** 홀 주문 인원 (매출 분석용) */
+    guestCount?: number
   }) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onDeliveryOrderComplete?: (payload: {
@@ -158,6 +160,7 @@ interface CartPanelProps {
     pointUsed?: number
     /** 선불: 결제 후 테이블 유지. 후불: 결제 시 테이블 초기화 */
     isPrepaid?: boolean
+    guestCount?: number
   }, existingOrderId?: number) => void
   /** 배달/포장 주문 결제 완료 시 */
   onNonDineOrderComplete?: (payload: {
@@ -714,6 +717,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           couponDiscountAmt: couponAppliedAmt || undefined,
           pointUsed: pointUsedNum || undefined,
           isPrepaid,
+          guestCount: guestCount > 0 ? guestCount : undefined,
         },
         pendingOrderId ?? undefined
       )
@@ -1306,6 +1310,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   couponCode: couponAppliedCode || undefined,
                   couponDiscountAmt: couponAppliedAmt || undefined,
                   pointUsed: pointUsedNum || undefined,
+                  guestCount,
                 })
               }}
             >

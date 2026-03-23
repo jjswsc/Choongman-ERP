@@ -60,13 +60,45 @@ export async function getPosSalesByPeriodWithCache(params: {
       return data
     } catch {
       const cached = await getFromCache<
-        { label: string; key: string; sales: number }[]
+        {
+          label: string
+          key: string
+          sales: number
+          count?: number
+          subtotal?: number
+          vat?: number
+          discount?: number
+          total?: number
+          guestSum?: number
+          dineInOrderCount?: number
+          dineInTotal?: number
+          dineInGuestSum?: number
+          salesPerDineInOrder?: number
+          salesPerGuest?: number
+          salesPerOrder?: number
+        }[]
       >('pos_sales_cache', key)
       return cached ?? []
     }
   }
   const cached = await getFromCache<
-    { label: string; key: string; sales: number }[]
+    {
+      label: string
+      key: string
+      sales: number
+      count?: number
+      subtotal?: number
+      vat?: number
+      discount?: number
+      total?: number
+      guestSum?: number
+      dineInOrderCount?: number
+      dineInTotal?: number
+      dineInGuestSum?: number
+      salesPerDineInOrder?: number
+      salesPerGuest?: number
+      salesPerOrder?: number
+    }[]
   >('pos_sales_cache', key)
   return cached ?? []
 }
@@ -208,13 +240,41 @@ export async function getPosSalesByStoreWithCache(params: {
       return data
     } catch {
       const cached = await getFromCache<
-        { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
+        {
+          storeName: string
+          count: number
+          subtotal: number
+          vat: number
+          discount?: number
+          total: number
+          guestSum?: number
+          dineInOrderCount?: number
+          dineInTotal?: number
+          dineInGuestSum?: number
+          salesPerDineInOrder?: number
+          salesPerGuest?: number
+          salesPerOrder?: number
+        }[]
       >('pos_sales_cache', key)
       return cached ?? []
     }
   }
   const cached = await getFromCache<
-    { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
+    {
+      storeName: string
+      count: number
+      subtotal: number
+      vat: number
+      discount?: number
+      total: number
+      guestSum?: number
+      dineInOrderCount?: number
+      dineInTotal?: number
+      dineInGuestSum?: number
+      salesPerDineInOrder?: number
+      salesPerGuest?: number
+      salesPerOrder?: number
+    }[]
   >('pos_sales_cache', key)
   return cached ?? []
 }

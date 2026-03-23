@@ -2168,7 +2168,24 @@ export async function getPosSalesByStore(params: {
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`)
   return res.json() as Promise<
-    { storeName: string; count: number; subtotal: number; vat: number; total: number }[]
+    {
+      storeName: string
+      count: number
+      subtotal: number
+      vat: number
+      discount: number
+      total: number
+      guestSum: number
+      dineInOrderCount: number
+      dineInTotal: number
+      dineInGuestSum: number
+      /** 홀(dine_in) 매출 ÷ 홀 건수 — 테이블(건)당 */
+      salesPerDineInOrder: number
+      /** 홀 매출 ÷ 홀 손님 수 — 1인당 */
+      salesPerGuest: number
+      /** 조회에 포함된 전체 주문: 매출 ÷ 건수 */
+      salesPerOrder: number
+    }[]
   >
 }
 
@@ -2193,7 +2210,26 @@ export async function getPosSalesByPeriod(params: {
   if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`)
-  return res.json() as Promise<{ label: string; key: string; sales: number }[]>
+  return res.json() as Promise<
+    {
+      label: string
+      key: string
+      /** 차트·호환: 결제 총액과 동일 */
+      sales: number
+      count: number
+      subtotal: number
+      vat: number
+      discount: number
+      total: number
+      guestSum: number
+      dineInOrderCount: number
+      dineInTotal: number
+      dineInGuestSum: number
+      salesPerDineInOrder: number
+      salesPerGuest: number
+      salesPerOrder: number
+    }[]
+  >
 }
 
 export async function getPosSalesByDeliveryApp(params: {
@@ -4510,6 +4546,8 @@ export interface PosOrder {
   couponDiscountAmt?: number
   pointUsed?: number
   pointEarned?: number
+  /** 홀 주문 인원(포장/배달 등은 0) */
+  guestCount?: number
   items: PosOrderItem[]
   subtotal: number
   vat: number
@@ -4628,6 +4666,7 @@ export async function updatePosOrder(params: {
   couponDiscountAmt?: number
   pointUsed?: number
   pointEarned?: number
+  guestCount?: number
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'
@@ -4692,6 +4731,8 @@ export async function savePosOrder(params: {
   couponDiscountAmt?: number
   pointUsed?: number
   pointEarned?: number
+  /** 홀 dine_in 시 권장. 미입력 시 0 */
+  guestCount?: number
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'

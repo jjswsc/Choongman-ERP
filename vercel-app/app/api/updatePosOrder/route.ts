@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
 
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     const couponDiscountAmt = Math.max(0, Number(body?.couponDiscountAmt ?? 0))
     const pointUsed = Math.max(0, Math.trunc(Number(body?.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body?.pointEarned ?? 0)))
+    const guestCountBody = body?.guestCount ?? body?.guest_count
     const pricingAdjustments = body?.pricingAdjustments || {}
 
     if (!id || items.length === 0) {
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
       'pos_orders',
       `id=eq.${id}`,
       { limit: 1 }
-    )) as { id?: number; status?: string; point_earned?: number }[] | null
+    )) as { id?: number; status?: string; point_earned?: number; order_type?: string }[] | null
 
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
@@ -91,6 +93,13 @@ export async function POST(req: NextRequest) {
       subtotal,
       vat,
       total,
+    }
+
+    if (guestCountBody !== undefined && guestCountBody !== null) {
+      const g = Math.trunc(Number(guestCountBody))
+      if (!Number.isNaN(g) && isDineInOrderTypeForGuestCount(existing[0]?.order_type)) {
+        patch.guest_count = Math.max(0, Math.min(99, g))
+      }
     }
 
     await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, patch)

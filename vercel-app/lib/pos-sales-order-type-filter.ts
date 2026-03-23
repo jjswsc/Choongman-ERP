@@ -6,6 +6,31 @@ export type PosOrderTypeValue = (typeof POS_ORDER_TYPE_DB_VALUES)[number]
 const ALLOWED = new Set<string>(POS_ORDER_TYPE_DB_VALUES)
 
 /**
+ * 하이픈/대소문자 차이(dine-in vs dine_in)를 DB 표준값 비교용으로 통일.
+ */
+export function normalizePosOrderTypeKey(raw: string | undefined | null): string {
+  return String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_')
+}
+
+/** 저장·집계용 표준 order_type (미인식 시 dine_in) */
+export function coercePosOrderTypeForDb(raw: string | undefined | null): PosOrderTypeValue {
+  const k = normalizePosOrderTypeKey(raw)
+  if (k === 'dine_in') return 'dine_in'
+  if (k === 'takeout') return 'takeout'
+  if (k === 'delivery') return 'delivery'
+  return 'dine_in'
+}
+
+/** guest_count 적용 대상: 홀(dine_in) 또는 DB에 타입 미기재(구데이터) */
+export function isDineInOrderTypeForGuestCount(raw: string | undefined | null): boolean {
+  const k = normalizePosOrderTypeKey(raw)
+  return k === 'dine_in' || k === ''
+}
+
+/**
  * 쿼리 `orderTypes=dine_in,takeout` 파싱.
  * 없거나 비어 있으면 필터 없음(전체).
  */
@@ -24,7 +49,7 @@ export function rowMatchesOrderFilter(
   allowed: PosOrderTypeValue[] | null
 ): boolean {
   if (allowed == null) return true
-  const t = String(orderType ?? '').trim()
+  const t = normalizePosOrderTypeKey(orderType)
   return (allowed as readonly string[]).includes(t)
 }
 

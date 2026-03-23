@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
+import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 
 /** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
 function generateOrderNo(storeCode: string): string {
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const storeCode = String(body.storeCode ?? '').trim()
-    const orderType = String(body.orderType ?? 'dine_in')
+    const orderType = coercePosOrderTypeForDb(body.orderType ?? body.order_type)
     const tableName = String(body.tableName ?? '')
     const memo = String(body.memo ?? '').trim()
     const discountAmt = Math.max(0, Number(body.discountAmt ?? 0))
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     const couponDiscountAmt = Math.max(0, Number(body.couponDiscountAmt ?? 0))
     const pointUsed = Math.max(0, Math.trunc(Number(body.pointUsed ?? 0)))
     const pointEarnedReq = Math.max(0, Math.trunc(Number(body.pointEarned ?? 0)))
+    const guestCountReq = Math.trunc(Number(body.guestCount ?? body.guest_count ?? 0))
     const items = Array.isArray(body.items) ? body.items : []
     const pricingAdjustments = body.pricingAdjustments || {}
 
@@ -60,6 +62,9 @@ export async function POST(req: NextRequest) {
     })
     const vat = pricing.vatFeeAmt
     const total = pricing.finalTotal
+
+    const guest_count =
+      orderType === 'dine_in' ? Math.max(0, Math.min(99, guestCountReq)) : 0
 
     const orderNo = generateOrderNo(storeCode)
     const row = {
@@ -87,6 +92,7 @@ export async function POST(req: NextRequest) {
       coupon_discount_amt: couponDiscountAmt,
       point_used: pointUsed,
       point_earned: pointEarnedReq,
+      guest_count,
     }
     const inserted = await supabaseInsert('pos_orders', row) as { id?: number }[]
     const created = Array.isArray(inserted) ? inserted[0] : inserted

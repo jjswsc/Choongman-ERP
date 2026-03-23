@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { toDateStrBangkok, bangkokDateRangeToUtc } from '@/lib/attendance-utils'
+import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 
 /** POS 주문 목록 조회 */
 export async function GET(request: NextRequest) {
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
       coupon_discount_amt?: number
       point_used?: number
       point_earned?: number
+      guest_count?: number
       items_json?: string
       subtotal?: number
       vat?: number
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
 
       if (!rows?.length && storeCode) {
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
           rows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
             limit: 10000,
-            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
+            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
           })) as typeof rows
           if (rows?.length) break
         }
@@ -95,7 +97,7 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -116,7 +118,7 @@ export async function GET(request: NextRequest) {
         id: r.id,
         orderNo: String(r.order_no ?? ''),
         storeCode: String(r.store_code ?? ''),
-        orderType: String(r.order_type ?? 'dine_in'),
+        orderType: coercePosOrderTypeForDb(r.order_type),
         tableName: String(r.table_name ?? ''),
         memo: String(r.memo ?? ''),
         discountAmt: Number(r.discount_amt) ?? 0,
@@ -133,6 +135,7 @@ export async function GET(request: NextRequest) {
         couponDiscountAmt: Number(r.coupon_discount_amt) ?? 0,
         pointUsed: Number(r.point_used) ?? 0,
         pointEarned: Number(r.point_earned) ?? 0,
+        guestCount: Math.max(0, Math.trunc(Number(r.guest_count) || 0)),
         items: (() => {
           try {
             const arr = JSON.parse(r.items_json || '[]')
