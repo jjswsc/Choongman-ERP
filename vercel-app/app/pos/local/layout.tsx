@@ -21,7 +21,7 @@ export default function PosLocalLayout({
   const headerTitle = isPettyCash ? t('adminPettyCash') : t('posCashInputOutput')
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col">
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm">
         <div className="flex items-center gap-1">
           <button
@@ -43,7 +43,9 @@ export default function PosLocalLayout({
         <span className="text-sm font-bold text-slate-800">{headerTitle || (isPettyCash ? '패티 캐쉬' : '시재 입출금')}</span>
         <div className="w-16" />
       </header>
-      <main className="flex-1 overflow-auto px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-6 sm:px-6 lg:px-8 [-webkit-overflow-scrolling:touch]">
+        {children}
+      </main>
     </div>
   )
 }

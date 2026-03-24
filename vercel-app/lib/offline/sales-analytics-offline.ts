@@ -43,7 +43,7 @@ export async function getPosSalesFilterOptionsWithCache(params: {
 export async function getPosSalesByPeriodWithCache(params: {
   startStr: string
   endStr: string
-  groupBy: 'month' | 'week' | 'day' | 'dow'
+  groupBy: 'month' | 'week' | 'day' | 'dow' | 'hour'
   pos?: string
   orderTypes?: string[]
 }) {

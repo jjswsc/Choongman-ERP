@@ -61,6 +61,12 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+    if (!editingId && !String(body.marketingCampaignId ?? '').trim()) {
+      return NextResponse.json(
+        { success: false, message: '캠페인 선택은 필수입니다. 캠페인 허브에서 연동 후 저장해 주세요.' },
+        { headers }
+      )
+    }
 
     const categorySub = String(body.category ?? '세트').trim() || '세트'
     const categoryMain = String(body.categoryMain ?? PROMOTION_MAIN_CATEGORY).trim() || PROMOTION_MAIN_CATEGORY
@@ -174,6 +180,15 @@ export async function POST(req: NextRequest) {
       }
       promoId = await insertPromoRow()
       if (!promoId) {
+        const rows = (await supabaseSelectFilter(
+          'pos_promos',
+          `code=eq.${encodeURIComponent(code)}`,
+          { limit: 1, select: 'id' }
+        )) as { id?: number }[] | null
+        const rid = rows?.[0]?.id
+        if (rid != null) promoId = String(rid)
+      }
+      if (!promoId) {
         return NextResponse.json({ success: false, message: '저장 후 ID를 확인할 수 없습니다.' }, { headers })
       }
     }
@@ -206,15 +221,22 @@ export async function POST(req: NextRequest) {
     const raw = e instanceof Error ? e.message : String(e)
     let message = raw
     if (
+      raw.includes('23505') ||
+      raw.includes('idx_pos_promos_code') ||
+      /duplicate key value violates unique constraint/i.test(raw)
+    ) {
+      message =
+        '이미 사용 중인 프로모션 코드입니다. 코드를 바꾸거나 페이지에서 자동 채번을 다시 적용해 주세요. RLS로 pos_promos 목록 조회가 막혀 있으면 중복인데도 통과한 뒤 저장 시 이 오류가 날 수 있으니, SUPABASE_SERVICE_ROLE_KEY 또는 pos_promos SELECT 정책을 확인하세요.'
+    } else if (
       raw.includes('42501') ||
       (raw.includes('PGRST') && raw.includes('row-level security')) ||
       /row-level security policy/i.test(raw)
     ) {
       const menusHint = /pos_menus/i.test(raw)
-        ? ' 그리고 pos_menus용으로 sql/pos_menus_rls_policies.sql 도 실행하세요.'
+        ? ' 그리고 pos_menus용으로 vercel-app/sql/pos_menus_rls_policies.sql 도 실행하세요.'
         : ''
       message =
-        'Supabase RLS로 저장이 거부되었습니다. Vercel에 SUPABASE_SERVICE_ROLE_KEY를 넣거나(권장), Supabase에서 sql/pos_promos_rls_policies.sql 을 실행하세요.' +
+        'Supabase RLS로 저장이 거부되었습니다. Vercel에 SUPABASE_SERVICE_ROLE_KEY를 넣거나(권장), Supabase에서 vercel-app/sql/pos_promos_rls_policies.sql 을 실행하세요.' +
         menusHint
     }
     return NextResponse.json({ success: false, message }, { headers })

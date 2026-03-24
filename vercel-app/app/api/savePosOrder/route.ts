@@ -3,6 +3,7 @@ import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 
 /** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
 function generateOrderNo(storeCode: string): string {
@@ -113,6 +114,12 @@ export async function POST(req: NextRequest) {
       await supabaseUpdateByFilter('pos_orders', `id=eq.${Number(created.id)}`, {
         point_earned: pointEarned,
       })
+    }
+
+    try {
+      await upsertTaxRecipientFromOrderMemo(storeCode, memo, 'pos_order_memo')
+    } catch (taxErr) {
+      console.error('savePosOrder tax recipient upsert:', taxErr)
     }
 
     return NextResponse.json({

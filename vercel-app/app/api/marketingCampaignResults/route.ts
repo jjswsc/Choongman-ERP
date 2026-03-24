@@ -8,6 +8,17 @@ import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
 
+function isColumnSchemaError(e: unknown): boolean {
+  const s = String(e)
+  return (
+    s.includes('42703') ||
+    s.includes('PGRST204') ||
+    s.includes('schema cache') ||
+    /Could not find the .* column/i.test(s) ||
+    /column .* does not exist/i.test(s)
+  )
+}
+
 function posMatchesBranch(storeCode: string, branches: string[]): boolean {
   if (!branches?.length) return true
   const p = String(storeCode || '').toLowerCase().trim()
@@ -15,6 +26,54 @@ function posMatchesBranch(storeCode: string, branches: string[]): boolean {
   return branches.some(
     (b) => String(b || '').toLowerCase().trim() === p || p.includes(String(b).toLowerCase())
   )
+}
+
+type OrderRow = {
+  order_type?: string
+  total?: number
+  store_code?: string
+  status?: string
+}
+
+function aggregateOrders(rows: OrderRow[], branches: string[], enforceBranch: boolean) {
+  let dineInOrders = 0
+  let deliveryOrders = 0
+  let carryOutOrders = 0
+  let dineInSales = 0
+  let deliverySales = 0
+  let carryOutSales = 0
+
+  for (const r of rows) {
+    if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
+    if (enforceBranch && !posMatchesBranch(r.store_code ?? '', branches)) continue
+
+    const amt = Number(r.total) || 0
+    const orderType = String(r.order_type ?? '').toLowerCase()
+
+    if (orderType === 'dine_in') {
+      dineInOrders++
+      dineInSales += amt
+    } else if (orderType === 'delivery') {
+      deliveryOrders++
+      deliverySales += amt
+    } else if (orderType === 'takeout') {
+      carryOutOrders++
+      carryOutSales += amt
+    }
+  }
+
+  const totalOrders = dineInOrders + deliveryOrders + carryOutOrders
+  const totalSales = dineInSales + deliverySales + carryOutSales
+  return {
+    dineInOrders,
+    deliveryOrders,
+    carryOutOrders,
+    totalOrders,
+    dineInSales,
+    deliverySales,
+    carryOutSales,
+    totalSales,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -47,47 +106,58 @@ export async function GET(request: NextRequest) {
 
     if (!startDate || !endDate) {
       return NextResponse.json(
-        { success: true, campaignId, startDate, endDate, dineInOrders: 0, deliveryOrders: 0, carryOutOrders: 0, totalOrders: 0, dineInSales: 0, deliverySales: 0, carryOutSales: 0, totalSales: 0 },
+        {
+          success: true,
+          campaignId,
+          startDate,
+          endDate,
+          dineInOrders: 0,
+          deliveryOrders: 0,
+          carryOutOrders: 0,
+          totalOrders: 0,
+          dineInSales: 0,
+          deliverySales: 0,
+          carryOutSales: 0,
+          totalSales: 0,
+          linkedOrders: 0,
+          fallbackOrders: 0,
+          attributionMode: 'heuristic',
+          attributionConfidence: 0,
+        },
         { headers }
       )
     }
 
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startDate, endDate)
-    const filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-
-    const rows = (await supabaseSelectFilter('pos_orders', filter, {
+    const fallbackFilter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
+    const fallbackRows = (await supabaseSelectFilter('pos_orders', fallbackFilter, {
       limit: 50000,
       select: 'order_type,total,store_code,status',
-    })) as { order_type?: string; total?: number; store_code?: string; status?: string }[]
+    })) as OrderRow[]
+    const fallback = aggregateOrders(fallbackRows || [], branches, true)
 
-    let dineInOrders = 0
-    let deliveryOrders = 0
-    let carryOutOrders = 0
-    let dineInSales = 0
-    let deliverySales = 0
-    let carryOutSales = 0
-
-    for (const r of rows) {
-      if (!COMPLETED_STATUSES.includes(String(r.status ?? ''))) continue
-      if (!posMatchesBranch(r.store_code ?? '', branches)) continue
-
-      const amt = Number(r.total) || 0
-      const orderType = String(r.order_type ?? '').toLowerCase()
-
-      if (orderType === 'dine_in') {
-        dineInOrders++
-        dineInSales += amt
-      } else if (orderType === 'delivery') {
-        deliveryOrders++
-        deliverySales += amt
-      } else if (orderType === 'takeout') {
-        carryOutOrders++
-        carryOutSales += amt
-      }
+    let linkedRows: OrderRow[] = []
+    let linkedSupported = true
+    try {
+      linkedRows = (await supabaseSelectFilter(
+        'pos_orders',
+        `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}&created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`,
+        {
+          limit: 50000,
+          select: 'order_type,total,store_code,status,marketing_campaign_id',
+        }
+      )) as OrderRow[]
+    } catch (e) {
+      linkedSupported = !isColumnSchemaError(e)
+      if (linkedSupported) throw e
+      linkedRows = []
     }
-
-    const totalOrders = dineInOrders + deliveryOrders + carryOutOrders
-    const totalSales = dineInSales + deliverySales + carryOutSales
+    const linked = aggregateOrders(linkedRows || [], branches, false)
+    const useLinked = linked.totalOrders > 0
+    const final = useLinked ? linked : fallback
+    const attributionMode: 'linked' | 'heuristic' | 'hybrid' =
+      useLinked ? (fallback.totalOrders > linked.totalOrders ? 'hybrid' : 'linked') : 'heuristic'
+    const attributionConfidence = useLinked ? 0.95 : linkedSupported ? 0.55 : 0.4
 
     return NextResponse.json(
       {
@@ -95,14 +165,18 @@ export async function GET(request: NextRequest) {
         campaignId,
         startDate,
         endDate,
-        dineInOrders,
-        deliveryOrders,
-        carryOutOrders,
-        totalOrders,
-        dineInSales,
-        deliverySales,
-        carryOutSales,
-        totalSales,
+        dineInOrders: final.dineInOrders,
+        deliveryOrders: final.deliveryOrders,
+        carryOutOrders: final.carryOutOrders,
+        totalOrders: final.totalOrders,
+        dineInSales: final.dineInSales,
+        deliverySales: final.deliverySales,
+        carryOutSales: final.carryOutSales,
+        totalSales: final.totalSales,
+        linkedOrders: linked.totalOrders,
+        fallbackOrders: fallback.totalOrders,
+        attributionMode,
+        attributionConfidence,
       },
       { headers }
     )

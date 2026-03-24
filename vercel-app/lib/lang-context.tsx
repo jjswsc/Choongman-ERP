@@ -4,11 +4,18 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 export type LangCode = 'ko' | 'en' | 'th' | 'mm' | 'la' | 'kh' | 'vi' | 'ms'
 
+/** UI·sessionStorage와 동일한 지원 언어 목록 (한곳에서만 정의) */
+export const LANG_CODES: readonly LangCode[] = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
+
+export function isLangCode(s: string): s is LangCode {
+  return (LANG_CODES as readonly string[]).includes(s)
+}
+
 function loadLang(): LangCode {
   if (typeof window === 'undefined') return 'ko'
   try {
     const s = sessionStorage.getItem('cm_lang')
-    if (s && ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms'].includes(s)) return s as LangCode
+    if (s && isLangCode(s)) return s
   } catch {}
   return 'ko'
 }

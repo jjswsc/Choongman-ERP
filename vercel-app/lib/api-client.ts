@@ -3,6 +3,7 @@
  * core fetch/auth는 lib/api/ 에서 분리
  * 쓰기 API는 apiFetchWithOffline 사용 → 네트워크 실패 시 큐 적재, 복구 후 자동 전송
  */
+import { apiFetch } from './api/fetch'
 import { apiFetchWithOffline } from './api/fetch-offline'
 import {
   getChecklistItemsWithCache,
@@ -2198,7 +2199,7 @@ export async function getPosSalesFilterOptions(params: { startStr: string; endSt
 export async function getPosSalesByPeriod(params: {
   startStr: string
   endStr: string
-  groupBy: 'month' | 'week' | 'day' | 'dow'
+  groupBy: 'month' | 'week' | 'day' | 'dow' | 'hour'
   pos?: string
   orderTypes?: string[]
 }) {
@@ -3606,6 +3607,9 @@ export async function savePosMenu(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** uploadPosMenuImage: 비 JSON 응답(413 HTML 등) 시 message로 구분 */
+export const POS_MENU_UPLOAD_TOO_LARGE = '__POS_MENU_UPLOAD_TOO_LARGE__'
+
 export async function uploadPosMenuImage(params: { file: File }) {
   const formData = new FormData()
   formData.append('file', params.file)
@@ -3613,7 +3617,24 @@ export async function uploadPosMenuImage(params: { file: File }) {
     method: 'POST',
     body: formData,
   })
-  return res.json() as Promise<{ success: boolean; message?: string; url?: string }>
+  const raw = await res.text()
+  try {
+    const parsed = JSON.parse(raw) as { success?: boolean; message?: string; url?: string }
+    return {
+      success: Boolean(parsed.success) && res.ok,
+      message: parsed.message,
+      url: parsed.url,
+    }
+  } catch {
+    const tooLarge =
+      res.status === 413 ||
+      /413|payload too large|entity too large|request entity too large/i.test(raw)
+    return {
+      success: false,
+      message: tooLarge ? POS_MENU_UPLOAD_TOO_LARGE : undefined,
+      url: undefined,
+    }
+  }
 }
 
 export async function deletePosMenu(params: { id: string }) {
@@ -3665,8 +3686,10 @@ export interface PosPromoItem {
   sortOrder: number
 }
 
-export async function getPosPromos() {
-  const res = await apiFetchWithOffline('/api/getPosPromos')
+export async function getPosPromos(params?: { campaignId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  const res = await apiFetchWithOffline('/api/getPosPromos' + (q.toString() ? '?' + q.toString() : ''))
   return res.json() as Promise<PosPromo[]>
 }
 
@@ -3765,8 +3788,10 @@ export async function deletePosPromo(params: { id: string }) {
 // ─── 마케팅 캠페인 ───
 export interface MarketingCampaign {
   id: string
+  campaignNo?: string
   topic: string
   format: string
+  campaignType?: string
   status: string
   startDate?: string | null
   endDate?: string | null
@@ -3786,6 +3811,8 @@ export interface MarketingCampaignDetail extends MarketingCampaign {
   costProduction: number
   costFood: number
   costInfluencer: number
+  costOther: number
+  costOtherLabel: string
   campaignPerformance: string
   conclusion: string
   createdAt?: string
@@ -3805,8 +3832,10 @@ export async function getMarketingCampaign(id: string) {
 
 export async function saveMarketingCampaign(params: {
   id?: string
+  campaignNo?: string
   topic: string
   format?: string
+  campaignType?: string
   status?: string
   detail?: string
   startDate?: string | null
@@ -3820,6 +3849,8 @@ export async function saveMarketingCampaign(params: {
   costProduction?: number
   costFood?: number
   costInfluencer?: number
+  costOther?: number
+  costOtherLabel?: string
   budgetTotal?: number
   kpiTarget?: number
   kpiUnit?: string
@@ -3856,6 +3887,10 @@ export async function getMarketingCampaignCosts(campaignId: string) {
     bankCosts?: number
     pettyCosts?: number
     totalCosts?: number
+    linkedCosts?: number
+    heuristicCosts?: number
+    attributionMode?: 'linked' | 'heuristic' | 'hybrid'
+    attributionConfidence?: number
   }>
 }
 
@@ -3866,7 +3901,6 @@ export async function getMarketingCampaignResults(params: { campaignId: string }
     success: boolean
     message?: string
     campaignId?: string
-    importId?: string
     startDate?: string | null
     endDate?: string | null
     dineInOrders?: number
@@ -3877,12 +3911,17 @@ export async function getMarketingCampaignResults(params: { campaignId: string }
     deliverySales?: number
     carryOutSales?: number
     totalSales?: number
+    linkedOrders?: number
+    fallbackOrders?: number
+    attributionMode?: 'linked' | 'heuristic' | 'hybrid'
+    attributionConfidence?: number
   }>
 }
 
-export async function importMarketingExcel(file: File) {
+export async function importMarketingExcel(file: File, options?: { dryRun?: boolean }) {
   const form = new FormData()
   form.set('file', file)
+  if (options?.dryRun) form.set('dryRun', '1')
   const res = await apiFetchWithOffline('/api/importMarketingExcel', {
     method: 'POST',
     body: form,
@@ -3893,6 +3932,20 @@ export async function importMarketingExcel(file: File) {
     campaignsInserted?: number
     adsInserted?: number
     influencersInserted?: number
+    timelineAdsInserted?: number
+    unmappedAds?: number
+    unmappedInfluencers?: number
+    dryRun?: boolean
+    preview?: {
+      detectedSheets?: string[]
+      campaignCandidates?: number
+      adCandidates?: number
+      influencerCandidates?: number
+      timelineCandidates?: number
+      mappedAds?: number
+      mappedInfluencers?: number
+      warnings?: string[]
+    }
   }>
 }
 
@@ -4004,6 +4057,54 @@ export async function deleteMarketingInfluencer(params: { id: string }) {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+// ─── 마케팅 판촉물 ───
+export interface MarketingMaterial {
+  id: string
+  campaignId: string | null
+  type: string
+  name: string
+  quantity: number
+  unitCost: number
+  branches: string[]
+  status: string
+  note: string
+}
+
+export async function getMarketingMaterials(params?: { campaignId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  const res = await apiFetchWithOffline('/api/marketingMaterials' + (q.toString() ? '?' + q.toString() : ''))
+  return res.json() as Promise<MarketingMaterial[]>
+}
+
+export async function saveMarketingMaterial(params: {
+  id?: string
+  campaignId: string
+  type?: string
+  name: string
+  quantity?: number
+  unitCost?: number
+  branches?: string[]
+  status?: string
+  note?: string
+}) {
+  const res = await apiFetchWithOffline('/api/marketingMaterials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingMaterial(params: { id: string }) {
+  const res = await apiFetchWithOffline('/api/deleteMarketingMaterial', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export interface PosCoupon {
   id?: number
   code: string
@@ -4017,6 +4118,7 @@ export interface PosCoupon {
   maxUses?: number | null
   usedCount?: number
   isActive?: boolean
+  marketingCampaignId?: string | null
 }
 
 export async function getPosCoupons() {
@@ -4512,6 +4614,8 @@ export interface PosOrderItem {
   name: string
   price: number
   qty: number
+  /** 줄 단위 메모 (주방·영수증) */
+  note?: string
   servedAt?: string | null
   servedBy?: string | null
   orderType?: string
@@ -4752,6 +4856,108 @@ export async function savePosOrder(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; orderId?: number; orderNo?: string; message?: string }>
+}
+
+export interface PosTaxInvoiceRecipientRow {
+  id: string
+  store_code: string
+  member_id: number | null
+  member_no: string | null
+  customer_type: 'person' | 'company'
+  name: string
+  tax_id: string
+  branch_no: string
+  phone: string
+  phone_normalized: string
+  email: string
+  address: string
+  is_active: boolean
+  notes: string | null
+  source: string | null
+  created_at: string
+  updated_at: string
+  last_used_at: string | null
+}
+
+/** 세금계산서 수취인 검색·목록 (관리자·POS) */
+export async function getPosTaxInvoiceRecipients(params: {
+  userStore: string
+  userRole: string
+  storeCode?: string
+  q?: string
+  by?: 'phone' | 'taxId' | 'name' | 'memberNo'
+  limit?: number
+}) {
+  const q = new URLSearchParams()
+  q.set('userStore', params.userStore)
+  q.set('userRole', params.userRole)
+  if (params.storeCode) q.set('storeCode', params.storeCode)
+  if (params.q) q.set('q', params.q)
+  if (params.by) q.set('by', params.by)
+  if (params.limit != null) q.set('limit', String(params.limit))
+  const res = await apiFetch(`/api/posTaxInvoiceRecipients?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    rows?: PosTaxInvoiceRecipientRow[]
+    message?: string
+  }>
+}
+
+/** 세금계산서 수취인 upsert (POS 결제 등) — 오프라인 시 큐 */
+export async function upsertPosTaxInvoiceRecipient(params: {
+  userStore: string
+  userRole: string
+  storeCode: string
+  memberId?: number | null
+  memberNo?: string | null
+  customerType: 'person' | 'company'
+  name: string
+  taxId: string
+  branchNo: string
+  phone: string
+  email: string
+  address: string
+  source?: string
+}) {
+  const res = await apiFetchWithOffline('/api/posTaxInvoiceRecipients', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    row?: PosTaxInvoiceRecipientRow
+    message?: string
+  }>
+}
+
+/** 관리자: 수취인 수정·비활성화 */
+export async function patchPosTaxInvoiceRecipient(params: {
+  userStore: string
+  userRole: string
+  id: string
+  is_active?: boolean
+  notes?: string | null
+  name?: string
+  taxId?: string
+  branchNo?: string
+  phone?: string
+  email?: string
+  address?: string
+  customerType?: 'person' | 'company'
+  member_id?: number | null
+  member_no?: string | null
+}) {
+  const res = await apiFetch('/api/posTaxInvoiceRecipients', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    row?: PosTaxInvoiceRecipientRow
+    message?: string
+  }>
 }
 
 export async function getLineMembers(params?: { q?: string; limit?: number }) {

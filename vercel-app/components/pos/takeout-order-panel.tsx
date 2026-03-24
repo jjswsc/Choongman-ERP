@@ -8,6 +8,8 @@ import type { Order } from '@/lib/pos-types'
 import { markPosOrderItemServed, updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { Check, CheckCircle, Clock, XCircle } from 'lucide-react'
+import { useLang } from '@/lib/lang-context'
+import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TakeoutOrderPanelProps {
   orderLabel: string
@@ -20,15 +22,6 @@ export interface TakeoutOrderPanelProps {
   t?: (key: string) => string
 }
 
-function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
 export function TakeoutOrderPanel({
   orderLabel,
   order,
@@ -38,6 +31,7 @@ export function TakeoutOrderPanel({
   onClose,
   t = (k) => k,
 }: TakeoutOrderPanelProps) {
+  const { lang } = useLang()
   const isCompleted = order?.status === 'completed'
   const [itemPackaged, setItemPackaged] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
@@ -132,7 +126,7 @@ export function TakeoutOrderPanel({
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Clock className="w-4 h-4 shrink-0" />
-            <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
+            <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
           </div>
 
           {isCompleted ? (

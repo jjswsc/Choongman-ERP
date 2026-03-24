@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select"
 import { getLoginData, loginCheck, changePassword } from "@/lib/api-client"
 import { useAuth, loadOfflineResumeAuth, type AuthState } from "@/lib/auth-context"
-import { useLang } from "@/lib/lang-context"
+import { isLangCode, useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 
@@ -144,10 +144,9 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem("cm_lang")
-      if (saved && ["ko", "en", "th", "mm", "la"].includes(saved))
-        setLang(saved as "ko" | "en" | "th" | "mm" | "la")
+      if (saved && isLangCode(saved)) setLang(saved)
     }
-  }, [])
+  }, [setLang])
 
   const handleStoreChange = (s: string) => {
     setStore(s)
@@ -155,10 +154,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   }
 
   const handleLangChange = (l: string) => {
-    if (["ko", "en", "th", "mm", "la"].includes(l)) setLang(l as "ko" | "en" | "th" | "mm" | "la")
-    try {
-      sessionStorage.setItem("cm_lang", l)
-    } catch {}
+    if (isLangCode(l)) setLang(l)
   }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -390,7 +386,14 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       manualUserPlaceholder: "ພິມຊື່ຂອງທ່ານ",
     },
   } as const
-  const t = labels[lang as keyof typeof labels] || labels.ko
+
+  /** 번들 문자열(ko~la만 정의). kh·vi·ms 등은 영어 UI로 폴백(i18n 키는 tMsg가 해당 언어 처리). */
+  type LoginLabelLang = keyof typeof labels
+  const LOGIN_BUILTIN_LABEL_LANGS = ["ko", "en", "th", "mm", "la"] as const satisfies readonly LoginLabelLang[]
+  const loginLabelLang: LoginLabelLang = (LOGIN_BUILTIN_LABEL_LANGS as readonly string[]).includes(lang)
+    ? (lang as (typeof LOGIN_BUILTIN_LABEL_LANGS)[number])
+    : "en"
+  const t = labels[loginLabelLang]
 
   return (
     <div className="login-page">
@@ -451,6 +454,9 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                 <SelectItem value="th">🇹🇭 ภาษาไทย</SelectItem>
                 <SelectItem value="mm">🇲🇲 မြန်မာ</SelectItem>
                 <SelectItem value="la">🇱🇦 ພາສາລາວ</SelectItem>
+                <SelectItem value="kh">🇰🇭 ភាសាខ្មែរ</SelectItem>
+                <SelectItem value="vi">🇻🇳 Tiếng Việt</SelectItem>
+                <SelectItem value="ms">🇲🇾 Bahasa Melayu</SelectItem>
               </SelectContent>
             </Select>
 

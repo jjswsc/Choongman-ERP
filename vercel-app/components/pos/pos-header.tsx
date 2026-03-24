@@ -90,12 +90,12 @@ export function POSHeader({
   return (
     <header
       className={cn(
-        "h-14 border-b border-border bg-card px-4 flex items-center justify-between flex-shrink-0",
+        "grid min-h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 border-b border-border bg-card px-3 py-2 sm:gap-x-3 sm:px-4 lg:h-14 lg:gap-x-4 lg:py-0",
         className
       )}
     >
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-nowrap items-center gap-x-1.5 overflow-x-auto sm:gap-x-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <Link href="/pos">
             <Button variant="ghost" size="icon" className="h-8 w-8" title={t('posHome') || '포스 첫 화면'}>
               <Home className="w-4 h-4" />
@@ -146,16 +146,16 @@ export function POSHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8"
+              className="h-8 shrink-0 px-2 sm:px-3"
               onClick={() => (onRefresh ? onRefresh() : window.location.reload())}
             >
-              <RefreshCw className="w-4 h-4 mr-1" />
-              {t('posRefresh')}
+              <RefreshCw className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">{t('posRefresh')}</span>
             </Button>
           </div>
         )}
 
-        <span className="text-sm text-muted-foreground">
+        <span className="hidden text-sm text-muted-foreground lg:inline">
           {t('posTodayCompleted')}:{" "}
           <span className="font-semibold text-foreground">{completed}{t('posCount')}</span>
         </span>
@@ -163,23 +163,25 @@ export function POSHeader({
           <Button
             variant={isMainPosDevice ? "default" : "outline"}
             size="sm"
-            className="h-8 gap-1.5"
+            className="h-8 shrink-0 gap-1 sm:gap-1.5"
             onClick={() => onMainPosDeviceChange(!isMainPosDevice)}
             title={isMainPosDevice ? (t('posMainDeviceOn') || '메인 포스 (프린터 연결)') : (t('posMainDeviceOff') || '주문 단말')}
           >
             {isMainPosDevice ? <Monitor className="w-3.5 h-3.5" /> : <Smartphone className="w-3.5 h-3.5" />}
-            <span className="text-xs">{isMainPosDevice ? (t('posMainDevice') || '메인') : (t('posOrderTerminal') || '주문')}</span>
+            <span className="hidden text-xs sm:inline">
+              {isMainPosDevice ? (t('posMainDevice') || '메인') : (t('posOrderTerminal') || '주문')}
+            </span>
           </Button>
         )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <h1 className="text-lg font-bold text-foreground">{title}</h1>
-      </div>
+      <h1 className="min-w-0 truncate px-1 text-center text-sm font-bold leading-tight text-foreground sm:text-base lg:text-lg">
+        {title}
+      </h1>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2 lg:gap-4">
         <Select value={lang} onValueChange={(v) => setLang(v as typeof lang)}>
-          <SelectTrigger className="w-[100px] h-8 gap-1" aria-label={t('posLanguage')}>
+          <SelectTrigger className="h-8 w-[5.5rem] gap-1 sm:w-[100px]" aria-label={t('posLanguage')}>
             <Languages className="w-3.5 h-3.5 shrink-0" />
             <SelectValue />
           </SelectTrigger>
@@ -191,7 +193,7 @@ export function POSHeader({
             ))}
           </SelectContent>
         </Select>
-        <span className="text-lg font-bold text-foreground">
+        <span className="whitespace-nowrap text-sm font-bold tabular-nums text-foreground sm:text-base lg:text-lg">
           {sales.toLocaleString()} ฿
         </span>
         {canAccessAdminProp && (

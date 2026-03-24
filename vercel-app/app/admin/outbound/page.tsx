@@ -64,6 +64,11 @@ import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점", "Head Office", "HQ", "Head office", "head office"]
 
+/** 품목 코드 자연 정렬 (CM005 < CM022, CT005 < CT005.1 등). */
+function compareItemCodes(a: string, b: string): number {
+  return (a || "").localeCompare(b || "", undefined, { numeric: true, sensitivity: "base" })
+}
+
 function ReceivePhotoGallery({ urls, t }: { urls: string[]; t: (k: string) => string }) {
   const [idx, setIdx] = React.useState(0)
   const current = urls[idx] ?? urls[0]
@@ -403,7 +408,7 @@ export default function OutboundPage() {
       let rows = whData.byWarehouse[wn] || []
       if (whStoreFilter) rows = rows.filter((r) => (r.store || "").trim() === whStoreFilter)
       if (itemQ) rows = rows.filter((r) => (r.name || "").toLowerCase().includes(itemQ) || (r.code || "").toLowerCase().includes(itemQ))
-      if (rows.length > 0) filteredByWh[wn] = rows
+      if (rows.length > 0) filteredByWh[wn] = [...rows].sort((a, b) => compareItemCodes(a.code, b.code))
     }
     return { order: Object.keys(filteredByWh).filter((wn) => (filteredByWh[wn] || []).length > 0), byWarehouse: filteredByWh }
   }, [whData, whWarehouseFilter, whStoreFilter, whItemFilter])

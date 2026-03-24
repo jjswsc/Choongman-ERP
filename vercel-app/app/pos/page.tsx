@@ -21,6 +21,7 @@ import {
   isManagerOrFranchiseeRole,
   isOfficeRole,
 } from '@/lib/permissions'
+import { formatPosClockDate, formatPosClockTime } from '@/lib/pos-datetime-locale'
 import {
   Dialog,
   DialogContent,
@@ -247,10 +248,8 @@ export default function POSMainPage() {
   )
   const switchUsers = switchStore ? (switchLoginData[switchStore] || []) : []
 
-  const formatDate = (date: Date) =>
-    date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
-  const formatTime = (date: Date) =>
-    date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const formatDate = (date: Date) => formatPosClockDate(date, lang)
+  const formatTime = (date: Date) => formatPosClockTime(date, lang)
 
   return (
     <div

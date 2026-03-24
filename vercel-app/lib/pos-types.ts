@@ -41,6 +41,8 @@ export interface OrderItem {
   name: string
   quantity: number
   price: number
+  /** 줄 단위 메모 (주방·items_json) */
+  note?: string
   options?: string[]
   servedAt?: string | null
   servedBy?: string | null

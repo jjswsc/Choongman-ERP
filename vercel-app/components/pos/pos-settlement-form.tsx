@@ -25,6 +25,8 @@ import { getPosSettlementWithCache } from '@/lib/offline/settlement-offline'
 import { useOnlineStatus } from '@/lib/offline'
 import { savePosSettlementWithOffline } from '@/lib/offline'
 import { useAuth } from '@/lib/auth-context'
+import { useLang } from '@/lib/lang-context'
+import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { isOfficeRole, canAccessSettings } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { OfflineBanner } from '@/components/offline-banner'
@@ -78,6 +80,7 @@ export type PosSettlementFormProps = {
 
 export function PosSettlementForm({ t, compact, offlineAware = false, openMode = false }: PosSettlementFormProps) {
   const router = useRouter()
+  const { lang } = useLang()
   const { auth } = useAuth()
   const { stores } = useStoreList()
   const online = useOnlineStatus()
@@ -335,6 +338,9 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
   const savedOther = Number(settlement?.otherAmt ?? 0)
   const savedTotal = savedCash + savedCard + savedQr + savedDelivery + savedOther
 
+  /** 서버에 마감 확정된 건만 잠금. 체크만 한 뒤에는 저장까지 입력·저장 가능 */
+  const inputsLocked = Boolean(settlement?.closed) && !canUnclose
+
   const handleSave = async () => {
     if (!effectiveStore) {
       await appAlert(t('store') || '매장을 선택하세요.')
@@ -404,7 +410,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
       </table>
       ${memo ? `<p class="t"><strong>${t('posMemo') || '비고'}</strong>: ${memo}</p>` : ''}
       ${closed ? `<p><strong>${t('posClosed') || '마감'}</strong></p>` : ''}
-      <p class="t" style="font-size:12px;color:#666">${new Date().toLocaleString('ko-KR')}</p>
+      <p class="t" style="font-size:12px;color:#666">${formatPosDateTimeMedium(new Date(), lang)}</p>
       </body></html>`)
     w.document.close()
     w.focus()
@@ -510,7 +516,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       onChange={(e) =>
                         setDenomCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, '') }))
                       }
-                      disabled={closed}
+                      disabled={inputsLocked}
                     />
                     <span className="text-xs text-muted-foreground w-8 tabular-nums">
                       ={(d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0)).toLocaleString()}
@@ -522,7 +528,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                 <div className="text-sm text-muted-foreground mb-1">{t('posCashActual') || '현금 시제 합계'}</div>
                 <div className="text-2xl font-bold tabular-nums">{denomTotal.toLocaleString()} ฿</div>
               </div>
-              <Button className="w-full" onClick={handleSave} disabled={saving || closed}>
+              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked}>
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? '...' : t('itemsBtnSave') || '저장'}
               </Button>
@@ -583,7 +589,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                           onChange={(e) =>
                             setDenomCounts((prev) => ({ ...prev, [d.value]: e.target.value.replace(/\D/g, '') }))
                           }
-                          disabled={closed}
+                          disabled={inputsLocked}
                         />
                         <span className="text-xs text-muted-foreground w-7 tabular-nums">
                           ={(d.value * (parseInt(denomCounts[d.value] || '0', 10) || 0)).toLocaleString()}
@@ -606,7 +612,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       className="ml-2 h-9 w-32 text-right"
                       value={cashAmt}
                       onChange={(e) => setCashAmt(e.target.value)}
-                      disabled={closed}
+                      disabled={inputsLocked}
                     />
                     <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
                   </div>
@@ -635,7 +641,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             className="h-8 text-right"
                             value={cardBreakdown[k] ?? ''}
                             onChange={(e) => setCardBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
-                            disabled={closed}
+                            disabled={inputsLocked}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
@@ -667,7 +673,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             className="h-8 text-right"
                             value={qrBreakdown[k] ?? ''}
                             onChange={(e) => setQrBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
-                            disabled={closed}
+                            disabled={inputsLocked}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
@@ -699,7 +705,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                             className="h-8 text-right"
                             value={deliveryAppBreakdown[k] ?? ''}
                             onChange={(e) => setDeliveryAppBreakdown((prev) => ({ ...prev, [k]: e.target.value }))}
-                            disabled={closed}
+                            disabled={inputsLocked}
                           />
                           <span className="text-muted-foreground w-5">฿</span>
                         </label>
@@ -718,7 +724,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                       className="ml-2 h-9 w-32 text-right"
                       value={otherAmt}
                       onChange={(e) => setOtherAmt(e.target.value)}
-                      disabled={closed}
+                      disabled={inputsLocked}
                     />
                     <span className="text-muted-foreground text-xs w-6">{currencySuffix}</span>
                   </div>
@@ -760,7 +766,7 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                   onChange={(e) => setMemo(e.target.value)}
                   placeholder={t('posMemoPh') || '메모'}
                   className="mt-1"
-                  disabled={closed}
+                  disabled={inputsLocked}
                 />
               </div>
 
@@ -770,18 +776,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
                     type="checkbox"
                     checked={closed}
                     onChange={(e) => setClosed(e.target.checked)}
-                    disabled={closed && !canUnclose}
+                    disabled={inputsLocked}
                   />
                   {t('posClosed') || '마감'}
                 </label>
-                {closed && !canUnclose && (
+                {settlement?.closed && !canUnclose && (
                   <span className="text-xs text-muted-foreground">
                     {t('posClosedByAdminOnly') || '마감 해제는 본사 관리자만 가능합니다.'}
                   </span>
                 )}
               </div>
 
-              <Button className="w-full" onClick={handleSave} disabled={saving || closed}>
+              <Button className="w-full" onClick={handleSave} disabled={saving || inputsLocked}>
                 <Save className="mr-2 h-4 w-4" />
                 {saving ? '...' : t('itemsBtnSave') || '저장'}
               </Button>

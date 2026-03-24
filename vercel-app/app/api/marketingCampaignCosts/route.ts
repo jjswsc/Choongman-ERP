@@ -6,6 +6,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 
+function isColumnSchemaError(e: unknown): boolean {
+  const s = String(e)
+  return (
+    s.includes('42703') ||
+    s.includes('PGRST204') ||
+    s.includes('schema cache') ||
+    /Could not find the .* column/i.test(s) ||
+    /column .* does not exist/i.test(s)
+  )
+}
+
 function memoMatchesTopic(memo: string, topic: string): boolean {
   const m = String(memo || '').trim().toLowerCase()
   const t = String(topic || '').trim().toLowerCase()
@@ -53,8 +64,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let bankCosts = 0
-    let pettyCosts = 0
+    let heuristicBankCosts = 0
+    let heuristicPettyCosts = 0
+    let linkedBankCosts = 0
+    let linkedPettyCosts = 0
+    let linkedSupported = true
 
     try {
       const bankAccRows = (await supabaseSelect('bank_accounts', { select: 'id', limit: 200 })) as { id?: number }[]
@@ -68,7 +82,7 @@ export async function GET(request: NextRequest) {
         })) as { amount?: number; memo?: string }[]
         for (const r of btRows || []) {
           if (memoMatchesTopic(r.memo ?? '', topic)) {
-            bankCosts += Math.abs(Number(r.amount) || 0)
+            heuristicBankCosts += Math.abs(Number(r.amount) || 0)
           }
         }
       }
@@ -84,14 +98,46 @@ export async function GET(request: NextRequest) {
       })) as { amount?: number; memo?: string }[]
       for (const r of pettyRows || []) {
         if (memoMatchesTopic(r.memo ?? '', topic)) {
-          pettyCosts += Math.abs(Number(r.amount) || 0)
+          heuristicPettyCosts += Math.abs(Number(r.amount) || 0)
         }
       }
     } catch {
       /* petty_cash_transactions 없을 수 있음 */
     }
 
+    try {
+      const bankFilter = `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}&trans_date=gte.${startDate}&trans_date=lte.${endDate}&trans_type=eq.withdraw`
+      const linkedBankRows = (await supabaseSelectFilter('bank_transactions', bankFilter, {
+        select: 'amount,marketing_campaign_id',
+        limit: 5000,
+      })) as { amount?: number }[]
+      linkedBankCosts = (linkedBankRows || []).reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0)
+    } catch (e) {
+      linkedSupported = !isColumnSchemaError(e)
+      if (linkedSupported) throw e
+    }
+
+    try {
+      const pettyFilter = `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}&trans_date=gte.${startDate}&trans_date=lte.${endDate}&trans_type=eq.expense`
+      const linkedPettyRows = (await supabaseSelectFilter('petty_cash_transactions', pettyFilter, {
+        select: 'amount,marketing_campaign_id',
+        limit: 5000,
+      })) as { amount?: number }[]
+      linkedPettyCosts = (linkedPettyRows || []).reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0)
+    } catch (e) {
+      linkedSupported = !isColumnSchemaError(e)
+      if (linkedSupported) throw e
+    }
+
+    const linkedCosts = linkedBankCosts + linkedPettyCosts
+    const heuristicCosts = heuristicBankCosts + heuristicPettyCosts
+    const useLinked = linkedCosts > 0
+    const bankCosts = useLinked ? linkedBankCosts : heuristicBankCosts
+    const pettyCosts = useLinked ? linkedPettyCosts : heuristicPettyCosts
     const totalCosts = bankCosts + pettyCosts
+    const attributionMode: 'linked' | 'heuristic' | 'hybrid' =
+      useLinked ? (heuristicCosts > linkedCosts ? 'hybrid' : 'linked') : 'heuristic'
+    const attributionConfidence = useLinked ? 0.95 : linkedSupported ? 0.55 : 0.4
 
     return NextResponse.json(
       {
@@ -103,6 +149,10 @@ export async function GET(request: NextRequest) {
         bankCosts,
         pettyCosts,
         totalCosts,
+        linkedCosts,
+        heuristicCosts,
+        attributionMode,
+        attributionConfidence,
       },
       { headers }
     )

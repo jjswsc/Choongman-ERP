@@ -79,7 +79,13 @@ export function DeliveryEditOrderNoDialog({
                 try {
                   const res = await updatePosOrder({
                     id: Number(order.id),
-                    items: order.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 })),
+                    items: order.items.map((i) => ({
+                      id: i.id,
+                      name: i.name,
+                      price: i.price,
+                      qty: i.quantity || 1,
+                      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
+                    })),
                     tableName: newTableName || appLabelEn,
                     memo: order.memo,
                   })

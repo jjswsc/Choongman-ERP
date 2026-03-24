@@ -212,6 +212,8 @@ export function canPosStaffAccessPath(pathname: string, role: string): boolean {
     return canAccessPosPrinters(role)
   if (p === "/admin/pos-coupons" || p.startsWith("/admin/pos-coupons"))
     return canAccessPosCoupons(role)
+  if (p === "/admin/pos-tax-invoice-recipients" || p.startsWith("/admin/pos-tax-invoice-recipients"))
+    return canAccessPosOrders(role)
   if (p === "/admin" || p === "/admin/") return true
   return false
 }

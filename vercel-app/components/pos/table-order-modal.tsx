@@ -14,6 +14,8 @@ import type { Order } from '@/lib/pos-types'
 import { updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { Clock, CheckCircle, Check } from 'lucide-react'
+import { useLang } from '@/lib/lang-context'
+import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TableOrderModalProps {
   open: boolean
@@ -24,15 +26,6 @@ export interface TableOrderModalProps {
   t?: (key: string) => string
 }
 
-function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
 export function TableOrderModal({
   open,
   onOpenChange,
@@ -41,6 +34,7 @@ export function TableOrderModal({
   onServed,
   t = (k) => k,
 }: TableOrderModalProps) {
+  const { lang } = useLang()
   const isServedReadyForPayment = order?.status === 'completed' || order?.status === 'ready'
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
 
@@ -89,7 +83,7 @@ export function TableOrderModal({
           <div className="space-y-4 flex-1 min-h-0 flex flex-col">
             <div className="flex items-center gap-2 text-muted-foreground text-sm shrink-0">
               <Clock className="w-4 h-4 shrink-0" />
-              <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
+              <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
             </div>
             {isServedReadyForPayment ? (
               <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">

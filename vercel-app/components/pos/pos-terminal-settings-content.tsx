@@ -23,6 +23,7 @@ import {
   type PosDeviceItem,
 } from '@/lib/api-client'
 import { isOfficeRole } from '@/lib/permissions'
+import { formatPosDateTimeShort } from '@/lib/pos-datetime-locale'
 import { Monitor, Smartphone, RefreshCw, UserX } from 'lucide-react'
 
 export function PosTerminalSettingsContent() {
@@ -86,7 +87,7 @@ export function PosTerminalSettingsContent() {
 
   const formatLastSeen = (iso: string) => {
     try {
-      return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Bangkok', dateStyle: 'short', timeStyle: 'short' })
+      return formatPosDateTimeShort(new Date(iso), lang)
     } catch {
       return iso
     }

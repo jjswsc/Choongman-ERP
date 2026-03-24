@@ -1,6 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,7 +38,14 @@ import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { getMembers, validatePosCoupon } from '@/lib/api-client'
+import { useAuth } from '@/lib/auth-context'
+import {
+  getMembers,
+  getPosTaxInvoiceRecipients,
+  upsertPosTaxInvoiceRecipient,
+  validatePosCoupon,
+  type PosTaxInvoiceRecipientRow,
+} from '@/lib/api-client'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
@@ -39,7 +53,7 @@ import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
 export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
 type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'other'
-type TaxSearchField = 'memberNo' | 'phone' | 'name'
+type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
   type: 'individual' | 'corporate'
   name: string
@@ -48,6 +62,34 @@ type TaxInvoiceProfile = {
   phone: string
   email: string
   address: string
+}
+
+/** 로컬 레지스트리 키: 회원번호 우선, 없으면 taxId_branch (비회원) */
+function taxRegistryLocalKey(
+  memberNoInput: string,
+  linkedMemberNo: string | undefined,
+  taxId: string,
+  branchNo: string
+): string {
+  const m = (memberNoInput || linkedMemberNo || '').trim()
+  if (m) return m
+  return `${taxId}_${branchNo}`
+}
+
+function isSyntheticTaxRegistryKey(key: string): boolean {
+  return /^\d{13}_\d{5}$/.test(key)
+}
+
+function rowToTaxProfile(row: PosTaxInvoiceRecipientRow): TaxInvoiceProfile {
+  return {
+    type: row.customer_type === 'company' ? 'corporate' : 'individual',
+    name: row.name || '',
+    taxId: row.tax_id || '',
+    branchCode: row.branch_no || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    address: row.address || '',
+  }
 }
 
 export type CartPanelAddItemPayload = {
@@ -64,15 +106,15 @@ export interface CartPanelHandle {
   clearCart: () => void
   openDineInPaymentFromOrder: (payload: {
     tableName: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => void
   openTakeoutPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => void
   openDeliveryPaymentFromOrder: (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => void
 }
 
@@ -99,6 +141,7 @@ interface CartPanelProps {
       name: string
       price: number
       quantity: number
+      note?: string
       orderType?: string
       deliveryAppCode?: string
       promoId?: string
@@ -119,7 +162,7 @@ interface CartPanelProps {
   }) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onDeliveryOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
     orderLabel: string
     memo?: string
     discountAmt?: number
@@ -133,7 +176,7 @@ interface CartPanelProps {
   }, existingOrderId?: number) => void
   /** 포장 주문 결제 완료 시 (기존 주문에 결제 반영, 테이블과 동일 결제 모달) */
   onTakeoutOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
     orderLabel: string
     memo?: string
     discountAmt?: number
@@ -147,7 +190,7 @@ interface CartPanelProps {
   }, existingOrderId?: number) => void
   /** 홀 주문 결제 완료 시. existingOrderId 있으면 해당 주문에 결제만 반영(updatePosOrder) */
   onDineInOrderComplete?: (payload: {
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
     tableName: string
     memo?: string
     discountAmt?: number
@@ -166,7 +209,7 @@ interface CartPanelProps {
   onNonDineOrderComplete?: (payload: {
     orderType: 'delivery' | 'takeout'
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
     memo?: string
     discountAmt?: number
     discountReason?: string
@@ -181,14 +224,22 @@ interface CartPanelProps {
   pendingOrderId?: number | null
   /** 최종 가격 반영 옵션(부가세/서비스비/카드비/기타) */
   pricingAdjustments?: PosPricingAdjustments
+  /**
+   * 터미널 등: ref 외에 layout effect로 imperative API를 등록해
+   * 태블릿에서 forwardRef 타이밍보다 먼저 메뉴 탭이 오는 경우에도 담기가 동작하도록 함.
+   */
+  onImperativeBridge?: (api: CartPanelHandle | null) => void
+  debugOwner?: 'inline-mobile' | 'side-panel' | 'unknown'
 }
 
-interface CartItem extends OrderItem {
-  note?: string
-  promoId?: string
-  promoCode?: string
-  promoItems?: { menuId: string; optionId: string | null; quantity: number }[]
-}
+type CartItem = OrderItem
+
+const CART_ITEMS_CACHE = new Map<string, CartItem[]>()
+const cloneCartItems = (items: CartItem[]): CartItem[] =>
+  items.map((i) => ({
+    ...i,
+    promoItems: i.promoItems ? i.promoItems.map((p) => ({ ...p })) : undefined,
+  }))
 
 export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function CartPanel({
   stores,
@@ -209,7 +260,10 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   onNonDineOrderComplete,
   pendingOrderId,
   pricingAdjustments,
+  onImperativeBridge,
+  debugOwner = 'unknown',
 }, ref) {
+  const { auth } = useAuth()
   const { lang } = useLang()
   const tDefault = useT(lang)
   const t = tProp ?? tDefault
@@ -221,12 +275,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const mapCartItemToOrderPayload = (i: CartItem) => {
     const orderTypeNorm = orderType === 'dine-in' ? 'dine_in' : orderType
+    const lineNote = String(i.note ?? '').trim()
     return {
       id: i.id,
       name: i.name,
       price: i.price,
       quantity: i.quantity,
       orderType: orderTypeNorm,
+      ...(lineNote ? { note: lineNote } : {}),
       ...(orderType === 'delivery' && deliveryAppProp ? { deliveryAppCode: String(deliveryAppProp) } : {}),
       ...(i.promoId && i.promoItems
         ? { promoId: i.promoId, promoCode: i.promoCode, promoItems: i.promoItems }
@@ -239,7 +295,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const canSubmit =
     !lockOrderType ||
     (orderType === 'dine-in' ? !!selectedTable : orderType === 'delivery' ? !!deliveryAppProp : true)
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  /** dine-in/takeout에서는 배달 앱·주문번호가 장바구니와 무관 — 키에 넣으면 사이드 패널(전체 props)과 인라인 패널(생략)이 서로 다른 슬롯을 씀 */
+  const deliveryAppKey = orderType === 'delivery' ? (deliveryAppProp ?? '') : ''
+  const deliveryOrderNoKey = orderType === 'delivery' ? (deliveryOrderNoProp ?? '') : ''
+  /** 홀(dine-in)은 포장 슬롯/라벨 state가 키에 섞이면 뷰포트·패널마다 다른 슬롯이 됨 → 테이블 ID만으로 구분 */
+  const takeoutLabelCacheSegment =
+    orderType === 'takeout' || orderType === 'delivery' ? (takeoutLabelProp ?? '') : ''
+  const cartItemsCacheKey = `${currentStoreId}|${orderType}|${selectedTable?.id ?? ''}|${deliveryAppKey}|${deliveryOrderNoKey}|${takeoutLabelCacheSegment}`
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? []))
   const [takeoutSlot, setTakeoutSlot] = useState<string>('1')
   const [takeoutMemberName, setTakeoutMemberName] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
@@ -293,6 +356,69 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
   const [isPrepaid, setIsPrepaid] = useState(false)
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
+  const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
+  const cartItemsRef = useRef<CartItem[]>(cartItems)
+  cartItemsRef.current = cartItems
+
+  /** 패널 전환·언마운트 시 useEffect 캐시 반영보다 먼저 읽히는 레이스 방지 */
+  useLayoutEffect(() => {
+    const key = cartItemsCacheKey
+    return () => {
+      CART_ITEMS_CACHE.set(key, cloneCartItems(cartItemsRef.current))
+    }
+  }, [cartItemsCacheKey])
+
+  // #region agent log
+  useEffect(() => {
+    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'cart-panel.tsx:cartItemsCacheKey',
+        message: 'cache key active',
+        data: { debugOwner, orderType, cartItemsCacheKey, takeoutUi: takeoutLabelProp ?? '' },
+        timestamp: Date.now(),
+        hypothesisId: 'H3',
+      }),
+    }).catch(() => {})
+  }, [cartItemsCacheKey, debugOwner, orderType, takeoutLabelProp])
+  // #endregion
+
+  useEffect(() => {
+    if (orderType !== 'dine-in') {
+      setCartItems(cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? []))
+      return
+    }
+    const fromNew = cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? [])
+    if (fromNew.length > 0) {
+      setCartItems(fromNew)
+      return
+    }
+    const dineInWithTakeoutTail = `${currentStoreId}|dine-in|${selectedTable?.id ?? ''}|||${takeoutLabelProp ?? ''}`
+    const fromTakeoutTail = cloneCartItems(CART_ITEMS_CACHE.get(dineInWithTakeoutTail) ?? [])
+    if (fromTakeoutTail.length > 0) {
+      setCartItems(fromTakeoutTail)
+      return
+    }
+    const legacyKey = `${currentStoreId}|dine-in|${selectedTable?.id ?? ''}|${deliveryAppProp ?? ''}|${deliveryOrderNoProp ?? ''}|${takeoutLabelProp ?? ''}`
+    if (legacyKey === cartItemsCacheKey) {
+      setCartItems(fromNew)
+      return
+    }
+    setCartItems(cloneCartItems(CART_ITEMS_CACHE.get(legacyKey) ?? []))
+  }, [
+    cartItemsCacheKey,
+    orderType,
+    currentStoreId,
+    selectedTable?.id,
+    deliveryAppProp,
+    deliveryOrderNoProp,
+    takeoutLabelProp,
+  ])
+
+  useEffect(() => {
+    CART_ITEMS_CACHE.set(cartItemsCacheKey, cloneCartItems(cartItems))
+  }, [cartItemsCacheKey, cartItems])
 
   useEffect(() => {
     if (showPaymentModal && orderType === 'dine-in') {
@@ -483,8 +609,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
   }, [taxMemberRegistry])
 
-  const applyTaxProfile = (memberNo: string, profile: TaxInvoiceProfile) => {
-    setTaxMemberNo(memberNo)
+  const fillTaxFieldsFromProfile = (profile: TaxInvoiceProfile) => {
     setInvoiceCustomerType(profile.type === 'corporate' ? 'company' : 'person')
     setTaxName(profile.name || '')
     setTaxId(profile.taxId || '')
@@ -494,12 +619,61 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setTaxAddress(profile.address || '')
   }
 
-  const handleTaxProfileSearch = () => {
+  /** registryKey: localStorage 객체 키(회원번호 또는 taxId_branch) */
+  const applyTaxProfile = (registryKey: string, profile: TaxInvoiceProfile) => {
+    setTaxMemberNo(isSyntheticTaxRegistryKey(registryKey) ? '' : registryKey)
+    fillTaxFieldsFromProfile(profile)
+  }
+
+  const applyTaxProfileFromServerRow = (row: PosTaxInvoiceRecipientRow) => {
+    const profile = rowToTaxProfile(row)
+    setTaxMemberNo(row.member_no?.trim() || '')
+    fillTaxFieldsFromProfile(profile)
+    const lk = taxRegistryLocalKey(row.member_no?.trim() || '', undefined, row.tax_id, row.branch_no)
+    setTaxMemberRegistry((prev) => ({ ...prev, [lk]: profile }))
+  }
+
+  const handleTaxProfileSearch = async () => {
     const keyword = taxSearchKeyword.trim()
     if (!keyword) {
       setTaxSearchMessage(t('posTaxSearchNeedKeyword'))
       return
     }
+    const byApi: 'phone' | 'taxId' | 'name' | 'memberNo' =
+      taxSearchField === 'memberNo'
+        ? 'memberNo'
+        : taxSearchField === 'taxId'
+          ? 'taxId'
+          : taxSearchField === 'name'
+            ? 'name'
+            : 'phone'
+    const qForApi =
+      taxSearchField === 'taxId' || taxSearchField === 'phone'
+        ? keyword.replace(/\D/g, '')
+        : keyword
+
+    if (auth?.store && auth?.role && currentStoreId && qForApi.length > 0) {
+      try {
+        const res = await getPosTaxInvoiceRecipients({
+          userStore: auth.store,
+          userRole: auth.role,
+          storeCode: currentStoreId,
+          q: qForApi,
+          by: byApi,
+          limit: 20,
+        })
+        if (res.success && res.rows?.length) {
+          const usable = res.rows.filter((r) => r.is_active)
+          const pick = (usable.length ? usable : res.rows)[0]
+          applyTaxProfileFromServerRow(pick)
+          setTaxSearchMessage(t('posTaxSearchLoadedServer'))
+          return
+        }
+      } catch (e) {
+        console.error('getPosTaxInvoiceRecipients:', e)
+      }
+    }
+
     const entries = Object.entries(taxMemberRegistry)
     let found: [string, TaxInvoiceProfile] | undefined
     if (taxSearchField === 'memberNo') {
@@ -507,6 +681,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     } else if (taxSearchField === 'phone') {
       const k = keyword.replace(/\D/g, '')
       found = entries.find(([, profile]) => String(profile.phone || '').replace(/\D/g, '').includes(k))
+    } else if (taxSearchField === 'taxId') {
+      const k = keyword.replace(/\D/g, '')
+      found = entries.find(([, profile]) => {
+        const tid = String(profile.taxId || '').replace(/\D/g, '')
+        return tid === k || (k.length >= 5 && tid.includes(k))
+      })
     } else {
       const k = keyword.toLowerCase()
       found = entries.find(([, profile]) => String(profile.name || '').toLowerCase().includes(k))
@@ -516,7 +696,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       return
     }
     applyTaxProfile(found[0], found[1])
-    setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', found[0]))
+    const displayNo = isSyntheticTaxRegistryKey(found[0]) ? found[1].taxId || found[0] : found[0]
+    setTaxSearchMessage(t('posTaxSearchLoaded').replace('{no}', displayNo))
   }
 
   const resetPaymentInputs = () => {
@@ -700,19 +881,40 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       (parseFloat(payLinePay) || 0) +
       (parseFloat(payShopeePay) || 0) +
       (parseFloat(payOther) || 0)
-    if (needTaxInvoice && taxMemberNo.trim()) {
-      setTaxMemberRegistry((prev) => ({
-        ...prev,
-        [taxMemberNo.trim()]: {
-          type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
+    if (needTaxInvoice && !taxInvoiceInvalid) {
+      const profile: TaxInvoiceProfile = {
+        type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
+        name: normalizedTaxName,
+        taxId: normalizedTaxId,
+        branchCode: effectiveTaxBranchNo,
+        phone: normalizedTaxPhone,
+        email: normalizedTaxEmail,
+        address: normalizedTaxAddress,
+      }
+      const regKey = taxRegistryLocalKey(
+        taxMemberNo.trim(),
+        memberMap[selectedMemberId]?.memberNo,
+        normalizedTaxId,
+        effectiveTaxBranchNo
+      )
+      setTaxMemberRegistry((prev) => ({ ...prev, [regKey]: profile }))
+      if (auth?.store && auth?.role && currentStoreId) {
+        void upsertPosTaxInvoiceRecipient({
+          userStore: auth.store,
+          userRole: auth.role,
+          storeCode: currentStoreId,
+          memberId: selectedMemberId ? Number(selectedMemberId) : null,
+          memberNo: taxMemberNo.trim() || memberMap[selectedMemberId]?.memberNo || null,
+          customerType: invoiceCustomerType === 'company' ? 'company' : 'person',
           name: normalizedTaxName,
           taxId: normalizedTaxId,
-          branchCode: effectiveTaxBranchNo,
+          branchNo: effectiveTaxBranchNo,
           phone: normalizedTaxPhone,
           email: normalizedTaxEmail,
           address: normalizedTaxAddress,
-        },
-      }))
+          source: 'pos_payment',
+        }).catch(() => {})
+      }
     }
     if (orderType === 'dine-in' && dineInTableName && onDineInOrderComplete) {
       onDineInOrderComplete(
@@ -812,7 +1014,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           },
         ]
       }
-      const existing = prev.find((p) => p.name === item.name && p.price === item.price && !p.promoId)
+      const existing = prev.find(
+        (p) =>
+          p.name === item.name &&
+          p.price === item.price &&
+          !p.promoId &&
+          !(p.note || '').trim()
+      )
       if (existing) {
         return prev.map((p) => (p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p))
       }
@@ -849,13 +1057,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDineInPaymentFromOrder = (payload: {
     tableName: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => {
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')
     setDiscountValue(0)
@@ -868,13 +1077,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openTakeoutPaymentFromOrder = (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => {
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')
     setDiscountValue(0)
@@ -887,13 +1097,14 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
   const openDeliveryPaymentFromOrder = (payload: {
     orderLabel: string
-    items: { id: string; name: string; price: number; quantity: number }[]
+    items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   }) => {
     const normalized = payload.items.map((i, idx) => ({
       id: `cart-existing-${idx}-${i.id}`,
       name: i.name,
       price: i.price,
       quantity: i.quantity,
+      ...(i.note?.trim() ? { note: i.note.trim() } : {}),
     }))
     setDiscountType('percent')
     setDiscountValue(0)
@@ -903,8 +1114,6 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     const amount = normalized.reduce((sum, i) => sum + i.price * i.quantity, 0)
     openPaymentModalWithAmount(amount)
   }
-
-  useImperativeHandle(ref, () => ({ addItem, clearCart: handleClearCart, openDineInPaymentFromOrder, openTakeoutPaymentFromOrder, openDeliveryPaymentFromOrder }), [])
 
   const handleClearCart = () => {
     setCartItems([])
@@ -919,6 +1128,45 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setDiscountReason('')
     setPaymentTableNameOverride(null)
   }
+
+  const imperativeApiRef = useRef<CartPanelHandle | null>(null)
+  imperativeApiRef.current = {
+    addItem,
+    clearCart: handleClearCart,
+    openDineInPaymentFromOrder,
+    openTakeoutPaymentFromOrder,
+    openDeliveryPaymentFromOrder,
+  }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      addItem: (item) => imperativeApiRef.current?.addItem(item),
+      clearCart: () => imperativeApiRef.current?.clearCart(),
+      openDineInPaymentFromOrder: (p) => imperativeApiRef.current?.openDineInPaymentFromOrder(p),
+      openTakeoutPaymentFromOrder: (p) => imperativeApiRef.current?.openTakeoutPaymentFromOrder(p),
+      openDeliveryPaymentFromOrder: (p) => imperativeApiRef.current?.openDeliveryPaymentFromOrder(p),
+    }),
+    []
+  )
+
+  useLayoutEffect(() => {
+    if (!onImperativeBridge) return
+    const api: CartPanelHandle = {
+      addItem: (item) => imperativeApiRef.current?.addItem(item),
+      clearCart: () => imperativeApiRef.current?.clearCart(),
+      openDineInPaymentFromOrder: (p) => imperativeApiRef.current?.openDineInPaymentFromOrder(p),
+      openTakeoutPaymentFromOrder: (p) => imperativeApiRef.current?.openTakeoutPaymentFromOrder(p),
+      openDeliveryPaymentFromOrder: (p) => imperativeApiRef.current?.openDeliveryPaymentFromOrder(p),
+    }
+    ;(api as CartPanelHandle & { __debug?: Record<string, string> }).__debug = {
+      instanceId: instanceIdRef.current,
+      debugOwner,
+      cacheKey: cartItemsCacheKey,
+    }
+    onImperativeBridge(api)
+    return () => onImperativeBridge(null)
+  }, [onImperativeBridge, debugOwner, cartItemsCacheKey])
 
   const updateItemQuantity = (itemId: string, delta: number) => {
     setCartItems(prev =>
@@ -948,8 +1196,18 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       handleClearCart()
     }
 
+    if (nextTableId && prevTableId !== nextTableId) {
+      const existingGuestCount = Math.max(
+        0,
+        Math.trunc(Number(selectedTable?.order?.guestCount ?? 0) || 0)
+      )
+      if (existingGuestCount > 0) {
+        setGuestCount(existingGuestCount)
+      }
+    }
+
     prevSelectedTableIdRef.current = nextTableId
-  }, [orderType, selectedTable?.id])
+  }, [orderType, selectedTable?.id, selectedTable?.order?.guestCount])
 
   return (
     <>
@@ -1194,57 +1452,72 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                   return (
                   <div
                     key={item.id}
-                    className="grid grid-cols-[1fr_auto] gap-2 items-start py-1.5 px-2 bg-secondary/50 w-full min-w-0 max-w-full"
+                    className="bg-secondary/50 w-full min-w-0 max-w-full rounded-sm overflow-hidden"
                   >
-                    <div className="min-w-0 overflow-hidden">
-                      <Tooltip
-                        open={menuNameTooltipOpen === item.id}
-                        onOpenChange={(open) => setMenuNameTooltipOpen(open ? item.id : null)}
-                      >
-                        <TooltipTrigger asChild>
-                          <p
-                            className="text-sm font-medium cursor-default touch-manipulation select-none break-words"
-                            title={item.name}
-                            onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
-                          >
-                            {mainName}
+                    <div className="grid grid-cols-[1fr_auto] gap-2 items-start py-1.5 px-2">
+                      <div className="min-w-0 overflow-hidden">
+                        <Tooltip
+                          open={menuNameTooltipOpen === item.id}
+                          onOpenChange={(open) => setMenuNameTooltipOpen(open ? item.id : null)}
+                        >
+                          <TooltipTrigger asChild>
+                            <p
+                              className="text-sm font-medium cursor-default touch-manipulation select-none break-words"
+                              title={item.name}
+                              onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
+                            >
+                              {mainName}
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
+                            {item.name}
+                          </TooltipContent>
+                        </Tooltip>
+                        {isBanban && flavor1 && flavor2 ? (
+                          <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                            <span>① {flavor1}</span>
+                            <span className="mx-1">·</span>
+                            <span>② {flavor2}</span>
                           </p>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
-                          {item.name}
-                        </TooltipContent>
-                      </Tooltip>
-                      {isBanban && flavor1 && flavor2 ? (
-                        <p className="text-xs text-muted-foreground mt-0.5 break-words">
-                          <span>① {flavor1}</span>
-                          <span className="mx-1">·</span>
-                          <span>② {flavor2}</span>
+                        ) : optionPart ? (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{optionPart}</p>
+                        ) : null}
+                        <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
+                          {formatBahtNum(item.price)} ฿
                         </p>
-                      ) : optionPart ? (
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{optionPart}</p>
-                      ) : null}
-                      <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
-                        {formatBahtNum(item.price)} ฿
-                      </p>
+                      </div>
+                      <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end self-start pt-0.5">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => updateItemQuantity(item.id, -1)}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </Button>
+                        <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => updateItemQuantity(item.id, 1)}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                  <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => updateItemQuantity(item.id, -1)}
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </Button>
-                    <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => updateItemQuantity(item.id, 1)}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </Button>
+                    <div className="px-2 pb-1.5 pt-0">
+                      <Input
+                        aria-label={tr('posLineNote', 'Note')}
+                        placeholder={tr('posLineNotePh', 'e.g. no onion, mild spice')}
+                        value={item.note ?? ''}
+                        onChange={(e) =>
+                          setCartItems((prev) =>
+                            prev.map((p) => (p.id === item.id ? { ...p, note: e.target.value } : p))
+                          )
+                        }
+                        className="h-7 text-xs"
+                      />
                     </div>
                   </div>
                   )
@@ -1745,10 +2018,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                           <SelectItem value="memberNo">{t('posMemberNo') || '회원번호'}</SelectItem>
                           <SelectItem value="phone">{t('posPhone') || '전화번호'}</SelectItem>
                           <SelectItem value="name">{t('posName') || '이름'}</SelectItem>
+                          <SelectItem value="taxId">{t('posTaxIdLabel') || 'Tax ID'}</SelectItem>
                         </SelectContent>
                       </Select>
                       <Input
-                        placeholder={taxSearchField === 'memberNo' ? (t('posMemberNoInputPh') || '회원번호 입력') : taxSearchField === 'phone' ? (t('posPhoneInputPh') || '전화번호 입력') : (t('posNameInputPh') || '이름 입력')}
+                        placeholder={
+                          taxSearchField === 'memberNo'
+                            ? (t('posMemberNoInputPh') || '회원번호 입력')
+                            : taxSearchField === 'phone'
+                              ? (t('posPhoneInputPh') || '전화번호 입력')
+                              : taxSearchField === 'taxId'
+                                ? (t('posTaxIdThirteenPlaceholder') || 'Tax ID 13자리')
+                                : (t('posNameInputPh') || '이름 입력')
+                        }
                         value={taxSearchKeyword}
                         onChange={(e) => setTaxSearchKeyword(e.target.value)}
                         className="h-12 rounded-xl"

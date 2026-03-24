@@ -50,7 +50,7 @@ export async function GET() {
       try {
         promos = (await supabaseSelect('pos_promos', {
           order: 'sort_order.asc,name.asc',
-          limit: 500,
+          limit: 10000,
           select: sel,
         })) as RawPromo[] | null
         break
@@ -63,7 +63,7 @@ export async function GET() {
       id: String(p.id ?? ''),
       code: String(p.code ?? ''),
       name: String(p.name ?? ''),
-      category: normalizePromotionCategoryMain(String(p.category ?? '').trim()),
+      category: String(p.category ?? '').trim(),
       categoryMain: normalizePromotionCategoryMain(p.category_main) || PROMOTION_MAIN_CATEGORY,
       price: Number(p.price) ?? 0,
       priceDelivery: p.price_delivery != null ? Number(p.price_delivery) : null,

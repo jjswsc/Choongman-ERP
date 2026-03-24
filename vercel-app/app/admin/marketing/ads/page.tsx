@@ -15,6 +15,7 @@ import {
   type MarketingAd,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { useSearchParams } from "next/navigation"
 
 const PLATFORM_OPTIONS = [
   { value: "instagram", label: "Instagram" },
@@ -38,8 +39,10 @@ const FORMAT_OPTIONS = [
 ]
 
 export default function MarketingAdsPage() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
+  const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const [list, setList] = React.useState<MarketingAd[]>([])
   const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -76,6 +79,12 @@ export default function MarketingAdsPage() {
     loadData()
   }, [loadData])
 
+  React.useEffect(() => {
+    if (!campaignIdFromQuery) return
+    setCampaignFilter(campaignIdFromQuery)
+    setForm((f) => ({ ...f, campaignId: campaignIdFromQuery }))
+  }, [campaignIdFromQuery])
+
   const handleNew = () => {
     setEditingId(null)
     setForm({
@@ -107,6 +116,10 @@ export default function MarketingAdsPage() {
   }
 
   const handleSave = async () => {
+    if (!form.campaignId.trim()) {
+      await appAlert("캠페인을 선택하세요. 캠페인 허브에서 연결 후 저장해야 합니다.")
+      return
+    }
     if (!form.platform.trim()) {
       await appAlert("플랫폼을 선택하세요.")
       return
@@ -191,6 +204,11 @@ export default function MarketingAdsPage() {
             추가
           </Button>
         </div>
+        {campaignIdFromQuery && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+            캠페인 허브에서 전달된 항목으로 필터되었습니다. 새 등록은 이 캠페인으로 자동 연결됩니다.
+          </div>
+        )}
 
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">

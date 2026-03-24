@@ -1,7 +1,7 @@
 'use client'
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
@@ -37,7 +37,8 @@ import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
-import { buildKitchenSlipHtml } from '@/lib/pos-kitchen-slip-html'
+import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { buildKitchenSlipHtml, formatKitchenSlipItemRowHtml } from '@/lib/pos-kitchen-slip-html'
 import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -48,7 +49,7 @@ export type DeliveryApp = string
 type TakeoutMode = 'slot' | 'member'
 type PendingPayRequest = {
   tableName: string
-  items: { id: string; name: string; price: number; quantity: number }[]
+  items: { id: string; name: string; price: number; quantity: number; note?: string }[]
   /** 기존 주문 결제 시 영수증용 */
   orderNo?: string
 } | null
@@ -69,6 +70,21 @@ export default function PosTerminalPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const cartRef = useRef<CartPanelHandle>(null)
+  /** 좁은 화면에서도 안정적으로 전달되는 부모 state 큐 */
+  const [menuAddQueue, setMenuAddQueue] = useState<CartPanelAddItemPayload[]>([])
+
+  /** CartPanel이 bridge 등록할 때마다 증가 — 큐는 부모에서 한 번만 비워 ref 타이밍/이중 패널 이슈 방지 */
+  const [cartBridgeEpoch, setCartBridgeEpoch] = useState(0)
+  /** forwardRef만으로는 태블릿에서 마운트 직후 ref가 늦게 잡히는 경우가 있어 CartPanel이 layout effect로 등록 */
+  const bindCartImperative = useCallback((api: CartPanelHandle | null) => {
+    cartRef.current = api
+    if (api) setCartBridgeEpoch((e) => e + 1)
+  }, [])
+
+  const clearCartFromTerminal = useCallback(() => {
+    setMenuAddQueue([])
+    cartRef.current?.clearCart()
+  }, [])
   const {
     stores,
     currentStore,
@@ -174,23 +190,6 @@ export default function PosTerminalPage() {
     byId: new Map(),
     byName: new Map(),
   })
-
-  useEffect(() => {
-    // #region agent log
-    const ping = {sessionId:'960801',runId:'run-3',hypothesisId:'H6',location:'terminal/page.tsx:mount',message:'terminal page mounted',data:{href:typeof window!=='undefined'?window.location.href:'',userAgent:typeof navigator!=='undefined'?navigator.userAgent:''},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
-    // #endregion
-  }, [])
-
-  useEffect(() => {
-    if (!receiptData) return
-    // #region agent log
-    const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H10',location:'terminal/page.tsx:receiptData',message:'terminal receiptData set',data:{orderNoLen:String(receiptData.orderNo||'').length,items:receiptData.items.length,total:receiptData.total},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
-    // #endregion
-  }, [receiptData])
 
   useEffect(() => {
     if (orderType !== 'delivery') setDeliveryApp(null)
@@ -417,7 +416,8 @@ export default function PosTerminalPage() {
     Boolean(pendingTakeoutOrderId) ||
     Boolean(pendingDeliveryOrderId)
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
-  const isNarrowViewport = useMediaQuery('(max-width: 1023px)')
+  /** lg 미만: 태블릿 가로(1024~1279)도 하단 고정 카트·터치 밀도 large와 맞춤 */
+  const isNarrowViewport = useMediaQuery('(max-width: 1279px)')
   /** 모바일 테이블 주문: 테이블 선택 후 메뉴 화면 + 하단 장바구니(시트 자동 오픈 안 함) */
   const isTablesMenuWithCart = activeTab === 'tables' && Boolean(selectedTableId) && !servingTable?.order
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
@@ -427,6 +427,12 @@ export default function PosTerminalPage() {
   useEffect(() => {
     if (showSidePanel && !isTablesMenuWithCart) setMobilePanelOpen(true)
   }, [showSidePanel, isTablesMenuWithCart])
+
+  useEffect(() => {
+    if (activeTab === 'tables' && !selectedTableId) {
+      setMenuAddQueue([])
+    }
+  }, [activeTab, selectedTableId])
 
   const hasInitializedMainPosPollRef = useRef(false)
   const lastSeenOrderIdRef = useRef<number>(0)
@@ -444,17 +450,21 @@ export default function PosTerminalPage() {
       if (seenOrderIdsRef.current.has(orderId)) return
       seenOrderIdsRef.current.add(orderId)
       if (orderId > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = orderId
-      let items: { id: string; name: string; price: number; qty: number }[] = []
+      let items: { id: string; name: string; price: number; qty: number; note?: string }[] = []
       try {
         const raw = row.items_json
         const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : []
         items = (Array.isArray(arr) ? arr : []).map(
-          (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number }) => ({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            price: Number(it.price ?? 0),
-            qty: Number(it.qty ?? it.quantity ?? 1),
-          })
+          (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string }) => {
+            const note = String(it.note ?? '').trim()
+            return {
+              id: String(it.id ?? ''),
+              name: String(it.name ?? ''),
+              price: Number(it.price ?? 0),
+              qty: Number(it.qty ?? it.quantity ?? 1),
+              ...(note ? { note } : {}),
+            }
+          }
         )
       } catch {
         return
@@ -515,7 +525,9 @@ export default function PosTerminalPage() {
               const slip = slips[idx]
               const cR = (tag: string) => '\u003c/' + tag + '>'
               const tablePartR = tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + tableName : ''
-              const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+              const itemsHtmlR = slip.items
+                .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
+                .join('')
               const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
               const html = buildKitchenSlipHtml({
                 label: slip.label,
@@ -523,7 +535,7 @@ export default function PosTerminalPage() {
                 storeCode,
                 orderTypeLabel: orderTypeLabels[orderType] || orderType,
                 tablePart: tablePartR,
-                dateStr: new Date().toLocaleString('ko-KR'),
+                dateStr: formatPosDateTimeMedium(new Date(), lang),
                 itemsHtml: itemsHtmlR,
                 memoHtml: memoHtmlR,
                 paperCss,
@@ -548,7 +560,7 @@ export default function PosTerminalPage() {
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t])
+  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t, lang])
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) {
@@ -586,12 +598,18 @@ export default function PosTerminalPage() {
         if (maxIdInBatch > lastSeenOrderIdRef.current) lastSeenOrderIdRef.current = maxIdInBatch
         for (const order of newOrders) {
           seenOrderIdsRef.current.add(order.id)
-          const items = (order.items || []).map((it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number }) => ({
-            id: String(it.id ?? ''),
-            name: String(it.name ?? ''),
-            price: Number(it.price ?? 0),
-            qty: Number(it.qty ?? it.quantity ?? 1),
-          }))
+          const items = (order.items || []).map(
+            (it: { id?: string; name?: string; price?: number; qty?: number; quantity?: number; note?: string }) => {
+              const note = String(it.note ?? '').trim()
+              return {
+                id: String(it.id ?? ''),
+                name: String(it.name ?? ''),
+                price: Number(it.price ?? 0),
+                qty: Number(it.qty ?? it.quantity ?? 1),
+                ...(note ? { note } : {}),
+              }
+            }
+          )
           if (autoPrintReceiptOnOrder && items.length > 0) {
             printReceiptNow({
               orderNo: order.orderNo ?? '',
@@ -641,7 +659,9 @@ export default function PosTerminalPage() {
                 const tablePart = order.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + order.tableName : ''
                 const orderTypeLabel = orderTypeLabels[order.orderType ?? ''] || (order.orderType ?? '')
                 const c2 = (tag: string) => '\u003c/' + tag + '>'
-                const itemsHtml = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + c2('div')).join('')
+                const itemsHtml = slip.items
+                  .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, c2))
+                  .join('')
                 const memoHtml = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + c2('div') : ''
                 const html = buildKitchenSlipHtml({
                   label: slip.label,
@@ -649,7 +669,7 @@ export default function PosTerminalPage() {
                   storeCode: order.storeCode ?? '',
                   orderTypeLabel,
                   tablePart,
-                  dateStr: new Date().toLocaleString('ko-KR'),
+                  dateStr: formatPosDateTimeMedium(new Date(), lang),
                   itemsHtml,
                   memoHtml,
                   paperCss,
@@ -681,7 +701,7 @@ export default function PosTerminalPage() {
     return () => {
       clearInterval(id)
     }
-  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t])
+  }, [isMainPosDevice, currentStoreId, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, menus, t, lang])
 
   useEffect(() => {
     if (selectedTableId) {
@@ -724,7 +744,7 @@ export default function PosTerminalPage() {
       orderType: string
       tableName?: string
       memo?: string
-      items: { id: string; name: string; price: number; qty: number }[]
+      items: { id: string; name: string; price: number; qty: number; note?: string }[]
       subtotal: number
       discountAmt: number
       total: number
@@ -769,11 +789,6 @@ export default function PosTerminalPage() {
       const value = tPrint(key)
       return value && value !== key ? value : fallback
     }
-    // #region agent log
-    const logH13 = {sessionId:'960801',runId:'run-13',hypothesisId:'H13',location:'terminal/page.tsx:printReceiptNow:layoutConfig',message:'terminal print layout config',data:{bodyPaddingTopMm:0,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,bodyPaddingBottomMm:1,receiptWidthMm:73.2,contentPadLeftMm:0,contentPadRightMm:0.8,rowPadRightMm:1.2,metaPadRightMm:1.2,contentMarginTopMm:0,contentAlign:'left'},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH13)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH13)}).catch(()=>{});
-    // #endregion
     /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
     const ct = (tag: string) => '\u003c/' + tag + '>'
     const tableDisplay = payload.tableName
@@ -786,22 +801,27 @@ export default function PosTerminalPage() {
     const itemsRows = payload.items
       .map((it) => {
         const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
-        return '<div class="receipt-row"><span>' + it.qty + 'x ' + esc(line) + ct('span') + '<span>' + formatBahtNum(it.price * it.qty) + ct('span') + ct('div')
+        const lineNote = String((it as { note?: string }).note ?? '').trim()
+        const noteHtml = lineNote
+          ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
+          : ''
+        return (
+          '<div class="receipt-row"><span>' +
+          it.qty +
+          'x ' +
+          esc(line) +
+          ct('span') +
+          '<span>' +
+          formatBahtNum(it.price * it.qty) +
+          ct('span') +
+          ct('div') +
+          noteHtml
+        )
       })
       .join('')
     const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
     const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
     const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
-    // #region agent log
-    const logH3 = {sessionId:'960801',runId:'run-2',hypothesisId:'H3',location:'terminal/page.tsx:printReceiptNow:beforeWrite',message:'terminal print payload metrics',data:{orderNoLen:String(payload.orderNo||'').length,items:payload.items.length,contentLen:printContent.length,hasMetaRow:printContent.includes('receipt-meta-row')},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH3)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH3)}).catch(()=>{});
-    // #endregion
-    // #region agent log
-    const logH20 = {sessionId:'960801',runId:'run-13',hypothesisId:'H20',location:'terminal/page.tsx:printReceiptNow:cssRiskBudget',message:'terminal css risk budget',data:{paperWidthMm:80,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,receiptWidthMm:73.2,contentPadRightMm:0.8,rowPadRightMm:1.2,horizontalBudgetMm:75.4,contentMarginTopMm:0},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH20)}).catch(()=>{});
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH20)}).catch(()=>{});
-    // #endregion
     const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -1158,7 +1178,7 @@ export default function PosTerminalPage() {
 
   const handleTableSelect = (tableId: string) => {
     if (selectedTableId !== tableId) {
-      cartRef.current?.clearCart()
+      clearCartFromTerminal()
     }
     const table = currentStore?.tables.find((t) => t.id === tableId)
     if (table?.order) {
@@ -1169,9 +1189,49 @@ export default function PosTerminalPage() {
     setServingTableId(null)
     setSelectedTableId(tableId)
   }
-  const handleAddItemToCart = (item: CartPanelAddItemPayload) => {
-    cartRef.current?.addItem(item)
-  }
+  const handleAddItemToCart = useCallback((item: CartPanelAddItemPayload) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'terminal/page.tsx:handleAddItemToCart',
+        message: 'add to cart request',
+        data: { via: cartRef.current ? 'ref' : 'queue', itemId: item.id },
+        timestamp: Date.now(),
+        hypothesisId: 'H1',
+      }),
+    }).catch(() => {})
+    // #endregion
+    if (cartRef.current) {
+      cartRef.current.addItem(item)
+      return
+    }
+    setMenuAddQueue((prev) => [...prev, item])
+  }, [])
+
+  useLayoutEffect(() => {
+    const api = cartRef.current
+    if (!api || menuAddQueue.length === 0) return
+    const n = menuAddQueue.length
+    // #region agent log
+    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'terminal/page.tsx:flushMenuAddQueue',
+        message: 'draining menu queue',
+        data: { count: n },
+        timestamp: Date.now(),
+        hypothesisId: 'H2',
+      }),
+    }).catch(() => {})
+    // #endregion
+    for (const item of menuAddQueue) {
+      api.addItem(item)
+    }
+    setMenuAddQueue((prev) => prev.slice(n))
+  }, [menuAddQueue, cartBridgeEpoch])
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -1196,7 +1256,7 @@ export default function PosTerminalPage() {
             onValueChange={(v) => {
               const next = v as 'tables' | 'delivery' | 'takeout'
               if (next !== activeTab) {
-                cartRef.current?.clearCart()
+                clearCartFromTerminal()
                 if (next === 'tables') {
                   setSelectedTableId(null)
                   setServingTableId(null)
@@ -1423,7 +1483,8 @@ export default function PosTerminalPage() {
                   {isNarrowViewport && (
                     <div className="flex-shrink-0 border-t border-border bg-card h-[22vh] min-h-[140px] max-h-[220px] overflow-hidden flex flex-col rounded-b-lg">
                       <CartPanel
-                        ref={cartRef}
+                        debugOwner="inline-mobile"
+                        onImperativeBridge={bindCartImperative}
                         stores={stores}
                         currentStoreId={currentStoreId}
                         selectedTable={selectedTable}
@@ -1431,49 +1492,98 @@ export default function PosTerminalPage() {
                         t={t}
                         lockOrderType
                         orderType="dine-in"
+                        takeoutLabel={takeoutLabel}
                         pricingAdjustments={pricingAdjustments}
                         pendingOrderId={pendingDineInOrderId}
                         onOrderSubmit={async (payload) => {
-                          const isAddOrder = Boolean(selectedTable?.order)
+                          const existingOrder = selectedTable?.order ?? null
+                          const existingOrderId = Number(existingOrder?.id ?? 0)
+                          const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
                           const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
                           try {
-                            const res = await savePosOrderWithOffline({
-                              storeCode: currentStoreId,
-                              orderType: 'dine_in',
-                              tableName: payload.tableName,
-                              memo: payload.memo,
-                              discountAmt: payload.discountAmt,
-                              discountReason: payload.discountReason,
-                              memberId: payload.memberId,
-                              memberNo: payload.memberNo,
-                              couponCode: payload.couponCode,
-                              couponDiscountAmt: payload.couponDiscountAmt,
-                              pointUsed: payload.pointUsed,
-                              guestCount: payload.guestCount,
-                              paymentCash: 0,
-                              paymentCard: 0,
-                              paymentQr: 0,
-                              paymentOther: 0,
-                              pricingAdjustments,
-                              items: cartLinesToPosOrderItems(payload.items),
-                            })
-                            if (!res.success) {
-                              const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                              await appAlert(msg)
-                              return
+                            const incomingItems = cartLinesToPosOrderItems(payload.items)
+                            let savedOrderNo = ''
+                            let savedOrderId: number | null = null
+                            if (isAddOrder && existingOrder) {
+                              const mergedItems = [
+                                ...existingOrder.items.map((it) => ({
+                                  id: it.id,
+                                  name: it.name,
+                                  price: it.price,
+                                  qty: it.quantity || 1,
+                                  ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                                  ...(it.servedAt ? { servedAt: it.servedAt } : {}),
+                                  ...(it.servedBy ? { servedBy: it.servedBy } : {}),
+                                })),
+                                ...incomingItems,
+                              ]
+                              const res = await updatePosOrder({
+                                id: existingOrderId,
+                                items: mergedItems,
+                                tableName: payload.tableName,
+                                memo: payload.memo,
+                                discountAmt: payload.discountAmt ?? 0,
+                                discountReason: payload.discountReason ?? '',
+                                memberId: payload.memberId,
+                                memberNo: payload.memberNo,
+                                couponCode: payload.couponCode,
+                                couponDiscountAmt: payload.couponDiscountAmt,
+                                pointUsed: payload.pointUsed,
+                                guestCount: payload.guestCount ?? existingOrder.guestCount,
+                                paymentCash: 0,
+                                paymentCard: 0,
+                                paymentQr: 0,
+                                paymentOther: 0,
+                                pricingAdjustments,
+                              })
+                              if (!res.success) {
+                                const msg = res.message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                                await appAlert(msg)
+                                return
+                              }
+                              savedOrderId = existingOrderId
+                              savedOrderNo = existingOrder.orderNo ?? ''
+                            } else {
+                              const res = await savePosOrderWithOffline({
+                                storeCode: currentStoreId,
+                                orderType: 'dine_in',
+                                tableName: payload.tableName,
+                                memo: payload.memo,
+                                discountAmt: payload.discountAmt,
+                                discountReason: payload.discountReason,
+                                memberId: payload.memberId,
+                                memberNo: payload.memberNo,
+                                couponCode: payload.couponCode,
+                                couponDiscountAmt: payload.couponDiscountAmt,
+                                pointUsed: payload.pointUsed,
+                                guestCount: payload.guestCount,
+                                paymentCash: 0,
+                                paymentCard: 0,
+                                paymentQr: 0,
+                                paymentOther: 0,
+                                pricingAdjustments,
+                                items: incomingItems,
+                              })
+                              if (!res.success) {
+                                const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                                await appAlert(msg)
+                                return
+                              }
+                              savedOrderId = res.orderId ?? null
+                              savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                             }
-                            if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
+                            if (savedOrderId != null) seenOrderIdsRef.current.add(savedOrderId)
                             const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                             const discountAmt = payload.discountAmt ?? 0
                             const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
                             printReceiptNow(
                               {
-                                orderNo: (res as { orderNo?: string }).orderNo ?? '',
+                                orderNo: savedOrderNo,
                                 storeCode: currentStoreId,
                                 orderType: t('posOrderTypeDineIn') || '매장',
                                 tableName: payload.tableName,
                                 memo: payload.memo,
-                                items: cartLinesToPosOrderItems(payload.items),
+                                items: incomingItems,
                                 subtotal,
                                 discountAmt,
                                 total: pricing.finalTotal,
@@ -1492,8 +1602,16 @@ export default function PosTerminalPage() {
                               true
                             )
                             if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
-                              const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
-                              const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
+                              const orderNoStr = savedOrderNo
+                              const itemsForKitchen = payload.items.map((i) => ({
+                                id: i.id,
+                                name: i.name,
+                                price: i.price,
+                                qty: i.quantity || 1,
+                                ...(String((i as { note?: string }).note ?? '').trim()
+                                  ? { note: String((i as { note?: string }).note).trim() }
+                                  : {}),
+                              }))
                               getPosPrinterSettings({ storeCode: currentStoreId })
                                 .then((settings) => {
                                   const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
@@ -1527,7 +1645,9 @@ export default function PosTerminalPage() {
                                   const printOne = (idx: number) => {
                                     if (idx >= slips.length) return
                                     const slip = slips[idx]
-                                    const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+                                    const itemsHtmlR = slip.items
+                                      .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
+                                      .join('')
                                     const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
                                     const html = buildKitchenSlipHtml({
                                       label: slip.label,
@@ -1535,7 +1655,7 @@ export default function PosTerminalPage() {
                                       storeCode: currentStoreId,
                                       orderTypeLabel: orderTypeLabels.dine_in || '매장',
                                       tablePart: tablePartR,
-                                      dateStr: new Date().toLocaleString('ko-KR'),
+                                      dateStr: formatPosDateTimeMedium(new Date(), lang),
                                       itemsHtml: itemsHtmlR,
                                       memoHtml: memoHtmlR,
                                       paperCss,
@@ -1556,12 +1676,12 @@ export default function PosTerminalPage() {
                                 })
                                 .catch((e) => console.error('Kitchen slip print:', e))
                             }
-                            if (res.orderId != null) setPendingDineInOrderId(res.orderId)
+                            if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                             setServingTableId(null)
                             setSelectedTableId(null)
                             await refetchStores()
                           } catch (e) {
-                            console.error('savePosOrder:', e)
+                            console.error('savePosOrder/updatePosOrder:', e)
                           }
                         }}
                         onDineInOrderComplete={async (payload, existingOrderId) => {
@@ -1764,7 +1884,7 @@ export default function PosTerminalPage() {
                     const selected = currentDeliveryBarItems.find((item) => item.id === id)
                     if (!selected) return
                     if (selectedDeliveryTargetId && selectedDeliveryTargetId !== id) {
-                      cartRef.current?.clearCart()
+                      clearCartFromTerminal()
                     }
                     setSelectedDeliveryTargetId(id)
                     setSelectedDeliveryTargetLabel(selected.label || (t('posOrderTypeDelivery') || '배달'))
@@ -1810,7 +1930,7 @@ export default function PosTerminalPage() {
                     const selected = currentTakeoutBarItems.find((item) => item.id === id)
                     if (!selected) return
                     if (selectedTakeoutTargetId && selectedTakeoutTargetId !== id) {
-                      cartRef.current?.clearCart()
+                      clearCartFromTerminal()
                     }
                     setSelectedTakeoutTargetId(id)
                     setSelectedTakeoutTargetLabel(selected.label)
@@ -1828,7 +1948,7 @@ export default function PosTerminalPage() {
           </Tabs>
         </div>
         {showSidePanel && (() => {
-          // 테이블 주문(모바일)은 하단 고정 카트 패널을 화면에 항상 붙여 실시간 확인
+          // 테이블 주문(모바일)은 메뉴 아래 고정 카트를 사용
           if (isNarrowViewport && isTablesMenuWithCart) return null
           const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
             <DeliveryOrderPanel
@@ -1848,6 +1968,7 @@ export default function PosTerminalPage() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedDeliveryOrder.orderNo,
                 })
@@ -1886,6 +2007,7 @@ export default function PosTerminalPage() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: servingTable.order.orderNo,
                 })
@@ -1918,6 +2040,7 @@ export default function PosTerminalPage() {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
                   })),
                   orderNo: selectedTakeoutOrder.orderNo,
                 })
@@ -1932,8 +2055,9 @@ export default function PosTerminalPage() {
             />
           ) : (
             <CartPanel
-            ref={cartRef}
-            stores={stores}
+              debugOwner="side-panel"
+              onImperativeBridge={bindCartImperative}
+              stores={stores}
             currentStoreId={currentStoreId}
             selectedTable={selectedTable}
             onStoreChange={setCurrentStoreId}
@@ -2059,46 +2183,94 @@ export default function PosTerminalPage() {
               }
             }}
             onOrderSubmit={async (payload) => {
-              const isAddOrder = Boolean(selectedTable?.order)
+              const existingOrder = selectedTable?.order ?? null
+              const existingOrderId = Number(existingOrder?.id ?? 0)
+              const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
               const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
               try {
-                const res = await savePosOrderWithOffline({
-                  storeCode: currentStoreId,
-                  orderType: 'dine_in',
-                  tableName: payload.tableName,
-                  memo: payload.memo,
-                  discountAmt: payload.discountAmt,
-                  discountReason: payload.discountReason,
-                  memberId: payload.memberId,
-                  memberNo: payload.memberNo,
-                  couponCode: payload.couponCode,
-                  couponDiscountAmt: payload.couponDiscountAmt,
-                  pointUsed: payload.pointUsed,
-                  guestCount: payload.guestCount,
-                  paymentCash: 0,
-                  paymentCard: 0,
-                  paymentQr: 0,
-                  paymentOther: 0,
-                  pricingAdjustments,
-                  items: cartLinesToPosOrderItems(payload.items),
-                })
-                if (!res.success) {
-                  const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                  await appAlert(msg)
-                  return
+                const incomingItems = cartLinesToPosOrderItems(payload.items)
+                let savedOrderNo = ''
+                let savedOrderId: number | null = null
+                if (isAddOrder && existingOrder) {
+                  const mergedItems = [
+                    ...existingOrder.items.map((it) => ({
+                      id: it.id,
+                      name: it.name,
+                      price: it.price,
+                      qty: it.quantity || 1,
+                      ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                      ...(it.servedAt ? { servedAt: it.servedAt } : {}),
+                      ...(it.servedBy ? { servedBy: it.servedBy } : {}),
+                    })),
+                    ...incomingItems,
+                  ]
+                  const res = await updatePosOrder({
+                    id: existingOrderId,
+                    items: mergedItems,
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    discountAmt: payload.discountAmt ?? 0,
+                    discountReason: payload.discountReason ?? '',
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                    couponCode: payload.couponCode,
+                    couponDiscountAmt: payload.couponDiscountAmt,
+                    pointUsed: payload.pointUsed,
+                    guestCount: payload.guestCount ?? existingOrder.guestCount,
+                    paymentCash: 0,
+                    paymentCard: 0,
+                    paymentQr: 0,
+                    paymentOther: 0,
+                    pricingAdjustments,
+                  })
+                  if (!res.success) {
+                    const msg = res.message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                    await appAlert(msg)
+                    return
+                  }
+                  savedOrderId = existingOrderId
+                  savedOrderNo = existingOrder.orderNo ?? ''
+                } else {
+                  const res = await savePosOrderWithOffline({
+                    storeCode: currentStoreId,
+                    orderType: 'dine_in',
+                    tableName: payload.tableName,
+                    memo: payload.memo,
+                    discountAmt: payload.discountAmt,
+                    discountReason: payload.discountReason,
+                    memberId: payload.memberId,
+                    memberNo: payload.memberNo,
+                    couponCode: payload.couponCode,
+                    couponDiscountAmt: payload.couponDiscountAmt,
+                    pointUsed: payload.pointUsed,
+                    guestCount: payload.guestCount,
+                    paymentCash: 0,
+                    paymentCard: 0,
+                    paymentQr: 0,
+                    paymentOther: 0,
+                    pricingAdjustments,
+                    items: incomingItems,
+                  })
+                  if (!res.success) {
+                    const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
+                    await appAlert(msg)
+                    return
+                  }
+                  savedOrderId = res.orderId ?? null
+                  savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                 }
-                if (res.orderId != null) seenOrderIdsRef.current.add(res.orderId)
+                if (savedOrderId != null) seenOrderIdsRef.current.add(savedOrderId)
                 const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
                 const discountAmt = payload.discountAmt ?? 0
                 const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
                 printReceiptNow(
                   {
-                    orderNo: (res as { orderNo?: string }).orderNo ?? '',
+                    orderNo: savedOrderNo,
                     storeCode: currentStoreId,
                     orderType: t('posOrderTypeDineIn') || '매장',
                     tableName: payload.tableName,
                     memo: payload.memo,
-                    items: cartLinesToPosOrderItems(payload.items),
+                    items: incomingItems,
                     subtotal,
                     discountAmt,
                     total: pricing.finalTotal,
@@ -2117,8 +2289,16 @@ export default function PosTerminalPage() {
                   true
                 )
                 if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
-                  const orderNoStr = (res as { orderNo?: string }).orderNo ?? ''
-                  const itemsForKitchen = payload.items.map((i) => ({ id: i.id, name: i.name, price: i.price, qty: i.quantity || 1 }))
+                  const orderNoStr = savedOrderNo
+                  const itemsForKitchen = payload.items.map((i) => ({
+                    id: i.id,
+                    name: i.name,
+                    price: i.price,
+                    qty: i.quantity || 1,
+                    ...(String((i as { note?: string }).note ?? '').trim()
+                      ? { note: String((i as { note?: string }).note).trim() }
+                      : {}),
+                  }))
                   getPosPrinterSettings({ storeCode: currentStoreId })
                     .then((settings) => {
                       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
@@ -2152,7 +2332,9 @@ export default function PosTerminalPage() {
                       const printOne = (idx: number) => {
                         if (idx >= slips.length) return
                         const slip = slips[idx]
-                        const itemsHtmlR = slip.items.map((it) => '<div class="k-row">' + escapeHtml(it.name) + ' × ' + it.qty + cR('div')).join('')
+                        const itemsHtmlR = slip.items
+                          .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
+                          .join('')
                         const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
                         const html = buildKitchenSlipHtml({
                           label: slip.label,
@@ -2160,7 +2342,7 @@ export default function PosTerminalPage() {
                           storeCode: currentStoreId,
                           orderTypeLabel: orderTypeLabels.dine_in || '매장',
                           tablePart: tablePartR,
-                          dateStr: new Date().toLocaleString('ko-KR'),
+                          dateStr: formatPosDateTimeMedium(new Date(), lang),
                           itemsHtml: itemsHtmlR,
                           memoHtml: memoHtmlR,
                           paperCss,
@@ -2181,12 +2363,12 @@ export default function PosTerminalPage() {
                     })
                     .catch((e) => console.error('Kitchen slip print:', e))
                 }
-                if (res.orderId != null) setPendingDineInOrderId(res.orderId)
+                if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
                 setServingTableId(null)
                 setSelectedTableId(null)
                 await refetchStores()
               } catch (e) {
-                console.error('savePosOrder:', e)
+                console.error('savePosOrder/updatePosOrder:', e)
               }
             }}
             onDineInOrderComplete={async (payload, existingOrderId) => {
@@ -2348,6 +2530,7 @@ export default function PosTerminalPage() {
         <>
           <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
             <SheetContent
+              forceMount
               side="bottom"
               showCloseButton={true}
               className="h-[85vh] max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 rounded-t-xl"

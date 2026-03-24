@@ -16,6 +16,8 @@ import { markPosOrderItemServed, updatePosOrder, updatePosOrderStatus } from '@/
 import { cn } from '@/lib/utils'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Check, CheckCircle, Clock, Users, XCircle } from 'lucide-react'
+import { useLang } from '@/lib/lang-context'
+import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TableOrderPanelProps {
   tableName: string
@@ -55,15 +57,6 @@ function getPlatformAndOrderNo(order: Order, deliveryApps?: PosDeliveryApp[]): {
   return { platform, orderNo }
 }
 
-function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
 export function TableOrderPanel({
   tableName,
   order,
@@ -76,6 +69,7 @@ export function TableOrderPanel({
   onClose,
   t = (k) => k,
 }: TableOrderPanelProps) {
+  const { lang } = useLang()
   const dineOutApps = deliveryApps.filter((a) => a.dineOutEnabled && a.enabled)
   const showPlatformPayOption = dineOutApps.length > 0
   const isServedReadyForPayment = order?.status === 'ready'
@@ -168,6 +162,7 @@ export function TableOrderPanel({
         name: it.name,
         price: it.price,
         qty: it.quantity || 1,
+        ...(it.note?.trim() ? { note: it.note.trim() } : {}),
       }))
       await updatePosOrder({
         id: Number(order.id),
@@ -219,7 +214,7 @@ export function TableOrderPanel({
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <Clock className="w-4 h-4 shrink-0" />
-            <span>{t('posOrderTime') || '주문 시각'}: {formatDateTime(order.createdAt)}</span>
+            <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
           </div>
           {order.type === 'dine-in' && (order.guestCount ?? 0) > 0 && (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">

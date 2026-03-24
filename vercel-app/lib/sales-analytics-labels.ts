@@ -17,7 +17,7 @@ const DOW_KEYS = [
 
 export function translatePeriodAxisLabel(
   row: { key: string; label: string },
-  groupBy: "month" | "week" | "day" | "dow",
+  groupBy: "month" | "week" | "day" | "dow" | "hour",
   tr: (key: string, fallback: string) => string
 ): string {
   if (groupBy === "dow") {
@@ -25,6 +25,13 @@ export function translatePeriodAxisLabel(
     if (i >= 0 && i <= 6) {
       const k = DOW_KEYS[i]
       return tr(k, KO[k] ?? row.label)
+    }
+  }
+  if (groupBy === "hour") {
+    const h = parseInt(row.key, 10)
+    if (!Number.isNaN(h) && h >= 0 && h <= 23) {
+      const start = String(h).padStart(2, "0")
+      return `${start}:00–${start}:59`
     }
   }
   return row.label

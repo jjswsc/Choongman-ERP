@@ -51,6 +51,7 @@ import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from "@/lib/pos-promo-constants"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
+import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -839,7 +840,7 @@ export default function PosOrderPage() {
           <div class="k-header">${escapeHtml(slip.label)}</div>
           <div class="k-row"><strong>${escapeHtml(receiptData.orderNo)}</strong></div>
           <div class="k-row">${escapeHtml(receiptData.storeCode + " · " + (orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}` : ""))}</div>
-          <div class="k-row">${new Date().toLocaleString("ko-KR")}</div>
+          <div class="k-row">${formatPosDateTimeMedium(new Date(), lang)}</div>
           <hr style="margin: 10px 0;" />
           ${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join("")}
           ${kitchenMemo ? `<div class="k-memo">${escapeHtml((t("posCustomerMemo") || "메모") + ": " + kitchenMemo)}</div>` : ""}
@@ -1673,7 +1674,7 @@ export default function PosOrderPage() {
                     {receiptData.tableName && ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}`}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {new Date().toLocaleString("ko-KR")}
+                    {formatPosDateTimeMedium(new Date(), lang)}
                   </div>
                   <div className="text-xs">{parsedReceiptMemo.taxInvoice ? tr("posReceiptTaxInvoice", "세금계산서") : tr("posReceiptSimpleTaxInvoice", "간이 세금계산서")}</div>
                 </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseSelect } from '@/lib/supabase-server'
 
-/** P0001, P001, PROMO12 등 숫자 접미사 최대값 */
+/** P0001, P001, PROMO12 등에서 숫자 접미사 후보 */
 const CODE_PATTERNS = [/^P(\d+)$/i, /^PROMO(\d+)$/i]
 
 function maxNumericSuffix(codes: Iterable<string>): number {
@@ -19,7 +19,7 @@ function maxNumericSuffix(codes: Iterable<string>): number {
   return max
 }
 
-/** 다음 프로모션 코드 (pos_promos·pos_menus 충돌 방지 — 미러 메뉴가 동일 코드 사용) */
+/** 다음 프로모션 코드: pos_promos·pos_menus의 실제 코드 집합과 충돌하지 않을 때까지 증가 */
 export async function GET() {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -31,15 +31,26 @@ export async function GET() {
     ])
 
     const allCodes: string[] = [
-      ...(promoRows || []).map((r) => String(r?.code ?? '')),
-      ...(menuRows || []).map((r) => String(r?.code ?? '')),
-    ]
+      ...(promoRows || []).map((r) => String(r?.code ?? '').trim()),
+      ...(menuRows || []).map((r) => String(r?.code ?? '').trim()),
+    ].filter(Boolean)
 
-    const nextNum = maxNumericSuffix(allCodes) + 1
-    const width = Math.max(4, String(nextNum).length)
-    const code = `P${String(nextNum).padStart(width, '0')}`
+    const codeSet = new Set(allCodes)
+    let n = maxNumericSuffix(allCodes) + 1
+    const maxAttempts = 50000
+    for (let i = 0; i < maxAttempts; i++) {
+      const width = Math.max(4, String(n).length)
+      const candidate = `P${String(n).padStart(width, '0')}`
+      if (!codeSet.has(candidate)) {
+        return NextResponse.json({ code: candidate }, { headers })
+      }
+      n++
+    }
 
-    return NextResponse.json({ code }, { headers })
+    return NextResponse.json(
+      { code: null, message: '사용 가능한 프로모 코드를 찾지 못했습니다.' },
+      { status: 500, headers }
+    )
   } catch (e) {
     console.error('getNextPosPromoCode:', e)
     return NextResponse.json({ code: null, message: String(e) }, { status: 500, headers })

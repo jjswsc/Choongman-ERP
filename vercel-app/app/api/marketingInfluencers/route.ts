@@ -109,6 +109,12 @@ export async function POST(req: NextRequest) {
         { headers }
       )
     }
+    if (!editingId && !String(body.campaignId ?? '').trim()) {
+      return NextResponse.json(
+        { success: false, message: '캠페인 선택은 필수입니다. 캠페인 허브에서 연결 후 저장해 주세요.' },
+        { headers }
+      )
+    }
 
     const platformLinks = body.platformLinks && typeof body.platformLinks === 'object'
       ? body.platformLinks

@@ -1,5 +1,5 @@
 /**
- * 기간별 집계 (월/주/일/요일별). pos_orders 기반.
+ * 기간별 집계 (월/주/일/요일/시간대별). pos_orders 기반. 시간대는 방콕 시각 기준 0–23시.
  * 건수·공급가액(subtotal)·세금(vat)·할인(discount_amt+coupon_discount_amt)·매출액(total).
  * 홀(dine_in): dineInTotal/dineInCount=테이블(건)당, dineInTotal/dineInGuestSum=1인당.
  * 조회 필터 전체: salesPerOrder = total/count (포장·배달 등 건당).
@@ -8,7 +8,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
-import { bangkokDateRangeToUtc, toDateStrBangkok, getDayOfWeekBangkok } from '@/lib/attendance-utils'
+import {
+  bangkokDateRangeToUtc,
+  toDateStrBangkok,
+  getDayOfWeekBangkok,
+  getBangkokHour,
+} from '@/lib/attendance-utils'
 import {
   normalizePosOrderTypeKey,
   parseOrderTypesParam,
@@ -128,6 +133,10 @@ export async function GET(request: NextRequest) {
       } else if (groupBy === 'dow') {
         const dow = getDayOfWeekBangkok(bkkDate)
         add(String(dow), r)
+      } else if (groupBy === 'hour') {
+        const h = getBangkokHour(dt)
+        const hk = String(Math.min(23, Math.max(0, h))).padStart(2, '0')
+        add(hk, r)
       } else {
         add(bkkDate, r)
       }
@@ -176,6 +185,22 @@ export async function GET(request: NextRequest) {
           dineInGuestSum: 0,
         })
       )
+    } else if (groupBy === 'hour') {
+      const empty: Bucket = {
+        count: 0,
+        subtotal: 0,
+        vat: 0,
+        discount: 0,
+        total: 0,
+        guestSum: 0,
+        dineInOrderCount: 0,
+        dineInTotal: 0,
+        dineInGuestSum: 0,
+      }
+      result = Array.from({ length: 24 }, (_, h) => {
+        const hk = String(h).padStart(2, '0')
+        return toRow(hk, byKey[hk] ?? { ...empty })
+      })
     } else {
       result = Object.entries(byKey)
         .sort(([a], [b]) => a.localeCompare(b))

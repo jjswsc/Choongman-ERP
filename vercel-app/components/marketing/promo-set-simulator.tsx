@@ -14,10 +14,14 @@ import {
 import { getPosMenus, getPosMenuOptions, getMenuCost } from "@/lib/api-client"
 import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { useLang } from "@/lib/lang-context"
+import { useT } from "@/lib/i18n"
 
 type SimItem = { menuId: string; optionId: string | null; qty: number; menuName: string; optionName?: string; unitPrice: number }
 
 export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
+  const { lang } = useLang()
+  const t = useT(lang)
   const [menus, setMenus] = React.useState<PosMenu[]>([])
   const [options, setOptions] = React.useState<PosMenuOption[]>([])
   const [items, setItems] = React.useState<SimItem[]>([])
@@ -25,7 +29,6 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
   const [salePrice, setSalePrice] = React.useState("")
   const [discountPercent, setDiscountPercent] = React.useState("")
   const [targetOrders, setTargetOrders] = React.useState("")
-  const [loading, setLoading] = React.useState(false)
 
   const optionsByMenu = React.useMemo(() => {
     const m: Record<string, PosMenuOption[]> = {}
@@ -106,11 +109,11 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Calculator className="h-5 w-5" />
-            프로모션 세트 시뮬레이터
+            {t("posPromoSimulatorTitle")}
           </h3>
           {onClose && (
             <Button variant="ghost" size="sm" onClick={onClose}>
-              닫기
+              {t("posPromoSimulatorClose")}
             </Button>
           )}
         </div>
@@ -118,7 +121,7 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
           <div className="flex flex-wrap gap-2">
             <Select value={newMenuId} onValueChange={(v) => { setNewMenuId(v); setNewOptionId(null) }}>
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="메뉴 선택" />
+                <SelectValue placeholder={t("posPromoSelectMenu")} />
               </SelectTrigger>
               <SelectContent>
                 {menus.map((m) => (
@@ -130,10 +133,10 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
             </Select>
             <Select value={newOptionId ?? "_"} onValueChange={(v) => setNewOptionId(v === "_" ? null : v)}>
               <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="옵션" />
+                <SelectValue placeholder={t("posPromoSelectOption")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="_">없음</SelectItem>
+                <SelectItem value="_">{t("posPromoSimulatorOptionNone")}</SelectItem>
                 {(optionsByMenu[newMenuId] || []).map((o) => (
                   <SelectItem key={o.id} value={String(o.id)}>
                     {o.name}
@@ -147,7 +150,7 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
               value={newQty}
               onChange={(e) => setNewQty(e.target.value)}
               className="w-16"
-              placeholder="수량"
+              placeholder={t("posPromoSimulatorQty")}
             />
             <Button size="sm" onClick={handleAdd} disabled={!newMenuId}>
               <Plus className="h-4 w-4" />
@@ -170,41 +173,48 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
           )}
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>
-              <label className="text-muted-foreground">세트 판매가 (฿)</label>
-              <Input type="number" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} placeholder="미입력=정가합계" />
+              <label className="text-muted-foreground">{t("posPromoSimulatorSetPrice")}</label>
+              <Input
+                type="number"
+                value={salePrice}
+                onChange={(e) => setSalePrice(e.target.value)}
+                placeholder={t("posPromoSimulatorPlaceholderSalePrice")}
+              />
             </div>
             <div>
-              <label className="text-muted-foreground">할인 %</label>
+              <label className="text-muted-foreground">{t("posPromoSimulatorDiscountPct")}</label>
               <Input type="number" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} placeholder="0" />
             </div>
             <div>
-              <label className="text-muted-foreground">목표 주문 수</label>
+              <label className="text-muted-foreground">{t("posPromoSimulatorTargetOrders")}</label>
               <Input type="number" value={targetOrders} onChange={(e) => setTargetOrders(e.target.value)} placeholder="0" />
             </div>
           </div>
           {items.length > 0 && (
             <div className={cn("rounded-lg border p-3 space-y-1", !hasAllCosts && "opacity-70")}>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">정가 합계</span>
+                <span className="text-muted-foreground">{t("posPromoSimulatorRegularSum")}</span>
                 <span className="font-mono">฿{regularPriceSum.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">원가 합계</span>
-                <span className="font-mono">{hasAllCosts ? `฿${costTotal.toFixed(1)}` : "계산 중..."}</span>
+                <span className="text-muted-foreground">{t("posPromoSimulatorCostSum")}</span>
+                <span className="font-mono">{hasAllCosts ? `฿${costTotal.toFixed(1)}` : t("posPromoSimulatorCalculating")}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">세트 판매가</span>
+                <span className="text-muted-foreground">{t("posPromoSimulatorSetSalePrice")}</span>
                 <span className="font-mono">฿{Math.round(finalSalePrice).toLocaleString()}</span>
               </div>
               <div className="flex justify-between font-semibold">
-                <span>마진</span>
+                <span>{t("posPromoSimulatorMargin")}</span>
                 <span className={marginBaht >= 0 ? "text-green-600" : "text-destructive"}>
                   ฿{marginBaht.toFixed(1)} ({marginPercent.toFixed(1)}%)
                 </span>
               </div>
               {targetNum > 0 && (
                 <div className="flex justify-between pt-2 border-t">
-                  <span className="text-muted-foreground">목표 {targetNum}주문 시 예상 이익</span>
+                  <span className="text-muted-foreground">
+                    {t("posPromoSimulatorTargetProfit").replace(/\{n\}/g, String(targetNum))}
+                  </span>
                   <span className="font-semibold">฿{targetProfit.toLocaleString()}</span>
                 </div>
               )}

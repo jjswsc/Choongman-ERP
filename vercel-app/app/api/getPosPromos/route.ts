@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import { supabaseSelect } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
@@ -47,7 +47,7 @@ function mapRow(row: RawRow) {
     id: String(row.id ?? ''),
     code: String(row.code ?? ''),
     name: String(row.name ?? ''),
-    category: normalizePromotionCategoryMain(String(row.category ?? '').trim()),
+    category: String(row.category ?? '').trim(),
     categoryMain: normalizePromotionCategoryMain(row.category_main) || PROMOTION_MAIN_CATEGORY,
     price: Number(row.price) ?? 0,
     priceDelivery: row.price_delivery != null ? Number(row.price_delivery) : null,
@@ -69,19 +69,31 @@ function mapRow(row: RawRow) {
 }
 
 /** POS 프로모션 목록 조회 */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const { searchParams } = new URL(req.url)
+    const campaignId = searchParams.get('campaignId')?.trim()
     let rows: RawRow[] | null = null
     for (const sel of [SELECT_EXTENDED, SELECT_BASE]) {
       try {
-        rows = (await supabaseSelect('pos_promos', {
-          order: 'sort_order.asc,name.asc',
-          limit: 500,
-          select: sel,
-        })) as RawRow[] | null
+        rows = campaignId
+          ? ((await supabaseSelectFilter(
+              'pos_promos',
+              `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`,
+              {
+                order: 'sort_order.asc,name.asc',
+                limit: 10000,
+                select: sel,
+              }
+            )) as RawRow[] | null)
+          : ((await supabaseSelect('pos_promos', {
+              order: 'sort_order.asc,name.asc',
+              limit: 10000,
+              select: sel,
+            })) as RawRow[] | null)
         break
       } catch {
         if (sel === SELECT_BASE) rows = []

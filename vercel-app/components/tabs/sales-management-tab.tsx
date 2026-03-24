@@ -66,9 +66,11 @@ const PERIOD_GROUP = [
   { value: "month", labelKey: "salesPeriodMonth" },
   { value: "week", labelKey: "salesPeriodWeek" },
   { value: "day", labelKey: "salesPeriodDay" },
+  { value: "hour", labelKey: "salesPeriodHour" },
   { value: "dow", labelKey: "salesPeriodDow" },
 ] as const
 const PERIOD_GROUP_VALUES = new Set(PERIOD_GROUP.map((g) => g.value))
+type PeriodGroupValue = (typeof PERIOD_GROUP)[number]["value"]
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
@@ -163,7 +165,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const [posFilter, setPosFilter] = React.useState<string>("")
   const [posOptions, setPosOptions] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [periodGroup, setPeriodGroup] = React.useState<"month" | "week" | "day" | "dow">("day")
+  const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>("day")
   const [menuSearch, setMenuSearch] = React.useState("")
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
@@ -291,6 +293,21 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [periodData, periodGroup, tr]
   )
 
+  /** 기간 막대차트가 시간대(24슬롯)일 때 라벨 겹침 완화 */
+  const periodBarXAxisProps = React.useMemo(
+    () =>
+      periodGroup === "hour"
+        ? {
+            angle: -55,
+            textAnchor: "end" as const,
+            tick: { fontSize: 9 },
+            height: 72,
+            interval: 0,
+          }
+        : { tick: { fontSize: 11 } },
+    [periodGroup]
+  )
+
   const channelChartRows = React.useMemo(
     () =>
       channelData.map((r) => ({
@@ -380,9 +397,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
     }
 
-    if (qGroup && PERIOD_GROUP_VALUES.has(qGroup as "month" | "week" | "day" | "dow")) {
+    if (qGroup && PERIOD_GROUP_VALUES.has(qGroup as PeriodGroupValue)) {
       if (periodGroup !== qGroup && userSelectedRef.current.periodGroup !== periodGroup) {
-        setPeriodGroup(qGroup as "month" | "week" | "day" | "dow")
+        setPeriodGroup(qGroup as PeriodGroupValue)
       }
     }
 
@@ -464,7 +481,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       orderTypesKey,
     ].join("|")
     if (currentStr === expectedValues) return
-    router.replace(`${pathname}?${expectedStr}`, { scroll: false })
+    /** 같은 틱에 라우터·서스펜스 경계와 겹치면 "마운트 전 setState" 경고가 날 수 있어 지연 */
+    const tid = window.setTimeout(() => {
+      router.replace(`${pathname}?${expectedStr}`, { scroll: false })
+    }, 0)
+    return () => clearTimeout(tid)
   }, [
     activeSubMenuId,
     pathname,
@@ -794,6 +815,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   variant={topic.id === selectedTopic.id ? "default" : "outline"}
                   onClick={() => {
                     userSelectedRef.current.topic = topic.id
+                    if (topic.id === "pivot-time-item" && topic.view === "period") {
+                      userSelectedRef.current.periodGroup = "hour"
+                      setPeriodGroup("hour")
+                    }
                     setSelectedTopicBySubMenu((prev) => ({
                       ...prev,
                       [currentSubMenu.id]: topic.id,
@@ -884,7 +909,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -894,7 +919,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                   <table className="mt-4 w-full min-w-[1120px] text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
-                        <th className="py-2 text-left">{tr("salesPeriod", "기간")}</th>
+                        <th className="py-2 text-left">
+                          {periodGroup === "hour"
+                            ? tr("salesPeriodHourColumn", "시간대")
+                            : tr("salesPeriod", "기간")}
+                        </th>
                         <th className="py-2 text-right">{tr("salesOccupancy", "주문건수")}</th>
                         <th className="py-2 text-right">{tr("salesGuestCount", "손님 수(홀)")}</th>
                         <th className="py-2 text-right">{tr("salesHallPerOrder", "홀 건당")}</th>
@@ -1008,7 +1037,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -1081,7 +1110,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -1132,7 +1161,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -1189,7 +1218,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -1370,7 +1399,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
@@ -1474,7 +1503,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="axisLabel" tick={{ fontSize: 11 }} />
+                        <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
                         <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
                         <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />

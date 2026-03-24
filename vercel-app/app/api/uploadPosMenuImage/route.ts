@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseStorageUpload } from '@/lib/supabase-server'
 
 const BUCKET = 'pos-menu-images'
+/** Vercel 요청 한도에 맞춤 (멀티파트 오버헤드 여유) */
+const MAX_FILE_BYTES = 4 * 1024 * 1024
 
 /** POS 메뉴 이미지 파일 업로드 */
 export async function POST(request: NextRequest) {
@@ -15,6 +17,17 @@ export async function POST(request: NextRequest) {
     if (!file || !file.size) {
       return NextResponse.json(
         { success: false, message: '파일을 선택해 주세요.' },
+        { status: 400, headers }
+      )
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            '파일이 너무 큽니다. 4MB 이하 이미지를 사용하거나 URL로 등록해 주세요. (자동 압축 후 다시 시도해 주세요)',
+        },
         { status: 400, headers }
       )
     }

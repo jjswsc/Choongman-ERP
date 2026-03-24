@@ -72,6 +72,17 @@ export async function upsertPromoMirrorMenu(p: PromoMirrorPayload): Promise<{
       console.warn('upsertPromoMirrorMenu: promo_id 컬럼 없음 — SQL 마이그레이션 필요', e)
       return { ok: true }
     }
+    if (
+      msg.includes('42501') ||
+      (msg.includes('PGRST') && msg.includes('row-level security')) ||
+      /row-level security policy/i.test(msg)
+    ) {
+      return {
+        ok: false,
+        message:
+          'pos_menus 테이블 RLS로 미러 메뉴 저장이 거부되었습니다. Vercel에 SUPABASE_SERVICE_ROLE_KEY를 설정하거나, Supabase SQL Editor에서 vercel-app/sql/pos_menus_rls_policies.sql 을 실행해 INSERT/UPDATE 정책을 추가하세요.',
+      }
+    }
     return { ok: false, message: msg }
   }
 }

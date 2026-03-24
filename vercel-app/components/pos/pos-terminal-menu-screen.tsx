@@ -12,6 +12,7 @@ import {
   savePosMenuScreenConfig,
   savePosMenu,
   uploadPosMenuImage,
+  POS_MENU_UPLOAD_TOO_LARGE,
   type PosMenu,
   type PosMenuOption,
   type PosPromoWithItems,
@@ -38,6 +39,7 @@ import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
 import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
+import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
 import type { CartPanelAddItemPayload } from '@/components/pos/cart-panel'
 
 function isChickenDefaultOption(name: string | undefined): boolean {
@@ -114,11 +116,6 @@ export function PosTerminalMenuScreen({
   const categoryPanelRef = React.useRef<HTMLElement | null>(null)
   const menuGridRef = React.useRef<HTMLDivElement | null>(null)
   const imageInputRef = React.useRef<HTMLInputElement>(null)
-  const debugLog = React.useCallback((runId: string, hypothesisId: string, location: string, message: string, data: Record<string, unknown>) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId,hypothesisId,location,message,data,timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, [])
   const [menuEditForm, setMenuEditForm] = React.useState<{
     code: string
     name: string
@@ -228,93 +225,6 @@ export function PosTerminalMenuScreen({
     setListPage(0)
   }, [selectedMainCategory, selectedCategory, searchKeyword, screenConfig.menuListPageSize])
 
-  React.useEffect(() => {
-    debugLog('pre-fix', 'H4', 'pos-terminal-menu-screen.tsx:state', 'menu screen state snapshot', {
-      mode,
-      selectedTableName,
-      selectedMainCategory,
-      selectedCategory,
-      filteredMenusLen: filteredMenus.length,
-      filteredPromosLen: filteredPromos.length,
-      searchKeyword,
-      href: typeof window !== 'undefined' ? window.location.href : '',
-    })
-  }, [debugLog, mode, selectedTableName, selectedMainCategory, selectedCategory, menus.length, promos.length, searchKeyword])
-
-  React.useLayoutEffect(() => {
-    const panelRect = categoryPanelRef.current?.getBoundingClientRect()
-    const sectionRect = menuListRef.current?.getBoundingClientRect()
-    const gridRect = menuGridRef.current?.getBoundingClientRect()
-    const firstCard = menuGridRef.current?.querySelector('[data-menu-card]') as HTMLElement | null
-    const firstCardRect = firstCard?.getBoundingClientRect()
-    const scrollTop = menuListRef.current?.scrollTop ?? 0
-    const scrollHeight = menuListRef.current?.scrollHeight ?? 0
-    const clientHeight = menuListRef.current?.clientHeight ?? 0
-    debugLog('pre-fix', 'H1,H2,H3', 'pos-terminal-menu-screen.tsx:layout', 'layout measurements', {
-      selectedMainCategory,
-      selectedCategory,
-      filteredMenusLen: filteredMenus.length,
-      filteredPromosLen: filteredPromos.length,
-      scrollTop,
-      scrollHeight,
-      clientHeight,
-      sectionTop: sectionRect?.top ?? null,
-      sectionBottom: sectionRect?.bottom ?? null,
-      panelBottom: panelRect?.bottom ?? null,
-      gridTop: gridRect?.top ?? null,
-      gapSectionToGrid: sectionRect && gridRect ? Math.round(gridRect.top - sectionRect.top) : null,
-      gapCategoryToGrid: panelRect && gridRect ? Math.round(gridRect.top - panelRect.bottom) : null,
-      firstCardTop: firstCardRect?.top ?? null,
-      gapGridToFirstCard: firstCardRect && gridRect ? Math.round(firstCardRect.top - gridRect.top) : null,
-      firstCardExists: Boolean(firstCard),
-      gridChildCount: menuGridRef.current?.children.length ?? 0,
-    })
-  }, [debugLog, selectedMainCategory, selectedCategory, menus.length, promos.length])
-
-  React.useLayoutEffect(() => {
-    const sectionEl = menuListRef.current
-    const gridEl = menuGridRef.current
-    if (!sectionEl || !gridEl) return
-
-    const logComputed = (phase: string) => {
-      const sectionStyle = window.getComputedStyle(sectionEl)
-      const gridStyle = window.getComputedStyle(gridEl)
-      const firstChild = gridEl.querySelector('[data-menu-card]') as HTMLElement | null
-      const firstChildStyle = firstChild ? window.getComputedStyle(firstChild) : null
-      debugLog('pre-fix', 'H5,H6,H7,H8', 'pos-terminal-menu-screen.tsx:computed', `computed styles (${phase})`, {
-        selectedMainCategory,
-        selectedCategory,
-        sectionPaddingTop: sectionStyle.paddingTop,
-        sectionDisplay: sectionStyle.display,
-        sectionOverflowY: sectionStyle.overflowY,
-        gridAlignContent: gridStyle.alignContent,
-        gridAutoRows: gridStyle.gridAutoRows,
-        gridTemplateRows: gridStyle.gridTemplateRows,
-        gridRowGap: gridStyle.rowGap,
-        firstChildDisplay: firstChildStyle?.display ?? null,
-        firstChildVisibility: firstChildStyle?.visibility ?? null,
-        firstChildOpacity: firstChildStyle?.opacity ?? null,
-      })
-    }
-
-    logComputed('layout')
-    const raf1 = window.requestAnimationFrame(() => {
-      logComputed('raf1')
-      const raf2 = window.requestAnimationFrame(() => logComputed('raf2'))
-      // #region agent log
-      fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'0d4853'},body:JSON.stringify({sessionId:'0d4853',runId:'pre-fix',hypothesisId:'H8',location:'pos-terminal-menu-screen.tsx:raf-chain',message:'raf chain scheduled',data:{selectedMainCategory,selectedCategory},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      ;(sectionEl as HTMLElement & { __raf2?: number }).__raf2 = raf2
-    })
-    ;(sectionEl as HTMLElement & { __raf1?: number }).__raf1 = raf1
-
-    return () => {
-      const s = sectionEl as HTMLElement & { __raf1?: number; __raf2?: number }
-      if (s.__raf1) window.cancelAnimationFrame(s.__raf1)
-      if (s.__raf2) window.cancelAnimationFrame(s.__raf2)
-    }
-  }, [debugLog, selectedMainCategory, selectedCategory, menus.length, promos.length])
-
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
@@ -363,57 +273,6 @@ export function PosTerminalMenuScreen({
     deliveryAppCode,
   ])
 
-  React.useEffect(() => {
-    const sectionEl = menuListRef.current
-    const gridEl = menuGridRef.current
-    if (!sectionEl || !gridEl) return
-
-    const snapshot = (phase: string) => {
-      const panelRect = categoryPanelRef.current?.getBoundingClientRect()
-      const sectionRect = sectionEl.getBoundingClientRect()
-      const gridRect = gridEl.getBoundingClientRect()
-      const cards = Array.from(gridEl.querySelectorAll('[data-menu-card]')) as HTMLElement[]
-      const firstThree = cards.slice(0, 3).map((el, idx) => {
-        const r = el.getBoundingClientRect()
-        return {
-          idx,
-          top: Math.round(r.top),
-          height: Math.round(r.height),
-          display: window.getComputedStyle(el).display,
-          visibility: window.getComputedStyle(el).visibility,
-          opacity: window.getComputedStyle(el).opacity,
-        }
-      })
-      debugLog('pre-fix', 'H9,H10', 'pos-terminal-menu-screen.tsx:observer', `observer snapshot (${phase})`, {
-        selectedMainCategory,
-        selectedCategory,
-        filteredMenusLen: filteredMenus.length,
-        filteredPromosLen: filteredPromos.length,
-        sectionTop: Math.round(sectionRect.top),
-        sectionBottom: Math.round(sectionRect.bottom),
-        panelBottom: panelRect ? Math.round(panelRect.bottom) : null,
-        gridTop: Math.round(gridRect.top),
-        gapCategoryToGrid: panelRect ? Math.round(gridRect.top - panelRect.bottom) : null,
-        gridChildCount: cards.length,
-        firstThree,
-      })
-    }
-
-    snapshot('effect-start')
-
-    const resizeObserver = new ResizeObserver(() => snapshot('resize'))
-    resizeObserver.observe(sectionEl)
-    resizeObserver.observe(gridEl)
-
-    const mutationObserver = new MutationObserver(() => snapshot('mutation'))
-    mutationObserver.observe(gridEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] })
-
-    return () => {
-      resizeObserver.disconnect()
-      mutationObserver.disconnect()
-    }
-  }, [debugLog, selectedMainCategory, selectedCategory, filteredMenus.length, filteredPromos.length])
-
   const getMenuPrice = (menu: PosMenu) =>
     orderType === 'delivery' && menu.priceDelivery != null ? menu.priceDelivery : menu.price
   const getOptionModifier = (opt: PosMenuOption) => {
@@ -454,6 +313,21 @@ export function PosTerminalMenuScreen({
         ? `${menu.name} (${defaultOptionName})`
         : menu.name
     const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
+    // #region agent log
+    if (!opt) {
+      fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'pos-terminal-menu-screen.tsx:addWithOption',
+          message: 'no-option add',
+          data: { menuId: menu.id },
+          timestamp: Date.now(),
+          hypothesisId: 'H4',
+        }),
+      }).catch(() => {})
+    }
+    // #endregion
     onAddItem?.({ id, name, price })
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
@@ -499,6 +373,11 @@ export function PosTerminalMenuScreen({
 
   // 실제 담기 가능 여부는 콜백 존재로 판단 (모드 문자열 불일치로 클릭이 막히는 케이스 방지)
   const interactive = typeof onAddItem === 'function'
+  const fireMenuAction = React.useCallback((fn: () => void, ev?: { preventDefault?: () => void; stopPropagation?: () => void }) => {
+    ev?.preventDefault?.()
+    ev?.stopPropagation?.()
+    fn()
+  }, [])
   const isExpandedMobileList = !isAdminMode && touchMode === 'large'
   const combinedRows = React.useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase()
@@ -649,11 +528,28 @@ export function PosTerminalMenuScreen({
     if (!file) return
     setImageUploading(true)
     try {
-      const res = await uploadPosMenuImage({ file })
+      let toSend = file
+      try {
+        toSend = await preparePosMenuImageFileForUpload(file)
+      } catch (prepErr) {
+        const pmsg = String(prepErr)
+        if (pmsg.includes('POS_MENU_IMAGE_DECODE_FAIL')) {
+          await appAlert(t('posMenuImageDecodeFail') || '이미지를 열 수 없습니다. JPG·PNG·WebP 등으로 저장 후 다시 시도해 주세요.')
+        } else {
+          await appAlert(pmsg)
+        }
+        return
+      }
+      const res = await uploadPosMenuImage({ file: toSend })
       if (res?.success && res?.url) {
         setMenuEditForm((p) => ({ ...p, imageUrl: res.url! }))
       } else {
-        await appAlert(res?.message || t('msg_upload_fail') || '업로드 실패')
+        const msg =
+          res?.message === POS_MENU_UPLOAD_TOO_LARGE
+            ? t('posMenuImageUploadTooLarge') ||
+              '파일이 너무 큽니다. 더 작은 사진을 선택하거나, 이미지 주소(URL)로 등록해 주세요.'
+            : res?.message || t('msg_upload_fail') || '업로드 실패'
+        await appAlert(msg)
       }
     } catch (err) {
       await appAlert(String(err))
@@ -716,12 +612,6 @@ export function PosTerminalMenuScreen({
                 key={main}
                 type="button"
                 onClick={() => {
-                  debugLog('pre-fix', 'H1', 'pos-terminal-menu-screen.tsx:onMainCategoryClick', 'main category clicked', {
-                    nextMain: main,
-                    prevMain: selectedMainCategory,
-                    prevCategory: selectedCategory,
-                    prevScrollTop: menuListRef.current?.scrollTop ?? null,
-                  })
                   setSelectedMainCategory(main)
                   setSelectedCategory('')
                 }}
@@ -744,15 +634,7 @@ export function PosTerminalMenuScreen({
               <button
                 key={cat}
                 type="button"
-                onClick={() => {
-                  debugLog('pre-fix', 'H1', 'pos-terminal-menu-screen.tsx:onCategoryClick', 'category clicked', {
-                    nextCategory: cat,
-                    prevCategory: selectedCategory,
-                    currentMain: selectedMainCategory,
-                    prevScrollTop: menuListRef.current?.scrollTop ?? null,
-                  })
-                  setSelectedCategory(cat)
-                }}
+                onClick={() => setSelectedCategory(cat)}
                 className={cn(
                   'rounded-md border px-3 py-1.5 text-left transition whitespace-nowrap leading-none',
                   selectedCategory === cat
@@ -802,9 +684,9 @@ export function PosTerminalMenuScreen({
               <button
                 key={`promo-${p.id}`}
                 type="button"
-                onClick={() => interactive && addPromo(p)}
+                onClick={() => interactive && fireMenuAction(() => addPromo(p))}
                 className={cn(
-                  'flex h-full flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition',
+                  'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-amber-300 bg-amber-50 p-1.5 text-left transition',
                   interactive ? 'hover:border-amber-400 hover:bg-amber-100 active:scale-[0.98]' : 'opacity-75 cursor-default'
                 )}
                 data-menu-card="promo"
@@ -832,9 +714,9 @@ export function PosTerminalMenuScreen({
               <button
                 key={m.id}
                 type="button"
-                onClick={() => interactive && openMenuPicker(m)}
+                onClick={() => interactive && fireMenuAction(() => openMenuPicker(m))}
                 className={cn(
-                  'flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
+                  'touch-manipulation flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-left transition',
                   interactive ? 'hover:border-emerald-400 hover:shadow-md active:scale-[0.98]' : 'opacity-85 cursor-default'
                 )}
                 data-menu-card="menu"
@@ -934,8 +816,10 @@ export function PosTerminalMenuScreen({
                           disabled={!interactive}
                           onClick={() => {
                             if (!interactive) return
-                            if (row.rowType === 'promo' && row.promo) addPromo(row.promo)
-                            if (row.rowType === 'menu' && row.menu) openMenuPicker(row.menu)
+                            fireMenuAction(() => {
+                              if (row.rowType === 'promo' && row.promo) addPromo(row.promo)
+                              if (row.rowType === 'menu' && row.menu) openMenuPicker(row.menu)
+                            })
                           }}
                         >
                           +
@@ -1065,11 +949,13 @@ export function PosTerminalMenuScreen({
                           type="button"
                           disabled={!!first && first.id === menu.id}
                           onClick={() => {
-                            if (first) {
-                              addBanban(optionPickerMenu, first, menu)
-                            } else {
-                              setOptionPickerBanbanFirst(menu)
-                            }
+                            fireMenuAction(() => {
+                              if (first) {
+                                addBanban(optionPickerMenu, first, menu)
+                              } else {
+                                setOptionPickerBanbanFirst(menu)
+                              }
+                            })
                           }}
                           className={cn(
                             "flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition",
@@ -1124,7 +1010,7 @@ export function PosTerminalMenuScreen({
             const defaultBtn = isChickenBase && (
               <button
                 type="button"
-                onClick={() => addWithOption(optionPickerMenu, null, 'S 순살')}
+                onClick={() => fireMenuAction(() => addWithOption(optionPickerMenu, null, 'S 순살'))}
                 className="mb-3 flex w-full justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
               >
                 <span className="font-medium text-slate-800">{t('posOptionDefault') || '기본 (S 순살)'}</span>
@@ -1166,7 +1052,7 @@ export function PosTerminalMenuScreen({
                       <button
                         key={val}
                         type="button"
-                        onClick={() => handleStepSelect(val)}
+                        onClick={() => fireMenuAction(() => handleStepSelect(val))}
                         className="rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:border-emerald-400 hover:bg-emerald-50 text-slate-800"
                       >
                         {val}
@@ -1193,7 +1079,7 @@ export function PosTerminalMenuScreen({
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => addWithOption(optionPickerMenu, opt)}
+                    onClick={() => fireMenuAction(() => addWithOption(optionPickerMenu, opt))}
                     className="flex justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-400 hover:bg-emerald-50"
                   >
                     <span className="text-slate-800">{opt.name}</span>

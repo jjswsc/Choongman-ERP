@@ -135,6 +135,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminPosMenus", icon: Package, href: "/admin/pos-menus" },
       { titleKey: "adminPosPrinters", icon: Printer, href: "/admin/pos-printers" },
       { titleKey: "adminPosCoupons", icon: Tag, href: "/admin/pos-coupons" },
+      { titleKey: "adminPosTaxInvoiceRecipients", icon: FileText, href: "/admin/pos-tax-invoice-recipients" },
     ],
   },
   {
@@ -197,6 +198,7 @@ const POS_MENU_ACCESS: Record<string, (role: string) => boolean> = {
   "/admin/pos-cost-analysis": canAccessPosCostAnalysis,
   "/admin/pos-printers": canAccessPosPrinters,
   "/admin/pos-coupons": canAccessPosCoupons,
+  "/admin/pos-tax-invoice-recipients": canAccessPosOrders,
 }
 
 export function ErpSidebar() {

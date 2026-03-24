@@ -41,6 +41,9 @@ function posOrderToOrder(po: PosOrder & { orderNo?: string }): Order {
       name: String(it.name ?? ''),
       quantity: Number(it.qty ?? 0) || 0,
       price: Number(it.price ?? 0) || 0,
+      ...(typeof it.note === 'string' && String(it.note).trim()
+        ? { note: String(it.note).trim() }
+        : {}),
       servedAt: typeof it.servedAt === 'string' ? it.servedAt : null,
       servedBy: typeof it.servedBy === 'string' ? it.servedBy : null,
     })),

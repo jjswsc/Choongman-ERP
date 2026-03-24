@@ -16,10 +16,13 @@ import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { escapeHtml, formatBahtNum } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import type { PosMenu } from '@/lib/api-client'
+import { useLang } from '@/lib/lang-context'
+import { formatPosDateTimeMedium, formatPosReceiptPrintTimestamp } from '@/lib/pos-datetime-locale'
+import { formatKitchenSlipItemRowHtml } from '@/lib/pos-kitchen-slip-html'
 
 export type ReceiptModalData = {
   orderNo: string
-  items: { id: string; name: string; price: number; qty: number }[]
+  items: { id: string; name: string; price: number; qty: number; note?: string }[]
   subtotal: number
   discountAmt: number
   deliveryFee?: number
@@ -102,6 +105,7 @@ export function PosReceiptModal({
   receiptShowThankYou = true,
   receiptShowCustomerCopy = true,
 }: PosReceiptModalProps) {
+  const { lang } = useLang()
   const receiptRef = useRef<HTMLDivElement>(null)
   const autoPrintedKeyRef = useRef<string>('')
   const tr = (key: string, fallback: string) => {
@@ -184,7 +188,15 @@ export function PosReceiptModal({
         ${taxInvoiceBlock}
         <div class="receipt-divider-strong"></div>
         <div class="receipt-item-head"><span>${esc(tr('posMenuName', '품목'))}</span><span>${esc(tr('amount', '금액'))}</span></div>
-        ${receiptData.items.map((it) => `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>`).join('')}
+        ${receiptData.items
+          .map((it) => {
+            const lineNote = String(it.note ?? '').trim()
+            const noteHtml = lineNote
+              ? `<div class="receipt-line-note">${esc(tr('posLineNote', '메모'))}: ${esc(lineNote)}</div>`
+              : ''
+            return `<div class="receipt-row"><span>${it.qty}x ${esc(translatePosMenuLineForReceipt(it.name, t))}</span><span>${formatBahtNum(it.price * it.qty)}</span></div>${noteHtml}`
+          })
+          .join('')}
         <div class="receipt-divider"></div>
         <div class="receipt-row"><span class="receipt-muted">${esc(t('posSubtotal') || '소계')}</span><span>${formatBahtNum(receiptData.subtotal)} ฿</span></div>
         ${receiptData.discountAmt > 0 ? `<div class="receipt-row"><span>${esc(t('posDiscount') || '할인')}</span><span>-${formatBahtNum(receiptData.discountAmt)} ฿</span></div>` : ''}
@@ -254,6 +266,7 @@ export function PosReceiptModal({
             .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
+            .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
             .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
             .receipt-meta-label { white-space: nowrap; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
@@ -349,14 +362,27 @@ export function PosReceiptModal({
             ${getPosPaperBaseCss('sans-serif', 18)}
             .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
             .k-row { margin: 6px 0; font-size: 18px; }
+            .k-line-note { font-size: 14px; color: #333; margin-top: 3px; padding-left: 2px; line-height: 1.25; }
             .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
           </style></head><body>
           <div class="k-header">${escapeHtml(slip.label)}</div>
           <div class="k-row"><strong>${escapeHtml(receiptData.orderNo)}</strong></div>
           <div class="k-row">${escapeHtml(receiptData.storeCode + ' · ' + (orderTypeLabels[receiptData.orderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t('posTable') || '테이블'}: ${translateReceiptTableDisplayName(receiptData.tableName, t)}` : ''))}</div>
-          <div class="k-row">${new Date().toLocaleString('ko-KR')}</div>
+          <div class="k-row">${formatPosDateTimeMedium(new Date(), lang)}</div>
           <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${escapeHtml(translatePosMenuLineForReceipt(it.name, t))} × ${it.qty}</div>`).join('')}
+          ${slip.items
+            .map((it) =>
+              formatKitchenSlipItemRowHtml(
+                {
+                  name: translatePosMenuLineForReceipt(it.name, t),
+                  qty: it.qty,
+                  note: it.note,
+                },
+                escapeHtml,
+                (tag: string) => `</${tag}>`
+              )
+            )
+            .join('')}
           ${kitchenMemo ? `<div class="k-memo">${escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo)}</div>` : ''}
           </body></html>`
         w.document.write(html)
@@ -404,16 +430,7 @@ export function PosReceiptModal({
   if (!receiptData) return null
   const receiptLogoSrc =
     typeof window !== 'undefined' ? `${window.location.origin}/company-stamp.png` : '/company-stamp.png'
-  const issuedAt = new Date().toLocaleString('en-GB', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
+  const issuedAt = formatPosDateTimeMedium(new Date(), lang)
   const parsedMemo = parsePosOrderMemo(receiptData.memo)
   const taxInvoice = parsedMemo.taxInvoice
 
@@ -491,10 +508,15 @@ export function PosReceiptModal({
           <div className="space-y-1">
             {receiptData.items.map((it) => (
               <div key={it.id} className="text-xs">
-                <div className="receipt-row">
+                <div className="receipt-row flex justify-between gap-2">
                   <span>{it.qty}x {translatePosMenuLineForReceipt(it.name, t)}</span>
                   <span className="tabular-nums">{formatBahtNum(it.price * it.qty)}</span>
                 </div>
+                {it.note?.trim() ? (
+                  <div className="text-[10px] text-neutral-600 pl-2 -mt-0.5 mb-1">
+                    {tr('posLineNote', '메모')}: {it.note.trim()}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

@@ -5,6 +5,7 @@ export type CartLineForPosOrder = {
   name: string
   price: number
   quantity?: number
+  note?: string
   orderType?: string
   deliveryAppCode?: string
   promoId?: string
@@ -19,6 +20,7 @@ export function cartLinesToPosOrderItems(lines: CartLineForPosOrder[]): PosOrder
     name: i.name,
     price: i.price,
     qty: Number(i.quantity) || 1,
+    ...(String(i.note ?? '').trim() ? { note: String(i.note).trim() } : {}),
     ...(i.orderType ? { orderType: i.orderType } : {}),
     ...(i.deliveryAppCode ? { deliveryAppCode: i.deliveryAppCode } : {}),
     ...(i.promoId && i.promoItems

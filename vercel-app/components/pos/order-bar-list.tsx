@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useLang, type LangCode } from '@/lib/lang-context'
+import { formatPosTimeHm24Bangkok } from '@/lib/pos-datetime-locale'
 
 export type OrderBarStatus = 'preparing' | 'partial_served' | 'packaged' | 'completed' | null
 type OrderBarStage = 'fresh' | 'warning' | 'urgent'
@@ -82,11 +84,11 @@ function getDelayOverMinutes(params: {
   return elapsedMin - warningMaxMin
 }
 
-function formatOrderTime(createdAt?: string): string {
+function formatOrderTime(createdAt: string | undefined, lang: LangCode): string {
   if (!createdAt) return '--:--'
   const d = new Date(createdAt)
   if (Number.isNaN(d.getTime())) return '--:--'
-  return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  return formatPosTimeHm24Bangkok(d, lang)
 }
 
 export function OrderBarList({
@@ -105,6 +107,7 @@ export function OrderBarList({
   usePackagingLabel = false,
   className,
 }: OrderBarListProps) {
+  const { lang } = useLang()
   const [, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 60_000)
@@ -203,7 +206,7 @@ export function OrderBarList({
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-sm tabular-nums text-slate-600 shrink-0">
-                      {formatOrderTime(item.createdAt)}
+                      {formatOrderTime(item.createdAt, lang)}
                     </span>
                     {(item.status === 'preparing' || item.status === 'partial_served' || item.status === 'packaged' || item.status === 'completed') && (
                       <span className="inline-flex items-center rounded-full px-2.5 py-1 text-sm font-bold tabular-nums shrink-0 ring-1 ring-black/10 bg-slate-100 text-slate-700" title={t('posCookingElapsed') || '조리 경과'}>
@@ -243,7 +246,7 @@ export function OrderBarList({
                     ) : null}
                     {item.status === 'preparing' || item.status === 'partial_served' || item.status === 'packaged' || item.status === 'completed' ? (
                       <>
-                        <span className="text-[11px] tabular-nums opacity-80">{formatOrderTime(item.createdAt)}</span>
+                        <span className="text-[11px] tabular-nums opacity-80">{formatOrderTime(item.createdAt, lang)}</span>
                         <span className="rounded bg-black/20 px-1.5 py-0.5 text-[11px] font-bold tabular-nums" title={t('posCookingElapsed') || '조리 경과'}>
                           {t('posCookingElapsed') || '조리'} {elapsedMin}{t('posMinuteUnit') || '분'}
                         </span>

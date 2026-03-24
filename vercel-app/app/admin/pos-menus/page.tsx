@@ -2087,16 +2087,15 @@ export default function PosMenusPage() {
             <div className="space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="text-sm font-bold">{t("posMenuSetTabTitle") || "프로모션 세트(미러 메뉴)"}</h3>
+                  <h3 className="text-sm font-bold">{t("posMenuSetTabTitle")}</h3>
                   <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">
-                    {t("posMenuSetTabDesc") ||
-                      "세트·프로모션의 마스터 데이터는 마케팅 > 프로모션 세트에서 관리합니다. 저장 시 POS 메뉴에 자동으로 반영되는 연동 행만 이 목록에 표시됩니다. 이름·가격·분류 수정은 마케팅 화면에서 하세요."}
+                    {t("posMenuSetTabDesc")}
                   </p>
                 </div>
                 <Button variant="default" size="sm" className="h-9 shrink-0 gap-1.5" asChild>
                   <Link href="/admin/marketing/promos">
                     <ExternalLink className="h-3.5 w-3.5" />
-                    {t("posMenuSetOpenMarketing") || "마케팅에서 편집"}
+                    {t("posMenuSetOpenMarketing")}
                   </Link>
                 </Button>
               </div>
@@ -2105,10 +2104,9 @@ export default function PosMenusPage() {
                 <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
                   <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                   <div className="min-w-0 flex-1 space-y-1">
-                    <p className="font-semibold">{t("posPromoSchemaBannerTitle") || "DB 확장 필요"}</p>
+                    <p className="font-semibold">{t("posPromoSchemaBannerTitle")}</p>
                     <p className="text-xs leading-relaxed opacity-90">
-                      {t("posPromoSchemaBannerBody") ||
-                        "Supabase에서 vercel-app/sql/pos_promo_extensions.sql 을 실행해야 미러 메뉴(promo_id) 연동이 동작합니다."}
+                      {t("posPromoSchemaBannerBody")}
                     </p>
                   </div>
                   <button
@@ -2135,15 +2133,13 @@ export default function PosMenusPage() {
 
               {!setTabPromosLoading && !loading && menus.length === 0 && (
                 <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-6 text-center text-sm text-muted-foreground">
-                  {t("posMenuSetNeedLoadMenus") ||
-                    "먼저 [화면] 탭에서 메뉴 목록을 조회해 주세요. 목록을 불러와야 프로모 연동 행을 표시할 수 있습니다."}
+                  {t("posMenuSetNeedLoadMenus")}
                 </div>
               )}
 
               {!setTabPromosLoading && !loading && menus.length > 0 && mirrorMenusSorted.length === 0 && (
                 <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
-                  {t("posMenuSetEmpty") ||
-                    "연동된 프로모션 메뉴가 없습니다. 마케팅 > 프로모션 세트에서 프로모를 저장하면 여기에 표시됩니다."}
+                  {t("posMenuSetEmpty")}
                 </div>
               )}
 
@@ -2152,12 +2148,12 @@ export default function PosMenusPage() {
                   <table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCodeCol") || "코드"}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCodeCol")}</th>
                         <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuName")}</th>
                         <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategoryMain")}</th>
                         <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategory")}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("posMenuActive")}</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuSetColPromoCode") || "프로모 코드"}</th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuSetColPromoCode")}</th>
                         <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("itemsColAction")}</th>
                       </tr>
                     </thead>
@@ -2177,7 +2173,7 @@ export default function PosMenusPage() {
                             </td>
                             <td className="px-3 py-2 text-center">
                               <Button variant="outline" size="sm" className="h-7 text-[11px]" asChild>
-                                <Link href="/admin/marketing/promos">{t("posMenuSetEditInMarketing") || "편집"}</Link>
+                                <Link href="/admin/marketing/promos">{t("posMenuSetEditInMarketing")}</Link>
                               </Button>
                             </td>
                           </tr>

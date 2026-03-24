@@ -16,6 +16,7 @@ import {
   type MarketingInfluencer,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { useSearchParams } from "next/navigation"
 
 const HIRE_TYPE_OPTIONS = [
   { value: "pay", label: "Pay" },
@@ -42,8 +43,10 @@ function getCpf(budget: number, followersStr: string): number | null {
 }
 
 export default function MarketingInfluencersPage() {
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
+  const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
   const [list, setList] = React.useState<MarketingInfluencer[]>([])
   const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -88,6 +91,12 @@ export default function MarketingInfluencersPage() {
   React.useEffect(() => {
     loadData()
   }, [loadData])
+
+  React.useEffect(() => {
+    if (!campaignIdFromQuery) return
+    setCampaignFilter(campaignIdFromQuery)
+    setForm((f) => ({ ...f, campaignId: campaignIdFromQuery }))
+  }, [campaignIdFromQuery])
 
   const handleNew = () => {
     setEditingId(null)
@@ -137,6 +146,10 @@ export default function MarketingInfluencersPage() {
   }
 
   const handleSave = async () => {
+    if (!form.campaignId.trim()) {
+      await appAlert("캠페인을 선택하세요. 캠페인 허브에서 연결 후 저장해야 합니다.")
+      return
+    }
     const name = form.name.trim()
     if (!name) {
       await appAlert("이름을 입력하세요.")
@@ -233,6 +246,11 @@ export default function MarketingInfluencersPage() {
             추가
           </Button>
         </div>
+        {campaignIdFromQuery && (
+          <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+            캠페인 허브에서 전달된 항목으로 필터되었습니다. 새 등록은 이 캠페인으로 자동 연결됩니다.
+          </div>
+        )}
 
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
