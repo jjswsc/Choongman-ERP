@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
+
+const SENT_NOTICES_DB_LIMIT = 400
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -20,6 +24,8 @@ export async function GET(request: NextRequest) {
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = (searchParams.get('userRole') || '').toLowerCase()
   const searchType = String(searchParams.get('searchType') || 'all').toLowerCase() as 'all' | 'notice' | 'order'
+  const keyword = String(searchParams.get('keyword') || searchParams.get('q') || '').trim().toLowerCase()
+  const { page, pageSize } = parseListPagination(searchParams, null, 15)
 
   const isAllSenders = sender === '' || sender.toLowerCase() === 'all' || sender === '전체'
 
@@ -45,7 +51,8 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('notices', effectiveFilter, {
       order: 'created_at.desc',
-      limit: 200,
+      limit: SENT_NOTICES_DB_LIMIT,
+      select: NOTICE_LIST_COLS,
     })) as {
       id: number
       sender?: string
@@ -71,7 +78,7 @@ export async function GET(request: NextRequest) {
       const allReadRows = (await supabaseSelectFilter(
         'notice_reads',
         `notice_id=in.(${noticeIds.join(',')})`,
-        { limit: 5000 }
+        { limit: 5000, select: 'notice_id' }
       )) as { notice_id: number }[] || []
       for (const r of allReadRows) {
         readCountByNotice[r.notice_id] = (readCountByNotice[r.notice_id] || 0) + 1
@@ -176,9 +183,26 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json(list, { headers })
+    let filtered = list
+    if (keyword) {
+      filtered = list.filter((n) => {
+        const t = (n.title || '').toLowerCase()
+        const c = (n.content || '').toLowerCase()
+        const p = (n.preview || '').toLowerCase()
+        return t.includes(keyword) || c.includes(keyword) || p.includes(keyword)
+      })
+    }
+
+    const total = filtered.length
+    const truncated = (rows || []).length >= SENT_NOTICES_DB_LIMIT
+    const items = slicePage(filtered, page, pageSize)
+
+    return NextResponse.json({ items, total, page, pageSize, truncated }, { headers })
   } catch (e) {
     console.error('getSentNotices:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(
+      { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE, truncated: false },
+      { headers }
+    )
   }
 }

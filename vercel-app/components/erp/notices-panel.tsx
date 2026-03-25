@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -31,42 +32,59 @@ export function NoticesPanel() {
   const [startDate, setStartDate] = React.useState(todayStr)
   const [endDate, setEndDate] = React.useState(todayStr)
   const [notices, setNotices] = React.useState<NoticeItem[]>([])
+  const [noticePage, setNoticePage] = React.useState(1)
+  const noticePageSize = 12
+  const [noticeTotal, setNoticeTotal] = React.useState(0)
+  const [noticeTruncated, setNoticeTruncated] = React.useState(false)
+  const [committedStart, setCommittedStart] = React.useState(startDate)
+  const [committedEnd, setCommittedEnd] = React.useState(endDate)
   const [loading, setLoading] = React.useState(false)
   const [expandedId, setExpandedId] = React.useState<number | null>(null)
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = React.useState<number | null>(null)
 
-  const fetchNotices = React.useCallback(() => {
+  const runNoticeQuery = React.useCallback(
+    (page: number) => {
+      if (!auth?.store || !auth?.user) return
+      setLoading(true)
+      getMyNotices({
+        store: auth.store,
+        name: auth.user,
+        page,
+        pageSize: noticePageSize,
+        listMode: "unread_or_in_range",
+        rangeStart: committedStart,
+        rangeEnd: committedEnd,
+      })
+        .then((res) => {
+          setNotices(res.items)
+          setNoticeTotal(res.total)
+          setNoticeTruncated(Boolean(res.truncated))
+          setNoticePage(res.page)
+        })
+        .catch(() => {
+          setNotices([])
+          setNoticeTotal(0)
+          setNoticeTruncated(false)
+        })
+        .finally(() => setLoading(false))
+    },
+    [auth?.store, auth?.user, noticePageSize, committedStart, committedEnd]
+  )
+
+  React.useEffect(() => {
     if (!auth?.store || !auth?.user) return
-    setLoading(true)
-    getMyNotices({ store: auth.store, name: auth.user })
-      .then(setNotices)
-      .catch(() => setNotices([]))
-      .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user])
+    runNoticeQuery(noticePage)
+  }, [noticePage, committedStart, committedEnd, auth?.store, auth?.user, runNoticeQuery])
+
+  const handleNoticeSearch = React.useCallback(() => {
+    setCommittedStart(startDate)
+    setCommittedEnd(endDate)
+    setNoticePage(1)
+  }, [startDate, endDate])
 
   React.useEffect(() => {
-    fetchNotices()
-  }, [fetchNotices])
-
-  const filtered = React.useMemo(() => {
-    const list = notices.filter((n) => {
-      const d = (n.date || "").slice(0, 10)
-      const inRange = d >= startDate && d <= endDate
-      const unread = !isRead(n.status)
-      return inRange || unread
-    })
-    // 미확인 먼저, 그다음 날짜 최신순
-    return [...list].sort((a, b) => {
-      const aRead = isRead(a.status)
-      const bRead = isRead(b.status)
-      if (aRead !== bRead) return aRead ? 1 : -1
-      return (b.date || "").localeCompare(a.date || "")
-    })
-  }, [notices, startDate, endDate])
-
-  React.useEffect(() => {
-    const texts = [...new Set(filtered.flatMap((n) => [n.title, n.content].filter(Boolean)))]
+    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
     if (texts.length === 0) {
       setTransMap({})
       return
@@ -79,7 +97,7 @@ export function NoticesPanel() {
       setTransMap(map)
     }).catch(() => setTransMap({}))
     return () => { cancelled = true }
-  }, [filtered, lang])
+  }, [notices, lang])
 
   const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
@@ -154,7 +172,7 @@ export function NoticesPanel() {
               className="date-input-compact h-9 w-40 text-xs"
             />
           </div>
-          <Button size="sm" className="h-9 px-4 text-xs" onClick={fetchNotices}>
+          <Button size="sm" className="h-9 px-4 text-xs" onClick={handleNoticeSearch}>
             <Search className="mr-1.5 h-3.5 w-3.5" />
             {t("search")}
           </Button>
@@ -166,7 +184,7 @@ export function NoticesPanel() {
           <div className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
             <p className="text-sm text-muted-foreground">{t("loading")}</p>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : notices.length === 0 ? (
           <div className="flex min-h-[200px] flex-col items-center justify-center py-12 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <FileText className="h-5 w-5 text-muted-foreground" />
@@ -180,7 +198,12 @@ export function NoticesPanel() {
           </div>
         ) : (
           <div className="flex flex-col divide-y">
-            {filtered.map((n) => {
+            {noticeTruncated && (
+              <p className="px-5 py-2 text-xs text-amber-700 dark:text-amber-400">
+                서버에서 최근 공지 {600}건까지만 불러옵니다. 더 보려면 기간을 나눠 검색하세요.
+              </p>
+            )}
+            {notices.map((n) => {
               const isExpanded = expandedId === n.id
               return (
                 <div
@@ -279,6 +302,15 @@ export function NoticesPanel() {
                 </div>
               )
             })}
+            <div className="px-5 pb-4">
+              <ListPaginationBar
+                page={noticePage}
+                pageSize={noticePageSize}
+                total={noticeTotal}
+                onPageChange={setNoticePage}
+                disabled={loading}
+              />
+            </div>
           </div>
         )}
       </div>

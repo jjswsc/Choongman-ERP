@@ -28,7 +28,17 @@ import { useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
 import { translateApiMessage } from '@/lib/translate-api-message'
 import { OfflineBanner } from '@/components/offline-banner'
+import { ListPaginationBar } from '@/components/list-pagination-bar'
 import { cn } from '@/lib/utils'
+
+function normalizePettyCashListPayload(data: unknown): { items: PettyCashItem[]; total: number; page: number } {
+  if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as { items?: unknown }).items)) {
+    const p = data as { items: PettyCashItem[]; total?: number; page?: number }
+    return { items: p.items, total: p.total ?? 0, page: p.page ?? 1 }
+  }
+  const arr = Array.isArray(data) ? (data as PettyCashItem[]) : []
+  return { items: arr, total: arr.length, page: 1 }
+}
 
 const OFFICE_ROLES = ['director', 'officer', 'ceo', 'hr']
 function isOfficeRole(role: string | undefined): boolean {
@@ -64,6 +74,10 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
   const [endStr, setEndStr] = React.useState(todayStr)
   const [listData, setListData] = React.useState<PettyCashItem[]>([])
   const [listLoading, setListLoading] = React.useState(false)
+  const listPageSize = 25
+  const [listPage, setListPage] = React.useState(1)
+  const [listTotal, setListTotal] = React.useState(0)
+  const listPageRef = React.useRef(1)
 
   const [addStore, setAddStore] = React.useState('')
   const [addType, setAddType] = React.useState<'receive' | 'expense' | 'replenish' | 'settle'>('receive')
@@ -118,36 +132,50 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
       })
   }, [auth?.store, stores, offlineAware, isOffice])
 
-  const loadList = React.useCallback(() => {
-    if (!effectiveStore) return
-    setListLoading(true)
-    const fetcher = offlineAware ? getPettyCashListWithCache : getPettyCashList
-    fetcher({
-      startStr,
-      endStr,
-      scopeFilter: 'store',
-      storeFilter: effectiveStore,
-      userStore: auth?.store,
-      userRole: auth?.role,
-    })
-      .then(setListData)
-      .catch(() => setListData([]))
-      .finally(() => setListLoading(false))
-  }, [startStr, endStr, effectiveStore, auth?.store, auth?.role, offlineAware])
+  const loadList = React.useCallback(
+    (page: number) => {
+      if (!effectiveStore) return
+      setListLoading(true)
+      const fetcher = offlineAware ? getPettyCashListWithCache : getPettyCashList
+      fetcher({
+        startStr,
+        endStr,
+        scopeFilter: 'store',
+        storeFilter: effectiveStore,
+        userStore: auth?.store,
+        userRole: auth?.role,
+        page,
+        pageSize: listPageSize,
+      })
+        .then((data) => {
+          const { items, total, page: pageOut } = normalizePettyCashListPayload(data)
+          setListData(items)
+          setListTotal(total)
+          setListPage(pageOut)
+          listPageRef.current = pageOut
+        })
+        .catch(() => {
+          setListData([])
+          setListTotal(0)
+        })
+        .finally(() => setListLoading(false))
+    },
+    [startStr, endStr, effectiveStore, auth?.store, auth?.role, offlineAware, listPageSize]
+  )
 
   React.useEffect(() => {
     setAddStore(effectiveStore)
   }, [effectiveStore])
 
   React.useEffect(() => {
-    loadList()
+    loadList(1)
   }, [loadList])
 
   const prevOnlineRef = React.useRef(online)
   React.useEffect(() => {
     if (offlineAware && !prevOnlineRef.current && online) {
       prevOnlineRef.current = true
-      loadList()
+      loadList(listPageRef.current)
     }
     prevOnlineRef.current = online
   }, [online, offlineAware, loadList])
@@ -178,7 +206,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
       if (res.success) {
         setAddAmount('')
         setAddMemo('')
-        loadList()
+        loadList(listPageRef.current)
         await appAlert(!online ? t('posOfflineSaved') : (res.message || t('msg_saved')))
       } else {
         await appAlert(translateApiMessage(res.message, t) || res.message || t('msg_save_fail'))
@@ -202,7 +230,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
     <div className="space-y-4">
       <OfflineBanner
         offlineOnly={offlineAware}
-        onSyncComplete={loadList}
+        onSyncComplete={() => loadList(listPageRef.current)}
         offlineMsg={t('posLocalOfflineNotice')}
         syncingMsg={t('posSyncing') || '동기화 중...'}
         retryLabel={t('posRetrySync') || '재시도'}
@@ -275,7 +303,7 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
             >
               {t('posToday') || '오늘'}
             </Button>
-            <Button size="sm" onClick={loadList} disabled={listLoading}>
+            <Button size="sm" onClick={() => loadList(1)} disabled={listLoading}>
               <Search className="mr-1 h-4 w-4" />
               {listLoading ? t('loading') : t('search') || '조회'}
             </Button>
@@ -333,6 +361,14 @@ export function PosPettyCashTab({ offlineAware = false }: { offlineAware?: boole
               </tbody>
             </table>
           </div>
+          <ListPaginationBar
+            className="mt-3"
+            page={listPage}
+            pageSize={listPageSize}
+            total={listTotal}
+            onPageChange={(pg) => loadList(pg)}
+            disabled={listLoading}
+          />
 
           <div className="mt-6 border-t pt-6">
             <p className="mb-3 text-sm font-medium">{t('pettyAddTitle') || '등록'}</p>

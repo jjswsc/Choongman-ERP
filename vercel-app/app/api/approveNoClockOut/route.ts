@@ -76,7 +76,11 @@ export async function POST(request: NextRequest) {
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
     const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { order: 'log_at.asc', limit: 200 })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
+    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, {
+      order: 'log_at.asc',
+      limit: 200,
+      select: 'id,log_type,log_at,status',
+    })) as { id?: number; log_type?: string; log_at?: string; status?: string }[]
     const inLogs = (attRows || []).filter((r) => String(r.log_type || '').trim() === '출근')
     const outLog = (attRows || []).find((r) => String(r.log_type || '').trim() === '퇴근')
     const hasOut = !!outLog

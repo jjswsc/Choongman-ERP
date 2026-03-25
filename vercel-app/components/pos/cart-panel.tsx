@@ -1173,24 +1173,31 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
     const nextTableId = selectedTable?.id ?? null
     const prevTableId = prevSelectedTableIdRef.current
+    const activeOrder = selectedTable?.order
 
-    // 테이블을 다른 것으로 바꿨을 때만 장바구니/입력값 초기화
+    // 테이블 미선택(서빙 패널 등): ref만 맞추고 손님 수는 건드리지 않음(다음 테이블 선택 시 다시 계산)
+    if (!nextTableId) {
+      prevSelectedTableIdRef.current = null
+      return
+    }
+
+    // 다른 테이블로 바꿀 때만 장바구니·쿠폰 등 초기화
     if (prevTableId && nextTableId && prevTableId !== nextTableId) {
       handleClearCart()
     }
 
-    if (nextTableId && prevTableId !== nextTableId) {
-      const existingGuestCount = Math.max(
-        0,
-        Math.trunc(Number(selectedTable?.order?.guestCount ?? 0) || 0)
-      )
-      if (existingGuestCount > 0) {
-        setGuestCount(existingGuestCount)
-      }
+    if (activeOrder?.id) {
+      // 진행 중 주문이 있는 테이블(추가 주문): DB 손님 수를 기본값으로 — 테이블 id 전환이 없어도 매번 맞춤
+      // (prevRef가 이미 같은 id면 예전 로직은 손님 수를 안 넣었음)
+      const raw = Math.max(0, Math.trunc(Number(activeOrder.guestCount ?? 0) || 0))
+      setGuestCount(raw > 0 ? raw : 1)
+    } else if (prevTableId !== nextTableId) {
+      // 빈 테이블로 새 홀 주문: 테이블을 바꿨을 때만 0으로
+      setGuestCount(0)
     }
 
     prevSelectedTableIdRef.current = nextTableId
-  }, [orderType, selectedTable?.id, selectedTable?.order?.guestCount])
+  }, [orderType, selectedTable?.id, selectedTable?.order?.id, selectedTable?.order?.guestCount])
 
   return (
     <>

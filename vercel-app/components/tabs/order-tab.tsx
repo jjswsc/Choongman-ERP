@@ -30,6 +30,7 @@ import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, trans
 import { compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -102,6 +103,9 @@ export function OrderTab() {
   const [submitting, setSubmitting] = useState(false)
   const [history, setHistory] = useState<OrderHistoryItem[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const histPageSize = 20
+  const [histPage, setHistPage] = useState(1)
+  const [histTotal, setHistTotal] = useState(0)
   const [histStart, setHistStart] = useState(todayStr)
   const [histEnd, setHistEnd] = useState(todayStr)
   const [imageModal, setImageModal] = useState<{ url: string; name: string } | null>(null)
@@ -210,12 +214,26 @@ export function OrderTab() {
     }
   }
 
-  const loadHistory = () => {
+  const loadHistory = (page?: number) => {
     if (!effectiveStore) return
+    const p = page ?? histPage
     setHistoryLoading(true)
-    getMyOrderHistory({ store: effectiveStore, startStr: histStart, endStr: histEnd })
-      .then(setHistory)
-      .catch(() => setHistory([]))
+    getMyOrderHistory({
+      store: effectiveStore,
+      startStr: histStart,
+      endStr: histEnd,
+      page: p,
+      pageSize: histPageSize,
+    })
+      .then((res) => {
+        setHistory(res.items)
+        setHistTotal(res.total)
+        setHistPage(res.page)
+      })
+      .catch(() => {
+        setHistory([])
+        setHistTotal(0)
+      })
       .finally(() => setHistoryLoading(false))
   }
 
@@ -786,7 +804,7 @@ export function OrderTab() {
                 className="h-9 flex-1 min-w-0 text-xs"
               />
             </div>
-            <Button size="sm" className="h-9 font-medium" onClick={loadHistory} disabled={historyLoading}>
+            <Button size="sm" className="h-9 font-medium" onClick={() => loadHistory(1)} disabled={historyLoading}>
               {historyLoading ? t('loading') : t('search')}
             </Button>
           </div>
@@ -930,6 +948,13 @@ export function OrderTab() {
               )}
             </CardContent>
           </Card>
+          <ListPaginationBar
+            page={histPage}
+            pageSize={histPageSize}
+            total={histTotal}
+            onPageChange={(p) => loadHistory(p)}
+            disabled={historyLoading}
+          />
         </TabsContent>
       </Tabs>
 

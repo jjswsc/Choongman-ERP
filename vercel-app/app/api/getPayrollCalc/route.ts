@@ -3,6 +3,7 @@ import {
   supabaseSelect,
   supabaseSelectFilter,
 } from '@/lib/supabase-server'
+import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
 import { getSSOLimitsByYear } from '@/lib/payroll-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
@@ -246,7 +247,7 @@ export async function GET(request: NextRequest) {
       supabaseSelectFilter(
         'attendance_logs',
         `log_at=gte.${normMonth}-01&log_at=lt.${nextMonthNextDay}`,
-        { order: 'log_at.asc', limit: 3000 }
+        { order: 'log_at.asc', limit: 3000, select: ATTENDANCE_LOG_PAYROLL_COLS }
       ) as Promise<{
         log_at?: string
         store_name?: string

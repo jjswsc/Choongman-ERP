@@ -34,9 +34,21 @@ export async function GET() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
 
     const [orders, inboundLogs, outboundLogs, leaveRows] = await Promise.all([
-      supabaseSelectFilter('orders', `order_date=gte.${monthStart}`, { order: 'order_date.desc', limit: 50 }) as Promise<{ id: number; order_date?: string; store_name?: string; status?: string; total?: number }[]>,
-      supabaseSelectFilter('stock_logs', 'log_type=eq.Inbound', { order: 'log_date.desc', limit: 30 }) as Promise<{ log_date?: string; location?: string; vendor_target?: string; qty?: number }[]>,
-      supabaseSelectFilter('stock_logs', 'log_type=eq.Outbound', { order: 'log_date.desc', limit: 30 }) as Promise<{ log_date?: string; vendor_target?: string; qty?: number }[]>,
+      supabaseSelectFilter('orders', `order_date=gte.${monthStart}`, {
+        order: 'order_date.desc',
+        limit: 50,
+        select: 'id,order_date,store_name,status,total',
+      }) as Promise<{ id: number; order_date?: string; store_name?: string; status?: string; total?: number }[]>,
+      supabaseSelectFilter('stock_logs', 'log_type=eq.Inbound', {
+        order: 'log_date.desc',
+        limit: 30,
+        select: 'log_date,location,vendor_target,qty',
+      }) as Promise<{ log_date?: string; location?: string; vendor_target?: string; qty?: number }[]>,
+      supabaseSelectFilter('stock_logs', 'log_type=eq.Outbound', {
+        order: 'log_date.desc',
+        limit: 30,
+        select: 'log_date,vendor_target,qty',
+      }) as Promise<{ log_date?: string; vendor_target?: string; qty?: number }[]>,
       (async () => {
         const a = (await supabaseSelectFilter('leave_requests', 'status=eq.대기', { order: 'created_at.desc', limit: 20 })) as { id: number; store?: string; name?: string; type?: string; leave_date?: string; created_at?: string }[]
         const b = (await supabaseSelectFilter('leave_requests', 'status=eq.Pending', { order: 'created_at.desc', limit: 20 })) as typeof a

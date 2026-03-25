@@ -2406,6 +2406,7 @@ export const i18n = {
     posKitchen1: '주방 1',
     posKitchen2: '주방 2',
     posKitchenOrder: '주방 주문서',
+    posReceiptAddonSection: '추가 주문',
     posKitchenSlip: '주방 주문서',
     posKitchenOptionsHint: '주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다.',
     posKitchenAutoPrintOnOrder: '주문 완료 시 주방 주문서 자동 인쇄',
@@ -6070,6 +6071,7 @@ orderItemQty: 'Qty',
     posKitchen1: 'Kitchen 1',
     posKitchen2: 'Kitchen 2',
     posKitchenOrder: 'Kitchen Order',
+    posReceiptAddonSection: 'Add-on order',
     posKitchenSlip: 'Kitchen Slip',
     posDeliveryFee: 'Delivery fee',
     posPackagingFee: 'Packaging fee',
@@ -9872,6 +9874,7 @@ orderItemQty: 'จำนวน',
     posReceipt: 'ใบเสร็จ',
     posPrintBlocked: 'ป๊อปอัปถูกบล็อก โปรดอนุญาตป๊อปอัปเพื่อพิมพ์',
     posKitchenOrder: 'สลิปครัว',
+    posReceiptAddonSection: 'เพิ่มออเดอร์',
     posKitchen1: 'ครัว 1',
     posKitchen2: 'ครัว 2',
     posOfflineSaved: 'โหมดออฟไลน์ - ออเดอร์ถูกบันทึกในเครื่องและจะส่งอัตโนมัติเมื่อเชื่อมต่ออีกครั้ง',
@@ -13773,6 +13776,7 @@ orderItemQty: 'အရေအတွက်',
     posPromoListFilterApplyHint:
       'Code/name, date overlap, channels, and active-only update the list below immediately. If a row you just saved is missing, press Search to reload the latest list from the server.',
     posPromoListTitle: 'Promo list',
+    posReceiptAddonSection: 'Add-on order',
   },
   la: {
     all: 'ທັງໝົດ',
@@ -16982,6 +16986,7 @@ orderItemQty: 'ຈຳນວນ',
     posPromoListFilterApplyHint:
       'Code/name, date overlap, channels, and active-only update the list below immediately. If a row you just saved is missing, press Search to reload the latest list from the server.',
     posPromoListTitle: 'Promo list',
+    posReceiptAddonSection: 'Add-on order',
   },
   /** 캄보디아어 - 미번역 시 en 폴백 */
   kh: {
@@ -18359,6 +18364,7 @@ orderItemQty: 'ຈຳນວນ',
     posMenuImageUploadTooLarge: 'The file is too large. Choose a smaller photo, reduce file size, or paste an image URL instead.',
     posOptionSelectionGroups: 'Option selection steps',
     posOptionSelectionGroupsHint: 'Comma-separated. e.g. size, part, topping — Step 1 (size) → Step 2 (part) → Step 3 (topping)',
+    posReceiptAddonSection: 'Add-on order',
   } as Record<string, string>,
   /** 베트남어 - 미번역 시 en 폴백 */
   vi: {
@@ -19736,6 +19742,7 @@ orderItemQty: 'ຈຳນວນ',
     posMenuImageUploadTooLarge: 'The file is too large. Choose a smaller photo, reduce file size, or paste an image URL instead.',
     posOptionSelectionGroups: 'Option selection steps',
     posOptionSelectionGroupsHint: 'Comma-separated. e.g. size, part, topping — Step 1 (size) → Step 2 (part) → Step 3 (topping)',
+    posReceiptAddonSection: 'Add-on order',
   } as Record<string, string>,
   /** 말레이시아어 - 미번역 시 en 폴백 */
   ms: {
@@ -21113,6 +21120,7 @@ orderItemQty: 'ຈຳນວນ',
     posMenuImageUploadTooLarge: 'The file is too large. Choose a smaller photo, reduce file size, or paste an image URL instead.',
     posOptionSelectionGroups: 'Option selection steps',
     posOptionSelectionGroupsHint: 'Comma-separated. e.g. size, part, topping — Step 1 (size) → Step 2 (part) → Step 3 (topping)',
+    posReceiptAddonSection: 'Add-on order',
   } as Record<string, string>,
 } as const
 

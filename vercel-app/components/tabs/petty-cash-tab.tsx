@@ -40,6 +40,7 @@ import {
 } from "@/lib/api-client"
 import { compressImageForUpload } from "@/lib/utils"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -68,6 +69,9 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [listEnd, setListEnd] = useState(todayStr)
   const [listData, setListData] = useState<PettyCashItem[]>([])
   const [listLoading, setListLoading] = useState(false)
+  const listPageSize = 25
+  const [listPage, setListPage] = useState(1)
+  const [listTotal, setListTotal] = useState(0)
 
   const [monthlyScope, setMonthlyScope] = useState<"store" | "office">("store")
   const [monthlyStore, setMonthlyStore] = useState("All")
@@ -192,8 +196,9 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const formatStoreLabel = (store: string) =>
     store.startsWith("Office-") ? `${t("pettyScopeOffice") || "본사"} (${store.slice(7)})` : store
 
-  const loadList = () => {
+  const loadList = (page?: number) => {
     if (!auth?.store) return
+    const p = page ?? listPage
     setListLoading(true)
     getPettyCashList({
       startStr: listStart,
@@ -203,9 +208,18 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
       departmentFilter: listScope === "office" && listDepartment !== "All" ? listDepartment : undefined,
       userStore: auth.store,
       userRole: auth.role,
+      page: p,
+      pageSize: listPageSize,
     })
-      .then(setListData)
-      .catch(() => setListData([]))
+      .then((res) => {
+        setListData(res.items)
+        setListTotal(res.total)
+        setListPage(res.page)
+      })
+      .catch(() => {
+        setListData([])
+        setListTotal(0)
+      })
       .finally(() => setListLoading(false))
   }
 
@@ -549,7 +563,7 @@ ${rows.map((row, ri) => {
                     <span className="text-xs whitespace-nowrap">{t("bankFilterAccountSubjectEmpty") || "계정과목 미입력만"}</span>
                   </label>
                 )}
-                <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={loadList} disabled={listLoading}>
+                <Button size="sm" className="h-9 shrink-0 px-2.5 text-xs sm:px-3" onClick={() => loadList(1)} disabled={listLoading}>
                   <Search className="mr-1 h-3.5 w-3.5" />
                   {listLoading ? (t("loading") || "불러오는 중") : (t("search") || "검색")}
                 </Button>
@@ -611,6 +625,14 @@ ${rows.map((row, ri) => {
                   </table>
                 )}
               </div>
+              <ListPaginationBar
+                className="mt-2"
+                page={listPage}
+                pageSize={listPageSize}
+                total={listTotal}
+                onPageChange={(pg) => loadList(pg)}
+                disabled={listLoading}
+              />
 
               <div className="border-t pt-3 mt-3">
                 <p className="text-sm font-medium mb-2">{t("pettyAddTitle") || "등록"}</p>

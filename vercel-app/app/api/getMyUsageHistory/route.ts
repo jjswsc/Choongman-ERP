@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const logs = (await supabaseSelectFilter('stock_logs', filter, {
       order: 'log_date.desc',
       limit: 20000,
+      select: 'log_date,item_code,item_name,qty,user_name',
     })) as { log_date?: string; item_code?: string; item_name?: string; qty?: number; user_name?: string }[]
 
     const nameToNick: Record<string, string> = {}

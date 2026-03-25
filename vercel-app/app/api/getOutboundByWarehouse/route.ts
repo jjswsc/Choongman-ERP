@@ -91,7 +91,8 @@ export async function GET(request: NextRequest) {
     const orderRows = (await supabaseSelectFilter('orders', orderFilter, {
       order: 'order_date.desc',
       limit: 300,
-    }    )) as { store_name?: string; delivery_date?: string; delivery_dates_by_outbound?: string; cart_json?: string }[]
+      select: 'store_name,delivery_date,delivery_dates_by_outbound,cart_json',
+    })) as { store_name?: string; delivery_date?: string; delivery_dates_by_outbound?: string; cart_json?: string }[]
 
     for (const o of orderRows || []) {
       const store = String(o.store_name || '').trim()
@@ -125,7 +126,11 @@ export async function GET(request: NextRequest) {
     const allLogs = (await supabaseSelectFilter(
       'stock_logs',
       'location=eq.본사&log_type=eq.ForceOutbound',
-      { order: 'log_date.desc', limit: 500 }
+      {
+        order: 'log_date.desc',
+        limit: 500,
+        select: 'log_date,vendor_target,item_code,item_name,qty,delivery_status',
+      }
     )) as {
       log_date?: string
       vendor_target?: string

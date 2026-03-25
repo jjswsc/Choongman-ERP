@@ -41,10 +41,18 @@ export async function GET(request: NextRequest) {
 
     if (store && store !== 'All' && store !== '전체') {
       const filter = `store_name=ilike.${encodeURIComponent(store)}&approved=eq.대기`
-      rows = (await supabaseSelectFilter('attendance_logs', filter, { order: 'log_at.desc', limit: 500 })) as Row[]
+      rows = (await supabaseSelectFilter('attendance_logs', filter, {
+        order: 'log_at.desc',
+        limit: 500,
+        select: 'id,log_at,store_name,name,log_type,status,approved,late_min,ot_min',
+      })) as Row[]
     } else {
       const filter = 'approved=eq.대기'
-      rows = (await supabaseSelectFilter('attendance_logs', filter, { order: 'log_at.desc', limit: 500 })) as Row[]
+      rows = (await supabaseSelectFilter('attendance_logs', filter, {
+        order: 'log_at.desc',
+        limit: 500,
+        select: 'id,log_at,store_name,name,log_type,status,approved,late_min,ot_min',
+      })) as Row[]
     }
 
     const nickMap: Record<string, string> = {}

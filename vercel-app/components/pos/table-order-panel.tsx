@@ -14,7 +14,7 @@ import type { Order } from '@/lib/pos-types'
 import type { PosDeliveryApp } from '@/lib/api-client'
 import { markPosOrderItemServed, updatePosOrder, updatePosOrderStatus } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
+import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { Check, CheckCircle, Clock, Users, XCircle } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
@@ -291,36 +291,34 @@ export function TableOrderPanel({
                     const optionPart = optMatch ? optMatch[2].trim() : null
                     const noteTrim = (item.note ?? '').trim()
                     const expanded = expandedItemId === item.id
+                    const mainNameT = translatePosMenuLineForReceipt(mainName, t)
+                    const optionPartT = optionPart ? translatePosMenuLineForReceipt(optionPart, t) : undefined
+                    const fullNameT = translatePosMenuLineForReceipt(item.name, t)
                     return (
                       <li
                         key={item.id}
                         className={cn(
-                          'grid grid-cols-[1fr_auto] items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50',
+                          'flex items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50',
                           served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                         )}
                       >
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <div className="flex items-start gap-2 min-w-0">
-                            <button
-                              type="button"
-                              className="min-w-0 flex-1 text-left hover:underline"
-                              onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                              title={item.name}
-                            >
-                              <span className="block text-base font-medium leading-snug line-clamp-2">
-                                {mainName}
-                              </span>
-                            </button>
-                            <span className="shrink-0 text-sm text-muted-foreground tabular-nums leading-snug pt-0.5">
-                              ×{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <button
+                            type="button"
+                            className="block w-full min-w-0 text-left hover:underline"
+                            onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
+                            title={fullNameT}
+                          >
+                            <span className="block text-base font-medium leading-snug break-words">
+                              {mainNameT}
                             </span>
-                          </div>
+                          </button>
                           {optionPart && (
                             <p
                               className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug"
-                              title={optionPart}
+                              title={optionPartT}
                             >
-                              {optionPart}
+                              {optionPartT}
                             </p>
                           )}
                           {noteTrim && (
@@ -333,10 +331,18 @@ export function TableOrderPanel({
                           )}
                           {expanded && (
                             <p className="text-sm text-muted-foreground pt-0.5 whitespace-normal break-words border-t border-border/40 mt-1">
-                              {item.name}
+                              {fullNameT}
                               {noteTrim ? ` · ${noteTrim}` : ''}
                             </p>
                           )}
+                        </div>
+                        <div className="shrink-0 flex flex-col items-end justify-start gap-0.5 self-start pt-0.5 text-right">
+                          <span className="text-base font-bold tabular-nums text-foreground leading-tight whitespace-nowrap">
+                            ×{item.quantity}
+                          </span>
+                          <span className="text-sm text-muted-foreground tabular-nums leading-tight whitespace-nowrap">
+                            {(item.price * item.quantity).toLocaleString()} ฿
+                          </span>
                         </div>
                         <Button
                           size="sm"

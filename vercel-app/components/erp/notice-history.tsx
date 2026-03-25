@@ -42,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -64,27 +65,45 @@ export function NoticeHistory() {
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [notices, setNotices] = React.useState<SentNoticeItem[]>([])
   const [loading, setLoading] = React.useState(false)
+  const [sentPage, setSentPage] = React.useState(1)
+  const sentPageSize = 15
+  const [sentTotal, setSentTotal] = React.useState(0)
+  const [sentTruncated, setSentTruncated] = React.useState(false)
   const [transMap, setTransMap] = React.useState<Record<string, string>>({})
   const [readDetailOpen, setReadDetailOpen] = React.useState(false)
   const [readDetailTitle, setReadDetailTitle] = React.useState("")
   const [readDetailItems, setReadDetailItems] = React.useState<NoticeReadDetailItem[]>([])
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
 
-  const loadNotices = React.useCallback(() => {
-    if (!auth?.store || !auth?.user) return
-    setLoading(true)
-    const sender = senderFilter === "all" ? "all" : senderFilter === "mine" ? auth.user : senderFilter
-    getSentNotices({
-      sender: sender || auth.user,
-      startDate,
-      endDate,
-      userStore: auth.store,
-      userRole: auth.role,
-    })
-      .then(setNotices)
-      .catch(() => setNotices([]))
-      .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter])
+  const loadNotices = React.useCallback(
+    (page: number) => {
+      if (!auth?.store || !auth?.user) return
+      setLoading(true)
+      const sender = senderFilter === "all" ? "all" : senderFilter === "mine" ? auth.user : senderFilter
+      getSentNotices({
+        sender: sender || auth.user,
+        startDate,
+        endDate,
+        userStore: auth.store,
+        userRole: auth.role,
+        page,
+        pageSize: sentPageSize,
+      })
+        .then((res) => {
+          setNotices(res.items)
+          setSentTotal(res.total)
+          setSentTruncated(Boolean(res.truncated))
+          setSentPage(res.page)
+        })
+        .catch(() => {
+          setNotices([])
+          setSentTotal(0)
+          setSentTruncated(false)
+        })
+        .finally(() => setLoading(false))
+    },
+    [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter, sentPageSize]
+  )
 
   const loadSenders = React.useCallback(() => {
     getNoticeSenders({ startDate, endDate })
@@ -97,16 +116,16 @@ export function NoticeHistory() {
   const handleSearch = React.useCallback(() => {
     setHasSearched(true)
     loadSenders()
-    loadNotices()
+    loadNotices(1)
   }, [loadSenders, loadNotices])
 
   React.useEffect(() => {
     const onSent = () => {
-      if (hasSearched) loadNotices()
+      if (hasSearched) loadNotices(sentPage)
     }
     window.addEventListener("notice-sent", onSent)
     return () => window.removeEventListener("notice-sent", onSent)
-  }, [loadNotices, hasSearched])
+  }, [loadNotices, hasSearched, sentPage])
 
   React.useEffect(() => {
     const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
@@ -215,12 +234,17 @@ export function NoticeHistory() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-between border-t px-4 py-2.5 bg-muted/20">
+      <div className="flex flex-col gap-1 border-t px-4 py-2.5 bg-muted/20">
         <span className="text-[11px] font-semibold text-muted-foreground">
           {t("noticeCountPrefix")}{" "}
-          <span className="text-card-foreground">{notices.length}</span>
+          <span className="text-card-foreground">{hasSearched ? sentTotal : 0}</span>
           {t("noticeCountSuffix")}
         </span>
+        {hasSearched && sentTruncated && (
+          <span className="text-[10px] text-amber-600 dark:text-amber-500">
+            기간 내 일부만 불러왔습니다. 기간을 나누어 검색해 보세요.
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col">
@@ -256,7 +280,7 @@ export function NoticeHistory() {
                   className="flex w-full items-start gap-3 px-4 py-3.5 text-left active:bg-muted/20 transition-colors"
                 >
                   <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold tabular-nums text-muted-foreground">
-                    {idx + 1}
+                    {(sentPage - 1) * sentPageSize + idx + 1}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
@@ -386,6 +410,17 @@ export function NoticeHistory() {
               </div>
             )
           })
+        )}
+        {hasSearched && notices.length > 0 && (
+          <div className="border-t px-4 py-3">
+            <ListPaginationBar
+              page={sentPage}
+              pageSize={sentPageSize}
+              total={sentTotal}
+              onPageChange={(p) => loadNotices(p)}
+              disabled={loading}
+            />
+          </div>
         )}
       </div>
 

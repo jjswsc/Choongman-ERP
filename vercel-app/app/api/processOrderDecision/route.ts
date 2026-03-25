@@ -65,7 +65,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const orders = (await supabaseSelectFilter('orders', 'id=eq.' + orderId)) as unknown[]
+    const orders = (await supabaseSelectFilter('orders', 'id=eq.' + orderId, {
+      limit: 1,
+      select: 'cart_json,store_name,user_name',
+    })) as unknown[]
     if (!orders?.length) {
       return NextResponse.json({ success: false, message: '해당 주문이 없습니다.' }, { headers })
     }

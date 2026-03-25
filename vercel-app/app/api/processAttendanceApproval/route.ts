@@ -24,7 +24,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, { limit: 1 })) as { id: number; store_name?: string; log_type?: string; late_min?: number }[]
+    const rows = (await supabaseSelectFilter('attendance_logs', `id=eq.${id}`, {
+      limit: 1,
+      select: 'id,store_name,log_type,late_min',
+    })) as { id: number; store_name?: string; log_type?: string; late_min?: number }[]
     if (!rows || rows.length === 0) {
       return NextResponse.json(
         { success: false, message: '해당 기록을 찾을 수 없습니다.' },

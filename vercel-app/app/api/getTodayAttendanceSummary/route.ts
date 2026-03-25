@@ -26,9 +26,17 @@ export async function GET(request: NextRequest) {
     const storeFilter = isAll ? '' : `&store_name=ilike.${encodeURIComponent(store)}`
     let rows: AttRow[] = []
     if (isAll) {
-      rows = (await supabaseSelectFilter('attendance_logs', logFilter, { order: 'log_at.asc', limit: 500 })) as AttRow[]
+      rows = (await supabaseSelectFilter('attendance_logs', logFilter, {
+        order: 'log_at.asc',
+        limit: 500,
+        select: 'log_at,store_name,name,log_type,late_min,early_min,ot_min,break_min,status,approved,id',
+      })) as AttRow[]
     } else {
-      rows = (await supabaseSelectFilter('attendance_logs', `${logFilter}${storeFilter}`, { order: 'log_at.asc', limit: 500 })) as AttRow[]
+      rows = (await supabaseSelectFilter('attendance_logs', `${logFilter}${storeFilter}`, {
+        order: 'log_at.asc',
+        limit: 500,
+        select: 'log_at,store_name,name,log_type,late_min,early_min,ot_min,break_min,status,approved,id',
+      })) as AttRow[]
     }
 
     const byKey: Record<string, { store: string; name: string; inTime: string | null; outTime: string | null; lateMin: number; earlyMin: number; otMin: number; breakMin: number; status: string; approval: string; onlyIn: boolean }> = {}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
 const TZ = 'Asia/Bangkok'
@@ -144,13 +145,13 @@ export async function GET(request: NextRequest) {
       attRows = (await supabaseSelectFilter(
         'attendance_logs',
         `log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { order: 'log_at.asc', limit: 2000 }
+        { order: 'log_at.asc', limit: 2000, select: ATTENDANCE_LOG_ADMIN_GRID_COLS }
       )) as AttRow[]
     } else {
       attRows = (await supabaseSelectFilter(
         'attendance_logs',
         `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${encodeURIComponent(startISO)}&log_at=lt.${encodeURIComponent(logEndISOExclusive)}`,
-        { order: 'log_at.asc', limit: 2000 }
+        { order: 'log_at.asc', limit: 2000, select: ATTENDANCE_LOG_ADMIN_GRID_COLS }
       )) as AttRow[]
     }
 

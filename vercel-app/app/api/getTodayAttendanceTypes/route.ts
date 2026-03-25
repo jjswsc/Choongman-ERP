@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'attendance_logs',
       `store_name=ilike.${encodeURIComponent(storePattern)}&name=ilike.${encodeURIComponent(name)}`,
-      { order: 'log_at.desc', limit: 50 }
+      { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
     )) as { log_at?: string; log_type?: string }[]
 
     const arr = rows || []

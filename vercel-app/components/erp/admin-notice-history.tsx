@@ -40,6 +40,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -69,66 +70,66 @@ export function AdminNoticeHistory() {
   const [readDetailLoading, setReadDetailLoading] = React.useState(false)
   const [searchType, setSearchType] = React.useState<"all" | "notice" | "order">("all")
   const [searchKeyword, setSearchKeyword] = React.useState("")
+  const [listPage, setListPage] = React.useState(1)
+  const listPageSize = 15
+  const [listTotal, setListTotal] = React.useState(0)
+  const [listTruncated, setListTruncated] = React.useState(false)
+  type SentListQuery = {
+    startDate: string
+    endDate: string
+    senderFilter: string
+    searchType: "all" | "notice" | "order"
+    keyword: string
+  }
+  const [listQuery, setListQuery] = React.useState<SentListQuery | null>(null)
 
-  /** 물류관리 관련 (주문승인/반려/보류/강제출고/발주/입고/재고/배송/매장 수령 완료 등) 공지 여부 */
-  const isOrderRelated = React.useCallback((n: SentNoticeItem) => {
-    const title = (n.title || "").toLowerCase()
-    const content = ((n.content || n.preview) || "").toLowerCase()
-    const text = title + " " + content
-    if (/주문.*(승인|반려|보류)/.test(title) || /주문\s*#\d+/.test(title)) return true
-    if (/강제|출고|발주|입고|재고|배송|물류|수령/.test(text)) return true
-    if (/주문.*확인|승인.*화면/.test(content)) return true
-    return false
-  }, [])
-
-  const filteredNotices = React.useMemo(() => {
-    let list = notices
-    const q = searchKeyword.trim().toLowerCase()
-    if (searchType === "all") {
-      if (q) {
-        list = list.filter(
-          (n) =>
-            (n.title || "").toLowerCase().includes(q) ||
-            ((n.content || n.preview) || "").toLowerCase().includes(q)
-        )
-      }
-    } else if (searchType === "notice") {
-      list = list.filter((n) => !isOrderRelated(n))
-      if (q) {
-        list = list.filter(
-          (n) =>
-            (n.title || "").toLowerCase().includes(q) ||
-            ((n.content || n.preview) || "").toLowerCase().includes(q)
-        )
-      }
-    } else {
-      list = list.filter((n) => isOrderRelated(n))
-      if (q) {
-        list = list.filter((n) => {
-          const text = ((n.title || "") + " " + (n.content || n.preview || "")).toLowerCase()
-          return text.includes(q)
+  const runSentListFetch = React.useCallback(
+    (page: number, query: SentListQuery) => {
+      if (!auth?.store || !auth?.user) return
+      setLoading(true)
+      const sender = query.senderFilter === "all" ? "all" : query.senderFilter === "mine" ? auth.user : query.senderFilter
+      getSentNotices({
+        sender: sender || auth.user,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        userStore: auth.store,
+        userRole: auth.role,
+        searchType: query.searchType,
+        keyword: query.keyword.trim() || undefined,
+        page,
+        pageSize: listPageSize,
+      })
+        .then((res) => {
+          setNotices(res.items)
+          setListTotal(res.total)
+          setListTruncated(Boolean(res.truncated))
+          setListPage(res.page)
         })
-      }
-    }
-    return list
-  }, [notices, searchType, searchKeyword, isOrderRelated])
+        .catch(() => {
+          setNotices([])
+          setListTotal(0)
+          setListTruncated(false)
+        })
+        .finally(() => setLoading(false))
+    },
+    [auth?.store, auth?.user, auth?.role, listPageSize]
+  )
 
-  const loadNotices = React.useCallback(() => {
-    if (!auth?.store || !auth?.user) return
-    setLoading(true)
-    const sender = senderFilter === "all" ? "all" : senderFilter === "mine" ? auth.user : senderFilter
-    getSentNotices({
-      sender: sender || auth.user,
+  React.useEffect(() => {
+    if (!listQuery) return
+    runSentListFetch(listPage, listQuery)
+  }, [listQuery, listPage, runSentListFetch])
+
+  const handleSearchNotices = React.useCallback(() => {
+    setListQuery({
       startDate,
       endDate,
-      userStore: auth.store,
-      userRole: auth.role,
+      senderFilter,
       searchType,
+      keyword: searchKeyword,
     })
-      .then(setNotices)
-      .catch(() => setNotices([]))
-      .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user, auth?.role, startDate, endDate, senderFilter, searchType])
+    setListPage(1)
+  }, [startDate, endDate, senderFilter, searchType, searchKeyword])
 
   const loadSenders = React.useCallback(() => {
     getNoticeSenders({ startDate, endDate })
@@ -141,10 +142,12 @@ export function AdminNoticeHistory() {
   }, [loadSenders])
 
   React.useEffect(() => {
-    const onSent = () => loadNotices()
+    const onSent = () => {
+      if (listQuery) runSentListFetch(listPage, listQuery)
+    }
     window.addEventListener("notice-sent", onSent)
     return () => window.removeEventListener("notice-sent", onSent)
-  }, [loadNotices])
+  }, [listQuery, listPage, runSentListFetch])
 
   React.useEffect(() => {
     const texts = [...new Set(notices.flatMap((n) => [n.title, n.content || n.preview].filter(Boolean)))]
@@ -243,7 +246,7 @@ export function AdminNoticeHistory() {
           <Button
             size="sm"
             className="h-9 px-4 text-xs font-semibold shrink-0"
-            onClick={loadNotices}
+            onClick={handleSearchNotices}
             disabled={loading}
           >
             <Search className="mr-1.5 h-3.5 w-3.5" />
@@ -251,10 +254,15 @@ export function AdminNoticeHistory() {
           </Button>
           <span className="text-[11px] font-semibold text-muted-foreground ml-auto">
             {t("noticeCountPrefix")}{" "}
-            <span className="text-foreground">{filteredNotices.length}</span>
+            <span className="text-foreground">{listQuery ? listTotal : 0}</span>
             {t("noticeCountSuffix")}
           </span>
         </div>
+        {listQuery && listTruncated && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+            기간 내 일부만 불러왔습니다. 기간을 나누어 검색해 보세요.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-[120px]">
             <Select value={senderFilter} onValueChange={setSenderFilter}>
@@ -290,12 +298,16 @@ export function AdminNoticeHistory() {
 
       {/* Notice list */}
       <div className="flex flex-col">
-        {filteredNotices.length === 0 ? (
+        {!listQuery ? (
+          <div className="py-12 px-6 text-center text-sm text-muted-foreground">
+            {t("msg_click_query") || "검색 버튼을 눌러 주세요."}
+          </div>
+        ) : notices.length === 0 ? (
           <div className="py-12 px-6 text-center text-sm text-muted-foreground">
             {t("adminNoNoticesFound")}
           </div>
         ) : (
-          filteredNotices.map((notice, idx) => {
+          notices.map((notice, idx) => {
             const isExpanded = expandedId === notice.id
             const readPercent =
               notice.totalCount > 0
@@ -322,7 +334,7 @@ export function AdminNoticeHistory() {
                   {/* Line 1: Index + 제목 | 대상 | 내용 */}
                   <div className="flex w-full items-center gap-3">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold tabular-nums text-muted-foreground">
-                      {idx + 1}
+                      {(listPage - 1) * listPageSize + idx + 1}
                     </div>
                     <div className="min-w-0 flex-1 flex items-center gap-2 text-xs overflow-hidden">
                       <span className="font-bold text-card-foreground shrink-0 max-w-[140px] truncate" title={getTrans(notice.title)}>
@@ -459,6 +471,17 @@ export function AdminNoticeHistory() {
               </div>
             )
           })
+        )}
+        {listQuery && (
+          <div className="border-t px-6 py-3">
+            <ListPaginationBar
+              page={listPage}
+              pageSize={listPageSize}
+              total={listTotal}
+              onPageChange={setListPage}
+              disabled={loading}
+            />
+          </div>
         )}
       </div>
 

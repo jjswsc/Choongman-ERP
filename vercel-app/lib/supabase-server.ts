@@ -372,6 +372,70 @@ export async function supabaseInsertMany(table: string, rows: Record<string, unk
  * path 예: "projectId/filename.pdf"
  * @returns object path (bucket/objectPath)
  */
+/** 공개 버킷 객체 URL (경로에 / 포함 가능, 세그먼트별 인코딩) */
+export function supabaseStoragePublicUrl(bucket: string, objectPath: string): string {
+  const { url } = getConfig()
+  const base = url.replace(/\/$/, '')
+  const encoded = objectPath
+    .split('/')
+    .filter(Boolean)
+    .map((p) => encodeURIComponent(p))
+    .join('/')
+  return `${base}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encoded}`
+}
+
+/**
+ * Storage: 클라이언트 직접 업로드용 signed upload URL 발급 (POST /object/upload/sign/…)
+ * 업로드 본문은 Vercel을 거치지 않음 → Incoming 절감.
+ */
+export async function supabaseCreateSignedUploadUrl(
+  bucket: string,
+  objectPath: string,
+  options?: { upsert?: boolean }
+): Promise<{ signedUrl: string; token: string; path: string }> {
+  const { url, key } = getConfig()
+  const base = url.replace(/\/$/, '')
+  const storageV1 = `${base}/storage/v1`
+  const segments = [bucket, ...objectPath.split('/').filter(Boolean)].map((s) => encodeURIComponent(s))
+  const apiPath = `${storageV1}/object/upload/sign/${segments.join('/')}`
+
+  const headers: Record<string, string> = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    'Content-Type': 'application/json',
+  }
+  if (options?.upsert) headers['x-upsert'] = 'true'
+
+  const res = await supabaseFetch(apiPath, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    throw new Error('Supabase createSignedUploadUrl failed: ' + text)
+  }
+  let parsed: { url?: string }
+  try {
+    parsed = JSON.parse(text) as { url?: string }
+  } catch {
+    throw new Error('Supabase createSignedUploadUrl: invalid JSON')
+  }
+  const relative = parsed.url
+  if (!relative || typeof relative !== 'string') {
+    throw new Error('Supabase createSignedUploadUrl: missing url in response')
+  }
+  const signedFull = relative.startsWith('http')
+    ? relative
+    : `${storageV1}${relative.startsWith('/') ? '' : '/'}${relative}`
+  const u = new URL(signedFull)
+  const token = u.searchParams.get('token')
+  if (!token) {
+    throw new Error('Supabase createSignedUploadUrl: no token in URL')
+  }
+  return { signedUrl: signedFull, token, path: objectPath }
+}
+
 export async function supabaseStorageUpload(
   bucket: string,
   path: string,

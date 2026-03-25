@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       const logs = (await supabaseSelectFilter(
         'attendance_logs',
         `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}`,
-        { order: 'log_at.desc', limit: 100 }
+        { order: 'log_at.desc', limit: 100, select: 'log_at,log_type' }
       )) as { log_at?: string; log_type?: string }[]
       const todayLogs = (logs || []).filter((r) => {
         const rowDate = r.log_at ? new Date(r.log_at).toLocaleDateString('en-CA', { timeZone: TZ }) : ''
@@ -329,7 +329,7 @@ export async function POST(request: NextRequest) {
       const allLogs = (await supabaseSelectFilter(
         'attendance_logs',
         `name=ilike.${encodeURIComponent(empName)}`,
-        { order: 'log_at.desc', limit: 50 }
+        { order: 'log_at.desc', limit: 50, select: 'log_at,log_type' }
       )) as { log_at?: string; log_type?: string }[]
       for (const r of allLogs || []) {
         const rowDate = r.log_at

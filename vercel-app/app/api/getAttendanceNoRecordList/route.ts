@@ -69,7 +69,11 @@ export async function GET(request: NextRequest) {
     const attFilter = isAllStores
       ? `log_at=gte.${startStr}&log_at=lt.${endExclusive}`
       : `store_name=ilike.${encodeURIComponent(storeFilter)}&log_at=gte.${startStr}&log_at=lt.${endExclusive}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { order: 'log_at.asc', limit: 2000 })) as AttRow[]
+    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, {
+      order: 'log_at.asc',
+      limit: 2000,
+      select: 'log_at,store_name,name,log_type',
+    })) as AttRow[]
 
     const hasAttendance = new Set<string>()
     for (const r of attRows || []) {

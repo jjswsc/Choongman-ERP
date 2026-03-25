@@ -31,6 +31,15 @@ export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
 export { invalidateBankTransactionsListCache } from './offline/erp-offline'
 
+/** 페이지네이션 목록 API 공통 응답 */
+export interface PaginatedList<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+  truncated?: boolean
+}
+
 export interface NoticeAttachment {
   name?: string
   mime?: string
@@ -47,10 +56,42 @@ export interface NoticeItem {
   attachments: NoticeAttachment[]
 }
 
-export async function getMyNotices(params: { store: string; name: string }) {
-  const q = new URLSearchParams(params)
+export async function getMyNotices(params: {
+  store: string
+  name: string
+  page?: number
+  pageSize?: number
+  status?: 'all' | 'unread' | 'read'
+  dateFrom?: string
+  dateTo?: string
+  /** ERP 공지 패널: 기간 밖이어도 미확인은 포함 */
+  listMode?: 'default' | 'unread_or_in_range'
+  rangeStart?: string
+  rangeEnd?: string
+}): Promise<PaginatedList<NoticeItem>> {
+  const q = new URLSearchParams({ store: params.store, name: params.name })
+  if (params.page != null) q.set('page', String(params.page))
+  if (params.pageSize != null) q.set('pageSize', String(params.pageSize))
+  if (params.status && params.status !== 'all') q.set('status', params.status)
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom)
+  if (params.dateTo) q.set('dateTo', params.dateTo)
+  if (params.listMode) q.set('listMode', params.listMode)
+  if (params.rangeStart) q.set('rangeStart', params.rangeStart)
+  if (params.rangeEnd) q.set('rangeEnd', params.rangeEnd)
   const res = await apiFetchWithOffline(`/api/getMyNotices?${q}`)
-  return res.json() as Promise<NoticeItem[]>
+  const data = (await res.json()) as unknown
+  if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as PaginatedList<NoticeItem>).items)) {
+    const p = data as PaginatedList<NoticeItem>
+    return {
+      items: p.items,
+      total: p.total ?? 0,
+      page: p.page ?? 1,
+      pageSize: p.pageSize ?? 20,
+      truncated: p.truncated,
+    }
+  }
+  const arr = Array.isArray(data) ? data : []
+  return { items: arr, total: arr.length, page: 1, pageSize: arr.length || 20 }
 }
 
 export async function confirmNoticeRead(params: {
@@ -267,9 +308,21 @@ export async function getMyOrderHistory(params: {
   store: string
   startStr: string
   endStr: string
-}) {
+  page?: number
+  pageSize?: number
+}): Promise<PaginatedList<OrderHistoryItem>> {
   const raw = await getMyOrderHistoryWithCache(params)
-  return raw as OrderHistoryItem[]
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray((raw as PaginatedList<OrderHistoryItem>).items)) {
+    const p = raw as PaginatedList<OrderHistoryItem>
+    return {
+      items: p.items,
+      total: p.total ?? 0,
+      page: p.page ?? 1,
+      pageSize: p.pageSize ?? 20,
+    }
+  }
+  const arr = Array.isArray(raw) ? (raw as OrderHistoryItem[]) : []
+  return { items: arr, total: arr.length, page: 1, pageSize: arr.length || 20 }
 }
 
 export interface UsageHistoryItem {
@@ -633,7 +686,10 @@ export async function getSentNotices(params: {
   userStore?: string
   userRole?: string
   searchType?: 'all' | 'notice' | 'order'
-}) {
+  page?: number
+  pageSize?: number
+  keyword?: string
+}): Promise<PaginatedList<SentNoticeItem>> {
   const q = new URLSearchParams({
     sender: params.sender,
     startDate: params.startDate,
@@ -642,8 +698,23 @@ export async function getSentNotices(params: {
   if (params.userStore) q.set('userStore', params.userStore)
   if (params.userRole) q.set('userRole', params.userRole)
   if (params.searchType && params.searchType !== 'all') q.set('searchType', params.searchType)
+  if (params.page != null) q.set('page', String(params.page))
+  if (params.pageSize != null) q.set('pageSize', String(params.pageSize))
+  if (params.keyword?.trim()) q.set('keyword', params.keyword.trim())
   const res = await apiFetchWithOffline(`/api/getSentNotices?${q}`)
-  return res.json() as Promise<SentNoticeItem[]>
+  const raw = await res.json()
+  if (raw && typeof raw === 'object' && Array.isArray((raw as PaginatedList<SentNoticeItem>).items)) {
+    const p = raw as PaginatedList<SentNoticeItem>
+    return {
+      items: p.items,
+      total: p.total ?? 0,
+      page: p.page ?? 1,
+      pageSize: p.pageSize ?? 15,
+      truncated: p.truncated,
+    }
+  }
+  const arr = Array.isArray(raw) ? (raw as SentNoticeItem[]) : []
+  return { items: arr, total: arr.length, page: 1, pageSize: arr.length || 15 }
 }
 
 export interface NoticeReadDetailItem {
@@ -1175,8 +1246,24 @@ export async function getPettyCashList(params: {
   departmentFilter?: string
   userStore?: string
   userRole?: string
-}) {
-  return getPettyCashListWithCache(params) as Promise<PettyCashItem[]>
+  page?: number
+  pageSize?: number
+}): Promise<PaginatedList<PettyCashItem>> {
+  const data = (await getPettyCashListWithCache(params)) as
+    | PaginatedList<PettyCashItem>
+    | PettyCashItem[]
+    | unknown
+  if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as PaginatedList<PettyCashItem>).items)) {
+    const p = data as PaginatedList<PettyCashItem>
+    return {
+      items: p.items,
+      total: p.total ?? 0,
+      page: p.page ?? 1,
+      pageSize: p.pageSize ?? 25,
+    }
+  }
+  const arr = Array.isArray(data) ? (data as PettyCashItem[]) : []
+  return { items: arr, total: arr.length, page: params.page ?? 1, pageSize: params.pageSize ?? 25 }
 }
 
 /** 해당 월 또는 기간 거래 전체 + 실시간 잔액 */
@@ -2877,15 +2964,52 @@ export async function uploadInteriorFile(params: {
   fileType: string
   file: File
 }) {
-  const formData = new FormData()
-  formData.append('projectId', String(params.projectId))
-  formData.append('fileType', params.fileType)
-  formData.append('file', params.file)
-  const res = await apiFetchWithOffline('/api/uploadInteriorFile', {
+  const file = params.file
+  const pres = await apiFetchWithOffline('/api/uploadInteriorFile/presign', {
     method: 'POST',
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: String(params.projectId),
+      fileName: file.name,
+      fileSize: file.size,
+      contentType: file.type || 'application/octet-stream',
+    }),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; url?: string }>
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    storagePath?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.storagePath) {
+    return {
+      success: false,
+      message: pjson.message || '업로드 준비 실패',
+      url: undefined,
+    }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  if (!putRes.ok) {
+    const raw = await putRes.text().catch(() => '')
+    return {
+      success: false,
+      message: raw || `Storage 업로드 실패 (${putRes.status})`,
+      url: undefined,
+    }
+  }
+  const done = await apiFetchWithOffline('/api/uploadInteriorFile/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: String(params.projectId),
+      fileType: params.fileType,
+      fileName: file.name,
+      fileSize: file.size,
+      storagePath: pjson.storagePath,
+    }),
+  })
+  return done.json() as Promise<{ success: boolean; message?: string; url?: string }>
 }
 
 export async function deleteInteriorFile(params: { id: number }) {
@@ -3611,29 +3735,51 @@ export async function savePosMenu(params: {
 export const POS_MENU_UPLOAD_TOO_LARGE = '__POS_MENU_UPLOAD_TOO_LARGE__'
 
 export async function uploadPosMenuImage(params: { file: File }) {
-  const formData = new FormData()
-  formData.append('file', params.file)
-  const res = await apiFetchWithOffline('/api/uploadPosMenuImage', {
+  const file = params.file
+  const pres = await apiFetchWithOffline('/api/uploadPosMenuImage/presign', {
     method: 'POST',
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+    }),
   })
-  const raw = await res.text()
+  const rawPres = await pres.text()
+  let pjson: { success?: boolean; message?: string; signedUrl?: string; publicUrl?: string }
   try {
-    const parsed = JSON.parse(raw) as { success?: boolean; message?: string; url?: string }
-    return {
-      success: Boolean(parsed.success) && res.ok,
-      message: parsed.message,
-      url: parsed.url,
-    }
+    pjson = JSON.parse(rawPres) as typeof pjson
   } catch {
     const tooLarge =
-      res.status === 413 ||
-      /413|payload too large|entity too large|request entity too large/i.test(raw)
+      pres.status === 413 ||
+      /413|payload too large|entity too large|request entity too large/i.test(rawPres)
     return {
       success: false,
       message: tooLarge ? POS_MENU_UPLOAD_TOO_LARGE : undefined,
       url: undefined,
     }
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return {
+      success: false,
+      message: pjson.message,
+      url: undefined,
+    }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return {
+      success: false,
+      message: t || `Storage 업로드 실패 (${putRes.status})`,
+      url: undefined,
+    }
+  }
+  return {
+    success: true,
+    message: '업로드되었습니다.',
+    url: pjson.publicUrl,
   }
 }
 
@@ -3878,6 +4024,368 @@ export async function deleteMarketingCampaign(params: { id: string }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/** LINE OA Segment API — 세그먼트 목록 (서버 프록시, X-API-KEY는 env) */
+export async function getLineOaSegments(params?: {
+  page?: number
+  size?: number
+  sort?: string
+  search?: string
+}) {
+  const q = new URLSearchParams()
+  if (params?.page != null) q.set('page', String(params.page))
+  if (params?.size != null) q.set('size', String(params.size))
+  if (params?.sort) q.set('sort', params.sort)
+  if (params?.search) q.set('search', params.search)
+  const suffix = q.toString()
+  const res = await apiFetch('/api/lineOa/segments' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    page?: number
+    size?: number
+    sort?: string
+    data?: unknown
+    total?: number
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Segment API — 세그먼트 상세 (서버 프록시, X-API-KEY는 env) */
+export async function getLineOaSegmentById(segmentId: number | string) {
+  const normalized = String(segmentId ?? '').trim()
+  const res = await apiFetch(`/api/lineOa/segments/${encodeURIComponent(normalized)}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    segmentId?: number
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Segment API — 세그먼트로 OA Audience 생성 */
+export async function createLineOaAudienceFromSegment(segmentId: number | string) {
+  const normalized = String(segmentId ?? '').trim()
+  const res = await apiFetch(
+    `/api/lineOa/segments/${encodeURIComponent(normalized)}/create-oa-audience`,
+    { method: 'POST' }
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    segmentId?: string
+    id?: string
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Segment API — OA Audience 생성 상태/오디언스명 조회 */
+export async function getLineOaAudienceCreateResult(segmentId: number | string, id: number | string) {
+  const normalizedSegmentId = String(segmentId ?? '').trim()
+  const normalizedId = String(id ?? '').trim()
+  const res = await apiFetch(
+    `/api/lineOa/segments/${encodeURIComponent(normalizedSegmentId)}/create-oa-audience/${encodeURIComponent(
+      normalizedId
+    )}`
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    segmentId?: string
+    id?: string
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Segment API — 세그먼트 사용자 목록 CSV 생성 요청 (202 + id, 이후 상태/다운로드는 별도 API) */
+export async function requestLineOaSegmentUserListCsv(segmentId: number | string) {
+  const normalized = String(segmentId ?? '').trim()
+  const res = await apiFetch(`/api/lineOa/segments/${encodeURIComponent(normalized)}/user-list-csv`, {
+    method: 'POST',
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    segmentId?: string
+    id?: string
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Segment API — CSV 보내기 상태·다운로드 URL (결과 3일, URL 10분 유효 — LINE 문서) */
+export async function getLineOaSegmentUserListExportStatus(segmentId: number | string, id: number | string) {
+  const normalizedSegmentId = String(segmentId ?? '').trim()
+  const normalizedId = String(id ?? '').trim()
+  const res = await apiFetch(
+    `/api/lineOa/segments/${encodeURIComponent(normalizedSegmentId)}/user-list-csv/${encodeURIComponent(
+      normalizedId
+    )}`
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    segmentId?: string
+    id?: string
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API (Deprecated) — 그룹 목록 */
+export async function getLineOaGroups(params?: {
+  groupIds?: string
+  page?: number
+  size?: number
+  sort?: string
+  search?: string
+}) {
+  const q = new URLSearchParams()
+  if (params?.groupIds) q.set('groupIds', params.groupIds)
+  if (params?.page != null) q.set('page', String(params.page))
+  if (params?.size != null) q.set('size', String(params.size))
+  if (params?.sort) q.set('sort', params.sort)
+  if (params?.search) q.set('search', params.search)
+  const suffix = q.toString()
+  const res = await apiFetch('/api/lineOa/groups' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    page?: number
+    size?: number
+    sort?: string
+    data?: unknown
+    total?: number
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API — 그룹 생성 */
+export async function createLineOaGroup(params: { name: string; retention?: 'P90D' | 'P180D' | 'P365D' }) {
+  const res = await apiFetch('/api/lineOa/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; data?: unknown; raw?: unknown; status?: number; body?: unknown }>
+}
+
+/** LINE OA Group API — 그룹 단건 조회 */
+export async function getLineOaGroupById(id: string) {
+  const res = await apiFetch(`/api/lineOa/groups/${encodeURIComponent(id.trim())}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API — 그룹 수정 */
+export async function patchLineOaGroup(
+  id: string,
+  params: { name?: string; retention?: 'P90D' | 'P180D' | 'P365D' }
+) {
+  const res = await apiFetch(`/api/lineOa/groups/${encodeURIComponent(id.trim())}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string; data?: unknown; raw?: unknown; status?: number; body?: unknown }>
+}
+
+/** LINE OA Group API — 그룹 삭제 (204 시 본문 없음) */
+export async function deleteLineOaGroup(id: string) {
+  const res = await apiFetch(`/api/lineOa/groups/${encodeURIComponent(id.trim())}`, { method: 'DELETE' })
+  if (res.status === 204) return { success: true as const, status: 204 }
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string; raw?: unknown; status?: number; body?: unknown }>
+}
+
+/** LINE OA Group API — 사용자 연결(append/overwrite) */
+export async function associateLineOaGroupUsers(
+  groupId: string,
+  params: { mode: 'append' | 'overwrite'; uids: string[] }
+) {
+  const res = await apiFetch(`/api/lineOa/groups/${encodeURIComponent(groupId.trim())}/users/associate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    groupId?: string
+    requestId?: string
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API — 사용자 연결 해제 */
+export async function dissociateLineOaGroupUsers(groupId: string, params: { uids: string[] }) {
+  const res = await apiFetch(`/api/lineOa/groups/${encodeURIComponent(groupId.trim())}/users/dissociate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    groupId?: string
+    requestId?: string
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API — associate/dissociate 작업 상태 */
+export async function getLineOaGroupUserOperation(groupId: string, requestId: string) {
+  const res = await apiFetch(
+    `/api/lineOa/groups/${encodeURIComponent(groupId.trim())}/users/operations/${encodeURIComponent(
+      requestId.trim()
+    )}`
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    groupId?: string
+    requestId?: string
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** LINE OA Group API V2 — 그룹 목록 (sort: friendCount 등) */
+export async function getLineOaGroupV2List(params?: {
+  groupIds?: string
+  page?: number
+  size?: number
+  sort?: string
+  search?: string
+}) {
+  const q = new URLSearchParams()
+  if (params?.groupIds) q.set('groupIds', params.groupIds)
+  if (params?.page != null) q.set('page', String(params.page))
+  if (params?.size != null) q.set('size', String(params.size))
+  if (params?.sort) q.set('sort', params.sort)
+  if (params?.search) q.set('search', params.search)
+  const suffix = q.toString()
+  const res = await apiFetch('/api/lineOa/group-v2/groups' + (suffix ? `?${suffix}` : ''))
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    code?: string
+    page?: number
+    size?: number
+    sort?: string
+    data?: unknown
+    total?: number
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+export async function createLineOaGroupV2(params: { name: string; retention?: 'P90D' | 'P180D' | 'P365D' }) {
+  const res = await apiFetch('/api/lineOa/group-v2/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; data?: unknown; raw?: unknown; status?: number; body?: unknown }>
+}
+
+export async function getLineOaGroupV2ById(id: string) {
+  const res = await apiFetch(`/api/lineOa/group-v2/groups/${encodeURIComponent(id.trim())}`)
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    data?: unknown
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+export async function patchLineOaGroupV2(
+  id: string,
+  params: { name?: string; retention?: 'P90D' | 'P180D' | 'P365D' }
+) {
+  const res = await apiFetch(`/api/lineOa/group-v2/groups/${encodeURIComponent(id.trim())}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string; data?: unknown; raw?: unknown; status?: number; body?: unknown }>
+}
+
+export async function deleteLineOaGroupV2(id: string) {
+  const res = await apiFetch(`/api/lineOa/group-v2/groups/${encodeURIComponent(id.trim())}`, { method: 'DELETE' })
+  if (res.status === 204) return { success: true as const, status: 204 }
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string; raw?: unknown; status?: number; body?: unknown }>
+}
+
+/** Group V2 — 그룹 사용자 CSV 생성 요청 (202 + id) */
+export async function requestLineOaGroupV2GroupedUsersCsv(groupId: string) {
+  const res = await apiFetch(
+    `/api/lineOa/group-v2/groups/${encodeURIComponent(groupId.trim())}/grouped-users`,
+    { method: 'POST' }
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    groupId?: string
+    id?: string
+    raw?: unknown
+    status?: number
+    body?: unknown
+  }>
+}
+
+/** Group V2 — CSV 상태·다운로드 URL (결과 약 7일, URL 약 10분 — LINE 문서) */
+export async function getLineOaGroupV2GroupedUsersResult(groupId: string, requestId: string) {
+  const res = await apiFetch(
+    `/api/lineOa/group-v2/groups/${encodeURIComponent(groupId.trim())}/grouped-users/${encodeURIComponent(
+      requestId.trim()
+    )}/result`
+  )
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    groupId?: string
+    requestId?: string
+    /** 성공 시 LINE export 상태 문자열, 실패 시 프록시의 HTTP 상태 숫자일 수 있음 */
+    status?: string | number
+    url?: string
+    raw?: unknown
+    body?: unknown
+  }>
 }
 
 export async function getMarketingCampaignCosts(campaignId: string) {
@@ -6149,14 +6657,35 @@ export async function updateStoreRepairTicket(rowOrId: string | number, data: Re
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
-/** FormData 업로드 — 오프라인 큐 미사용 */
+/** 오프라인 큐 미사용 — 파일은 Supabase로 직접 PUT */
 export async function uploadStoreRepairPhoto(store: string, file: File) {
   const { apiFetch } = await import('./api/fetch')
-  const fd = new FormData()
-  fd.set('store', store)
-  fd.set('file', file)
-  const res = await apiFetch('/api/uploadStoreRepairPhoto', { method: 'POST', body: fd })
-  return res.json() as Promise<{ success: boolean; url?: string; message?: string }>
+  const pres = await apiFetch('/api/uploadStoreRepairPhoto/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      store,
+      fileName: file.name,
+      contentType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+    }),
+  })
+  const pjson = (await pres.json()) as {
+    success?: boolean
+    message?: string
+    signedUrl?: string
+    publicUrl?: string
+  }
+  if (!pres.ok || !pjson.success || !pjson.signedUrl || !pjson.publicUrl) {
+    return { success: false, url: undefined, message: pjson.message || '업로드 준비 실패' }
+  }
+  const { putFileToSupabaseSignedUploadUrl } = await import('@/lib/storage-client-upload')
+  const putRes = await putFileToSupabaseSignedUploadUrl(pjson.signedUrl, file, { upsert: false })
+  if (!putRes.ok) {
+    const t = await putRes.text().catch(() => '')
+    return { success: false, url: undefined, message: t || `Storage 업로드 실패 (${putRes.status})` }
+  }
+  return { success: true, url: pjson.publicUrl, message: undefined }
 }
 
 export interface StoreRepairProgressLog {

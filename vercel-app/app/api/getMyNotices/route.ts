@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { NOTICE_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 
 export interface NoticeItem {
   id: number
@@ -11,16 +13,48 @@ export interface NoticeItem {
   attachments: unknown[]
 }
 
-async function getMyNoticesHandler(store: string, name: string): Promise<NoticeItem[]> {
+const DB_FETCH_LIMIT = 600
+
+function isReadStatus(status: string): boolean {
+  return /^(확인|Read|확인함)$/.test(String(status || '').trim())
+}
+
+export interface MyNoticesPageResult {
+  items: NoticeItem[]
+  total: number
+  page: number
+  pageSize: number
+  truncated: boolean
+}
+
+type ListMode = 'default' | 'unread_or_in_range'
+
+async function getMyNoticesHandler(
+  store: string,
+  name: string,
+  opts: {
+    page: number
+    pageSize: number
+    status: 'all' | 'unread' | 'read'
+    dateFrom?: string
+    dateTo?: string
+    listMode: ListMode
+    rangeStart?: string
+    rangeEnd?: string
+  }
+): Promise<MyNoticesPageResult> {
   let myJob = ''
   let myRole = ''
-  const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as { store?: string; name?: string; job?: string; role?: string }[] || []
-  for (let i = 0; i < empList.length; i++) {
-    const s = String(empList[i].store || '').trim()
-    const n = String(empList[i].name || '').trim()
+  const empList = (await supabaseSelect('employees', { order: 'id.asc', select: 'store,name,job,role' })) as
+    | { store?: string; name?: string; job?: string; role?: string }[]
+    | null
+    | undefined
+  for (let i = 0; i < (empList || []).length; i++) {
+    const s = String(empList![i].store || '').trim()
+    const n = String(empList![i].name || '').trim()
     if (s === store && n === name) {
-      myJob = String(empList[i].job || empList[i].role || '').trim()
-      myRole = String(empList[i].role || '').trim().toLowerCase()
+      myJob = String(empList![i].job || empList![i].role || '').trim()
+      myRole = String(empList![i].role || '').trim().toLowerCase()
       break
     }
   }
@@ -28,16 +62,23 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
   const readMap: Record<number, string> = {}
   try {
     const filter = `store=eq.${encodeURIComponent(store)}&name=eq.${encodeURIComponent(name)}`
-    const readRows = (await supabaseSelectFilter('notice_reads', filter)) as { notice_id: number; status?: string }[] || []
-    for (let i = 0; i < readRows.length; i++) {
-      readMap[readRows[i].notice_id] = readRows[i].status || '확인'
+    const readRows = (await supabaseSelectFilter('notice_reads', filter, {
+      select: 'notice_id,status',
+      limit: 5000,
+    })) as { notice_id: number; status?: string }[] | null
+    for (let i = 0; i < (readRows || []).length; i++) {
+      readMap[readRows![i].notice_id] = readRows![i].status || '확인'
     }
   } catch {
     /* ignore */
   }
 
-  const list: NoticeItem[] = []
-  const rows = (await supabaseSelect('notices', { order: 'created_at.desc' })) as {
+  const built: NoticeItem[] = []
+  const rows = (await supabaseSelect('notices', {
+    order: 'created_at.desc',
+    limit: DB_FETCH_LIMIT,
+    select: NOTICE_LIST_COLS,
+  })) as {
     id: number
     title?: string
     content?: string
@@ -48,10 +89,10 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
     target_recipients?: string | null
     created_at?: string
     attachments?: string
-  }[] || []
+  }[] | null
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
+  for (let i = 0; i < (rows || []).length; i++) {
+    const row = rows![i]
     const recipientsRaw = row.target_recipients
     if (recipientsRaw) {
       try {
@@ -61,15 +102,22 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
           if (!recipients.includes(myKey)) continue
         }
       } catch {
-        /* fall through to store/role match */
+        /* fall through */
       }
     } else {
       const targetStores = String(row.target_store || '전체').trim()
       const targetJobs = String(row.target_role || '전체').trim()
       const targetPerms = String(row.target_permission_group || '').trim()
       const storeMatch = targetStores === '전체' || targetStores.indexOf(store) > -1
-      const jobList = String(targetJobs || '전체').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-      const jobMatch = !targetJobs || targetJobs.trim() === '전체' || jobList.length === 0 || (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
+      const jobList = String(targetJobs || '전체')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+      const jobMatch =
+        !targetJobs ||
+        targetJobs.trim() === '전체' ||
+        jobList.length === 0 ||
+        (myJob && jobList.indexOf(myJob.toLowerCase()) >= 0)
       const permList = targetPerms ? targetPerms.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : []
       const permMatch = permList.length === 0 || (myRole && permList.includes(myRole))
       if (!storeMatch || !jobMatch || !permMatch) continue
@@ -83,9 +131,13 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
         /* ignore */
       }
     }
-    const created = row.created_at ? (typeof row.created_at === 'string' ? row.created_at : new Date(row.created_at).toISOString()) : ''
+    const created = row.created_at
+      ? typeof row.created_at === 'string'
+        ? row.created_at
+        : new Date(row.created_at).toISOString()
+      : ''
     const dateStr = created ? created.slice(0, 10) : ''
-    list.push({
+    built.push({
       id: row.id,
       date: dateStr,
       title: row.title || '',
@@ -96,7 +148,90 @@ async function getMyNoticesHandler(store: string, name: string): Promise<NoticeI
     })
   }
 
-  return list
+  const df = (opts.dateFrom || '').trim().slice(0, 10)
+  const dt = (opts.dateTo || '').trim().slice(0, 10)
+  const rs = (opts.rangeStart || '').trim().slice(0, 10)
+  const re = (opts.rangeEnd || '').trim().slice(0, 10)
+
+  let filtered = built
+  if (opts.listMode === 'unread_or_in_range') {
+    filtered = built.filter((n) => {
+      const d = (n.date || '').slice(0, 10)
+      const unread = !isReadStatus(n.status)
+      const inRange = rs && re ? d >= rs && d <= re : true
+      return unread || inRange
+    })
+  } else {
+    if (df) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) >= df)
+    if (dt) filtered = filtered.filter((n) => (n.date || '').slice(0, 10) <= dt)
+    if (opts.status === 'unread') filtered = filtered.filter((n) => !isReadStatus(n.status))
+    else if (opts.status === 'read') filtered = filtered.filter((n) => isReadStatus(n.status))
+  }
+
+  filtered = [...filtered].sort((a, b) => {
+    const aUnread = !isReadStatus(a.status)
+    const bUnread = !isReadStatus(b.status)
+    if (aUnread && !bUnread) return -1
+    if (!aUnread && bUnread) return 1
+    return (b.date || '').localeCompare(a.date || '')
+  })
+
+  const total = filtered.length
+  const truncated = (rows || []).length >= DB_FETCH_LIMIT
+  const items = slicePage(filtered, opts.page, opts.pageSize)
+
+  return {
+    items,
+    total,
+    page: opts.page,
+    pageSize: opts.pageSize,
+    truncated,
+  }
+}
+
+function parseMyNoticesQuery(
+  searchParams: URLSearchParams,
+  body?: Record<string, unknown> | null
+): {
+  page: number
+  pageSize: number
+  status: 'all' | 'unread' | 'read'
+  dateFrom?: string
+  dateTo?: string
+  listMode: ListMode
+  rangeStart?: string
+  rangeEnd?: string
+} {
+  const { page, pageSize } = parseListPagination(searchParams, body, 15)
+  const fromBody = (k: string): string | undefined => {
+    if (!body || typeof body !== 'object') return undefined
+    const v = (body as Record<string, unknown>)[k]
+    if (v == null) return undefined
+    return String(v).trim()
+  }
+  const statusRaw = (searchParams.get('status') ?? fromBody('status') ?? 'all').toLowerCase()
+  const status: 'all' | 'unread' | 'read' =
+    statusRaw === 'unread' ? 'unread' : statusRaw === 'read' ? 'read' : 'all'
+  const dateFrom = (searchParams.get('dateFrom') ?? searchParams.get('startDate') ?? fromBody('dateFrom') ?? fromBody('startDate') ?? '').trim()
+  const dateTo = (searchParams.get('dateTo') ?? searchParams.get('endDate') ?? fromBody('dateTo') ?? fromBody('endDate') ?? '').trim()
+  const listModeRaw = (searchParams.get('listMode') ?? fromBody('listMode') ?? 'default').toLowerCase()
+  const listMode: ListMode = listModeRaw === 'unread_or_in_range' ? 'unread_or_in_range' : 'default'
+  const rangeStart = (searchParams.get('rangeStart') ?? fromBody('rangeStart') ?? '').trim()
+  const rangeEnd = (searchParams.get('rangeEnd') ?? fromBody('rangeEnd') ?? '').trim()
+  return {
+    page,
+    pageSize,
+    status,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    listMode,
+    rangeStart: rangeStart || undefined,
+    rangeEnd: rangeEnd || undefined,
+  }
+}
+
+function emptyResult(page: number, pageSize: number): MyNoticesPageResult {
+  return { items: [], total: 0, page, pageSize, truncated: false }
 }
 
 export async function GET(request: NextRequest) {
@@ -108,17 +243,18 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const store = String(searchParams.get('store') || '').trim()
   const name = String(searchParams.get('name') || '').trim()
+  const q = parseMyNoticesQuery(searchParams, null)
 
   if (!store || !name) {
-    return NextResponse.json([], { headers })
+    return NextResponse.json(emptyResult(1, DEFAULT_LIST_PAGE_SIZE), { headers })
   }
 
   try {
-    const list = await getMyNoticesHandler(store, name)
-    return NextResponse.json(list, { headers })
+    const result = await getMyNoticesHandler(store, name, q)
+    return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('getMyNotices:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(emptyResult(q.page, q.pageSize), { headers })
   }
 }
 
@@ -129,18 +265,19 @@ export async function POST(request: NextRequest) {
   headers.set('Access-Control-Allow-Headers', 'Content-Type')
 
   try {
-    const body = await request.json()
+    const body = (await request.json()) as Record<string, unknown>
     const store = String(body?.store || '').trim()
     const name = String(body?.name || '').trim()
+    const q = parseMyNoticesQuery(new URL(request.url).searchParams, body)
 
     if (!store || !name) {
-      return NextResponse.json([], { headers })
+      return NextResponse.json(emptyResult(1, DEFAULT_LIST_PAGE_SIZE), { headers })
     }
 
-    const list = await getMyNoticesHandler(store, name)
-    return NextResponse.json(list, { headers })
+    const result = await getMyNoticesHandler(store, name, q)
+    return NextResponse.json(result, { headers })
   } catch (e) {
     console.error('getMyNotices:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(emptyResult(1, DEFAULT_LIST_PAGE_SIZE), { headers })
   }
 }

@@ -306,15 +306,21 @@ export async function getPettyCashListWithCache(params: {
   departmentFilter?: string
   userStore?: string
   userRole?: string
-}): Promise<unknown[]> {
+  page?: number
+  pageSize?: number
+}): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }> {
+  const page = params.page ?? 1
+  const pageSize = params.pageSize ?? 25
   const key = cacheKey('erp:petty', {
     start: params.startStr,
     end: params.endStr,
     scope: params.scopeFilter || '',
     store: params.storeFilter || '',
     dept: params.departmentFilter || '',
+    page,
+    ps: pageSize,
   })
-  const fallback: unknown[] = []
+  const fallback = { items: [] as unknown[], total: 0, page, pageSize }
   return fetchWithCache(key, async () => {
     const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
     if (params.scopeFilter) q.set('scopeFilter', params.scopeFilter)
@@ -322,9 +328,20 @@ export async function getPettyCashListWithCache(params: {
     if (params.departmentFilter) q.set('departmentFilter', params.departmentFilter)
     if (params.userStore) q.set('userStore', params.userStore)
     if (params.userRole) q.set('userRole', params.userRole)
+    q.set('page', String(page))
+    q.set('pageSize', String(pageSize))
     const res = await apiFetch(`/api/getPettyCashList?${q}`)
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const data = (await res.json()) as { items?: unknown[]; total?: number; page?: number; pageSize?: number } | unknown[]
+    if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.items)) {
+      return {
+        items: data.items,
+        total: data.total ?? 0,
+        page: data.page ?? page,
+        pageSize: data.pageSize ?? pageSize,
+      }
+    }
+    const arr = Array.isArray(data) ? data : []
+    return { items: arr, total: arr.length, page: 1, pageSize: arr.length || pageSize }
   }, fallback)
 }
 
@@ -388,14 +405,33 @@ export async function getMyOrderHistoryWithCache(params: {
   store: string
   startStr: string
   endStr: string
-}): Promise<unknown[]> {
-  const key = cacheKey('erp:myOrders', params)
-  const fallback: unknown[] = []
+  page?: number
+  pageSize?: number
+}): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }> {
+  const page = params.page ?? 1
+  const pageSize = params.pageSize ?? 20
+  const key = cacheKey('erp:myOrders', { ...params, page, pageSize })
+  const fallback = { items: [] as unknown[], total: 0, page, pageSize }
   return fetchWithCache(key, async () => {
-    const q = new URLSearchParams(params)
+    const q = new URLSearchParams({
+      store: params.store,
+      startStr: params.startStr,
+      endStr: params.endStr,
+    })
+    q.set('page', String(page))
+    q.set('pageSize', String(pageSize))
     const res = await apiFetch(`/api/getMyOrderHistory?${q}`)
-    const data = await res.json()
-    return Array.isArray(data) ? data : []
+    const data = (await res.json()) as { items?: unknown[]; total?: number; page?: number; pageSize?: number } | unknown[]
+    if (data && typeof data === 'object' && !Array.isArray(data) && Array.isArray(data.items)) {
+      return {
+        items: data.items,
+        total: data.total ?? 0,
+        page: data.page ?? page,
+        pageSize: data.pageSize ?? pageSize,
+      }
+    }
+    const arr = Array.isArray(data) ? data : []
+    return { items: arr, total: arr.length, page: 1, pageSize: arr.length || pageSize }
   }, fallback)
 }
 

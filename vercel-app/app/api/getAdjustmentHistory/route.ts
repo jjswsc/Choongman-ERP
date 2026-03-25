@@ -27,7 +27,11 @@ export async function GET(request: NextRequest) {
     const logs = (await supabaseSelectFilter(
       'stock_logs',
       'log_type=eq.Adjustment',
-      { order: 'log_date.desc', limit: 500 }
+      {
+        order: 'log_date.desc',
+        limit: 500,
+        select: 'log_date,location,item_code,item_name,qty,vendor_target',
+      }
     )) as {
       log_date?: string
       location?: string

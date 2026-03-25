@@ -16,6 +16,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import dynamic from "next/dynamic"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem } from "@/lib/api-client"
+import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { Megaphone, Bell, Search, FileText } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
@@ -43,6 +44,10 @@ export function HomeTab() {
   const { lang } = useLang()
   const t = useT(lang)
   const [notices, setNotices] = useState<NoticeItem[]>([])
+  const [noticePage, setNoticePage] = useState(1)
+  const [noticeTotal, setNoticeTotal] = useState(0)
+  const [noticePageSize] = useState(15)
+  const [noticeTruncated, setNoticeTruncated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'All' | 'Unread' | 'Read'>('Unread') // 첫화면: 미확인 기본
@@ -51,39 +56,44 @@ export function HomeTab() {
   const [transMap, setTransMap] = useState<Record<string, string>>({})
   const [confirmingId, setConfirmingId] = useState<number | null>(null)
 
-  const fetchNotices = useCallback(() => {
+  const statusParam = statusFilter === 'Unread' ? 'unread' : statusFilter === 'Read' ? 'read' : 'all'
+
+  const fetchNotices = useCallback(
+    (page: number) => {
+      if (!auth?.store || !auth?.user) return
+      setLoading(true)
+      getMyNotices({
+        store: auth.store,
+        name: auth.user,
+        page,
+        pageSize: noticePageSize,
+        status: statusParam,
+        dateFrom,
+        dateTo,
+      })
+        .then((res) => {
+          setNotices(res.items)
+          setNoticeTotal(res.total)
+          setNoticeTruncated(Boolean(res.truncated))
+          setNoticePage(res.page)
+        })
+        .catch(() => {
+          setNotices([])
+          setNoticeTotal(0)
+          setNoticeTruncated(false)
+        })
+        .finally(() => setLoading(false))
+    },
+    [auth?.store, auth?.user, noticePageSize, statusParam, dateFrom, dateTo]
+  )
+
+  useEffect(() => {
     if (!auth?.store || !auth?.user) return
-    setLoading(true)
-    getMyNotices({ store: auth.store, name: auth.user })
-      .then(setNotices)
-      .catch(() => setNotices([]))
-      .finally(() => setLoading(false))
-  }, [auth?.store, auth?.user])
+    fetchNotices(noticePage)
+  }, [auth?.store, auth?.user, noticePage, fetchNotices])
 
   useEffect(() => {
-    fetchNotices()
-  }, [fetchNotices])
-
-  const filteredNotices = useMemo(() => {
-    let list = notices
-    if (statusFilter === 'Unread') {
-      list = list.filter((n) => !isRead(n.status))
-    } else if (statusFilter === 'Read') {
-      list = list.filter((n) => isRead(n.status))
-    }
-    if (dateFrom) list = list.filter((n) => (n.date || '').slice(0, 10) >= dateFrom)
-    if (dateTo) list = list.filter((n) => (n.date || '').slice(0, 10) <= dateTo)
-    return [...list].sort((a, b) => {
-      const aUnread = !isRead(a.status)
-      const bUnread = !isRead(b.status)
-      if (aUnread && !bUnread) return -1
-      if (!aUnread && bUnread) return 1
-      return (b.date || '').localeCompare(a.date || '')
-    })
-  }, [notices, statusFilter, dateFrom, dateTo])
-
-  useEffect(() => {
-    const texts = [...new Set(filteredNotices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
+    const texts = [...new Set(notices.flatMap((n) => [n.title, n.content].filter(Boolean)))]
     if (texts.length === 0) {
       setTransMap({})
       return
@@ -96,7 +106,7 @@ export function HomeTab() {
       setTransMap(map)
     }).catch(() => setTransMap({}))
     return () => { cancelled = true }
-  }, [filteredNotices, lang])
+  }, [notices, lang])
 
   const getTrans = (text: string) => (text && transMap[text]) || text || ""
 
@@ -153,7 +163,13 @@ export function HomeTab() {
           <div className="flex flex-col gap-2">
             {/* 1행: 미확인 필터 + 검색 버튼 */}
             <div className="flex items-center gap-2">
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'All' | 'Unread' | 'Read')}>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => {
+                  setNoticePage(1)
+                  setStatusFilter(v as 'All' | 'Unread' | 'Read')
+                }}
+              >
                 <SelectTrigger className="h-9 min-w-[100px] flex-1 text-xs sm:flex-initial sm:w-28">
                   <SelectValue />
                 </SelectTrigger>
@@ -163,7 +179,16 @@ export function HomeTab() {
                   <SelectItem value="Read">{t('noticeFilterRead')}</SelectItem>
                 </SelectContent>
               </Select>
-              <Button size="icon" className="h-9 w-9 shrink-0" type="button" onClick={() => fetchNotices()} title={t('search')}>
+              <Button
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                type="button"
+                onClick={() => {
+                  setNoticePage(1)
+                  fetchNotices(1)
+                }}
+                title={t('search')}
+              >
                 <Search className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -172,7 +197,10 @@ export function HomeTab() {
               <Input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => {
+                  setNoticePage(1)
+                  setDateFrom(e.target.value)
+                }}
                 className="h-9 flex-1 min-w-0 text-xs"
                 aria-label={t('dateFrom')}
               />
@@ -180,7 +208,10 @@ export function HomeTab() {
               <Input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => {
+                  setNoticePage(1)
+                  setDateTo(e.target.value)
+                }}
                 className="h-9 flex-1 min-w-0 text-xs"
                 aria-label={t('dateTo')}
               />
@@ -189,11 +220,16 @@ export function HomeTab() {
 
           {loading ? (
             <div className="py-6 text-center text-sm text-muted-foreground">{t('loadingNotices')}</div>
-          ) : filteredNotices.length === 0 ? (
+          ) : notices.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">{t('noNotices')}</div>
           ) : (
             <div className="flex flex-col gap-2">
-              {filteredNotices.map((n) => {
+              {noticeTruncated && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  최근 {600}건 기준입니다. 더 오래된 공지는 날짜 범위를 넓혀 검색해 보세요.
+                </p>
+              )}
+              {notices.map((n) => {
                 const isExpanded = expandedId === n.id
                 return (
                   <div
@@ -286,6 +322,13 @@ export function HomeTab() {
                   </div>
                 )
               })}
+              <ListPaginationBar
+                page={noticePage}
+                pageSize={noticePageSize}
+                total={noticeTotal}
+                onPageChange={setNoticePage}
+                disabled={loading}
+              />
             </div>
           )}
         </CardContent>

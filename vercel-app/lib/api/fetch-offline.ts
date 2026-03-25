@@ -146,6 +146,10 @@ const QUEUE_WHITELIST = new Set([
   '/api/savePosTableLayout',
   '/api/savePosSettlement',
   '/api/savePosOrder',
+  /** 홀 추가 주문(기존 주문 병합) — 오프라인 시 큐 적재, 복구 후 순차 전송 */
+  '/api/updatePosOrder',
+  /** 주문 상태(pending→completed 등) — 결제·완료 처리 후 동기화 순서는 sync.ts 참고 */
+  '/api/updatePosOrderStatus',
   '/api/saveItemVendors',
   '/api/addChecklistItem',
   '/api/deleteChecklistItem',

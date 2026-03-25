@@ -99,7 +99,10 @@ export async function POST(request: NextRequest) {
     nextD.setDate(nextD.getDate() + 1)
     const nextDayStr = nextD.toISOString().slice(0, 10)
     const attFilter = `store_name=ilike.${encodeURIComponent(storeName)}&name=ilike.${encodeURIComponent(empName)}&log_at=gte.${dateStr}&log_at=lt.${nextDayStr}`
-    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, { limit: 10 })) as { log_type?: string }[]
+    const attRows = (await supabaseSelectFilter('attendance_logs', attFilter, {
+      limit: 10,
+      select: 'log_type',
+    })) as { log_type?: string }[]
     const hasIn = (attRows || []).some((r) => String(r.log_type || '').trim() === '출근')
     if (hasIn) {
       return NextResponse.json(

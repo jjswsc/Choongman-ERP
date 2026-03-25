@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { PETTY_CASH_LIST_COLS } from '@/lib/postgrest-narrow-select'
+import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest) {
   const departmentFilter = String(searchParams.get('departmentFilter') || searchParams.get('department') || '').trim()
   const userStore = String(searchParams.get('userStore') || '').trim()
   const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+  const { page, pageSize } = parseListPagination(searchParams, null, 25)
 
   if (storeFilter === 'undefined' || storeFilter === 'null' || storeFilter === 'All') storeFilter = ''
 
@@ -37,19 +40,20 @@ export async function GET(request: NextRequest) {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'or=(store.eq.Office,store.eq.본사,store.eq.오피스,store.eq.본점,store.ilike.Office-%25)',
-          { order: 'trans_date.asc,id.asc', limit: 20000 }
+          { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
         )) as typeof rows
       } else {
         rows = (await supabaseSelectFilter(
           'petty_cash_transactions',
           'store=eq.' + encodeURIComponent(effectiveStore),
-          { order: 'trans_date.asc,id.asc', limit: 20000 }
+          { order: 'trans_date.asc,id.asc', limit: 20000, select: PETTY_CASH_LIST_COLS }
         )) as typeof rows
       }
     } else {
       rows = (await supabaseSelect('petty_cash_transactions', {
         order: 'trans_date.asc,id.asc',
         limit: 20000,
+        select: PETTY_CASH_LIST_COLS,
       })) as typeof rows
     }
 
@@ -91,9 +95,14 @@ export async function GET(request: NextRequest) {
     // 최신순으로 정렬 (화면 표시용)
     list.sort((a, b) => b.trans_date.localeCompare(a.trans_date) || b.id - a.id)
 
-    return NextResponse.json(list, { headers })
+    const total = list.length
+    const items = slicePage(list, page, pageSize)
+    return NextResponse.json({ items, total, page, pageSize }, { headers })
   } catch (e) {
     console.error('getPettyCashList:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(
+      { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+      { headers }
+    )
   }
 }

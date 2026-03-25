@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { ORDERS_COMBINED_PENDING_COLS, STOCK_LOG_OUTBOUND_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 
 export interface OutboundHistoryItem {
@@ -69,10 +70,12 @@ export async function GET(request: NextRequest) {
       supabaseSelectFilter('stock_logs', `log_type=eq.Outbound&${baseFilter}`, {
         order: 'log_date.desc',
         limit: 10000,
+        select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
       }),
       supabaseSelectFilter('stock_logs', `log_type=eq.ForceOutbound&${baseFilter}`, {
         order: 'log_date.desc',
         limit: 10000,
+        select: STOCK_LOG_OUTBOUND_HISTORY_COLS,
       }),
     ])
 
@@ -95,8 +98,14 @@ export async function GET(request: NextRequest) {
       const orderDateFilter = `status=eq.Approved&order_date=gte.${startStr}&order_date=lte.${endStr}T23:59:59.999`
       const deliveryDateFilter = `status=eq.Approved&delivery_date=gte.${startStr}&delivery_date=lte.${endStr}`
       const [ordersByOrderDate, ordersByDeliveryDate] = await Promise.all([
-        supabaseSelectFilter('orders', orderDateFilter, { limit: 5000 }),
-        supabaseSelectFilter('orders', deliveryDateFilter, { limit: 5000 }),
+        supabaseSelectFilter('orders', orderDateFilter, {
+          limit: 5000,
+          select: ORDERS_COMBINED_PENDING_COLS,
+        }),
+        supabaseSelectFilter('orders', deliveryDateFilter, {
+          limit: 5000,
+          select: ORDERS_COMBINED_PENDING_COLS,
+        }),
       ])
       const seenOrderIds = new Set<number>()
       const approvedOrders = [

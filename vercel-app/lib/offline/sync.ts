@@ -34,11 +34,15 @@ function isNetworkError(e: unknown): boolean {
   return false
 }
 
-/** 동기화 순서: 주문 → 기타 → 결산 (결산이 주문보다 먼저 전송되면 안 됨) */
+/**
+ * 동기화 순서: 신규 주문(0) → 본문 수정·기타(1, createdAt) → 주문 상태(2) → 결산(3)
+ * updatePosOrder는 1번 티어에 두어 다른 요청과 시간순으로 섞이고, status는 항상 그 뒤.
+ */
 function syncOrder(item: { api: string; createdAt: number }): number {
   if (item.api === '/api/savePosOrder') return 0
-  if (item.api === '/api/savePosSettlement') return 2
-  return 1 // 그 외: 주문 다음, 결산 전
+  if (item.api === '/api/updatePosOrderStatus') return 2
+  if (item.api === '/api/savePosSettlement') return 3
+  return 1 // updatePosOrder 및 그 외
 }
 
 export async function syncPending(): Promise<SyncResult> {

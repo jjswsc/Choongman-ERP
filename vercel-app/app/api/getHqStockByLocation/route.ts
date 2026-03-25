@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const rows = (await supabaseSelectFilter(
       'stock_logs',
       `location=ilike.${enc}`,
-      { limit: 10000 }
+      { limit: 10000, select: 'item_code,qty' }
     )) as { item_code?: string; qty?: number }[] | null
 
     const m: Record<string, number> = {}

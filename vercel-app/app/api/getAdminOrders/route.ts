@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { ORDERS_ADMIN_LIST_COLS, ORDERS_STORE_NAME_COLS } from '@/lib/postgrest-narrow-select'
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -60,9 +61,22 @@ export async function GET(request: NextRequest) {
     const hasValidOrderId = !Number.isNaN(orderIdNum) && orderIdNum > 0
 
     const [rows, storeRows, orderByIdRows, empRows] = await Promise.all([
-      supabaseSelectFilter('orders', filter, { order: 'order_date.desc', limit: 5000 }),
-      supabaseSelectFilter('orders', baseFilter, { order: 'order_date.desc', limit: 10000 }),
-      hasValidOrderId ? supabaseSelectFilter('orders', `id=eq.${orderIdNum}`, { limit: 1 }) : Promise.resolve(null),
+      supabaseSelectFilter('orders', filter, {
+        order: 'order_date.desc',
+        limit: 5000,
+        select: ORDERS_ADMIN_LIST_COLS,
+      }),
+      supabaseSelectFilter('orders', baseFilter, {
+        order: 'order_date.desc',
+        limit: 10000,
+        select: ORDERS_STORE_NAME_COLS,
+      }),
+      hasValidOrderId
+        ? supabaseSelectFilter('orders', `id=eq.${orderIdNum}`, {
+            limit: 1,
+            select: ORDERS_ADMIN_LIST_COLS,
+          })
+        : Promise.resolve(null),
       supabaseSelect('employees', { order: 'id.asc', limit: 2000, select: 'store,name,nick' }),
     ])
 

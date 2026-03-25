@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { ORDERS_MY_HISTORY_COLS } from '@/lib/postgrest-narrow-select'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
+import { parseListPagination, slicePage, DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-params'
 
 export interface OrderHistoryItem {
   id: number
@@ -29,9 +31,13 @@ export async function GET(request: NextRequest) {
   const store = String(searchParams.get('store') || '').trim()
   const startStr = String(searchParams.get('startStr') || searchParams.get('start') || '').trim()
   const endStr = String(searchParams.get('endStr') || searchParams.get('end') || '').trim()
+  const { page, pageSize } = parseListPagination(searchParams, null, 20)
 
   if (!store || !startStr || !endStr) {
-    return NextResponse.json([], { headers })
+    return NextResponse.json(
+      { items: [], total: 0, page: 1, pageSize: DEFAULT_LIST_PAGE_SIZE },
+      { headers }
+    )
   }
 
   try {
@@ -47,7 +53,8 @@ export async function GET(request: NextRequest) {
       `&order_date=lte.${encodeURIComponent(endIso)}`
     const rows = (await supabaseSelectFilter('orders', filter, {
       order: 'order_date.desc',
-      limit: 300,
+      limit: 800,
+      select: ORDERS_MY_HISTORY_COLS,
     })) as {
       id: number
       order_date?: string
@@ -172,7 +179,8 @@ export async function GET(request: NextRequest) {
         `&log_type=eq.ForcePush`
       const forcePushRows = (await supabaseSelectFilter('stock_logs', fpFilter, {
         order: 'log_date.desc',
-        limit: 300,
+        limit: 400,
+        select: 'log_date,item_code,item_name,qty,delivery_status',
       })) as {
         log_date?: string
         item_code?: string
@@ -241,9 +249,14 @@ export async function GET(request: NextRequest) {
       return db.getTime() - da.getTime()
     })
 
-    return NextResponse.json(list, { headers })
+    const total = list.length
+    const items = slicePage(list, page, pageSize)
+    return NextResponse.json({ items, total, page, pageSize }, { headers })
   } catch (e) {
     console.error('getMyOrderHistory:', e)
-    return NextResponse.json([], { headers })
+    return NextResponse.json(
+      { items: [], total: 0, page, pageSize },
+      { headers }
+    )
   }
 }

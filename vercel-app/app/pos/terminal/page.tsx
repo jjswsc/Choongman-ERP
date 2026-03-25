@@ -432,7 +432,7 @@ export default function PosTerminalPage() {
       orderType: string
       tableName?: string
       memo?: string
-      items: { id: string; name: string; price: number; qty: number; note?: string }[]
+      items: { id: string; name: string; price: number; qty: number; note?: string; isAddon?: boolean }[]
       subtotal: number
       discountAmt: number
       total: number
@@ -486,13 +486,22 @@ export default function PosTerminalPage() {
       : ''
     const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
     const itemsRows = payload.items
-      .map((it) => {
+      .map((it, idx) => {
+        const addon = Boolean((it as { isAddon?: boolean }).isAddon)
+        const prevAddon = idx > 0 && Boolean((payload.items[idx - 1] as { isAddon?: boolean }).isAddon)
+        const addonHead =
+          addon && !prevAddon
+            ? '<div class="receipt-addon-section" style="margin:10px 0 6px;padding-top:8px;border-top:1px dashed #666;font-size:11px;font-weight:700;text-align:center">' +
+              esc(tr('posReceiptAddonSection', '추가 주문')) +
+              ct('div')
+            : ''
         const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
         const lineNote = String((it as { note?: string }).note ?? '').trim()
         const noteHtml = lineNote
           ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
           : ''
         return (
+          addonHead +
           '<div class="receipt-row"><span>' +
           it.qty +
           'x ' +
@@ -1397,9 +1406,50 @@ export default function PosTerminalPage() {
                   savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
                 }
                 if (savedOrderId != null) seenOrderIdsRef.current.add(savedOrderId)
-                const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
+
+                type ReceiptPrintLine = {
+                  id: string
+                  name: string
+                  price: number
+                  qty: number
+                  note?: string
+                  isAddon?: boolean
+                }
+                const mapPosItemToReceiptLine = (
+                  it: (typeof incomingItems)[number],
+                  addon: boolean
+                ): ReceiptPrintLine => ({
+                  id: String(it.id ?? ''),
+                  name: String(it.name ?? ''),
+                  price: Number(it.price ?? 0),
+                  qty: Math.max(1, Number(it.qty ?? 1) || 1),
+                  ...(String((it as { note?: string }).note ?? '').trim()
+                    ? { note: String((it as { note?: string }).note).trim() }
+                    : {}),
+                  ...(addon ? { isAddon: true as const } : {}),
+                })
+                const receiptPrintItems: ReceiptPrintLine[] =
+                  isAddOrder && existingOrder
+                    ? [
+                        ...existingOrder.items.map((it) => ({
+                          id: String(it.id),
+                          name: it.name,
+                          price: it.price,
+                          qty: Math.max(1, it.quantity || 1),
+                          ...(it.note?.trim() ? { note: it.note.trim() } : {}),
+                        })),
+                        ...incomingItems.map((it) => mapPosItemToReceiptLine(it, true)),
+                      ]
+                    : incomingItems.map((it) => mapPosItemToReceiptLine(it, false))
+
+                const mergeSubtotal = receiptPrintItems.reduce((s, i) => s + i.price * i.qty, 0)
                 const discountAmt = payload.discountAmt ?? 0
-                const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
+                const pricing = computePosPricing({
+                  subtotal: mergeSubtotal,
+                  discountAmt,
+                  cardPaymentAmount: 0,
+                  adjustments: pricingAdjustments,
+                })
                 printReceiptNow(
                   {
                     orderNo: savedOrderNo,
@@ -1407,8 +1457,8 @@ export default function PosTerminalPage() {
                     orderType: t('posOrderTypeDineIn') || '매장',
                     tableName: payload.tableName,
                     memo: payload.memo,
-                    items: incomingItems,
-                    subtotal,
+                    items: receiptPrintItems,
+                    subtotal: mergeSubtotal,
                     discountAmt,
                     total: pricing.finalTotal,
                     vatFeeAmt: pricing.vatFeeAmt,
@@ -1466,12 +1516,20 @@ export default function PosTerminalPage() {
                       const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
                       const cR = (tag: string) => '\u003c/' + tag + '>'
                       const tablePartR = payload.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + payload.tableName : ''
+                      const addonKitchenHead =
+                        isAddOrder
+                          ? '<div class="k-row" style="font-weight:700;margin-top:6px;padding-top:8px;border-top:2px solid #000">' +
+                            escapeHtml(tPrint('posReceiptAddonSection') || '추가 주문') +
+                            cR('div')
+                          : ''
                       const printOne = (idx: number) => {
                         if (idx >= slips.length) return
                         const slip = slips[idx]
-                        const itemsHtmlR = slip.items
-                          .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
-                          .join('')
+                        const itemsHtmlR =
+                          (isAddOrder && idx === 0 ? addonKitchenHead : '') +
+                          slip.items
+                            .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
+                            .join('')
                         const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
                         const html = buildKitchenSlipHtml({
                           label: slip.label,

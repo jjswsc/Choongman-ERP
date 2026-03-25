@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const noticeRows = (await supabaseSelectFilter('notices', `id=eq.${noticeId}`, { limit: 1 })) as {
+    const noticeRows = (await supabaseSelectFilter('notices', `id=eq.${noticeId}`, {
+      limit: 1,
+      select: 'id,target_store,target_role,target_recipients',
+    })) as {
       id: number
       target_store?: string
       target_role?: string
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
     const readRows = (await supabaseSelectFilter(
       'notice_reads',
       `notice_id=eq.${noticeId}`,
-      { limit: 10000 }
+      { limit: 10000, select: 'store,name,read_at,status' }
     )) as { store?: string; name?: string; read_at?: string; status?: string }[] || []
 
     const readMap: Record<string, { read_at: string; status: string }> = {}

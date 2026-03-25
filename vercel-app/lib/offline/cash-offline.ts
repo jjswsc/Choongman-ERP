@@ -19,9 +19,11 @@ function cacheKeyPettyList(params: {
   startStr: string
   endStr: string
   storeFilter?: string
+  page?: number
+  pageSize?: number
 }): string {
-  const { startStr, endStr, storeFilter = '' } = params
-  return `petty:list:${storeFilter}:${startStr}:${endStr}`
+  const { startStr, endStr, storeFilter = '', page = 1, pageSize = 25 } = params
+  return `petty:list:${storeFilter}:${startStr}:${endStr}:p${page}:s${pageSize}`
 }
 
 export async function getPettyCashOptionsWithCache(): Promise<{
@@ -55,9 +57,14 @@ export async function getPettyCashListWithCache(params: {
   storeFilter?: string
   userStore?: string
   userRole?: string
-}): Promise<PettyCashItem[]> {
+  page?: number
+  pageSize?: number
+}): Promise<{ items: PettyCashItem[]; total: number; page: number; pageSize: number }> {
   const { startStr, endStr, storeFilter = '' } = params
-  const key = cacheKeyPettyList({ startStr, endStr, storeFilter })
+  const page = params.page ?? 1
+  const pageSize = params.pageSize ?? 25
+  const key = cacheKeyPettyList({ startStr, endStr, storeFilter, page, pageSize })
+  const empty = { items: [] as PettyCashItem[], total: 0, page, pageSize }
 
   if (isOnline()) {
     try {
@@ -68,15 +75,23 @@ export async function getPettyCashListWithCache(params: {
         storeFilter: storeFilter || undefined,
         userStore: params.userStore,
         userRole: params.userRole,
+        page,
+        pageSize,
       })
       await setCache('pos_sales_cache', key, data)
       return data
     } catch {
-      const cached = await getFromCache<PettyCashItem[]>('pos_sales_cache', key)
-      return cached ?? []
+      const cached = await getFromCache<{ items: PettyCashItem[]; total: number; page: number; pageSize: number }>(
+        'pos_sales_cache',
+        key
+      )
+      return cached ?? empty
     }
   }
 
-  const cached = await getFromCache<PettyCashItem[]>('pos_sales_cache', key)
-  return cached ?? []
+  const cached = await getFromCache<{ items: PettyCashItem[]; total: number; page: number; pageSize: number }>(
+    'pos_sales_cache',
+    key
+  )
+  return cached ?? empty
 }
