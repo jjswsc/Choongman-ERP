@@ -8,7 +8,7 @@ import {
   patchLineOaGroup,
 } from '@/lib/line-oa-group-server'
 
-type RouteContext = { params: { id: string } }
+type RouteContext = { params: Promise<{ id: string }> }
 
 function corsHeaders(): Headers {
   const headers = new Headers()
@@ -27,7 +27,8 @@ async function readJsonBody(request: NextRequest): Promise<unknown> {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const headers = corsHeaders()
-  const parsedId = parseLineOaGroupId(context.params.id)
+  const { id } = await context.params
+  const parsedId = parseLineOaGroupId(id)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }
@@ -61,7 +62,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const headers = corsHeaders()
-  const parsedId = parseLineOaGroupId(context.params.id)
+  const { id } = await context.params
+  const parsedId = parseLineOaGroupId(id)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }
@@ -100,7 +102,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const headers = corsHeaders()
-  const parsedId = parseLineOaGroupId(context.params.id)
+  const { id } = await context.params
+  const parsedId = parseLineOaGroupId(id)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }

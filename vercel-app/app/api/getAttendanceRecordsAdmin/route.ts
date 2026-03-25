@@ -294,7 +294,7 @@ export async function GET(request: NextRequest) {
     const result: AttendanceDailyRow[] = []
     for (const rec of Object.values(byKey)) {
       if (!rec.inTime) continue
-      let dateForRow = rec.date
+      const dateForRow = rec.date
       const inTimeForRow = rec.inTime
       let outTimeForRow = rec.outTime
       let breakMinForRow = rec.breakMin

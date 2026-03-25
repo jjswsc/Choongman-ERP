@@ -6,7 +6,7 @@ import {
   parseLineOaGroupId,
 } from '@/lib/line-oa-group-server'
 
-type RouteContext = { params: { id: string } }
+type RouteContext = { params: Promise<{ id: string }> }
 
 function corsHeaders(): Headers {
   const headers = new Headers()
@@ -25,7 +25,8 @@ async function readJsonBody(request: NextRequest): Promise<unknown> {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const headers = corsHeaders()
-  const parsedId = parseLineOaGroupId(context.params.id)
+  const { id } = await context.params
+  const parsedId = parseLineOaGroupId(id)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, list: [], totalAmount: 0 }, { headers })
     }
 
-    let filter = `year_month=eq.${yearMonth}`
+    const filter = `year_month=eq.${yearMonth}`
     const entries = (await supabaseSelectFilter('depreciation_entries', filter, {
       select: 'id,fixed_asset_id,year_month,accounting_date,amount,journal_entry_id',
       limit: 5000,

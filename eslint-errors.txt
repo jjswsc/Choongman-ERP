@@ -1,0 +1,2 @@
+﻿[BABEL] Note: The code generator has deoptimised the styling of C:\CM_ERP\vercel-app\lib\i18n.ts as it exceeds the max of 500KB.
+The unix formatter is no longer part of core ESLint. Install it manually with `npm install -D eslint-formatter-unix`

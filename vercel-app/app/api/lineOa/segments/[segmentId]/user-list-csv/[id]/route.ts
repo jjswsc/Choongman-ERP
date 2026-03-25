@@ -5,18 +5,19 @@ import {
   parseLineOaSegmentPathId,
 } from '@/lib/line-oa-segment-server'
 
-type RouteContext = { params: { segmentId: string; id: string } }
+type RouteContext = { params: Promise<{ segmentId: string; id: string }> }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store, max-age=0')
 
-  const parsedSegmentId = parseLineOaSegmentPathId(context.params.segmentId)
+  const { segmentId: rawSegmentId, id: rawId } = await context.params
+  const parsedSegmentId = parseLineOaSegmentPathId(rawSegmentId)
   if (!parsedSegmentId.ok) {
     return NextResponse.json({ success: false, message: parsedSegmentId.message }, { status: 400, headers })
   }
-  const parsedId = parseLineOaAudienceRequestId(context.params.id)
+  const parsedId = parseLineOaAudienceRequestId(rawId)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }

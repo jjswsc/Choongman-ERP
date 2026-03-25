@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const type = String(body.type || '').trim().toLowerCase()
     const vendorCode = String(body.vendorCode || body.vendor_code || '').trim()
-    let storeName = String(body.storeName || body.store_name || '').trim()
+    const storeName = String(body.storeName || body.store_name || '').trim()
     const userStore = String(body.userStore || body.user_store || '').trim()
     const userRole = String(body.userRole || body.user_role || '').toLowerCase()
     const amount = Number(body.amount ?? 0)

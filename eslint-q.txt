@@ -1,0 +1,806 @@
+﻿node.exe : [BABEL] Note: The code generator has deoptimised the styling of C:\CM_ERP\vercel-app\lib\i18n.ts as it excee
+ds the max of 500KB.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([BABEL] Note: T...e max of 500KB.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+C:\CM_ERP\vercel-app\app\api\addBalanceTransaction\route.ts
+  23:9  error  'storeName' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\api\getAttendanceRecordsAdmin\route.ts
+  297:11  error  'dateForRow' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\api\getDepreciationEntries\route.ts
+  16:9  error  'filter' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\api\getMyLeaveInfo\route.ts
+  53:11  error  'type' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\api\getPayableTransactionItems\route.ts
+  30:9  error  'items' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\api\getTillList\route.ts
+  46:9  error  'rows' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx
+   188:35  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:188:35
+  186 |
+  187 |   useEffect(() => {
+> 188 |     if (orderType !== 'delivery') setDeliveryApp(null)
+      |                                   ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  189 |   }, [orderType])
+  190 |
+  191 |   useEffect(() => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/set-state-in-effect
+   340:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:340:5
+  338 |     if (!cartRef.current) return
+  339 |     cartRef.current.openDineInPaymentFromOrder(pendingPayRequest)
+> 340 |     setPendingPayRequest(null)
+      |     ^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  341 |   }, [pendingPayRequest])
+  342 |
+  343 |   useEffect(() => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                react-hooks/set-state-in-effect
+   350:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:350:5
+  348 |       items: pendingTakeoutPayRequest.items,
+  349 |     })
+> 350 |     setPendingTakeoutPayRequest(null)
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  351 |   }, [pendingTakeoutPayRequest])
+  352 |
+  353 |   useEffect(() => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/set-state-in-effect
+   360:5   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:360:5
+  358 |       items: pendingDeliveryPayRequest.items,
+  359 |     })
+> 360 |     setPendingDeliveryPayRequest(null)
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  361 |   }, [pendingDeliveryPayRequest])
+  362 |
+  363 |   useEffect(() => {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      react-hooks/set-state-in-effect
+   368:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:368:7
+  366 |       const raw = window.localStorage.getItem(`${FLOOR_PREF_KEY}${currentStoreId}`)
+  367 |       const floor = Math.min(3, Math.max(1, Number(raw ?? 1) || 1)) as 1 | 2 | 3
+> 368 |       setActiveFloor(floor)
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  369 |     } catch {
+  370 |       setActiveFloor(1)
+  371 |     }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       react-hooks/set-state-in-effect
+   419:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:419:7
+  417 |   useEffect(() => {
+  418 |     if (activeTab === 'tables' && !selectedTableId) {
+> 419 |       clearCartFromTerminal()
+      |       ^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  420 |     }
+  421 |   }, [activeTab, selectedTableId, clearCartFromTerminal])
+  422 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+   872:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:872:7
+  870 |   useEffect(() => {
+  871 |     if (selectedTableId) {
+> 872 |       setActiveFloor(getTableFloor(selectedTableId))
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  873 |     } else if (servingTableId) {
+  874 |       setActiveFloor(getTableFloor(servingTableId))
+  875 |     }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+   888:7   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:888:7
+  886 |     ).sort((a, b) => a - b)
+  887 |     if (floors[0] && floors[0] !== activeFloor) {
+> 888 |       setActiveFloor(floors[0])
+      |       ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  889 |     }
+  890 |   }, [currentLayout, activeFloor, selectedTableId, servingTableId])
+  891 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/set-state-in-effect
+   981:52  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getOrderVisual`, but the source dependencies were [deliveryOrders, menuTargets, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:981:52
+   979 |   }
+   980 |
+>  981 |   const deliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                    ^^^^^^^
+>  982 |     const orders = [...deliveryOrders]
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  983 |     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1002 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1003 |   }, [deliveryOrders, menuTargets, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1004 |
+  1005 |   const packagedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+  1006 |     const filtered = [...packagedDeliveryOrders]                                                                                                                                                                                                                                                                                                     react-hooks/preserve-manual-memoization
+   981:52  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `detectDeliveryApp`, but the source dependencies were [deliveryOrders, menuTargets, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:981:52
+   979 |   }
+   980 |
+>  981 |   const deliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                    ^^^^^^^
+>  982 |     const orders = [...deliveryOrders]
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  983 |     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1002 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1003 |   }, [deliveryOrders, menuTargets, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1004 |
+  1005 |   const packagedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+  1006 |     const filtered = [...packagedDeliveryOrders]                                                                                                                                                                                                                                                                                                  react-hooks/preserve-manual-memoization
+  1005:60  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `detectDeliveryApp`, but the source dependencies were [packagedDeliveryOrders, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1005:60
+  1003 |   }, [deliveryOrders, menuTargets, t, deliveryAppsFromApi])
+  1004 |
+> 1005 |   const packagedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                            ^^^^^^^
+> 1006 |     const filtered = [...packagedDeliveryOrders]
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1007 |     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1025 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1026 |   }, [packagedDeliveryOrders, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1027 |
+  1028 |   const completedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+  1029 |     const filtered = [...completedDeliveryOrders]                                                                                                                                                                                       react-hooks/preserve-manual-memoization
+  1028:61  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `detectDeliveryApp`, but the source dependencies were [completedDeliveryOrders, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1028:61
+  1026 |   }, [packagedDeliveryOrders, t, deliveryAppsFromApi])
+  1027 |
+> 1028 |   const completedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                             ^^^^^^^
+> 1029 |     const filtered = [...completedDeliveryOrders]
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1030 |     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1048 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1049 |   }, [completedDeliveryOrders, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1050 |
+  1051 |   const allDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+  1052 |     type Tagged = Order & { _listType?: 'in_progress' | 'packaged' | 'completed' }                                                                                                                                                         react-hooks/preserve-manual-memoization
+  1051:55  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `detectDeliveryApp`, but the source dependencies were [deliveryOrders, packagedDeliveryOrders, completedDeliveryOrders, menuTargets, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1051:55
+  1049 |   }, [completedDeliveryOrders, t, deliveryAppsFromApi])
+  1050 |
+> 1051 |   const allDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                       ^^^^^^^
+> 1052 |     type Tagged = Order & { _listType?: 'in_progress' | 'packaged' | 'completed' }
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1053 |     const merged: Tagged[] = [
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1080 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1081 |   }, [deliveryOrders, packagedDeliveryOrders, completedDeliveryOrders, menuTargets, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1082 |
+  1083 |   const inProgressOrPackagedDeliveryBarItems = useMemo(() => {
+  1084 |     const merged = [...deliveryBarItems, ...packagedDeliveryBarItems]  react-hooks/preserve-manual-memoization
+  1051:55  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getOrderVisual`, but the source dependencies were [deliveryOrders, packagedDeliveryOrders, completedDeliveryOrders, menuTargets, t, deliveryAppsFromApi]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1051:55
+  1049 |   }, [completedDeliveryOrders, t, deliveryAppsFromApi])
+  1050 |
+> 1051 |   const allDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                       ^^^^^^^
+> 1052 |     type Tagged = Order & { _listType?: 'in_progress' | 'packaged' | 'completed' }
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1053 |     const merged: Tagged[] = [
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1080 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1081 |   }, [deliveryOrders, packagedDeliveryOrders, completedDeliveryOrders, menuTargets, t, deliveryAppsFromApi])
+       | ^^^^ Could not preserve existing manual memoization
+  1082 |
+  1083 |   const inProgressOrPackagedDeliveryBarItems = useMemo(() => {
+  1084 |     const merged = [...deliveryBarItems, ...packagedDeliveryBarItems]     react-hooks/preserve-manual-memoization
+  1090:51  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getOrderVisual`, but the source dependencies were [takeoutOrders, menuTargets, t]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1090:51
+  1088 |   const currentDeliveryBarItems = deliveryListMode === 'all' ? allDeliveryBarItems : deliveryListMode === 'completed' ? completedDeliveryBarItems : inProgressOrPackagedDeliveryBarItems
+  1089 |
+> 1090 |   const takeoutBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                   ^^^^^^^
+> 1091 |     const orders = [...takeoutOrders]
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1092 |     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1105 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1106 |   }, [takeoutOrders, menuTargets, t])
+       | ^^^^ Could not preserve existing manual memoization
+  1107 |
+  1108 |   const packagedTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
+  1109 |     const filtered = [...packagedTakeoutOrders]                                                                                                                                                                   react-hooks/preserve-manual-memoization
+  1142:54  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getOrderVisual`, but the source dependencies were [takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders, menuTargets, t]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\app\pos\terminal\page.tsx:1142:54
+  1140 |   }, [completedTakeoutOrders, t])
+  1141 |
+> 1142 |   const allTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
+       |                                                      ^^^^^^^
+> 1143 |     type Tagged = Order & { _listType?: 'in_progress' | 'packaged' | 'completed' }
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1144 |     const merged: Tagged[] = [
+       ΓÇª
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1165 |     })
+       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 1166 |   }, [takeoutOrders, packagedTakeoutOrders, completedTakeoutOrders, menuTargets, t])
+       | ^^^^ Could not preserve existing manual memoization
+  1167 |
+  1168 |   const inProgressOrPackagedTakeoutBarItems = useMemo(() => {
+  1169 |     const merged = [...takeoutBarItems, ...packagedTakeoutBarItems]                                                                                react-hooks/preserve-manual-memoization
+
+C:\CM_ERP\vercel-app\app\qr\page.tsx
+  74:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\app\qr\page.tsx:74:5
+  72 |         : ""
+  73 |     if (!origin) return
+> 74 |     regenerate(`${origin}${PATHS[target]}`)
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  75 |   }, [target, regenerate])
+  76 |
+  77 |   const handleDownload = () => {  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\components\admin\admin-schedule-edit.tsx
+  126:26  error  Error: Cannot access variable before it is declared
+
+`loadSaved` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+C:\CM_ERP\vercel-app\components\admin\admin-schedule-edit.tsx:126:26
+  124 |   // δºñ∞₧Ñ┬╖∞ú╝ ∞äáφâ¥ ∞ï£ ∞₧ÉδÅÖ∞£╝δí£ ∞áÇ∞₧ÑδÉ£ ∞ï£Ω░äφæ£ δ╢êδƒ¼∞ÿñΩ╕░ (φ£┤Ω░Ç ∞áòδ│┤ φÅ¼φò¿)
+  125 |   React.useEffect(() => {
+> 126 |     if (store && monday) loadSaved()
+      |                          ^^^^^^^^^ `loadSaved` accessed before it is declared
+  127 |   }, [store, monday])
+  128 |
+  129 |   const snapToMonday = (v: string) => {
+
+C:\CM_ERP\vercel-app\components\admin\admin-schedule-edit.tsx:152:3
+  150 |   }
+  151 |
+> 152 |   const loadSaved = async () => {
+      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 153 |     if (!store || !monday) {
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 154 |       await appAlert(t("att_store_monday_required"))
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 207 |       .finally(() => setLoading(false))
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 208 |   }
+      | ^^^^ `loadSaved` is declared here
+  209 |
+  210 |   const resetGrid = () => {
+  211 |     setSlotData({})  react-hooks/immutability
+
+C:\CM_ERP\vercel-app\components\cost-analysis\ingredient-table.tsx
+   86:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\components\cost-analysis\ingredient-table.tsx:86:7
+  84 |   useEffect(() => {
+  85 |     if (!isOpen) {
+> 86 |       setSearchTerm("")
+     |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  87 |       setCategoryFilter("all")
+  88 |     }
+  89 |   }, [isOpen])                                     react-hooks/set-state-in-effect
+  342:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\components\cost-analysis\ingredient-table.tsx:342:5
+  340 |
+  341 |   useEffect(() => {
+> 342 |     setRowUnitKeys((prev) => {
+      |     ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  343 |       let changed = false
+  344 |       const next = { ...prev }
+  345 |       items.forEach((item, i) => {  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\components\cost-analysis\menu-info-panel.tsx
+  78:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\components\cost-analysis\menu-info-panel.tsx:78:7
+  76 |   useLayoutEffect(() => {
+  77 |     if (!menuSearchOpen || !menuSearchAnchorRef.current) {
+> 78 |       setDropdownRect(null)
+     |       ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  79 |       return
+  80 |     }
+  81 |     const rect = menuSearchAnchorRef.current.getBoundingClientRect()  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\components\erp\realtime-work.tsx
+  128:43  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `t`, but the source dependencies were [storeFilterFinal, auth?.store, date]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\components\erp\realtime-work.tsx:128:43
+  126 |   }, [auth?.store, storeListProp.length, storeListFromHook])
+  127 |
+> 128 |   const loadTodayData = React.useCallback(() => {
+      |                                           ^^^^^^^
+> 129 |     let store = storeFilterFinal || auth?.store
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 130 |     if (!store) return
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 143 |       .finally(() => setLoading(false))
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 144 |   }, [storeFilterFinal, auth?.store, date])
+      | ^^^^ Could not preserve existing manual memoization
+  145 |
+  146 |   // δï╣∞¥╝ ∞í░φÜî ∞ñæ∞¥╝ δòî ∞ïñ∞ï£Ω░ä δ░ÿ∞ÿü: 30∞┤êδºêδïñ ∞╢£φç┤Ω╖╝ δì░∞¥┤φä░ ∞₧¼∞í░φÜî
+  147 |   const isViewingToday = date === todayStr()  react-hooks/preserve-manual-memoization
+
+C:\CM_ERP\vercel-app\components\erp\stock-table.tsx
+  147:9  error  'html' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\components\erp\weekly-schedule.tsx
+  74:42  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setHasSearched`, but the source dependencies were [auth?.store, storeFilterFinal, date, areaFilter]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\components\erp\weekly-schedule.tsx:74:42
+  72 |   }, [auth?.store, auth?.role, t, storeListProp.length, storeListRaw])
+  73 |
+> 74 |   const loadWeekData = React.useCallback(() => {
+     |                                          ^^^^^^^
+> 75 |     let store = storeFilterFinal || auth?.store
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 76 |     if (!store) return
+     ΓÇª
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 85 |       .finally(() => setLoading(false))
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 86 |   }, [auth?.store, storeFilterFinal, date, areaFilter])
+     | ^^^^ Could not preserve existing manual memoization
+  87 |
+  88 |   const handleStoreChange = (v: string) => {
+  89 |     if (onStoreChange) onStoreChange(v)  react-hooks/preserve-manual-memoization
+  74:42  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setLoading`, but the source dependencies were [auth?.store, storeFilterFinal, date, areaFilter]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\components\erp\weekly-schedule.tsx:74:42
+  72 |   }, [auth?.store, auth?.role, t, storeListProp.length, storeListRaw])
+  73 |
+> 74 |   const loadWeekData = React.useCallback(() => {
+     |                                          ^^^^^^^
+> 75 |     let store = storeFilterFinal || auth?.store
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 76 |     if (!store) return
+     ΓÇª
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 85 |       .finally(() => setLoading(false))
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 86 |   }, [auth?.store, storeFilterFinal, date, areaFilter])
+     | ^^^^ Could not preserve existing manual memoization
+  87 |
+  88 |   const handleStoreChange = (v: string) => {
+  89 |     if (onStoreChange) onStoreChange(v)      react-hooks/preserve-manual-memoization
+  74:42  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `t`, but the source dependencies were [auth?.store, storeFilterFinal, date, areaFilter]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\components\erp\weekly-schedule.tsx:74:42
+  72 |   }, [auth?.store, auth?.role, t, storeListProp.length, storeListRaw])
+  73 |
+> 74 |   const loadWeekData = React.useCallback(() => {
+     |                                          ^^^^^^^
+> 75 |     let store = storeFilterFinal || auth?.store
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 76 |     if (!store) return
+     ΓÇª
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 85 |       .finally(() => setLoading(false))
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 86 |   }, [auth?.store, storeFilterFinal, date, areaFilter])
+     | ^^^^ Could not preserve existing manual memoization
+  87 |
+  88 |   const handleStoreChange = (v: string) => {
+  89 |     if (onStoreChange) onStoreChange(v)               react-hooks/preserve-manual-memoization
+  74:42  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setSchedule`, but the source dependencies were [auth?.store, storeFilterFinal, date, areaFilter]. Inferred different dependency than source.
+
+C:\CM_ERP\vercel-app\components\erp\weekly-schedule.tsx:74:42
+  72 |   }, [auth?.store, auth?.role, t, storeListProp.length, storeListRaw])
+  73 |
+> 74 |   const loadWeekData = React.useCallback(() => {
+     |                                          ^^^^^^^
+> 75 |     let store = storeFilterFinal || auth?.store
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 76 |     if (!store) return
+     ΓÇª
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 85 |       .finally(() => setLoading(false))
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 86 |   }, [auth?.store, storeFilterFinal, date, areaFilter])
+     | ^^^^ Could not preserve existing manual memoization
+  87 |
+  88 |   const handleStoreChange = (v: string) => {
+  89 |     if (onStoreChange) onStoreChange(v)     react-hooks/preserve-manual-memoization
+
+C:\CM_ERP\vercel-app\components\pos\table-grid.tsx
+  24:33  error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+C:\CM_ERP\vercel-app\components\pos\table-grid.tsx:24:33
+  22 |   const getTableTime = (table: Table) => {
+  23 |     if (!table.isOccupied || !table.order) return null
+> 24 |     const minutes = Math.floor((Date.now() - new Date(table.order.createdAt).getTime()) / 60000)
+     |                                 ^^^^^^^^^^ Cannot call impure function
+  25 |     return `${minutes}δ╢ä`
+  26 |   }
+  27 |  react-hooks/purity
+
+C:\CM_ERP\vercel-app\components\push-notification-register.tsx
+  128:23  error  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+C:\CM_ERP\vercel-app\components\push-notification-register.tsx:128:23
+  126 |     <div className="sticky top-0 z-50 mx-auto max-w-lg bg-primary/10 px-3 py-2 text-center text-sm">
+  127 |       {message ? (
+> 128 |         <p className={registered.current ? 'text-green-600' : 'text-amber-600'}>{message}</p>
+      |                       ^^^^^^^^^^^^^^^^^^ Cannot access ref value during render
+  129 |       ) : showBanner ? (
+  130 |         <>
+  131 |           <p className="mb-2 text-muted-foreground">Ω│╡∞ºÇ δô▒ φæ╕∞ï£ ∞òîδª╝∞¥ä δ░¢∞£╝∞ï£δáñδ⌐┤ ∞òäδ₧ÿδÑ╝ δêîδƒ¼ ∞ú╝∞ä╕∞Üö.</p>  react-hooks/refs
+
+C:\CM_ERP\vercel-app\components\pwa-install-banner.tsx
+  29:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\components\pwa-install-banner.tsx:29:5
+  27 |     if (dismissed) return
+  28 |
+> 29 |     setVisible(true)
+     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  30 |
+  31 |     const handler = (e: Event) => {
+  32 |       e.preventDefault()  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\components\tabs\admin-tab.tsx
+  87:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\components\tabs\admin-tab.tsx:87:7
+  85 |     const list = (storeList || []).filter((s) => s && String(s).trim())
+  86 |     if (isOffice) {
+> 87 |       setAttStores(["All", ...list.filter((s) => s !== "All")])
+     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  88 |     } else if (auth.store) {
+  89 |       setAttStores(["All", auth.store])
+  90 |     }  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\components\tabs\sales-management-tab.tsx
+  502:44  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `auth`, but the source dependencies were [startStr, endStr, offlineAware, canSearchAll, auth?.store]. Inferred less specific property than source.
+
+C:\CM_ERP\vercel-app\components\tabs\sales-management-tab.tsx:502:44
+  500 |   ])
+  501 |
+> 502 |   const loadPosOptions = React.useCallback(() => {
+      |                                            ^^^^^^^
+> 503 |     if (!startStr || !endStr) return
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 504 |     if (!canSearchAll && auth?.store) {
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 511 |     )
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 512 |   }, [startStr, endStr, offlineAware, canSearchAll, auth?.store])
+      | ^^^^ Could not preserve existing manual memoization
+  513 |
+  514 |   React.useEffect(() => {
+  515 |     loadPosOptions()  react-hooks/preserve-manual-memoization
+
+C:\CM_ERP\vercel-app\components\ui\sidebar.tsx
+  615:26  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+C:\CM_ERP\vercel-app\components\ui\sidebar.tsx:615:26
+  613 |   // Random width between 50 to 90%.
+  614 |   const width = React.useMemo(() => {
+> 615 |     return `${Math.floor(Math.random() * 40) + 50}%`
+      |                          ^^^^^^^^^^^^^ Cannot call impure function
+  616 |   }, [])
+  617 |
+  618 |   return (  react-hooks/purity
+
+C:\CM_ERP\vercel-app\lib\auth-context.tsx
+  85:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\lib\auth-context.tsx:85:5
+  83 |   useEffect(() => {
+  84 |     const a = loadAuth()
+> 85 |     setAuthState(a)
+     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  86 |     // ∞ÿê∞áä δ╣îδô£: sessionδºî ∞₧êΩ│á ∞èñδâà∞â╖ ∞ùå∞¥î ΓåÆ ∞ÿñφöäδ¥╝∞¥╕ δ│╡Ω╡¼∞Ü⌐ localStorage δ│┤Ω░ò
+  87 |     if (a) saveAuth(a)
+  88 |     setInitialized(true)  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\lib\lang-context.tsx
+  29:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\lib\lang-context.tsx:29:5
+  27 |
+  28 |   useEffect(() => {
+> 29 |     setLangState(loadLang())
+     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  30 |   }, [])
+  31 |
+  32 |   const setLang = useCallback((l: LangCode) => {  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\lib\pos-menu-categories.ts
+  21:7  error  'mains' is never reassigned. Use 'const' instead  prefer-const
+
+C:\CM_ERP\vercel-app\lib\pos-store.ts
+  289:7  error  Error: Expected the dependency list to be an array of simple expressions (e.g. `x`, `x.y.z`, `x?.y?.z`)
+
+Expected the dependency list to be an array of simple expressions (e.g. `x`, `x.y.z`, `x?.y?.z`).
+
+C:\CM_ERP\vercel-app\lib\pos-store.ts:289:7
+  287 |       .catch(() => {})
+  288 |       .finally(() => setLoading(false))
+> 289 |   }, [effectiveStoreCodes.join(',')])
+      |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Expected the dependency list to be an array of simple expressions (e.g. `x`, `x.y.z`, `x?.y?.z`)
+  290 |
+  291 |   /** refetchStores δööδ░ö∞Ü┤∞èñ (600ms) - ∞ù░∞åì φÿ╕∞╢£ ∞ï£ API δ╢Çφòÿ Ω░É∞åî */
+  292 |   const refetchStores = useCallback(() => {  react-hooks/use-memo
+
+C:\CM_ERP\vercel-app\lib\use-store-list.ts
+  47:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\lib\use-store-list.ts:47:5
+  45 |
+  46 |   useEffect(() => {
+> 47 |     load()
+     |     ^^^^ Avoid calling setState() directly within an effect
+  48 |   }, [load])
+  49 |
+  50 |   return { stores, users, staffByStore, loading, refetch: load }  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\lib\use-ui-translate.ts
+  26:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\lib\use-ui-translate.ts:26:7
+  24 |   useEffect(() => {
+  25 |     if (!key) {
+> 26 |       setMap({})
+     |       ^^^^^^ Avoid calling setState() directly within an effect
+  27 |       return
+  28 |     }
+  29 |     const unique = key.split(SEP)                            react-hooks/set-state-in-effect
+  68:7  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\CM_ERP\vercel-app\lib\use-ui-translate.ts:68:7
+  66 |     const raw = String(text || "").trim()
+  67 |     if (!raw) {
+> 68 |       setTranslated("")
+     |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  69 |       setPending(false)
+  70 |       return
+  71 |     }  react-hooks/set-state-in-effect
+
+C:\CM_ERP\vercel-app\scripts\check-pos-i18n.cjs
+  1:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\dev-with-i18n.cjs
+  1:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  3:19  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\fill-pos-i18n-from-en.cjs
+  1:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\generate-firebase-sw.cjs
+  6:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  7:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\import-employees-csv.js
+  6:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  7:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\import-items-csv.js
+  6:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  7:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\import-items-excel.cjs
+  6:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  7:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\import-vendors-csv.js
+  7:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  8:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\list-pos-english-values.cjs
+  1:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\merge-fcm-into-sw.cjs
+  5:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  6:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\read-cost-excel.cjs
+  1:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:27  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  3:18  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\read-excel-accounts.js
+   5:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+   6:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  12:17  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\scripts\read-sales-excel.js
+  1:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  2:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+C:\CM_ERP\vercel-app\tailwind.config.ts
+  103:13  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+Γ£û 76 problems (76 errors, 0 warnings)
+  8 errors and 0 warnings potentially fixable with the `--fix` option.
+

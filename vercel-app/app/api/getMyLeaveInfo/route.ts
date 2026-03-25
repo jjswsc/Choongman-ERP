@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const history = (rows || []).map((r) => {
       const dateStr = toDateStr(r.leave_date)
       const status = String(r.status || '').trim()
-      let type = String(r.type || '').trim()
+      const type = String(r.type || '').trim()
       const isAnnualType = type.indexOf('연차') !== -1 || type.indexOf('반차') !== -1 || type.toLowerCase().indexOf('annual') !== -1 || type.toLowerCase().indexOf('half') !== -1
       const underOneYear = dateStr && isAnnualType && !hasOneYearTenureAsOf(emp, dateStr)
 

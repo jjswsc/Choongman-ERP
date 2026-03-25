@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchLineOaSegmentDetail, parseLineOaSegmentId } from '@/lib/line-oa-segment-server'
 
-type RouteContext = { params: { segmentId: string } }
+type RouteContext = { params: Promise<{ segmentId: string }> }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
   headers.set('Cache-Control', 'no-store, max-age=0')
 
-  const parsedId = parseLineOaSegmentId(context.params.segmentId)
+  const { segmentId } = await context.params
+  const parsedId = parseLineOaSegmentId(segmentId)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }

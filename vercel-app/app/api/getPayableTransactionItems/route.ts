@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ items: [] }, { headers })
     }
 
-    let items: PayableItemRow[] = []
+    const items: PayableItemRow[] = []
 
     if (refType === 'Inbound') {
       const logRows = (await supabaseSelectFilter('stock_logs', `inbound_batch_id=eq.${refId}`, {

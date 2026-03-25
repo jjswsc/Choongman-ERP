@@ -6,7 +6,7 @@ import {
   parseLineOaGroupRequestId,
 } from '@/lib/line-oa-group-server'
 
-type RouteContext = { params: { id: string; requestId: string } }
+type RouteContext = { params: Promise<{ id: string; requestId: string }> }
 
 function corsHeaders(): Headers {
   const headers = new Headers()
@@ -17,11 +17,12 @@ function corsHeaders(): Headers {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const headers = corsHeaders()
-  const parsedId = parseLineOaGroupId(context.params.id)
+  const { id: rawId, requestId: rawRequestId } = await context.params
+  const parsedId = parseLineOaGroupId(rawId)
   if (!parsedId.ok) {
     return NextResponse.json({ success: false, message: parsedId.message }, { status: 400, headers })
   }
-  const parsedReq = parseLineOaGroupRequestId(context.params.requestId)
+  const parsedReq = parseLineOaGroupRequestId(rawRequestId)
   if (!parsedReq.ok) {
     return NextResponse.json({ success: false, message: parsedReq.message }, { status: 400, headers })
   }

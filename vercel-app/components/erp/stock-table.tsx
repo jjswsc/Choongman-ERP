@@ -144,7 +144,7 @@ export function StockTable({
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
     const colWidths = [80, 180, 70, 70, 70, 100, 55]
     const headerCells = [t("stockColCode"), t("stockColName"), t("stockColSpec"), t("stockColQty"), t("stockColSafeQty"), t("stockColAmount"), t("stockColStatus")]
-    let html = `
+    const html = `
 <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
 <head><meta charset="utf-8"/><style>td{border:1px solid #ccc;padding:4px 8px;font-size:11px}.head{font-weight:bold;background:#f0f0f0}table{width:100%;border-collapse:collapse}</style></head>
 <body>

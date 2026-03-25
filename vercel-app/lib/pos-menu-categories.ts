@@ -18,7 +18,7 @@ export type PosMenuCategoriesConfigShape = {
 export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigShape): PosMenuCategoriesConfigShape {
   const main = PROMOTION_MAIN_CATEGORY
 
-  let mains = [...new Set(cfg.mainCategories.map((m) => (m === LEGACY_PROMOTION_MAIN_CATEGORY ? main : m)))]
+  const mains = [...new Set(cfg.mainCategories.map((m) => (m === LEGACY_PROMOTION_MAIN_CATEGORY ? main : m)))]
 
   let categoriesByMain = { ...cfg.categoriesByMain }
   const legacySubs = categoriesByMain[LEGACY_PROMOTION_MAIN_CATEGORY]
