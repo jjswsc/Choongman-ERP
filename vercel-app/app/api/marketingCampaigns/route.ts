@@ -30,21 +30,20 @@ function parseBranches(val: unknown): string[] {
   return []
 }
 
-function getBangkokDateStamp() {
+function getBangkokYYMM() {
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Bangkok',
-    year: 'numeric',
+    year: '2-digit',
     month: '2-digit',
-    day: '2-digit',
   })
-  return fmt.format(new Date()).replace(/-/g, '')
+  return fmt.format(new Date()).replace(/-/g, '').replace(/\//g, '')
 }
 
 async function generateCampaignNo() {
-  const datePart = getBangkokDateStamp()
+  const datePart = getBangkokYYMM()
   for (let i = 0; i < 5; i++) {
-    const suffix = Math.floor(1000 + Math.random() * 9000)
-    const candidate = `MC-${datePart}-${suffix}`
+    const suffix = String(Math.floor(Math.random() * 100)).padStart(2, '0')
+    const candidate = `${datePart}${suffix}`
     const existing = (await supabaseSelectFilter(
       'marketing_campaigns',
       `campaign_no=eq.${encodeURIComponent(candidate)}`,
@@ -52,7 +51,7 @@ async function generateCampaignNo() {
     )) as { id?: number }[] | null
     if (!existing || existing.length === 0) return candidate
   }
-  return `MC-${datePart}-${Date.now().toString().slice(-6)}`
+  return `${datePart}${Date.now().toString().slice(-2)}`
 }
 
 function toCampaignErrorMessage(e: unknown): string {
@@ -75,6 +74,12 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')?.trim()
+    const nextNumber = searchParams.get('nextNumber') === '1'
+
+    if (nextNumber) {
+      const campaignNo = await generateCampaignNo()
+      return NextResponse.json({ campaignNo }, { headers })
+    }
 
     if (id) {
       const rows = (await supabaseSelectFilter(

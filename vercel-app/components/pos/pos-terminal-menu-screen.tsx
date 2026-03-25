@@ -71,6 +71,11 @@ export interface PosTerminalMenuScreenProps {
   showConfigBar?: boolean
   /** 터치 UI 밀도 (모바일: large) */
   touchMode?: 'default' | 'large'
+  /**
+   * true면 메뉴 목록을 뷰포트 안에서만 스크롤 (하단 고정 장바구니 등과 함께 쓸 때).
+   * false(기본)면 large 터치 시 전체 페이지 스크롤 레이아웃(h-auto)을 씀.
+   */
+  containMenuHeight?: boolean
   className?: string
 }
 
@@ -85,6 +90,7 @@ export function PosTerminalMenuScreen({
   deliveryAppCode = null,
   showConfigBar = true,
   touchMode = 'default',
+  containMenuHeight = false,
   className,
 }: PosTerminalMenuScreenProps) {
   const { lang } = useLang()
@@ -313,21 +319,6 @@ export function PosTerminalMenuScreen({
         ? `${menu.name} (${defaultOptionName})`
         : menu.name
     const price = getMenuPrice(menu) + (opt ? getOptionModifier(opt) : 0)
-    // #region agent log
-    if (!opt) {
-      fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'pos-terminal-menu-screen.tsx:addWithOption',
-          message: 'no-option add',
-          data: { menuId: menu.id },
-          timestamp: Date.now(),
-          hypothesisId: 'H4',
-        }),
-      }).catch(() => {})
-    }
-    // #endregion
     onAddItem?.({ id, name, price })
     setOptionPickerMenu(null)
     setOptionPickerStep(0)
@@ -378,7 +369,7 @@ export function PosTerminalMenuScreen({
     ev?.stopPropagation?.()
     fn()
   }, [])
-  const isExpandedMobileList = !isAdminMode && touchMode === 'large'
+  const isExpandedMobileList = !isAdminMode && touchMode === 'large' && !containMenuHeight
   const combinedRows = React.useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase()
     const promoRows = filteredPromos.map((p) => ({
@@ -1042,6 +1033,10 @@ export function PosTerminalMenuScreen({
                 topping: '토핑',
                 bone: '뼈/순살',
                 type: '타입',
+                side: '사이드',
+                drink: '음료',
+                soup: '스프',
+                rice: '밥',
               }
               return (
                 <div className="flex flex-col gap-3 py-2">

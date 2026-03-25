@@ -7,13 +7,14 @@ import {
   useRef,
   forwardRef,
   useImperativeHandle,
+  type Dispatch,
+  type SetStateAction,
 } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -33,7 +34,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip'
-import { ShoppingCart, Trash2, Tag, Minus, Plus, ChevronDown, ChevronUp, CreditCard, Banknote, QrCode, Wallet, Users, Receipt, Building2, User, Check, X } from 'lucide-react'
+import { ShoppingCart, Trash2, Tag, Minus, Plus, ChevronDown, ChevronUp, CreditCard, Banknote, QrCode, Wallet, Users, Receipt, Building2, User, Check, X, Pencil } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
@@ -49,6 +50,8 @@ import {
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
+import { getPosCartSessionKey } from '@/lib/pos-cart-session'
+import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 
 export type CartOrderType = 'dine-in' | 'delivery' | 'takeout'
 export type CartDeliveryApp = 'grab' | 'lineman' | 'shopee' | (string & {})
@@ -134,6 +137,11 @@ interface CartPanelProps {
   deliveryOrderNo?: string
   /** 포장 슬롯/회원명 식별값 (예: 포장 1, 홍길동) */
   takeoutLabel?: string
+  /**
+   * 홀(dine-in) 세션/브리지 키용 테이블 id. 부모의 selectedTableId를 넘기면
+   * selectedTable 객체가 늦게 채워져도 키가 안 흔들림 (장바구니 초기화 방지).
+   */
+  cartSessionTableId?: string | null
   /** 홀 주문 전송 (주방 전달) - 부모에서 savePosOrder 호출 후 pendingOrderId 전달 */
   onOrderSubmit?: (payload: {
     items: {
@@ -229,7 +237,10 @@ interface CartPanelProps {
    * 태블릿에서 forwardRef 타이밍보다 먼저 메뉴 탭이 오는 경우에도 담기가 동작하도록 함.
    */
   onImperativeBridge?: (api: CartPanelHandle | null) => void
-  debugOwner?: 'inline-mobile' | 'side-panel' | 'unknown'
+  debugOwner?: 'inline-mobile' | 'side-panel' | 'inline-delivery' | 'inline-takeout' | 'unknown'
+  /** 터미널: 줄 단위 장바구니만 부모 단일 상태와 동기화 (좁은/넓은 패널 공유) */
+  cartItems?: OrderItem[]
+  setCartItems?: Dispatch<SetStateAction<OrderItem[]>>
 }
 
 type CartItem = OrderItem
@@ -253,6 +264,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   deliveryAppName: deliveryAppNameProp,
   deliveryOrderNo: deliveryOrderNoProp,
   takeoutLabel: takeoutLabelProp,
+  cartSessionTableId: cartSessionTableIdProp,
   onOrderSubmit,
   onTakeoutOrderComplete,
   onDeliveryOrderComplete,
@@ -262,6 +274,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   pricingAdjustments,
   onImperativeBridge,
   debugOwner = 'unknown',
+  cartItems: cartItemsProp,
+  setCartItems: setCartItemsProp,
 }, ref) {
   const { auth } = useAuth()
   const { lang } = useLang()
@@ -295,14 +309,25 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const canSubmit =
     !lockOrderType ||
     (orderType === 'dine-in' ? !!selectedTable : orderType === 'delivery' ? !!deliveryAppProp : true)
-  /** dine-in/takeout에서는 배달 앱·주문번호가 장바구니와 무관 — 키에 넣으면 사이드 패널(전체 props)과 인라인 패널(생략)이 서로 다른 슬롯을 씀 */
-  const deliveryAppKey = orderType === 'delivery' ? (deliveryAppProp ?? '') : ''
-  const deliveryOrderNoKey = orderType === 'delivery' ? (deliveryOrderNoProp ?? '') : ''
-  /** 홀(dine-in)은 포장 슬롯/라벨 state가 키에 섞이면 뷰포트·패널마다 다른 슬롯이 됨 → 테이블 ID만으로 구분 */
-  const takeoutLabelCacheSegment =
-    orderType === 'takeout' || orderType === 'delivery' ? (takeoutLabelProp ?? '') : ''
-  const cartItemsCacheKey = `${currentStoreId}|${orderType}|${selectedTable?.id ?? ''}|${deliveryAppKey}|${deliveryOrderNoKey}|${takeoutLabelCacheSegment}`
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? []))
+  const tableIdForCartSessionKey =
+    orderType === 'dine-in'
+      ? (cartSessionTableIdProp ?? selectedTable?.id ?? '')
+      : (selectedTable?.id ?? '')
+  const cartItemsCacheKey = getPosCartSessionKey({
+    currentStoreId,
+    orderType,
+    selectedTableId: tableIdForCartSessionKey,
+    deliveryApp: deliveryAppProp,
+    deliveryOrderNo: deliveryOrderNoProp,
+    takeoutLabel: takeoutLabelProp,
+  })
+  const isCartControlled = cartItemsProp !== undefined && setCartItemsProp !== undefined
+  const [internalCartItems, setInternalCartItems] = useState<CartItem[]>(() => {
+    if (cartItemsProp !== undefined && setCartItemsProp !== undefined) return []
+    return cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? [])
+  })
+  const cartItems = isCartControlled ? cartItemsProp! : internalCartItems
+  const setCartItems = isCartControlled ? setCartItemsProp! : setInternalCartItems
   const [takeoutSlot, setTakeoutSlot] = useState<string>('1')
   const [takeoutMemberName, setTakeoutMemberName] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
@@ -353,6 +378,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [splitPaidSteps, setSplitPaidSteps] = useState(0)
   const [showSplit, setShowSplit] = useState(false)
   const [menuNameTooltipOpen, setMenuNameTooltipOpen] = useState<string | null>(null)
+  const [editingNoteItemId, setEditingNoteItemId] = useState<string | null>(null)
+  const [editingCustomerMemo, setEditingCustomerMemo] = useState(false)
   const [paymentTableNameOverride, setPaymentTableNameOverride] = useState<string | null>(null)
   const [isPrepaid, setIsPrepaid] = useState(false)
   const prevSelectedTableIdRef = useRef<string | null>(selectedTable?.id ?? null)
@@ -360,31 +387,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const cartItemsRef = useRef<CartItem[]>(cartItems)
   cartItemsRef.current = cartItems
 
-  /** 패널 전환·언마운트 시 useEffect 캐시 반영보다 먼저 읽히는 레이스 방지 */
+  /** 비제어 모드: 패널 전환 시 캐시에 즉시 반영 (제어 모드는 부모가 진실) */
   useLayoutEffect(() => {
+    if (isCartControlled) return
     const key = cartItemsCacheKey
     return () => {
       CART_ITEMS_CACHE.set(key, cloneCartItems(cartItemsRef.current))
     }
-  }, [cartItemsCacheKey])
-
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'cart-panel.tsx:cartItemsCacheKey',
-        message: 'cache key active',
-        data: { debugOwner, orderType, cartItemsCacheKey, takeoutUi: takeoutLabelProp ?? '' },
-        timestamp: Date.now(),
-        hypothesisId: 'H3',
-      }),
-    }).catch(() => {})
-  }, [cartItemsCacheKey, debugOwner, orderType, takeoutLabelProp])
-  // #endregion
+  }, [cartItemsCacheKey, isCartControlled])
 
   useEffect(() => {
+    if (isCartControlled) return
     if (orderType !== 'dine-in') {
       setCartItems(cloneCartItems(CART_ITEMS_CACHE.get(cartItemsCacheKey) ?? []))
       return
@@ -394,13 +407,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
       setCartItems(fromNew)
       return
     }
-    const dineInWithTakeoutTail = `${currentStoreId}|dine-in|${selectedTable?.id ?? ''}|||${takeoutLabelProp ?? ''}`
+    const dineInWithTakeoutTail = `${currentStoreId}|dine-in|${tableIdForCartSessionKey}|||${takeoutLabelProp ?? ''}`
     const fromTakeoutTail = cloneCartItems(CART_ITEMS_CACHE.get(dineInWithTakeoutTail) ?? [])
     if (fromTakeoutTail.length > 0) {
       setCartItems(fromTakeoutTail)
       return
     }
-    const legacyKey = `${currentStoreId}|dine-in|${selectedTable?.id ?? ''}|${deliveryAppProp ?? ''}|${deliveryOrderNoProp ?? ''}|${takeoutLabelProp ?? ''}`
+    const legacyKey = `${currentStoreId}|dine-in|${tableIdForCartSessionKey}|${deliveryAppProp ?? ''}|${deliveryOrderNoProp ?? ''}|${takeoutLabelProp ?? ''}`
     if (legacyKey === cartItemsCacheKey) {
       setCartItems(fromNew)
       return
@@ -410,15 +423,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     cartItemsCacheKey,
     orderType,
     currentStoreId,
-    selectedTable?.id,
+    tableIdForCartSessionKey,
     deliveryAppProp,
     deliveryOrderNoProp,
     takeoutLabelProp,
+    isCartControlled,
   ])
 
   useEffect(() => {
+    if (isCartControlled) return
     CART_ITEMS_CACHE.set(cartItemsCacheKey, cloneCartItems(cartItems))
-  }, [cartItemsCacheKey, cartItems])
+  }, [cartItemsCacheKey, cartItems, isCartControlled])
 
   useEffect(() => {
     if (showPaymentModal && orderType === 'dine-in') {
@@ -992,40 +1007,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   }
 
   const addItem = (item: CartPanelAddItemPayload) => {
-    const lineId = item.promoId ? `promo-cart-${item.promoId}` : `cart-${Date.now()}-${item.id}`
-    setCartItems((prev) => {
-      if (item.promoId) {
-        const existing = prev.find((p) => p.promoId === item.promoId)
-        if (existing) {
-          return prev.map((p) =>
-            p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p
-          )
-        }
-        return [
-          ...prev,
-          {
-            id: lineId,
-            name: item.name,
-            price: item.price,
-            quantity: 1,
-            promoId: item.promoId,
-            promoCode: item.promoCode,
-            promoItems: item.promoItems,
-          },
-        ]
-      }
-      const existing = prev.find(
-        (p) =>
-          p.name === item.name &&
-          p.price === item.price &&
-          !p.promoId &&
-          !(p.note || '').trim()
-      )
-      if (existing) {
-        return prev.map((p) => (p.id === existing.id ? { ...p, quantity: p.quantity + 1 } : p))
-      }
-      return [...prev, { id: lineId, name: item.name, price: item.price, quantity: 1 }]
-    })
+    setCartItems((prev) => mergeCartPanelAddItem(prev, item))
   }
 
   const applyCouponCode = async () => {
@@ -1166,7 +1148,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     }
     onImperativeBridge(api)
     return () => onImperativeBridge(null)
-  }, [onImperativeBridge, debugOwner, cartItemsCacheKey])
+    // cartItemsCacheKey 제외: 변경 시 cleanup이 cartRef를 null로 만들어 담기가 실패함
+  }, [onImperativeBridge, debugOwner])
 
   const updateItemQuantity = (itemId: string, delta: number) => {
     setCartItems(prev =>
@@ -1217,6 +1200,11 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
           <CardTitle className="text-base font-semibold flex items-center gap-2 flex-wrap">
             <ShoppingCart className="w-4 h-4" />
             {t('posCart')}
+            {cartItems.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                {cartItems.reduce((s, i) => s + i.quantity, 0)}
+              </span>
+            )}
             {orderType && (
               <span
                 className={cn(
@@ -1250,8 +1238,141 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col py-2 gap-1.5 min-h-0 overflow-hidden px-0">
-        {/* 주문 타입 */}
+      <CardContent className="flex-1 flex flex-col py-2 gap-1.5 min-h-0 overflow-y-auto overflow-x-hidden px-0">
+        {/* Cart Items - 메뉴 리스트를 맨 위에 배치해 좁은 패널에서도 항상 보이게 */}
+        <div className="min-w-0 shrink-0">
+          {cartItems.length === 0 ? (
+            <div className="min-h-[60px] flex items-center justify-center text-muted-foreground text-sm px-3">
+              {t('posCartEmpty')}
+            </div>
+          ) : (
+            <TooltipProvider delayDuration={0}>
+              <div className="space-y-1.5 w-full max-w-full min-w-0 overflow-hidden pr-2">
+                {cartItems.map(item => {
+                  const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
+                  const mainName = optMatch ? optMatch[1].trim() : item.name
+                  const optionPart = optMatch ? optMatch[2].trim() : null
+                  const isBanban = optionPart?.includes(' / ')
+                  const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
+                  return (
+                  <div
+                    key={item.id}
+                    className="bg-secondary/50 w-full min-w-0 max-w-full rounded-sm overflow-hidden"
+                  >
+                    <div className="grid grid-cols-[1fr_auto] gap-2 items-start py-1.5 px-2">
+                      <div className="min-w-0 overflow-hidden">
+                        <Tooltip
+                          open={menuNameTooltipOpen === item.id}
+                          onOpenChange={(open) => setMenuNameTooltipOpen(open ? item.id : null)}
+                        >
+                          <TooltipTrigger asChild>
+                            <p
+                              className="text-sm font-medium cursor-default touch-manipulation select-none line-clamp-2 min-w-0"
+                              title={item.name}
+                              onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
+                            >
+                              {mainName}
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
+                            {item.name}
+                          </TooltipContent>
+                        </Tooltip>
+                        {isBanban && flavor1 && flavor2 ? (
+                          <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                            <span>① {flavor1}</span>
+                            <span className="mx-1">·</span>
+                            <span>② {flavor2}</span>
+                          </p>
+                        ) : optionPart ? (
+                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 min-w-0 break-words" title={optionPart}>
+                            {optionPart}
+                          </p>
+                        ) : null}
+                        <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
+                          {formatBahtNum(item.price)} ฿
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end self-start pt-0.5">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => updateItemQuantity(item.id, -1)}
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </Button>
+                        <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => updateItemQuantity(item.id, 1)}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                    {((item.note ?? '').trim() || editingNoteItemId === item.id) ? (
+                      <div className={cn(
+                        "px-2 pb-1.5 pt-0",
+                        (item.note ?? '').trim() && "rounded-md bg-blue-900/15 dark:bg-blue-800/25 border border-blue-700/40 dark:border-blue-500/40"
+                      )}>
+                        {editingNoteItemId === item.id ? (
+                          <Input
+                            aria-label={tr('posLineNote', 'Note')}
+                            placeholder=""
+                            value={item.note ?? ''}
+                            onChange={(e) =>
+                              setCartItems((prev) =>
+                                prev.map((p) => (p.id === item.id ? { ...p, note: e.target.value } : p))
+                              )
+                            }
+                            onBlur={() => setEditingNoteItemId(null)}
+                            className="h-7 text-xs border-0 bg-transparent focus-visible:ring-2"
+                            autoFocus
+                          />
+                        ) : (
+                          <div className="flex items-center gap-1.5 min-h-7">
+                            <p className="flex-1 text-xs font-medium text-blue-800 dark:text-blue-200 break-words">
+                              {(item.note ?? '').trim()}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0 text-blue-600 hover:text-blue-800"
+                              onClick={() => setEditingNoteItemId(item.id)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="px-2 pb-1 pt-0 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          aria-label={tr('posLineNote', '메모')}
+                          title={tr('posLineNote', '메모')}
+                          onClick={() => setEditingNoteItemId(item.id)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  )
+                })}
+              </div>
+            </TooltipProvider>
+          )}
+        </div>
+
+        {/* 주문 타입 / 회원 / 테이블 등 */}
         <div className="space-y-1.5 shrink-0 px-3">
           {!lockOrderType && (
             <div className="flex items-center gap-2">
@@ -1434,110 +1555,52 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </Dialog>
         </div>
 
-        {/* Cart Items - 메뉴 리스트 영역 최대 확보 (좌우 여백 없이 끝까지 사용) */}
-        <ScrollArea className="flex-1 min-h-0 min-w-0 w-full overflow-x-hidden [&>[data-radix-scroll-area-viewport]]:max-w-full">
-          {cartItems.length === 0 ? (
-            <div className="h-full min-h-[120px] flex items-center justify-center text-muted-foreground text-sm px-3">
-              {t('posCartEmpty')}
+        {/* Options - 쿠폰/할인은 결제 페이지에서 입력. 손님 메모는 내용 있을 때만 표시 */}
+        <div className="space-y-2 pt-3 border-t shrink-0 px-3" aria-label={t('posCustomerMemo') || '손님 메모'}>
+          {customerMemo.trim() || editingCustomerMemo ? (
+            <div className={cn(
+              "rounded-md p-2",
+              customerMemo.trim() && "bg-blue-900/15 dark:bg-blue-800/25 border border-blue-700/40 dark:border-blue-500/40"
+            )}>
+              {editingCustomerMemo ? (
+                <Input
+                  placeholder={t('posCustomerMemoPh') || '알레르기, 맵기 조절 등'}
+                  value={customerMemo}
+                  onChange={e => setCustomerMemo(e.target.value)}
+                  onBlur={() => setEditingCustomerMemo(false)}
+                  className="h-8 text-sm border-0 bg-transparent focus-visible:ring-2"
+                  autoFocus
+                  aria-label={t('posCustomerMemo') || '손님 메모'}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 min-h-8">
+                  <p className="flex-1 text-sm font-medium text-blue-800 dark:text-blue-200 break-words">
+                    {customerMemo.trim()}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-blue-600 hover:text-blue-800"
+                    onClick={() => setEditingCustomerMemo(true)}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
-            <TooltipProvider delayDuration={0}>
-              <div className="space-y-1.5 w-full max-w-full min-w-0 overflow-hidden">
-                {cartItems.map(item => {
-                  const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
-                  const mainName = optMatch ? optMatch[1].trim() : item.name
-                  const optionPart = optMatch ? optMatch[2].trim() : null
-                  const isBanban = optionPart?.includes(' / ')
-                  const [flavor1, flavor2] = isBanban && optionPart ? optionPart.split(/\s*\/\s*/).map((s) => s.trim()) : [null, null]
-                  return (
-                  <div
-                    key={item.id}
-                    className="bg-secondary/50 w-full min-w-0 max-w-full rounded-sm overflow-hidden"
-                  >
-                    <div className="grid grid-cols-[1fr_auto] gap-2 items-start py-1.5 px-2">
-                      <div className="min-w-0 overflow-hidden">
-                        <Tooltip
-                          open={menuNameTooltipOpen === item.id}
-                          onOpenChange={(open) => setMenuNameTooltipOpen(open ? item.id : null)}
-                        >
-                          <TooltipTrigger asChild>
-                            <p
-                              className="text-sm font-medium cursor-default touch-manipulation select-none break-words"
-                              title={item.name}
-                              onClick={() => setMenuNameTooltipOpen((prev) => (prev === item.id ? null : item.id))}
-                            >
-                              {mainName}
-                            </p>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[min(20rem,85vw)] text-left whitespace-normal">
-                            {item.name}
-                          </TooltipContent>
-                        </Tooltip>
-                        {isBanban && flavor1 && flavor2 ? (
-                          <p className="text-xs text-muted-foreground mt-0.5 break-words">
-                            <span>① {flavor1}</span>
-                            <span className="mx-1">·</span>
-                            <span>② {flavor2}</span>
-                          </p>
-                        ) : optionPart ? (
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{optionPart}</p>
-                        ) : null}
-                        <p className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5">
-                          {formatBahtNum(item.price)} ฿
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-0.5 w-[5.5rem] shrink-0 justify-end self-start pt-0.5">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => updateItemQuantity(item.id, -1)}
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </Button>
-                        <span className="w-6 text-center text-sm font-medium tabular-nums">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => updateItemQuantity(item.id, 1)}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="px-2 pb-1.5 pt-0">
-                      <Input
-                        aria-label={tr('posLineNote', 'Note')}
-                        placeholder={tr('posLineNotePh', 'e.g. no onion, mild spice')}
-                        value={item.note ?? ''}
-                        onChange={(e) =>
-                          setCartItems((prev) =>
-                            prev.map((p) => (p.id === item.id ? { ...p, note: e.target.value } : p))
-                          )
-                        }
-                        className="h-7 text-xs"
-                      />
-                    </div>
-                  </div>
-                  )
-                })}
-              </div>
-            </TooltipProvider>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setEditingCustomerMemo(true)}
+              aria-label={t('posCustomerMemo') || '손님 메모'}
+            >
+              + {t('posCustomerMemo') || '손님 메모'}
+            </Button>
           )}
-        </ScrollArea>
-
-        {/* Options - 쿠폰/할인은 결제 페이지에서 입력 */}
-        <div className="space-y-2 pt-3 border-t shrink-0 px-3">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">{t('posCustomerMemo')}</Label>
-            <Input
-              placeholder={t('posCustomerMemoPh')}
-              value={customerMemo}
-              onChange={e => setCustomerMemo(e.target.value)}
-              className="h-8 text-sm"
-            />
-          </div>
         </div>
 
         {/* Totals - 여백 유지 */}

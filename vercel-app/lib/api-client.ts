@@ -3830,6 +3830,12 @@ export async function getMarketingCampaign(id: string) {
   return res.json() as Promise<MarketingCampaignDetail | null>
 }
 
+export async function getNextCampaignNumber(): Promise<string | null> {
+  const res = await apiFetchWithOffline('/api/marketingCampaigns?nextNumber=1')
+  const data = (await res.json()) as { campaignNo?: string }
+  return data?.campaignNo ?? null
+}
+
 export async function saveMarketingCampaign(params: {
   id?: string
   campaignNo?: string

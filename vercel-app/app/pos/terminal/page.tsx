@@ -1,7 +1,7 @@
 'use client'
 import { appAlert } from "@/lib/app-message"
 
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { POSHeader } from '@/components/pos/pos-header'
 import { TableFloorView } from '@/components/pos/table-floor-view'
@@ -17,11 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { useScrollIntoViewOnFocus } from '@/hooks/use-scroll-into-view-on-focus'
 import { usePosMainDevice } from '@/hooks/use-pos-main-device'
-import { LayoutGrid, Bike, Package, Search, ShoppingCart } from 'lucide-react'
+import { LayoutGrid, Bike, Package, Search } from 'lucide-react'
 import { getMembers, getPosMenus, getPosOrders, getPosPrinterSettings, getPosTodaySales, getPosDeliveryApps, updatePosOrder, updatePosOrderStatus, type PosMenu, type PosDeliveryApp } from '@/lib/api-client'
 import { savePosOrderWithOffline } from '@/lib/offline'
 import { cartLinesToPosOrderItems } from '@/lib/pos-order-item-map'
@@ -31,8 +30,8 @@ import { DeliveryEditOrderNoDialog } from '@/components/pos/delivery-edit-order-
 import { useAuth } from '@/lib/auth-context'
 import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
-import { isOfficeRole } from '@/lib/permissions'
-import type { Order } from '@/lib/pos-types'
+import type { Order, OrderItem } from '@/lib/pos-types'
+import { mergeCartPanelAddItem } from '@/lib/pos-cart-merge'
 import { computePosPricing, type PosPricingAdjustments } from '@/lib/pos-pricing'
 import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
 import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
@@ -70,19 +69,13 @@ export default function PosTerminalPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const cartRef = useRef<CartPanelHandle>(null)
-  /** 좁은 화면에서도 안정적으로 전달되는 부모 state 큐 */
-  const [menuAddQueue, setMenuAddQueue] = useState<CartPanelAddItemPayload[]>([])
-
-  /** CartPanel이 bridge 등록할 때마다 증가 — 큐는 부모에서 한 번만 비워 ref 타이밍/이중 패널 이슈 방지 */
-  const [cartBridgeEpoch, setCartBridgeEpoch] = useState(0)
-  /** forwardRef만으로는 태블릿에서 마운트 직후 ref가 늦게 잡히는 경우가 있어 CartPanel이 layout effect로 등록 */
+  const [terminalCartLines, setTerminalCartLines] = useState<OrderItem[]>([])
   const bindCartImperative = useCallback((api: CartPanelHandle | null) => {
     cartRef.current = api
-    if (api) setCartBridgeEpoch((e) => e + 1)
   }, [])
 
   const clearCartFromTerminal = useCallback(() => {
-    setMenuAddQueue([])
+    setTerminalCartLines([])
     cartRef.current?.clearCart()
   }, [])
   const {
@@ -418,25 +411,187 @@ export default function PosTerminalPage() {
   const showSidePanel = activeTab !== 'tables' || Boolean(servingTable?.order) || Boolean(selectedTableId) || hasPendingPaymentFlow
   /** lg 미만: 태블릿 가로(1024~1279)도 하단 고정 카트·터치 밀도 large와 맞춤 */
   const isNarrowViewport = useMediaQuery('(max-width: 1279px)')
-  /** 모바일 테이블 주문: 테이블 선택 후 메뉴 화면 + 하단 장바구니(시트 자동 오픈 안 함) */
-  const isTablesMenuWithCart = activeTab === 'tables' && Boolean(selectedTableId) && !servingTable?.order
-  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
   const scrollIntoViewOnFocus = useScrollIntoViewOnFocus()
   const [isMainPosDevice, setIsMainPosDevice] = usePosMainDevice(currentStoreId || null)
   const seenOrderIdsRef = useRef<Set<number>>(new Set())
   useEffect(() => {
-    if (showSidePanel && !isTablesMenuWithCart) setMobilePanelOpen(true)
-  }, [showSidePanel, isTablesMenuWithCart])
-
-  useEffect(() => {
     if (activeTab === 'tables' && !selectedTableId) {
-      setMenuAddQueue([])
+      clearCartFromTerminal()
     }
-  }, [activeTab, selectedTableId])
+  }, [activeTab, selectedTableId, clearCartFromTerminal])
 
   const hasInitializedMainPosPollRef = useRef(false)
   const lastSeenOrderIdRef = useRef<number>(0)
   const prevStoreForPollRef = useRef<string | null>(null)
+
+
+  async function printReceiptNow(
+    payload: {
+      orderNo: string
+      storeCode: string
+      orderType: string
+      tableName?: string
+      memo?: string
+      items: { id: string; name: string; price: number; qty: number; note?: string }[]
+      subtotal: number
+      discountAmt: number
+      total: number
+      vatFeeAmt?: number
+      vatFeeMode?: 'included' | 'separate'
+      serviceFeeAmt?: number
+      serviceFeeMode?: 'included' | 'separate'
+      cardFeeAmt?: number
+      cardFeeMode?: 'included' | 'separate'
+      otherFeeAmt?: number
+      otherFeeMode?: 'included' | 'separate'
+    },
+    /** 사용자 클릭 직후 열어둔 창을 넘기면 팝업 차단/자동 인쇄 제한을 피할 수 있음 */
+    existingWindow?: Window | null,
+    /** true면 사용자 제스처 직후 호출로 간주 */
+    fromUserGesture?: boolean,
+    /** 주문 후 인쇄: 이 콜백을 넘기면 새 창 대신 HTML만 넘겨서 같은 페이지 iframe 모달로 보여줌 (팝업 차단 무관, iframe 안에서 인쇄 버튼 클릭 시 인쇄 화면 표시) */
+    onShowInModal?: (html: string) => void,
+    /** true면 주문 직인쇄: 숨김 iframe에 쓰고 print() (별도 브라우저 창 없음). 결제 등은 false */
+    directPrint?: boolean
+  ) {
+    const esc = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+    const timestamp = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(new Date())
+    const parsedMemo = parsePosOrderMemo(payload.memo)
+    const tr = (key: string, fallback: string) => {
+      const value = tPrint(key)
+      return value && value !== key ? value : fallback
+    }
+    /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
+    const ct = (tag: string) => '\u003c/' + tag + '>'
+    const tableDisplay = payload.tableName
+      ? translateReceiptTableDisplayName(payload.tableName, (k) => tPrint(k))
+      : ''
+    const tableRow = tableDisplay
+      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('posTable', '테이블')) + ct('span') + '<span class="receipt-meta-value">' + esc(tableDisplay) + ct('span') + ct('div')
+      : ''
+    const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
+    const itemsRows = payload.items
+      .map((it) => {
+        const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
+        const lineNote = String((it as { note?: string }).note ?? '').trim()
+        const noteHtml = lineNote
+          ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
+          : ''
+        return (
+          '<div class="receipt-row"><span>' +
+          it.qty +
+          'x ' +
+          esc(line) +
+          ct('span') +
+          '<span>' +
+          formatBahtNum(it.price * it.qty) +
+          ct('span') +
+          ct('div') +
+          noteHtml
+        )
+      })
+      .join('')
+    const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
+    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
+    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
+    const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+    const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
+    const receiptHtml = buildReceiptDocumentHtml({
+      title: tPrint('posReceipt') || '영수증',
+      bodyContent: printContent,
+      footerContent: showPrintButtonInReceipt
+        ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
+            printButtonLabel +
+            '</button>'
+        : undefined,
+    })
+
+    if (fromUserGesture && onShowInModal) {
+      onShowInModal(receiptHtml)
+      return
+    }
+
+    /** 주문 직인쇄: 팝업 창 대신 숨김 iframe → OS 인쇄 대화상자만 보임 */
+    if (directPrint) {
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('title', tPrint('posReceipt') || '영수증')
+      iframe.setAttribute('aria-hidden', 'true')
+      iframe.style.cssText =
+        'position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;visibility:hidden'
+      document.body.appendChild(iframe)
+      const cw = iframe.contentWindow
+      if (!cw) {
+        iframe.remove()
+        await appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
+        return
+      }
+      cw.document.open()
+      cw.document.write(receiptHtml)
+      cw.document.close()
+      let cleaned = false
+      const removeIframe = () => {
+        if (cleaned) return
+        cleaned = true
+        try {
+          iframe.remove()
+        } catch {
+          /* ignore */
+        }
+      }
+      cw.onafterprint = removeIframe
+      setTimeout(() => {
+        try {
+          cw.focus()
+          cw.print()
+        } catch {
+          removeIframe()
+        }
+      }, 450)
+      setTimeout(removeIframe, 30000)
+      return
+    }
+
+    let printWindow: Window | null =
+      existingWindow != null && typeof existingWindow !== 'undefined' && !existingWindow.closed ? existingWindow : null
+    if (!printWindow) printWindow = window.open('', '_blank')
+    if (!printWindow || printWindow.closed) {
+      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
+      return
+    }
+    printWindow.document.write(receiptHtml)
+    printWindow.document.close()
+    printWindow.focus()
+    let closed = false
+    const safeClose = () => {
+      if (closed) return
+      closed = true
+      if (printWindow && !printWindow.closed) printWindow.close()
+    }
+    printWindow.onafterprint = safeClose
+    if (existingWindow == null && !fromUserGesture) {
+      setTimeout(() => printWindow.print(), 250)
+    }
+    setTimeout(safeClose, 30000)
+  }
 
   useEffect(() => {
     if (!isMainPosDevice || !currentStoreId) return
@@ -737,174 +892,6 @@ export default function PosTerminalPage() {
     otherMode,
   }), [vatRate, vatMode, serviceRate, serviceMode, cardRate, cardMode, cardBaseMode, otherRate, otherMode])
 
-  const printReceiptNow = async (
-    payload: {
-      orderNo: string
-      storeCode: string
-      orderType: string
-      tableName?: string
-      memo?: string
-      items: { id: string; name: string; price: number; qty: number; note?: string }[]
-      subtotal: number
-      discountAmt: number
-      total: number
-      vatFeeAmt?: number
-      vatFeeMode?: 'included' | 'separate'
-      serviceFeeAmt?: number
-      serviceFeeMode?: 'included' | 'separate'
-      cardFeeAmt?: number
-      cardFeeMode?: 'included' | 'separate'
-      otherFeeAmt?: number
-      otherFeeMode?: 'included' | 'separate'
-    },
-    /** 사용자 클릭 직후 열어둔 창을 넘기면 팝업 차단/자동 인쇄 제한을 피할 수 있음 */
-    existingWindow?: Window | null,
-    /** true면 사용자 제스처 직후 호출로 간주 */
-    fromUserGesture?: boolean,
-    /** 주문 후 인쇄: 이 콜백을 넘기면 새 창 대신 HTML만 넘겨서 같은 페이지 iframe 모달로 보여줌 (팝업 차단 무관, iframe 안에서 인쇄 버튼 클릭 시 인쇄 화면 표시) */
-    onShowInModal?: (html: string) => void,
-    /** true면 주문 직인쇄: 숨김 iframe에 쓰고 print() (별도 브라우저 창 없음). 결제 등은 false */
-    directPrint?: boolean
-  ) => {
-    const esc = (value: string) =>
-      value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-    const timestamp = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Bangkok',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    }).format(new Date())
-    const parsedMemo = parsePosOrderMemo(payload.memo)
-    const taxInvoice = parsedMemo.taxInvoice
-    const tr = (key: string, fallback: string) => {
-      const value = tPrint(key)
-      return value && value !== key ? value : fallback
-    }
-    /* 주문용 영수증: 로고 없이 심플 (내부/주방 참조용) */
-    const ct = (tag: string) => '\u003c/' + tag + '>'
-    const tableDisplay = payload.tableName
-      ? translateReceiptTableDisplayName(payload.tableName, (k) => tPrint(k))
-      : ''
-    const tableRow = tableDisplay
-      ? '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('posTable', '테이블')) + ct('span') + '<span class="receipt-meta-value">' + esc(tableDisplay) + ct('span') + ct('div')
-      : ''
-    const dateRow = '<div class="receipt-meta-row"><span class="receipt-meta-label">' + esc(tr('date', 'Date')) + ct('span') + '<span class="receipt-meta-value">' + esc(timestamp) + ct('span') + ct('div')
-    const itemsRows = payload.items
-      .map((it) => {
-        const line = translatePosMenuLineForReceipt(it.name, (k) => tPrint(k))
-        const lineNote = String((it as { note?: string }).note ?? '').trim()
-        const noteHtml = lineNote
-          ? '<div class="receipt-line-note">' + esc(tr('posLineNote', '메모')) + ': ' + esc(lineNote) + ct('div')
-          : ''
-        return (
-          '<div class="receipt-row"><span>' +
-          it.qty +
-          'x ' +
-          esc(line) +
-          ct('span') +
-          '<span>' +
-          formatBahtNum(it.price * it.qty) +
-          ct('span') +
-          ct('div') +
-          noteHtml
-        )
-      })
-      .join('')
-    const memoRow = parsedMemo.plainMemo ? '<div class="memo">' + esc(tr('posCustomerMemo', '메모')) + ': ' + esc(parsedMemo.plainMemo) + ct('div') : ''
-    const discountRow = payload.discountAmt > 0 ? '<div class="receipt-row discount"><span>' + esc(tPrint('posDiscount') || '할인') + ct('span') + '<span>-' + formatBahtNum(payload.discountAmt) + ' ฿' + ct('span') + ct('div') : ''
-    const printContent = '<div class="receipt-content receipt-order-simple"><div class="receipt-order-header text-center"><div class="receipt-store-name">' + esc(payload.storeCode) + ct('div') + '<div class="receipt-order-label">' + esc(tr('posOrderNo', '주문')) + ' #' + esc(payload.orderNo) + ct('div') + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="text-xs">' + tableRow + dateRow + ct('div') + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-item-head"><span>' + esc(tr('posMenuName', '품목')) + ct('span') + '<span>' + esc(tr('amount', '금액')) + ct('span') + ct('div') + itemsRows + memoRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row"><span class="receipt-muted">' + esc(tPrint('posSubtotal') || '소계') + ct('span') + '<span>' + formatBahtNum(payload.subtotal) + ' ฿' + ct('span') + ct('div') + discountRow + '<div class="receipt-divider">' + ct('div') + '<div class="receipt-row receipt-total"><span>' + esc(tPrint('posTotal') || '합계') + ct('span') + '<span>' + formatBahtNum(payload.total) + ' ฿' + ct('span') + ct('div') + ct('div')
-    const printButtonLabel = (tPrint('posPrint') || tPrint('btn_print') || '인쇄')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-    const showPrintButtonInReceipt = (existingWindow != null || fromUserGesture) && !directPrint
-    const receiptHtml = buildReceiptDocumentHtml({
-      title: tPrint('posReceipt') || '영수증',
-      bodyContent: printContent,
-      footerContent: showPrintButtonInReceipt
-        ? '<button type="button" onclick="window.print();" style="padding:8px 20px;font-size:14px;cursor:pointer;border:1px solid #000;background:#fff;color:#000;">' +
-            printButtonLabel +
-            '</button>'
-        : undefined,
-    })
-
-    if (fromUserGesture && onShowInModal) {
-      onShowInModal(receiptHtml)
-      return
-    }
-
-    /** 주문 직인쇄: 팝업 창 대신 숨김 iframe → OS 인쇄 대화상자만 보임 */
-    if (directPrint) {
-      const iframe = document.createElement('iframe')
-      iframe.setAttribute('title', tPrint('posReceipt') || '영수증')
-      iframe.setAttribute('aria-hidden', 'true')
-      iframe.style.cssText =
-        'position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;pointer-events:none;visibility:hidden'
-      document.body.appendChild(iframe)
-      const cw = iframe.contentWindow
-      if (!cw) {
-        iframe.remove()
-        await appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
-        return
-      }
-      cw.document.open()
-      cw.document.write(receiptHtml)
-      cw.document.close()
-      let cleaned = false
-      const removeIframe = () => {
-        if (cleaned) return
-        cleaned = true
-        try {
-          iframe.remove()
-        } catch {
-          /* ignore */
-        }
-      }
-      cw.onafterprint = removeIframe
-      setTimeout(() => {
-        try {
-          cw.focus()
-          cw.print()
-        } catch {
-          removeIframe()
-        }
-      }, 450)
-      setTimeout(removeIframe, 30000)
-      return
-    }
-
-    let printWindow: Window | null =
-      existingWindow != null && typeof existingWindow !== 'undefined' && !existingWindow.closed ? existingWindow : null
-    if (!printWindow) printWindow = window.open('', '_blank')
-    if (!printWindow || printWindow.closed) {
-      await appAlert(t('posPrintBlocked') || '팝업이 차단되었습니다. 인쇄를 허용해 주세요.')
-      return
-    }
-    printWindow.document.write(receiptHtml)
-    printWindow.document.close()
-    printWindow.focus()
-    let closed = false
-    const safeClose = () => {
-      if (closed) return
-      closed = true
-      if (printWindow && !printWindow.closed) printWindow.close()
-    }
-    printWindow.onafterprint = safeClose
-    if (existingWindow == null && !fromUserGesture) {
-      setTimeout(() => printWindow.print(), 250)
-    }
-    setTimeout(safeClose, 30000)
-  }
   const deliveryApps = deliveryAppsFromApi
     .filter((a) => a.enabled)
     .map((a) => ({ id: a.code, name: a.name }))
@@ -983,7 +970,7 @@ export default function PosTerminalPage() {
   }
 
   const deliveryBarItems = useMemo<OrderBarItem[]>(() => {
-    let orders = [...deliveryOrders]
+    const orders = [...deliveryOrders]
     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return orders.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
@@ -1007,7 +994,7 @@ export default function PosTerminalPage() {
   }, [deliveryOrders, menuTargets, t, deliveryAppsFromApi])
 
   const packagedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
-    let filtered = [...packagedDeliveryOrders]
+    const filtered = [...packagedDeliveryOrders]
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
@@ -1030,7 +1017,7 @@ export default function PosTerminalPage() {
   }, [packagedDeliveryOrders, t, deliveryAppsFromApi])
 
   const completedDeliveryBarItems = useMemo<OrderBarItem[]>(() => {
-    let filtered = [...completedDeliveryOrders]
+    const filtered = [...completedDeliveryOrders]
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
@@ -1059,7 +1046,7 @@ export default function PosTerminalPage() {
       ...packagedDeliveryOrders.map((o) => ({ ...o, _listType: 'packaged' as const })),
       ...completedDeliveryOrders.map((o) => ({ ...o, _listType: 'completed' as const })),
     ]
-    let filtered = merged
+    const filtered = merged
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeDelivery') || '배달'} #${order.id}`
@@ -1092,7 +1079,7 @@ export default function PosTerminalPage() {
   const currentDeliveryBarItems = deliveryListMode === 'all' ? allDeliveryBarItems : deliveryListMode === 'completed' ? completedDeliveryBarItems : inProgressOrPackagedDeliveryBarItems
 
   const takeoutBarItems = useMemo<OrderBarItem[]>(() => {
-    let orders = [...takeoutOrders]
+    const orders = [...takeoutOrders]
     orders.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return orders.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
@@ -1110,7 +1097,7 @@ export default function PosTerminalPage() {
   }, [takeoutOrders, menuTargets, t])
 
   const packagedTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
-    let filtered = [...packagedTakeoutOrders]
+    const filtered = [...packagedTakeoutOrders]
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
@@ -1127,7 +1114,7 @@ export default function PosTerminalPage() {
   }, [packagedTakeoutOrders, t])
 
   const completedTakeoutBarItems = useMemo<OrderBarItem[]>(() => {
-    let filtered = [...completedTakeoutOrders]
+    const filtered = [...completedTakeoutOrders]
     filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
@@ -1150,7 +1137,7 @@ export default function PosTerminalPage() {
       ...packagedTakeoutOrders.map((o) => ({ ...o, _listType: 'packaged' as const })),
       ...completedTakeoutOrders.map((o) => ({ ...o, _listType: 'completed' as const })),
     ]
-    let filtered = merged
+    const filtered = merged
     filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     return filtered.map((order) => {
       const label = String(order.customerName || '').trim() || `${t('posOrderTypeTakeout') || '포장'} #${order.id}`
@@ -1190,873 +1177,23 @@ export default function PosTerminalPage() {
     setSelectedTableId(tableId)
   }
   const handleAddItemToCart = useCallback((item: CartPanelAddItemPayload) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'terminal/page.tsx:handleAddItemToCart',
-        message: 'add to cart request',
-        data: { via: cartRef.current ? 'ref' : 'queue', itemId: item.id },
-        timestamp: Date.now(),
-        hypothesisId: 'H1',
-      }),
-    }).catch(() => {})
-    // #endregion
-    if (cartRef.current) {
+    // CartPanel ref가 있으면 addItem으로 위임 (패널 내부 setCartItems = setTerminalCartLines)
+    if (cartRef.current?.addItem) {
       cartRef.current.addItem(item)
-      return
+    } else {
+      // 패널 마운트 전/전환 중이면 state 직접 갱신
+      setTerminalCartLines((prev) => mergeCartPanelAddItem(prev, item))
     }
-    setMenuAddQueue((prev) => [...prev, item])
   }, [])
 
-  useLayoutEffect(() => {
-    const api = cartRef.current
-    if (!api || menuAddQueue.length === 0) return
-    const n = menuAddQueue.length
-    // #region agent log
-    fetch('http://127.0.0.1:7383/ingest/05cba2f0-f5a1-42a7-be87-88f44be3588c', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'terminal/page.tsx:flushMenuAddQueue',
-        message: 'draining menu queue',
-        data: { count: n },
-        timestamp: Date.now(),
-        hypothesisId: 'H2',
-      }),
-    }).catch(() => {})
-    // #endregion
-    for (const item of menuAddQueue) {
-      api.addItem(item)
-    }
-    setMenuAddQueue((prev) => prev.slice(n))
-  }, [menuAddQueue, cartBridgeEpoch])
-
-  return (
-    <div className="h-full flex flex-col bg-background">
-      <POSHeader
-        stores={stores}
-        currentStoreId={currentStoreId}
-        onStoreChange={setCurrentStoreId}
-        onRefresh={refetchStores}
-        todayCompleted={todayCompleted}
-        totalSales={totalSales}
-        showBackButton
-        canChangeStore={stores.length > 0}
-        canAccessAdmin={false}
-        isMainPosDevice={isMainPosDevice}
-        onMainPosDeviceChange={setIsMainPosDevice}
-      />
-      <OfflineBanner onSyncComplete={refetchStores} />
-      <div className="flex-1 flex min-h-0 min-w-0">
-        <div className="flex-1 min-w-0 flex flex-col min-h-0">
-          <Tabs
-            value={activeTab}
-            onValueChange={(v) => {
-              const next = v as 'tables' | 'delivery' | 'takeout'
-              if (next !== activeTab) {
-                clearCartFromTerminal()
-                if (next === 'tables') {
-                  setSelectedTableId(null)
-                  setServingTableId(null)
-                } else if (next === 'delivery') {
-                  setSelectedDeliveryTargetId(null)
-                  setSelectedDeliveryTargetLabel('')
-                  setDeliveryApp(null)
-                  setDeliveryOrderNo('')
-                } else if (next === 'takeout') {
-                  setSelectedTakeoutTargetId(null)
-                  setSelectedTakeoutTargetLabel('')
-                }
-              }
-              setActiveTab(next)
-            }}
-            className="flex-1 min-w-0 flex flex-col min-h-0"
-          >
-            <div className="border-b border-border bg-card px-2 sm:px-4 shrink-0">
-              <div className="flex h-12 min-[640px]:h-10 min-h-[44px] items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
-                <TabsList className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0">
-                  <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
-                    <LayoutGrid className="w-4 h-4 shrink-0" />
-                    <span className="hidden min-[640px]:inline">{t('posTableStatus')}</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="delivery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
-                    <Bike className="w-4 h-4 shrink-0" />
-                    <span className="hidden min-[640px]:inline">{t('posOrderTypeDelivery') || '배달'}</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="takeout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
-                    <Package className="w-4 h-4 shrink-0" />
-                    <span className="hidden min-[640px]:inline">{t('posOrderTypeTakeout') || '포장'}</span>
-                  </TabsTrigger>
-                </TabsList>
-                {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
-                <div className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0">
-                  {activeTab === 'tables' && (
-                    <Select
-                      value={tableListMode}
-                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => setTableListMode(v)}
-                    >
-                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {activeTab === 'delivery' && (
-                    <Select
-                      value={deliveryListMode}
-                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => {
-                        setDeliveryListMode(v)
-                        setSelectedDeliveryTargetId(null)
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {activeTab === 'takeout' && (
-                    <Select
-                      value={takeoutListMode}
-                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => {
-                        setTakeoutListMode(v)
-                        setSelectedTakeoutTargetId(null)
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
-                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
-                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Button size="sm" variant="outline" className="h-9 min-[640px]:h-8 gap-1.5 px-2 min-[640px]:px-3 touch-manipulation shrink-0 rounded-md" onClick={() => setLiveSearchOpen(true)} title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}>
-                    <Search className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-            {activeTab === 'delivery' && (
-              <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
-                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
-                {effectiveDeliveryApps.map((app) => (
-                  <Button
-                    key={app.id}
-                    variant={deliveryApp === app.id ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-8"
-                    onClick={() => setDeliveryApp(app.id)}
-                  >
-                    {app.name}
-                  </Button>
-                ))}
-                <span className="text-sm font-medium text-muted-foreground ml-2">{t('posDeliveryOrderNo') || '주문 번호'}</span>
-                <Input
-                  type="text"
-                  placeholder={t('posDeliveryOrderNoPh') || '배달 플랫폼 주문번호'}
-                  value={deliveryOrderNo}
-                  onChange={(e) => setDeliveryOrderNo(e.target.value)}
-                  onFocus={scrollIntoViewOnFocus}
-                  className="h-8 w-32 max-w-full text-sm"
-                />
-                <Button
-                  size="sm"
-                  className="h-8"
-                  onClick={() => {
-                    if (!deliveryApp) return
-                    setDeliveryOrderNo('')
-                    setSelectedDeliveryTargetId('delivery-draft')
-                    const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
-                    setSelectedDeliveryTargetLabel(appLabelEn)
-                  }}
-                  disabled={!deliveryApp}
-                >
-                  + {t('posNewOrder') || '새 주문'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() => {
-                    if (selectedDeliveryOrder) {
-                      const label = String(selectedDeliveryOrder.customerName || '').trim() || ''
-                      const appId = detectDeliveryApp(label)
-                      const no = detectDeliveryOrderNo(label)
-                      setDeliveryEditOrderNoValue(no)
-                      setDeliveryEditOrderNoOpen(true)
-                    }
-                  }}
-                  disabled={!selectedDeliveryOrder}
-                >
-                  {t('posEditOrderNo') || '수정'}
-                </Button>
-                </div>
-              </div>
-            )}
-            {activeTab === 'takeout' && (
-              <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
-                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
-                  {Array.from({ length: 7 }, (_, i) => i + 1).map((slotNo) => (
-                    <Button
-                      key={slotNo}
-                      variant={takeoutMode === 'slot' && takeoutSlot === String(slotNo) ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8"
-                      onClick={() => {
-                        setTakeoutMode('slot')
-                        setTakeoutSlot(String(slotNo))
-                      }}
-                    >
-                      {formatTakeoutSlotLabel(String(slotNo))}
-                    </Button>
-                  ))}
-                  <span className="text-sm font-medium text-muted-foreground ml-2">{t('posTakeoutMemberName') || '회원 이름'}</span>
-                  <Input
-                    type="text"
-                    placeholder={t('posTakeoutMemberNamePh') || '회원 이름 입력'}
-                    value={takeoutMemberName}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setTakeoutMemberName(v)
-                      setTakeoutMode(v.trim() ? 'member' : 'slot')
-                    }}
-                    onFocus={(e) => {
-                      scrollIntoViewOnFocus(e)
-                      if (takeoutMemberName.trim()) setTakeoutMode('member')
-                    }}
-                    list="takeout-member-history"
-                    className="h-8 w-32 max-w-full text-sm"
-                  />
-                  <datalist id="takeout-member-history">
-                    {filteredTakeoutMembers.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
-                  <Button
-                    size="sm"
-                    className="h-8"
-                    onClick={() => {
-                      setSelectedTakeoutTargetId('takeout-draft')
-                      setSelectedTakeoutTargetLabel(baseTakeoutLabel)
-                    }}
-                  >
-                    + {t('posNewOrder') || '새 주문'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 메뉴 화면(모바일은 하단에 장바구니 고정) */}
-            <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 min-w-0 flex flex-col">
-              {selectedTableId ? (
-                <div className={cn('flex-1 min-h-0 flex flex-col', isNarrowViewport && 'gap-0 overflow-y-auto')}>
-                  <div className={cn(isNarrowViewport ? 'flex-none min-h-0' : 'flex-1 min-h-[260px] overflow-hidden')}>
-                    <PosTerminalMenuScreen
-                      mode="pos-order"
-                      storeCode={currentStoreId}
-                      selectedTableName={
-                        selectedTable?.name
-                          ? translateReceiptTableDisplayName(selectedTable.name, t)
-                          : String(selectedTableId ?? '')
-                      }
-                      onBack={() => setSelectedTableId(null)}
-                      onAddItem={handleAddItemToCart}
-                      orderType="dine-in"
-                      touchMode={isNarrowViewport ? 'large' : 'default'}
-                      className={isNarrowViewport ? 'h-auto' : 'h-full'}
-                    />
-                  </div>
-                  {isNarrowViewport && (
-                    <div className="flex-shrink-0 border-t border-border bg-card h-[22vh] min-h-[140px] max-h-[220px] overflow-hidden flex flex-col rounded-b-lg">
-                      <CartPanel
-                        debugOwner="inline-mobile"
-                        onImperativeBridge={bindCartImperative}
-                        stores={stores}
-                        currentStoreId={currentStoreId}
-                        selectedTable={selectedTable}
-                        onStoreChange={setCurrentStoreId}
-                        t={t}
-                        lockOrderType
-                        orderType="dine-in"
-                        takeoutLabel={takeoutLabel}
-                        pricingAdjustments={pricingAdjustments}
-                        pendingOrderId={pendingDineInOrderId}
-                        onOrderSubmit={async (payload) => {
-                          const existingOrder = selectedTable?.order ?? null
-                          const existingOrderId = Number(existingOrder?.id ?? 0)
-                          const isAddOrder = existingOrder != null && Number.isFinite(existingOrderId) && existingOrderId > 0
-                          const shouldAutoPrintReceipt = isAddOrder ? autoPrintReceiptOnAddOrder : autoPrintReceiptOnOrder
-                          try {
-                            const incomingItems = cartLinesToPosOrderItems(payload.items)
-                            let savedOrderNo = ''
-                            let savedOrderId: number | null = null
-                            if (isAddOrder && existingOrder) {
-                              const mergedItems = [
-                                ...existingOrder.items.map((it) => ({
-                                  id: it.id,
-                                  name: it.name,
-                                  price: it.price,
-                                  qty: it.quantity || 1,
-                                  ...(it.note?.trim() ? { note: it.note.trim() } : {}),
-                                  ...(it.servedAt ? { servedAt: it.servedAt } : {}),
-                                  ...(it.servedBy ? { servedBy: it.servedBy } : {}),
-                                })),
-                                ...incomingItems,
-                              ]
-                              const res = await updatePosOrder({
-                                id: existingOrderId,
-                                items: mergedItems,
-                                tableName: payload.tableName,
-                                memo: payload.memo,
-                                discountAmt: payload.discountAmt ?? 0,
-                                discountReason: payload.discountReason ?? '',
-                                memberId: payload.memberId,
-                                memberNo: payload.memberNo,
-                                couponCode: payload.couponCode,
-                                couponDiscountAmt: payload.couponDiscountAmt,
-                                pointUsed: payload.pointUsed,
-                                guestCount: payload.guestCount ?? existingOrder.guestCount,
-                                paymentCash: 0,
-                                paymentCard: 0,
-                                paymentQr: 0,
-                                paymentOther: 0,
-                                pricingAdjustments,
-                              })
-                              if (!res.success) {
-                                const msg = res.message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                                await appAlert(msg)
-                                return
-                              }
-                              savedOrderId = existingOrderId
-                              savedOrderNo = existingOrder.orderNo ?? ''
-                            } else {
-                              const res = await savePosOrderWithOffline({
-                                storeCode: currentStoreId,
-                                orderType: 'dine_in',
-                                tableName: payload.tableName,
-                                memo: payload.memo,
-                                discountAmt: payload.discountAmt,
-                                discountReason: payload.discountReason,
-                                memberId: payload.memberId,
-                                memberNo: payload.memberNo,
-                                couponCode: payload.couponCode,
-                                couponDiscountAmt: payload.couponDiscountAmt,
-                                pointUsed: payload.pointUsed,
-                                guestCount: payload.guestCount,
-                                paymentCash: 0,
-                                paymentCard: 0,
-                                paymentQr: 0,
-                                paymentOther: 0,
-                                pricingAdjustments,
-                                items: incomingItems,
-                              })
-                              if (!res.success) {
-                                const msg = (res as { message?: string }).message || t('posOrderSaveFailed') || '주문 저장에 실패했습니다.'
-                                await appAlert(msg)
-                                return
-                              }
-                              savedOrderId = res.orderId ?? null
-                              savedOrderNo = (res as { orderNo?: string }).orderNo ?? ''
-                            }
-                            if (savedOrderId != null) seenOrderIdsRef.current.add(savedOrderId)
-                            const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                            const discountAmt = payload.discountAmt ?? 0
-                            const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: 0, adjustments: pricingAdjustments })
-                            printReceiptNow(
-                              {
-                                orderNo: savedOrderNo,
-                                storeCode: currentStoreId,
-                                orderType: t('posOrderTypeDineIn') || '매장',
-                                tableName: payload.tableName,
-                                memo: payload.memo,
-                                items: incomingItems,
-                                subtotal,
-                                discountAmt,
-                                total: pricing.finalTotal,
-                                vatFeeAmt: pricing.vatFeeAmt,
-                                vatFeeMode: pricing.vatFeeMode,
-                                serviceFeeAmt: pricing.serviceFeeAmt,
-                                serviceFeeMode: pricing.serviceFeeMode,
-                                cardFeeAmt: pricing.cardFeeAmt,
-                                cardFeeMode: pricing.cardFeeMode,
-                                otherFeeAmt: pricing.otherFeeAmt,
-                                otherFeeMode: pricing.otherFeeMode,
-                              },
-                              null,
-                              false,
-                              undefined,
-                              true
-                            )
-                            if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
-                              const orderNoStr = savedOrderNo
-                              const itemsForKitchen = payload.items.map((i) => ({
-                                id: i.id,
-                                name: i.name,
-                                price: i.price,
-                                qty: i.quantity || 1,
-                                ...(String((i as { note?: string }).note ?? '').trim()
-                                  ? { note: String((i as { note?: string }).note).trim() }
-                                  : {}),
-                              }))
-                              getPosPrinterSettings({ storeCode: currentStoreId })
-                                .then((settings) => {
-                                  const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
-                                  const kitchen2 = settings.kitchen2Categories || []
-                                  const mode = settings.kitchenMode || 1
-                                  const orderTypeLabels: Record<string, string> = {
-                                    dine_in: t('posOrderTypeDineIn') ?? '매장',
-                                    takeout: t('posOrderTypeTakeout') ?? '포장',
-                                    delivery: t('posOrderTypeDelivery') ?? '배달',
-                                  }
-                                  const toSlips = (): { label: string; items: typeof itemsForKitchen }[] => {
-                                    if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
-                                    const slip1: typeof itemsForKitchen = []
-                                    const slip2: typeof itemsForKitchen = []
-                                    for (const it of itemsForKitchen) {
-                                      const menuId = String(it.id ?? '').split('-')[0]
-                                      const cat = categoryByMenuId[menuId] ?? ''
-                                      if (kitchen2.includes(cat)) slip2.push(it)
-                                      else slip1.push(it)
-                                    }
-                                    const result: { label: string; items: typeof itemsForKitchen }[] = []
-                                    if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
-                                    if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
-                                    return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
-                                  }
-                                  const slips = toSlips()
-                                  const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
-                                  const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
-                                  const cR = (tag: string) => '\u003c/' + tag + '>'
-                                  const tablePartR = payload.tableName ? ' · ' + (t('posTable') || '테이블') + ': ' + payload.tableName : ''
-                                  const printOne = (idx: number) => {
-                                    if (idx >= slips.length) return
-                                    const slip = slips[idx]
-                                    const itemsHtmlR = slip.items
-                                      .map((it) => formatKitchenSlipItemRowHtml({ name: it.name, qty: it.qty, note: it.note }, escapeHtml, cR))
-                                      .join('')
-                                    const memoHtmlR = kitchenMemo ? '<div class="k-memo">' + escapeHtml((t('posCustomerMemo') || '메모') + ': ' + kitchenMemo) + cR('div') : ''
-                                    const html = buildKitchenSlipHtml({
-                                      label: slip.label,
-                                      orderNo: orderNoStr,
-                                      storeCode: currentStoreId,
-                                      orderTypeLabel: orderTypeLabels.dine_in || '매장',
-                                      tablePart: tablePartR,
-                                      dateStr: formatPosDateTimeMedium(new Date(), lang),
-                                      itemsHtml: itemsHtmlR,
-                                      memoHtml: memoHtmlR,
-                                      paperCss,
-                                      escapeHtml,
-                                    })
-                                    printHtmlInHiddenIframe(html, {
-                                      title: slip.label,
-                                      printDelayMs: 250,
-                                      onPrintUnavailable: () => {
-                                        void appAlert(t('posPrintBlocked') || '인쇄를 준비할 수 없습니다.')
-                                      },
-                                      onAfterCleanup: () => {
-                                        if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
-                                      },
-                                    })
-                                  }
-                                  setTimeout(() => printOne(0), shouldAutoPrintReceipt ? 600 : 180)
-                                })
-                                .catch((e) => console.error('Kitchen slip print:', e))
-                            }
-                            if (savedOrderId != null) setPendingDineInOrderId(savedOrderId)
-                            setServingTableId(null)
-                            setSelectedTableId(null)
-                            await refetchStores()
-                          } catch (e) {
-                            console.error('savePosOrder/updatePosOrder:', e)
-                          }
-                        }}
-                        onDineInOrderComplete={async (payload, existingOrderId) => {
-                          try {
-                            let orderIdToComplete: number | null = null
-                            let orderNo: string = ''
-                            if (existingOrderId != null && payload.payment != null) {
-                              await updatePosOrder({
-                                id: existingOrderId,
-                                items: cartLinesToPosOrderItems(payload.items),
-                                tableName: payload.tableName,
-                                memo: payload.memo,
-                                discountAmt: payload.discountAmt ?? 0,
-                                discountReason: payload.discountReason ?? '',
-                                memberId: payload.memberId,
-                                memberNo: payload.memberNo,
-                                couponCode: payload.couponCode,
-                                couponDiscountAmt: payload.couponDiscountAmt,
-                                pointUsed: payload.pointUsed,
-                                guestCount: payload.guestCount,
-                                paymentCash: payload.payment.paymentCash,
-                                paymentCard: payload.payment.paymentCard,
-                                paymentQr: payload.payment.paymentQr,
-                                paymentOther: payload.payment.paymentOther,
-                                pricingAdjustments,
-                              })
-                              orderIdToComplete = existingOrderId
-                              orderNo = pendingReceiptOrderNo ?? ''
-                            } else {
-                              const res = await savePosOrderWithOffline({
-                                storeCode: currentStoreId,
-                                orderType: 'dine_in',
-                                tableName: payload.tableName,
-                                memo: payload.memo,
-                                discountAmt: payload.discountAmt ?? 0,
-                                discountReason: payload.discountReason ?? '',
-                                memberId: payload.memberId,
-                                memberNo: payload.memberNo,
-                                couponCode: payload.couponCode,
-                                couponDiscountAmt: payload.couponDiscountAmt,
-                                pointUsed: payload.pointUsed,
-                                guestCount: payload.guestCount,
-                                items: cartLinesToPosOrderItems(payload.items),
-                                paymentCash: payload.payment?.paymentCash ?? 0,
-                                paymentCard: payload.payment?.paymentCard ?? 0,
-                                paymentQr: payload.payment?.paymentQr ?? 0,
-                                paymentOther: payload.payment?.paymentOther ?? 0,
-                                pricingAdjustments,
-                              })
-                              orderIdToComplete = (res as { orderId?: number }).orderId ?? null
-                              orderNo = (res as { orderNo?: string }).orderNo ?? ''
-                            }
-                            if (orderIdToComplete != null) {
-                              const targetStatus = payload.isPrepaid ? 'paid' : 'completed'
-                              await updatePosOrderStatus({ id: orderIdToComplete, status: targetStatus })
-                              if (!payload.isPrepaid && payload.tableName) {
-                                clearTableOrder(currentStoreId, payload.tableName)
-                              }
-                            }
-                            const subtotal = payload.items.reduce((s, i) => s + i.price * (i.quantity || 1), 0)
-                            const discountAmt = payload.discountAmt ?? 0
-                            const pricing = computePosPricing({ subtotal, discountAmt, cardPaymentAmount: payload.payment?.paymentCard ?? 0, adjustments: pricingAdjustments })
-                            setReceiptData({
-                              orderNo,
-                              items: cartLinesToPosOrderItems(payload.items),
-                              subtotal,
-                              discountAmt,
-                              total: pricing.finalTotal,
-                              storeCode: currentStoreId,
-                              orderType: 'dine_in',
-                              tableName: payload.tableName,
-                              memo: payload.memo,
-                              discountReason: payload.discountReason,
-                              vatFeeAmt: pricing.vatFeeAmt,
-                              vatFeeMode: pricing.vatFeeMode,
-                              serviceFeeAmt: pricing.serviceFeeAmt,
-                              serviceFeeMode: pricing.serviceFeeMode,
-                              cardFeeAmt: pricing.cardFeeAmt,
-                              cardFeeMode: pricing.cardFeeMode,
-                              otherFeeAmt: pricing.otherFeeAmt,
-                              otherFeeMode: pricing.otherFeeMode,
-                            })
-                            setPendingReceiptOrderNo(null)
-                            setPendingDineInOrderId(null)
-                            setServingTableId(null)
-                            setSelectedTableId(null)
-                            await refetchStores()
-                          } catch (e) {
-                            console.error('savePosOrder/updatePosOrder:', e)
-                          }
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {loadingTables && (
-                    <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(320px,40vh)]">
-                      {t('loading')}
-                    </div>
-                  )}
-                  {(!loadingTables && currentLayout.length > 0) && (
-                    <div className="h-full min-h-[min(320px,40vh)] min-w-0">
-                      <TableFloorView
-                        layout={currentLayout}
-                        tableListMode={tableListMode}
-                        gridCols={30}
-                        gridRows={20}
-                        getTableStatus={(id, name) => {
-                          const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
-                          if (!tbl?.order) return null
-                          const items = Array.isArray(tbl.order.items) ? tbl.order.items : []
-                          const servedCount = items.filter((item) => Boolean(item.servedAt)).length
-                          const status: 'preparing' | 'partial_served' | 'completed' =
-                            (tbl.order.status === 'completed' || tbl.order.status === 'ready')
-                              ? 'completed'
-                              : servedCount > 0
-                                ? 'partial_served'
-                                : 'preparing'
-                          const getItemTarget = (item: { id?: string; name?: string }) => {
-                            const rawId = String(item.id || '').trim()
-                            const rawName = String(item.name || '').trim()
-                            const normalizedId = rawId.replace(/^cart-existing-\d+-/, '')
-                            const idKey = normalizedId.split('-')[0]
-                            if (idKey && menuTargets.byId.has(idKey)) return menuTargets.byId.get(idKey) || 0
-                            const mainName = rawName.replace(/\s*\(.+\)\s*$/, '').trim()
-                            if (mainName && menuTargets.byName.has(mainName)) return menuTargets.byName.get(mainName) || 0
-                            return 0
-                          }
-                          const targetMin = status === 'preparing'
-                            ? Math.max(
-                                0,
-                                ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') }))
-                              )
-                            : 0
-                          const createdAt = tbl.order.createdAt
-                            ? (tbl.order.createdAt instanceof Date
-                                ? tbl.order.createdAt.toISOString()
-                                : String(tbl.order.createdAt))
-                            : undefined
-                          const guestCount = Math.max(0, Math.trunc(Number(tbl.order.guestCount ?? 0) || 0))
-                          return { status, createdAt, targetMin, guestCount: guestCount > 0 ? guestCount : undefined }
-                        }}
-                        selectedTableId={selectedTableId ?? servingTableId}
-                        onTableSelect={handleTableSelect}
-                        activeFloor={activeFloor}
-                        onFloorChange={setActiveFloor}
-                        t={t}
-                        className="h-full min-h-[min(320px,40vh)]"
-                        freshMaxMin={cookingRules.freshMaxMin}
-                        warningMaxMin={cookingRules.warningMaxMin}
-                        ruleMode={cookingRules.mode}
-                        recipeWarningDiffMin={cookingRules.recipeWarnDiff}
-                        recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
-                        delayBadgeEnabled={cookingRules.delayBadgeEnabled}
-                        delaySoundEnabled={cookingRules.delaySoundEnabled}
-                        delayAlertOverMin={cookingRules.delayAlertOverMin}
-                      />
-                    </div>
-                  )}
-                  {!loadingTables && currentLayout.length === 0 && currentStore && (
-                    <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
-                      {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 설정 > 테이블 구성에서 배치해 주세요.'}
-                    </div>
-                  )}
-                  {!loadingTables && !currentStore && stores.length === 0 && (
-                    <div className="h-full min-h-[min(280px,35vh)] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm">
-                      {t('posTableLayoutEmpty') || '매장/테이블 배치를 관리자 페이지에서 설정해 주세요.'}
-                    </div>
-                  )}
-                </>
-              )}
-            </TabsContent>
-
-            {/* 배달 탭: 새 주문(draft)일 때만 메뉴 화면, 기존 주문 선택 시 목록 유지 */}
-            <TabsContent value="delivery" className="flex-1 m-0 p-4 min-h-0 overflow-auto min-h-[640px]">
-              {selectedDeliveryTargetId === 'delivery-draft' ? (
-                <PosTerminalMenuScreen
-                  mode="pos-order"
-                  storeCode={currentStoreId}
-                  selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
-                  onBack={() => setSelectedDeliveryTargetId(null)}
-                  backButtonLabel={t('posBack') || '뒤로가기'}
-                      onAddItem={handleAddItemToCart}
-                      orderType="delivery"
-                      deliveryAppCode={deliveryApp || null}
-                      touchMode={isNarrowViewport ? 'large' : 'default'}
-                      className="h-full"
-                    />
-              ) : (
-                <OrderBarList
-                  items={currentDeliveryBarItems}
-                  className="min-h-[600px]"
-                  t={t}
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  usePackagingLabel
-                  selectedId={selectedDeliveryTargetId}
-                  onSelect={(id) => {
-                    const selected = currentDeliveryBarItems.find((item) => item.id === id)
-                    if (!selected) return
-                    if (selectedDeliveryTargetId && selectedDeliveryTargetId !== id) {
-                      clearCartFromTerminal()
-                    }
-                    setSelectedDeliveryTargetId(id)
-                    setSelectedDeliveryTargetLabel(selected.label || (t('posOrderTypeDelivery') || '배달'))
-                    const app = detectDeliveryApp([selected.label, selected.rightLabel || ''].join(' '))
-                    if (app) setDeliveryApp(app.code)
-                    const parsedNo = detectDeliveryOrderNo([selected.label, selected.rightLabel || ''].join(' '))
-                    setDeliveryOrderNo(parsedNo)
-                  }}
-                  freshMaxMin={cookingRules.freshMaxMin}
-                  warningMaxMin={cookingRules.warningMaxMin}
-                  ruleMode={cookingRules.mode}
-                  recipeWarningDiffMin={cookingRules.recipeWarnDiff}
-                  recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
-                  delayBadgeEnabled={cookingRules.delayBadgeEnabled}
-                  delayAlertOverMin={cookingRules.delayAlertOverMin}
-                />
-              )}
-            </TabsContent>
-
-            {/* 포장 탭 (배달과 동일 높이: 8개 주문 표시) */}
-            <TabsContent value="takeout" className="flex-1 m-0 p-4 min-h-0 overflow-auto min-h-[640px]">
-              {selectedTakeoutTargetId === 'takeout-draft' ? (
-                <PosTerminalMenuScreen
-                  mode="pos-order"
-                  storeCode={currentStoreId}
-                  selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${selectedTakeoutTargetLabel || takeoutLabel}`}
-                  onBack={() => setSelectedTakeoutTargetId(null)}
-                  backButtonLabel={t('posBack') || '뒤로가기'}
-                  onAddItem={handleAddItemToCart}
-                  orderType="takeout"
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  className="h-full"
-                />
-              ) : (
-                <OrderBarList
-                  items={currentTakeoutBarItems}
-                  className="min-h-[600px]"
-                  t={t}
-                  touchMode={isNarrowViewport ? 'large' : 'default'}
-                  usePackagingLabel
-                  selectedId={selectedTakeoutTargetId}
-                  onSelect={(id) => {
-                    const selected = currentTakeoutBarItems.find((item) => item.id === id)
-                    if (!selected) return
-                    if (selectedTakeoutTargetId && selectedTakeoutTargetId !== id) {
-                      clearCartFromTerminal()
-                    }
-                    setSelectedTakeoutTargetId(id)
-                    setSelectedTakeoutTargetLabel(selected.label)
-                  }}
-                  freshMaxMin={cookingRules.freshMaxMin}
-                  warningMaxMin={cookingRules.warningMaxMin}
-                  ruleMode={cookingRules.mode}
-                  recipeWarningDiffMin={cookingRules.recipeWarnDiff}
-                  recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
-                  delayBadgeEnabled={cookingRules.delayBadgeEnabled}
-                  delayAlertOverMin={cookingRules.delayAlertOverMin}
-                />
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-        {showSidePanel && (() => {
-          // 테이블 주문(모바일)은 메뉴 아래 고정 카트를 사용
-          if (isNarrowViewport && isTablesMenuWithCart) return null
-          const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
-            <DeliveryOrderPanel
-              orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
-              deliveryApps={deliveryAppsFromApi}
-              order={selectedDeliveryOrder}
-              onPackaged={refetchStores}
-              onCancel={refetchStores}
-              onPay={() => {
-                if (!selectedDeliveryOrder) return
-                setPendingDeliveryOrderId(Number(selectedDeliveryOrder.id))
-                setPendingReceiptOrderNo(selectedDeliveryOrder.orderNo ?? null)
-                setPendingDeliveryPayRequest({
-                  tableName: selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id),
-                  items: selectedDeliveryOrder.items.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
-                  orderNo: selectedDeliveryOrder.orderNo,
-                })
-                setSelectedDeliveryTargetId(null)
-                setSelectedDeliveryTargetLabel('')
-                setDeliveryApp(null)
-                setDeliveryOrderNo('')
-              }}
-              onClose={() => {
-                setSelectedDeliveryTargetId(null)
-                setSelectedDeliveryTargetLabel('')
-                setDeliveryApp(null)
-                setDeliveryOrderNo('')
-              }}
-              t={t}
-            />
-          ) : activeTab === 'tables' && servingTable?.order ? (
-            <TableOrderPanel
-              tableName={servingTable.name}
-              order={servingTable.order}
-              deliveryApps={deliveryAppsFromApi}
-              onServed={refetchStores}
-              onAddOrder={() => {
-                if (!servingTableId) return
-                setServingTableId(null)
-                setSelectedTableId(servingTableId)
-              }}
-              onPay={() => {
-                if (!servingTableId || !servingTable?.order) return
-                setPendingDineInOrderId(Number(servingTable.order.id))
-                setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
-                setPendingPayRequest({
-                  tableName: servingTable.name,
-                  items: servingTable.order.items.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
-                  orderNo: servingTable.order.orderNo,
-                })
-                setServingTableId(null)
-              }}
-              onLeaveTable={async () => {
-                if (!servingTable?.order || !servingTable?.name) return
-                clearTableOrder(currentStoreId, servingTable.name)
-                setServingTableId(null)
-                await refetchStores()
-              }}
-              onCancel={refetchStores}
-              onClose={() => setServingTableId(null)}
-              t={t}
-            />
-          ) : activeTab === 'takeout' && selectedTakeoutOrder ? (
-            <TakeoutOrderPanel
-              orderLabel={selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id)}
-              order={selectedTakeoutOrder}
-              onPackaged={refetchStores}
-              onCancel={refetchStores}
-              onPay={() => {
-                if (!selectedTakeoutOrder) return
-                setPendingTakeoutOrderId(Number(selectedTakeoutOrder.id))
-                setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
-                setPendingTakeoutPayRequest({
-                  tableName: selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id),
-                  items: selectedTakeoutOrder.items.map((item) => ({
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
-                  })),
-                  orderNo: selectedTakeoutOrder.orderNo,
-                })
-                setSelectedTakeoutTargetId(null)
-                setSelectedTakeoutTargetLabel('')
-              }}
-              onClose={() => {
-                setSelectedTakeoutTargetId(null)
-                setSelectedTakeoutTargetLabel('')
-              }}
-              t={t}
-            />
-          ) : (
+  const renderTerminalCartPanel = (
+    debugOwner: 'inline-mobile' | 'side-panel' | 'inline-delivery' | 'inline-takeout'
+  ) => (
             <CartPanel
-              debugOwner="side-panel"
+              debugOwner={debugOwner}
               onImperativeBridge={bindCartImperative}
+              cartItems={terminalCartLines}
+              setCartItems={setTerminalCartLines}
               stores={stores}
             currentStoreId={currentStoreId}
             selectedTable={selectedTable}
@@ -2525,43 +1662,561 @@ export default function PosTerminalPage() {
               }
             }}
           />
-          );
-          return isNarrowViewport ? (
-        <>
-          <Sheet open={mobilePanelOpen} onOpenChange={setMobilePanelOpen}>
-            <SheetContent
-              forceMount
-              side="bottom"
-              showCloseButton={true}
-              className="h-[85vh] max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0 rounded-t-xl"
-            >
-              <SheetTitle className="sr-only">{t('posCart') || '장바구니'}</SheetTitle>
-              <div className="flex-1 min-h-0 overflow-y-auto shrink-0">
-                {panelContent}
-              </div>
-            </SheetContent>
-          </Sheet>
-          {!mobilePanelOpen && (
-            <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+8px)]">
-              <div className="mx-auto w-full max-w-[1024px]">
-                <button
-                  type="button"
-                  onClick={() => setMobilePanelOpen(true)}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-t-xl bg-primary text-sm font-semibold text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/90 active:scale-[0.99] touch-manipulation"
-                  aria-label={t('posCart') || '장바구니'}
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                  <span>{t('posCart') || '장바구니'}</span>
-                </button>
+  )
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <POSHeader
+        stores={stores}
+        currentStoreId={currentStoreId}
+        onStoreChange={setCurrentStoreId}
+        onRefresh={refetchStores}
+        todayCompleted={todayCompleted}
+        totalSales={totalSales}
+        showBackButton
+        canChangeStore={stores.length > 0}
+        canAccessAdmin={false}
+        isMainPosDevice={isMainPosDevice}
+        onMainPosDeviceChange={setIsMainPosDevice}
+      />
+      <OfflineBanner onSyncComplete={refetchStores} />
+      <div
+        className={cn(
+          'flex-1 flex min-h-0 min-w-0',
+          isNarrowViewport ? 'flex-col overflow-y-auto' : 'flex-row overflow-hidden'
+        )}
+      >
+        <div
+          className={cn(
+            'min-w-0 flex flex-col',
+            isNarrowViewport ? 'min-h-0 shrink-0' : 'flex-1 min-h-0 overflow-hidden'
+          )}
+        >
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => {
+              const next = v as 'tables' | 'delivery' | 'takeout'
+              if (next !== activeTab) {
+                clearCartFromTerminal()
+                if (next === 'tables') {
+                  setSelectedTableId(null)
+                  setServingTableId(null)
+                } else if (next === 'delivery') {
+                  setSelectedDeliveryTargetId(null)
+                  setSelectedDeliveryTargetLabel('')
+                  setDeliveryApp(null)
+                  setDeliveryOrderNo('')
+                } else if (next === 'takeout') {
+                  setSelectedTakeoutTargetId(null)
+                  setSelectedTakeoutTargetLabel('')
+                }
+              }
+              setActiveTab(next)
+            }}
+            className="flex-1 min-w-0 flex flex-col min-h-0"
+          >
+            <div className={cn(
+              "border-b border-border bg-card px-2 sm:px-4 shrink-0",
+              isNarrowViewport && "sticky top-0 z-10"
+            )}>
+              <div className="flex h-12 min-[640px]:h-10 min-h-[44px] items-center justify-between gap-1 min-[640px]:gap-2 flex-wrap">
+                <TabsList className="h-12 min-[640px]:h-10 min-h-[44px] bg-transparent shrink-0">
+                  <TabsTrigger value="tables" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                    <LayoutGrid className="w-4 h-4 shrink-0" />
+                    <span className="hidden min-[640px]:inline">{t('posTableStatus')}</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="delivery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                    <Bike className="w-4 h-4 shrink-0" />
+                    <span className="hidden min-[640px]:inline">{t('posOrderTypeDelivery') || '배달'}</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="takeout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1 min-[640px]:gap-2 px-3 min-[640px]:px-4 min-h-[44px] touch-manipulation">
+                    <Package className="w-4 h-4 shrink-0" />
+                    <span className="hidden min-[640px]:inline">{t('posOrderTypeTakeout') || '포장'}</span>
+                  </TabsTrigger>
+                </TabsList>
+                {/* 오른쪽 영역: 탭별 필터(준비중/결제완료/전체) + 실시간 메뉴 검색 — 배달/포장/테이블 동일 UI, 밑줄 정렬 */}
+                <div className="flex items-center gap-1 min-[640px]:gap-2 flex-shrink-0 w-[min(100%,theme(spacing.52))] min-[640px]:w-44 justify-end self-stretch min-h-0">
+                  {activeTab === 'tables' && (
+                    <Select
+                      value={tableListMode}
+                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => setTableListMode(v)}
+                    >
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {activeTab === 'delivery' && (
+                    <Select
+                      value={deliveryListMode}
+                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => {
+                        setDeliveryListMode(v)
+                        setSelectedDeliveryTargetId(null)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {activeTab === 'takeout' && (
+                    <Select
+                      value={takeoutListMode}
+                      onValueChange={(v: 'in_progress' | 'completed' | 'all') => {
+                        setTakeoutListMode(v)
+                        setSelectedTakeoutTargetId(null)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 w-20 min-[640px]:h-8 min-[640px]:w-28 shrink-0 touch-manipulation rounded-md">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="in_progress">{t('posFilterPreparing')}</SelectItem>
+                        <SelectItem value="completed">{t('posFilterComplete')}</SelectItem>
+                        <SelectItem value="all">{t('posStatusAll')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button size="sm" variant="outline" className="h-9 min-[640px]:h-8 gap-1.5 px-2 min-[640px]:px-3 touch-manipulation shrink-0 rounded-md" onClick={() => setLiveSearchOpen(true)} title={t('posLiveMenuSearch') || '실시간 메뉴 검색'}>
+                    <Search className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden min-[500px]:inline">{t('posLiveMenuSearch') || '실시간 메뉴 검색'}</span>
+                  </Button>
+                </div>
               </div>
             </div>
-          )}
-        </>
-      ) : (
-        <div className="w-80 border-l border-border flex-shrink-0 min-h-0">
-          {panelContent}
+            {activeTab === 'delivery' && (
+              <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
+                {effectiveDeliveryApps.map((app) => (
+                  <Button
+                    key={app.id}
+                    variant={deliveryApp === app.id ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setDeliveryApp(app.id)}
+                  >
+                    {app.name}
+                  </Button>
+                ))}
+                <span className="text-sm font-medium text-muted-foreground ml-2">{t('posDeliveryOrderNo') || '주문 번호'}</span>
+                <Input
+                  type="text"
+                  placeholder={t('posDeliveryOrderNoPh') || '배달 플랫폼 주문번호'}
+                  value={deliveryOrderNo}
+                  onChange={(e) => setDeliveryOrderNo(e.target.value)}
+                  onFocus={scrollIntoViewOnFocus}
+                  className="h-8 w-32 max-w-full text-sm"
+                />
+                <Button
+                  size="sm"
+                  className="h-8"
+                  onClick={() => {
+                    if (!deliveryApp) return
+                    setDeliveryOrderNo('')
+                    setSelectedDeliveryTargetId('delivery-draft')
+                    const appLabelEn = effectiveDeliveryApps.find((a) => a.id === deliveryApp)?.name ?? deliveryApp
+                    setSelectedDeliveryTargetLabel(appLabelEn)
+                  }}
+                  disabled={!deliveryApp}
+                >
+                  + {t('posNewOrder') || '새 주문'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => {
+                    if (selectedDeliveryOrder) {
+                      const label = String(selectedDeliveryOrder.customerName || '').trim() || ''
+                      const appId = detectDeliveryApp(label)
+                      const no = detectDeliveryOrderNo(label)
+                      setDeliveryEditOrderNoValue(no)
+                      setDeliveryEditOrderNoOpen(true)
+                    }
+                  }}
+                  disabled={!selectedDeliveryOrder}
+                >
+                  {t('posEditOrderNo') || '수정'}
+                </Button>
+                </div>
+              </div>
+            )}
+            {activeTab === 'takeout' && (
+              <div className="px-2 min-[640px]:px-4 py-2 border-b border-border bg-card flex flex-col gap-2 shrink-0">
+                <div className="flex items-center gap-2 min-[640px]:gap-3 flex-wrap">
+                  {Array.from({ length: 7 }, (_, i) => i + 1).map((slotNo) => (
+                    <Button
+                      key={slotNo}
+                      variant={takeoutMode === 'slot' && takeoutSlot === String(slotNo) ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        setTakeoutMode('slot')
+                        setTakeoutSlot(String(slotNo))
+                      }}
+                    >
+                      {formatTakeoutSlotLabel(String(slotNo))}
+                    </Button>
+                  ))}
+                  <span className="text-sm font-medium text-muted-foreground ml-2">{t('posTakeoutMemberName') || '회원 이름'}</span>
+                  <Input
+                    type="text"
+                    placeholder={t('posTakeoutMemberNamePh') || '회원 이름 입력'}
+                    value={takeoutMemberName}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setTakeoutMemberName(v)
+                      setTakeoutMode(v.trim() ? 'member' : 'slot')
+                    }}
+                    onFocus={(e) => {
+                      scrollIntoViewOnFocus(e)
+                      if (takeoutMemberName.trim()) setTakeoutMode('member')
+                    }}
+                    list="takeout-member-history"
+                    className="h-8 w-32 max-w-full text-sm"
+                  />
+                  <datalist id="takeout-member-history">
+                    {filteredTakeoutMembers.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    onClick={() => {
+                      setSelectedTakeoutTargetId('takeout-draft')
+                      setSelectedTakeoutTargetLabel(baseTakeoutLabel)
+                    }}
+                  >
+                    + {t('posNewOrder') || '새 주문'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* 테이블 현황 탭: 테이블 선택 전 = 플로어 뷰, 선택 후 = 메뉴 화면. 장바구니는 우측(넓음)/하단(좁음) 패널에 단일로 표시 */}
+            <TabsContent value="tables" className="flex-1 m-0 p-4 min-h-0 min-w-0 flex flex-col">
+              {selectedTableId ? (
+                <div
+                  className={cn(
+                    'flex-1 min-h-0 overflow-hidden',
+                    !isNarrowViewport && 'min-h-[260px]'
+                  )}
+                >
+                  <PosTerminalMenuScreen
+                    mode="pos-order"
+                    storeCode={currentStoreId}
+                    selectedTableName={
+                      selectedTable?.name
+                        ? translateReceiptTableDisplayName(selectedTable.name, t)
+                        : String(selectedTableId ?? '')
+                    }
+                    onBack={() => setSelectedTableId(null)}
+                    onAddItem={handleAddItemToCart}
+                    orderType="dine-in"
+                    touchMode={isNarrowViewport ? 'large' : 'default'}
+                    containMenuHeight={isNarrowViewport}
+                    className="h-full"
+                  />
+                </div>
+              ) : (
+                <>
+                  {loadingTables && (
+                    <div className="h-full flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm min-h-[min(320px,40vh)]">
+                      {t('loading')}
+                    </div>
+                  )}
+                  {(!loadingTables && currentLayout.length > 0) && (
+                    <div className="h-full min-h-[min(320px,40vh)] min-w-0">
+                      <TableFloorView
+                        layout={currentLayout}
+                        tableListMode={tableListMode}
+                        gridCols={30}
+                        gridRows={20}
+                        getTableStatus={(id, name) => {
+                          const tbl = currentStore?.tables.find((t) => t.id === id || t.name === name)
+                          if (!tbl?.order) return null
+                          const items = Array.isArray(tbl.order.items) ? tbl.order.items : []
+                          const servedCount = items.filter((item) => Boolean(item.servedAt)).length
+                          const status: 'preparing' | 'partial_served' | 'completed' =
+                            (tbl.order.status === 'completed' || tbl.order.status === 'ready')
+                              ? 'completed'
+                              : servedCount > 0
+                                ? 'partial_served'
+                                : 'preparing'
+                          const getItemTarget = (item: { id?: string; name?: string }) => {
+                            const rawId = String(item.id || '').trim()
+                            const rawName = String(item.name || '').trim()
+                            const normalizedId = rawId.replace(/^cart-existing-\d+-/, '')
+                            const idKey = normalizedId.split('-')[0]
+                            if (idKey && menuTargets.byId.has(idKey)) return menuTargets.byId.get(idKey) || 0
+                            const mainName = rawName.replace(/\s*\(.+\)\s*$/, '').trim()
+                            if (mainName && menuTargets.byName.has(mainName)) return menuTargets.byName.get(mainName) || 0
+                            return 0
+                          }
+                          const targetMin = status === 'preparing'
+                            ? Math.max(
+                                0,
+                                ...items.map((it) => getItemTarget({ id: String(it.id || ''), name: String(it.name || '') }))
+                              )
+                            : 0
+                          const createdAt = tbl.order.createdAt
+                            ? (tbl.order.createdAt instanceof Date
+                                ? tbl.order.createdAt.toISOString()
+                                : String(tbl.order.createdAt))
+                            : undefined
+                          const guestCount = Math.max(0, Math.trunc(Number(tbl.order.guestCount ?? 0) || 0))
+                          return { status, createdAt, targetMin, guestCount: guestCount > 0 ? guestCount : undefined }
+                        }}
+                        selectedTableId={selectedTableId ?? servingTableId}
+                        onTableSelect={handleTableSelect}
+                        activeFloor={activeFloor}
+                        onFloorChange={setActiveFloor}
+                        t={t}
+                        className="h-full min-h-[min(320px,40vh)]"
+                        freshMaxMin={cookingRules.freshMaxMin}
+                        warningMaxMin={cookingRules.warningMaxMin}
+                        ruleMode={cookingRules.mode}
+                        recipeWarningDiffMin={cookingRules.recipeWarnDiff}
+                        recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
+                        delayBadgeEnabled={cookingRules.delayBadgeEnabled}
+                        delaySoundEnabled={cookingRules.delaySoundEnabled}
+                        delayAlertOverMin={cookingRules.delayAlertOverMin}
+                      />
+                    </div>
+                  )}
+                  {!loadingTables && currentLayout.length === 0 && currentStore && (
+                    <div className="h-full min-h-[280px] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm p-4 text-center">
+                      {t('posTableLayoutEmpty') || '이 매장에 테이블이 없습니다. 관리자 > POS 설정 > 테이블 구성에서 배치해 주세요.'}
+                    </div>
+                  )}
+                  {!loadingTables && !currentStore && stores.length === 0 && (
+                    <div className="h-full min-h-[min(280px,35vh)] flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground text-sm">
+                      {t('posTableLayoutEmpty') || '매장/테이블 배치를 관리자 페이지에서 설정해 주세요.'}
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* 배달 탭: 새 주문(draft)일 때만 메뉴 화면, 기존 주문 선택 시 목록 유지 */}
+            <TabsContent value="delivery" className="flex-1 m-0 p-4 min-h-0 overflow-auto min-h-[640px]">
+              {selectedDeliveryTargetId === 'delivery-draft' ? (
+                <PosTerminalMenuScreen
+                  mode="pos-order"
+                  storeCode={currentStoreId}
+                  selectedTableName={selectedDeliveryTargetLabel || (t('posOrderTypeDelivery') || '배달')}
+                  onBack={() => setSelectedDeliveryTargetId(null)}
+                  backButtonLabel={t('posBack') || '뒤로가기'}
+                  onAddItem={handleAddItemToCart}
+                  orderType="delivery"
+                  deliveryAppCode={deliveryApp || null}
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
+                  containMenuHeight={isNarrowViewport}
+                  className="h-full"
+                />
+              ) : (
+                <OrderBarList
+                  items={currentDeliveryBarItems}
+                  className="min-h-[600px]"
+                  t={t}
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
+                  usePackagingLabel
+                  selectedId={selectedDeliveryTargetId}
+                  onSelect={(id) => {
+                    const selected = currentDeliveryBarItems.find((item) => item.id === id)
+                    if (!selected) return
+                    if (selectedDeliveryTargetId && selectedDeliveryTargetId !== id) {
+                      clearCartFromTerminal()
+                    }
+                    setSelectedDeliveryTargetId(id)
+                    setSelectedDeliveryTargetLabel(selected.label || (t('posOrderTypeDelivery') || '배달'))
+                    const app = detectDeliveryApp([selected.label, selected.rightLabel || ''].join(' '))
+                    if (app) setDeliveryApp(app.code)
+                    const parsedNo = detectDeliveryOrderNo([selected.label, selected.rightLabel || ''].join(' '))
+                    setDeliveryOrderNo(parsedNo)
+                  }}
+                  freshMaxMin={cookingRules.freshMaxMin}
+                  warningMaxMin={cookingRules.warningMaxMin}
+                  ruleMode={cookingRules.mode}
+                  recipeWarningDiffMin={cookingRules.recipeWarnDiff}
+                  recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
+                  delayBadgeEnabled={cookingRules.delayBadgeEnabled}
+                  delayAlertOverMin={cookingRules.delayAlertOverMin}
+                />
+              )}
+            </TabsContent>
+
+            {/* 포장 탭 (배달과 동일 높이: 8개 주문 표시) */}
+            <TabsContent value="takeout" className="flex-1 m-0 p-4 min-h-0 overflow-auto min-h-[640px]">
+              {selectedTakeoutTargetId === 'takeout-draft' ? (
+                <PosTerminalMenuScreen
+                  mode="pos-order"
+                  storeCode={currentStoreId}
+                  selectedTableName={`${t('posOrderTypeTakeout') || '포장'} · ${selectedTakeoutTargetLabel || takeoutLabel}`}
+                  onBack={() => setSelectedTakeoutTargetId(null)}
+                  backButtonLabel={t('posBack') || '뒤로가기'}
+                  onAddItem={handleAddItemToCart}
+                  orderType="takeout"
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
+                  containMenuHeight={isNarrowViewport}
+                  className="h-full"
+                />
+              ) : (
+                <OrderBarList
+                  items={currentTakeoutBarItems}
+                  className="min-h-[600px]"
+                  t={t}
+                  touchMode={isNarrowViewport ? 'large' : 'default'}
+                  usePackagingLabel
+                  selectedId={selectedTakeoutTargetId}
+                  onSelect={(id) => {
+                    const selected = currentTakeoutBarItems.find((item) => item.id === id)
+                    if (!selected) return
+                    if (selectedTakeoutTargetId && selectedTakeoutTargetId !== id) {
+                      clearCartFromTerminal()
+                    }
+                    setSelectedTakeoutTargetId(id)
+                    setSelectedTakeoutTargetLabel(selected.label)
+                  }}
+                  freshMaxMin={cookingRules.freshMaxMin}
+                  warningMaxMin={cookingRules.warningMaxMin}
+                  ruleMode={cookingRules.mode}
+                  recipeWarningDiffMin={cookingRules.recipeWarnDiff}
+                  recipeUrgentDiffMin={cookingRules.recipeUrgentDiff}
+                  delayBadgeEnabled={cookingRules.delayBadgeEnabled}
+                  delayAlertOverMin={cookingRules.delayAlertOverMin}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
-      )
+        {showSidePanel && (() => {
+          const panelContent = activeTab === 'delivery' && selectedDeliveryOrder ? (
+            <DeliveryOrderPanel
+              orderLabel={selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id)}
+              deliveryApps={deliveryAppsFromApi}
+              order={selectedDeliveryOrder}
+              onPackaged={refetchStores}
+              onCancel={refetchStores}
+              onPay={() => {
+                if (!selectedDeliveryOrder) return
+                setPendingDeliveryOrderId(Number(selectedDeliveryOrder.id))
+                setPendingReceiptOrderNo(selectedDeliveryOrder.orderNo ?? null)
+                setPendingDeliveryPayRequest({
+                  tableName: selectedDeliveryTargetLabel || selectedDeliveryOrder.customerName || String(selectedDeliveryOrder.id),
+                  items: selectedDeliveryOrder.items.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                  })),
+                  orderNo: selectedDeliveryOrder.orderNo,
+                })
+                setSelectedDeliveryTargetId(null)
+                setSelectedDeliveryTargetLabel('')
+                setDeliveryApp(null)
+                setDeliveryOrderNo('')
+              }}
+              onClose={() => {
+                setSelectedDeliveryTargetId(null)
+                setSelectedDeliveryTargetLabel('')
+                setDeliveryApp(null)
+                setDeliveryOrderNo('')
+              }}
+              t={t}
+            />
+          ) : activeTab === 'tables' && servingTable?.order ? (
+            <TableOrderPanel
+              tableName={servingTable.name}
+              order={servingTable.order}
+              deliveryApps={deliveryAppsFromApi}
+              onServed={refetchStores}
+              onAddOrder={() => {
+                if (!servingTableId) return
+                setServingTableId(null)
+                setSelectedTableId(servingTableId)
+              }}
+              onPay={() => {
+                if (!servingTableId || !servingTable?.order) return
+                setPendingDineInOrderId(Number(servingTable.order.id))
+                setPendingReceiptOrderNo(servingTable.order.orderNo ?? null)
+                setPendingPayRequest({
+                  tableName: servingTable.name,
+                  items: servingTable.order.items.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                  })),
+                  orderNo: servingTable.order.orderNo,
+                })
+                setServingTableId(null)
+              }}
+              onLeaveTable={async () => {
+                if (!servingTable?.order || !servingTable?.name) return
+                clearTableOrder(currentStoreId, servingTable.name)
+                setServingTableId(null)
+                await refetchStores()
+              }}
+              onCancel={refetchStores}
+              onClose={() => setServingTableId(null)}
+              t={t}
+            />
+          ) : activeTab === 'takeout' && selectedTakeoutOrder ? (
+            <TakeoutOrderPanel
+              orderLabel={selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id)}
+              order={selectedTakeoutOrder}
+              onPackaged={refetchStores}
+              onCancel={refetchStores}
+              onPay={() => {
+                if (!selectedTakeoutOrder) return
+                setPendingTakeoutOrderId(Number(selectedTakeoutOrder.id))
+                setPendingReceiptOrderNo(selectedTakeoutOrder.orderNo ?? null)
+                setPendingTakeoutPayRequest({
+                  tableName: selectedTakeoutTargetLabel || selectedTakeoutOrder.customerName || String(selectedTakeoutOrder.id),
+                  items: selectedTakeoutOrder.items.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+                  })),
+                  orderNo: selectedTakeoutOrder.orderNo,
+                })
+                setSelectedTakeoutTargetId(null)
+                setSelectedTakeoutTargetLabel('')
+              }}
+              onClose={() => {
+                setSelectedTakeoutTargetId(null)
+                setSelectedTakeoutTargetLabel('')
+              }}
+              t={t}
+            />
+          ) : renderTerminalCartPanel('side-panel');
+          return (
+            <div
+              className={cn(
+                'flex-shrink-0 overflow-hidden flex flex-col border-border bg-card',
+                isNarrowViewport
+                  ? 'border-t min-h-[180px] max-h-[50vh]'
+                  : 'w-80 border-l min-h-0'
+              )}
+            >
+              {panelContent}
+            </div>
+          )
         })()}
       <LiveMenuSearchDialog
         open={liveSearchOpen}

@@ -5,7 +5,7 @@ import * as React from "react"
 import {
   Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
-  List, ClipboardPen,
+  List, ClipboardPen, Search, Tag, TrendingUp,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,7 @@ import { useT } from "@/lib/i18n"
 import {
   getMarketingCampaigns,
   getMarketingCampaign,
+  getNextCampaignNumber,
   saveMarketingCampaign,
   deleteMarketingCampaign,
   importMarketingExcel,
@@ -36,7 +37,7 @@ import {
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 const DEFAULT_DELIVERY_APPS = ["그랩", "라인맨", "쇼피", "기타"]
@@ -263,6 +264,7 @@ const defaultMatForm = {
 // ─── 페이지 ──────────────────────────────────────────────────────────────────
 export default function MarketingCampaignsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
   const { stores, loading: storesLoading } = useStoreList()
@@ -395,14 +397,14 @@ export default function MarketingCampaignsPage() {
 
   // 허브: 등록·수정 vs 목록
   const [hubTab, setHubTab] = React.useState<"form" | "list">("form")
-  const [listSelectedId, setListSelectedId] = React.useState<string | null>(null)
+  const [listSearch, setListSearch] = React.useState("")
 
   // 인플루언서 인라인
   const [linkedInfluencers, setLinkedInfluencers] = React.useState<MarketingInfluencer[]>([])
   const [infForm, setInfForm] = React.useState(defaultInfForm)
   const [savingInf, setSavingInf] = React.useState(false)
 
-  // 판촉물 인라인
+  // 홍보물 인라인
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])
   const [matForm, setMatForm] = React.useState({ ...defaultMatForm, branches: [] as string[] })
   const [savingMat, setSavingMat] = React.useState(false)
@@ -432,6 +434,19 @@ export default function MarketingCampaignsPage() {
 
   React.useEffect(() => { loadList() }, [loadList])
 
+  const openCampaignId = searchParams.get("openCampaign")?.trim()
+  const openTab = searchParams.get("tab") as "influencers" | "materials" | "results" | null
+  React.useEffect(() => {
+    if (openCampaignId && list.length > 0) {
+      const c = list.find((x) => x.id === openCampaignId)
+      if (c) {
+        setHubTab("form")
+        setEditingId(c.id)
+        setActiveTab(openTab === "materials" || openTab === "results" ? openTab : "influencers")
+      }
+    }
+  }, [openCampaignId, openTab, list])
+
   React.useEffect(() => {
     const nextFormat = serializeCampaignFormat(channelState)
     setForm((prev) => (prev.format === nextFormat ? prev : { ...prev, format: nextFormat }))
@@ -459,6 +474,14 @@ export default function MarketingCampaignsPage() {
       .then(setMaterials)
       .catch(() => setMaterials([]))
   }, [])
+
+  // 신규 등록 시 고유번호 즉시 표시
+  React.useEffect(() => {
+    if (editingId) return
+    getNextCampaignNumber()
+      .then((no) => { if (no) setForm((f) => ({ ...f, campaignNo: no })) })
+      .catch(() => {})
+  }, [editingId])
 
   React.useEffect(() => {
     if (!editingId) {
@@ -519,7 +542,6 @@ export default function MarketingCampaignsPage() {
   // ─── 캠페인 핸들러 ─────────────────────────────────────────────────────────
   const handleNew = () => {
     setHubTab("form")
-    setListSelectedId(null)
     setEditingId(null)
     setForm(defaultForm)
     setCostFlags({
@@ -541,25 +563,30 @@ export default function MarketingCampaignsPage() {
     tab: "influencers" | "materials" | "results" = "influencers",
   ) => {
     setHubTab("form")
-    setListSelectedId(c.id)
     setEditingId(c.id)
     setActiveTab(tab)
   }
 
-  const openMaterialsForSelectedCampaign = async () => {
-    if (!listSelectedId) {
-      await appAlert(
-        tr(
-          "목록에서 캠페인 행을 눌러 선택한 뒤 다시 시도하세요.",
-          "Select a campaign row in the list, then try again.",
-          "กรุณาเลือกแถวแคมเปญในรายการแล้วลองอีกครั้ง"
-        )
+  const filteredList = React.useMemo(() => {
+    const q = listSearch.trim().toLowerCase()
+    if (!q) return list
+    return list.filter((c) => {
+      const topic = (c.topic ?? "").toLowerCase()
+      const no = (c.campaignNo ?? "").toLowerCase()
+      const format = (c.format ?? "").toLowerCase()
+      const branches = (c.branches ?? []).join(" ").toLowerCase()
+      const typeLabel = getCampaignTypeLabel(c.campaignType, lang).toLowerCase()
+      const statusText = statusLabel(c.status).toLowerCase()
+      return (
+        topic.includes(q) ||
+        no.includes(q) ||
+        format.includes(q) ||
+        branches.includes(q) ||
+        typeLabel.includes(q) ||
+        statusText.includes(q)
       )
-      return
-    }
-    const c = list.find((x) => x.id === listSelectedId)
-    if (c) handleEdit(c, "materials")
-  }
+    })
+  }, [list, listSearch, lang])
 
   const handleCopyCampaign = (c: MarketingCampaign) => {
     getMarketingCampaign(c.id).then((detail) => {
@@ -791,7 +818,7 @@ export default function MarketingCampaignsPage() {
     }
   }
 
-  // ─── 판촉물 인라인 핸들러 ──────────────────────────────────────────────────
+  // ─── 홍보물 인라인 핸들러 ──────────────────────────────────────────────────
   const handleAddMaterial = async () => {
     if (!editingId || !matForm.name.trim()) {
       await appAlert(tr("이름을 입력하세요.", "Please enter name.", "กรุณากรอกชื่อ"))
@@ -1357,7 +1384,7 @@ export default function MarketingCampaignsPage() {
               <div className="flex border-b">
                 {([
                   { key: "influencers", icon: <Users className="h-3.5 w-3.5" />, label: `${tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")} (${linkedInfluencers.length})` },
-                  { key: "materials", icon: <Package className="h-3.5 w-3.5" />, label: `${tr("판촉물", "Materials", "สื่อโปรโมชัน")} (${materials.length})` },
+                  { key: "materials", icon: <Package className="h-3.5 w-3.5" />, label: `${tr("홍보물", "Materials", "สื่อโปรโมชัน")} (${materials.length})` },
                   { key: "results", icon: <BarChart2 className="h-3.5 w-3.5" />, label: tr("성과/비용", "Result/Cost", "ผลลัพธ์/ต้นทุน") },
                 ] as { key: "influencers" | "materials" | "results"; icon: React.ReactNode; label: string }[]).map((tab) => (
                   <button
@@ -1473,12 +1500,12 @@ export default function MarketingCampaignsPage() {
                 </div>
               )}
 
-              {/* ── 판촉물 탭 ─────────────────────────────────────────────── */}
+              {/* ── 홍보물 탭 ─────────────────────────────────────────────── */}
               {activeTab === "materials" && (
                 <div className="p-4 space-y-4">
                   {/* 빠른 등록 */}
                   <div className="rounded-lg border bg-muted/20 p-3">
-                    <p className="mb-2 text-xs font-semibold">{tr("판촉물 추가", "Add Material", "เพิ่มสื่อโปรโมชัน")}</p>
+                    <p className="mb-2 text-xs font-semibold">{tr("홍보물 추가", "Add Material", "เพิ่มสื่อโปรโมชัน")}</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
                         <label className="text-[10px] text-muted-foreground">{tr("종류", "Type", "ประเภท")}</label>
@@ -1569,9 +1596,9 @@ export default function MarketingCampaignsPage() {
                     </Button>
                   </div>
 
-                  {/* 판촉물 목록 */}
+                  {/* 홍보물 목록 */}
                   {materials.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">{tr("등록된 판촉물이 없습니다.", "No materials.", "ไม่มีสื่อโปรโมชัน")}</p>
+                    <p className="py-4 text-center text-xs text-muted-foreground">{tr("등록된 홍보물이 없습니다.", "No materials.", "ไม่มีสื่อโปรโมชัน")}</p>
                   ) : (
                     <div className="space-y-2">
                       {/* 합계 */}
@@ -1680,103 +1707,36 @@ export default function MarketingCampaignsPage() {
 
           {hubTab === "list" && (
           <>
-          {/* ── 연결 메뉴 빠른 이동 ───────────────────────────────────────── */}
-          <div className="rounded-xl border bg-card p-4">
-            <p className="mb-1 text-sm font-semibold">{tr("연결 메뉴", "Linked Menus", "เมนูที่เชื่อม")}</p>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {tr(
-                "행을 눌러 캠페인을 선택하면 아래 링크에 해당 캠페인이 반영됩니다.",
-                "Tap a row to select a campaign; links below will include that campaign.",
-                "แตะแถวเพื่อเลือกแคมเปญ ลิงก์ด้านล่างจะรวมแคมเปญนั้น"
-              )}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 gap-1.5"
-                onClick={() =>
-                  router.push(
-                    listSelectedId
-                      ? `/admin/marketing/promos?campaignId=${listSelectedId}`
-                      : "/admin/marketing/promos"
-                  )
-                }
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 gap-1.5"
-                onClick={() =>
-                  router.push(
-                    listSelectedId
-                      ? `/admin/marketing/ads?campaignId=${listSelectedId}`
-                      : "/admin/marketing/ads"
-                  )
-                }
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {tr("광고", "Ads", "โฆษณา")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-9 gap-1.5"
-                onClick={() =>
-                  router.push(
-                    listSelectedId
-                      ? `/admin/marketing/influencers?campaignId=${listSelectedId}`
-                      : "/admin/marketing/influencers"
-                  )
-                }
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="h-9 gap-1.5"
-                onClick={() => void openMaterialsForSelectedCampaign()}
-              >
-                <Package className="h-3.5 w-3.5" />
-                {tr("매장 홍보물(판촉물)", "Store promo materials", "สื่อโปรโมชันที่สาขา")}
-              </Button>
-            </div>
-          </div>
-
-          {/* ── 캠페인 목록 ─────────────────────────────────────────────────── */}
+          {/* ── 캠페인 목록 (검색 + 행별 연결 메뉴) ───────────────────────────── */}
           <div className="rounded-xl border bg-card">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <h3 className="text-sm font-semibold">{tr("캠페인 목록", "Campaign List", "รายการแคมเปญ")} ({list.length})</h3>
+            <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-sm font-semibold">
+                {tr("캠페인 목록", "Campaign List", "รายการแคมเปญ")} ({filteredList.length}{listSearch.trim() ? ` / ${list.length}` : ""})
+              </h3>
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder={tr("제목, 번호, 채널, 지점 등 검색", "Search title, number, channel...", "ค้นหาชื่อ หมายเลข ช่องทาง...")}
+                  className="h-9 pl-9"
+                />
+              </div>
             </div>
             <div className="divide-y overflow-x-auto">
-              {list.length === 0 && !loading && (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">{tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")}</p>
+              {filteredList.length === 0 && !loading && (
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {listSearch.trim()
+                    ? tr("검색 결과가 없습니다.", "No search results.", "ไม่พบผลการค้นหา")
+                    : tr("등록된 캠페인이 없습니다.", "No campaigns.", "ไม่มีแคมเปญ")}
+                </p>
               )}
-              {list.map((c) => (
+              {filteredList.map((c) => (
                 <div
                   key={c.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setListSelectedId(c.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      setListSelectedId(c.id)
-                    }
-                  }}
                   className={cn(
-                    "flex flex-wrap items-center justify-between gap-2 px-4 py-3 cursor-pointer outline-none transition-colors hover:bg-muted/40",
-                    editingId === c.id && "bg-primary/5",
-                    listSelectedId === c.id && "bg-primary/10 ring-1 ring-inset ring-primary/20"
+                    "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between",
+                    editingId === c.id && "bg-primary/5"
                   )}
                 >
                   <div className="min-w-0 flex-1">
@@ -1805,14 +1765,35 @@ export default function MarketingCampaignsPage() {
                       {c.budgetTotal > 0 && <span>{tr("예산", "Budget", "งบประมาณ")}: ฿{c.budgetTotal.toLocaleString()}</span>}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-1" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="sm" onClick={() => handleCopyCampaign(c)} title={tr("복사", "Copy", "คัดลอก")}>
-                      <Copy className="h-4 w-4" />
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    <span className="mr-1 text-[10px] font-medium text-muted-foreground">{tr("연결", "Links", "ลิงก์")}:</span>
+                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                      title={tr("프로모션 세트", "Promotion Sets", "ชุดโปรโมชัน")}
+                      onClick={() => router.push(`/admin/marketing/promos?campaignId=${c.id}`)}>
+                      <Tag className="h-3 w-3" /> {tr("세트", "Promos", "ชุดโปรโมชัน")}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(c)}>{tr("수정", "Edit", "แก้ไข")}</Button>
-                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(c)}>
-                      <Trash2 className="h-4 w-4" />
+                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                      title={tr("광고", "Ads", "โฆษณา")}
+                      onClick={() => router.push(`/admin/marketing/ads?campaignId=${c.id}`)}>
+                      <TrendingUp className="h-3 w-3" /> {tr("광고", "Ads", "โฆษณา")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                      title={tr("인플루언서", "Influencers", "อินฟลูเอนเซอร์")}
+                      onClick={() => router.push(`/admin/marketing/influencers?campaignId=${c.id}`)}>
+                      <Users className="h-3 w-3" /> {tr("인플", "Influencers", "อินฟลูเอนเซอร์")}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-[11px] px-2"
+                      title={tr("매장 홍보물", "Store promo materials", "สื่อโปรโมชันที่สาขา")}
+                      onClick={() => router.push(`/admin/marketing/materials?campaignId=${c.id}`)}>
+                      <Package className="h-3 w-3" /> {tr("홍보물", "Materials", "สื่อโปรโมชัน")}
+                    </Button>
+                    <span className="mx-0.5 text-muted-foreground">|</span>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => handleCopyCampaign(c)} title={tr("복사", "Copy", "คัดลอก")}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleEdit(c)}>{tr("수정", "Edit", "แก้ไข")}</Button>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => handleDelete(c)}>
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>

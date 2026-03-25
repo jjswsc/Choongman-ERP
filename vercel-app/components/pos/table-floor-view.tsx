@@ -277,7 +277,7 @@ export function TableFloorView({
                 onFloorChange(floor as 1 | 2 | 3)
               }}
               className={cn(
-                'rounded px-2 py-1 text-[11px] font-medium',
+                'rounded px-2 py-1 text-xs font-medium sm:text-sm',
                 activeFloor === floor ? 'bg-primary text-primary-foreground' : 'text-slate-700 hover:bg-slate-100'
               )}
             >
@@ -339,6 +339,28 @@ export function TableFloorView({
                   ? 'bg-sky-900/80 text-sky-100'
                 : 'bg-lime-900/80 text-lime-100'
         const isOccupied = status !== null
+        const statusLabel =
+          status === 'preparing'
+            ? (t('posTableStatusPreparing') || '조리중')
+            : status === 'partial_served'
+              ? (t('posTableStatusPartiallyServed') || '일부 서빙')
+              : status === 'completed'
+                ? (t('posTableStatusServed') || '서빙 완료')
+                : ''
+        const minuteUnit = t('posMinuteUnit') || '분'
+        const tableMetaTitle =
+          isOccupied && createdAt
+            ? [
+                statusLabel,
+                formatTableTime(createdAt),
+                `${elapsedMin}${minuteUnit}`,
+                showDelayBadge ? (t('posDelayBadge') || '지연') : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : isOccupied
+              ? statusLabel
+              : ''
 
         const tableSurfaceClass = cn(
           'absolute inset-0 shadow-sm border-2 border-dashed box-border',
@@ -354,7 +376,7 @@ export function TableFloorView({
         )
 
         const labelTextClass = cn(
-          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-1 pointer-events-none px-1 text-center antialiased',
+          'absolute inset-0 z-[12] flex flex-col items-center justify-center gap-0.5 pointer-events-none px-1 text-center antialiased',
           /** 밝은 테이블 면 위에서도 글자가 잘 보이도록 */
           '[text-shadow:0_1px_2px_rgba(0,0,0,0.45)]',
           isSquare && !isOccupied && 'text-white',
@@ -374,6 +396,7 @@ export function TableFloorView({
             key={tab.id}
             role="button"
             tabIndex={0}
+            title={tableMetaTitle || undefined}
             onClick={() => onTableSelect?.(tab.id)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -429,91 +452,66 @@ export function TableFloorView({
               className={labelTextClass}
               style={{ writingMode: 'horizontal-tb' }}
             >
-              {/* 1줄: 테이블 번호 · 조리중(또는 일부 서빙/서빙 완료) · 빈 테이블은 좌석 */}
-              <div className="flex min-w-0 max-w-full flex-row flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 px-0.5 leading-tight">
-                <span className="max-w-[min(100%,8rem)] shrink truncate text-sm font-extrabold tracking-tight sm:text-base">
+              {/* 1줄: 테이블명 (+ 사용 중이면 인원). 빈 테이블은 좌석 수 */}
+              <div className="flex min-w-0 max-w-full flex-row flex-nowrap items-baseline justify-center gap-x-1 px-0.5 leading-none">
+                <span className="min-w-0 max-w-[min(100%,8.5rem)] shrink truncate text-base font-extrabold tracking-tight sm:text-lg">
                   {translateReceiptTableDisplayName(tab.name, t)}
                 </span>
-                {isOccupied && (
-                  <>
-                    <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
-                      ·
-                    </span>
-                    {status === 'preparing' && (
-                      <span className="text-xs font-bold sm:text-sm">
-                        {t('posTableStatusPreparing') || '조리중'}
-                      </span>
-                    )}
-                    {status === 'partial_served' && (
-                      <span className="text-xs font-bold sm:text-sm">
-                        {t('posTableStatusPartiallyServed') || '일부 서빙'}
-                      </span>
-                    )}
-                    {status === 'completed' && (
-                      <span className="text-xs font-bold sm:text-sm">
-                        {t('posTableStatusServed') || '서빙 완료'}
-                      </span>
-                    )}
-                    {tableGuestCount > 0 && (
-                        <>
-                          <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
-                            ·
-                          </span>
-                          <span className="text-xs font-extrabold tabular-nums sm:text-sm" title={t('posOrderGuestCount') || ''}>
-                            {tableGuestCount}
-                            {t('posPeopleUnit') || ''}
-                          </span>
-                        </>
-                      )}
-                  </>
+                {isOccupied && tableGuestCount > 0 && (
+                  <span
+                    className="shrink-0 text-xs font-extrabold tabular-nums opacity-90 sm:text-sm"
+                    title={t('posOrderGuestCount') || ''}
+                  >
+                    {tableGuestCount}
+                    {t('posPeopleUnit') || ''}
+                  </span>
                 )}
                 {!isOccupied && tab.seats > 0 && (
-                  <>
-                    <span className="shrink-0 text-sm font-bold opacity-70 sm:text-base" aria-hidden>
-                      ·
-                    </span>
-                    <span className="text-xs font-semibold opacity-95 sm:text-sm">
-                      {tab.seats}
-                      {t('posTableSeatsUnit') || '인'}
-                    </span>
-                  </>
+                  <span className="shrink-0 text-xs font-semibold tabular-nums opacity-95 sm:text-sm">
+                    {tab.seats}
+                    {t('posTableSeatsUnit') || '인'}
+                  </span>
                 )}
               </div>
 
-              {/* 2줄: 지연 + 경과 시간 */}
+              {/* 2줄: 상태 · 주문시각 · 경과(지연 문구는 경과 칩 안으로 합침) */}
               {isOccupied && createdAt && (
-                <div className="flex max-w-full flex-row flex-wrap items-center justify-center gap-1.5 px-0.5 text-xs tabular-nums leading-tight sm:text-sm">
-                  {showDelayBadge && (
-                    <span className="rounded-md bg-red-900/95 px-1.5 py-0.5 text-[11px] font-extrabold text-red-50 shadow-sm sm:text-xs">
-                      {t('posDelayBadge') || '지연'}
-                    </span>
-                  )}
-                  {showDelayBadge && (
-                    <span className="shrink-0 font-bold opacity-70" aria-hidden>
-                      ·
-                    </span>
-                  )}
-                  <span
-                    className={cn(
-                      'rounded-md px-1.5 py-1 font-extrabold tabular-nums shadow-sm',
-                      elapsedClass
-                    )}
-                    title={t('posTableElapsedHint') || '경과(분)'}
-                  >
-                    {elapsedMin}
-                    {t('posMinuteUnit') || '분'}
-                  </span>
-                </div>
-              )}
-
-              {/* 3줄: 주문 시간 */}
-              {isOccupied && createdAt && (
-                <div className="flex max-w-full items-center justify-center px-0.5 text-xs font-semibold tabular-nums leading-tight opacity-95 sm:text-sm">
-                  <span title={t('posTableOrderClockHint') || '주문 시각'}>
+                <div
+                  className="flex max-w-full min-w-0 flex-wrap items-center justify-center gap-x-1 gap-y-0.5 px-0.5 text-xs leading-tight sm:text-sm"
+                  title={tableMetaTitle}
+                >
+                  {statusLabel ? (
+                    <span className="max-w-[min(100%,6.5rem)] shrink truncate font-bold">{statusLabel}</span>
+                  ) : null}
+                  <span className="shrink-0 tabular-nums font-semibold opacity-90" title={t('posTableOrderClockHint') || ''}>
                     {formatTableTime(createdAt)}
                   </span>
+                  <span
+                    className={cn(
+                      'max-w-full shrink-0 rounded px-1.5 py-0.5 text-xs font-extrabold tabular-nums shadow-sm sm:text-sm',
+                      elapsedClass
+                    )}
+                    title={t('posTableElapsedHint') || ''}
+                  >
+                    {showDelayBadge ? (
+                      <span className="whitespace-nowrap">
+                        {t('posDelayBadge') || '지연'} {elapsedMin}
+                        {minuteUnit}
+                      </span>
+                    ) : (
+                      <span className="whitespace-nowrap">
+                        {elapsedMin}
+                        {minuteUnit}
+                      </span>
+                    )}
+                  </span>
                 </div>
               )}
+              {isOccupied && !createdAt && statusLabel ? (
+                <div className="max-w-full min-w-0 truncate px-0.5 text-xs font-bold leading-tight sm:text-sm" title={statusLabel}>
+                  {statusLabel}
+                </div>
+              ) : null}
             </div>
           </div>
         )

@@ -41,9 +41,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const optionSelectionGroups = Array.isArray(body.optionSelectionGroups) && body.optionSelectionGroups.length > 0
-      ? body.optionSelectionGroups
+    /** 필드 포함 시 빈 배열이어도 저장(다단계 해제). 미포함 시 기존처럼 컬럼 생략 */
+    const optionSelectionGroupsExplicit = 'optionSelectionGroups' in body && Array.isArray(body.optionSelectionGroups)
+    const optionSelectionGroupsCleaned = optionSelectionGroupsExplicit
+      ? body.optionSelectionGroups!.map((x) => String(x).trim()).filter(Boolean)
       : null
+    const optionSelectionGroupsLegacy =
+      !optionSelectionGroupsExplicit && Array.isArray(body.optionSelectionGroups) && body.optionSelectionGroups.length > 0
+        ? body.optionSelectionGroups.map((x) => String(x).trim()).filter(Boolean)
+        : null
     const kitchenPrinter = body.kitchenPrinter === 1 || body.kitchenPrinter === 2 ? body.kitchenPrinter : null
     const cookingTimeMin = body.cookingTimeMin != null && Number.isFinite(body.cookingTimeMin) && body.cookingTimeMin >= 0 ? body.cookingTimeMin : null
     const isBanban = body.isBanban === true
@@ -59,7 +65,12 @@ export async function POST(req: NextRequest) {
       is_active: body.isActive !== false,
       sort_order: Number(body.sortOrder) ?? 0,
     }
-    if (optionSelectionGroups) baseRow.option_selection_groups = optionSelectionGroups
+    if (optionSelectionGroupsExplicit) {
+      baseRow.option_selection_groups =
+        optionSelectionGroupsCleaned && optionSelectionGroupsCleaned.length > 0 ? optionSelectionGroupsCleaned : []
+    } else if (optionSelectionGroupsLegacy && optionSelectionGroupsLegacy.length > 0) {
+      baseRow.option_selection_groups = optionSelectionGroupsLegacy
+    }
     if (kitchenPrinter != null) baseRow.kitchen_printer = kitchenPrinter
     if (cookingTimeMin != null) baseRow.cooking_time_min = cookingTimeMin
     baseRow.is_banban = isBanban
@@ -211,7 +222,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { headers })
     } catch (saveErr: unknown) {
       const err = String(saveErr)
-      if ((optionSelectionGroups || kitchenPrinter != null || cookingTimeMin != null || isBanban) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('is_banban') || err.includes('42703'))) {
+      if ((optionSelectionGroupsExplicit || optionSelectionGroupsLegacy || kitchenPrinter != null || cookingTimeMin != null || isBanban) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('is_banban') || err.includes('42703'))) {
         const rowWithout = { ...baseRow }
         delete rowWithout.option_selection_groups
         delete rowWithout.kitchen_printer

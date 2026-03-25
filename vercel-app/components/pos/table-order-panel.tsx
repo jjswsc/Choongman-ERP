@@ -200,25 +200,25 @@ export function TableOrderPanel({
   return (
     <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
-        <h3 className="text-sm font-semibold truncate">
+        <h3 className="text-base font-semibold truncate">
           {translateReceiptTableDisplayName(tableName, t)} {t('posTableOrder') || '주문'}
         </h3>
-        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onClose}>
+        <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>
           {t('posBack') || '뒤로가기'}
         </Button>
       </div>
 
       {!order ? (
-        <div className="p-3 text-sm text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
+        <div className="p-3 text-base text-muted-foreground">{t('posNoOrder') || '주문이 없습니다.'}</div>
       ) : (
         <div className="flex-1 min-h-0 p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <Clock className="w-4 h-4 shrink-0" />
+          <div className="flex items-center gap-2 text-muted-foreground text-base">
+            <Clock className="w-5 h-5 shrink-0" />
             <span>{t('posOrderTime') || '주문 시각'}: {formatPosOrderMonthDayTime(order.createdAt, lang)}</span>
           </div>
           {order.type === 'dine-in' && (order.guestCount ?? 0) > 0 && (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Users className="w-4 h-4 shrink-0" />
+            <div className="flex items-center gap-2 text-muted-foreground text-base">
+              <Users className="w-5 h-5 shrink-0" />
               <span>
                 {t('posOrderGuestCount') || '손님 수'}:{' '}
                 <span className="font-semibold tabular-nums text-foreground">
@@ -231,8 +231,8 @@ export function TableOrderPanel({
 
           {isPaidPrepaid ? (
             <>
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
-                <CheckCircle className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
+                <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posPrepaidPaid') || '선불 결제 완료'}</span>
               </div>
               <Button
@@ -258,8 +258,8 @@ export function TableOrderPanel({
             </>
           ) : isServedReadyForPayment ? (
             <>
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg bg-muted/50 p-3">
-                <CheckCircle className="w-4 h-4 shrink-0" />
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base rounded-lg bg-muted/50 p-3">
+                <CheckCircle className="w-5 h-5 shrink-0" />
                 <span>{t('posTableStatusServed') || '서빙 완료'}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -282,44 +282,66 @@ export function TableOrderPanel({
             </>
           ) : (
             <>
-              <ScrollArea className="flex-1 max-h-[320px] rounded-md border">
-                <ul className="p-2 space-y-2">
+              <ScrollArea className="flex-1 max-h-[min(360px,45vh)] rounded-md border">
+                <ul className="p-1.5 space-y-1">
                   {order.items.map((item) => {
                     const served = itemServed[item.id]
                     const optMatch = item.name.match(/^(.+?)\s*\(([^)]+)\)\s*$/)
                     const mainName = optMatch ? optMatch[1].trim() : item.name
                     const optionPart = optMatch ? optMatch[2].trim() : null
+                    const noteTrim = (item.note ?? '').trim()
+                    const expanded = expandedItemId === item.id
                     return (
                       <li
                         key={item.id}
                         className={cn(
-                          'grid grid-cols-[1fr_auto] items-start gap-2 py-2 px-2 rounded-lg border border-border/50',
+                          'grid grid-cols-[1fr_auto] items-start gap-1.5 py-1.5 px-2 rounded-md border border-border/50',
                           served && 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                         )}
                       >
-                        <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            className="text-sm font-medium truncate text-left w-full hover:underline"
-                            onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
-                            title={item.name}
-                          >
-                            {mainName}
-                          </button>
-                          <p className="text-xs text-muted-foreground tabular-nums">
-                            {optionPart && <span className="mr-1">{optionPart}</span>}
-                            x{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
-                          </p>
-                          {expandedItemId === item.id && (
-                            <p className="text-xs text-muted-foreground mt-1 whitespace-normal break-words">
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <button
+                              type="button"
+                              className="min-w-0 flex-1 text-left hover:underline"
+                              onClick={() => setExpandedItemId((prev) => (prev === item.id ? null : item.id))}
+                              title={item.name}
+                            >
+                              <span className="block text-base font-medium leading-snug line-clamp-2">
+                                {mainName}
+                              </span>
+                            </button>
+                            <span className="shrink-0 text-sm text-muted-foreground tabular-nums leading-snug pt-0.5">
+                              ×{item.quantity} · {(item.price * item.quantity).toLocaleString()} ฿
+                            </span>
+                          </div>
+                          {optionPart && (
+                            <p
+                              className="text-sm text-muted-foreground line-clamp-2 break-words pl-0 leading-snug"
+                              title={optionPart}
+                            >
+                              {optionPart}
+                            </p>
+                          )}
+                          {noteTrim && (
+                            <p
+                              className="text-sm text-blue-700 dark:text-blue-300/90 line-clamp-1 break-words leading-snug"
+                              title={noteTrim}
+                            >
+                              {noteTrim}
+                            </p>
+                          )}
+                          {expanded && (
+                            <p className="text-sm text-muted-foreground pt-0.5 whitespace-normal break-words border-t border-border/40 mt-1">
                               {item.name}
+                              {noteTrim ? ` · ${noteTrim}` : ''}
                             </p>
                           )}
                         </div>
                         <Button
                           size="sm"
                           variant={served ? 'default' : 'outline'}
-                          className="shrink-0 h-8 w-8 p-0 self-center"
+                          className="shrink-0 h-9 w-9 p-0 self-start mt-0.5"
                           onClick={() => { void toggleItemServed(item.id) }}
                           disabled={savingItemId === item.id}
                           aria-label={
@@ -328,7 +350,7 @@ export function TableOrderPanel({
                               : (t('posTableStatusServed') || '서빙 완료')
                           }
                         >
-                          {served ? <Check className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                          {served ? <Check className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
                         </Button>
                       </li>
                     )
@@ -336,7 +358,7 @@ export function TableOrderPanel({
                 </ul>
               </ScrollArea>
 
-              <div className="flex justify-between text-sm font-medium">
+              <div className="flex justify-between text-base font-medium">
                 <span>{t('posInputTotal') || '합계'}</span>
                 <span className="tabular-nums">{order.total.toLocaleString()} ฿</span>
               </div>

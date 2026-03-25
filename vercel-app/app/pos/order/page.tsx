@@ -1594,7 +1594,17 @@ export default function PosOrderPage() {
                   setOptionPickerStep((s) => s + 1)
                 }
               }
-              const groupLabels: Record<string, string> = { size: "사이즈", part: "부위", topping: "토핑", bone: "뼈/순살", type: "타입" }
+              const groupLabels: Record<string, string> = {
+                size: "사이즈",
+                part: "부위",
+                topping: "토핑",
+                bone: "뼈/순살",
+                type: "타입",
+                side: "사이드",
+                drink: "음료",
+                soup: "스프",
+                rice: "밥",
+              }
               return (
                 <div className="flex flex-col gap-3 py-2">
                   {defaultBtn}

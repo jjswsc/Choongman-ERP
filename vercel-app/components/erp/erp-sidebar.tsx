@@ -107,6 +107,7 @@ const menuSections: MenuSection[] = [
       { titleKey: "adminMarketingPromos", icon: Tag, href: "/admin/marketing/promos" },
       { titleKey: "adminMarketingAds", icon: TrendingUp, href: "/admin/marketing/ads" },
       { titleKey: "adminMarketingInfluencers", icon: Users, href: "/admin/marketing/influencers" },
+      { titleKey: "adminMarketingMaterials", icon: Package, href: "/admin/marketing/materials" },
       { titleKey: "adminMarketingDashboard", icon: BarChart3, href: "/admin/marketing/dashboard" },
       { titleKey: "adminMarketingCosts", icon: Banknote, href: "/admin/marketing/costs" },
       { titleKey: "adminMarketingCalendar", icon: CalendarDays, href: "/admin/marketing/calendar" },
