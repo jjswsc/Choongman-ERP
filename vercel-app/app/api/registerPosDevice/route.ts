@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  supabaseSelectFilter,
-  supabaseUpdateByFilter,
-  supabaseUpsert,
-} from '@/lib/supabase-server'
+import { supabaseUpsert } from '@/lib/supabase-server'
+import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
 
 /** 포스 터미널: 이 기기를 해당 매장에 메인/주문 단말로 등록·갱신 (last_seen_at 갱신) */
 export async function POST(req: NextRequest) {
@@ -36,31 +33,7 @@ export async function POST(req: NextRequest) {
       'store_code,device_token'
     )
 
-    if (role === 'main') {
-      const settingsRows = await supabaseSelectFilter(
-        'pos_printer_settings',
-        `store_code=eq.${encodeURIComponent(storeCode)}`,
-        { limit: 1 }
-      )
-      const exists = Array.isArray(settingsRows) ? settingsRows.length > 0 : !!settingsRows
-      if (exists) {
-        await supabaseUpdateByFilter(
-          'pos_printer_settings',
-          `store_code=eq.${encodeURIComponent(storeCode)}`,
-          { main_device_token: deviceToken }
-        )
-      }
-      await supabaseUpdateByFilter(
-        'pos_connected_devices',
-        `store_code=eq.${encodeURIComponent(storeCode)}`,
-        { role: 'order' }
-      )
-      await supabaseUpdateByFilter(
-        'pos_connected_devices',
-        `store_code=eq.${encodeURIComponent(storeCode)}&device_token=eq.${encodeURIComponent(deviceToken)}`,
-        { role: 'main' }
-      )
-    }
+    await syncLegacyMainDeviceToken(storeCode)
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

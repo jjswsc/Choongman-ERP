@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseUpdate, supabaseSelectFilter, supabaseInsert, supabaseDeleteByFilter } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import {
+  assertAccountingDateOpen,
+  deleteJournalEntriesBySource,
+  postBankTransactionJournal,
+} from '@/lib/accounting-posting'
 
 /** 통장 거래 수정 (용도, 계정과목, 상세내용, 인식일, 거래처, 매장 등) */
 export async function POST(request: NextRequest) {
@@ -30,13 +35,19 @@ export async function POST(request: NextRequest) {
       trans_date?: string
       amount?: number
       memo?: string
+      note?: string
+      store?: string
       store_name?: string
+      user_name?: string
+      account_subject_id?: number | null
     }[]
     if (!existing?.length) {
       return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
     }
 
     const transType = String(existing[0].trans_type || 'withdraw').toLowerCase()
+    const transDate = String(existing[0].trans_date || '').slice(0, 10)
+    await assertAccountingDateOpen(transDate)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
     const prevCategory = String(existing[0].category || '').toLowerCase()
@@ -70,6 +81,10 @@ export async function POST(request: NextRequest) {
     }
     const finalCategory = (patch.category as string) ?? existing[0].category
     const finalStoreName = storeName !== undefined ? String(storeName || '').trim() || null : (existing[0].store_name ?? null)
+    const finalAccountSubjectId =
+      patch.account_subject_id !== undefined
+        ? (patch.account_subject_id as number | null)
+        : (existing[0].account_subject_id ?? null)
     if (finalCategory === 'purchase_payment' && vendorCode !== undefined) {
       patch.vendor_code = String(vendorCode || '').trim() || null
     }
@@ -111,6 +126,29 @@ export async function POST(request: NextRequest) {
           await supabaseInsert('receivable_transactions', recvRow)
         }
       }
+    }
+
+    try {
+      await deleteJournalEntriesBySource('bank_transaction', bankTxId, {
+        memoIncludes: ['통장 거래 자동분개'],
+      })
+      await postBankTransactionJournal({
+        bankTransactionId: bankTxId,
+        transDate,
+        transType: transType === 'deposit' ? 'deposit' : 'withdraw',
+        amountAbs: Math.abs(Number(existing[0].amount) || 0),
+        category: String(finalCategory || ''),
+        memo: String(existing[0].memo || '').trim() || String(existing[0].note || '').trim() || undefined,
+        storeName: String(existing[0].store || '').trim() || undefined,
+        postedBy: String(existing[0].user_name || '').trim() || undefined,
+        accountSubjectId: finalAccountSubjectId,
+      })
+    } catch (postingErr) {
+      console.error('updateBankTransaction reposting:', postingErr)
+      return NextResponse.json(
+        { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
+        { status: 500, headers }
+      )
     }
 
     return NextResponse.json({ success: true, message: '저장되었습니다.' }, { headers })

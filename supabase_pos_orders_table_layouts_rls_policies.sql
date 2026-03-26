@@ -35,6 +35,11 @@ DROP POLICY IF EXISTS "Allow select pos_menu_options" ON public.pos_menu_options
 CREATE POLICY "Allow select pos_menu_options" ON public.pos_menu_options
   FOR SELECT USING (true);
 
+-- pos_menu_ingredients: 조회 허용 (메뉴 BOM·원가 분석 — 정책 없으면 RLS만 켜진 DB에서 anon 조회 시 0행)
+DROP POLICY IF EXISTS "Allow select pos_menu_ingredients" ON public.pos_menu_ingredients;
+CREATE POLICY "Allow select pos_menu_ingredients" ON public.pos_menu_ingredients
+  FOR SELECT USING (true);
+
 -- pos_promos, pos_promo_items: 조회 허용 (프로모션)
 DROP POLICY IF EXISTS "Allow select pos_promos" ON public.pos_promos;
 CREATE POLICY "Allow select pos_promos" ON public.pos_promos

@@ -1,6 +1,7 @@
 import React from "react"
 import type { Metadata, Viewport } from "next"
-import { Inter, Geist_Mono, Noto_Sans_KR, Orbitron } from "next/font/google"
+import localFont from "next/font/local"
+import { Geist_Mono, Orbitron } from "next/font/google"
 import { AuthProvider } from "@/lib/auth-context"
 import { LangProvider } from "@/lib/lang-context"
 import { AppMessageProvider } from "@/components/app-message-provider"
@@ -9,17 +10,14 @@ import { SwPreregister } from "@/components/sw-preregister"
 
 import "./globals.css"
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
+const pretendard = localFont({
+  src: "../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2",
+  variable: "--font-pretendard",
+  display: "swap",
 })
 const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
-})
-const notoSansKr = Noto_Sans_KR({
-  subsets: ["latin"],
-  variable: "--font-noto-sans-kr",
 })
 const orbitron = Orbitron({
   subsets: ["latin"],
@@ -52,7 +50,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className={`${inter.variable} ${geistMono.variable} ${notoSansKr.variable} ${orbitron.variable} font-sans antialiased`}>
+      <body className={`${pretendard.variable} ${geistMono.variable} ${orbitron.variable} font-sans antialiased`}>
         <ErrorBoundary>
           <SwPreregister />
           <AuthProvider>

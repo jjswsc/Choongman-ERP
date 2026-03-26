@@ -49,7 +49,7 @@
 }
 
 body {
-  font-family: var(--font-noto-sans-kr), Arial, Helvetica, sans-serif;
+  font-family: var(--font-pretendard), "Noto Sans Thai", "Apple SD Gothic Neo", system-ui, sans-serif;
 }
 
 /* 인쇄 시 사이드바/헤더 숨김, 재고 테이블만 A4에 맞게 출력 */

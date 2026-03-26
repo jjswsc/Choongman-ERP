@@ -2,7 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
-import { Printer, Save, RotateCw, Wallet, Receipt, Building2, Calculator } from "lucide-react"
+import { Printer, Save, RotateCw, Wallet, Receipt, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,6 +31,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
 import { cn, escapeHtml } from "@/lib/utils"
+import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
 
 type PreviewKind = "receipt" | "kitchen"
 
@@ -118,9 +119,11 @@ export default function PosPrintersPage() {
   const { stores } = useStoreList()
 
   const [storeCode, setStoreCode] = React.useState("")
-  const [kitchenMode, setKitchenMode] = React.useState<1 | 2>(1)
+  const [kitchenMode, setKitchenMode] = React.useState<1 | 2 | 3>(1)
   const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
   const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
+  const [kitchen3Categories, setKitchen3Categories] = React.useState<string[]>([])
+  const [mainDeviceTokensPreview, setMainDeviceTokensPreview] = React.useState<string[]>([])
   const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
   const [deliveryFee, setDeliveryFee] = React.useState("0")
   const [packagingFee, setPackagingFee] = React.useState("0")
@@ -164,15 +167,6 @@ export default function PosPrintersPage() {
   const [receiptShowThankYou, setReceiptShowThankYou] = React.useState(true)
   const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = React.useState(true)
   const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
-  const [vatRate, setVatRate] = React.useState("7")
-  const [vatMode, setVatMode] = React.useState<'included' | 'separate'>('included')
-  const [serviceRate, setServiceRate] = React.useState("0")
-  const [serviceMode, setServiceMode] = React.useState<'included' | 'separate'>('separate')
-  const [cardRate, setCardRate] = React.useState("0")
-  const [cardMode, setCardMode] = React.useState<'included' | 'separate'>('separate')
-  const [cardBaseMode, setCardBaseMode] = React.useState<'card_only' | 'card_plus_vat' | 'card_plus_vat_service'>('card_only')
-  const [otherRate, setOtherRate] = React.useState("0")
-  const [otherMode, setOtherMode] = React.useState<'included' | 'separate'>('separate')
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
@@ -185,9 +179,19 @@ export default function PosPrintersPage() {
       getPosMenuCategories(),
     ])
       .then(([settings, { categories: cats }]) => {
-        setKitchenMode((settings.kitchenMode as 1 | 2) || 1)
+        const km = Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3
+        setKitchenMode(km)
         setKitchen1Categories(settings.kitchen1Categories || [])
         setKitchen2Categories(settings.kitchen2Categories || [])
+        setKitchen3Categories(settings.kitchen3Categories || [])
+        const mt = Array.isArray(settings.mainDeviceTokens)
+          ? settings.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
+          : []
+        const leg =
+          settings.mainDeviceToken != null && String(settings.mainDeviceToken).trim()
+            ? [String(settings.mainDeviceToken).trim()]
+            : []
+        setMainDeviceTokensPreview(mt.length > 0 ? mt : leg)
         setAutoStockDeduction(Boolean(settings.autoStockDeduction))
         setDeliveryFee(String(settings.deliveryFee ?? 0))
         setPackagingFee(String(settings.packagingFee ?? 0))
@@ -230,21 +234,6 @@ export default function PosPrintersPage() {
         setReceiptShowThankYou(settings.receiptShowThankYou !== false)
         setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
         setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
-        setVatRate(String(settings.vatRate ?? 7))
-        setVatMode(settings.vatMode === 'separate' ? 'separate' : 'included')
-        setServiceRate(String(settings.serviceRate ?? 0))
-        setServiceMode(settings.serviceMode === 'included' ? 'included' : 'separate')
-        setCardRate(String(settings.cardRate ?? 0))
-        setCardMode(settings.cardMode === 'included' ? 'included' : 'separate')
-        setCardBaseMode(
-          settings.cardBaseMode === 'card_plus_vat'
-            ? 'card_plus_vat'
-            : settings.cardBaseMode === 'card_plus_vat_service'
-              ? 'card_plus_vat_service'
-              : 'card_only'
-        )
-        setOtherRate(String(settings.otherRate ?? 0))
-        setOtherMode(settings.otherMode === 'included' ? 'included' : 'separate')
       })
       .catch(() => {
         setCategories([])
@@ -270,6 +259,7 @@ export default function PosPrintersPage() {
     } else {
       setKitchen1Categories((prev) => [...prev, cat])
       setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
+      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
     }
   }
 
@@ -279,6 +269,25 @@ export default function PosPrintersPage() {
     } else {
       setKitchen2Categories((prev) => [...prev, cat])
       setKitchen1Categories((prev) => prev.filter((c) => c !== cat))
+      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
+    }
+  }
+
+  const toggleKitchen2Mode3 = (cat: string) => {
+    if (kitchen2Categories.includes(cat)) {
+      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
+    } else {
+      setKitchen2Categories((prev) => [...prev, cat])
+      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
+    }
+  }
+
+  const toggleKitchen3 = (cat: string) => {
+    if (kitchen3Categories.includes(cat)) {
+      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
+    } else {
+      setKitchen3Categories((prev) => [...prev, cat])
+      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
     }
   }
 
@@ -289,11 +298,14 @@ export default function PosPrintersPage() {
     }
     setSaving(true)
     try {
+      const latest = await getPosPrinterSettings({ storeCode: effectiveStore })
       const res = await savePosPrinterSettings({
+        ...posPrinterSettingsToSaveParams(latest),
         storeCode: effectiveStore,
         kitchenMode,
         kitchen1Categories,
         kitchen2Categories,
+        kitchen3Categories,
         autoStockDeduction,
         deliveryFee: Number(deliveryFee) || 0,
         packagingFee: Number(packagingFee) || 0,
@@ -329,15 +341,6 @@ export default function PosPrintersPage() {
         receiptShowThankYou,
         receiptShowCustomerCopy,
         receiptPrintLang: receiptPrintLang || undefined,
-        vatRate: Number(vatRate) || 0,
-        vatMode,
-        serviceRate: Number(serviceRate) || 0,
-        serviceMode,
-        cardRate: Number(cardRate) || 0,
-        cardMode,
-        cardBaseMode,
-        otherRate: Number(otherRate) || 0,
-        otherMode,
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -410,8 +413,8 @@ export default function PosPrintersPage() {
             .receipt-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; align-items: start; margin: 4px 0; padding-right: 1.2mm; }
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
-            .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
-            .receipt-meta-label { white-space: nowrap; }
+            .receipt-meta-row { display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 54%); column-gap: 6px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
+            .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #111; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; }
@@ -618,10 +621,6 @@ export default function PosPrintersPage() {
                 <Building2 className="h-4 w-4" />
                 {t("posBizInfoTab") || "사업자 정보"}
               </TabsTrigger>
-              <TabsTrigger value="pricing" className="gap-1.5 shrink-0">
-                <Calculator className="h-4 w-4" />
-                {t("posPricingTab") || "최종가격"}
-              </TabsTrigger>
               <TabsTrigger value="drawer" className="gap-1.5 shrink-0">
                 <Wallet className="h-4 w-4" />
                 {t("posDrawerTab") || "돈통"}
@@ -687,11 +686,25 @@ export default function PosPrintersPage() {
               <p className="text-sm text-muted-foreground">
                 {t("posKitchenOptionsHint") || "주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다."}
               </p>
+              <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground space-y-2">
+                <p className="font-medium text-foreground">{t("posAdminPrinterWorkflowTitle") || "카운터·주방 프린터 안내"}</p>
+                <p>{t("posAdminPrinterWorkflowBody") || "웹 POS는 Windows/Chrome 인쇄 창에서 프린터를 고릅니다. 주방이 2~3대면 인쇄 창이 슬립마다 순서대로 열리므로, 각 창에서 해당 주방 프린터를 선택하세요. ‘주문 완료 시 주방 자동 인쇄’를 켜야 주방으로 나갑니다."}</p>
+                <p>
+                  {mainDeviceTokensPreview.length > 0
+                    ? (t("posAdminPrinterMainRegisteredN") ||
+                        "카운터(메인) POS {{n}}대가 등록되어 있습니다. 등록된 각 PC에서 주문 수신·자동 인쇄가 실행됩니다.").replace(
+                        "{{n}}",
+                        String(mainDeviceTokensPreview.length)
+                      )
+                    : t("posAdminPrinterMainNone") ||
+                      "메인 POS 미등록 시 각 기기의 로컬 ‘메인’ 토글만 적용됩니다. 카운터마다 /pos/terminal 에서 메인을 켜거나, POS 설정 화면에서 기기별로 지정하세요."}
+                </p>
+              </div>
               <div>
                 <label className="text-sm font-medium">{t("posKitchenMode") || "주방 프린터 구성"}</label>
                 <Select
                   value={String(kitchenMode)}
-                  onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2)}
+                  onValueChange={(v) => setKitchenMode(Number(v) as 1 | 2 | 3)}
                 >
                   <SelectTrigger className="mt-1 h-10">
                     <SelectValue />
@@ -699,10 +712,14 @@ export default function PosPrintersPage() {
                   <SelectContent>
                     <SelectItem value="1">{t("posKitchenMode1") || "1대 (통합)"}</SelectItem>
                     <SelectItem value="2">{t("posKitchenMode2") || "2대 (카테고리별)"}</SelectItem>
+                    <SelectItem value="3">{t("posKitchenMode3") || "3대 (주방2·주방3 분할)"}</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
+                  {kitchenMode === 3
+                    ? t("posKitchenMode3Hint") ||
+                      "주방2·주방3에 넣을 카테고리만 고릅니다. 나머지 메뉴는 주방1 슬립으로 갑니다."
+                    : t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
                 </p>
               </div>
 
@@ -753,6 +770,69 @@ export default function PosPrintersPage() {
                             type="checkbox"
                             checked={kitchen2Categories.includes(cat)}
                             onChange={() => toggleKitchen2(cat)}
+                            className="mr-1.5"
+                          />
+                          {cat}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {kitchenMode === 3 && categories.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <h3 className="mb-2 text-sm font-semibold">
+                      {t("posKitchen2") || "주방 2"}
+                    </h3>
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      {t("posKitchenMode3Col2Hint") || "이쪽 카테고리는 ‘주방 2’ 제목 슬립으로 인쇄됩니다."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat) => (
+                        <label
+                          key={cat}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                            kitchen2Categories.includes(cat)
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-muted bg-muted/30 text-muted-foreground"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={kitchen2Categories.includes(cat)}
+                            onChange={() => toggleKitchen2Mode3(cat)}
+                            className="mr-1.5"
+                          />
+                          {cat}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <h3 className="mb-2 text-sm font-semibold">
+                      {t("posKitchen3") || "주방 3"}
+                    </h3>
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      {t("posKitchenMode3Col3Hint") || "이쪽 카테고리는 ‘주방 3’ 제목 슬립으로 인쇄됩니다. 위·아래에 같은 카테고리를 둘 수 없습니다."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat) => (
+                        <label
+                          key={cat}
+                          className={cn(
+                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
+                            kitchen3Categories.includes(cat)
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-muted bg-muted/30 text-muted-foreground"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={kitchen3Categories.includes(cat)}
+                            onChange={() => toggleKitchen3(cat)}
                             className="mr-1.5"
                           />
                           {cat}
@@ -939,110 +1019,6 @@ export default function PosPrintersPage() {
                   <Input value={receiptBizAddress} onChange={(e) => setReceiptBizAddress(e.target.value)} className="mt-1 h-9" placeholder={t("posBizAddressPh") || "예: Bangkok ... "} />
                 </div>
                 <p className="text-[11px] text-muted-foreground">{t("posBizInfoHint") || "초기값은 기존 매장 정보(vendors)에서 자동 반영되며, 저장 후 언제든 수정할 수 있습니다."}</p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="pricing" className="mt-0 p-6 space-y-4">
-              <div className="rounded-lg border p-4 space-y-3">
-                <p className="text-sm font-medium">{t("posPricingTab") || "최종가격"}</p>
-                <p className="text-[11px] text-muted-foreground">{t("posPricingAdjustmentsHint") || "각 항목은 % 기준입니다. 포함: 최종금액에 이미 포함, 별도: 최종금액에 추가됩니다."}</p>
-                <div className="grid gap-3">
-                  {[
-                    { key: 'vat', label: t("posVatLabel") || '부가세', rate: vatRate, setRate: setVatRate, mode: vatMode, setMode: setVatMode },
-                    { key: 'service', label: t("posServiceFeeLabel") || '서비스비', rate: serviceRate, setRate: setServiceRate, mode: serviceMode, setMode: setServiceMode },
-                    { key: 'card', label: t("posCardFeeLabel") || '카드비', rate: cardRate, setRate: setCardRate, mode: cardMode, setMode: setCardMode },
-                    { key: 'other', label: t("posOtherFeeLabel") || '기타', rate: otherRate, setRate: setOtherRate, mode: otherMode, setMode: setOtherMode },
-                  ].map((it) => (
-                    <div key={it.key} className="space-y-1.5">
-                      <div className="grid gap-2 sm:grid-cols-[120px_1fr_220px] sm:items-center">
-                        <label className="text-sm font-medium">{it.label}</label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={it.rate}
-                          onChange={(e) => it.setRate(e.target.value)}
-                          className="h-9"
-                          placeholder="0"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => it.setMode('included')}
-                            className={cn(
-                              "rounded-md border px-3 py-1.5 text-sm",
-                              it.mode === 'included' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                            )}
-                          >
-                            {t("posFeeModeIncluded") || "포함"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => it.setMode('separate')}
-                            className={cn(
-                              "rounded-md border px-3 py-1.5 text-sm",
-                              it.mode === 'separate' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                            )}
-                          >
-                            {t("posFeeModeSeparate") || "별도"}
-                          </button>
-                        </div>
-                      </div>
-                      {it.key !== 'card' && (
-                        <p className="text-[11px] text-muted-foreground sm:pl-[120px]">
-                          {it.mode === 'included'
-                            ? (t("posFeeFormulaIncluded") || '예시) {fee}액 = 기준금액 x ({fee}율 / (100 + {fee}율))').replaceAll('{fee}', it.label)
-                            : (t("posFeeFormulaSeparate") || '예시) {fee}액 = 기준금액 x ({fee}율 / 100)').replaceAll('{fee}', it.label)}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <label className="text-sm font-medium">{t("posCardFeeBaseTitle") || "카드비 계산 기준"}</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCardBaseMode('card_only')}
-                      className={cn(
-                        "rounded-md border px-3 py-1.5 text-sm",
-                        cardBaseMode === 'card_only' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                      )}
-                    >
-                      {t("posCardFeeBaseCardOnly") || "카드 결제액 기준"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCardBaseMode('card_plus_vat')}
-                      className={cn(
-                        "rounded-md border px-3 py-1.5 text-sm",
-                        cardBaseMode === 'card_plus_vat' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                      )}
-                    >
-                      {t("posCardFeeBaseCardPlusVat") || "카드 결제액+부가세 기준"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCardBaseMode('card_plus_vat_service')}
-                      className={cn(
-                        "rounded-md border px-3 py-1.5 text-sm",
-                        cardBaseMode === 'card_plus_vat_service' ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
-                      )}
-                    >
-                      {t("posCardFeeBaseCardPlusVatService") || "카드 결제액+부가세+서비스비 기준"}
-                    </button>
-                  </div>
-                  <div className="mt-2 rounded-md border border-dashed bg-background/70 p-2 text-xs text-muted-foreground">
-                    <p>
-                      {cardBaseMode === 'card_only' && (t("posCardFeeBaseExampleCardOnly") || '예시) 카드비 기준금액 = 카드결제액')}
-                      {cardBaseMode === 'card_plus_vat' && (t("posCardFeeBaseExampleCardPlusVat") || '예시) 카드비 기준금액 = 카드결제액 + 카드결제액 기준 부가세분')}
-                      {cardBaseMode === 'card_plus_vat_service' && (t("posCardFeeBaseExampleCardPlusVatService") || '예시) 카드비 기준금액 = 카드결제액 + 카드결제액 기준 부가세분 + 카드결제액 기준 서비스비분')}
-                    </p>
-                    <p className="mt-1">
-                      {t("posCardFeeFinalFormula") || '카드비 최종금액 = 카드비 기준금액 x 카드비율(%)'}
-                    </p>
-                  </div>
-                </div>
               </div>
             </TabsContent>
 

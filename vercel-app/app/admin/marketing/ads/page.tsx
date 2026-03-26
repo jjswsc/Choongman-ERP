@@ -16,6 +16,7 @@ import {
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 const PLATFORM_OPTIONS = [
   { value: "instagram", label: "Instagram" },
@@ -43,8 +44,9 @@ export default function MarketingAdsPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
+  const { auth } = useAuth()
   const [list, setList] = React.useState<MarketingAd[]>([])
-  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
+  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string; campaignNo?: string }[]>([])
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
@@ -62,14 +64,15 @@ export default function MarketingAdsPage() {
   })
 
   const loadData = React.useCallback(() => {
+    const cid = campaignFilter.trim()
     setLoading(true)
     Promise.all([
-      getMarketingAds(campaignFilter ? { campaignId: campaignFilter } : undefined),
+      cid ? getMarketingAds({ campaignId: cid }) : Promise.resolve([] as MarketingAd[]),
       getMarketingCampaigns(),
     ])
       .then(([ads, camps]) => {
         setList(ads)
-        setCampaigns(camps.map((c) => ({ id: c.id, topic: c.topic })))
+        setCampaigns(camps.map((c) => ({ id: c.id, topic: c.topic, campaignNo: c.campaignNo })))
       })
       .catch(() => setList([]))
       .finally(() => setLoading(false))
@@ -137,9 +140,12 @@ export default function MarketingAdsPage() {
         postLink: form.postLink.trim(),
         boostBudget: Number(form.boostBudget) || 0,
         actualSpent: Number(form.actualSpent) || 0,
+        userRole: auth?.role,
+        userName: auth?.user,
       })
       if (res.success) {
-        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
+        const extra = res.expenseSyncMessage ? `\n\n${res.expenseSyncMessage}` : ""
+        await appAlert((t("itemsAlertSaved") || "저장되었습니다.") + extra)
         loadData()
         handleNew()
       } else {
@@ -163,11 +169,15 @@ export default function MarketingAdsPage() {
     }
   }
 
-  const campaignMap = React.useMemo(() => {
-    const m: Record<string, string> = {}
-    campaigns.forEach((c) => { m[c.id] = c.topic })
-    return m
-  }, [campaigns])
+  const campaignLabel = React.useCallback(
+    (id: string | null | undefined) => {
+      if (!id) return ''
+      const c = campaigns.find((x) => x.id === id)
+      if (!c) return ''
+      return `${c.campaignNo ? `[${c.campaignNo}] ` : ''}${c.topic}`
+    },
+    [campaigns]
+  )
 
   return (
     <div className="flex-1 overflow-auto">
@@ -184,6 +194,10 @@ export default function MarketingAdsPage() {
           </div>
         </div>
 
+        <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          광고·비용은 <strong className="text-foreground">캠페인 고유번호</strong>로 묶입니다. 캠페인 허브에서 캠페인을 만든 뒤, 여기서 해당 캠페인을 선택해 주세요.
+        </div>
+
         <div className="mb-4 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -194,9 +208,12 @@ export default function MarketingAdsPage() {
             onChange={(e) => setCampaignFilter(e.target.value)}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
-            <option value="">전체 캠페인</option>
+            <option value="">캠페인 선택…</option>
             {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.topic}</option>
+              <option key={c.id} value={c.id}>
+                {c.campaignNo ? `[${c.campaignNo}] ` : ''}
+                {c.topic}
+              </option>
             ))}
           </select>
           <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
@@ -240,9 +257,12 @@ export default function MarketingAdsPage() {
                     onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))}
                     className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                   >
-                    <option value="">선택 안 함</option>
+                    <option value="">캠페인 선택 *</option>
                     {campaigns.map((c) => (
-                      <option key={c.id} value={c.id}>{c.topic}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.campaignNo ? `[${c.campaignNo}] ` : ''}
+                        {c.topic}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -309,8 +329,8 @@ export default function MarketingAdsPage() {
                     className="mt-1"
                   />
                 </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">실제 사용액 (฿)</label>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-muted-foreground">실제 비용 (฿) · 지출관리 지급예정</label>
                   <Input
                     type="number"
                     min={0}
@@ -318,6 +338,9 @@ export default function MarketingAdsPage() {
                     onChange={(e) => setForm((f) => ({ ...f, actualSpent: e.target.value }))}
                     className="mt-1"
                   />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    본사 권한으로 저장하면 이 금액이 지출관리 「지급예정」에 자동 등록·갱신됩니다. 0으로 저장 시 연동 건이 요청 상태면 삭제됩니다.
+                  </p>
                 </div>
               </div>
               <div className="mt-4 flex gap-2">
@@ -336,7 +359,11 @@ export default function MarketingAdsPage() {
             <h3 className="border-b px-4 py-3 text-sm font-semibold">광고 목록</h3>
             <div className="divide-y overflow-x-auto">
               {list.length === 0 && !loading && (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">등록된 광고가 없습니다.</p>
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {!campaignFilter.trim()
+                    ? '캠페인을 선택하면 해당 캠페인의 광고 목록이 표시됩니다.'
+                    : '등록된 광고가 없습니다.'}
+                </p>
               )}
               {list.map((a) => (
                 <div
@@ -349,8 +376,10 @@ export default function MarketingAdsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium capitalize">{a.platform}</span>
-                      {a.campaignId && campaignMap[a.campaignId] && (
-                        <span className="text-xs text-muted-foreground">({campaignMap[a.campaignId]})</span>
+                      {a.campaignId && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          {a.campaignNo?.trim() || campaignLabel(a.campaignId)}
+                        </span>
                       )}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">

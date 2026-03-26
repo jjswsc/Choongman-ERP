@@ -41,6 +41,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
+import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
@@ -369,27 +370,20 @@ export default function PosOrdersPage() {
     try {
       const settings = await getPosPrinterSettings({ storeCode })
       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
-      const kitchen1 = settings.kitchen1Categories || []
-      const kitchen2 = settings.kitchen2Categories || []
-      const mode = settings.kitchenMode || 1
       const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
 
-      const toSlips = (): { label: string; items: typeof items }[] => {
-        if (mode === 1) return [{ label: t("posKitchenOrder") || "주방 주문서", items }]
-        const slip1: typeof items = []
-        const slip2: typeof items = []
-        for (const it of items) {
-          const menuId = String(it.id ?? "").split("-")[0]
-          const cat = categoryByMenuId[menuId] ?? ""
-          if (kitchen2.includes(cat)) slip2.push(it)
-          else slip1.push(it)
-        }
-        const result: { label: string; items: typeof items }[] = []
-        if (slip1.length) result.push({ label: t("posKitchen1") || "주방 1", items: slip1 })
-        if (slip2.length) result.push({ label: t("posKitchen2") || "주방 2", items: slip2 })
-        return result.length ? result : [{ label: t("posKitchenOrder") || "주방 주문서", items }]
-      }
-      const slips = toSlips()
+      const slips = buildKitchenSlipGroups(items, {
+        kitchenMode: settings.kitchenMode || 1,
+        kitchen2Categories: settings.kitchen2Categories || [],
+        kitchen3Categories: settings.kitchen3Categories || [],
+        categoryByMenuId,
+        labels: {
+          unified: t("posKitchenOrder") || "주방 주문서",
+          kitchen1: `${t("posKitchen1") || "주방 1"}`,
+          kitchen2: `${t("posKitchen2") || "주방 2"}`,
+          kitchen3: `${t("posKitchen3") || "주방 3"}`,
+        },
+      })
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]

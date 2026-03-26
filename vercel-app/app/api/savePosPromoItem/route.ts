@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
 
 /** POS 프로모션 구성 메뉴 저장 */
 export async function POST(req: NextRequest) {
@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: 'promoId와 menuId가 필요합니다.' }, { headers })
     }
 
+    const optionId = body.optionId != null ? Number(body.optionId) : null
     const row = {
       promo_id: promoId,
       menu_id: menuId,
-      option_id: body.optionId != null ? Number(body.optionId) : null,
+      option_id: optionId,
       quantity: Number(body.quantity) ?? 1,
       sort_order: Number(body.sortOrder) ?? 0,
     }
@@ -35,6 +36,23 @@ export async function POST(req: NextRequest) {
     if (editingId) {
       await supabaseUpdateByFilter('pos_promo_items', `id=eq.${editingId}`, row)
       return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
+    }
+
+    const dupFilter =
+      optionId == null
+        ? `promo_id=eq.${promoId}&menu_id=eq.${menuId}&option_id=is.null`
+        : `promo_id=eq.${promoId}&menu_id=eq.${menuId}&option_id=eq.${optionId}`
+    const dup = (await supabaseSelectFilter('pos_promo_items', dupFilter, {
+      select: 'id,quantity',
+      limit: 1,
+    })) as { id?: number; quantity?: number }[] | null
+
+    if (dup?.[0]?.id) {
+      await supabaseUpdateByFilter('pos_promo_items', `id=eq.${dup[0].id}`, {
+        quantity: Number(dup[0].quantity || 0) + (Number(body.quantity) || 1),
+        sort_order: Number(body.sortOrder) ?? 0,
+      })
+      return NextResponse.json({ success: true, message: '기존 구성에 수량을 합산했습니다.' }, { headers })
     }
 
     await supabaseInsert('pos_promo_items', row)

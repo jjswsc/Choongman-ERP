@@ -26,6 +26,14 @@ const API_MESSAGE_TO_KEY: Record<string, string> = {
   "✅ 주문 완료": "orderSuccess",
   "거절 사유를 입력해 주세요.": "orderRejectReasonRequired",
   "완료되었습니다.": "receiveDone",
+  "본사 정산분이 없어 Order 미수금을 제거했습니다.": "syncRecRemovedHqZero",
+  "미수금을 재계산해 반영했습니다.": "syncRecUpdated",
+  "삭제된 주문의 미수금 행을 제거했습니다.": "syncRecOrphanRemoved",
+  "주문을 찾을 수 없습니다.": "syncRecOrderNotFound",
+  "수령 완료된 주문만 동기화할 수 있습니다.": "syncRecNotDelivered",
+  "매장명이 없어 미수금을 반영할 수 없습니다.": "syncRecNoStoreName",
+  "권한이 없습니다.": "apiPermissionDenied",
+  no_store_name: "syncRecNoStoreName",
 
   // 패티캐시
   "등록되었습니다.": "pettySaved",

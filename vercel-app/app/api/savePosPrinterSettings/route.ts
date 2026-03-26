@@ -50,12 +50,15 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const storeCode = String(body?.storeCode ?? '').trim()
-    const kitchenMode = Math.min(2, Math.max(1, Number(body?.kitchenMode) || 1))
+    const kitchenMode = Math.min(3, Math.max(1, Number(body?.kitchenMode) || 1))
     const kitchen1Categories = Array.isArray(body?.kitchen1Categories)
       ? body.kitchen1Categories.filter((c: unknown) => typeof c === 'string')
       : []
     const kitchen2Categories = Array.isArray(body?.kitchen2Categories)
       ? body.kitchen2Categories.filter((c: unknown) => typeof c === 'string')
+      : []
+    const kitchen3Categories = Array.isArray(body?.kitchen3Categories)
+      ? body.kitchen3Categories.filter((c: unknown) => typeof c === 'string')
       : []
     const autoStockDeduction = Boolean(body?.autoStockDeduction)
     const deliveryFee = Math.max(0, Number(body?.deliveryFee ?? 0))
@@ -135,6 +138,7 @@ export async function POST(req: NextRequest) {
       kitchen_mode: kitchenMode,
       kitchen1_categories: kitchen1Categories,
       kitchen2_categories: kitchen2Categories,
+      kitchen3_categories: kitchen3Categories,
       auto_stock_deduction: autoStockDeduction,
       delivery_fee: deliveryFee,
       packaging_fee: packagingFee,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
 
 type VendorBizInfo = {
   name?: string
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
     kitchenMode: 1,
     kitchen1Categories: [] as string[],
     kitchen2Categories: [] as string[],
+    kitchen3Categories: [] as string[],
     autoStockDeduction: false,
     deliveryFee: 0,
     packagingFee: 0,
@@ -126,6 +128,7 @@ export async function GET(request: NextRequest) {
     otherMode: 'separate' as const,
     receiptPrintLang: '' as string,
     mainDeviceToken: null as string | null,
+    mainDeviceTokens: [] as string[],
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -194,6 +197,7 @@ export async function GET(request: NextRequest) {
       other_rate?: number
       other_mode?: string
       main_device_token?: string | null
+      kitchen3_categories?: unknown
     }[] | null
 
     const raw = rows?.[0]
@@ -203,14 +207,27 @@ export async function GET(request: NextRequest) {
     const kitchen2 = Array.isArray(raw?.kitchen2_categories)
       ? (raw.kitchen2_categories as string[]).filter((c) => typeof c === 'string')
       : []
+    const kitchen3 = Array.isArray(raw?.kitchen3_categories)
+      ? (raw.kitchen3_categories as string[]).filter((c) => typeof c === 'string')
+      : []
 
     const fallback = await getStoreReceiptBizFallback(storeCode)
 
+    const fromConnected = await listMainDeviceTokensForStore(storeCode)
+    const legacy =
+      raw?.main_device_token != null && String(raw.main_device_token).trim()
+        ? String(raw.main_device_token).trim()
+        : null
+    const mainDeviceTokens =
+      fromConnected.length > 0 ? fromConnected : legacy ? [legacy] : []
+    const mainDeviceTokenResolved = mainDeviceTokens[0] ?? null
+
     return NextResponse.json({
       storeCode,
-      kitchenMode: Number(raw?.kitchen_mode) || 1,
+      kitchenMode: Math.min(3, Math.max(1, Number(raw?.kitchen_mode) || 1)),
       kitchen1Categories: kitchen1.filter((c) => typeof c === 'string'),
       kitchen2Categories: kitchen2.filter((c) => typeof c === 'string'),
+      kitchen3Categories: kitchen3.filter((c) => typeof c === 'string'),
       autoStockDeduction: Boolean(raw?.auto_stock_deduction),
       deliveryFee: Math.max(0, Number(raw?.delivery_fee ?? 0)),
       packagingFee: Math.max(0, Number(raw?.packaging_fee ?? 0)),
@@ -281,6 +298,8 @@ export async function GET(request: NextRequest) {
             : 'card_only',
       otherRate: Math.max(0, Number(raw?.other_rate ?? 0)),
       otherMode: String(raw?.other_mode || 'separate') === 'included' ? 'included' : 'separate',
+      mainDeviceTokens,
+      mainDeviceToken: mainDeviceTokenResolved,
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)

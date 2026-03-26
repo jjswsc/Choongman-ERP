@@ -20,6 +20,9 @@ import { ListPaginationBar } from "@/components/list-pagination-bar"
 import { Megaphone, Bell, Search, FileText } from "lucide-react"
 import { PwaInstallBanner } from "@/components/pwa-install-banner"
 
+/** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
+const NOTICE_SERVER_FETCH_CAP = 600
+
 const PushNotificationSetup = dynamic(
   () => import("@/components/push-notification-setup").then((m) => ({ default: m.PushNotificationSetup })),
   { ssr: false }
@@ -226,7 +229,7 @@ export function HomeTab() {
             <div className="flex flex-col gap-2">
               {noticeTruncated && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  최근 {600}건 기준입니다. 더 오래된 공지는 날짜 범위를 넓혀 검색해 보세요.
+                  {t("adminNoticeTruncatedLimitHint").replace("{max}", String(NOTICE_SERVER_FETCH_CAP))}
                 </p>
               )}
               {notices.map((n) => {

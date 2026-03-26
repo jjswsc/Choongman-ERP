@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  supabaseSelectFilter,
-  supabaseUpdateByFilter,
-  supabaseUpsert,
-} from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import { syncLegacyMainDeviceToken } from '@/lib/pos-main-devices-server'
 
 /** 관리자: 해당 기기를 해당 매장 메인 포스로 지정 */
 export async function POST(req: NextRequest) {
@@ -47,21 +44,7 @@ export async function POST(req: NextRequest) {
       ],
       'store_code,device_token'
     )
-    await supabaseUpdateByFilter(
-      'pos_printer_settings',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
-      { main_device_token: deviceToken }
-    )
-    await supabaseUpdateByFilter(
-      'pos_connected_devices',
-      `store_code=eq.${encodeURIComponent(storeCode)}`,
-      { role: 'order' }
-    )
-    await supabaseUpdateByFilter(
-      'pos_connected_devices',
-      `store_code=eq.${encodeURIComponent(storeCode)}&device_token=eq.${encodeURIComponent(deviceToken)}`,
-      { role: 'main' }
-    )
+    await syncLegacyMainDeviceToken(storeCode)
 
     return NextResponse.json({ success: true }, { headers })
   } catch (e) {

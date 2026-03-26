@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { supabaseSelect, supabaseSelectFilter, supabaseSelectAllPages } from '@/lib/supabase-server'
 
 /** POS 메뉴 옵션 목록 조회 (menu_id별 필터 가능) */
 export async function GET(request: NextRequest) {
@@ -22,7 +22,11 @@ export async function GET(request: NextRequest) {
       if (menuId) {
         return (await supabaseSelectFilter('pos_menu_options', `menu_id=eq.${encodeURIComponent(menuId)}`, { order: 'sort_order.asc,name.asc', limit: 200, select: cols })) as typeof rows
       }
-      return (await supabaseSelect('pos_menu_options', { order: 'menu_id.asc,sort_order.asc,name.asc', limit: 1000, select: cols })) as typeof rows
+      return (await supabaseSelectAllPages('pos_menu_options', {
+        order: 'menu_id.asc,sort_order.asc,name.asc',
+        pageSize: 3000,
+        select: cols,
+      })) as typeof rows
     }
 
     const selectColsLegacy =

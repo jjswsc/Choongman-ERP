@@ -28,23 +28,24 @@ export async function POST(req: NextRequest) {
     }
 
     let synced = 0
+    let syncedWithProfile = 0
+    let syncedStubOnly = 0
     let failed = 0
     const errors: string[] = []
     for (const userId of collectedIds) {
       try {
         const profile = await getLineUserProfile(userId).catch(() => ({ displayName: '', pictureUrl: '' }))
-        if (!String(profile.displayName || '').trim()) {
-          failed += 1
-          if (errors.length < 20) errors.push(`LINE 표시명 조회 실패: ${userId}`)
-          continue
-        }
+        const displayName = String(profile.displayName || '').trim()
+        const pictureUrl = String(profile.pictureUrl || '').trim()
         await registerLineMember({
           lineUserId: userId,
-          displayName: profile.displayName,
-          pictureUrl: profile.pictureUrl,
-          name: profile.displayName,
+          displayName: displayName || undefined,
+          pictureUrl: pictureUrl || undefined,
+          name: displayName || undefined,
         })
         synced += 1
+        if (displayName) syncedWithProfile += 1
+        else syncedStubOnly += 1
       } catch (e) {
         failed += 1
         if (errors.length < 20) errors.push(e instanceof Error ? e.message : 'unknown error')
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
         success: true,
         scanned: collectedIds.length,
         synced,
+        syncedWithProfile,
+        syncedStubOnly,
         failed,
         hasNextCursor: Boolean(cursor),
         nextCursor: cursor || undefined,

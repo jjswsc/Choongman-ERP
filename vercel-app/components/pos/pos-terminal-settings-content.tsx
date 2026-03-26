@@ -35,7 +35,7 @@ export function PosTerminalSettingsContent() {
   const [storeCode, setStoreCode] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [clearing, setClearing] = React.useState(false)
-  const [mainDeviceToken, setMainDeviceToken] = React.useState<string | null>(null)
+  const [mainDeviceTokens, setMainDeviceTokens] = React.useState<string[]>([])
   const [devices, setDevices] = React.useState<PosDeviceItem[]>([])
   const [actionToken, setActionToken] = React.useState<string | null>(null)
 
@@ -50,7 +50,14 @@ export function PosTerminalSettingsContent() {
       getPosDevices({ storeCode: effectiveStore }),
     ])
       .then(([settings, devRes]) => {
-        setMainDeviceToken(settings.mainDeviceToken ?? null)
+        const fromApi = Array.isArray(settings.mainDeviceTokens)
+          ? settings.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
+          : []
+        const legacy =
+          settings.mainDeviceToken != null && String(settings.mainDeviceToken).trim()
+            ? [String(settings.mainDeviceToken).trim()]
+            : []
+        setMainDeviceTokens(fromApi.length > 0 ? fromApi : legacy)
         setDevices(devRes.devices ?? [])
       })
       .finally(() => setLoading(false))
@@ -68,18 +75,45 @@ export function PosTerminalSettingsContent() {
 
   const handleClearMain = async () => {
     if (!effectiveStore) return
-    if (!(await appConfirm(t('posTerminalClearMainConfirm') || '등록된 메인 포스를 해제하시겠습니까? 해당 기기에서 다시 등록할 수 있습니다.'))) return
+    if (
+      !(await appConfirm(
+        t('posTerminalClearAllMainsConfirm') ||
+          '등록된 모든 카운터(메인) 포스를 해제하시겠습니까? 각 기기에서 다시 메인으로 등록할 수 있습니다.'
+      ))
+    )
+      return
     setClearing(true)
     clearPosMainDevice({ storeCode: effectiveStore })
       .then(async (res) => {
         if (res.success) {
-          setMainDeviceToken(null)
+          setMainDeviceTokens([])
           loadData()
         } else {
           await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
         }
       })
       .finally(() => setClearing(false))
+  }
+
+  const handleClearOneMain = async (deviceToken: string) => {
+    if (!effectiveStore) return
+    if (
+      !(await appConfirm(
+        t('posTerminalClearOneMainConfirm') || '이 기기만 메인(카운터)에서 해제할까요? 다른 메인 포스는 그대로 둡니다.'
+      ))
+    )
+      return
+    setActionToken(deviceToken)
+    clearPosMainDevice({ storeCode: effectiveStore, deviceToken })
+      .then(async (res) => {
+        if (res.success) {
+          setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
+          loadData()
+        } else {
+          await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
+        }
+      })
+      .finally(() => setActionToken(null))
   }
 
   const maskToken = (token: string) =>
@@ -100,7 +134,7 @@ export function PosTerminalSettingsContent() {
     setPosMainDevice({ storeCode: effectiveStore, deviceToken })
       .then(async (res) => {
         if (res.success) {
-          setMainDeviceToken(deviceToken)
+          setMainDeviceTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
           loadData()
         } else {
           await appAlert((res as { message?: string }).message || '지정에 실패했습니다.')
@@ -116,7 +150,7 @@ export function PosTerminalSettingsContent() {
     revokePosDevice({ storeCode: effectiveStore, deviceToken })
       .then(async (res) => {
         if (res.success) {
-          if (mainDeviceToken === deviceToken) setMainDeviceToken(null)
+          setMainDeviceTokens((prev) => prev.filter((x) => x !== deviceToken))
           loadData()
         } else {
           await appAlert((res as { message?: string }).message || '해제에 실패했습니다.')
@@ -156,26 +190,28 @@ export function PosTerminalSettingsContent() {
           <dl className="grid gap-2 text-sm">
             <div className="flex flex-wrap items-baseline gap-2">
               <dt className="font-medium text-muted-foreground min-w-[6rem]">
-                {t('posTerminalStatusMainLabel') || '메인 포스'}
+                {t('posTerminalStatusMainLabel') || '카운터(메인) 포스'}
               </dt>
-              <dd className="flex flex-wrap items-center gap-2">
-                {mainDeviceToken ? (
+              <dd className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                {mainDeviceTokens.length > 0 ? (
                   <>
                     <span className="inline-flex items-center gap-1.5 text-foreground">
                       <Smartphone className="h-3.5 w-3.5 text-primary" />
-                      {t('posTerminalStatusMainRegistered') || '등록됨'}
+                      {(t('posTerminalStatusMainRegisteredN') || '등록됨 · {{n}}대').replace(
+                        '{{n}}',
+                        String(mainDeviceTokens.length)
+                      )}
                     </span>
-                    <span className="text-muted-foreground font-mono text-xs">
-                      ({t('posTerminalStatusMainDeviceId') || '등록된 기기 ID'}: {mainDeviceToken.length > 10 ? `${mainDeviceToken.slice(0, 6)}…${mainDeviceToken.slice(-4)}` : '****'})
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClearMain}
-                      disabled={clearing}
-                    >
-                      {t('posTerminalClearMain') || '메인 포스 해제'}
-                    </Button>
+                    <ul className="text-muted-foreground font-mono text-xs list-disc list-inside max-w-full">
+                      {mainDeviceTokens.map((tok) => (
+                        <li key={tok}>{maskToken(tok)}</li>
+                      ))}
+                    </ul>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={handleClearMain} disabled={clearing}>
+                        {t('posTerminalClearAllMains') || '전체 메인 해제'}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <span className="text-muted-foreground">
@@ -189,7 +225,8 @@ export function PosTerminalSettingsContent() {
                 {t('posTerminalStatusOrderLabel') || '주문 단말'}
               </dt>
               <dd className="text-muted-foreground">
-                {t('posTerminalStatusOrderDesc') || '별도 등록 없음. 메인으로 등록되지 않은 기기는 모두 주문 단말로 동작합니다.'}
+                {t('posTerminalStatusOrderDescMulti') ||
+                  '메인으로 등록되지 않은 기기는 주문 단말입니다. 카운터 PC를 여러 대 쓰면 각각 메인으로 등록하면 모두 자동 인쇄를 받습니다.'}
               </dd>
             </div>
           </dl>
@@ -250,8 +287,17 @@ export function PosTerminalSettingsContent() {
                     </td>
                     <td className="py-2 text-muted-foreground">{formatLastSeen(d.lastSeenAt)}</td>
                     <td className="py-2 text-right">
-                      <div className="flex justify-end gap-1">
-                        {!d.isMain && (
+                      <div className="flex justify-end gap-1 flex-wrap">
+                        {d.isMain ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!!actionToken}
+                            onClick={() => handleClearOneMain(d.deviceToken)}
+                          >
+                            {t('posTerminalUnsetMain') || '메인 해제'}
+                          </Button>
+                        ) : (
                           <Button
                             variant="outline"
                             size="sm"
@@ -287,12 +333,16 @@ export function PosTerminalSettingsContent() {
           {t('posTerminalMainDeviceTitle') || '메인 포스 지정'}
         </h4>
         <p className="text-xs text-muted-foreground">
-          {t('posTerminalMainDeviceHint') || '매장당 1대만 메인 포스로 등록됩니다. 메인 포스에서만 주문 수신 시 주방/영수증 자동 인쇄가 됩니다.'}
+          {t('posTerminalMainDeviceHintMulti') ||
+            '카운터(프린터 연결) PC를 여러 대 쓰면 각각 메인으로 등록할 수 있습니다. 등록된 모든 메인 기기에서 주문 수신 시 자동 인쇄가 실행됩니다.'}
         </p>
         {!loading && (
           <p className="text-sm text-muted-foreground">
-            {mainDeviceToken
-              ? (t('posTerminalMainDeviceRegistered') || '메인 포스가 등록되어 있습니다.')
+            {mainDeviceTokens.length > 0
+              ? (t('posTerminalMainDeviceRegisteredN') || '카운터(메인) 포스 {{n}}대 등록됨.').replace(
+                  '{{n}}',
+                  String(mainDeviceTokens.length)
+                )
               : (t('posTerminalMainDeviceNone') || '등록된 메인 포스 없음. 포스 터미널 화면에서 "메인" 버튼으로 지정할 수 있습니다.')}
           </p>
         )}
@@ -304,10 +354,12 @@ export function PosTerminalSettingsContent() {
         </h4>
         <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
           <li>
-            {t('posTerminalHowToMain') || '메인 포스(프린터 연결된 1대): 포스 터미널 화면(/pos/terminal)을 해당 기기에서 열고, 상단 오른쪽 "메인" 버튼을 누르면 이 기기가 메인 포스로 등록됩니다. 주문 단말에서 들어온 주문이 이 기기에서 자동 인쇄됩니다.'}
+            {t('posTerminalHowToMainMulti') ||
+              '카운터(메인) 포스: /pos/terminal 에서 상단 "메인"을 켭니다. 카운터를 여러 대 쓰면 각 PC에서 같은 방식으로 등록합니다. 등록된 모든 메인에서 주문 알림·자동 인쇄가 실행됩니다.'}
           </li>
           <li>
-            {t('posTerminalHowToOthers') || '나머지 단말(주문 전용): 별도 설정 없이 같은 포스 터미널 화면을 열어 사용하면 됩니다. 기본이 "주문" 모드이며, 주문만 입력하고 인쇄는 메인 포스에서만 나갑니다. 메인 포스를 바꾸려면 관리자에서 "메인 포스 해제" 후 다른 기기에서 "메인" 버튼을 누르세요.'}
+            {t('posTerminalHowToOthersMulti') ||
+              '주문 전용 단말: 메인을 끈 상태로 터미널을 쓰면 됩니다. 특정 카운터만 빼려면 기기 목록에서 "메인 해제"를 누르세요. 전부 해제하려면 "전체 메인 해제"를 사용하세요.'}
           </li>
         </ul>
       </div>

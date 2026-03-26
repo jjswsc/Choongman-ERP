@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { getMembers, importLineCrmFile, syncLineMembers, updateMember, type Member } from "@/lib/api-client"
+import {
+  getLineMessagingStatus,
+  getMembers,
+  importLineCrmFile,
+  syncLineMembers,
+  updateMember,
+  type Member,
+} from "@/lib/api-client"
 
 type MemberForm = {
   id?: number
@@ -64,6 +71,14 @@ function toDateTimeLocalInput(value: string): string {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
 }
 
+function lineSyncErrorHint(errors?: string[]): string {
+  const list = Array.isArray(errors) ? errors.map((x) => String(x || "").trim()).filter(Boolean) : []
+  if (!list.length) return ""
+  const preview = list.slice(0, 3).join(" · ")
+  const more = list.length > 3 ? ` 외 ${list.length - 3}건` : ""
+  return ` (${preview}${more})`
+}
+
 function reasonLabel(reason?: string): string {
   const key = String(reason || "").trim()
   if (!key) return "미확인"
@@ -92,6 +107,12 @@ export default function MembersPage() {
   const [query, setQuery] = React.useState("")
   const [form, setForm] = React.useState<MemberForm>({ ...emptyForm })
   const [syncMessage, setSyncMessage] = React.useState("")
+  /** loaded 전에는 자동 동기화 대기. token/secret null 이면 상태 API 실패로 미확인 → 동기화는 시도함. */
+  const [lineMessagingStatus, setLineMessagingStatus] = React.useState<{
+    loaded: boolean
+    channelAccessTokenConfigured: boolean | null
+    channelSecretConfigured: boolean | null
+  }>({ loaded: false, channelAccessTokenConfigured: null, channelSecretConfigured: null })
   const [selectedImportFileName, setSelectedImportFileName] = React.useState("")
   const importFileRef = React.useRef<HTMLInputElement | null>(null)
 
@@ -130,7 +151,33 @@ export default function MembersPage() {
   }, [load])
 
   React.useEffect(() => {
+    getLineMessagingStatus()
+      .then((r) =>
+        setLineMessagingStatus({
+          loaded: true,
+          channelAccessTokenConfigured: r.channelAccessTokenConfigured,
+          channelSecretConfigured: r.channelSecretConfigured,
+        })
+      )
+      .catch(() =>
+        setLineMessagingStatus({
+          loaded: true,
+          channelAccessTokenConfigured: null,
+          channelSecretConfigured: null,
+        })
+      )
+  }, [])
+
+  React.useEffect(() => {
     const runAutoSync = async () => {
+      if (!lineMessagingStatus.loaded) return
+      if (lineMessagingStatus.channelAccessTokenConfigured === false) {
+        setSyncMessage(
+          "LINE 동기화를 건너뜀: 서버에 LINE_CHANNEL_ACCESS_TOKEN이 설정되어 있지 않습니다. Vercel 환경 변수에 Messaging API 채널의 토큰을 넣은 뒤 재배포하세요."
+        )
+        return
+      }
+
       const todayKey = new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
       const storageKey = "members-line-last-sync-day"
       try {
@@ -149,7 +196,7 @@ export default function MembersPage() {
             // ignore storage failure
           }
           setSyncMessage(
-            `자동 동기화 완료: 반영 ${Number(res.synced || 0).toLocaleString()}명 / 실패 ${Number(res.failed || 0).toLocaleString()}명`
+            `자동 동기화 완료: 조회 ${Number(res.scanned || 0).toLocaleString()}명, 반영 ${Number(res.synced || 0).toLocaleString()}명, 실패 ${Number(res.failed || 0).toLocaleString()}명${lineSyncErrorHint(res.errors)}`
           )
           await load(query)
         }
@@ -158,7 +205,7 @@ export default function MembersPage() {
       }
     }
     runAutoSync().catch(() => {})
-  }, [load, query])
+  }, [load, query, lineMessagingStatus])
 
   const onSave = async () => {
     const name = form.name.trim()
@@ -209,6 +256,28 @@ export default function MembersPage() {
             <p className="text-xs text-muted-foreground">LINE Official 회원 항목 기준으로 조회/관리합니다.</p>
           </div>
         </div>
+
+        {lineMessagingStatus.loaded && lineMessagingStatus.channelAccessTokenConfigured === false && (
+          <div
+            className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-foreground"
+            role="status"
+          >
+            <p className="font-medium text-amber-900 dark:text-amber-100">LINE Messaging API 미설정</p>
+            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+              Vercel(또는 서버) 환경 변수에 <code className="rounded bg-muted px-1">LINE_CHANNEL_ACCESS_TOKEN</code>{" "}
+              (오피셜의 Messaging API 채널에서 발급)과 웹훅용{" "}
+              <code className="rounded bg-muted px-1">LINE_CHANNEL_SECRET</code>를 설정한 뒤 재배포해야 친구 목록·표시명
+              동기화가 동작합니다. LINE Login 채널 토큰과는 다릅니다. 포인트·등급은 LINE MyCustomer API로 일괄 조회되지
+              않으므로 ERP에서 관리하고, 전화·실명 등은 CRM 파일 반영 또는 수동 입력을 사용합니다.
+            </p>
+            {lineMessagingStatus.channelSecretConfigured === false && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                현재 <code className="rounded bg-muted px-1">LINE_CHANNEL_SECRET</code>도 비어 있어 웹훅 검증이 실패할 수
+                있습니다.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <div className="lg:sticky lg:top-0 lg:self-start">
@@ -322,7 +391,7 @@ export default function MembersPage() {
                         setSyncMessage(
                           `동기화 완료: 조회 ${Number(res.scanned || 0).toLocaleString()}명, 반영 ${Number(
                             res.synced || 0
-                          ).toLocaleString()}명, 실패 ${Number(res.failed || 0).toLocaleString()}명`
+                          ).toLocaleString()}명, 실패 ${Number(res.failed || 0).toLocaleString()}명${lineSyncErrorHint(res.errors)}`
                         )
                         await load(query)
                       }

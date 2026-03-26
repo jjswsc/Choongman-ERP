@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
@@ -40,19 +40,34 @@ function parseDeliveryCodes(dac: unknown): string[] | null {
 }
 
 /** POS 프로모션 목록 + 구성 메뉴 (재고 차감용) */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
 
   try {
+    const { searchParams } = new URL(req.url)
+    const campaignId = searchParams.get('campaignId')?.trim() || ''
+    const includeInactive = searchParams.get('includeInactive') === 'true'
+
     let promos: RawPromo[] | null = null
     for (const sel of [SELECT_EXTENDED, SELECT_BASE]) {
       try {
-        promos = (await supabaseSelect('pos_promos', {
-          order: 'sort_order.asc,name.asc',
-          limit: 10000,
-          select: sel,
-        })) as RawPromo[] | null
+        const filterParts: string[] = []
+        if (campaignId) filterParts.push(`marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`)
+        if (!includeInactive) filterParts.push('is_active=eq.true')
+        if (filterParts.length > 0) {
+          promos = (await supabaseSelectFilter('pos_promos', filterParts.join('&'), {
+            order: 'sort_order.asc,name.asc',
+            limit: 10000,
+            select: sel,
+          })) as RawPromo[] | null
+        } else {
+          promos = (await supabaseSelect('pos_promos', {
+            order: 'sort_order.asc,name.asc',
+            limit: 10000,
+            select: sel,
+          })) as RawPromo[] | null
+        }
         break
       } catch {
         if (sel === SELECT_BASE) promos = []
@@ -81,17 +96,29 @@ export async function GET() {
     }))
 
     const itemsByPromo: Record<string, { menuId: string; optionId: string | null; quantity: number }[]> = {}
-    for (const p of promoList) {
-      const rows = (await supabaseSelectFilter(
-        'pos_promo_items',
-        `promo_id=eq.${p.id}`,
-        { order: 'sort_order.asc', limit: 50, select: 'menu_id,option_id,quantity' }
-      )) as { menu_id?: number; option_id?: number | null; quantity?: number }[] | null
-      itemsByPromo[p.id] = (rows || []).map((r) => ({
-        menuId: String(r.menu_id ?? ''),
-        optionId: r.option_id != null ? String(r.option_id) : null,
-        quantity: Number(r.quantity) ?? 1,
-      }))
+    for (const p of promoList) itemsByPromo[p.id] = []
+
+    const promoIds = promoList.map((p) => p.id).filter(Boolean)
+    if (promoIds.length > 0) {
+      const chunkSize = 300
+      for (let i = 0; i < promoIds.length; i += chunkSize) {
+        const chunk = promoIds.slice(i, i + chunkSize)
+        const rows = (await supabaseSelectFilter(
+          'pos_promo_items',
+          `promo_id=in.(${chunk.join(',')})`,
+          { order: 'sort_order.asc,id.asc', limit: 10000, select: 'promo_id,menu_id,option_id,quantity' }
+        )) as { promo_id?: number; menu_id?: number; option_id?: number | null; quantity?: number }[] | null
+
+        for (const r of rows || []) {
+          const pid = r.promo_id != null ? String(r.promo_id) : ''
+          if (!pid || !itemsByPromo[pid]) continue
+          itemsByPromo[pid].push({
+            menuId: String(r.menu_id ?? ''),
+            optionId: r.option_id != null ? String(r.option_id) : null,
+            quantity: Number(r.quantity) ?? 1,
+          })
+        }
+      }
     }
 
     return NextResponse.json(

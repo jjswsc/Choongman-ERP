@@ -28,6 +28,26 @@ import {
 
 const MISE_RATE_DEFAULT = 3
 
+/** API·JSON에 따라 menuId가 숫자/문자 혼재 시 flatList 매칭 실패 방지 */
+function costAnalysisMenuIdKey(id: unknown): string {
+  return String(id ?? "")
+}
+
+/** 기본 행(option 없음): null·undefined·''·'null' 문자열까지 기본으로 취급 */
+function isCostAnalysisBaseRow(r: { optionId?: string | number | null }): boolean {
+  const o = r.optionId
+  if (o == null) return true
+  if (typeof o === "string" && (o.trim() === "" || o === "null")) return true
+  return false
+}
+
+/**
+ * React Strict Mode(dev)에서 마운트→언마운트→재마운트 시,
+ * inFlight 가드로 두 번째 마운트가 fetch를 건너뛰고 첫 fetch의 setState는 버려져 목록이 영구히 비는 경우가 있다.
+ * 최신 요청만 UI에 반영하고, 로딩은 "현재 진행 중인 최신 요청" 기준으로만 끈다.
+ */
+let posCostAnalysisLoadSeq = 0
+
 /** 목록·계산기에서 옵션까지 코드로 구분 (예: c101, c101-1, c101-2) */
 export type RowWithDisplayCode = PosMenuCostAnalysisRow & { displayCode: string }
 
@@ -37,6 +57,16 @@ function toCsvRow(cells: (string | number)[]): string {
     const needsQuote = /[",\n\r]/.test(s)
     return needsQuote ? `"${s.replace(/"/g, '""')}"` : s
   }).join(",")
+}
+
+/** POS 메뉴 cooking_time_min(소수=초) → 목록 표시 */
+function formatCookingTimeList(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v) || v < 0) return ""
+  const totalSec = Math.round(v * 60)
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  if (sec === 0) return String(min)
+  return `${min}:${String(sec).padStart(2, "0")}`
 }
 
 export default function PosCostAnalysisPage() {
@@ -57,8 +87,10 @@ export default function PosCostAnalysisPage() {
 
   const loadList = React.useCallback(async () => {
     if (!allowed) return
+    const seq = ++posCostAnalysisLoadSeq
     setLoading(true)
-    const timeoutMs = 60000
+    /** 로컬(dev)은 Cold start·페이지네이션이 길어질 수 있어 배포보다 여유 있게 */
+    const timeoutMs = process.env.NODE_ENV === "development" ? 600000 : 180000
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("timeout")), timeoutMs)
     )
@@ -67,14 +99,26 @@ export default function PosCostAnalysisPage() {
         getPosMenuCostAnalysis(),
         timeoutPromise,
       ])
+      if (seq !== posCostAnalysisLoadSeq) return
       setRows(Array.isArray(data) ? data : [])
     } catch (e) {
+      if (seq !== posCostAnalysisLoadSeq) return
       console.error("getPosMenuCostAnalysis:", e)
       setRows([])
     } finally {
-      setLoading(false)
+      if (seq === posCostAnalysisLoadSeq) {
+        setLoading(false)
+      }
     }
   }, [allowed])
+
+  /** POS 메뉴 관리와 동일: 페이지 진입 시 목록 1회 자동 조회 (배포·로컬 동일 데이터 확인) */
+  const initialCostAnalysisLoadRef = React.useRef(false)
+  React.useEffect(() => {
+    if (!allowed || initialCostAnalysisLoadRef.current) return
+    initialCostAnalysisLoadRef.current = true
+    void loadList()
+  }, [allowed, loadList])
 
   /** 계산기 탭 진입 시 데이터 없으면 자동 조회 — 메뉴 검색 드롭다운용 */
   React.useEffect(() => {
@@ -124,11 +168,15 @@ export default function PosCostAnalysisPage() {
 
   /** 목록용: 기본 메뉴 + 옵션을 각각 한 행으로. 옵션 코드는 메뉴 관리와 동일( sort_order 순으로 -1, -2, ... ) */
   const flatList = React.useMemo((): RowWithDisplayCode[] => {
-    const order = [...new Set(filtered.map((r) => r.menuId))]
+    const order = [...new Set(filtered.map((r) => costAnalysisMenuIdKey(r.menuId)))]
     const out: RowWithDisplayCode[] = []
     for (const menuId of order) {
-      const base = filtered.find((r) => r.menuId === menuId && !r.optionId)
-      const opts = filtered.filter((r) => r.menuId === menuId && r.optionId)
+      const base = filtered.find(
+        (r) => costAnalysisMenuIdKey(r.menuId) === menuId && isCostAnalysisBaseRow(r)
+      )
+      const opts = filtered.filter(
+        (r) => costAnalysisMenuIdKey(r.menuId) === menuId && !isCostAnalysisBaseRow(r)
+      )
       if (base) out.push({ ...base, displayCode: base.menuCode ?? "" })
       opts.forEach((o, i) => {
         out.push({ ...o, displayCode: `${base?.menuCode ?? menuId}-${i + 1}` })
@@ -139,11 +187,15 @@ export default function PosCostAnalysisPage() {
 
   /** 원가 계산기용: 필터 없이 전체 메뉴 — 계산기에서 대분류·카테고리로 자체 필터링 */
   const fullFlatList = React.useMemo((): RowWithDisplayCode[] => {
-    const order = [...new Set(rows.map((r) => r.menuId))]
+    const order = [...new Set(rows.map((r) => costAnalysisMenuIdKey(r.menuId)))]
     const out: RowWithDisplayCode[] = []
     for (const menuId of order) {
-      const base = rows.find((r) => r.menuId === menuId && !r.optionId)
-      const opts = rows.filter((r) => r.menuId === menuId && r.optionId)
+      const base = rows.find(
+        (r) => costAnalysisMenuIdKey(r.menuId) === menuId && isCostAnalysisBaseRow(r)
+      )
+      const opts = rows.filter(
+        (r) => costAnalysisMenuIdKey(r.menuId) === menuId && !isCostAnalysisBaseRow(r)
+      )
       if (base) out.push({ ...base, displayCode: base.menuCode ?? "" })
       opts.forEach((o, i) => {
         out.push({ ...o, displayCode: `${base?.menuCode ?? menuId}-${i + 1}` })
@@ -162,7 +214,8 @@ export default function PosCostAnalysisPage() {
     })
   }
 
-  const rowKey = (r: RowWithDisplayCode) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId)
+  const rowKey = (r: RowWithDisplayCode) =>
+    isCostAnalysisBaseRow(r) ? costAnalysisMenuIdKey(r.menuId) : `${costAnalysisMenuIdKey(r.menuId)}:${r.optionId}`
 
   const withMise = (cost: number) =>
     Math.round(cost * (1 + MISE_RATE_DEFAULT / 100) * 10) / 10
@@ -197,7 +250,20 @@ export default function PosCostAnalysisPage() {
 
   const handleExportCsv = () => {
     const csvRows: string[] = [
-      toCsvRow(["코드", "대분류", "카테고리", "메뉴명", "옵션", "홀", "배달앱", "홀 원가", "배달앱 원가", "원가율(홀)%", "원가율(배달앱)%"]),
+      toCsvRow([
+        "코드",
+        "대분류",
+        "카테고리",
+        "메뉴명",
+        "옵션",
+        "조리시간",
+        "홀",
+        "배달앱",
+        "홀 원가",
+        "배달앱 원가",
+        "원가율(홀)%",
+        "원가율(배달앱)%",
+      ]),
     ]
     for (const r of flatList) {
       const priceH = (r.priceHall ?? 0) || 1
@@ -212,6 +278,7 @@ export default function PosCostAnalysisPage() {
         r.category ?? "",
         r.menuName ?? "",
         r.optionName ?? "",
+        formatCookingTimeList(r.cookingTimeMin) || "-",
         r.priceHall ?? 0,
         r.priceDelivery ?? r.priceHall ?? 0,
         costHMise.toFixed(1),
@@ -389,6 +456,12 @@ export default function PosCostAnalysisPage() {
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategoryMain") || "대분류"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuCategory") || "카테고리"}</th>
                   <th className="px-3 py-3 text-left font-semibold text-xs">{t("posMenuName") || "메뉴명"}</th>
+                  <th
+                    className="px-3 py-3 text-right font-semibold text-xs whitespace-nowrap"
+                    title={t("posMenuCookingTimeMin") || "조리 시간"}
+                  >
+                    {t("posCostTableHdrCook") || t("posMenuCookingTimeMin") || "조리"}
+                  </th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceHall") || "홀"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostPriceDelivery") || "배달앱"}</th>
                   <th className="px-3 py-3 text-right font-semibold text-xs">{t("posCostCostHall") || "홀 원가"}</th>
@@ -454,6 +527,9 @@ export default function PosCostAnalysisPage() {
                         <td className="px-3 py-2">
                           <span className="font-medium">{menuLabel}</span>
                         </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+                          {formatCookingTimeList(r.cookingTimeMin) || "—"}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums">{(r.priceHall ?? 0).toFixed(0)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{(r.priceDelivery ?? r.priceHall ?? 0).toFixed(0)}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">{costHMise.toFixed(1)}</td>
@@ -463,7 +539,7 @@ export default function PosCostAnalysisPage() {
                       </tr>
                       {expanded && hasBreakdown && (
                         <tr className="border-b bg-muted/10">
-                          <td colSpan={10} className="px-4 py-3">
+                          <td colSpan={12} className="px-4 py-3">
                             <div className="rounded border bg-background overflow-hidden">
                               <table className="w-full text-xs">
                                 <thead>
@@ -517,8 +593,15 @@ export default function PosCostAnalysisPage() {
             </table>
           </div>
           {flatList.length === 0 && !loading && rows.length === 0 && (
-            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
-              {t("posCostClickSearchToLoad") || "위에서 [조회] 버튼을 눌러 원가 분석 목록을 불러오세요."}
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground space-y-2">
+              <p>
+                {t("posCostEmptyAfterLoad") ||
+                  "표시할 행이 없습니다. 서버가 0건을 돌려줬거나 응답 파싱에 실패했을 수 있습니다."}
+              </p>
+              <p className="text-xs opacity-80">
+                {t("posCostEmptyHintDev") ||
+                  "개발자 도구 Network에서 해당 요청 → Headers의 X-CM-Pos-Cost-Analysis-Rows, Response 본문을 확인하거나 Console 로그를 확인하세요."}
+              </p>
             </div>
           )}
           {flatList.length === 0 && !loading && rows.length > 0 && (

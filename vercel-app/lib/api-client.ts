@@ -1494,6 +1494,57 @@ export async function getReceivablePayableList(params: {
   return getReceivablePayableListWithCache(params)
 }
 
+/** 수령 완료 주문의 Order 미수금을 현재 cart·직접정산 규칙으로 재계산 (지두방 제외 등) */
+export async function syncOrderReceivable(params: { orderId: number; userRole?: string }) {
+  const res = await apiFetchWithOffline('/api/syncOrderReceivable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ orderId: params.orderId, userRole: params.userRole }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    orderId?: number
+    subtotalHQ?: number
+    totalHQ?: number
+    removed?: boolean
+  }>
+}
+
+/** Order 미수금 일괄 재동기화 (배치 1회 — 클라이언트에서 hasMore까지 반복) */
+export async function syncAllOrderReceivablesBatch(params: {
+  lastReceivableId?: number
+  batchSize?: number
+  storeFilter?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/syncAllOrderReceivables', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lastReceivableId: params.lastReceivableId ?? 0,
+      batchSize: params.batchSize ?? 120,
+      storeFilter: params.storeFilter,
+      userRole: params.userRole,
+    }),
+  })
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    nextReceivableId?: number
+    hasMore?: boolean
+    stats?: {
+      processed: number
+      updated: number
+      removed: number
+      skipped: number
+      orphanRemoved: number
+      errors: number
+    }
+    errorSamples?: { orderId: number; message: string }[]
+  }>
+}
+
 export interface PayableTransactionItem {
   code?: string
   name?: string
@@ -1719,6 +1770,146 @@ export function getExportVatLedgerCsvUrl(params: { userRole: string; taxMonth: s
     return `${window.location.origin}/api/exportVatLedgerCsv?${q}`
   }
   return `/api/exportVatLedgerCsv?${q}`
+}
+
+export function getExportWithholdingTaxLedgerCsvUrl(params: { userRole: string; taxMonth: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole, taxMonth: params.taxMonth })
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportWithholdingTaxLedgerCsv?${q}`
+  }
+  return `/api/exportWithholdingTaxLedgerCsv?${q}`
+}
+
+export type ThaiTaxFilingSummary = {
+  period: {
+    periodType: 'monthly' | 'half_year' | 'annual'
+    periodKey: string
+    startMonth: string
+    endMonth: string
+    months: string[]
+  }
+  vat: {
+    outputNet: number
+    outputVat: number
+    inputNet: number
+    inputVat: number
+    payableVat: number
+    missingTaxIdCount: number
+    missingInvoiceCount: number
+    rowCount: number
+  }
+  wht: {
+    totalGross: number
+    totalWithheld: number
+    missingTaxIdCount: number
+    missingCertificateCount: number
+    rowCount: number
+    byForm: Record<string, { gross: number; withheld: number; rows: number }>
+  }
+}
+
+export async function getThaiTaxFilingSummary(params: {
+  userRole: string
+  yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    periodType: params.periodType || 'monthly',
+  })
+  const res = await apiFetchWithOffline(`/api/getThaiTaxFilingSummary?${q}`)
+  return res.json() as Promise<ThaiTaxFilingSummary>
+}
+
+export type CorporateTaxComputationData = {
+  periodType: 'monthly' | 'half_year' | 'annual'
+  periodKey: string
+  months: string[]
+  storeFilter: string
+  accountingProfit: number
+  taxAddBack: number
+  taxDeduction: number
+  taxableIncome: number
+  taxRate: number
+  estimatedTax: number
+  adjustments: { type: 'add_back' | 'deduction'; itemName: string; amount: number; memo: string | null }[]
+}
+
+export async function getCorporateTaxComputation(params: {
+  userRole: string
+  yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+  userStore?: string
+  taxRate?: number
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    periodType: params.periodType || 'monthly',
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.taxRate != null && !isNaN(Number(params.taxRate))) q.set('taxRate', String(params.taxRate))
+  const res = await apiFetchWithOffline(`/api/getCorporateTaxComputation?${q}`)
+  return res.json() as Promise<CorporateTaxComputationData>
+}
+
+export function getExportCorporateTaxPackageCsvUrl(params: {
+  userRole: string
+  yearMonth: string
+  periodType?: 'monthly' | 'half_year' | 'annual'
+  storeFilter?: string
+  userStore?: string
+  taxRate?: number
+}) {
+  const q = new URLSearchParams({
+    userRole: params.userRole,
+    yearMonth: params.yearMonth,
+    periodType: params.periodType || 'monthly',
+  })
+  if (params.storeFilter) q.set('storeFilter', params.storeFilter)
+  if (params.userStore) q.set('userStore', params.userStore)
+  if (params.taxRate != null && !isNaN(Number(params.taxRate))) q.set('taxRate', String(params.taxRate))
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/exportCorporateTaxPackageCsv?${q}`
+  }
+  return `/api/exportCorporateTaxPackageCsv?${q}`
+}
+
+export type AccountingWorkflowStatusRow = {
+  id?: number
+  year_month: string
+  filing_type: string
+  status: 'todo' | 'in_progress' | 'review' | 'done'
+  note?: string | null
+  owner?: string | null
+  updated_by?: string | null
+  updated_at?: string | null
+}
+
+export async function getAccountingWorkflowStatus(params: { userRole: string; yearMonth: string }) {
+  const q = new URLSearchParams({ userRole: params.userRole, yearMonth: params.yearMonth })
+  const res = await apiFetchWithOffline(`/api/getAccountingWorkflowStatus?${q}`)
+  return res.json() as Promise<{ rows: AccountingWorkflowStatusRow[] }>
+}
+
+export async function saveAccountingWorkflowStatus(params: {
+  userRole: string
+  yearMonth: string
+  filingType: string
+  status: 'todo' | 'in_progress' | 'review' | 'done'
+  note?: string | null
+  owner?: string | null
+  updatedBy?: string | null
+}) {
+  const res = await apiFetchWithOffline('/api/saveAccountingWorkflowStatus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; id?: number; error?: string }>
 }
 
 export async function reconcileBankTransaction(params: {
@@ -2248,11 +2439,13 @@ export async function getPosSalesByStore(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   /** dine_in / takeout / delivery — 복수 시 합산(OR) */
   orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByStore?${q}`)
   return res.json() as Promise<
@@ -2283,55 +2476,84 @@ export async function getPosSalesFilterOptions(params: { startStr: string; endSt
   return res.json() as Promise<{ posOptions: string[] }>
 }
 
+export type PosSalesPeriodRow = {
+  label: string
+  key: string
+  sales: number
+  count: number
+  subtotal: number
+  vat: number
+  discount: number
+  total: number
+  guestSum: number
+  dineInOrderCount: number
+  dineInTotal: number
+  dineInGuestSum: number
+  salesPerDineInOrder: number
+  salesPerGuest: number
+  salesPerOrder: number
+}
+
+export type PosSalesByPeriodResult =
+  | { kind: 'aggregate'; rows: PosSalesPeriodRow[]; truncated: boolean }
+  | { kind: 'split'; series: Record<string, PosSalesPeriodRow[]>; truncated: boolean }
+
 export async function getPosSalesByPeriod(params: {
   startStr: string
   endStr: string
   groupBy: 'month' | 'week' | 'day' | 'dow' | 'hour'
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
-}) {
+  splitByStore?: boolean
+}): Promise<PosSalesByPeriodResult> {
   const q = new URLSearchParams({
     startStr: params.startStr,
     endStr: params.endStr,
     groupBy: params.groupBy,
   })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
+  if (params.splitByStore) q.set('splitByStore', '1')
   const res = await apiFetchWithOffline(`/api/posSalesByPeriod?${q}`)
-  return res.json() as Promise<
-    {
-      label: string
-      key: string
-      /** 차트·호환: 결제 총액과 동일 */
-      sales: number
-      count: number
-      subtotal: number
-      vat: number
-      discount: number
-      total: number
-      guestSum: number
-      dineInOrderCount: number
-      dineInTotal: number
-      dineInGuestSum: number
-      salesPerDineInOrder: number
-      salesPerGuest: number
-      salesPerOrder: number
-    }[]
-  >
+  const truncated = res.headers.get('X-Sales-Truncated') === '1'
+  const json: unknown = await res.json()
+  if (
+    json &&
+    typeof json === 'object' &&
+    'split' in json &&
+    (json as { split?: unknown }).split === true &&
+    'series' in json &&
+    typeof (json as { series?: unknown }).series === 'object' &&
+    (json as { series: Record<string, PosSalesPeriodRow[]> }).series !== null
+  ) {
+    const series = (json as { series: Record<string, PosSalesPeriodRow[]>; truncated?: boolean }).series
+    const bodyTrunc = !!(json as { truncated?: boolean }).truncated
+    return { kind: 'split', series, truncated: truncated || bodyTrunc }
+  }
+  return { kind: 'aggregate', rows: Array.isArray(json) ? (json as PosSalesPeriodRow[]) : [], truncated }
 }
 
 export async function getPosSalesByDeliveryApp(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByDeliveryApp?${q}`)
   return res.json() as Promise<{
-    items: { channelKey: string; sales: number; pct: number }[]
+    items: {
+      channelKey: string
+      sales: number
+      pct: number
+      platforms?: { code: string; sales: number; pct: number }[]
+    }[]
     total: number
   }>
 }
@@ -2340,10 +2562,12 @@ export async function getPosSalesByChannel(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByChannel?${q}`)
   return res.json() as Promise<{ channelKey: string; sales: number }[]>
@@ -2353,12 +2577,17 @@ export async function getPosSalesByMenu(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   search?: string
+  /** or: 쉼표 토큰 중 하나라도 일치(기본). and: 모두 일치 */
+  searchMode?: 'or' | 'and'
   orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.search) q.set('search', params.search)
+  if (params.searchMode === 'and') q.set('searchMode', 'and')
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByMenu?${q}`)
   return res.json() as Promise<{ name: string; qty: number; sales: number }[]>
@@ -2368,10 +2597,12 @@ export async function getPosSalesByPayment(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const q = new URLSearchParams({ startStr: params.startStr, endStr: params.endStr })
-  if (params.pos) q.set('pos', params.pos)
+  if (params.stores?.length) q.set('stores', params.stores.join(','))
+  else if (params.pos) q.set('pos', params.pos)
   if (params.orderTypes?.length) q.set('orderTypes', params.orderTypes.join(','))
   const res = await apiFetchWithOffline(`/api/posSalesByPayment?${q}`)
   return res.json() as Promise<{ paymentKey: string; sales: number }[]>
@@ -3539,7 +3770,7 @@ export async function getMenuCost(params: { menuId: string; optionId?: string })
   const q = new URLSearchParams()
   q.set('menuId', params.menuId)
   if (params.optionId !== undefined) q.set('optionId', params.optionId)
-  const res = await apiFetchWithOffline('/api/getMenuCost?' + q.toString())
+  const res = await apiFetch('/api/getMenuCost?' + q.toString())
   return res.json() as Promise<{ cost: number; breakdown: MenuCostBreakdown[] }>
 }
 
@@ -3572,11 +3803,60 @@ export interface PosMenuCostAnalysisRow {
   }[]
 }
 
-export async function getPosMenuCostAnalysis(): Promise<PosMenuCostAnalysisRow[]> {
-  const res = await apiFetchWithOffline('/api/getPosMenuCostAnalysis')
-  const data = await res.json().catch(() => [])
+export async function getPosMenuCostAnalysis(params?: { summary?: boolean }): Promise<PosMenuCostAnalysisRow[]> {
+  const q = params?.summary ? '?summary=1' : ''
+  const res = await apiFetch(`/api/getPosMenuCostAnalysis${q}`)
+  const text = await res.text().catch(() => '')
+  const headerRows = res.headers.get('X-CM-Pos-Cost-Analysis-Rows')
+  const headerErr = res.headers.get('X-CM-Pos-Cost-Analysis-Error')
+  const serverCount = headerRows != null && headerRows !== '' ? Number(headerRows) : NaN
+  let raw: unknown = null
+  try {
+    raw = text ? JSON.parse(text) : null
+  } catch {
+    raw = null
+  }
+  if (typeof raw === 'string') {
+    try {
+      raw = JSON.parse(raw)
+    } catch {
+      /* ignore */
+    }
+  }
   if (!res.ok) return []
-  return Array.isArray(data) ? data : []
+  let data: unknown = raw
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>
+    if (Array.isArray(o.rows)) data = o.rows
+    else if (Array.isArray(o.data)) data = o.data
+    else if (Array.isArray(o.items)) data = o.items
+  }
+  const arr = Array.isArray(data) ? (data as PosMenuCostAnalysisRow[]) : []
+  if (process.env.NODE_ENV === 'development') {
+    if (!Array.isArray(data)) {
+      console.warn(
+        '[getPosMenuCostAnalysis] 응답이 배열이 아닙니다. Network → Response 본문 확인.',
+        typeof raw,
+        raw && typeof raw === 'object' ? Object.keys(raw as object).slice(0, 8) : raw
+      )
+    }
+    if (!Number.isNaN(serverCount) && arr.length !== serverCount) {
+      console.error(
+        '[getPosMenuCostAnalysis] 서버 헤더 X-CM-Pos-Cost-Analysis-Rows=' +
+          serverCount +
+          ' 인데, 파싱된 배열 길이=' +
+          arr.length +
+          '. 본문 잘림·JSON 오류 가능. response 본문 앞 200자:',
+        text.slice(0, 200)
+      )
+    }
+    if (headerErr === '1' && arr.length === 0) {
+      console.error(
+        '[getPosMenuCostAnalysis] 서버에서 예외 처리됨(X-CM-Pos-Cost-Analysis-Error=1). API 라우트 터미널 로그(getPosMenuCostAnalysis:) 확인.'
+      )
+    }
+  }
+  return arr
 }
 
 // ─── 소스(합성품) 원가 ───
@@ -3805,6 +4085,8 @@ export async function updatePosMenuSoldOut(params: { id: string; soldOut: boolea
 export interface PosPromo {
   id: string
   code: string
+  /** 캠페인 허브 고유번호(campaign_no) — API가 marketing_campaign_id로 조회해 붙임 */
+  marketingCampaignNo?: string | null
   name: string
   category: string
   categoryMain?: string
@@ -3821,6 +4103,8 @@ export interface PosPromo {
   discountPercent?: number | null
   validFrom?: string | null
   validTo?: string | null
+  marketingActualCost?: number
+  expenseAccrualId?: string | null
 }
 
 export interface PosPromoItem {
@@ -3848,8 +4132,10 @@ export async function getPosPromoSchemaStatus() {
   }>
 }
 
-export async function getNextPosPromoCode() {
-  const res = await apiFetchWithOffline('/api/getNextPosPromoCode')
+export async function getNextPosPromoCode(params: { campaignId: string }) {
+  const q = new URLSearchParams()
+  q.set('campaignId', params.campaignId.trim())
+  const res = await apiFetchWithOffline('/api/getNextPosPromoCode?' + q.toString())
   return res.json() as Promise<{ code: string | null; message?: string }>
 }
 
@@ -3857,8 +4143,11 @@ export interface PosPromoWithItems extends PosPromo {
   items: { menuId: string; optionId: string | null; quantity: number }[]
 }
 
-export async function getPosPromosWithItems() {
-  const res = await apiFetchWithOffline('/api/getPosPromosWithItems')
+export async function getPosPromosWithItems(params?: { campaignId?: string; includeInactive?: boolean }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set("campaignId", params.campaignId)
+  if (params?.includeInactive) q.set("includeInactive", "true")
+  const res = await apiFetchWithOffline('/api/getPosPromosWithItems' + (q.toString() ? `?${q.toString()}` : ''))
   return res.json() as Promise<PosPromoWithItems[]>
 }
 
@@ -3871,7 +4160,8 @@ export async function getPosPromoItems(params: { promoId: string }) {
 
 export async function savePosPromo(params: {
   id?: string
-  code: string
+  /** 비우면 서버가 캠페인 고유번호 기준으로 자동 부여 ({번호}-S01 …) */
+  code?: string
   name: string
   category?: string
   categoryMain?: string
@@ -3888,13 +4178,23 @@ export async function savePosPromo(params: {
   discountPercent?: number | null
   validFrom?: string | null
   validTo?: string | null
+  marketingActualCost?: number | null
+  /** 메뉴 관리 세트: 캠페인 없이 저장 (서버가 SET-#### 코드 부여) */
+  standaloneSetMenu?: boolean
+  userRole?: string
+  userName?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePosPromo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    expenseSyncMessage?: string
+  }>
 }
 
 export async function savePosPromoItem(params: {
@@ -4467,6 +4767,8 @@ export async function importMarketingExcel(file: File, options?: { dryRun?: bool
 export interface MarketingAd {
   id: string
   campaignId: string | null
+  /** marketing_campaigns.campaign_no */
+  campaignNo?: string | null
   contentFormat: string
   contentPillar: string
   contentTopic: string
@@ -4475,6 +4777,7 @@ export interface MarketingAd {
   postLink: string
   boostBudget: number
   actualSpent: number
+  expenseAccrualId?: string | null
 }
 
 export async function getMarketingAds(params?: { campaignId?: string }) {
@@ -4495,13 +4798,20 @@ export async function saveMarketingAd(params: {
   postLink?: string
   boostBudget?: number
   actualSpent?: number
+  userRole?: string
+  userName?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingAds', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    expenseSyncMessage?: string
+  }>
 }
 
 export async function deleteMarketingAd(params: { id: string }) {
@@ -4517,6 +4827,7 @@ export async function deleteMarketingAd(params: { id: string }) {
 export interface MarketingInfluencer {
   id: string
   campaignId: string | null
+  campaignNo?: string | null
   name: string
   followers: string
   contentFormat: string
@@ -4525,10 +4836,13 @@ export interface MarketingInfluencer {
   branchReview: string
   hireType: string
   budget: number
+  /** 실제 지출(지급예정 연동) */
+  actualCost: number
   shootingDate: string | null
   publishDate: string | null
   platformLinks: Record<string, string>
   note: string
+  expenseAccrualId?: string | null
 }
 
 export async function getMarketingInfluencers(params?: { campaignId?: string }) {
@@ -4549,17 +4863,25 @@ export async function saveMarketingInfluencer(params: {
   branchReview?: string
   hireType?: string
   budget?: number
+  actualCost?: number
   shootingDate?: string | null
   publishDate?: string | null
   platformLinks?: Record<string, string>
   note?: string
+  userRole?: string
+  userName?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingInfluencers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    expenseSyncMessage?: string
+  }>
 }
 
 export async function deleteMarketingInfluencer(params: { id: string }) {
@@ -4575,13 +4897,20 @@ export async function deleteMarketingInfluencer(params: { id: string }) {
 export interface MarketingMaterial {
   id: string
   campaignId: string | null
+  campaignNo?: string | null
   type: string
   name: string
   quantity: number
   unitCost: number
+  actualCost: number
   branches: string[]
+  isHqWide: boolean
+  displayStartDate: string | null
+  displayEndDate: string | null
+  placementSpots: string[]
   status: string
   note: string
+  expenseAccrualId?: string | null
 }
 
 export async function getMarketingMaterials(params?: { campaignId?: string }) {
@@ -4598,16 +4927,28 @@ export async function saveMarketingMaterial(params: {
   name: string
   quantity?: number
   unitCost?: number
+  actualCost?: number
   branches?: string[]
+  isHqWide?: boolean
+  displayStartDate?: string | null
+  displayEndDate?: string | null
+  placementSpots?: string[]
   status?: string
   note?: string
+  userRole?: string
+  userName?: string
 }) {
   const res = await apiFetchWithOffline('/api/marketingMaterials', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    message?: string
+    id?: string
+    expenseSyncMessage?: string
+  }>
 }
 
 export async function deleteMarketingMaterial(params: { id: string }) {
@@ -4617,6 +4958,64 @@ export async function deleteMarketingMaterial(params: { id: string }) {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export interface MarketingMaterialGift {
+  id: string
+  materialId: string
+  campaignId: string | null
+  storeName: string
+  giftName: string
+  allocatedQty: number
+  distributedQty: number
+  remainingQty: number
+  ruleNote: string
+  updatedAt: string | null
+}
+
+export async function getMarketingMaterialGifts(params?: { campaignId?: string; materialId?: string }) {
+  const q = new URLSearchParams()
+  if (params?.campaignId) q.set('campaignId', params.campaignId)
+  if (params?.materialId) q.set('materialId', params.materialId)
+  const res = await apiFetchWithOffline('/api/marketingMaterialGifts' + (q.toString() ? '?' + q.toString() : ''))
+  return res.json() as Promise<MarketingMaterialGift[]>
+}
+
+export async function saveMarketingMaterialGift(params: {
+  id?: string
+  materialId: string
+  campaignId?: string | null
+  storeName: string
+  giftName: string
+  allocatedQty?: number
+  distributedQty?: number
+  remainingQty?: number
+  ruleNote?: string
+}) {
+  const res = await apiFetchWithOffline('/api/marketingMaterialGifts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: string }>
+}
+
+export async function deleteMarketingMaterialGift(params: { id: string }) {
+  const res = await apiFetchWithOffline('/api/deleteMarketingMaterialGift', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function getMarketingMaterialLookup(ids: string[]) {
+  const uniq = [...new Set(ids.map((x) => String(x).trim()).filter(Boolean))].slice(0, 200)
+  if (uniq.length === 0) return []
+  const res = await apiFetchWithOffline(
+    `/api/marketingMaterialLookup?ids=${encodeURIComponent(uniq.join(','))}`
+  )
+  return res.json() as Promise<{ id: string; name: string; campaignId: string | null }[]>
 }
 
 export interface PosCoupon {
@@ -4711,9 +5110,10 @@ export async function getPosTableLayout(params: { storeCode: string }) {
 
 export interface PosPrinterSettings {
   storeCode: string
-  kitchenMode: 1 | 2
+  kitchenMode: 1 | 2 | 3
   kitchen1Categories: string[]
   kitchen2Categories: string[]
+  kitchen3Categories?: string[]
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
@@ -4766,8 +5166,12 @@ export interface PosPrinterSettings {
   cardBaseMode?: 'card_only' | 'card_plus_vat' | 'card_plus_vat_service'
   otherRate?: number
   otherMode?: 'included' | 'separate'
-  /** 매장당 메인 포스 1대 지정용. 설정 시 해당 토큰을 가진 기기만 주문 수신·자동 인쇄 */
+  /**
+   * 카운터(프론트) 포스 — 여러 대 가능. 해당 토큰을 가진 기기에서 주문 수신·자동 인쇄.
+   * mainDeviceToken 은 하위 호환용(목록의 첫 토큰과 동일).
+   */
   mainDeviceToken?: string | null
+  mainDeviceTokens?: string[]
 }
 
 export async function getPosPrinterSettings(params: { storeCode: string }) {
@@ -4779,9 +5183,10 @@ export async function getPosPrinterSettings(params: { storeCode: string }) {
 
 export async function savePosPrinterSettings(params: {
   storeCode: string
-  kitchenMode: 1 | 2
+  kitchenMode: 1 | 2 | 3
   kitchen1Categories: string[]
   kitchen2Categories: string[]
+  kitchen3Categories?: string[]
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
@@ -5351,6 +5756,8 @@ export async function savePosOrder(params: {
   pointEarned?: number
   /** 홀 dine_in 시 권장. 미입력 시 0 */
   guestCount?: number
+  /** 배달 주문 시 pos_orders.delivery_app_code (예: grab, lineman) */
+  deliveryAppCode?: string
   pricingAdjustments?: {
     vatRate?: number
     vatMode?: 'included' | 'separate'
@@ -5517,6 +5924,14 @@ export async function unlinkMemberLine(params: { memberId: number; lineUserId?: 
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+export async function getLineMessagingStatus() {
+  const res = await apiFetchWithOffline('/api/members/line-messaging-status')
+  return res.json() as Promise<{
+    channelAccessTokenConfigured: boolean
+    channelSecretConfigured: boolean
+  }>
+}
+
 export async function syncLineMembers(params?: { limit?: number }) {
   const res = await apiFetchWithOffline('/api/members/line-sync', {
     method: 'POST',
@@ -5528,6 +5943,8 @@ export async function syncLineMembers(params?: { limit?: number }) {
     message?: string
     scanned?: number
     synced?: number
+    syncedWithProfile?: number
+    syncedStubOnly?: number
     failed?: number
     hasNextCursor?: boolean
     nextCursor?: string

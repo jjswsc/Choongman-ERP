@@ -29,3 +29,4 @@ create policy "pos_promos_allow_all_authenticated"
 -- service_role 은 RLS를 우회하므로 정책 불필요
 --
 -- pos_menus 에서 42501 이 나오면: sql/pos_menus_rls_policies.sql 실행
+-- pos_promo_items 에서 42501 이 나오면: sql/pos_promo_items_rls_policies.sql 실행

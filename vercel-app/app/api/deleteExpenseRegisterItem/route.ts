@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter } from '@/lib/supabase-server'
+import { assertAccountingDateOpen, deleteJournalEntriesBySource } from '@/lib/accounting-posting'
 
 type LinkedPayableRow = {
   id?: number
   expense_accrual_id?: number | null
+}
+
+type BankTransactionRow = {
+  id?: number
+  trans_date?: string
 }
 
 export async function POST(request: NextRequest) {
@@ -32,6 +38,14 @@ export async function POST(request: NextRequest) {
       supabaseSelectFilter('bank_transaction_inbound_links', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
       supabaseSelectFilter('card_transactions', `bank_transaction_id=eq.${bankTransactionId}`, { limit: 1 }).catch(() => []),
     ])
+    const txRows = (await supabaseSelectFilter('bank_transactions', `id=eq.${bankTransactionId}`, {
+      select: 'id,trans_date',
+      limit: 1,
+    })) as BankTransactionRow[] | null
+    if (!txRows?.[0]?.id) {
+      return NextResponse.json({ success: false, message: '해당 통장 거래가 없습니다.' }, { status: 404, headers })
+    }
+    await assertAccountingDateOpen(String(txRows[0].trans_date || '').slice(0, 10))
 
     if ((linkedPayables || []).some((r) => Number(r.expense_accrual_id || 0) > 0)) {
       return NextResponse.json(
@@ -53,6 +67,9 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseDeleteByFilter('payable_transactions', `bank_transaction_id=eq.${bankTransactionId}&expense_accrual_id=is.null`)
+    await deleteJournalEntriesBySource('bank_transaction', bankTransactionId, {
+      memoIncludes: ['통장 거래 자동분개'],
+    })
     await supabaseDeleteByFilter('bank_transactions', `id=eq.${bankTransactionId}`)
 
     return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })

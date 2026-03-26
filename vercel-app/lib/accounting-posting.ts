@@ -1,5 +1,11 @@
 import { getBangkokTodayDateString } from '@/lib/bangkok-time'
-import { supabaseInsert, supabaseInsertMany, supabaseSelectFilter, supabaseUpsert } from '@/lib/supabase-server'
+import {
+  supabaseDeleteByFilter,
+  supabaseInsert,
+  supabaseInsertMany,
+  supabaseSelectFilter,
+  supabaseUpsert,
+} from '@/lib/supabase-server'
 import {
   accountLine,
   GL,
@@ -32,6 +38,53 @@ type PostJournalParams = {
 
 function monthOf(dateYmd: string): string {
   return String(dateYmd || '').slice(0, 7)
+}
+
+export async function assertAccountingDateOpen(dateYmd: string) {
+  const ymd = String(dateYmd || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return
+  if (await isAccountingPeriodClosed(monthOf(ymd))) {
+    throw new Error('ACCOUNTING_PERIOD_CLOSED')
+  }
+}
+
+type DeleteBySourceOptions = {
+  memoIncludes?: string[]
+}
+
+export async function deleteJournalEntriesBySource(
+  sourceType: string,
+  sourceId: number,
+  options: DeleteBySourceOptions = {}
+): Promise<number> {
+  const sid = Number(sourceId || 0)
+  if (!sid) return 0
+  const sourceTypeKey = encodeURIComponent(String(sourceType || '').trim())
+  const rows = (await supabaseSelectFilter(
+    'journal_entries',
+    `source_type=eq.${sourceTypeKey}&source_id=eq.${sid}`,
+    {
+      select: 'id,memo',
+      limit: 200,
+      order: 'id.asc',
+    }
+  )) as { id?: number; memo?: string | null }[] | null
+  const memoIncludes = (options.memoIncludes || [])
+    .map((m) => String(m || '').trim())
+    .filter(Boolean)
+  const targetIds = (rows || [])
+    .filter((row) => {
+      if (!memoIncludes.length) return true
+      const memo = String(row.memo || '')
+      return memoIncludes.some((needle) => memo.includes(needle))
+    })
+    .map((row) => Number(row.id || 0))
+    .filter((id) => id > 0)
+  if (!targetIds.length) return 0
+  const idList = targetIds.join(',')
+  await supabaseDeleteByFilter('journal_lines', `journal_entry_id=in.(${idList})`)
+  await supabaseDeleteByFilter('journal_entries', `id=in.(${idList})`)
+  return targetIds.length
 }
 
 function mkEntryNo(sourceType: string, sourceId?: number | null): string {

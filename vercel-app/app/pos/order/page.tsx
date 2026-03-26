@@ -52,6 +52,7 @@ import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from "@/lib/pos-promo-constants"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
+import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -797,31 +798,18 @@ export default function PosOrderPage() {
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
-      const kitchen1 = settings.kitchen1Categories || []
-      const kitchen2 = settings.kitchen2Categories || []
-      const mode = settings.kitchenMode || 1
-
-      const toSlips = (): { label: string; items: CartItem[] }[] => {
-        if (mode === 1) {
-          return [{ label: t("posKitchenOrder") || "주방 주문서", items: receiptData.items }]
-        }
-        const slip1: CartItem[] = []
-        const slip2: CartItem[] = []
-        for (const it of receiptData.items) {
-          const menuId = String(it.id ?? "").split("-")[0]
-          const cat = categoryByMenuId[menuId] ?? ""
-          if (kitchen2.includes(cat)) {
-            slip2.push(it)
-          } else {
-            slip1.push(it)
-          }
-        }
-        const result: { label: string; items: CartItem[] }[] = []
-        if (slip1.length) result.push({ label: `${t("posKitchen1") || "주방 1"}`, items: slip1 })
-        if (slip2.length) result.push({ label: `${t("posKitchen2") || "주방 2"}`, items: slip2 })
-        return result.length ? result : [{ label: t("posKitchenOrder") || "주방 주문서", items: receiptData.items }]
-      }
-      const slips = toSlips()
+      const slips = buildKitchenSlipGroups(receiptData.items, {
+        kitchenMode: settings.kitchenMode || 1,
+        kitchen2Categories: settings.kitchen2Categories || [],
+        kitchen3Categories: settings.kitchen3Categories || [],
+        categoryByMenuId,
+        labels: {
+          unified: t("posKitchenOrder") || "주방 주문서",
+          kitchen1: `${t("posKitchen1") || "주방 1"}`,
+          kitchen2: `${t("posKitchen2") || "주방 2"}`,
+          kitchen3: `${t("posKitchen3") || "주방 3"}`,
+        },
+      })
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]

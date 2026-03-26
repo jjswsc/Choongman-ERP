@@ -10,20 +10,12 @@
  */
 
 import https from 'node:https'
-import { appendFileSync } from 'node:fs'
-import { join } from 'node:path'
 
 const SUPABASE_RETRY_MAX = 3
 const SUPABASE_RETRY_BASE_MS = 800
 
-// #region agent log
-const _log = (msg: string, data?: Record<string, unknown>) => {
-  try {
-    const logPath = join(process.cwd(), '..', 'debug-e3767f.log')
-    appendFileSync(logPath, JSON.stringify({ sessionId: 'e3767f', location: 'supabase-server.ts', message: msg, data: data ?? {}, timestamp: Date.now() }) + '\n')
-  } catch (_) {}
-}
-// #endregion
+/** 디버그용 — 매 Supabase 요청마다 디스크 쓰기하면 로컬·다건 조회 시 병목·타임아웃 유발 */
+const _log = (_msg: string, _data?: Record<string, unknown>) => {}
 
 function httpsRequest(
   urlStr: string,
@@ -200,6 +192,31 @@ export async function supabaseSelect(
   })
   if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))
   return res.json()
+}
+
+/**
+ * PostgREST 단일 limit을 넘는 테이블 전체 로드 (offset 페이지 반복).
+ * 원가 분석 등 메뉴·재료·품목 전량이 필요할 때 사용.
+ */
+export async function supabaseSelectAllPages(
+  table: string,
+  options: { order: string; select: string; pageSize?: number; maxRows?: number }
+): Promise<unknown[]> {
+  const pageSize = Math.min(Math.max(options.pageSize ?? 4000, 1), 10000)
+  const maxRows = options.maxRows ?? 1_000_000
+  const out: unknown[] = []
+  for (let offset = 0; out.length < maxRows; offset += pageSize) {
+    const batch = await supabaseSelect(table, {
+      order: options.order,
+      limit: pageSize,
+      offset,
+      select: options.select,
+    })
+    const rows = Array.isArray(batch) ? batch : []
+    out.push(...rows)
+    if (rows.length < pageSize) break
+  }
+  return out
 }
 
 export async function supabaseInsert(table: string, row: Record<string, unknown>) {

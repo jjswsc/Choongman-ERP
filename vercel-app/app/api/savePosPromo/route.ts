@@ -6,6 +6,14 @@ import {
 } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
 import { upsertPromoMirrorMenu } from '@/lib/pos-promo-mirror-menu'
+import {
+  allocateNextPromoCodeForCampaign,
+  allocateNextStandaloneSetPromoCode,
+} from '@/lib/marketing-promo-code'
+import {
+  fetchCampaignMetaForExpenseMemo,
+  syncMarketingExpenseAccrual,
+} from '@/lib/marketing-expense-accrual-sync'
 
 function isColumnSchemaError(e: unknown): boolean {
   const s = String(e)
@@ -49,27 +57,77 @@ export async function POST(req: NextRequest) {
       discountPercent?: number | null
       validFrom?: string | null
       validTo?: string | null
+      marketingActualCost?: number | null
+      /** true: 캠페인 없이 메뉴 관리 세트만 저장 시 자동 코드(SET-####) */
+      standaloneSetMenu?: boolean
+      userRole?: string
+      userName?: string
+      user_role?: string
+      user_name?: string
     }
 
-    const code = String(body.code ?? '').trim()
+    let code = String(body.code ?? '').trim()
     const name = String(body.name ?? '').trim()
     const editingId = body.id ? String(body.id).trim() : null
+    const campaignIdRaw = String(body.marketingCampaignId ?? '').trim()
 
-    if (!code || !name) {
+    if (!name) {
       return NextResponse.json(
-        { success: false, message: '코드와 프로모션명이 필요합니다.' },
+        { success: false, message: '프로모션명이 필요합니다.' },
         { headers }
       )
     }
-    if (!editingId && !String(body.marketingCampaignId ?? '').trim()) {
+    const standaloneSet = body.standaloneSetMenu === true
+
+    if (!editingId && !campaignIdRaw && !standaloneSet) {
       return NextResponse.json(
         { success: false, message: '캠페인 선택은 필수입니다. 캠페인 허브에서 연동 후 저장해 주세요.' },
         { headers }
       )
     }
 
+    if (!editingId && !campaignIdRaw && standaloneSet && !code) {
+      try {
+        code = await allocateNextStandaloneSetPromoCode()
+      } catch (e) {
+        return NextResponse.json(
+          { success: false, message: e instanceof Error ? e.message : '세트 전용 코드 자동 부여 실패' },
+          { headers }
+        )
+      }
+    }
+
+    if (!editingId && campaignIdRaw) {
+      const cid = Number(campaignIdRaw)
+      if (Number.isFinite(cid) && cid > 0) {
+        if (!code) {
+          try {
+            code = await allocateNextPromoCodeForCampaign(cid)
+          } catch (e) {
+            return NextResponse.json(
+              { success: false, message: e instanceof Error ? e.message : '프로모션 코드 자동 부여 실패' },
+              { headers }
+            )
+          }
+        }
+      }
+    }
+
+    if (!code) {
+      return NextResponse.json(
+        { success: false, message: '프로모션 코드가 필요합니다. 캠페인을 선택한 뒤 다시 저장해 주세요.' },
+        { headers }
+      )
+    }
+
     const categorySub = String(body.category ?? '세트').trim() || '세트'
     const categoryMain = String(body.categoryMain ?? PROMOTION_MAIN_CATEGORY).trim() || PROMOTION_MAIN_CATEGORY
+    const userRole = String(body.userRole ?? body.user_role ?? '')
+    const userName = String(body.userName ?? body.user_name ?? '').trim()
+    const marketingActualCost =
+      body.marketingActualCost != null && Number.isFinite(Number(body.marketingActualCost))
+        ? Math.abs(Number(body.marketingActualCost))
+        : 0
 
     const deliveryCodes =
       Array.isArray(body.deliveryAppCodes) && body.deliveryAppCodes.length > 0
@@ -151,6 +209,20 @@ export async function POST(req: NextRequest) {
     }
 
     let promoId: string | null = editingId || null
+    let priorAccrualId: number | null = null
+    if (editingId) {
+      try {
+        const prev = (await supabaseSelectFilter(
+          'pos_promos',
+          `id=eq.${editingId}`,
+          { limit: 1, select: 'expense_accrual_id' }
+        )) as { expense_accrual_id?: number | null }[] | null
+        const pid = prev?.[0]?.expense_accrual_id
+        priorAccrualId = pid != null && Number(pid) > 0 ? Number(pid) : null
+      } catch {
+        priorAccrualId = null
+      }
+    }
 
     if (editingId) {
       const existing = (await supabaseSelectFilter(
@@ -211,10 +283,47 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const campaignIdForExpense = campaignIdRaw || String(body.marketingCampaignId ?? '').trim()
+    let expenseSyncMessage: string | undefined
+    if (campaignIdForExpense && promoId) {
+      const camp = await fetchCampaignMetaForExpenseMemo(campaignIdForExpense)
+      const topic = camp?.topic || ''
+      const campaignNo = camp?.campaignNo || ''
+      const expenseDate = body.validFrom?.trim() ? String(body.validFrom).slice(0, 10) : ''
+      const sync = await syncMarketingExpenseAccrual({
+        userRole,
+        userName,
+        campaignId: campaignIdForExpense,
+        campaignTopic: topic,
+        campaignNo,
+        channel: 'promo',
+        recordId: promoId,
+        amount: marketingActualCost,
+        expenseDate,
+        dueDate: null,
+        detailLine: `${code} ${name}`.trim().slice(0, 120),
+        existingExpenseAccrualId: priorAccrualId,
+      })
+      expenseSyncMessage = sync.message
+      if (sync.linkExpenseAccrualId !== undefined) {
+        try {
+          await supabaseUpdateByFilter('pos_promos', `id=eq.${promoId}`, {
+            expense_accrual_id: sync.linkExpenseAccrualId,
+          })
+        } catch (e) {
+          if (!isColumnSchemaError(e)) throw e
+          expenseSyncMessage =
+            (expenseSyncMessage ? expenseSyncMessage + ' ' : '') +
+            'DB에 marketing_actual_cost/expense_accrual_id 컬럼이 없습니다. sql/marketing_expense_accrual_link.sql 을 실행하세요.'
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: editingId ? '수정되었습니다.' : '저장되었습니다.',
       id: promoId,
+      expenseSyncMessage,
     }, { headers })
   } catch (e) {
     console.error('savePosPromo:', e)

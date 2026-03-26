@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseDeleteByFilter, supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import {
+  assertAccountingDateOpen,
+  deleteJournalEntriesBySource,
+  postExpenseAccrualJournal,
+} from '@/lib/accounting-posting'
 
 type ExpenseAccrualRow = {
   id?: number
   status?: string
   payee_code?: string
   store_name?: string | null
+  amount?: number
+  expense_date?: string
+  memo?: string | null
+  account_subject_id?: number | null
+  created_by?: string | null
+  payee_name?: string | null
 }
 
 type PayableRow = {
@@ -73,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     const rows = (await supabaseSelectFilter('expense_accruals', `id=eq.${expenseAccrualId}`, {
-      select: 'id,status,payee_code,store_name',
+      select: 'id,status,payee_code,store_name,amount,expense_date,memo,account_subject_id,created_by,payee_name',
       limit: 1,
     })) as ExpenseAccrualRow[] | null
     const row = rows?.[0]
@@ -81,6 +92,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '지급 예정 데이터를 찾을 수 없습니다.' }, { status: 404, headers })
     }
     const status = String(row.status || '').toLowerCase()
+    await assertAccountingDateOpen(String(row.expense_date || '').slice(0, 10))
     const rowStoreName = String(row.store_name ?? '').trim()
     const isNoStore = !rowStoreName
     if (action === 'delete') {
@@ -92,6 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'delete') {
+      await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
       await supabaseDeleteByFilter('payable_transactions', `expense_accrual_id=eq.${expenseAccrualId}`)
       await supabaseDeleteByFilter('expense_accruals', `id=eq.${expenseAccrualId}`)
       return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
@@ -123,6 +136,7 @@ export async function POST(request: NextRequest) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(expenseDate)) {
       return NextResponse.json({ success: false, message: '비용 발생일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
+    await assertAccountingDateOpen(expenseDate)
     if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
       return NextResponse.json({ success: false, message: '지급예정일 형식이 올바르지 않습니다.' }, { status: 400, headers })
     }
@@ -171,6 +185,39 @@ export async function POST(request: NextRequest) {
         expense_date: expenseDate,
         due_date: dueDate,
       })
+    }
+
+    let subjectCode = '5520'
+    let subjectName = '기타경비'
+    if (accountSubjectId && Number(accountSubjectId) > 0) {
+      const subjectRows = (await supabaseSelectFilter(
+        'account_subjects',
+        `id=eq.${accountSubjectId}`,
+        { select: 'id,code,name', limit: 1 }
+      )) as { id?: number; code?: string; name?: string }[] | null
+      if (subjectRows?.[0]?.code) subjectCode = String(subjectRows[0].code)
+      if (subjectRows?.[0]?.name) subjectName = String(subjectRows[0].name)
+    }
+    const finalAmount = Number(amount || row.amount || 0)
+    try {
+      await deleteJournalEntriesBySource('expense_accrual', expenseAccrualId)
+      await postExpenseAccrualJournal({
+        expenseAccrualId,
+        accountingDate: expenseDate,
+        amountAbs: Math.abs(finalAmount),
+        expenseAccountCode: subjectCode,
+        expenseAccountName: subjectName,
+        expenseAccountSubjectId: accountSubjectId,
+        memo: memo || String(row.memo || '') || `지출 발생 ${payeeName || row.payee_name || payeeCode}`,
+        storeName: storeName || String(row.store_name || '') || undefined,
+        postedBy: String(row.created_by || '').trim() || undefined,
+      })
+    } catch (postingErr) {
+      console.error('updateExpenseAccrual reposting:', postingErr)
+      return NextResponse.json(
+        { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
+        { status: 500, headers }
+      )
     }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })

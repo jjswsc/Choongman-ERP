@@ -30,25 +30,28 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
       return false
     }
   })
-  const [serverMainToken, setServerMainToken] = React.useState<string | null>(null)
+  const [serverMainTokens, setServerMainTokens] = React.useState<string[]>([])
   const [deviceToken] = React.useState(() => getOrCreateDeviceToken())
 
   React.useEffect(() => {
     if (!storeCode || !deviceToken) {
-      setServerMainToken(null)
+      setServerMainTokens([])
       return
     }
     let cancelled = false
     getPosPrinterSettings({ storeCode })
       .then((s) => {
-        if (!cancelled && s?.mainDeviceToken != null && s.mainDeviceToken.trim()) {
-          setServerMainToken(s.mainDeviceToken.trim())
-        } else {
-          setServerMainToken(null)
-        }
+        if (cancelled) return
+        const list = Array.isArray(s?.mainDeviceTokens)
+          ? s.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
+          : []
+        const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
+          ? [String(s.mainDeviceToken).trim()]
+          : []
+        setServerMainTokens(list.length > 0 ? list : legacy)
       })
       .catch(() => {
-        if (!cancelled) setServerMainToken(null)
+        if (!cancelled) setServerMainTokens([])
       })
     return () => {
       cancelled = true
@@ -56,9 +59,9 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
   }, [storeCode, deviceToken])
 
   const isMain = React.useMemo(() => {
-    if (serverMainToken != null) return deviceToken === serverMainToken
+    if (serverMainTokens.length > 0) return serverMainTokens.includes(deviceToken)
     return localIsMain
-  }, [serverMainToken, deviceToken, localIsMain])
+  }, [serverMainTokens, deviceToken, localIsMain])
 
   const setValue = React.useCallback(
     (value: boolean) => {
@@ -78,39 +81,56 @@ export function usePosMainDevice(storeCode: string | null): [boolean, (value: bo
       registerPosDevice({ storeCode, deviceToken, role }).catch(() => {})
       if (value) {
         applyLocal(true)
-        setServerMainToken(deviceToken)
+        setServerMainTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
         registerPosMainDevice({ storeCode, deviceToken })
           .then(async (res) => {
             if (!res.success) {
-              setServerMainToken(null)
+              setServerMainTokens([])
               applyLocal(false)
               return
             }
             try {
               const s = await getPosPrinterSettings({ storeCode })
-              if (s?.mainDeviceToken === deviceToken) {
-                setServerMainToken(deviceToken)
-              }
+              const list = Array.isArray(s?.mainDeviceTokens)
+                ? s.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
+                : []
+              const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
+                ? [String(s.mainDeviceToken).trim()]
+                : []
+              setServerMainTokens(list.length > 0 ? list : legacy)
             } catch {
               // keep optimistic state
             }
           })
           .catch(() => {
-            setServerMainToken(null)
+            setServerMainTokens([])
             applyLocal(false)
           })
       } else {
         applyLocal(false)
-        setServerMainToken(null)
+        setServerMainTokens((prev) => prev.filter((t) => t !== deviceToken))
         clearPosMainDevice({ storeCode, deviceToken })
-          .then((res) => {
+          .then(async (res) => {
             if (!res.success) {
-              setServerMainToken(deviceToken)
+              setServerMainTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
               applyLocal(true)
+              return
+            }
+            try {
+              const s = await getPosPrinterSettings({ storeCode })
+              const list = Array.isArray(s?.mainDeviceTokens)
+                ? s.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
+                : []
+              const legacy = s?.mainDeviceToken != null && String(s.mainDeviceToken).trim()
+                ? [String(s.mainDeviceToken).trim()]
+                : []
+              setServerMainTokens(list.length > 0 ? list : legacy)
+            } catch {
+              /* ignore */
             }
           })
           .catch(() => {
-            setServerMainToken(deviceToken)
+            setServerMainTokens((prev) => (prev.includes(deviceToken) ? prev : [...prev, deviceToken]))
             applyLocal(true)
           })
       }

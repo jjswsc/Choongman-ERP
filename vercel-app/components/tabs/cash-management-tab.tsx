@@ -243,11 +243,20 @@ export function CashManagementTab({ offlineAware = false }: CashManagementTabPro
 
   const handleSalesWithdrawalAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!addStore || !salesWithdrawalAmount.trim()) {
+    if (!addStore) {
+      await appAlert(t('msg_store_name_first'))
+      return
+    }
+    const trimmed = salesWithdrawalAmount.trim()
+    let amt: number
+    if (trimmed) {
+      amt = parseFloat(trimmed.replace(/,/g, ''))
+    } else if (salesWithdrawalCash != null && salesWithdrawalCash > 0) {
+      amt = salesWithdrawalCash
+    } else {
       await appAlert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
       return
     }
-    const amt = parseFloat(salesWithdrawalAmount.replace(/,/g, ''))
     if (Number.isNaN(amt) || amt <= 0) {
       await appAlert(t('pettyAlertAmount') || '금액을 입력해 주세요.')
       return

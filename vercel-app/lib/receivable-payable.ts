@@ -7,6 +7,7 @@ import {
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdate,
+  supabaseDeleteByFilter,
 } from './supabase-server'
 
 export async function upsertPayableFromPO(params: {
@@ -57,7 +58,18 @@ export async function upsertReceivableFromOrder(params: {
   invoiceNo?: string
 }): Promise<void> {
   const { orderId, storeName, total, transDate, invoiceNo } = params
-  if (!storeName || total <= 0) return
+  if (!orderId) return
+
+  // 본사 정산분이 0(직접정산·지두방만 등)이면 Order 미수금 행 제거 — 과거 잘못 적재분도 정리
+  if (total <= 0) {
+    await supabaseDeleteByFilter(
+      'receivable_transactions',
+      `ref_type=eq.Order&ref_id=eq.${orderId}`
+    )
+    return
+  }
+
+  if (!storeName) return
 
   const invNo = invoiceNo || formatReceivableInvoiceNo(orderId, transDate)
 

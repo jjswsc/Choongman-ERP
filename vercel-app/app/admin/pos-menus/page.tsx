@@ -3,7 +3,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import Link from "next/link"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, ExternalLink, AlertTriangle, X } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -48,6 +48,7 @@ import {
   updatePosMenuSoldOut,
   getPosPromos,
   getPosPromoSchemaStatus,
+  useStoreList,
   type PosMenu,
   type PosMenuOption,
   type PosMenuIngredient,
@@ -56,7 +57,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
+import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-workspace"
+import { PosStoreFinalPriceSettings } from "@/components/erp/pos-store-final-price-settings"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
+import { useAuth } from "@/lib/auth-context"
+import { isOfficeRole } from "@/lib/permissions"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
 import { sortByCode } from "@/lib/sort-utils"
 
@@ -118,6 +123,8 @@ const emptyForm = {
 }
 
 export default function PosMenusPage() {
+  const { auth } = useAuth()
+  const { stores } = useStoreList()
   const { lang } = useLang()
   const t = useT(lang)
   /** 옵션 부위명(순살/윙/봉) 표시 시 현재 언어로 번역. "M - 순살" 등 포함 형태도 처리 */
@@ -163,7 +170,12 @@ export default function PosMenusPage() {
   const [expandedMenuId, setExpandedMenuId] = React.useState<string | null>(null)
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
-  const [mainTab, setMainTab] = React.useState<"screen" | "optionsConfig" | "set" | "priceHistory" | "priceApply">("screen")
+  const [mainTab, setMainTab] = React.useState<
+    "screen" | "optionsConfig" | "set" | "priceHistory" | "priceApply" | "finalPrice"
+  >("screen")
+  const [pricingStoreCode, setPricingStoreCode] = React.useState("")
+  const canSearchAllStores = isOfficeRole(auth?.role || "")
+  const effectivePricingStore = canSearchAllStores && pricingStoreCode ? pricingStoreCode : auth?.store || ""
   const [optionsConfigSelectedMenuId, setOptionsConfigSelectedMenuId] = React.useState<string | null>(null)
   const [optionsConfigMenuOptions, setOptionsConfigMenuOptions] = React.useState<PosMenuOption[]>([])
   const [newOptionStepValues, setNewOptionStepValues] = React.useState<Record<string, string>>({})
@@ -190,21 +202,6 @@ export default function PosMenusPage() {
   } | null>(null)
   const [setTabSchemaDismissed, setSetTabSchemaDismissed] = React.useState(false)
 
-  const promoById = React.useMemo(() => {
-    const m: Record<string, PosPromo> = {}
-    for (const p of promoListForSetTab) {
-      m[String(p.id)] = p
-    }
-    return m
-  }, [promoListForSetTab])
-
-  const mirrorMenusSorted = React.useMemo(() => {
-    return sortByCode(
-      menus.filter((m) => m.promoId != null && String(m.promoId).trim() !== ""),
-      (m) => m.code
-    )
-  }, [menus])
-
   React.useEffect(() => {
     try {
       if (typeof window !== "undefined" && localStorage.getItem("admin_pos_menu_set_schema_banner_dismiss") === "1") {
@@ -214,6 +211,14 @@ export default function PosMenusPage() {
       /* ignore */
     }
   }, [])
+
+  React.useEffect(() => {
+    if (canSearchAllStores && stores.length && !pricingStoreCode) {
+      setPricingStoreCode(stores[0])
+    } else if (!canSearchAllStores && auth?.store) {
+      setPricingStoreCode(auth.store)
+    }
+  }, [canSearchAllStores, stores, auth?.store, pricingStoreCode])
 
   React.useEffect(() => {
     if (mainTab !== "set") return
@@ -251,11 +256,25 @@ export default function PosMenusPage() {
     }
   }, [t])
 
-  // 메뉴 목록은 조회 버튼을 눌렀을 때만 불러옴 (초기 자동 로드 없음)
+  const refreshSetTabAfterSave = React.useCallback(() => {
+    void getPosPromos()
+      .then((plist) => setPromoListForSetTab(Array.isArray(plist) ? plist : []))
+      .catch(() => {})
+    void loadMenusAndCategories()
+  }, [loadMenusAndCategories])
+
   // 카테고리 설정은 페이지 로드 시 미리 로드 (메뉴 폼에서 대분류·카테고리 선택 가능)
   React.useEffect(() => {
     getPosMenuCategoriesConfig().then(setCategoriesConfig).catch(() => setCategoriesConfig(null))
   }, [])
+
+  /** 페이지 진입 시 메뉴 1회 자동 조회 (화면 세트 시뮬·세트 탭·옵션구성에 공통) — 실패 시 [조회]로 재시도 */
+  const initialPosMenusLoadRef = React.useRef(false)
+  React.useEffect(() => {
+    if (initialPosMenusLoadRef.current) return
+    initialPosMenusLoadRef.current = true
+    void loadMenusAndCategories(setLoading)
+  }, [loadMenusAndCategories])
 
   const effectiveOptionIdForIngredients = selectedIngredientOptionId === "" || selectedIngredientOptionId === "null" ? undefined : selectedIngredientOptionId
 
@@ -1229,6 +1248,10 @@ export default function PosMenusPage() {
             <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
             <TabsTrigger value="priceHistory" className="gap-1.5 text-xs"><History className="h-3.5 w-3.5" />{t("posMenuTabPriceHistory") || "메뉴 가격이력"}</TabsTrigger>
             <TabsTrigger value="priceApply" className="gap-1.5 text-xs"><DollarSign className="h-3.5 w-3.5" />{t("posMenuTabPriceApply") || "가격 적용"}</TabsTrigger>
+            <TabsTrigger value="finalPrice" className="gap-1.5 text-xs">
+              <Calculator className="h-3.5 w-3.5" />
+              {t("posPricingTab") || "최종가격"}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="screen" className="mt-0">
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
@@ -2352,106 +2375,29 @@ export default function PosMenusPage() {
             </div>
           </TabsContent>
           <TabsContent value="set" className="mt-0">
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-sm font-bold">{t("posMenuSetTabTitle")}</h3>
-                  <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">
-                    {t("posMenuSetTabDesc")}
-                  </p>
-                </div>
-                <Button variant="default" size="sm" className="h-9 shrink-0 gap-1.5" asChild>
-                  <Link href="/admin/marketing/promos">
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    {t("posMenuSetOpenMarketing")}
-                  </Link>
-                </Button>
-              </div>
-
-              {schemaStatus && !schemaStatus.ok && !setTabSchemaDismissed && (
-                <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="font-semibold">{t("posPromoSchemaBannerTitle")}</p>
-                    <p className="text-xs leading-relaxed opacity-90">
-                      {t("posPromoSchemaBannerBody")}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md p-1 hover:bg-amber-200/60 dark:hover:bg-amber-900/50"
-                    aria-label={t("cancel")}
-                    onClick={() => {
-                      try {
-                        localStorage.setItem("admin_pos_menu_set_schema_banner_dismiss", "1")
-                      } catch {
-                        /* ignore */
-                      }
-                      setSetTabSchemaDismissed(true)
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
-              {(setTabPromosLoading || loading) && (
-                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
-              )}
-
-              {!setTabPromosLoading && !loading && menus.length === 0 && (
-                <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 px-4 py-6 text-center text-sm text-muted-foreground">
-                  {t("posMenuSetNeedLoadMenus")}
-                </div>
-              )}
-
-              {!setTabPromosLoading && !loading && menus.length > 0 && mirrorMenusSorted.length === 0 && (
-                <div className="rounded-xl border border-dashed bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
-                  {t("posMenuSetEmpty")}
-                </div>
-              )}
-
-              {mirrorMenusSorted.length > 0 && (
-                <div className="overflow-x-auto rounded-xl border bg-card">
-                  <table className="w-full min-w-[720px] text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/40">
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCodeCol")}</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuName")}</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategoryMain")}</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuCategory")}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("posMenuActive")}</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-bold">{t("posMenuSetColPromoCode")}</th>
-                        <th className="px-3 py-2.5 text-center text-[11px] font-bold">{t("itemsColAction")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mirrorMenusSorted.map((m) => {
-                        const pid = String(m.promoId ?? "").trim()
-                        const promo = pid ? promoById[pid] : undefined
-                        return (
-                          <tr key={m.id} className="border-b last:border-0 hover:bg-muted/20">
-                            <td className="px-3 py-2 font-mono text-xs">{m.code}</td>
-                            <td className="px-3 py-2">{m.name}</td>
-                            <td className="px-3 py-2 text-xs text-muted-foreground">{m.categoryMain ?? "—"}</td>
-                            <td className="px-3 py-2 text-xs text-muted-foreground">{m.category ?? "—"}</td>
-                            <td className="px-3 py-2 text-center text-xs">{m.isActive ? "Y" : "—"}</td>
-                            <td className="px-3 py-2 font-mono text-xs">
-                              {promo?.code ?? (pid ? `#${pid}` : "—")}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <Button variant="outline" size="sm" className="h-7 text-[11px]" asChild>
-                                <Link href="/admin/marketing/promos">{t("posMenuSetEditInMarketing")}</Link>
-                              </Button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            {(setTabPromosLoading || loading) && menus.length === 0 ? (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
+            ) : (
+              <PosSetMenuTabWorkspace
+                menus={menus}
+                mainCategories={mainCategories}
+                categoriesConfig={categoriesConfig}
+                optionPartLabel={optionPartLabel}
+                promos={promoListForSetTab}
+                promosLoading={setTabPromosLoading}
+                schemaOk={schemaStatus == null ? null : schemaStatus.ok}
+                schemaBannerDismissed={setTabSchemaDismissed}
+                onDismissSchemaBanner={() => {
+                  try {
+                    localStorage.setItem("admin_pos_menu_set_schema_banner_dismiss", "1")
+                  } catch {
+                    /* ignore */
+                  }
+                  setSetTabSchemaDismissed(true)
+                }}
+                onAfterSave={refreshSetTabAfterSave}
+              />
+            )}
           </TabsContent>
           <TabsContent value="priceHistory" className="mt-0">
             <div className="rounded-xl border bg-card p-6">
@@ -2484,6 +2430,35 @@ export default function PosMenusPage() {
               <p className="text-xs text-muted-foreground">
                 {t("posMenuPriceApplyHint") || "메뉴 정보 탭에서 홀·배달앱 가격을 각각 설정할 수 있습니다. 배달앱 가격이 없으면 홀 가격이 적용됩니다."}
               </p>
+            </div>
+          </TabsContent>
+          <TabsContent value="finalPrice" className="mt-0">
+            <div className="rounded-xl border bg-card p-6 space-y-4 max-w-2xl">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-primary" />
+                {t("posPricingTab") || "최종가격"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {t("posPricingTabMenuHint") ||
+                  "매장별 부가세·서비스·카드비 등 결제 시 최종 금액에 반영되는 비율 옵션입니다."}
+              </p>
+              {canSearchAllStores && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Select value={pricingStoreCode} onValueChange={setPricingStoreCode}>
+                    <SelectTrigger className="h-10 w-40">
+                      <SelectValue placeholder={t("store") || "매장"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {stores.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <PosStoreFinalPriceSettings storeCode={effectivePricingStore} />
             </div>
           </TabsContent>
         </Tabs>

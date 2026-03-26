@@ -8,6 +8,7 @@ import { upsertReceivableFromOrder } from '@/lib/receivable-payable'
 import { sendNoticeToRecipients, getLogisticRecipients } from '@/lib/send-notice-util'
 import { getDirectSettlementMap } from '@/lib/direct-settlement-server'
 import { postStorePurchaseJournal } from '@/lib/accounting-posting'
+import { computeOrderHqReceivableTotal } from '@/lib/order-receivable-hq'
 
 const TZ = 'Asia/Bangkok'
 
@@ -210,15 +211,9 @@ export async function POST(request: NextRequest) {
     const transDate = today
     if (storeName) {
       const cartForReceivable = newCart.length > 0 ? newCart : cart.map((item, idx) => ({ ...item, qty: getQtyForIdx(idx) }))
-      let subtotalHQ = 0
-      cartForReceivable.forEach((it) => {
-        if (!directMap[String(it.code || '').trim()]) {
-          subtotalHQ += Number(it.price || 0) * Number(it.qty || 0)
-        }
-      })
-      const totalHQ = subtotalHQ > 0 ? subtotalHQ + Math.round(subtotalHQ * 0.07) : 0
+      const { totalHQ } = await computeOrderHqReceivableTotal(cartForReceivable)
+      await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
       if (totalHQ > 0) {
-        await upsertReceivableFromOrder({ orderId, storeName, total: totalHQ, transDate })
         try {
           await postStorePurchaseJournal({
             orderId,

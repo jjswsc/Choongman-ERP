@@ -75,7 +75,12 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-noto-sans-kr)", "system-ui", "sans-serif"],
+        sans: [
+          "var(--font-pretendard)",
+          '"Noto Sans Thai"',
+          "system-ui",
+          "sans-serif",
+        ],
         mono: ["var(--font-geist-mono)", "monospace"],
         orbitron: ["var(--font-orbitron)", "sans-serif"],
       },

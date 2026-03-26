@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseUpdate } from '@/lib/supabase-server'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
+import {
+  assertAccountingDateOpen,
+  deleteJournalEntriesBySource,
+  postPettyCashJournal,
+} from '@/lib/accounting-posting'
 
 /** 패티캐시 거래 수정 - 월별 현황에서 조회 후 수정 */
 export async function POST(request: NextRequest) {
@@ -36,12 +41,23 @@ export async function POST(request: NextRequest) {
       'petty_cash_transactions',
       `id=eq.${id}`,
       { limit: 1 }
-    )) as { id: number; store?: string }[]
+    )) as {
+      id: number
+      store?: string
+      trans_date?: string
+      trans_type?: string
+      amount?: number
+      memo?: string
+      user_name?: string
+      account_subject_id?: number | null
+    }[]
 
     const row = rows?.[0]
     if (!row) {
       return NextResponse.json({ success: false, message: '해당 거래를 찾을 수 없습니다.' }, { status: 404, headers })
     }
+    await assertAccountingDateOpen(String(row.trans_date || '').slice(0, 10))
+    await assertAccountingDateOpen(transDate)
 
     const store = String(row.store || '').trim()
     const isOffice = ['director', 'officer', 'ceo', 'hr'].some((r) => userRole.includes(r))
@@ -71,6 +87,32 @@ export async function POST(request: NextRequest) {
     }
 
     await supabaseUpdate('petty_cash_transactions', id, patch)
+
+    const finalAccountSubjectId =
+      patch.account_subject_id !== undefined
+        ? (patch.account_subject_id as number | null)
+        : (row.account_subject_id ?? null)
+    try {
+      await deleteJournalEntriesBySource('petty_cash', id, { memoIncludes: ['시재 지출 자동분개'] })
+      if (transType === 'expense') {
+        await postPettyCashJournal({
+          pettyCashId: id,
+          transDate,
+          transType,
+          amountAbs: Math.abs(amt),
+          memo: memo || String(row.memo || ''),
+          storeName: store,
+          postedBy: String(row.user_name || '').trim() || undefined,
+          accountSubjectId: finalAccountSubjectId,
+        })
+      }
+    } catch (postingErr) {
+      console.error('updatePettyCashTransaction reposting:', postingErr)
+      return NextResponse.json(
+        { success: false, message: postingErr instanceof Error ? postingErr.message : '분개 재처리 실패' },
+        { status: 500, headers }
+      )
+    }
 
     return NextResponse.json({ success: true, message: '수정되었습니다.' }, { headers })
   } catch (e) {

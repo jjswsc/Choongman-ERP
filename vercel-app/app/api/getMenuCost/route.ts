@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
   try {
     type ItemRow = { code?: string; cost?: number; price?: number; total_quantity?: number; unit?: string; name?: string; category?: string }
     const itemRows = (await supabaseSelect('items', {
-      limit: 1000,
+      order: 'code.asc',
+      limit: 50000,
       select: 'code,cost,price,total_quantity,unit,name,category',
     })) as ItemRow[] | null
 
@@ -68,18 +69,46 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let filter = `menu_id=eq.${encodeURIComponent(menuId)}`
-    if (optionId && optionId !== 'null' && optionType === 'substitution') {
-      filter += `&option_id=eq.${encodeURIComponent(optionId)}`
-    } else {
-      filter += '&option_id=is.null'
-    }
+    const fetchIng = (filter: string) =>
+      supabaseSelectFilter('pos_menu_ingredients', filter, { order: 'id.asc', limit: 200 }) as Promise<
+        { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string; option_id?: unknown }[] | null
+      >
 
-    let ingRows: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null
+    let ingRows: { item_code?: string; quantity?: number; loss_rate?: number; ingredient_type?: string }[] | null = null
+    const midEnc = encodeURIComponent(menuId)
     try {
-      ingRows = (await supabaseSelectFilter('pos_menu_ingredients', filter, { order: 'id.asc', limit: 200 })) as typeof ingRows
+      if (optionId && optionId !== 'null' && optionType === 'substitution') {
+        ingRows = await fetchIng(`menu_id=eq.${midEnc}&option_id=eq.${encodeURIComponent(optionId)}`)
+        if (!ingRows?.length) {
+          ingRows = await fetchIng(`menu_id=eq.${midEnc}&option_id=is.null`)
+        }
+        if (!ingRows?.length) {
+          ingRows = await fetchIng(`menu_id=eq.${midEnc}&option_id=eq.0`)
+        }
+      } else {
+        ingRows = await fetchIng(`menu_id=eq.${midEnc}&option_id=is.null`)
+        if (!ingRows?.length) {
+          ingRows = await fetchIng(`menu_id=eq.${midEnc}&option_id=eq.0`)
+        }
+      }
     } catch {
-      ingRows = (await supabaseSelectFilter('pos_menu_ingredients', `menu_id=eq.${encodeURIComponent(menuId)}`, { order: 'id.asc', limit: 200 })) as typeof ingRows
+      try {
+        const all = await fetchIng(`menu_id=eq.${midEnc}`)
+        const isBaseOpt = (raw: unknown) => {
+          if (raw == null) return true
+          if (typeof raw === 'number' && raw === 0) return true
+          const s = String(raw).trim()
+          return s === '' || s === '0'
+        }
+        if (optionId && optionId !== 'null' && optionType === 'substitution') {
+          const spec = (all || []).filter((r) => String((r as { option_id?: unknown }).option_id ?? '') === String(optionId))
+          ingRows = spec.length > 0 ? spec : (all || []).filter((r) => isBaseOpt((r as { option_id?: unknown }).option_id))
+        } else {
+          ingRows = (all || []).filter((r) => isBaseOpt((r as { option_id?: unknown }).option_id))
+        }
+      } catch {
+        ingRows = null
+      }
     }
 
     const ingredients = ingRows || []

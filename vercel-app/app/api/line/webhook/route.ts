@@ -50,17 +50,15 @@ async function handleEvent(event: LineWebhookEvent) {
       } catch (profileError) {
         console.warn('LINE profile fetch failed:', profileError)
       }
-      if (!displayName) {
-        console.warn('LINE displayName is empty. skip register:', lineUserId)
-      } else {
+      const dn = String(displayName || '').trim()
+      const pic = String(pictureUrl || '').trim()
       const member = await registerLineMember({
         lineUserId,
-        displayName,
-        pictureUrl,
-        name: displayName,
+        displayName: dn || undefined,
+        pictureUrl: pic || undefined,
+        name: dn || undefined,
       })
       memberId = member.id
-      }
     } else if (lineUserId && eventType === 'unfollow') {
       await setLineIdentityStatus(lineUserId, 'inactive')
     }

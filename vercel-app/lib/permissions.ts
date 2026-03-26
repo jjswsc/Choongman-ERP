@@ -69,6 +69,18 @@ export function canManageReceivablePayableAllStores(role: string): boolean {
   return isOfficeRole(role) || isAccountingRole(role)
 }
 
+/** 주문 미수금을 출고(본사 정산) 규칙에 맞게 재동기화 (직접정산·지두방 반영) */
+export function canSyncOrderReceivable(role: string): boolean {
+  if (canManageReceivablePayableAllStores(role)) return true
+  const r = String(role || "").toLowerCase().trim()
+  return r.includes("logistic") || r.includes("물류")
+}
+
+/** Order 미수금 일괄 재동기화 (본사·회계만) */
+export function canBulkReconcileOrderReceivables(role: string): boolean {
+  return canManageReceivablePayableAllStores(role)
+}
+
 /** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (

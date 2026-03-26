@@ -25,7 +25,7 @@ export async function GET() {
       try {
         rows = (await supabaseSelect('pos_menus', {
           order: 'sort_order.asc,name.asc',
-          limit: 1000,
+          limit: 10000,
           select: cols,
         })) as unknown[] | null
         break

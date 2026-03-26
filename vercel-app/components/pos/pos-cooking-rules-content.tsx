@@ -29,9 +29,10 @@ export function PosCookingRulesContent() {
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [baseSettings, setBaseSettings] = React.useState<{
-    kitchenMode: 1 | 2
+    kitchenMode: 1 | 2 | 3
     kitchen1Categories: string[]
     kitchen2Categories: string[]
+    kitchen3Categories: string[]
     autoStockDeduction?: boolean
     deliveryFee?: number
     packagingFee?: number
@@ -58,9 +59,10 @@ export function PosCookingRulesContent() {
     getPosPrinterSettings({ storeCode: effectiveStore })
       .then((settings) => {
         setBaseSettings({
-          kitchenMode: settings.kitchenMode || 1,
+          kitchenMode: (Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3),
           kitchen1Categories: settings.kitchen1Categories || [],
           kitchen2Categories: settings.kitchen2Categories || [],
+          kitchen3Categories: settings.kitchen3Categories || [],
           autoStockDeduction: settings.autoStockDeduction,
           deliveryFee: settings.deliveryFee,
           packagingFee: settings.packagingFee,
@@ -108,6 +110,7 @@ export function PosCookingRulesContent() {
         kitchenMode: baseSettings?.kitchenMode || 1,
         kitchen1Categories: baseSettings?.kitchen1Categories || [],
         kitchen2Categories: baseSettings?.kitchen2Categories || [],
+        kitchen3Categories: baseSettings?.kitchen3Categories || [],
         autoStockDeduction: baseSettings?.autoStockDeduction,
         deliveryFee: baseSettings?.deliveryFee,
         packagingFee: baseSettings?.packagingFee,
@@ -178,6 +181,7 @@ export function PosCookingRulesContent() {
         kitchenMode: targetBase.kitchenMode || 1,
         kitchen1Categories: targetBase.kitchen1Categories || [],
         kitchen2Categories: targetBase.kitchen2Categories || [],
+        kitchen3Categories: targetBase.kitchen3Categories || [],
         autoStockDeduction: targetBase.autoStockDeduction,
         deliveryFee: targetBase.deliveryFee,
         packagingFee: targetBase.packagingFee,

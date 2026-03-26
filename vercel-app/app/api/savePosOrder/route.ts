@@ -3,6 +3,7 @@ import { supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
 import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 
 /** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
@@ -67,6 +68,28 @@ export async function POST(req: NextRequest) {
     const guest_count =
       orderType === 'dine_in' ? Math.max(0, Math.min(99, guestCountReq)) : 0
 
+    let delivery_app_code: string | null = null
+    if (orderType === 'delivery') {
+      let code = String(body.deliveryAppCode ?? body.delivery_app_code ?? '')
+        .trim()
+        .toLowerCase()
+      if (!code) {
+        for (const it of items) {
+          const c = String((it as { deliveryAppCode?: string }).deliveryAppCode ?? '')
+            .trim()
+            .toLowerCase()
+          if (c) {
+            code = c
+            break
+          }
+        }
+      }
+      if (!code) {
+        code = parseDeliveryAppCodeFromItemsJson(JSON.stringify(items))
+      }
+      delivery_app_code = code || null
+    }
+
     const orderNo = generateOrderNo(storeCode)
     const row = {
       order_no: orderNo,
@@ -94,6 +117,7 @@ export async function POST(req: NextRequest) {
       point_used: pointUsed,
       point_earned: pointEarnedReq,
       guest_count,
+      delivery_app_code,
     }
     const inserted = await supabaseInsert('pos_orders', row) as { id?: number }[]
     const created = Array.isArray(inserted) ? inserted[0] : inserted

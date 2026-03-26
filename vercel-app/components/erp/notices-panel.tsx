@@ -11,6 +11,9 @@ import { useAuth } from "@/lib/auth-context"
 import { getMyNotices, confirmNoticeRead, translateTexts, type NoticeItem, type NoticeAttachment } from "@/lib/api-client"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
 
+/** app/api/getMyNotices/route.ts 의 DB_FETCH_LIMIT 과 맞출 것 */
+const NOTICE_SERVER_FETCH_CAP = 600
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
@@ -200,7 +203,7 @@ export function NoticesPanel() {
           <div className="flex flex-col divide-y">
             {noticeTruncated && (
               <p className="px-5 py-2 text-xs text-amber-700 dark:text-amber-400">
-                서버에서 최근 공지 {600}건까지만 불러옵니다. 더 보려면 기간을 나눠 검색하세요.
+                {t("adminNoticeTruncatedLimitHint").replace("{max}", String(NOTICE_SERVER_FETCH_CAP))}
               </p>
             )}
             {notices.map((n) => {

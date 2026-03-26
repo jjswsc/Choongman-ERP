@@ -13,6 +13,8 @@ import {
   getPosSalesByMenu,
   getPosSalesByPayment,
   getPosSalesByStore,
+  type PosSalesByPeriodResult,
+  type PosSalesPeriodRow,
 } from '@/lib/api-client'
 
 export async function getPosSalesFilterOptionsWithCache(params: {
@@ -45,13 +47,17 @@ export async function getPosSalesByPeriodWithCache(params: {
   endStr: string
   groupBy: 'month' | 'week' | 'day' | 'dow' | 'hour'
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
+  splitByStore?: boolean
 }) {
   const key = cacheKeyAnalytics('period', {
     ...params,
     groupBy: params.groupBy,
     pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
+    splitByStore: params.splitByStore ? '1' : '',
   })
   if (isOnline()) {
     try {
@@ -59,59 +65,31 @@ export async function getPosSalesByPeriodWithCache(params: {
       await setCache('pos_sales_cache', key, data)
       return data
     } catch {
-      const cached = await getFromCache<
-        {
-          label: string
-          key: string
-          sales: number
-          count?: number
-          subtotal?: number
-          vat?: number
-          discount?: number
-          total?: number
-          guestSum?: number
-          dineInOrderCount?: number
-          dineInTotal?: number
-          dineInGuestSum?: number
-          salesPerDineInOrder?: number
-          salesPerGuest?: number
-          salesPerOrder?: number
-        }[]
-      >('pos_sales_cache', key)
-      return cached ?? []
+      const cached = await getFromCache<unknown>('pos_sales_cache', key)
+      if (Array.isArray(cached))
+        return { kind: 'aggregate' as const, rows: cached as PosSalesPeriodRow[], truncated: false }
+      const typed = cached as PosSalesByPeriodResult | null
+      return typed ?? { kind: 'aggregate' as const, rows: [], truncated: false }
     }
   }
-  const cached = await getFromCache<
-    {
-      label: string
-      key: string
-      sales: number
-      count?: number
-      subtotal?: number
-      vat?: number
-      discount?: number
-      total?: number
-      guestSum?: number
-      dineInOrderCount?: number
-      dineInTotal?: number
-      dineInGuestSum?: number
-      salesPerDineInOrder?: number
-      salesPerGuest?: number
-      salesPerOrder?: number
-    }[]
-  >('pos_sales_cache', key)
-  return cached ?? []
+  const cached = await getFromCache<unknown>('pos_sales_cache', key)
+  if (Array.isArray(cached))
+    return { kind: 'aggregate' as const, rows: cached as PosSalesPeriodRow[], truncated: false }
+  const typed = cached as PosSalesByPeriodResult | null
+  return typed ?? { kind: 'aggregate' as const, rows: [], truncated: false }
 }
 
 export async function getPosSalesByDeliveryAppWithCache(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const key = cacheKeyAnalytics('delivery', {
     ...params,
     pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
   })
   if (isOnline()) {
@@ -121,14 +99,24 @@ export async function getPosSalesByDeliveryAppWithCache(params: {
       return data
     } catch {
       const cached = await getFromCache<{
-        items: { channelKey: string; sales: number; pct: number }[]
+        items: {
+          channelKey: string
+          sales: number
+          pct: number
+          platforms?: { code: string; sales: number; pct: number }[]
+        }[]
         total: number
       }>('pos_sales_cache', key)
       return cached ?? { items: [], total: 0 }
     }
   }
   const cached = await getFromCache<{
-    items: { channelKey: string; sales: number; pct: number }[]
+    items: {
+      channelKey: string
+      sales: number
+      pct: number
+      platforms?: { code: string; sales: number; pct: number }[]
+    }[]
     total: number
   }>('pos_sales_cache', key)
   return cached ?? { items: [], total: 0 }
@@ -138,11 +126,13 @@ export async function getPosSalesByChannelWithCache(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const key = cacheKeyAnalytics('channel', {
     ...params,
     pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
   })
   if (isOnline()) {
@@ -167,12 +157,16 @@ export async function getPosSalesByMenuWithCache(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   search?: string
+  searchMode?: 'or' | 'and'
   orderTypes?: string[]
 }) {
   const key = cacheKeyAnalytics('menu', {
     ...params,
     search: params.search ?? '',
+    searchMode: params.searchMode ?? 'or',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
   })
   if (isOnline()) {
@@ -197,11 +191,13 @@ export async function getPosSalesByPaymentWithCache(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const key = cacheKeyAnalytics('payment', {
     ...params,
     pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
   })
   if (isOnline()) {
@@ -226,11 +222,13 @@ export async function getPosSalesByStoreWithCache(params: {
   startStr: string
   endStr: string
   pos?: string
+  stores?: string[]
   orderTypes?: string[]
 }) {
   const key = cacheKeyAnalytics('store', {
     ...params,
     pos: params.pos ?? '',
+    stores: (params.stores ?? []).slice().sort().join(','),
     orderTypes: (params.orderTypes ?? []).slice().sort().join(','),
   })
   if (isOnline()) {

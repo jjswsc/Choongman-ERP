@@ -38,6 +38,7 @@ import { formatBahtNum, escapeHtml, cn } from '@/lib/utils'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
 import { buildKitchenSlipHtml, formatKitchenSlipItemRowHtml } from '@/lib/pos-kitchen-slip-html'
+import { buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 import { printHtmlInHiddenIframe } from '@/lib/print-html-iframe'
 import { buildReceiptDocumentHtml } from '@/lib/pos-receipt-html'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -659,29 +660,23 @@ export default function PosTerminalPage() {
         getPosPrinterSettings({ storeCode })
           .then((settings) => {
             const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
-            const kitchen2 = settings.kitchen2Categories || []
-            const mode = settings.kitchenMode || 1
             const orderTypeLabels: Record<string, string> = {
               dine_in: t('posOrderTypeDineIn') ?? '매장',
               takeout: t('posOrderTypeTakeout') ?? '포장',
               delivery: t('posOrderTypeDelivery') ?? '배달',
             }
-            const toSlips = (): { label: string; items: typeof items }[] => {
-              if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items }]
-              const slip1: typeof items = []
-              const slip2: typeof items = []
-              for (const it of items) {
-                const menuId = String(it.id ?? '').split('-')[0]
-                const cat = categoryByMenuId[menuId] ?? ''
-                if (kitchen2.includes(cat)) slip2.push(it)
-                else slip1.push(it)
-              }
-              const result: { label: string; items: typeof items }[] = []
-              if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
-              if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
-              return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items }]
-            }
-            const slips = toSlips()
+            const slips = buildKitchenSlipGroups(items, {
+              kitchenMode: settings.kitchenMode || 1,
+              kitchen2Categories: settings.kitchen2Categories || [],
+              kitchen3Categories: settings.kitchen3Categories || [],
+              categoryByMenuId,
+              labels: {
+                unified: t('posKitchenOrder') || '주방 주문서',
+                kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                kitchen3: `${t('posKitchen3') || '주방 3'}`,
+              },
+            })
             const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
             const kitchenMemo = parsePosOrderMemo(memo).plainMemo
             const printOne = (idx: number) => {
@@ -791,30 +786,23 @@ export default function PosTerminalPage() {
             try {
               const settings = await getPosPrinterSettings({ storeCode: order.storeCode ?? currentStoreId })
               const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
-              const kitchen1 = settings.kitchen1Categories || []
-              const kitchen2 = settings.kitchen2Categories || []
-              const mode = settings.kitchenMode || 1
               const orderTypeLabels: Record<string, string> = {
                 dine_in: t('posOrderTypeDineIn') ?? '매장',
                 takeout: t('posOrderTypeTakeout') ?? '포장',
                 delivery: t('posOrderTypeDelivery') ?? '배달',
               }
-              const toSlips = (): { label: string; items: typeof items }[] => {
-                if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items }]
-                const slip1: typeof items = []
-                const slip2: typeof items = []
-                for (const it of items) {
-                  const menuId = String(it.id ?? '').split('-')[0]
-                  const cat = categoryByMenuId[menuId] ?? ''
-                  if (kitchen2.includes(cat)) slip2.push(it)
-                  else slip1.push(it)
-                }
-                const result: { label: string; items: typeof items }[] = []
-                if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
-                if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
-                return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items }]
-              }
-              const slips = toSlips()
+              const slips = buildKitchenSlipGroups(items, {
+                kitchenMode: settings.kitchenMode || 1,
+                kitchen2Categories: settings.kitchen2Categories || [],
+                kitchen3Categories: settings.kitchen3Categories || [],
+                categoryByMenuId,
+                labels: {
+                  unified: t('posKitchenOrder') || '주방 주문서',
+                  kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                  kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                  kitchen3: `${t('posKitchen3') || '주방 3'}`,
+                },
+              })
               const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
               const kitchenMemo = parsePosOrderMemo(order.memo).plainMemo
               const printOne = (idx: number) => {
@@ -1261,6 +1249,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  receiptAutoPrintContext: 'payment',
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDeliveryOrderId(null)
@@ -1318,6 +1307,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  receiptAutoPrintContext: 'payment',
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingTakeoutOrderId(null)
@@ -1450,31 +1440,33 @@ export default function PosTerminalPage() {
                   cardPaymentAmount: 0,
                   adjustments: pricingAdjustments,
                 })
-                printReceiptNow(
-                  {
-                    orderNo: savedOrderNo,
-                    storeCode: currentStoreId,
-                    orderType: t('posOrderTypeDineIn') || '매장',
-                    tableName: payload.tableName,
-                    memo: payload.memo,
-                    items: receiptPrintItems,
-                    subtotal: mergeSubtotal,
-                    discountAmt,
-                    total: pricing.finalTotal,
-                    vatFeeAmt: pricing.vatFeeAmt,
-                    vatFeeMode: pricing.vatFeeMode,
-                    serviceFeeAmt: pricing.serviceFeeAmt,
-                    serviceFeeMode: pricing.serviceFeeMode,
-                    cardFeeAmt: pricing.cardFeeAmt,
-                    cardFeeMode: pricing.cardFeeMode,
-                    otherFeeAmt: pricing.otherFeeAmt,
-                    otherFeeMode: pricing.otherFeeMode,
-                  },
-                  null,
-                  false,
-                  undefined,
-                  true
-                )
+                if (shouldAutoPrintReceipt) {
+                  void printReceiptNow(
+                    {
+                      orderNo: savedOrderNo,
+                      storeCode: currentStoreId,
+                      orderType: t('posOrderTypeDineIn') || '매장',
+                      tableName: payload.tableName,
+                      memo: payload.memo,
+                      items: receiptPrintItems,
+                      subtotal: mergeSubtotal,
+                      discountAmt,
+                      total: pricing.finalTotal,
+                      vatFeeAmt: pricing.vatFeeAmt,
+                      vatFeeMode: pricing.vatFeeMode,
+                      serviceFeeAmt: pricing.serviceFeeAmt,
+                      serviceFeeMode: pricing.serviceFeeMode,
+                      cardFeeAmt: pricing.cardFeeAmt,
+                      cardFeeMode: pricing.cardFeeMode,
+                      otherFeeAmt: pricing.otherFeeAmt,
+                      otherFeeMode: pricing.otherFeeMode,
+                    },
+                    null,
+                    false,
+                    undefined,
+                    true
+                  )
+                }
                 if (autoPrintKitchenSlipOnOrder && payload.items.length > 0) {
                   const orderNoStr = savedOrderNo
                   const itemsForKitchen = payload.items.map((i) => ({
@@ -1489,29 +1481,23 @@ export default function PosTerminalPage() {
                   getPosPrinterSettings({ storeCode: currentStoreId })
                     .then((settings) => {
                       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category ?? '']))
-                      const kitchen2 = settings.kitchen2Categories || []
-                      const mode = settings.kitchenMode || 1
                       const orderTypeLabels: Record<string, string> = {
                         dine_in: t('posOrderTypeDineIn') ?? '매장',
                         takeout: t('posOrderTypeTakeout') ?? '포장',
                         delivery: t('posOrderTypeDelivery') ?? '배달',
                       }
-                      const toSlips = (): { label: string; items: typeof itemsForKitchen }[] => {
-                        if (mode === 1) return [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
-                        const slip1: typeof itemsForKitchen = []
-                        const slip2: typeof itemsForKitchen = []
-                        for (const it of itemsForKitchen) {
-                          const menuId = String(it.id ?? '').split('-')[0]
-                          const cat = categoryByMenuId[menuId] ?? ''
-                          if (kitchen2.includes(cat)) slip2.push(it)
-                          else slip1.push(it)
-                        }
-                        const result: { label: string; items: typeof itemsForKitchen }[] = []
-                        if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
-                        if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
-                        return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items: itemsForKitchen }]
-                      }
-                      const slips = toSlips()
+                      const slips = buildKitchenSlipGroups(itemsForKitchen, {
+                        kitchenMode: settings.kitchenMode || 1,
+                        kitchen2Categories: settings.kitchen2Categories || [],
+                        kitchen3Categories: settings.kitchen3Categories || [],
+                        categoryByMenuId,
+                        labels: {
+                          unified: t('posKitchenOrder') || '주방 주문서',
+                          kitchen1: `${t('posKitchen1') || '주방 1'}`,
+                          kitchen2: `${t('posKitchen2') || '주방 2'}`,
+                          kitchen3: `${t('posKitchen3') || '주방 3'}`,
+                        },
+                      })
                       const paperCss = '@page { size: 80mm 200mm; margin: 0; } html, body { margin: 0; padding: 0; } body { width: 80mm; box-sizing: border-box; font-family: sans-serif; font-size: 18px; padding: 1mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
                       const kitchenMemo = parsePosOrderMemo(payload.memo).plainMemo
                       const cR = (tag: string) => '\u003c/' + tag + '>'
@@ -1645,6 +1631,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  receiptAutoPrintContext: 'payment',
                 })
                 setPendingReceiptOrderNo(null)
                 setPendingDineInOrderId(null)
@@ -1670,6 +1657,9 @@ export default function PosTerminalPage() {
                   couponDiscountAmt: payload.couponDiscountAmt,
                   pointUsed: payload.pointUsed,
                   items: cartLinesToPosOrderItems(payload.items),
+                  ...(payload.orderType === 'delivery' && deliveryApp
+                    ? { deliveryAppCode: String(deliveryApp) }
+                    : {}),
                   paymentCash: payload.payment?.paymentCash ?? 0,
                   paymentCard: payload.payment?.paymentCard ?? 0,
                   paymentQr: payload.payment?.paymentQr ?? 0,
@@ -1704,6 +1694,7 @@ export default function PosTerminalPage() {
                   cardFeeMode: pricing.cardFeeMode,
                   otherFeeAmt: pricing.otherFeeAmt,
                   otherFeeMode: pricing.otherFeeMode,
+                  receiptAutoPrintContext: 'order',
                 })
                 if (payload.orderType === 'delivery') {
                   setSelectedDeliveryTargetId(null)
@@ -2293,7 +2284,9 @@ export default function PosTerminalPage() {
           delivery: tPrint('posOrderTypeDelivery') ?? '배달',
         }}
         t={tPrint}
-        autoPrintReceiptOnOrder={autoPrintReceiptOnPayment}
+        autoPrintReceiptOnOrder={autoPrintReceiptOnOrder}
+        autoPrintReceiptOnAddOrder={autoPrintReceiptOnAddOrder}
+        autoPrintReceiptOnPayment={autoPrintReceiptOnPayment}
         autoPrintKitchenSlipOnOrder={autoPrintKitchenSlipOnOrder}
         receiptBizName={receiptBizName}
         receiptBizTaxId={receiptBizTaxId}

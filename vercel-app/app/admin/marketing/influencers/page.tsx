@@ -17,6 +17,7 @@ import {
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 const HIRE_TYPE_OPTIONS = [
   { value: "pay", label: "Pay" },
@@ -47,8 +48,9 @@ export default function MarketingInfluencersPage() {
   const { lang } = useLang()
   const t = useT(lang)
   const campaignIdFromQuery = searchParams.get("campaignId")?.trim() || ""
+  const { auth } = useAuth()
   const [list, setList] = React.useState<MarketingInfluencer[]>([])
-  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string }[]>([])
+  const [campaigns, setCampaigns] = React.useState<{ id: string; topic: string; campaignNo?: string }[]>([])
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
@@ -64,6 +66,7 @@ export default function MarketingInfluencersPage() {
     branchReview: "",
     hireType: "pay",
     budget: "",
+    actualCost: "",
     shootingDate: "",
     publishDate: "",
     instagram: "",
@@ -75,14 +78,15 @@ export default function MarketingInfluencersPage() {
   })
 
   const loadData = React.useCallback(() => {
+    const cid = campaignFilter.trim()
     setLoading(true)
     Promise.all([
-      getMarketingInfluencers(campaignFilter ? { campaignId: campaignFilter } : undefined),
+      cid ? getMarketingInfluencers({ campaignId: cid }) : Promise.resolve([] as MarketingInfluencer[]),
       getMarketingCampaigns(),
     ])
       .then(([infs, camps]) => {
         setList(infs)
-        setCampaigns(camps.map((c) => ({ id: c.id, topic: c.topic })))
+        setCampaigns(camps.map((c) => ({ id: c.id, topic: c.topic, campaignNo: c.campaignNo })))
       })
       .catch(() => setList([]))
       .finally(() => setLoading(false))
@@ -110,6 +114,7 @@ export default function MarketingInfluencersPage() {
       branchReview: "",
       hireType: "pay",
       budget: "",
+      actualCost: "",
       shootingDate: "",
       publishDate: "",
       instagram: "",
@@ -134,6 +139,7 @@ export default function MarketingInfluencersPage() {
       branchReview: i.branchReview || "",
       hireType: i.hireType || "pay",
       budget: String(i.budget ?? ""),
+      actualCost: String(i.actualCost ?? ""),
       shootingDate: i.shootingDate || "",
       publishDate: i.publishDate || "",
       instagram: links.instagram || "",
@@ -175,13 +181,17 @@ export default function MarketingInfluencersPage() {
         branchReview: form.branchReview.trim(),
         hireType: form.hireType,
         budget: Number(form.budget) || 0,
+        actualCost: Number(form.actualCost) || 0,
         shootingDate: form.shootingDate.trim() || null,
         publishDate: form.publishDate.trim() || null,
         platformLinks: Object.keys(platformLinks).length > 0 ? platformLinks : undefined,
         note: form.note.trim(),
+        userRole: auth?.role,
+        userName: auth?.user,
       })
       if (res.success) {
-        await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
+        const extra = res.expenseSyncMessage ? `\n\n${res.expenseSyncMessage}` : ""
+        await appAlert((t("itemsAlertSaved") || "저장되었습니다.") + extra)
         loadData()
         handleNew()
       } else {
@@ -205,11 +215,15 @@ export default function MarketingInfluencersPage() {
     }
   }
 
-  const campaignMap = React.useMemo(() => {
-    const m: Record<string, string> = {}
-    campaigns.forEach((c) => { m[c.id] = c.topic })
-    return m
-  }, [campaigns])
+  const campaignLabel = React.useCallback(
+    (id: string | null | undefined) => {
+      if (!id) return ''
+      const c = campaigns.find((x) => x.id === id)
+      if (!c) return ''
+      return `${c.campaignNo ? `[${c.campaignNo}] ` : ''}${c.topic}`
+    },
+    [campaigns]
+  )
 
   return (
     <div className="flex-1 overflow-auto">
@@ -226,6 +240,10 @@ export default function MarketingInfluencersPage() {
           </div>
         </div>
 
+        <div className="mb-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          인플루언서 활동은 <strong className="text-foreground">캠페인 고유번호</strong>로 묶입니다. 캠페인 허브에서 캠페인을 만든 뒤 선택해 주세요.
+        </div>
+
         <div className="mb-4 flex flex-wrap gap-2">
           <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={loadData} disabled={loading}>
             <RotateCw className={cn("h-4 w-4", loading && "animate-spin")} />
@@ -236,9 +254,12 @@ export default function MarketingInfluencersPage() {
             onChange={(e) => setCampaignFilter(e.target.value)}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
-            <option value="">전체 캠페인</option>
+            <option value="">캠페인 선택…</option>
             {campaigns.map((c) => (
-              <option key={c.id} value={c.id}>{c.topic}</option>
+              <option key={c.id} value={c.id}>
+                {c.campaignNo ? `[${c.campaignNo}] ` : ''}
+                {c.topic}
+              </option>
             ))}
           </select>
           <Button variant="outline" size="sm" className="h-10 gap-1.5" onClick={handleNew}>
@@ -288,9 +309,12 @@ export default function MarketingInfluencersPage() {
                     onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))}
                     className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
                   >
-                    <option value="">선택 안 함</option>
+                    <option value="">캠페인 선택 *</option>
                     {campaigns.map((c) => (
-                      <option key={c.id} value={c.id}>{c.topic}</option>
+                      <option key={c.id} value={c.id}>
+                        {c.campaignNo ? `[${c.campaignNo}] ` : ''}
+                        {c.topic}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -334,7 +358,7 @@ export default function MarketingInfluencersPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground">비용 (฿)</label>
+                  <label className="text-xs text-muted-foreground">예산 (฿)</label>
                   <Input
                     type="number"
                     min={0}
@@ -342,6 +366,19 @@ export default function MarketingInfluencersPage() {
                     onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
                     className="mt-1"
                   />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-muted-foreground">실제 비용 (฿) · 지출관리 지급예정</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.actualCost}
+                    onChange={(e) => setForm((f) => ({ ...f, actualCost: e.target.value }))}
+                    className="mt-1"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    본사 권한으로 저장 시 지급예정에 자동 반영됩니다.
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground">촬영일</label>
@@ -404,7 +441,11 @@ export default function MarketingInfluencersPage() {
             </div>
             <div className="divide-y overflow-x-auto">
               {list.length === 0 && !loading && (
-                <p className="px-4 py-8 text-center text-sm text-muted-foreground">등록된 인플루언서가 없습니다.</p>
+                <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  {!campaignFilter.trim()
+                    ? '캠페인을 선택하면 해당 캠페인의 인플루언서가 표시됩니다.'
+                    : '등록된 인플루언서가 없습니다.'}
+                </p>
               )}
               {[...list]
                 .sort((a, b) => {
@@ -432,9 +473,16 @@ export default function MarketingInfluencersPage() {
                     <div className="font-semibold">{i.name}</div>
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                       {i.followers && <span>{i.followers} followers</span>}
-                      {i.campaignId && campaignMap[i.campaignId] && <span>{campaignMap[i.campaignId]}</span>}
+                      {i.campaignId && (
+                        <span className="rounded bg-muted px-1 font-mono text-[10px]">
+                          {i.campaignNo?.trim() || campaignLabel(i.campaignId)}
+                        </span>
+                      )}
                       {i.branchReview && <span>{i.branchReview}</span>}
-                      {i.budget > 0 && <span>฿{i.budget.toLocaleString()}</span>}
+                      {i.budget > 0 && <span>예산 ฿{i.budget.toLocaleString()}</span>}
+                      {(i.actualCost ?? 0) > 0 && (
+                        <span className="text-foreground">실비 ฿{(i.actualCost ?? 0).toLocaleString()}</span>
+                      )}
                       {cpf != null && <span className="text-primary font-medium">CPF ฿{cpf.toFixed(2)}</span>}
                       {i.publishDate && <span>{i.publishDate}</span>}
                     </div>

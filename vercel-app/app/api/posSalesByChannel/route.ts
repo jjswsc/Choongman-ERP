@@ -5,8 +5,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 import { parseOrderTypesParam, rowMatchesOrderFilter } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+const FETCH_LIMIT = 50000
 
 /** UI에서 i18n 매핑용 고정 키 */
 function bucketOrderType(raw: string): 'dine_in' | 'takeout' | 'delivery' | 'unknown' {
@@ -24,6 +26,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
+    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
@@ -32,12 +35,14 @@ export async function GET(request: NextRequest) {
 
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    if (pos && pos !== 'All') filter += `&store_code=ilike.${encodeURIComponent(pos)}`
+    filter = appendStoreCodeFilter(filter, stores)
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: 50000,
-      select: 'order_type,total,status',
-    })) as { order_type?: string; total?: number; status?: string }[]
+      limit: FETCH_LIMIT,
+      select: 'order_type,total,status,store_code',
+    })) as { order_type?: string; total?: number; status?: string; store_code?: string     }[]
+
+    if (rows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byChannel: Record<string, number> = {}
     for (const r of rows) {

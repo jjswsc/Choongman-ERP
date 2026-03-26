@@ -4,6 +4,7 @@
 -- INSERT 시 42501 (row-level security) 이면:
 --   · Vercel에 SUPABASE_SERVICE_ROLE_KEY 설정 권장, 또는
 --   · pos_promos → sql/pos_promos_rls_policies.sql
+--   · pos_promo_items → sql/pos_promo_items_rls_policies.sql
 --   · pos_menus(미러 메뉴) → sql/pos_menus_rls_policies.sql
 
 alter table public.pos_promos

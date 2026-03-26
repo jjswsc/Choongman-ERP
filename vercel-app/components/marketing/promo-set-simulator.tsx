@@ -16,6 +16,7 @@ import type { PosMenu, PosMenuOption } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
+import { calcPromoSimulation, promoCostKey } from "@/lib/promo-economics"
 
 type SimItem = { menuId: string; optionId: string | null; qty: number; menuName: string; optionName?: string; unitPrice: number }
 
@@ -47,13 +48,13 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
 
   React.useEffect(() => {
     for (const it of items) {
-      const key = `${it.menuId}:${it.optionId || "null"}`
+      const key = promoCostKey(it.menuId, it.optionId)
       if (costs[key] != null) continue
       getMenuCost({ menuId: it.menuId, optionId: it.optionId || undefined })
         .then((r) => setCosts((c) => ({ ...c, [key]: (r as { costHall?: number }).costHall ?? r.cost ?? 0 })))
         .catch(() => setCosts((c) => ({ ...c, [key]: 0 })))
     }
-  }, [items])
+  }, [items, costs])
 
   const addItem = (menuId: string, optionId: string | null, qty: number) => {
     const m = menus.find((x) => String(x.id) === menuId)
@@ -77,17 +78,20 @@ export function PromoSetSimulator({ onClose }: { onClose?: () => void }) {
 
   const regularPriceSum = items.reduce((s, it) => s + it.unitPrice * it.qty, 0)
   const costTotal = items.reduce((s, it) => {
-    const key = `${it.menuId}:${it.optionId || "null"}`
+    const key = promoCostKey(it.menuId, it.optionId)
     return s + (costs[key] ?? 0) * it.qty
   }, 0)
-  const hasAllCosts = items.every((it) => costs[`${it.menuId}:${it.optionId || "null"}`] != null)
+  const hasAllCosts = items.every((it) => costs[promoCostKey(it.menuId, it.optionId)] != null)
 
-  const salePriceNum = salePrice ? Number(salePrice) : null
-  const discountNum = discountPercent ? Number(discountPercent) : null
-  const finalSalePrice =
-    salePriceNum != null ? salePriceNum : discountNum != null ? regularPriceSum * (1 - discountNum / 100) : regularPriceSum
-  const marginBaht = finalSalePrice - costTotal
-  const marginPercent = finalSalePrice > 0 ? (marginBaht / finalSalePrice) * 100 : 0
+  const sim = calcPromoSimulation({
+    regularPriceSum,
+    costTotal,
+    salePriceInput: salePrice ? Number(salePrice) : null,
+    discountPercentInput: discountPercent ? Number(discountPercent) : null,
+  })
+  const finalSalePrice = sim.finalSalePrice
+  const marginBaht = sim.marginBaht
+  const marginPercent = sim.marginPercent
   const targetNum = targetOrders ? Number(targetOrders) : 0
   const targetProfit = marginBaht * targetNum
 

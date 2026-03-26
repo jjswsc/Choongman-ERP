@@ -10,8 +10,10 @@ import {
   parseOrderTypesParam,
   rowMatchesOrderFilter,
 } from '@/lib/pos-sales-order-type-filter'
+import { resolveStoresFromParams, appendStoreCodeFilter } from '@/lib/pos-sales-store-filter'
 
 const COMPLETED_STATUSES = ['completed', 'paid', 'ready']
+const FETCH_LIMIT = 50000
 
 export async function GET(request: NextRequest) {
   const headers = new Headers()
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
     const startStr = searchParams.get('startStr')?.trim()
     const endStr = searchParams.get('endStr')?.trim()
     const pos = searchParams.get('pos')?.trim()
+    const stores = resolveStoresFromParams(pos, searchParams.get('stores'))
     const orderTypesAllowed = parseOrderTypesParam(searchParams.get('orderTypes'))
 
     if (!startStr || !endStr) {
@@ -30,10 +33,10 @@ export async function GET(request: NextRequest) {
 
     const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
     let filter = `created_at=gte.${encodeURIComponent(startISO)}&created_at=lt.${encodeURIComponent(endISOExclusive)}`
-    if (pos && pos !== 'All') filter += `&store_code=ilike.${encodeURIComponent(pos)}`
+    filter = appendStoreCodeFilter(filter, stores)
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
-      limit: 50000,
+      limit: FETCH_LIMIT,
       select:
         'store_code,subtotal,vat,total,discount_amt,coupon_discount_amt,guest_count,status,order_type',
     })) as {
@@ -47,6 +50,8 @@ export async function GET(request: NextRequest) {
       status?: string
       order_type?: string
     }[]
+
+    if (rows.length >= FETCH_LIMIT) headers.set('X-Sales-Truncated', '1')
 
     const byStore: Record<
       string,

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
+import { campaignNoByIdMap } from '@/lib/marketing-campaign-code-resolve'
 import { PROMOTION_MAIN_CATEGORY, normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 const SELECT_EXTENDED =
   'id,code,name,category,category_main,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id,channel_hall,channel_takeout,channel_delivery,delivery_app_codes,discount_percent,valid_from,valid_to'
+
+const SELECT_WITH_MARKETING_COST =
+  SELECT_EXTENDED + ',marketing_actual_cost,expense_accrual_id'
 
 const SELECT_BASE =
   'id,code,name,category,price,price_delivery,vat_included,is_active,sort_order,marketing_campaign_id'
@@ -27,6 +31,8 @@ type RawRow = {
   discount_percent?: number | null
   valid_from?: string | null
   valid_to?: string | null
+  marketing_actual_cost?: number | null
+  expense_accrual_id?: number | null
 }
 
 function mapRow(row: RawRow) {
@@ -65,6 +71,14 @@ function mapRow(row: RawRow) {
         : null,
     validFrom: row.valid_from ? String(row.valid_from).slice(0, 10) : null,
     validTo: row.valid_to ? String(row.valid_to).slice(0, 10) : null,
+    marketingActualCost:
+      row.marketing_actual_cost != null && Number.isFinite(Number(row.marketing_actual_cost))
+        ? Number(row.marketing_actual_cost)
+        : 0,
+    expenseAccrualId:
+      row.expense_accrual_id != null && Number.isFinite(Number(row.expense_accrual_id))
+        ? String(row.expense_accrual_id)
+        : null,
   }
 }
 
@@ -77,7 +91,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
     let rows: RawRow[] | null = null
-    for (const sel of [SELECT_EXTENDED, SELECT_BASE]) {
+    for (const sel of [SELECT_WITH_MARKETING_COST, SELECT_EXTENDED, SELECT_BASE]) {
       try {
         rows = campaignId
           ? ((await supabaseSelectFilter(
@@ -100,7 +114,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const list = (rows || []).map((row) => mapRow(row))
+    const base = (rows || []).map((row) => mapRow(row))
+    const cmap = await campaignNoByIdMap(base.map((p) => p.marketingCampaignId))
+    const list = base.map((p) => ({
+      ...p,
+      marketingCampaignNo:
+        p.marketingCampaignId != null && String(p.marketingCampaignId).trim() !== ''
+          ? cmap.get(Number(p.marketingCampaignId)) ?? ''
+          : null,
+    }))
     return NextResponse.json(list, { headers })
   } catch (e) {
     console.error('getPosPromos:', e)

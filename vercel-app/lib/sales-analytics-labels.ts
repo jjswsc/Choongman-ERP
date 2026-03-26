@@ -51,6 +51,27 @@ export function translateChannelKey(
   return tr(i18nKey, KO[i18nKey] ?? channelKey)
 }
 
+/** 배달앱 코드(pos_delivery_apps.code) → i18n */
+export function translateDeliveryAppCode(
+  code: string,
+  tr: (key: string, fallback: string) => string
+): string {
+  const c = String(code ?? "").trim().toLowerCase()
+  if (!c || c === "_unspecified") {
+    return tr("salesDeliveryPlatformUnspecified", "앱 미지정")
+  }
+  const map: Record<string, string> = {
+    grab: "posDeliveryAppGrab",
+    lineman: "posDeliveryAppLineMan",
+    "line man": "posDeliveryAppLineMan",
+    shopee: "posDeliveryAppShopee",
+    foodpanda: "salesDeliveryAppFoodpanda",
+  }
+  const i18nKey = map[c]
+  if (i18nKey) return tr(i18nKey, KO[i18nKey] ?? c)
+  return c.replace(/_/g, " ").replace(/\b\w/g, (x) => x.toUpperCase())
+}
+
 export function translatePaymentKey(
   paymentKey: string,
   tr: (key: string, fallback: string) => string

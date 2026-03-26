@@ -19,6 +19,7 @@ import type { PosMenu } from '@/lib/api-client'
 import { useLang } from '@/lib/lang-context'
 import { formatPosDateTimeMedium, formatPosReceiptPrintTimestamp } from '@/lib/pos-datetime-locale'
 import { formatKitchenSlipItemRowHtml } from '@/lib/pos-kitchen-slip-html'
+import { buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
 
 export type ReceiptModalData = {
   orderNo: string
@@ -41,6 +42,8 @@ export type ReceiptModalData = {
   cardFeeMode?: 'included' | 'separate'
   otherFeeAmt?: number
   otherFeeMode?: 'included' | 'separate'
+  /** 모달 자동 영수증 인쇄 시 어떤 설정을 따를지 (주문/추가주문/결제) */
+  receiptAutoPrintContext?: 'order' | 'add_order' | 'payment'
 }
 
 const POS_PAPER_WIDTH_MM = 80
@@ -70,6 +73,8 @@ interface PosReceiptModalProps {
   orderTypeLabels: Record<string, string>
   t: (k: string) => string
   autoPrintReceiptOnOrder?: boolean
+  autoPrintReceiptOnAddOrder?: boolean
+  autoPrintReceiptOnPayment?: boolean
   autoPrintKitchenSlipOnOrder?: boolean
   receiptBizName?: string
   receiptBizTaxId?: string
@@ -92,6 +97,8 @@ export function PosReceiptModal({
   orderTypeLabels,
   t,
   autoPrintReceiptOnOrder = false,
+  autoPrintReceiptOnAddOrder = false,
+  autoPrintReceiptOnPayment = false,
   autoPrintKitchenSlipOnOrder = false,
   receiptBizName = '',
   receiptBizTaxId = '',
@@ -228,7 +235,7 @@ export function PosReceiptModal({
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH1)}).catch(()=>{});
     // #endregion
     // #region agent log
-    const logH14 = {sessionId:'960801',runId:'run-13',hypothesisId:'H14',location:'pos-receipt-modal.tsx:handlePrintReceipt:layoutConfig',message:'modal print layout config',data:{bodyPaddingTopMm:0,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,bodyPaddingBottomMm:1,receiptWidthMm:73.2,contentPadLeftMm:0,contentPadRightMm:0.8,rowPadRightMm:1.2,metaPadRightMm:1.2,contentMarginTopMm:0,rowTemplate:'minmax(0,1fr)+auto',metaTemplate:'11mm+1fr',contentAlign:'left'},timestamp:Date.now()}
+    const logH14 = {sessionId:'960801',runId:'run-13',hypothesisId:'H14',location:'pos-receipt-modal.tsx:handlePrintReceipt:layoutConfig',message:'modal print layout config',data:{bodyPaddingTopMm:0,bodyPaddingLeftMm:0,bodyPaddingRightMm:0.2,bodyPaddingBottomMm:1,receiptWidthMm:73.2,contentPadLeftMm:0,contentPadRightMm:0.8,rowPadRightMm:1.2,metaPadRightMm:1.2,contentMarginTopMm:0,rowTemplate:'minmax(0,1fr)+auto',metaTemplate:'46pct+54pct',contentAlign:'left'},timestamp:Date.now()}
     fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(logH14)}).catch(()=>{});
     fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logH14)}).catch(()=>{});
     // #endregion
@@ -267,8 +274,8 @@ export function PosReceiptModal({
             .receipt-row > span:first-child { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-row > span:last-child { white-space: normal; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-line-note { font-size: 10px; font-weight: 600; color: #333; padding-left: 2mm; margin: -2px 0 4px 0; line-height: 1.35; }
-            .receipt-meta-row { display: grid; grid-template-columns: 11mm minmax(0, 1fr); column-gap: 4px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
-            .receipt-meta-label { white-space: nowrap; }
+            .receipt-meta-row { display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 54%); column-gap: 6px; align-items: start; margin: 3px 0; padding-right: 1.2mm; }
+            .receipt-meta-label { min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-meta-value { min-width: 0; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
             .receipt-item-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 7px; font-size: 11px; font-weight: 700; padding: 0 1.2mm 4px 0; border-bottom: 1px solid #000; color: #000; }
             .receipt-total { margin-top: 8px; padding-top: 4px; font-weight: bold; color: #000; }
@@ -324,31 +331,18 @@ export function PosReceiptModal({
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
       const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
-      const kitchen1 = settings.kitchen1Categories || []
-      const kitchen2 = settings.kitchen2Categories || []
-      const mode = settings.kitchenMode || 1
-
-      const toSlips = (): { label: string; items: typeof receiptData.items }[] => {
-        if (mode === 1) {
-          return [{ label: t('posKitchenOrder') || '주방 주문서', items: receiptData.items }]
-        }
-        const slip1: typeof receiptData.items = []
-        const slip2: typeof receiptData.items = []
-        for (const it of receiptData.items) {
-          const menuId = String(it.id ?? '').split('-')[0]
-          const cat = categoryByMenuId[menuId] ?? ''
-          if (kitchen2.includes(cat)) {
-            slip2.push(it)
-          } else {
-            slip1.push(it)
-          }
-        }
-        const result: { label: string; items: typeof receiptData.items }[] = []
-        if (slip1.length) result.push({ label: `${t('posKitchen1') || '주방 1'}`, items: slip1 })
-        if (slip2.length) result.push({ label: `${t('posKitchen2') || '주방 2'}`, items: slip2 })
-        return result.length ? result : [{ label: t('posKitchenOrder') || '주방 주문서', items: receiptData.items }]
-      }
-      const slips = toSlips()
+      const slips = buildKitchenSlipGroups(receiptData.items, {
+        kitchenMode: settings.kitchenMode || 1,
+        kitchen2Categories: settings.kitchen2Categories || [],
+        kitchen3Categories: settings.kitchen3Categories || [],
+        categoryByMenuId,
+        labels: {
+          unified: t('posKitchenOrder') || '주방 주문서',
+          kitchen1: `${t('posKitchen1') || '주방 1'}`,
+          kitchen2: `${t('posKitchen2') || '주방 2'}`,
+          kitchen3: `${t('posKitchen3') || '주방 3'}`,
+        },
+      })
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]
@@ -408,7 +402,16 @@ export function PosReceiptModal({
 
   useEffect(() => {
     if (!open || !receiptData) return
-    if (!autoPrintReceiptOnOrder && !autoPrintKitchenSlipOnOrder) return
+    const ctx = receiptData.receiptAutoPrintContext
+    const autoReceipt =
+      ctx === 'payment'
+        ? autoPrintReceiptOnPayment
+        : ctx === 'add_order'
+          ? autoPrintReceiptOnAddOrder
+          : ctx === 'order'
+            ? autoPrintReceiptOnOrder
+            : false
+    if (!autoReceipt && !autoPrintKitchenSlipOnOrder) return
     const key = `${receiptData.orderNo}|${receiptData.storeCode}|${receiptData.total}|${receiptData.items.length}`
     if (autoPrintedKeyRef.current === key) return
     autoPrintedKeyRef.current = key
@@ -419,13 +422,22 @@ export function PosReceiptModal({
         void handlePrintKitchenSlip()
       }, 180))
     }
-    if (autoPrintReceiptOnOrder) {
+    if (autoReceipt) {
       timers.push(setTimeout(() => {
-        handlePrintReceipt()
+        void handlePrintReceipt()
       }, autoPrintKitchenSlipOnOrder ? 780 : 180))
     }
     return () => timers.forEach((id) => clearTimeout(id))
-  }, [open, receiptData, autoPrintReceiptOnOrder, autoPrintKitchenSlipOnOrder, handlePrintReceipt, handlePrintKitchenSlip])
+  }, [
+    open,
+    receiptData,
+    autoPrintReceiptOnOrder,
+    autoPrintReceiptOnAddOrder,
+    autoPrintReceiptOnPayment,
+    autoPrintKitchenSlipOnOrder,
+    handlePrintReceipt,
+    handlePrintKitchenSlip,
+  ])
 
   if (!receiptData) return null
   const receiptLogoSrc =
@@ -444,7 +456,7 @@ export function PosReceiptModal({
         </DialogHeader>
         <div
           ref={receiptRef}
-          className="receipt-content space-y-2 rounded border p-4 text-sm [&_.receipt-row]:grid [&_.receipt-row]:grid-cols-[minmax(0,1fr)_auto] [&_.receipt-row]:gap-x-2 [&_.receipt-row]:items-start [&_.receipt-row>span:first-child]:min-w-0 [&_.receipt-row>span:first-child]:break-words [&_.receipt-row>span:last-child]:text-right [&_.receipt-meta-row]:grid [&_.receipt-meta-row]:grid-cols-[70px_minmax(0,1fr)] [&_.receipt-meta-row]:gap-x-1 [&_.receipt-meta-row]:items-start [&_.receipt-meta-label]:whitespace-nowrap [&_.receipt-meta-value]:min-w-0 [&_.receipt-meta-value]:break-words"
+          className="receipt-content space-y-2 rounded border p-4 text-sm [&_.receipt-row]:grid [&_.receipt-row]:grid-cols-[minmax(0,1fr)_auto] [&_.receipt-row]:gap-x-2 [&_.receipt-row]:items-start [&_.receipt-row>span:first-child]:min-w-0 [&_.receipt-row>span:first-child]:break-words [&_.receipt-row>span:last-child]:text-right [&_.receipt-meta-row]:grid [&_.receipt-meta-row]:grid-cols-[minmax(0,46%)_minmax(0,54%)] [&_.receipt-meta-row]:gap-x-1.5 [&_.receipt-meta-row]:items-start [&_.receipt-meta-label]:min-w-0 [&_.receipt-meta-label]:break-words [&_.receipt-meta-value]:min-w-0 [&_.receipt-meta-value]:break-words"
         >
           <div className="receipt-brand-wrap text-center">
             <img

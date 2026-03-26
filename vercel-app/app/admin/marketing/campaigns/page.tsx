@@ -5,7 +5,8 @@ import * as React from "react"
 import {
   Megaphone, Save, Plus, Trash2, RotateCw, Upload, Calculator, Copy,
   Users, Package, BarChart2, ExternalLink, Loader2, CheckCheck, X,
-  List, ClipboardPen, Search, Tag, TrendingUp,
+  List, ClipboardPen, Search, Tag, TrendingUp, ChevronDown, ChevronUp,
+  GitCompare,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,14 +31,20 @@ import {
   getMarketingMaterials,
   saveMarketingMaterial,
   deleteMarketingMaterial,
+  getMarketingMaterialGifts,
+  saveMarketingMaterialGift,
+  deleteMarketingMaterialGift,
   useStoreList,
   type MarketingCampaign,
   type MarketingInfluencer,
   type MarketingMaterial,
+  type MarketingMaterialGift,
 } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { PromoSetSimulator } from "@/components/marketing/promo-set-simulator"
+import { CampaignAbComparePanel } from "@/components/marketing/campaign-ab-compare-panel"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 const DEFAULT_DELIVERY_APPS = ["그랩", "라인맨", "쇼피", "기타"]
@@ -206,6 +213,13 @@ const MATERIAL_STATUSES = [
   { value: "distributed", label: "배포완료" },
 ]
 
+const MATERIAL_PLACEMENT_SPOTS = [
+  { value: "counter", ko: "카운터", en: "Counter", th: "เคาน์เตอร์" },
+  { value: "tv", ko: "TV", en: "TV", th: "ทีวี" },
+  { value: "table", ko: "테이블", en: "Table", th: "โต๊ะ" },
+  { value: "entrance", ko: "입구", en: "Entrance", th: "ทางเข้า" },
+]
+
 const MATERIAL_STATUS_COLORS: Record<string, string> = {
   planning: "bg-gray-100 text-gray-700",
   producing: "bg-amber-100 text-amber-800",
@@ -247,6 +261,7 @@ const defaultInfForm = {
   contentTopic: "",
   hireType: "pay",
   budget: "",
+  actualCost: "",
   shootingDate: "",
   publishDate: "",
   note: "",
@@ -257,8 +272,23 @@ const defaultMatForm = {
   name: "",
   quantity: "1",
   unitCost: "",
+  actualCost: "",
+  branches: [] as string[],
+  isHqWide: false,
+  displayStartDate: "",
+  displayEndDate: "",
+  placementSpots: [] as string[],
   status: "planning",
   note: "",
+}
+
+const defaultGiftDraft = {
+  storeName: "",
+  giftName: "",
+  allocatedQty: "",
+  distributedQty: "",
+  remainingQty: "",
+  ruleNote: "",
 }
 
 // ─── 페이지 ──────────────────────────────────────────────────────────────────
@@ -267,6 +297,7 @@ export default function MarketingCampaignsPage() {
   const searchParams = useSearchParams()
   const { lang } = useLang()
   const t = useT(lang)
+  const { auth } = useAuth()
   const { stores, loading: storesLoading } = useStoreList()
   const tr = React.useCallback((ko: string, en: string, th: string) => {
     if (lang === "en") return en
@@ -364,6 +395,13 @@ export default function MarketingCampaignsPage() {
       default: return value
     }
   }, [tr])
+  const materialPlacementSpotLabel = React.useCallback((value: string) => {
+    const found = MATERIAL_PLACEMENT_SPOTS.find((x) => x.value === value)
+    if (!found) return value
+    if (lang === "en") return found.en
+    if (lang === "th") return found.th
+    return found.ko
+  }, [lang])
 
   // 캠페인 목록
   const [list, setList] = React.useState<MarketingCampaign[]>([])
@@ -395,8 +433,11 @@ export default function MarketingCampaignsPage() {
   // 하위 활동 탭
   const [activeTab, setActiveTab] = React.useState<"influencers" | "materials" | "results">("influencers")
 
-  // 허브: 등록·수정 vs 목록
-  const [hubTab, setHubTab] = React.useState<"form" | "list">("form")
+  // 허브: 등록·수정 / 목록 / A·B 비교
+  const [hubTab, setHubTab] = React.useState<"form" | "list" | "compare">(() => {
+    if (typeof window === "undefined") return "form"
+    return new URLSearchParams(window.location.search).get("view") === "compare" ? "compare" : "form"
+  })
   const [listSearch, setListSearch] = React.useState("")
 
   // 인플루언서 인라인
@@ -406,8 +447,14 @@ export default function MarketingCampaignsPage() {
 
   // 홍보물 인라인
   const [materials, setMaterials] = React.useState<MarketingMaterial[]>([])
-  const [matForm, setMatForm] = React.useState({ ...defaultMatForm, branches: [] as string[] })
+  const [matForm, setMatForm] = React.useState({ ...defaultMatForm })
   const [savingMat, setSavingMat] = React.useState(false)
+  const [materialGifts, setMaterialGifts] = React.useState<MarketingMaterialGift[]>([])
+  const [expandedGiftMatId, setExpandedGiftMatId] = React.useState<string | null>(null)
+  const [giftAddDraft, setGiftAddDraft] = React.useState({ ...defaultGiftDraft })
+  const [editingGiftId, setEditingGiftId] = React.useState<string | null>(null)
+  const [giftEditDraft, setGiftEditDraft] = React.useState({ ...defaultGiftDraft })
+  const [savingGift, setSavingGift] = React.useState(false)
 
   // 성과/비용
   const [linkedCounts, setLinkedCounts] = React.useState<{ ads: number; influencers: number; promos: number } | null>(null)
@@ -436,6 +483,29 @@ export default function MarketingCampaignsPage() {
 
   const openCampaignId = searchParams.get("openCampaign")?.trim()
   const openTab = searchParams.get("tab") as "influencers" | "materials" | "results" | null
+
+  const navigateHubTab = React.useCallback(
+    (tab: "form" | "list" | "compare") => {
+      setHubTab(tab)
+      const p = new URLSearchParams(searchParams.toString())
+      if (tab === "compare") {
+        p.set("view", "compare")
+        p.delete("openCampaign")
+        p.delete("tab")
+      } else {
+        p.delete("view")
+      }
+      const qs = p.toString()
+      router.replace(qs ? `/admin/marketing/campaigns?${qs}` : "/admin/marketing/campaigns")
+    },
+    [router, searchParams]
+  )
+
+  React.useEffect(() => {
+    if (searchParams.get("openCampaign")?.trim()) return
+    if (searchParams.get("view") === "compare") setHubTab("compare")
+  }, [searchParams])
+
   React.useEffect(() => {
     if (openCampaignId && list.length > 0) {
       const c = list.find((x) => x.id === openCampaignId)
@@ -473,6 +543,9 @@ export default function MarketingCampaignsPage() {
     getMarketingMaterials({ campaignId: id })
       .then(setMaterials)
       .catch(() => setMaterials([]))
+    getMarketingMaterialGifts({ campaignId: id })
+      .then(setMaterialGifts)
+      .catch(() => setMaterialGifts([]))
   }, [])
 
   // 신규 등록 시 고유번호 즉시 표시
@@ -488,6 +561,10 @@ export default function MarketingCampaignsPage() {
       setLinkedCounts(null)
       setLinkedInfluencers([])
       setMaterials([])
+      setMaterialGifts([])
+      setExpandedGiftMatId(null)
+      setEditingGiftId(null)
+      setGiftAddDraft({ ...defaultGiftDraft })
       setCostResults(null)
       setPosResults(null)
       return
@@ -542,6 +619,10 @@ export default function MarketingCampaignsPage() {
   // ─── 캠페인 핸들러 ─────────────────────────────────────────────────────────
   const handleNew = () => {
     setHubTab("form")
+    const p = new URLSearchParams(searchParams.toString())
+    p.delete("view")
+    const qs = p.toString()
+    router.replace(qs ? `/admin/marketing/campaigns?${qs}` : "/admin/marketing/campaigns")
     setEditingId(null)
     setForm(defaultForm)
     setCostFlags({
@@ -555,7 +636,11 @@ export default function MarketingCampaignsPage() {
     setCustomCampaignType("")
     setChannelState({ online: false, hall: false, takeout: false, apps: [] })
     setInfForm(defaultInfForm)
-    setMatForm({ ...defaultMatForm, branches: [] })
+    setMatForm({ ...defaultMatForm })
+    setMaterialGifts([])
+    setExpandedGiftMatId(null)
+    setEditingGiftId(null)
+    setGiftAddDraft({ ...defaultGiftDraft })
   }
 
   const handleEdit = (
@@ -563,6 +648,10 @@ export default function MarketingCampaignsPage() {
     tab: "influencers" | "materials" | "results" = "influencers",
   ) => {
     setHubTab("form")
+    const p = new URLSearchParams(searchParams.toString())
+    p.delete("view")
+    const qs = p.toString()
+    router.replace(qs ? `/admin/marketing/campaigns?${qs}` : "/admin/marketing/campaigns")
     setEditingId(c.id)
     setActiveTab(tab)
   }
@@ -790,15 +879,19 @@ export default function MarketingCampaignsPage() {
         contentTopic: infForm.contentTopic.trim(),
         hireType: infForm.hireType,
         budget: Number(infForm.budget) || 0,
+        actualCost: Number(infForm.actualCost) || 0,
         shootingDate: infForm.shootingDate || null,
         publishDate: infForm.publishDate || null,
         note: infForm.note.trim(),
         status: "finish",
+        userRole: auth?.role,
+        userName: auth?.user,
       })
       if (res.success) {
         setInfForm(defaultInfForm)
         loadSubActivities(editingId)
         loadLinkedCounts(editingId)
+        if (res.expenseSyncMessage) await appAlert(res.expenseSyncMessage)
       } else {
         await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
       }
@@ -832,13 +925,21 @@ export default function MarketingCampaignsPage() {
         name: matForm.name.trim(),
         quantity: Number(matForm.quantity) || 1,
         unitCost: Number(matForm.unitCost) || 0,
+        actualCost: Number(matForm.actualCost) || 0,
         branches: matForm.branches,
+        isHqWide: matForm.isHqWide,
+        displayStartDate: matForm.displayStartDate || null,
+        displayEndDate: matForm.displayEndDate || null,
+        placementSpots: matForm.placementSpots,
         status: matForm.status,
         note: matForm.note.trim(),
+        userRole: auth?.role,
+        userName: auth?.user,
       })
       if (res.success) {
-        setMatForm({ ...defaultMatForm, branches: [] })
+        setMatForm({ ...defaultMatForm })
         loadSubActivities(editingId)
+        if (res.expenseSyncMessage) await appAlert(res.expenseSyncMessage)
       } else {
         await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
       }
@@ -861,6 +962,127 @@ export default function MarketingCampaignsPage() {
         ? f.branches.filter((b) => b !== store)
         : [...f.branches, store],
     }))
+  }
+
+  const toggleMatPlacementSpot = (spot: string) => {
+    setMatForm((f) => ({
+      ...f,
+      placementSpots: f.placementSpots.includes(spot)
+        ? f.placementSpots.filter((x) => x !== spot)
+        : [...f.placementSpots, spot],
+    }))
+  }
+
+  const giftsForMaterial = React.useCallback(
+    (materialId: string) => materialGifts.filter((g) => g.materialId === materialId),
+    [materialGifts]
+  )
+
+  const reloadMaterialGifts = React.useCallback(() => {
+    if (!editingId) return
+    getMarketingMaterialGifts({ campaignId: editingId })
+      .then(setMaterialGifts)
+      .catch(() => setMaterialGifts([]))
+  }, [editingId])
+
+  const toggleGiftPanel = (materialId: string) => {
+    setExpandedGiftMatId((cur) => (cur === materialId ? null : materialId))
+    setEditingGiftId(null)
+    setGiftAddDraft({ ...defaultGiftDraft })
+  }
+
+  const startEditGift = (g: MarketingMaterialGift) => {
+    setEditingGiftId(g.id)
+    setGiftEditDraft({
+      storeName: g.storeName,
+      giftName: g.giftName,
+      allocatedQty: String(g.allocatedQty),
+      distributedQty: String(g.distributedQty),
+      remainingQty: String(g.remainingQty),
+      ruleNote: g.ruleNote,
+    })
+  }
+
+  const handleAddMaterialGift = async (materialId: string) => {
+    if (!editingId) return
+    const storeName = giftAddDraft.storeName.trim()
+    const giftName = giftAddDraft.giftName.trim()
+    if (!storeName || !giftName) {
+      await appAlert(tr("매장과 사은품명을 입력하세요.", "Enter store and gift name.", "กรุณากรอกสาขาและชื่อของแถม"))
+      return
+    }
+    const allocatedQty = Math.max(0, Math.floor(Number(giftAddDraft.allocatedQty) || 0))
+    const distributedQty = Math.max(0, Math.floor(Number(giftAddDraft.distributedQty) || 0))
+    const remainingRaw = giftAddDraft.remainingQty.trim()
+    setSavingGift(true)
+    try {
+      const res = await saveMarketingMaterialGift({
+        materialId,
+        campaignId: editingId,
+        storeName,
+        giftName,
+        allocatedQty,
+        distributedQty,
+        remainingQty: remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
+        ruleNote: giftAddDraft.ruleNote.trim(),
+      })
+      if (res.success) {
+        setGiftAddDraft({ ...defaultGiftDraft })
+        reloadMaterialGifts()
+      } else {
+        await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
+      }
+    } finally {
+      setSavingGift(false)
+    }
+  }
+
+  const handleSaveGiftEdit = async () => {
+    if (!editingId || !editingGiftId) return
+    const base = materialGifts.find((x) => x.id === editingGiftId)
+    if (!base) return
+    const storeName = giftEditDraft.storeName.trim()
+    const giftName = giftEditDraft.giftName.trim()
+    if (!storeName || !giftName) {
+      await appAlert(tr("매장과 사은품명을 입력하세요.", "Enter store and gift name.", "กรุณากรอกสาขาและชื่อของแถม"))
+      return
+    }
+    const allocatedQty = Math.max(0, Math.floor(Number(giftEditDraft.allocatedQty) || 0))
+    const distributedQty = Math.max(0, Math.floor(Number(giftEditDraft.distributedQty) || 0))
+    const remainingRaw = giftEditDraft.remainingQty.trim()
+    setSavingGift(true)
+    try {
+      const res = await saveMarketingMaterialGift({
+        id: editingGiftId,
+        materialId: base.materialId,
+        campaignId: editingId,
+        storeName,
+        giftName,
+        allocatedQty,
+        distributedQty,
+        remainingQty: remainingRaw === "" ? undefined : Math.max(0, Math.floor(Number(remainingRaw) || 0)),
+        ruleNote: giftEditDraft.ruleNote.trim(),
+      })
+      if (res.success) {
+        setEditingGiftId(null)
+        reloadMaterialGifts()
+      } else {
+        await appAlert(res.message || tr("저장 실패", "Save failed", "บันทึกไม่สำเร็จ"))
+      }
+    } finally {
+      setSavingGift(false)
+    }
+  }
+
+  const handleDeleteMaterialGift = async (g: MarketingMaterialGift) => {
+    if (!await appConfirm(`"${g.giftName}" ${tr("삭제하시겠습니까?", "Delete this item?", "ต้องการลบรายการนี้หรือไม่?")}`)) return
+    const res = await deleteMarketingMaterialGift({ id: g.id })
+    if (res.success) {
+      if (editingGiftId === g.id) setEditingGiftId(null)
+      reloadMaterialGifts()
+    } else {
+      await appAlert(res.message || tr("삭제 실패", "Delete failed", "ลบไม่สำเร็จ"))
+    }
   }
 
   // ─── 성과/비용 ─────────────────────────────────────────────────────────────
@@ -919,7 +1141,12 @@ export default function MarketingCampaignsPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <div
+        className={cn(
+          "mx-auto px-4 py-6 sm:px-6 lg:px-8",
+          hubTab === "compare" ? "max-w-7xl" : "max-w-4xl"
+        )}
+      >
 
         {/* 헤더 */}
         <div className="mb-6 flex items-center gap-3">
@@ -963,29 +1190,40 @@ export default function MarketingCampaignsPage() {
         </div>
         {showSimulator && <PromoSetSimulator onClose={() => setShowSimulator(false)} />}
 
-        {/* 등록·수정 / 목록 */}
+        {/* 등록·수정 / 목록 / A·B 비교 */}
         <div className="mb-4 flex rounded-lg border bg-muted/30 p-1 text-sm font-medium">
           <button
             type="button"
-            onClick={() => setHubTab("form")}
+            onClick={() => navigateHubTab("form")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2.5 transition-colors",
+              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
               hubTab === "form" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <ClipboardPen className="h-4 w-4 shrink-0" />
-            {tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}
+            <span className="truncate">{tr("등록·수정", "Create / Edit", "สร้าง / แก้ไข")}</span>
           </button>
           <button
             type="button"
-            onClick={() => setHubTab("list")}
+            onClick={() => navigateHubTab("list")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md py-2.5 transition-colors",
+              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
               hubTab === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             )}
           >
             <List className="h-4 w-4 shrink-0" />
-            {tr("목록", "List", "รายการ")}
+            <span className="truncate">{tr("목록", "List", "รายการ")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigateHubTab("compare")}
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md py-2.5 transition-colors",
+              hubTab === "compare" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <GitCompare className="h-4 w-4 shrink-0" />
+            <span className="truncate">{tr("A/B 비교", "A/B Compare", "เปรียบเทียบ A/B")}</span>
           </button>
         </div>
 
@@ -1435,11 +1673,22 @@ export default function MarketingCampaignsPage() {
                           </select>
                         </div>
                         <div className="flex-1">
-                        <label className="text-[10px] text-muted-foreground">{tr("비용 (฿)", "Cost (฿)", "ค่าใช้จ่าย (฿)")}</label>
+                        <label className="text-[10px] text-muted-foreground">{tr("예산 (฿)", "Budget (฿)", "งบประมาณ (฿)")}</label>
                           <Input type="number" min={0} value={infForm.budget}
                             onChange={(e) => setInfForm((f) => ({ ...f, budget: e.target.value }))}
                             className="mt-0.5 h-8 text-xs" />
                         </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-muted-foreground">
+                          {tr("실제 비용 (฿)", "Actual cost (฿)", "ค่าใช้จ่ายจริง (฿)")}
+                        </label>
+                        <Input type="number" min={0} value={infForm.actualCost}
+                          onChange={(e) => setInfForm((f) => ({ ...f, actualCost: e.target.value }))}
+                          className="mt-0.5 h-8 text-xs" />
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {tr("본사 권한으로 저장 시 지출관리 「지급예정」에 반영됩니다.", "Office role: syncs to Expense → Planned payment.", "สิทธิ์สำนักงาน: เชื่อมไปยังค่าใช้จ่าย → กำหนดจ่าย")}
+                        </p>
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">{tr("촬영일", "Shoot Date", "วันที่ถ่ายทำ")}</label>
@@ -1485,7 +1734,14 @@ export default function MarketingCampaignsPage() {
                             {inf.followers && <span className="ml-2 text-xs text-muted-foreground">{inf.followers}</span>}
                             {inf.contentTopic && <span className="ml-2 text-xs text-muted-foreground">· {inf.contentTopic}</span>}
                             <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              {inf.budget > 0 && <span>฿{inf.budget.toLocaleString()}</span>}
+                              {inf.budget > 0 && (
+                                <span>{tr("예산", "Budget", "งบ")} ฿{inf.budget.toLocaleString()}</span>
+                              )}
+                              {(inf.actualCost ?? 0) > 0 && (
+                                <span className="text-foreground">
+                                  {tr("실비", "Actual", "จริง")} ฿{(inf.actualCost ?? 0).toLocaleString()}
+                                </span>
+                              )}
                               {inf.publishDate && <span>{tr("게시", "Published", "เผยแพร่")}: {inf.publishDate}</span>}
                             </div>
                           </div>
@@ -1532,12 +1788,44 @@ export default function MarketingCampaignsPage() {
                           className="mt-0.5 h-8 text-xs" />
                       </div>
                       <div>
+                        <label className="text-[10px] text-muted-foreground">{tr("본사 공용", "HQ-wide", "ส่วนกลางสำนักงานใหญ่")}</label>
+                        <div className="mt-0.5 flex h-8 items-center rounded-md border border-input px-2 text-xs">
+                          <label className="flex cursor-pointer items-center gap-1.5">
+                            <Checkbox
+                              checked={matForm.isHqWide}
+                              onCheckedChange={(checked) =>
+                                setMatForm((f) => ({ ...f, isHqWide: Boolean(checked) }))
+                              }
+                            />
+                            <span>{tr("본사 차원 통합 진행", "Managed at HQ level", "ดำเนินการในระดับสำนักงานใหญ่")}</span>
+                          </label>
+                        </div>
+                      </div>
+                      <div>
                         <label className="text-[10px] text-muted-foreground">{tr("상태", "Status", "สถานะ")}</label>
                         <select value={matForm.status}
                           onChange={(e) => setMatForm((f) => ({ ...f, status: e.target.value }))}
                           className="mt-0.5 flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs">
                           {MATERIAL_STATUSES.map((o) => <option key={o.value} value={o.value}>{materialStatusLabel(o.value)}</option>)}
                         </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">{tr("게시 시작일", "Display Start Date", "วันที่เริ่มติดตั้ง")}</label>
+                        <Input
+                          type="date"
+                          value={matForm.displayStartDate}
+                          onChange={(e) => setMatForm((f) => ({ ...f, displayStartDate: e.target.value }))}
+                          className="mt-0.5 h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">{tr("게시 종료일", "Display End Date", "วันที่สิ้นสุดการติดตั้ง")}</label>
+                        <Input
+                          type="date"
+                          value={matForm.displayEndDate}
+                          onChange={(e) => setMatForm((f) => ({ ...f, displayEndDate: e.target.value }))}
+                          className="mt-0.5 h-8 text-xs"
+                        />
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">{tr("메모", "Note", "บันทึก")}</label>
@@ -1583,12 +1871,68 @@ export default function MarketingCampaignsPage() {
                         </div>
                       </div>
 
+                      {/* 매장 내 위치 */}
+                      <div className="sm:col-span-2">
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-[10px] text-muted-foreground">{tr("매장 내 위치", "In-store Placement", "ตำแหน่งในร้าน")}</label>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-6 w-6 p-0"
+                              title={tr("전체 선택", "Select All", "เลือกทั้งหมด")}
+                              onClick={() =>
+                                setMatForm((f) => ({
+                                  ...f,
+                                  placementSpots: MATERIAL_PLACEMENT_SPOTS.map((x) => x.value),
+                                }))
+                              }
+                            >
+                              <CheckCheck className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-6 w-6 p-0"
+                              title={tr("전체 해제", "Clear All", "ล้างทั้งหมด")}
+                              onClick={() => setMatForm((f) => ({ ...f, placementSpots: [] }))}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 rounded-lg border bg-background px-2 py-2">
+                          {MATERIAL_PLACEMENT_SPOTS.map((spot) => (
+                            <label key={spot.value} className="flex cursor-pointer items-center gap-1 text-xs">
+                              <Checkbox
+                                checked={matForm.placementSpots.includes(spot.value)}
+                                onCheckedChange={() => toggleMatPlacementSpot(spot.value)}
+                              />
+                              <span className="truncate">{materialPlacementSpotLabel(spot.value)}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* 합계 미리보기 */}
                       {Number(matForm.quantity) > 0 && Number(matForm.unitCost) > 0 && (
                         <div className="sm:col-span-2 text-xs text-muted-foreground">
-                          {tr("소계", "Subtotal", "ยอดรวมย่อย")}: {matForm.quantity}{tr("개", "", " ชิ้น")} × ฿{Number(matForm.unitCost).toLocaleString()} = <span className="font-semibold text-foreground">฿{(Number(matForm.quantity) * Number(matForm.unitCost)).toLocaleString()}</span>
+                          {tr("예상 소계", "Est. subtotal", "ประมาณการ")}: {matForm.quantity}{tr("개", "", " ชิ้น")} × ฿{Number(matForm.unitCost).toLocaleString()} = <span className="font-semibold text-foreground">฿{(Number(matForm.quantity) * Number(matForm.unitCost)).toLocaleString()}</span>
                         </div>
                       )}
+                      <div className="sm:col-span-2">
+                        <label className="text-[10px] text-muted-foreground">
+                          {tr("실제 비용 (฿)", "Actual cost (฿)", "ค่าใช้จ่ายจริง (฿)")}
+                        </label>
+                        <Input type="number" min={0} value={matForm.actualCost}
+                          onChange={(e) => setMatForm((f) => ({ ...f, actualCost: e.target.value }))}
+                          className="mt-0.5 h-8 text-xs" />
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {tr("본사 권한으로 저장 시 지출관리 「지급예정」에 반영됩니다.", "Office role: syncs to Expense → Planned payment.", "สิทธิ์สำนักงาน: เชื่อมไปยังค่าใช้จ่าย → กำหนดจ่าย")}
+                        </p>
+                      </div>
                     </div>
                     <Button size="sm" className="mt-2 h-8 text-xs gap-1" onClick={handleAddMaterial} disabled={savingMat}>
                       {savingMat ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
@@ -1608,35 +1952,318 @@ export default function MarketingCampaignsPage() {
                           {tr("합계", "Total", "รวม")}: ฿{materials.reduce((s, m) => s + m.quantity * m.unitCost, 0).toLocaleString()}
                         </span>
                       </div>
-                      {materials.map((mat) => (
-                        <div key={mat.id}
-                          className="flex items-start justify-between rounded-lg border px-3 py-2 text-sm">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-medium">{mat.name}</span>
-                              <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium",
-                                MATERIAL_STATUS_COLORS[mat.status] || "bg-gray-100 text-gray-700")}>
-                                {materialStatusLabel(mat.status)}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {materialTypeLabel(mat.type)}
-                              </span>
+                      {materials.map((mat) => {
+                        const gf = giftsForMaterial(mat.id)
+                        const giftSum = gf.reduce(
+                          (a, g) => ({
+                            alloc: a.alloc + g.allocatedQty,
+                            dist: a.dist + g.distributedQty,
+                            rem: a.rem + g.remainingQty,
+                          }),
+                          { alloc: 0, dist: 0, rem: 0 }
+                        )
+                        const spots = mat.placementSpots ?? []
+                        return (
+                          <div key={mat.id} className="rounded-lg border">
+                            <div className="flex items-start justify-between gap-2 px-3 py-2 text-sm">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{mat.name}</span>
+                                  <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium",
+                                    MATERIAL_STATUS_COLORS[mat.status] || "bg-gray-100 text-gray-700")}>
+                                    {materialStatusLabel(mat.status)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {materialTypeLabel(mat.type)}
+                                  </span>
+                                </div>
+                                <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                  <span>{mat.quantity}{tr("개", "", " ชิ้น")}</span>
+                                  {mat.unitCost > 0 && (
+                                    <span>
+                                      {tr("예상", "Est.", "ประมาณ")} ฿{mat.unitCost.toLocaleString()} × {mat.quantity} = ฿
+                                      {(mat.quantity * mat.unitCost).toLocaleString()}
+                                    </span>
+                                  )}
+                                  {(mat.actualCost ?? 0) > 0 && (
+                                    <span className="text-foreground">
+                                      {tr("실비", "Actual", "จริง")} ฿{(mat.actualCost ?? 0).toLocaleString()}
+                                    </span>
+                                  )}
+                                  {mat.branches.length > 0 && <span>{mat.branches.slice(0, 3).join(", ")}{mat.branches.length > 3 ? "..." : ""}</span>}
+                                  {spots.length > 0 && (
+                                    <span>
+                                      {tr("위치", "Placement", "ตำแหน่ง")}:{" "}
+                                      {spots.map((spot) => materialPlacementSpotLabel(spot)).join(", ")}
+                                    </span>
+                                  )}
+                                  {mat.isHqWide && <span>{tr("본사공용", "HQ-wide", "ส่วนกลางสำนักงานใหญ่")}</span>}
+                                  {(mat.displayStartDate || mat.displayEndDate) && (
+                                    <span>
+                                      {tr("게시기간", "Display Period", "ช่วงเวลาติดตั้ง")}: {mat.displayStartDate || "-"} ~ {mat.displayEndDate || "-"}
+                                    </span>
+                                  )}
+                                  {mat.note && <span>{mat.note}</span>}
+                                </div>
+                                {gf.length > 0 && (
+                                  <div className="mt-1 text-[10px] text-muted-foreground">
+                                    {tr("사은품", "Gifts", "ของแถม")}: {tr("배정", "Alloc", "จัดสรร")}{" "}
+                                    {giftSum.alloc} · {tr("배포", "Dist", "แจกจ่าย")} {giftSum.dist} · {tr("잔여", "Left", "คงเหลือ")}{" "}
+                                    {giftSum.rem}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex shrink-0 items-start gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  title={tr("사은품", "Gifts", "ของแถม")}
+                                  onClick={() => toggleGiftPanel(mat.id)}
+                                >
+                                  {expandedGiftMatId === mat.id ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                  onClick={() => handleDeleteMaterial(mat)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                              <span>{mat.quantity}{tr("개", "", " ชิ้น")}</span>
-                              {mat.unitCost > 0 && (
-                                <span>฿{mat.unitCost.toLocaleString()} × {mat.quantity} = ฿{(mat.quantity * mat.unitCost).toLocaleString()}</span>
-                              )}
-                              {mat.branches.length > 0 && <span>{mat.branches.slice(0, 3).join(", ")}{mat.branches.length > 3 ? "..." : ""}</span>}
-                              {mat.note && <span>{mat.note}</span>}
-                            </div>
+                            {expandedGiftMatId === mat.id && (
+                              <div className="space-y-2 border-t bg-muted/10 px-3 py-2 text-xs">
+                                <p className="text-[11px] font-semibold">
+                                  {tr("사은품 배정/배포", "Gift allocation & distribution", "จัดสรร/แจกจ่ายของแถม")}
+                                </p>
+                                {gf.length === 0 ? (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {tr("등록된 사은품이 없습니다.", "No gift rows.", "ไม่มีแถวของแถม")}
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    {gf.map((g) =>
+                                      editingGiftId === g.id ? (
+                                        <div key={g.id} className="grid gap-1.5 rounded border bg-background p-2 sm:grid-cols-2">
+                                          <select
+                                            value={giftEditDraft.storeName}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, storeName: e.target.value }))
+                                            }
+                                            className="h-8 rounded-md border border-input bg-background px-2 text-xs sm:col-span-2"
+                                          >
+                                            <option value="">{tr("매장 선택", "Select store", "เลือกสาขา")}</option>
+                                            {stores.map((s) => (
+                                              <option key={s} value={s}>
+                                                {s}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <Input
+                                            className="h-8 text-xs sm:col-span-2"
+                                            value={giftEditDraft.giftName}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, giftName: e.target.value }))
+                                            }
+                                            placeholder={tr("사은품명", "Gift name", "ชื่อของแถม")}
+                                          />
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-8 text-xs"
+                                            value={giftEditDraft.allocatedQty}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, allocatedQty: e.target.value }))
+                                            }
+                                            placeholder={tr("배정", "Alloc", "จัดสรร")}
+                                          />
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-8 text-xs"
+                                            value={giftEditDraft.distributedQty}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, distributedQty: e.target.value }))
+                                            }
+                                            placeholder={tr("배포", "Dist", "แจกจ่าย")}
+                                          />
+                                          <Input
+                                            type="number"
+                                            min={0}
+                                            className="h-8 text-xs sm:col-span-2"
+                                            value={giftEditDraft.remainingQty}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, remainingQty: e.target.value }))
+                                            }
+                                            placeholder={tr("잔여(공란=자동)", "Left (auto if empty)", "คงเหลือ (เว้นว่าง=อัตโนมัติ)")}
+                                          />
+                                          <Input
+                                            className="h-8 text-xs sm:col-span-2"
+                                            value={giftEditDraft.ruleNote}
+                                            onChange={(e) =>
+                                              setGiftEditDraft((d) => ({ ...d, ruleNote: e.target.value }))
+                                            }
+                                            placeholder={tr("배포 기준 메모", "Distribution rule note", "หมายเหตุเกณฑ์แจกจ่าย")}
+                                          />
+                                          <div className="flex flex-wrap gap-1 sm:col-span-2">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              className="h-7 text-[11px]"
+                                              disabled={savingGift}
+                                              onClick={() => void handleSaveGiftEdit()}
+                                            >
+                                              {savingGift ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                tr("저장", "Save", "บันทึก")
+                                              )}
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 text-[11px]"
+                                              onClick={() => setEditingGiftId(null)}
+                                            >
+                                              {tr("취소", "Cancel", "ยกเลิก")}
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          key={g.id}
+                                          className="flex flex-wrap items-center justify-between gap-2 rounded border bg-background px-2 py-1.5"
+                                        >
+                                          <div className="min-w-0 flex-1">
+                                            <span className="font-medium">{g.storeName}</span>
+                                            <span className="text-muted-foreground"> · </span>
+                                            <span>{g.giftName}</span>
+                                            <div className="text-[10px] text-muted-foreground">
+                                              {tr("배정", "Alloc", "จัดสรร")} {g.allocatedQty} · {tr("배포", "Dist", "แจกจ่าย")}{" "}
+                                              {g.distributedQty} · {tr("잔여", "Left", "คงเหลือ")} {g.remainingQty}
+                                              {g.ruleNote ? ` · ${g.ruleNote}` : ""}
+                                            </div>
+                                          </div>
+                                          <div className="flex shrink-0 gap-1">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-7 px-2 text-[10px]"
+                                              onClick={() => startEditGift(g)}
+                                            >
+                                              {tr("편집", "Edit", "แก้ไข")}
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                                              onClick={() => void handleDeleteMaterialGift(g)}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                )}
+                                <div className="space-y-1.5 rounded border border-dashed bg-background p-2">
+                                  <p className="text-[10px] font-medium text-muted-foreground">
+                                    {tr("행 추가", "Add row", "เพิ่มแถว")}
+                                  </p>
+                                  <div className="grid gap-1.5 sm:grid-cols-2">
+                                    <select
+                                      value={giftAddDraft.storeName}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, storeName: e.target.value }))
+                                      }
+                                      disabled={storesLoading}
+                                      className="h-8 rounded-md border border-input bg-background px-2 text-xs sm:col-span-2"
+                                    >
+                                      <option value="">{tr("매장 선택", "Select store", "เลือกสาขา")}</option>
+                                      {stores.map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <Input
+                                      className="h-8 text-xs sm:col-span-2"
+                                      value={giftAddDraft.giftName}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, giftName: e.target.value }))
+                                      }
+                                      placeholder={tr("사은품명", "Gift name", "ชื่อของแถม")}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 text-xs"
+                                      value={giftAddDraft.allocatedQty}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, allocatedQty: e.target.value }))
+                                      }
+                                      placeholder={tr("배정", "Alloc", "จัดสรร")}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 text-xs"
+                                      value={giftAddDraft.distributedQty}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, distributedQty: e.target.value }))
+                                      }
+                                      placeholder={tr("배포", "Dist", "แจกจ่าย")}
+                                    />
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-8 text-xs sm:col-span-2"
+                                      value={giftAddDraft.remainingQty}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, remainingQty: e.target.value }))
+                                      }
+                                      placeholder={tr("잔여(공란=자동)", "Left (auto if empty)", "คงเหลือ (เว้นว่าง=อัตโนมัติ)")}
+                                    />
+                                    <Input
+                                      className="h-8 text-xs sm:col-span-2"
+                                      value={giftAddDraft.ruleNote}
+                                      onChange={(e) =>
+                                        setGiftAddDraft((d) => ({ ...d, ruleNote: e.target.value }))
+                                      }
+                                      placeholder={tr("배포 기준 메모", "Distribution rule note", "หมายเหตุเกณฑ์แจกจ่าย")}
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-7 gap-1 text-[11px]"
+                                    disabled={savingGift || storesLoading}
+                                    onClick={() => void handleAddMaterialGift(mat.id)}
+                                  >
+                                    {savingGift ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Plus className="h-3 w-3" />
+                                    )}
+                                    {tr("추가", "Add", "เพิ่ม")}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive ml-2 shrink-0"
-                            onClick={() => handleDeleteMaterial(mat)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
@@ -1802,6 +2429,8 @@ export default function MarketingCampaignsPage() {
           </div>
           </>
           )}
+
+          {hubTab === "compare" && <CampaignAbComparePanel />}
 
         </div>
       </div>

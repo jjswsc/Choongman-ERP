@@ -1,5 +1,5 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -20,19 +20,27 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight } from "lucide-react"
+import { Search, Plus, Wallet, Building2, Printer, FileSpreadsheet, ChevronDown, ChevronRight, RefreshCw } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useStoreList } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
-import { isManagerOrFranchiseeRole, isManagerRole, canManageReceivablePayableAllStores } from "@/lib/permissions"
+import {
+  isManagerOrFranchiseeRole,
+  isManagerRole,
+  canManageReceivablePayableAllStores,
+  canSyncOrderReceivable,
+  canBulkReconcileOrderReceivables,
+} from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
 import {
   getReceivablePayableList,
   getPayableTransactionItems,
   addBalanceTransaction,
+  syncOrderReceivable,
+  syncAllOrderReceivablesBatch,
   translateTexts,
   type ReceivablePayableItem,
   type PayableTransactionItem,
@@ -59,6 +67,8 @@ export function ReceivablePayableTab() {
   const managerStore = (auth?.store || "").trim()
   /** 본사/회계직원: 매장별 선택해서 관리 가능 (별도 로그인 불필요) */
   const canSelectStores = canManageReceivablePayableAllStores(auth?.role || "")
+  const showRecSyncBtn = canSyncOrderReceivable(auth?.role || "")
+  const showBulkRecSyncBtn = canBulkReconcileOrderReceivables(auth?.role || "")
 
   const [tab, setTab] = React.useState<"receivable" | "payable">("receivable")
   // 미수금: 매출처만 (매장은 미수금 없음 - 본사가 매출처에게 받을 돈)
@@ -89,6 +99,9 @@ export function ReceivablePayableTab() {
   const [expandedPayableRowId, setExpandedPayableRowId] = React.useState<string | null>(null)
   const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, PayableTransactionItem[]>>({})
   const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
+  const [syncingOrderId, setSyncingOrderId] = React.useState<number | null>(null)
+  const [bulkRecSyncing, setBulkRecSyncing] = React.useState(false)
+  const [bulkRecProgress, setBulkRecProgress] = React.useState("")
 
   React.useEffect(() => {
     const rows = listData.flatMap((item) => item.items || [])
@@ -189,6 +202,104 @@ export function ReceivablePayableTab() {
     setHasSearchedList(true)
     loadList()
   }, [loadList])
+
+  const handleSyncOrderReceivable = React.useCallback(
+    async (orderId: number | undefined) => {
+      if (orderId == null || Number.isNaN(orderId)) return
+      setSyncingOrderId(orderId)
+      try {
+        const res = await syncOrderReceivable({ orderId, userRole: auth?.role })
+        if (res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processSuccess") || "처리되었습니다.")
+          loadList()
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "실패")
+        }
+      } catch (e) {
+        await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setSyncingOrderId(null)
+      }
+    },
+    [auth?.role, loadList, t]
+  )
+
+  const handleBulkSyncOrderReceivables = React.useCallback(async () => {
+    const msg =
+      salesOutletFilter !== "All"
+        ? tt(
+            "recBulkSyncConfirmOutlet",
+            "선택한 매출처({outlet})의 Order 미수금만 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 계속할까요?"
+          ).replace(/\{outlet\}/g, salesOutletFilter)
+        : tt(
+            "recBulkSyncConfirmAll",
+            "전체 매출처의 Order 미수금을 현재 품목·직접정산(지두방) 규칙으로 다시 맞춥니다. 시간이 걸릴 수 있습니다. 계속할까요?"
+          )
+    const ok = await appConfirm(msg)
+    if (!ok) return
+    setBulkRecSyncing(true)
+    let lastReceivableId = 0
+    const acc = {
+      processed: 0,
+      updated: 0,
+      removed: 0,
+      skipped: 0,
+      orphanRemoved: 0,
+      errors: 0,
+    }
+    try {
+      for (;;) {
+        const r = await syncAllOrderReceivablesBatch({
+          lastReceivableId,
+          batchSize: 120,
+          userRole: auth?.role,
+          storeFilter: salesOutletFilter !== "All" ? salesOutletFilter : undefined,
+        })
+        if (!r.success) {
+          await appAlert(translateApiMessage(r.message, t) || r.message || t("processFail") || "실패")
+          break
+        }
+        const s = r.stats
+        if (s) {
+          acc.processed += s.processed
+          acc.updated += s.updated
+          acc.removed += s.removed
+          acc.skipped += s.skipped
+          acc.orphanRemoved += s.orphanRemoved
+          acc.errors += s.errors
+        }
+        lastReceivableId = Number(r.nextReceivableId ?? lastReceivableId)
+        setBulkRecProgress(
+          tt("recBulkSyncProgress", `처리 중… 누적 ${acc.processed}건 (갱신 ${acc.updated} / 제거 ${acc.removed} / 스킵 ${acc.skipped})`)
+        )
+        if (!r.hasMore) {
+          const detail =
+            (r.errorSamples?.length
+              ? `\n${r.errorSamples.map((e) => `#${e.orderId}: ${translateApiMessage(e.message, t) || e.message}`).join("\n")}`
+              : "")
+          await appAlert(
+            tt(
+              "recBulkSyncDone",
+              "일괄 동기화 완료.\n처리 {processed}건 · 갱신 {updated} · 제거 {removed} · 스킵 {skipped} · 고아 삭제 {orphanRemoved} · 오류 {errors}"
+            )
+              .replace(/\{processed\}/g, String(acc.processed))
+              .replace(/\{updated\}/g, String(acc.updated))
+              .replace(/\{removed\}/g, String(acc.removed))
+              .replace(/\{skipped\}/g, String(acc.skipped))
+              .replace(/\{orphanRemoved\}/g, String(acc.orphanRemoved))
+              .replace(/\{errors\}/g, String(acc.errors)) + detail
+          )
+          loadList()
+          break
+        }
+      }
+    } catch (e) {
+      await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBulkRecSyncing(false)
+      setBulkRecProgress("")
+    }
+  }, [auth?.role, loadList, salesOutletFilter, t, tt])
 
   React.useEffect(() => {
     setHasSearchedList(false)
@@ -297,9 +408,6 @@ export function ReceivablePayableTab() {
 
   const handleExcel = () => {
     if (listData.length === 0) return
-    // #region agent log
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H3',location:'receivable-payable-tab.tsx:239',message:'handleExcel start',data:{tab,listCount:listData.length,filterUnpaidOnly},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const isRec = tab === "receivable"
     const entityCol = isRec ? (t("outColStore") || "매출처") : (t("vendor") || "매입처")
     const typeOrder = isRec ? (t("recTypeOrder") || "주문") : (t("payTypePO") || "발주")
@@ -314,19 +422,11 @@ export function ReceivablePayableTab() {
     const rows: string[][] = [header]
     for (const item of listData) {
       const displayItems = filterItemsByUnpaid(item.items, isRec)
-      // #region agent log
-      fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H1',location:'receivable-payable-tab.tsx:254',message:'filtered displayItems',data:{isRec,itemCount:item.items?.length||0,displayCount:displayItems.length},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       if (displayItems.length === 0) continue
       const name = isRec ? (item.storeName ?? "") : formatVendorDisplay(item.vendorCode)
       const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
       for (const row of displayItems) {
         const orderOrInv = isRec && row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "")) : ""
-        if (isRec && row.ref_type === "Order") {
-          // #region agent log
-          fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'b41811'},body:JSON.stringify({sessionId:'b41811',runId:'run1',hypothesisId:'H2',location:'receivable-payable-tab.tsx:260',message:'order row invoice candidate',data:{invoiceNo:row.invoice_no||'',refId:row.ref_id||0,transDate:row.trans_date||''},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-        }
         const invPayable = !isRec
           ? ((row as { invoice_received?: boolean; invoice_no?: string }).invoice_received === true
             ? ((row as { invoice_no?: string }).invoice_no || t("poInvoiceReceived") || "수령")
@@ -472,10 +572,26 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       <Checkbox checked={filterUnpaidOnly} onCheckedChange={(v) => setFilterUnpaidOnly(!!v)} className="mt-0" />
                       {t("recFilterUnpaidOnly") || "미수만"}
                     </label>
-                    <Button size="sm" onClick={handleLoadList} disabled={loading} className="h-9">
+                    <Button size="sm" onClick={handleLoadList} disabled={loading || bulkRecSyncing} className="h-9">
                       <Search className="h-4 w-4 mr-1" />
                       {t("btn_query")}
                     </Button>
+                    {showBulkRecSyncBtn && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void handleBulkSyncOrderReceivables()}
+                        disabled={loading || bulkRecSyncing}
+                        className="h-9"
+                        title={tt(
+                          "recBulkSyncBtnTitle",
+                          "과거 포함 Order 미수금 전건을 출고·직접정산 규칙에 맞게 재계산합니다."
+                        )}
+                      >
+                        <RefreshCw className={cn("h-4 w-4 mr-1", bulkRecSyncing && "animate-spin")} />
+                        {tt("recBulkSyncBtn", "Order 미수 일괄 맞춤")}
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={handlePrint} disabled={loading || listData.length === 0} title={t("pettyPrintHint")} className="h-9">
                       <Printer className="h-4 w-4 mr-1" />
                       {t("printBtn")}
@@ -485,6 +601,9 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                       {t("excelBtn")}
                     </Button>
                   </div>
+                  {bulkRecProgress ? (
+                    <p className="text-xs text-muted-foreground mb-2">{bulkRecProgress}</p>
+                  ) : null}
                   {loading ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</p>
                   ) : !hasSearchedList ? (
@@ -540,6 +659,14 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
+                                    {showRecSyncBtn && (
+                                      <th
+                                        className="text-center py-2 px-1 w-[52px] text-xs font-semibold text-muted-foreground"
+                                        title={tt("recSyncOrderColHint", "출고·직접정산 규칙에 맞게 본사 미수 재계산")}
+                                      >
+                                        ↻
+                                      </th>
+                                    )}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -558,6 +685,23 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                       <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
+                                      {showRecSyncBtn && (
+                                        <td className="py-1.5 px-1 w-[52px] text-center align-middle">
+                                          {row.ref_type === "Order" && row.ref_id != null ? (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-8 w-8 p-0 shrink-0"
+                                              disabled={syncingOrderId === row.ref_id}
+                                              title={tt("recSyncOrderBtnTitle", "본사 미수 재동기화 (지두방·직접정산 반영)")}
+                                              onClick={() => void handleSyncOrderReceivable(row.ref_id)}
+                                            >
+                                              <RefreshCw className={cn("h-4 w-4", syncingOrderId === row.ref_id && "animate-spin")} />
+                                            </Button>
+                                          ) : null}
+                                        </td>
+                                      )}
                                     </tr>
                                   ))}
                                 </tbody>

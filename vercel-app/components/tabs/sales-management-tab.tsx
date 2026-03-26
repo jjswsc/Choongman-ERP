@@ -4,15 +4,10 @@ import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   parseOrderTypesParam,
   normalizeOrderTypesQueryString,
@@ -26,6 +21,7 @@ import {
   translatePeriodAxisLabel,
   translateChannelKey,
   translatePaymentKey,
+  translateDeliveryAppCode,
 } from "@/lib/sales-analytics-labels"
 import {
   getPosSalesFilterOptions,
@@ -35,12 +31,13 @@ import {
   getPosSalesByMenu,
   getPosSalesByPayment,
   getPosSalesByStore,
+  type PosSalesPeriodRow,
 } from "@/lib/api-client"
+import { mergePeriodSeriesToAggregated } from "@/lib/pos-sales-period-aggregate"
 import {
   getPosSalesFilterOptionsWithCache,
   getPosSalesByPeriodWithCache,
   getPosSalesByDeliveryAppWithCache,
-  getPosSalesByChannelWithCache,
   getPosSalesByMenuWithCache,
   getPosSalesByPaymentWithCache,
   getPosSalesByStoreWithCache,
@@ -74,8 +71,16 @@ type PeriodGroupValue = (typeof PERIOD_GROUP)[number]["value"]
 
 const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"]
 
+const POS_SALES_RECENT_STORES_LS = "pos_sales_recent_store_sets"
+
 function formatSalesAmount(n: number) {
   return (n ?? 0).toLocaleString()
+}
+
+function normalizeStoreCodes(values: string[]): string[] {
+  return [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  )
 }
 
 type AnalyticsView = "period" | "delivery" | "channel" | "menu" | "payment" | "store" | "store-category" | null
@@ -162,13 +167,22 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
 
   const [startStr, setStartStr] = React.useState(monthStart)
   const [endStr, setEndStr] = React.useState(today)
-  const [posFilter, setPosFilter] = React.useState<string>("")
+  const [selectedStores, setSelectedStores] = React.useState<string[]>([])
   const [posOptions, setPosOptions] = React.useState<string[]>([])
   const [loading, setLoading] = React.useState(false)
   const [periodGroup, setPeriodGroup] = React.useState<PeriodGroupValue>("day")
   const [menuSearch, setMenuSearch] = React.useState("")
+  const [storeSearch, setStoreSearch] = React.useState("")
+  const [storePickerOpen, setStorePickerOpen] = React.useState(false)
+  const storePickerRef = React.useRef<HTMLDivElement | null>(null)
   /** 빈 문자열 = 매출액 종류 전체(필터 없음) */
   const [orderTypesKey, setOrderTypesKey] = React.useState("")
+  const [compareStores, setCompareStores] = React.useState(false)
+  const [periodSplitSeries, setPeriodSplitSeries] = React.useState<Record<string, PosSalesPeriodRow[]> | null>(null)
+  const [periodTruncated, setPeriodTruncated] = React.useState(false)
+  const [menuSearchAnd, setMenuSearchAnd] = React.useState(false)
+  const storePickerListId = React.useId()
+  const storePickerBtnId = React.useId()
 
   const [activeSubMenuId, setActiveSubMenuId] = React.useState<string>(SALES_IA[0].id)
   const [selectedTopicBySubMenu, setSelectedTopicBySubMenu] = React.useState<Record<string, string>>(() =>
@@ -195,7 +209,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     }[]
   >([])
   const [deliveryAppData, setDeliveryAppData] = React.useState<{
-    items: { channelKey: string; sales: number; pct: number }[]
+    items: {
+      channelKey: string
+      sales: number
+      pct: number
+      platforms?: { code: string; sales: number; pct: number }[]
+    }[]
     total: number
   }>({ items: [], total: 0 })
   const [channelData, setChannelData] = React.useState<{ channelKey: string; sales: number }[]>([])
@@ -226,6 +245,39 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     },
     [t]
   )
+  const selectedStoresKey = React.useMemo(
+    () => normalizeStoreCodes(selectedStores).join(","),
+    [selectedStores]
+  )
+  const selectedStoresParam = React.useMemo(
+    () => (selectedStoresKey ? selectedStoresKey.split(",") : undefined),
+    [selectedStoresKey]
+  )
+  const filteredStoreOptions = React.useMemo(() => {
+    const q = storeSearch.trim().toLowerCase()
+    if (!q) return posOptions
+    return posOptions.filter((p) => p.toLowerCase().includes(q))
+  }, [posOptions, storeSearch])
+
+  React.useEffect(() => {
+    if (!storePickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      const root = storePickerRef.current
+      const target = e.target as Node | null
+      if (root && target && !root.contains(target)) {
+        setStorePickerOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setStorePickerOpen(false)
+    }
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [storePickerOpen])
 
   /** 구버전·캐시 행에 누락된 집계 필드 보정 — 홀 전용 지표와 조회 건당 분리 */
   const periodChartRows = React.useMemo(
@@ -308,6 +360,37 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [periodGroup]
   )
 
+  const currentSubMenu = SALES_IA.find((menu) => menu.id === activeSubMenuId) ?? SALES_IA[0]
+  const selectedTopicId = selectedTopicBySubMenu[currentSubMenu.id] ?? currentSubMenu.topics[0].id
+  const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
+  const selectedView = selectedTopic?.view ?? null
+
+  const storesForCompareChart = React.useMemo(
+    () => selectedStoresParam ?? [],
+    [selectedStoresParam]
+  )
+
+  const comparePeriodChartRows = React.useMemo(() => {
+    if (!periodSplitSeries || storesForCompareChart.length < 2) return []
+    const first = storesForCompareChart[0]
+    const base = periodSplitSeries[first]
+    if (!base?.length) return []
+    return base.map((r) => {
+      const row: Record<string, string | number> = {
+        key: r.key,
+        axisLabel: translatePeriodAxisLabel({ key: r.key, label: r.label }, periodGroup, tr),
+      }
+      for (const s of storesForCompareChart) {
+        const hit = periodSplitSeries[s]?.find((x) => x.key === r.key)
+        row[`sales_${s}`] = hit?.sales ?? 0
+      }
+      return row
+    })
+  }, [periodSplitSeries, storesForCompareChart, periodGroup, tr])
+
+  const showComparePeriodChart =
+    selectedView === "period" && compareStores && !!periodSplitSeries && storesForCompareChart.length >= 2
+
   const channelChartRows = React.useMemo(
     () =>
       channelData.map((r) => ({
@@ -335,10 +418,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     [deliveryAppData.items, tr]
   )
 
-  const currentSubMenu = SALES_IA.find((menu) => menu.id === activeSubMenuId) ?? SALES_IA[0]
-  const selectedTopicId = selectedTopicBySubMenu[currentSubMenu.id] ?? currentSubMenu.topics[0].id
-  const selectedTopic = currentSubMenu.topics.find((topic) => topic.id === selectedTopicId) ?? currentSubMenu.topics[0]
-  const selectedView = selectedTopic?.view ?? null
+  const deliveryPlatformBreakdown = React.useMemo(() => {
+    const d = deliveryAppData.items.find((x) => x.channelKey === "delivery")
+    return d?.platforms ?? []
+  }, [deliveryAppData.items])
+
+  const deliveryPlatformPieRows = React.useMemo(
+    () =>
+      deliveryPlatformBreakdown.map((p) => ({
+        ...p,
+        axisLabel: translateDeliveryAppCode(p.code, tr),
+      })),
+    [deliveryPlatformBreakdown, tr]
+  )
+
   const hasData = !!(startStr && endStr)
 
   const orderTypesParam = React.useMemo(
@@ -358,17 +451,49 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   const userSelectedRef = React.useRef<{
     subMenu?: string
     topic?: string
-    pos?: string
+    storesKey?: string
     periodGroup?: string
     dateRange?: string
     orderTypesKey?: string
+    compare?: boolean
   }>({})
+
+  const [recentStoreSets, setRecentStoreSets] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POS_SALES_RECENT_STORES_LS)
+      if (raw) setRecentStoreSets(JSON.parse(raw) as string[])
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!selectedStoresKey || typeof window === "undefined") return
+    try {
+      const prev = JSON.parse(localStorage.getItem(POS_SALES_RECENT_STORES_LS) || "[]") as string[]
+      const next = [selectedStoresKey, ...prev.filter((k) => k !== selectedStoresKey)].slice(0, 5)
+      localStorage.setItem(POS_SALES_RECENT_STORES_LS, JSON.stringify(next))
+      setRecentStoreSets(next)
+    } catch {
+      /* ignore */
+    }
+  }, [selectedStoresKey])
+
+  React.useEffect(() => {
+    if ((selectedStoresParam?.length ?? 0) < 2 && compareStores) setCompareStores(false)
+  }, [selectedStoresParam, compareStores])
 
   React.useEffect(() => {
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
-    const qPos = searchParams.get("pos")
+    const qCompare = searchParams.get("compare") === "1"
+    const qStores = normalizeStoreCodes(
+      (searchParams.get("stores") ?? searchParams.get("pos") ?? "").split(",")
+    )
+    const qStoresKey = qStores.join(",")
     const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
@@ -403,31 +528,35 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       }
     }
 
-    const nextPos = qPos ?? ""
-    if (nextPos !== posFilter && userSelectedRef.current.pos !== posFilter) {
-      setPosFilter(nextPos)
+    if (qStoresKey !== selectedStoresKey && userSelectedRef.current.storesKey !== selectedStoresKey) {
+      setSelectedStores(qStores)
     }
     if (qOrderTypes !== orderTypesKey && userSelectedRef.current.orderTypesKey !== orderTypesKey) {
       setOrderTypesKey(qOrderTypes)
     }
+    if (qCompare !== compareStores && userSelectedRef.current.compare !== compareStores) {
+      setCompareStores(qCompare)
+    }
     if (
       qMenu === activeSubMenuId &&
-      (qPos ?? "") === posFilter &&
+      qStoresKey === selectedStoresKey &&
       qGroup === periodGroup &&
       qStart === startStr &&
       qEnd === endStr &&
-      qOrderTypes === orderTypesKey
+      qOrderTypes === orderTypesKey &&
+      qCompare === compareStores
     ) {
       userSelectedRef.current = {}
     }
   }, [
     searchParams,
     activeSubMenuId,
-    posFilter,
+    selectedStoresKey,
     periodGroup,
     startStr,
     endStr,
     orderTypesKey,
+    compareStores,
     validTopicByMenu,
     selectedTopicBySubMenu,
   ])
@@ -439,7 +568,10 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     const qMenu = searchParams.get("menu")
     const qTopic = searchParams.get("topic")
     const qGroup = searchParams.get("group")
-    const qPos = searchParams.get("pos") ?? ""
+    const qStoresKey = normalizeStoreCodes(
+      (searchParams.get("stores") ?? searchParams.get("pos") ?? "").split(",")
+    ).join(",")
+    const qCompare = searchParams.get("compare") === "1"
     const qOrderTypes = normalizeOrderTypesQueryString(searchParams.get("orderTypes"))
     const qStart = searchParams.get("start")
     const qEnd = searchParams.get("end")
@@ -447,10 +579,11 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       qMenu === activeSubMenuId &&
       qTopic === currentTopic &&
       qGroup === periodGroup &&
-      qPos === posFilter &&
+      qStoresKey === selectedStoresKey &&
       qOrderTypes === orderTypesKey &&
       qStart === startStr &&
-      qEnd === endStr
+      qEnd === endStr &&
+      qCompare === compareStores
     ) return
 
     const expected = new URLSearchParams()
@@ -459,7 +592,8 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     expected.set("group", periodGroup)
     if (startStr) expected.set("start", startStr)
     if (endStr) expected.set("end", endStr)
-    if (posFilter) expected.set("pos", posFilter)
+    if (selectedStoresKey) expected.set("stores", selectedStoresKey)
+    if (compareStores) expected.set("compare", "1")
     if (orderTypesKey) expected.set("orderTypes", orderTypesKey)
     const expectedStr = expected.toString()
     const currentStr = [
@@ -468,8 +602,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       searchParams.get("group"),
       searchParams.get("start"),
       searchParams.get("end"),
-      searchParams.get("pos") ?? "",
+      normalizeStoreCodes((searchParams.get("stores") ?? searchParams.get("pos") ?? "").split(",")).join(","),
       normalizeOrderTypesQueryString(searchParams.get("orderTypes")),
+      searchParams.get("compare") === "1" ? "1" : "",
     ].join("|")
     const expectedValues = [
       activeSubMenuId,
@@ -477,8 +612,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       periodGroup,
       startStr,
       endStr,
-      posFilter,
+      selectedStoresKey,
       orderTypesKey,
+      compareStores ? "1" : "",
     ].join("|")
     if (currentStr === expectedValues) return
     /** 같은 틱에 라우터·서스펜스 경계와 겹치면 "마운트 전 setState" 경고가 날 수 있어 지연 */
@@ -490,8 +626,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     activeSubMenuId,
     pathname,
     periodGroup,
-    posFilter,
+    selectedStoresKey,
     orderTypesKey,
+    compareStores,
     startStr,
     endStr,
     router,
@@ -516,23 +653,53 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   }, [loadPosOptions])
 
   React.useEffect(() => {
-    if (!canSearchAll && auth?.store && posFilter !== auth.store) setPosFilter(auth.store)
-  }, [canSearchAll, auth?.store, posFilter])
+    if (!canSearchAll && auth?.store) {
+      const fixed = normalizeStoreCodes([auth.store])
+      if (selectedStoresKey !== fixed.join(",")) setSelectedStores(fixed)
+    }
+  }, [canSearchAll, auth?.store, selectedStoresKey])
 
   const loadPeriodData = React.useCallback(() => {
     if (!startStr || !endStr) return
     setLoading(true)
-    getPosSalesByPeriod({
+    const needSplit =
+      compareStores && (selectedStoresParam?.length ?? 0) >= 2 && selectedView === "period"
+    const run = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
+    run({
       startStr,
       endStr,
       groupBy: periodGroup,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       orderTypes: orderTypesParam,
+      splitByStore: needSplit,
     })
-      .then(setPeriodData)
-      .catch(() => setPeriodData([]))
+      .then((res) => {
+        if (res.kind === "split") {
+          setPeriodSplitSeries(res.series)
+          setPeriodData(mergePeriodSeriesToAggregated(res.series, selectedStoresParam))
+          setPeriodTruncated(res.truncated)
+        } else {
+          setPeriodSplitSeries(null)
+          setPeriodData(res.rows)
+          setPeriodTruncated(res.truncated)
+        }
+      })
+      .catch(() => {
+        setPeriodSplitSeries(null)
+        setPeriodData([])
+        setPeriodTruncated(false)
+      })
       .finally(() => setLoading(false))
-  }, [startStr, endStr, periodGroup, posFilter, orderTypesParam])
+  }, [
+    startStr,
+    endStr,
+    periodGroup,
+    selectedStoresParam,
+    orderTypesParam,
+    compareStores,
+    selectedView,
+    offlineAware,
+  ])
 
   const loadDeliveryAppData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -540,24 +707,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     fetcher({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       orderTypes: orderTypesParam,
     })
       .then(setDeliveryAppData)
       .catch(() => setDeliveryAppData({ items: [], total: 0 }))
-  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, offlineAware, orderTypesParam])
 
   const loadChannelData = React.useCallback(() => {
     if (!startStr || !endStr) return
     getPosSalesByChannel({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       orderTypes: orderTypesParam,
     })
       .then(setChannelData)
       .catch(() => setChannelData([]))
-  }, [startStr, endStr, posFilter, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, orderTypesParam])
 
   const loadMenuData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -565,13 +732,14 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     fetcher({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       search: menuSearch || undefined,
+      searchMode: menuSearchAnd ? "and" : "or",
       orderTypes: orderTypesParam,
     })
       .then(setMenuData)
       .catch(() => setMenuData([]))
-  }, [startStr, endStr, posFilter, menuSearch, offlineAware, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, menuSearch, menuSearchAnd, offlineAware, orderTypesParam])
 
   const loadPaymentData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -579,12 +747,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     fetcher({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       orderTypes: orderTypesParam,
     })
       .then(setPaymentData)
       .catch(() => setPaymentData([]))
-  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, offlineAware, orderTypesParam])
 
   const loadStoreData = React.useCallback(() => {
     if (!startStr || !endStr) return
@@ -592,12 +760,12 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     fetcher({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       orderTypes: orderTypesParam,
     })
       .then(setStoreData)
       .catch(() => setStoreData([]))
-  }, [startStr, endStr, posFilter, offlineAware, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, offlineAware, orderTypesParam])
 
   const loadAllAnalytics = React.useCallback(() => {
     loadPeriodData()
@@ -622,37 +790,56 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
   React.useEffect(() => {
     if (startStr && endStr) {
       const id = ++loadIdRef.current
+      const needSplit =
+        compareStores && (selectedStoresParam?.length ?? 0) >= 2 && selectedView === "period"
+      const periodRun = offlineAware ? getPosSalesByPeriodWithCache : getPosSalesByPeriod
       const guarded =
         <T,>(setter: React.Dispatch<React.SetStateAction<T>>) =>
         (v: T) => {
           if (loadIdRef.current === id) setter(v)
         }
-      const gPeriod = guarded(setPeriodData)
       const gDelivery = guarded(setDeliveryAppData)
       const gChannel = guarded(setChannelData)
       const gPayment = guarded(setPaymentData)
       const gStore = guarded(setStoreData)
       setLoading(true)
       Promise.all([
-        getPosSalesByPeriod({
+        periodRun({
           startStr,
           endStr,
           groupBy: periodGroup,
-          pos: posFilter || undefined,
+          stores: selectedStoresParam,
           orderTypes: orderTypesParam,
+          splitByStore: needSplit,
         })
-          .then(gPeriod)
-          .catch(() => gPeriod([])),
+          .then((res) => {
+            if (loadIdRef.current !== id) return
+            if (res.kind === "split") {
+              setPeriodSplitSeries(res.series)
+              setPeriodData(mergePeriodSeriesToAggregated(res.series, selectedStoresParam))
+              setPeriodTruncated(res.truncated)
+            } else {
+              setPeriodSplitSeries(null)
+              setPeriodData(res.rows)
+              setPeriodTruncated(res.truncated)
+            }
+          })
+          .catch(() => {
+            if (loadIdRef.current !== id) return
+            setPeriodSplitSeries(null)
+            setPeriodData([])
+            setPeriodTruncated(false)
+          }),
         (offlineAware ? getPosSalesByDeliveryAppWithCache : getPosSalesByDeliveryApp)({
           startStr,
           endStr,
-          pos: posFilter || undefined,
+          stores: selectedStoresParam,
           orderTypes: orderTypesParam,
         }).then(gDelivery).catch(() => gDelivery({ items: [], total: 0 })),
         getPosSalesByChannel({
           startStr,
           endStr,
-          pos: posFilter || undefined,
+          stores: selectedStoresParam,
           orderTypes: orderTypesParam,
         })
           .then(gChannel)
@@ -660,13 +847,13 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
         (offlineAware ? getPosSalesByPaymentWithCache : getPosSalesByPayment)({
           startStr,
           endStr,
-          pos: posFilter || undefined,
+          stores: selectedStoresParam,
           orderTypes: orderTypesParam,
         }).then(gPayment).catch(() => gPayment([])),
         (offlineAware ? getPosSalesByStoreWithCache : getPosSalesByStore)({
           startStr,
           endStr,
-          pos: posFilter || undefined,
+          stores: selectedStoresParam,
           orderTypes: orderTypesParam,
         }).then(gStore).catch(() => gStore([])),
       ]).finally(() => {
@@ -674,13 +861,24 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       })
     } else {
       setPeriodData([])
+      setPeriodSplitSeries(null)
+      setPeriodTruncated(false)
       setDeliveryAppData({ items: [], total: 0 })
       setChannelData([])
       setMenuData([])
       setPaymentData([])
       setStoreData([])
     }
-  }, [startStr, endStr, posFilter, periodGroup, offlineAware, orderTypesParam])
+  }, [
+    startStr,
+    endStr,
+    selectedStoresParam,
+    periodGroup,
+    offlineAware,
+    orderTypesParam,
+    compareStores,
+    selectedView,
+  ])
 
   React.useEffect(() => {
     if (!startStr || !endStr) return
@@ -689,8 +887,9 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
     fetcher({
       startStr,
       endStr,
-      pos: posFilter || undefined,
+      stores: selectedStoresParam,
       search: menuSearch || undefined,
+      searchMode: menuSearchAnd ? "and" : "or",
       orderTypes: orderTypesParam,
     })
       .then((data) => {
@@ -699,7 +898,7 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
       .catch(() => {
         if (menuLoadIdRef.current === id) setMenuData([])
       })
-  }, [startStr, endStr, posFilter, menuSearch, offlineAware, orderTypesParam])
+  }, [startStr, endStr, selectedStoresParam, menuSearch, menuSearchAnd, offlineAware, orderTypesParam])
 
   const online = useOnlineStatus()
   const prevOnlineRef = React.useRef(online)
@@ -760,27 +959,151 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
               }}
               className="h-9 w-[140px]"
             />
-            <Select
-              value={posFilter === "" ? "__all__" : posFilter}
-              onValueChange={(v) => {
-                const next = v === "__all__" ? "" : v
-                userSelectedRef.current.pos = next
-                setPosFilter(next)
-              }}
-              disabled={!canSearchAll}
-            >
-              <SelectTrigger className="h-9 w-[180px]">
-                <SelectValue placeholder={tr("salesSelectStoreAll", "매장(전체)")} />
-              </SelectTrigger>
-              <SelectContent>
-                {canSearchAll && <SelectItem value="__all__">{tr("all", "전체")}</SelectItem>}
-                {posOptions.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap items-center gap-2">
+              {canSearchAll ? (
+                <div className="relative" ref={storePickerRef}>
+                  <Button
+                    id={storePickerBtnId}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="min-w-[220px] justify-between"
+                    aria-expanded={storePickerOpen}
+                    aria-controls={storePickerListId}
+                    aria-haspopup="dialog"
+                    onClick={() => setStorePickerOpen((prev) => !prev)}
+                  >
+                    <span className="truncate text-left">
+                      {selectedStores.length === 0
+                        ? tr("salesSelectStoreAll", "매장(전체)")
+                        : selectedStores.length === 1
+                          ? selectedStores[0]
+                          : `${selectedStores.length}${tr("selected", "개 선택")}`}
+                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">{storePickerOpen ? "▲" : "▼"}</span>
+                  </Button>
+                  {storePickerOpen ? (
+                    <div
+                      id={storePickerListId}
+                      role="dialog"
+                      aria-modal="false"
+                      aria-labelledby={storePickerBtnId}
+                      className="absolute z-20 mt-2 w-[320px] rounded-md border bg-background p-2 shadow-lg"
+                    >
+                      <Input
+                        value={storeSearch}
+                        onChange={(e) => setStoreSearch(e.target.value)}
+                        placeholder={tr("salesStoreSearch", "매장 검색")}
+                        className="mb-2 h-8"
+                      />
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={selectedStoresKey === "" ? "default" : "outline"}
+                          onClick={() => {
+                            userSelectedRef.current.storesKey = ""
+                            setSelectedStores([])
+                          }}
+                        >
+                          {tr("all", "전체")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const all = normalizeStoreCodes([...posOptions])
+                            userSelectedRef.current.storesKey = all.join(",")
+                            setSelectedStores(all)
+                          }}
+                        >
+                          {tr("salesStoreSelectAll", "전체 선택")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            userSelectedRef.current.storesKey = ""
+                            setSelectedStores([])
+                          }}
+                        >
+                          {tr("salesStoreDeselectAll", "전체 해제")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setStorePickerOpen(false)}
+                        >
+                          {tr("close", "닫기")}
+                        </Button>
+                      </div>
+                      {recentStoreSets.filter(Boolean).length > 0 ? (
+                        <div className="mb-2">
+                          <p className="mb-1 text-xs font-medium text-muted-foreground">
+                            {tr("salesRecentStoreSets", "최근 선택")}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {recentStoreSets.filter(Boolean).map((setKey) => (
+                              <Button
+                                key={setKey}
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  const next = normalizeStoreCodes(setKey.split(","))
+                                  userSelectedRef.current.storesKey = next.join(",")
+                                  setSelectedStores(next)
+                                }}
+                              >
+                                {setKey.replace(/,/g, ", ")}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="max-h-56 overflow-auto rounded border p-1">
+                        {filteredStoreOptions.map((p) => {
+                          const active = selectedStores.includes(p)
+                          return (
+                            <label
+                              key={p}
+                              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/40"
+                            >
+                              <Checkbox
+                                checked={active}
+                                onCheckedChange={() => {
+                                  setSelectedStores((prev) => {
+                                    const exists = prev.includes(p)
+                                    const next = exists ? prev.filter((v) => v !== p) : [...prev, p]
+                                    const normalized = normalizeStoreCodes(next)
+                                    userSelectedRef.current.storesKey = normalized.join(",")
+                                    return normalized
+                                  })
+                                }}
+                              />
+                              <span className="text-sm">{p}</span>
+                            </label>
+                          )
+                        })}
+                        {filteredStoreOptions.length === 0 && (
+                          <p className="px-2 py-3 text-sm text-muted-foreground">
+                            {tr("salesNoStoreResult", "검색 결과 없음")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <Button type="button" size="sm" variant="default" disabled>
+                  {selectedStores[0] ?? auth?.store ?? tr("salesSelectStoreAll", "매장(전체)")}
+                </Button>
+              )}
+            </div>
             <Button size="sm" onClick={loadAllAnalytics} disabled={!hasData || loading}>
               {tr("salesQuery", "조회")}
             </Button>
@@ -905,14 +1228,54 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                 </p>
               ) : (
                 <>
+                  {periodTruncated ? (
+                    <p
+                      className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
+                      role="status"
+                    >
+                      {tr(
+                        "salesDataTruncatedWarning",
+                        "조회 기간 내 주문이 많아 일부만 반영했을 수 있습니다. 기간을 나누어 조회해 보세요."
+                      )}
+                    </p>
+                  ) : null}
+                  {canSearchAll && (selectedStoresParam?.length ?? 0) >= 2 ? (
+                    <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={compareStores}
+                        onCheckedChange={(c) => {
+                          const on = c === true
+                          userSelectedRef.current.compare = on
+                          setCompareStores(on)
+                        }}
+                      />
+                      <span>{tr("salesCompareByStorePeriod", "기간 차트를 매장별로 비교")}</span>
+                    </label>
+                  ) : null}
                   <div className="h-[300px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={periodChartRows}>
+                      <BarChart data={showComparePeriodChart ? comparePeriodChartRows : periodChartRows}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="axisLabel" {...periodBarXAxisProps} />
                         <YAxis tickFormatter={(v) => (v / 1000).toFixed(0) + "k"} />
-                        <Tooltip formatter={(v: number) => [formatSalesAmount(v), tr("pL_sales", "매출")]} />
-                        <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                        <Tooltip
+                          formatter={(v: number, name: string) => [formatSalesAmount(v), name]}
+                        />
+                        {showComparePeriodChart ? (
+                          <>
+                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                            {storesForCompareChart.map((s, i) => (
+                              <Bar
+                                key={s}
+                                dataKey={`sales_${s}`}
+                                fill={COLORS[i % COLORS.length]}
+                                name={s}
+                              />
+                            ))}
+                          </>
+                        ) : (
+                          <Bar dataKey="sales" fill="#3b82f6" name={tr("pL_sales", "매출")} />
+                        )}
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1093,6 +1456,79 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                         ))}
                       </tbody>
                     </table>
+                    {deliveryPlatformBreakdown.length > 0 ? (
+                      <Collapsible defaultOpen className="mt-4 rounded-md border bg-muted/10">
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="flex w-full justify-between px-3 py-2 font-medium"
+                          >
+                            <span>{tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}</span>
+                            <span className="text-xs text-muted-foreground">▼</span>
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="flex flex-wrap gap-4 border-t px-3 pb-3 pt-2">
+                            <div className="h-[220px] w-[220px] shrink-0">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie
+                                    data={deliveryPlatformPieRows}
+                                    dataKey="sales"
+                                    nameKey="axisLabel"
+                                    cx="50%"
+                                    cy="50%"
+                                    outerRadius={78}
+                                    label={({ name, percent }) =>
+                                      `${String(name ?? "")} ${((percent ?? 0) * 100).toFixed(0)}%`
+                                    }
+                                  >
+                                    {deliveryPlatformPieRows.map((_, i) => (
+                                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip formatter={(v: number) => formatSalesAmount(v)} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+                            <div className="min-w-[200px] flex-1">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b text-muted-foreground">
+                                    <th className="py-2 text-left">
+                                      {tr("salesDeliveryPlatformBreakdown", "배달 플랫폼별")}
+                                    </th>
+                                    <th className="py-2 text-right">{tr("pL_sales", "매출")}</th>
+                                    <th className="py-2 text-right">{tr("salesRatio", "비율")}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {deliveryPlatformPieRows.map((r) => (
+                                    <tr key={r.code} className="border-b">
+                                      <td className="py-1.5">{r.axisLabel}</td>
+                                      <td className="py-1.5 text-right font-mono">
+                                        {formatSalesAmount(r.sales)}
+                                      </td>
+                                      <td className="py-1.5 text-right text-muted-foreground">
+                                        {r.pct.toFixed(1)}%
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {tr(
+                                  "salesDeliveryPlatformFootnote",
+                                  "비율은 배달 매출 합계 대비입니다. 과거 주문은 품목에 저장된 배달앱 코드로 추정할 수 있습니다."
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ) : null}
                   </div>
                 </div>
                 </>
@@ -1168,13 +1604,20 @@ export function SalesManagementTab(props: SalesManagementTabProps = {}) {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="mb-4">
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
                     <Input
                       placeholder={tr("salesMenuSearch", "메뉴 검색")}
                       value={menuSearch}
                       onChange={(e) => setMenuSearch(e.target.value)}
-                      className="w-48"
+                      className="w-48 min-w-[12rem]"
                     />
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={menuSearchAnd}
+                        onCheckedChange={(c) => setMenuSearchAnd(c === true)}
+                      />
+                      <span>{tr("salesMenuSearchAndMode", "검색어 모두 포함 (AND)")}</span>
+                    </label>
                   </div>
                   <table className="w-full text-sm">
                     <thead>

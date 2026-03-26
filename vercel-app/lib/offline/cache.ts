@@ -32,10 +32,24 @@ export function cacheKeyAnalytics(
     groupBy?: string
     search?: string
     orderTypes?: string
+    /** 쉼표로 이어 붙인 정규화된 매장 목록 */
+    stores?: string
+    splitByStore?: string
+    searchMode?: string
   }
 ): string {
-  const { startStr, endStr, pos = '', groupBy = '', search = '', orderTypes = '' } = params
-  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}:${orderTypes}`
+  const {
+    startStr,
+    endStr,
+    pos = '',
+    groupBy = '',
+    search = '',
+    orderTypes = '',
+    stores = '',
+    splitByStore = '',
+    searchMode = '',
+  } = params
+  return `analytics:${type}:${startStr}:${endStr}:${pos}:${groupBy}:${search}:${orderTypes}:${stores}:${splitByStore}:${searchMode}`
 }
 
 export async function getFromCache<T>(

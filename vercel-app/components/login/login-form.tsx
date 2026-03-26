@@ -273,6 +273,12 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   })
   const users = store ? (loginData[store] || []) : []
   const noStores = !loading && stores.length === 0
+  /**
+   * 이전 세션 복구 배너: 오프라인이거나 서버에서 매장 목록을 못 받았을 때만 표시.
+   * (예전에는 resumeAuth만 있으면 온라인+정상일 때도 Wi‑Fi/서버 문구가 항상 떠서 혼란스러움)
+   */
+  const serverListDegraded = Boolean(loadError) || noStores
+  const showResumeBanner = Boolean(resumeAuth) && (!browserOnline || serverListDegraded)
 
   const labels = {
     ko: {
@@ -417,7 +423,7 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             <p className="erp-text">CM ERP SYSTEM</p>
           </div>
 
-          {resumeAuth && (
+          {showResumeBanner && (
             <div className="mb-4 rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-3 py-3 text-sm text-emerald-100">
               <p className="mb-2 leading-snug">
                 {!browserOnline
