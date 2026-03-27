@@ -32,12 +32,14 @@ export async function GET(request: NextRequest) {
 
     const rows = (await supabaseSelectFilter('pos_orders', filter, {
       limit: FETCH_LIMIT,
-      select: 'payment_cash,payment_card,payment_qr,payment_other,total,status,order_type,store_code',
+      select: 'payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,total,status,order_type,store_code',
     })) as {
       payment_cash?: number
       payment_card?: number
       payment_qr?: number
       payment_other?: number
+      payment_delivery_app?: number
+      delivery_payment_channel?: string | null
       total?: number
       status?: string
       order_type?: string
@@ -54,10 +56,20 @@ export async function GET(request: NextRequest) {
       const card = Number(r.payment_card) || 0
       const qr = Number(r.payment_qr) || 0
       const other = Number(r.payment_other) || 0
+      const deliveryApp = Number(r.payment_delivery_app) || 0
+      const deliveryCh = String(r.delivery_payment_channel ?? '').trim().toLowerCase()
       if (cash > 0) byMethod.cash = (byMethod.cash || 0) + cash
       if (card > 0) byMethod.card = (byMethod.card || 0) + card
       if (qr > 0) byMethod.qr = (byMethod.qr || 0) + qr
       if (other > 0) byMethod.other = (byMethod.other || 0) + other
+      if (deliveryApp > 0) {
+        byMethod.delivery_app = (byMethod.delivery_app || 0) + deliveryApp
+        if (deliveryCh === 'grab') byMethod.delivery_grab = (byMethod.delivery_grab || 0) + deliveryApp
+        else if (deliveryCh === 'lineman') byMethod.delivery_lineman = (byMethod.delivery_lineman || 0) + deliveryApp
+        else if (deliveryCh === 'shopee') byMethod.delivery_shopee = (byMethod.delivery_shopee || 0) + deliveryApp
+        else if (deliveryCh === 'dine_in') byMethod.delivery_dine_in = (byMethod.delivery_dine_in || 0) + deliveryApp
+        else byMethod.delivery_unknown = (byMethod.delivery_unknown || 0) + deliveryApp
+      }
     }
 
     const result = Object.entries(byMethod)

@@ -500,6 +500,7 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
             foodItems={foodItems}
             packagingItems={packagingItems}
             misePercent={0}
+            serviceType={menuItem.serviceType}
           />
         </div>
       </div>

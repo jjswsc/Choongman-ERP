@@ -144,7 +144,7 @@ export function PosTerminalMenuScreen({
     price: string
     priceDelivery: string
     imageUrl: string
-    kitchenPrinter: 'none' | '1' | '2'
+    kitchenPrinter: 'none' | '0' | '1' | '2' | '3'
     cookingTimeMin: string
     optionSelectionGroupsText: string
     isActive: boolean
@@ -467,7 +467,16 @@ export function PosTerminalMenuScreen({
       price: String(menu.price ?? ''),
       priceDelivery: menu.priceDelivery == null ? '' : String(menu.priceDelivery),
       imageUrl: menu.imageUrl || '',
-      kitchenPrinter: menu.kitchenPrinter === 1 ? '1' : menu.kitchenPrinter === 2 ? '2' : 'none',
+      kitchenPrinter:
+        menu.kitchenPrinter === 0
+          ? '0'
+          : menu.kitchenPrinter === 1
+            ? '1'
+            : menu.kitchenPrinter === 2
+              ? '2'
+              : menu.kitchenPrinter === 3
+                ? '3'
+                : 'none',
       cookingTimeMin: menu.cookingTimeMin == null ? '' : String(menu.cookingTimeMin),
       optionSelectionGroupsText: Array.isArray(menu.optionSelectionGroups) ? menu.optionSelectionGroups.join(', ') : '',
       isActive: menu.isActive !== false,
@@ -507,7 +516,12 @@ export function PosTerminalMenuScreen({
         imageUrl: menuEditForm.imageUrl.trim(),
         vatIncluded: menuEditForm.vatIncluded,
         isActive: menuEditForm.isActive,
-        kitchenPrinter: menuEditForm.kitchenPrinter === 'none' ? null : Number(menuEditForm.kitchenPrinter) as 1 | 2,
+        kitchenPrinter:
+          menuEditForm.kitchenPrinter === 'none'
+            ? null
+            : menuEditForm.kitchenPrinter === '0'
+              ? 0
+              : (Number(menuEditForm.kitchenPrinter) as 1 | 2 | 3),
         cookingTimeMin: menuEditForm.cookingTimeMin.trim() === '' ? null : Number(menuEditForm.cookingTimeMin),
         optionSelectionGroups: optionSelectionGroups.length > 0 ? Array.from(new Set(optionSelectionGroups)) : [],
         isBanban: menuEditForm.isBanban,
@@ -1117,6 +1131,7 @@ export function PosTerminalMenuScreen({
                 topping: '토핑',
                 bone: '뼈/순살',
                 type: '타입',
+                set_main: '세트 메인',
                 side: '사이드',
                 drink: '음료',
                 soup: '스프',
@@ -1368,11 +1383,18 @@ export function PosTerminalMenuScreen({
                     <select
                       className="h-9 w-full rounded-md border px-2 text-sm bg-background"
                       value={menuEditForm.kitchenPrinter}
-                      onChange={(e) => setMenuEditForm((p) => ({ ...p, kitchenPrinter: e.target.value as 'none' | '1' | '2' }))}
+                      onChange={(e) =>
+                        setMenuEditForm((p) => ({
+                          ...p,
+                          kitchenPrinter: e.target.value as 'none' | '0' | '1' | '2' | '3',
+                        }))
+                      }
                     >
                       <option value="none">{t('posMenuKitchenPrinterAuto') || '자동(카테고리 기준)'}</option>
+                      <option value="0">{t('posKitchenSkipPrint') || '주방 미인쇄'}</option>
                       <option value="1">{t('posKitchen1') || '주방1'}</option>
                       <option value="2">{t('posKitchen2') || '주방2'}</option>
+                      <option value="3">{t('posKitchen3') || '주방3'}</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-[120px_1fr] items-center gap-2">

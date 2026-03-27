@@ -104,7 +104,7 @@ function isChickenDefaultOption(name: string | undefined): boolean {
 /** 옵션 구성 탭·메뉴 폼: 쉼표 구분 단계 키 (영문 키 권장: size, part, side, drink) */
 function parseOptionGroupsFromText(text: string): string[] {
   const parts = text
-    .split(/[,，]/)
+    .split(/[,，\n\r]+/)
     .map((s) => s.trim())
     .filter(Boolean)
   return Array.from(new Set(parts))
@@ -211,6 +211,8 @@ export default function PosMenusPage() {
   const [optionsConfigGroupsDraft, setOptionsConfigGroupsDraft] = React.useState("")
   const [optionsConfigNewStepValues, setOptionsConfigNewStepValues] = React.useState<Record<string, string>>({})
   const [optionsConfigApplyingGroups, setOptionsConfigApplyingGroups] = React.useState(false)
+  /** 비치킨·선택 단계 없음: POS에서 한 줄로 고르는 치환 옵션 */
+  const [optionsConfigCustomOptionName, setOptionsConfigCustomOptionName] = React.useState("")
   const [promoListForSetTab, setPromoListForSetTab] = React.useState<PosPromo[]>([])
   const [setTabPromosLoading, setSetTabPromosLoading] = React.useState(false)
   const [schemaStatus, setSchemaStatus] = React.useState<{
@@ -366,10 +368,12 @@ export default function PosMenusPage() {
       setOptionsConfigMenuOptions([])
       setOptionsConfigGroupsDraft("")
       setOptionsConfigNewStepValues({})
+      setOptionsConfigCustomOptionName("")
       return
     }
     getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
     setOptionsConfigNewStepValues({})
+    setOptionsConfigCustomOptionName("")
     setNewOptionSize("")
     setNewOptionPart("")
     setNewOptionModifier("0")
@@ -701,11 +705,11 @@ export default function PosMenusPage() {
     return (m?.optionSelectionGroups ?? []).map((g) => String(g).trim()).filter(Boolean)
   }, [menus, optionsConfigSelectedMenuId])
 
+  /** 사이즈/부위 드롭다운은 치킨(c 접두) 전용. 비치킨은 단계 키마다 직접 입력 */
   const optionsConfigUseSizePartUi = React.useMemo(() => {
     if (!optionsConfigSelectedMenu) return false
-    if (isChickenMenu(optionsConfigSelectedMenu.code)) return true
-    return isSizePartGroups(optionsConfigStepGroups)
-  }, [optionsConfigSelectedMenu, optionsConfigStepGroups])
+    return isChickenMenu(optionsConfigSelectedMenu.code)
+  }, [optionsConfigSelectedMenu])
 
   /** 치킨 메뉴만: 옵션 추가 시 size, part 단계로 맞춤 */
   const ensureChickenMenuOptionGroups = React.useCallback(async () => {
@@ -764,12 +768,98 @@ export default function PosMenusPage() {
         setMenus((prev) =>
           prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: parsed } : m))
         )
+        setOptionsConfigNewStepValues({})
         await appAlert(t("msg_save_success") || "저장되었습니다.")
       } else {
         await appAlert(res.message || t("msg_save_fail_detail"))
       }
     } finally {
       setOptionsConfigApplyingGroups(false)
+    }
+  }
+
+  /** 프리셋 단계를 입력란에 반영한 뒤 곧바로 DB에 저장 */
+  const handleApplyOptionPresetAndSave = async (preset: string[]) => {
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
+    const pid = optionsConfigSelectedMenu.promoId?.trim()
+    if (pid) {
+      await appAlert(t("posMenuPromoLinkedEdit") || "프로모션과 연동된 메뉴는 마케팅 > 프로모션 관리에서 수정하세요.")
+      return
+    }
+    const cleaned = preset.map((x) => String(x).trim()).filter(Boolean)
+    if (cleaned.length === 0) return
+    setOptionsConfigGroupsDraft(cleaned.join(", "))
+    setOptionsConfigApplyingGroups(true)
+    try {
+      const res = await savePosMenu({
+        id: optionsConfigSelectedMenuId,
+        code: optionsConfigSelectedMenu.code,
+        name: optionsConfigSelectedMenu.name,
+        category: optionsConfigSelectedMenu.category ?? "",
+        categoryMain: optionsConfigSelectedMenu.categoryMain ?? "",
+        sortOrder: optionsConfigSelectedMenu.sortOrder ?? 0,
+        price: optionsConfigSelectedMenu.price,
+        priceDelivery: optionsConfigSelectedMenu.priceDelivery ?? null,
+        imageUrl: optionsConfigSelectedMenu.imageUrl ?? "",
+        vatIncluded: optionsConfigSelectedMenu.vatIncluded ?? true,
+        isActive: optionsConfigSelectedMenu.isActive ?? true,
+        optionSelectionGroups: cleaned,
+        isBanban: optionsConfigSelectedMenu.isBanban ?? false,
+      })
+      if (res.success) {
+        setMenus((prev) =>
+          prev.map((m) => (m.id === optionsConfigSelectedMenuId ? { ...m, optionSelectionGroups: cleaned } : m))
+        )
+        setOptionsConfigNewStepValues({})
+        await appAlert(t("msg_save_success") || "저장되었습니다.")
+      } else {
+        await appAlert(res.message || t("msg_save_fail_detail"))
+      }
+    } finally {
+      setOptionsConfigApplyingGroups(false)
+    }
+  }
+
+  const handleAddFlatOptionForConfig = async () => {
+    if (!optionsConfigSelectedMenuId || !optionsConfigSelectedMenu) return
+    if (isChickenMenu(optionsConfigSelectedMenu.code)) return
+    if (optionsConfigStepGroups.length > 0) {
+      await appAlert(
+        t("posOptionDirectAddNeedNoSteps") ||
+          "선택 단계가 설정된 메뉴에서는 아래 단계별 입력으로 조합을 추가하세요. 한 줄 옵션만 쓰려면 선택 단계를 비운 뒤 [단계 저장]하세요."
+      )
+      return
+    }
+    const name = optionsConfigCustomOptionName.trim()
+    if (!name) {
+      await appAlert(t("posOptionDirectAddNameRequired") || "옵션명을 입력해 주세요.")
+      return
+    }
+    const exists = optionsConfigMenuOptions.some((o) => o.name.trim() === name)
+    if (exists) {
+      await appAlert(`${name} ${t("itemsAlertCodeExists") || "이미 있습니다."}`)
+      return
+    }
+    const res = await savePosMenuOption({
+      menuId: Number(optionsConfigSelectedMenuId),
+      name,
+      priceModifier: Number(newOptionModifier) || 0,
+      priceModifierDelivery: newOptionModifierDelivery !== "" ? Number(newOptionModifierDelivery) : null,
+      priceModifierPackaging: newOptionModifierPackaging !== "" ? Number(newOptionModifierPackaging) : null,
+      sortOrder: optionsConfigMenuOptions.length,
+      optionType: "substitution",
+      sellHall: true,
+      sellDelivery: true,
+      sellPackaging: true,
+    })
+    if (res.success) {
+      getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
+      setOptionsConfigCustomOptionName("")
+      setNewOptionModifier("0")
+      setNewOptionModifierDelivery("")
+      setNewOptionModifierPackaging("")
+    } else {
+      await appAlert(res.message || t("msg_save_fail_detail"))
     }
   }
 
@@ -859,12 +949,7 @@ export default function PosMenusPage() {
       })
       if (res.success) {
         getPosMenuOptions({ menuId: optionsConfigSelectedMenuId }).then(setOptionsConfigMenuOptions)
-        if (isSizePartGroups(groups)) {
-          setNewOptionSize("")
-          setNewOptionPart("")
-        } else {
-          setOptionsConfigNewStepValues({})
-        }
+        setOptionsConfigNewStepValues({})
         setNewOptionModifier("0")
         setNewOptionModifierDelivery("")
         setNewOptionModifierPackaging("")
@@ -2219,7 +2304,9 @@ export default function PosMenusPage() {
                             : optionsConfigStepGroups.length > 0
                               ? (t("posOptionConfigCurrentSteps") || "저장된 선택 단계") +
                                 ": " +
-                                optionsConfigStepGroups.join(" → ")
+                                optionsConfigStepGroups.join(" → ") +
+                                " · " +
+                                (t("posOptionConfigNonChickenStepHint") || "각 칸에 원하는 문구를 직접 입력하세요 (한글·영문 가능).")
                               : t("posOptionConfigNoStepsYet") || "선택 단계가 없습니다. 아래에 입력 후 [단계 저장] 하세요."}
                         </p>
                       </div>
@@ -2261,8 +2348,13 @@ export default function PosMenusPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-[11px]"
-                            disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                            onClick={() => setOptionsConfigGroupsDraft("size, part")}
+                            disabled={
+                              optionsConfigApplyingGroups ||
+                              !!optionsConfigSelectedMenu?.promoId?.trim() ||
+                              !optionsConfigSelectedMenu ||
+                              !isChickenMenu(optionsConfigSelectedMenu.code)
+                            }
+                            onClick={() => void handleApplyOptionPresetAndSave(["size", "part"])}
                           >
                             {t("posOptionConfigPresetChicken") || "프리셋: size, part (치킨)"}
                           </Button>
@@ -2271,13 +2363,26 @@ export default function PosMenusPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-[11px]"
-                            disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
-                            onClick={() => setOptionsConfigGroupsDraft("side, drink")}
+                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
+                            onClick={() => void handleApplyOptionPresetAndSave(["side", "drink"])}
                           >
-                            {t("posOptionConfigPresetSet") || "프리셋: side, drink (세트 예시)"}
+                            {t("posOptionConfigPresetSet") || "세트: side + drink (저장까지)"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px]"
+                            disabled={optionsConfigApplyingGroups || !!optionsConfigSelectedMenu?.promoId?.trim()}
+                            onClick={() => void handleApplyOptionPresetAndSave(["set_main", "side", "drink"])}
+                          >
+                            {t("posOptionConfigPresetSet3") || "세트 3단: 메인+사이드+음료 (저장까지)"}
                           </Button>
                         </div>
-                        <p className="text-[10px] text-muted-foreground">{t("posOptionConfigStepsSaveHint") || "단계 저장 후 아래에서 각 조합 행을 추가하세요. POS는 저장된 순서대로 단계 선택합니다."}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {t("posOptionConfigStepsSaveHint") ||
+                            "프리셋은 단계를 DB에 바로 저장합니다. 수동 입력은 쉼표·줄바꿈으로 구분 후 [단계 저장]을 누르세요. 그다음 아래에서 조합을 추가합니다."}
+                        </p>
                       </div>
                       <div className="rounded border p-3 bg-muted/20">
                         <div className="flex flex-wrap gap-2 items-end">
@@ -2356,8 +2461,7 @@ export default function PosMenusPage() {
                                 optionsConfigUseSizePartUi
                                   ? !newOptionSize || !newOptionPart
                                   : optionsConfigStepGroups.length === 0 ||
-                                    (!isSizePartGroups(optionsConfigStepGroups) &&
-                                      optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim()))
+                                    optionsConfigStepGroups.some((g) => !(optionsConfigNewStepValues[g] ?? "").trim())
                               }
                               type="button"
                             >
@@ -2390,6 +2494,36 @@ export default function PosMenusPage() {
                           </div>
                         </div>
                       </div>
+                      {optionsConfigSelectedMenu && !isChickenMenu(optionsConfigSelectedMenu.code) && optionsConfigStepGroups.length === 0 ? (
+                        <div className="rounded border p-3 bg-muted/15 space-y-2">
+                          <p className="text-xs font-medium">{t("posOptionDirectAddSection") || "옵션명 직접 추가 (단계 없음)"}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {t("posOptionDirectAddHint") ||
+                              "세트처럼 단계 선택이 필요 없을 때 한 줄 옵션만 씁니다. 사이드+음료 세트는 위에서 세트 프리셋으로 단계를 만든 뒤 조합을 추가하세요."}
+                          </p>
+                          <div className="flex flex-wrap items-end gap-2">
+                            <div className="min-w-[180px] flex-1">
+                              <Input
+                                className="h-8 text-xs"
+                                placeholder={t("posOptionDirectAddPlaceholder") || "예: 라지 음료로 변경"}
+                                value={optionsConfigCustomOptionName}
+                                onChange={(e) => setOptionsConfigCustomOptionName(e.target.value)}
+                                disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => void handleAddFlatOptionForConfig()}
+                              disabled={!!optionsConfigSelectedMenu?.promoId?.trim()}
+                            >
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              {t("posOptionDirectAddButton") || "한 줄 옵션 추가"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                       {/* 옵션 목록: 각 행에 홀/배달/포장 체크박스. 치킨은 S 순살(기본) 제외하고 M 순살/윙/봉만 표시 */}
                       <div className="rounded border p-3">
                         <h4 className="mb-2 text-xs font-semibold">{t("posMenuOptions") || "옵션 목록"}</h4>

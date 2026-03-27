@@ -17,6 +17,8 @@ interface CostChartProps {
   packagingItems: RecipeItem[]
   /** 메뉴 레벨 미세 - 품목별 미세 사용 시 0으로 전달 */
   misePercent: number
+  /** 매장(홀)이면 CostSummary와 같이 포장 원가를 총액·도넛에서 제외 */
+  serviceType?: "Dine-In" | "Delivery"
 }
 
 const COLORS = [
@@ -30,7 +32,7 @@ const COLORS = [
   "oklch(0.73 0.14 280)",
 ]
 
-export function CostChart({ foodItems, packagingItems, misePercent }: CostChartProps) {
+export function CostChart({ foodItems, packagingItems, misePercent, serviceType = "Dine-In" }: CostChartProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const foodData = foodItems
@@ -57,6 +59,7 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
     })
     .filter((d) => d.value > 0)
 
+  const includePackaging = serviceType === "Delivery"
   const allData = [
     ...foodData,
     ...(misePercent > 0 ? [
@@ -66,7 +69,7 @@ export function CostChart({ foodItems, packagingItems, misePercent }: CostChartP
         category: "mise",
       },
     ] : []),
-    ...packagingData,
+    ...(includePackaging ? packagingData : []),
   ]
 
   const total = allData.reduce((s, d) => s + d.value, 0)

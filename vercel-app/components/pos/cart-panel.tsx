@@ -1,12 +1,14 @@
 'use client'
 
 import {
+  Fragment,
   useState,
   useEffect,
   useLayoutEffect,
   useRef,
   forwardRef,
   useImperativeHandle,
+  useMemo,
   type Dispatch,
   type SetStateAction,
   type ReactNode,
@@ -68,9 +70,11 @@ import { useT } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth-context'
 import {
   getMembers,
+  getPosPaymentMethodItems,
   getPosTaxInvoiceRecipients,
   upsertPosTaxInvoiceRecipient,
   validatePosCoupon,
+  type PosPaymentMethodItem,
   type PosTaxInvoiceRecipientRow,
 } from '@/lib/api-client'
 import { encodeTaxInvoiceMemoValue } from '@/lib/pos-tax-invoice'
@@ -134,7 +138,16 @@ function deliveryAppBrandClasses(app: string | undefined) {
   }
 }
 
-type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'other'
+type PaymentMethodTab = 'cash' | 'card' | 'qr' | 'delivery_app' | 'other'
+
+export type CartPanelPaymentPayload = {
+  paymentCash: number
+  paymentCard: number
+  paymentQr: number
+  paymentOther: number
+  paymentDeliveryApp?: number
+  deliveryPaymentChannel?: string | null
+}
 type TaxSearchField = 'memberNo' | 'phone' | 'name' | 'taxId'
 type TaxInvoiceProfile = {
   type: 'individual' | 'corporate'
@@ -256,7 +269,7 @@ interface CartPanelProps {
     memo?: string
     discountAmt?: number
     discountReason?: string
-    payment?: Record<string, number>
+    payment?: CartPanelPaymentPayload
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -270,7 +283,7 @@ interface CartPanelProps {
     memo?: string
     discountAmt?: number
     discountReason?: string
-    payment?: Record<string, number>
+    payment?: CartPanelPaymentPayload
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -284,7 +297,7 @@ interface CartPanelProps {
     memo?: string
     discountAmt?: number
     discountReason?: string
-    payment?: Record<string, number>
+    payment?: CartPanelPaymentPayload
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -302,7 +315,7 @@ interface CartPanelProps {
     memo?: string
     discountAmt?: number
     discountReason?: string
-    payment?: Record<string, number>
+    payment?: CartPanelPaymentPayload
     memberId?: number
     memberNo?: string
     couponCode?: string
@@ -567,7 +580,12 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const [payLinePay, setPayLinePay] = useState('')
   const [payShopeePay, setPayShopeePay] = useState('')
   const [payOther, setPayOther] = useState('')
+  const [payDeliveryApp, setPayDeliveryApp] = useState('')
+  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = useState<'grab' | 'lineman' | 'shopee' | 'dine_in'>('grab')
   const [showOtherPayments, setShowOtherPayments] = useState(false)
+  /** 관리자 POS 설정 > 결제 관리(pos_payment_method_items)의 qr·other 분류 — POS 기타 세부와 연동 */
+  const [posPaymentMethodItems, setPosPaymentMethodItems] = useState<PosPaymentMethodItem[]>([])
+  const [payAdminLineAmounts, setPayAdminLineAmounts] = useState<Record<string, string>>({})
   const [needTaxInvoice, setNeedTaxInvoice] = useState(false)
   const [showTaxInvoiceDetails, setShowTaxInvoiceDetails] = useState(true)
   const [invoiceCustomerType, setInvoiceCustomerType] = useState<'person' | 'company'>('person')
@@ -594,6 +612,43 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const instanceIdRef = useRef(`cart-${Math.random().toString(36).slice(2, 10)}`)
   const cartItemsRef = useRef<CartItem[]>(cartItems)
   cartItemsRef.current = cartItems
+
+  const adminQrLines = useMemo(
+    () =>
+      posPaymentMethodItems
+        .filter((i) => i.category === 'qr' && !i.hidden)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    [posPaymentMethodItems]
+  )
+  const adminOtherLines = useMemo(
+    () =>
+      posPaymentMethodItems
+        .filter((i) => i.category === 'other' && !i.hidden)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    [posPaymentMethodItems]
+  )
+  const adminPaymentLines = useMemo(() => [...adminQrLines, ...adminOtherLines], [adminQrLines, adminOtherLines])
+  const useAdminPaymentLines = adminPaymentLines.length > 0
+  const adminPaymentLinesRef = useRef(adminPaymentLines)
+  adminPaymentLinesRef.current = adminPaymentLines
+
+  useEffect(() => {
+    if (!currentStoreId?.trim()) {
+      setPosPaymentMethodItems([])
+      return
+    }
+    getPosPaymentMethodItems({ storeCode: currentStoreId })
+      .then((list) => setPosPaymentMethodItems(Array.isArray(list) ? list : []))
+      .catch(() => setPosPaymentMethodItems([]))
+  }, [currentStoreId])
+
+  useEffect(() => {
+    setPayAdminLineAmounts((prev) => {
+      const next: Record<string, string> = {}
+      for (const i of adminPaymentLines) next[i.id] = prev[i.id] ?? '0'
+      return next
+    })
+  }, [adminPaymentLines])
 
   /** 비제어 모드: 패널 전환 시 캐시에 즉시 반영 (제어 모드는 부모가 진실) */
   useLayoutEffect(() => {
@@ -679,20 +734,30 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayLinePay('0')
     setPayShopeePay('0')
     setPayOther('0')
+    setPayDeliveryApp('0')
+    setDeliveryPaymentChannel('grab')
+    setPayAdminLineAmounts(Object.fromEntries(adminPaymentLinesRef.current.map((i) => [i.id, '0'])))
     setShowPaymentModal(true)
   }
   const openPaymentModal = () => openPaymentModalWithAmount(total)
 
-  const paymentSum =
-    (parseFloat(payCash) || 0) +
-    (parseFloat(payCard) || 0) +
+  const legacyWalletPaymentSum =
     (parseFloat(payTrueMoney) || 0) +
     (parseFloat(payWeChat) || 0) +
     (parseFloat(payAlipay) || 0) +
-    (parseFloat(payPromptPay) || 0) +
     (parseFloat(payLinePay) || 0) +
     (parseFloat(payShopeePay) || 0) +
     (parseFloat(payOther) || 0)
+  const adminConfiguredWalletSum = adminPaymentLines.reduce(
+    (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+    0
+  )
+  const paymentSum =
+    (parseFloat(payCash) || 0) +
+    (parseFloat(payCard) || 0) +
+    (parseFloat(payPromptPay) || 0) +
+    (useAdminPaymentLines ? adminConfiguredWalletSum : legacyWalletPaymentSum) +
+    (parseFloat(payDeliveryApp) || 0)
   const paymentSumMatch = Math.abs(paymentSum - total) < 0.01
   /** 더치 패널을 열지 않아도: 합계 미달·일부 결제 진행 중이면 수단 탭이 더치 방식(1인분/잔액)으로 동작 */
   const splitFlowForInputs =
@@ -710,6 +775,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     { id: 'cash', label: t('posPaymentCash') || '현금', icon: Banknote },
     { id: 'card', label: t('posPaymentCard') || '카드', icon: CreditCard },
     { id: 'qr', label: tr('posPaymentQrCode', 'QR Code'), icon: QrCode },
+    { id: 'delivery_app', label: t('posPaymentDeliveryApp') || '배달앱', icon: Bike },
     { id: 'other', label: t('posPaymentOther') || '기타', icon: Wallet },
   ]
   const isMemberOrder = selectedMemberId !== ''
@@ -943,16 +1009,33 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     setPayLinePay('0')
     setPayShopeePay('0')
     setPayOther('0')
+    setPayDeliveryApp('0')
+    const lines = adminPaymentLinesRef.current
+    setPayAdminLineAmounts(Object.fromEntries(lines.map((i) => [i.id, '0'])))
   }
 
-  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
+  const moveAllAmountTo = (target: 'cash' | 'card' | 'qr' | 'delivery_app' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay') => {
     const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
     const amount = Math.max(0, st - dc - pointUsedNum)
     resetPaymentInputs()
+    const lines = adminPaymentLinesRef.current
+    const walletToAdmin =
+      lines.length > 0 &&
+      (target === 'other' ||
+        target === 'truemoney' ||
+        target === 'wechat' ||
+        target === 'alipay' ||
+        target === 'linepay' ||
+        target === 'shopeepay')
+    if (walletToAdmin) {
+      setPayAdminLineAmounts(Object.fromEntries(lines.map((li, idx) => [li.id, idx === 0 ? String(amount) : '0'])))
+      return
+    }
     if (target === 'cash') setPayCash(String(amount))
     if (target === 'card') setPayCard(String(amount))
     if (target === 'qr') setPayPromptPay(String(amount))
+    if (target === 'delivery_app') setPayDeliveryApp(String(amount))
     if (target === 'other') setPayOther(String(amount))
     if (target === 'truemoney') setPayTrueMoney(String(amount))
     if (target === 'wechat') setPayWeChat(String(amount))
@@ -961,28 +1044,65 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'shopeepay') setPayShopeePay(String(amount))
   }
 
-  type MoveTarget = 'cash' | 'card' | 'qr' | 'other' | 'truemoney' | 'wechat' | 'alipay' | 'linepay' | 'shopeepay'
+  type MoveTarget =
+    | 'cash'
+    | 'card'
+    | 'qr'
+    | 'delivery_app'
+    | 'other'
+    | 'truemoney'
+    | 'wechat'
+    | 'alipay'
+    | 'linepay'
+    | 'shopeepay'
 
   /** 탭/라벨 클릭 시: 1인 금액만 해당 수단에 추가 (진행은 하단 「일부 결제」에서만 증가) */
   const addDutchAmountOnly = (target: MoveTarget) => {
     const count = effectiveDutchCount
     const perPerson = dutchUnitAmount
-    const currentSum =
-      (parseFloat(payCash) || 0) +
-      (parseFloat(payCard) || 0) +
-      (parseFloat(payPromptPay) || 0) +
+    const adminLineSum = adminPaymentLines.reduce(
+      (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+      0
+    )
+    const legacyWalletSum =
       (parseFloat(payTrueMoney) || 0) +
       (parseFloat(payWeChat) || 0) +
       (parseFloat(payAlipay) || 0) +
       (parseFloat(payLinePay) || 0) +
       (parseFloat(payShopeePay) || 0) +
       (parseFloat(payOther) || 0)
+    const currentSum =
+      (parseFloat(payCash) || 0) +
+      (parseFloat(payCard) || 0) +
+      (parseFloat(payPromptPay) || 0) +
+      (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
+      (parseFloat(payDeliveryApp) || 0)
     const remain = Math.max(0, total - currentSum)
     const addAmount = splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain)
     if (addAmount <= 0) return
+    const lines = adminPaymentLinesRef.current
+    const walletTarget =
+      target === 'other' ||
+      target === 'truemoney' ||
+      target === 'wechat' ||
+      target === 'alipay' ||
+      target === 'linepay' ||
+      target === 'shopeepay'
+    if (lines.length > 0 && walletTarget) {
+      setShowOtherPayments(true)
+      const id0 = lines[0].id
+      setPayAdminLineAmounts((prev) => {
+        const next: Record<string, string> = {}
+        for (const li of lines) next[li.id] = String(parseFloat(prev[li.id] || '0') || 0)
+        next[id0] = String((parseFloat(next[id0]) || 0) + addAmount)
+        return next
+      })
+      return
+    }
     if (target === 'cash') setPayCash((p) => String((parseFloat(p || '0') || 0) + addAmount))
     if (target === 'card') setPayCard((p) => String((parseFloat(p || '0') || 0) + addAmount))
     if (target === 'qr') setPayPromptPay((p) => String((parseFloat(p || '0') || 0) + addAmount))
+    if (target === 'delivery_app') setPayDeliveryApp((p) => String((parseFloat(p || '0') || 0) + addAmount))
     if (target === 'other') {
       setShowOtherPayments(true)
       setPayOther((p) => String((parseFloat(p || '0') || 0) + addAmount))
@@ -992,6 +1112,48 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
     if (target === 'alipay') { setShowOtherPayments(true); setPayAlipay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
     if (target === 'linepay') { setShowOtherPayments(true); setPayLinePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
     if (target === 'shopeepay') { setShowOtherPayments(true); setPayShopeePay((p) => String((parseFloat(p || '0') || 0) + addAmount)) }
+  }
+
+  const applyFullAmountToSingleAdminLine = (lineId: string) => {
+    const st = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    const dc = discountType === 'percent' ? Math.floor((st * discountValue) / 100) : discountValue
+    const amount = Math.max(0, st - dc - pointUsedNum)
+    resetPaymentInputs()
+    const lines = adminPaymentLinesRef.current
+    setPayAdminLineAmounts(Object.fromEntries(lines.map((li) => [li.id, li.id === lineId ? String(amount) : '0'])))
+  }
+
+  const addDutchAmountToAdminLine = (lineId: string) => {
+    const count = effectiveDutchCount
+    const perPerson = dutchUnitAmount
+    const adminLineSum = adminPaymentLines.reduce(
+      (s, i) => s + (parseFloat(payAdminLineAmounts[i.id] || '0') || 0),
+      0
+    )
+    const legacyWalletSum =
+      (parseFloat(payTrueMoney) || 0) +
+      (parseFloat(payWeChat) || 0) +
+      (parseFloat(payAlipay) || 0) +
+      (parseFloat(payLinePay) || 0) +
+      (parseFloat(payShopeePay) || 0) +
+      (parseFloat(payOther) || 0)
+    const currentSum =
+      (parseFloat(payCash) || 0) +
+      (parseFloat(payCard) || 0) +
+      (parseFloat(payPromptPay) || 0) +
+      (useAdminPaymentLines ? adminLineSum : legacyWalletSum) +
+      (parseFloat(payDeliveryApp) || 0)
+    const remain = Math.max(0, total - currentSum)
+    const addAmount = splitPaidSteps >= count - 1 ? remain : Math.min(perPerson, remain)
+    if (addAmount <= 0) return
+    setShowOtherPayments(true)
+    setPayAdminLineAmounts((prev) => {
+      const lines = adminPaymentLinesRef.current
+      const next: Record<string, string> = {}
+      for (const li of lines) next[li.id] = String(parseFloat(prev[li.id] || '0') || 0)
+      next[lineId] = String((parseFloat(next[lineId]) || 0) + addAmount)
+      return next
+    })
   }
 
   /** 더치페이 「일부 결제」: 진행만 누적 (금액은 탭 클릭으로 이미 입력됨). 패널 없이도 일부 결제만으로 단계 증가 가능 */
@@ -1083,13 +1245,19 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
   const submitNonDineOrder = (withPayment: boolean) => {
     if (orderType === 'dine-in') return
     if (!onNonDineOrderComplete) return
-    const paymentOtherSum =
-      (parseFloat(payTrueMoney) || 0) +
-      (parseFloat(payWeChat) || 0) +
-      (parseFloat(payAlipay) || 0) +
-      (parseFloat(payLinePay) || 0) +
-      (parseFloat(payShopeePay) || 0) +
-      (parseFloat(payOther) || 0)
+    const payDel = parseFloat(payDeliveryApp) || 0
+    const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
+      payDel > 0
+        ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
+        : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
+    const paymentOtherSum = useAdminPaymentLines
+      ? adminConfiguredWalletSum
+      : (parseFloat(payTrueMoney) || 0) +
+        (parseFloat(payWeChat) || 0) +
+        (parseFloat(payAlipay) || 0) +
+        (parseFloat(payLinePay) || 0) +
+        (parseFloat(payShopeePay) || 0) +
+        (parseFloat(payOther) || 0)
     const deliveryLabel = [deliveryAppLabel, deliveryOrderNoProp?.trim() ? `#${deliveryOrderNoProp.trim()}` : '']
       .filter(Boolean)
       .join(' ')
@@ -1114,25 +1282,34 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...deliveryPayPart,
           }
         : {
             paymentCash: 0,
             paymentCard: 0,
             paymentQr: 0,
             paymentOther: 0,
+            paymentDeliveryApp: 0,
+            deliveryPaymentChannel: null,
           },
     })
   }
 
   const handlePaymentComplete = () => {
     const dineInTableName = selectedTable?.name || paymentTableNameOverride
-    const paymentOtherSum =
-      (parseFloat(payTrueMoney) || 0) +
-      (parseFloat(payWeChat) || 0) +
-      (parseFloat(payAlipay) || 0) +
-      (parseFloat(payLinePay) || 0) +
-      (parseFloat(payShopeePay) || 0) +
-      (parseFloat(payOther) || 0)
+    const payDel = parseFloat(payDeliveryApp) || 0
+    const deliveryPayPart: Pick<CartPanelPaymentPayload, 'paymentDeliveryApp' | 'deliveryPaymentChannel'> =
+      payDel > 0
+        ? { paymentDeliveryApp: payDel, deliveryPaymentChannel }
+        : { paymentDeliveryApp: 0, deliveryPaymentChannel: null }
+    const paymentOtherSum = useAdminPaymentLines
+      ? adminConfiguredWalletSum
+      : (parseFloat(payTrueMoney) || 0) +
+        (parseFloat(payWeChat) || 0) +
+        (parseFloat(payAlipay) || 0) +
+        (parseFloat(payLinePay) || 0) +
+        (parseFloat(payShopeePay) || 0) +
+        (parseFloat(payOther) || 0)
     if (needTaxInvoice && !taxInvoiceInvalid) {
       const profile: TaxInvoiceProfile = {
         type: invoiceCustomerType === 'company' ? 'corporate' : 'individual',
@@ -1181,6 +1358,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
@@ -1205,6 +1383,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
@@ -1227,6 +1406,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
             paymentCard: parseFloat(payCard) || 0,
             paymentQr: parseFloat(payPromptPay) || 0,
             paymentOther: paymentOtherSum,
+            ...deliveryPayPart,
           },
           memberId: selectedMemberId ? Number(selectedMemberId) : undefined,
           memberNo: memberMap[selectedMemberId]?.memberNo || undefined,
@@ -2226,7 +2406,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 <span className="text-[11px] text-muted-foreground">{tr('posPaymentMethodTapHint', '탭을 바꿔 금액을 나누어 입력')}</span>
               </div>
             {/* 결제 수단 탭 */}
-            <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner">
+            <div className="grid grid-cols-5 gap-1 rounded-2xl border border-border/60 bg-muted/50 p-1.5 shadow-inner">
               {paymentTabs.map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -2235,7 +2415,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     type="button"
                     variant="ghost"
                     className={cn(
-                      'h-[4.25rem] flex-col gap-1 rounded-xl transition-all',
+                      'h-[4.25rem] flex-col gap-0.5 rounded-xl px-1 transition-all',
                       activePaymentTab === tab.id
                         ? 'bg-card text-card-foreground shadow-md ring-1 ring-border/70'
                         : 'text-muted-foreground hover:bg-muted/80'
@@ -2243,12 +2423,13 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     onClick={() => {
                       setActivePaymentTab(tab.id)
                       if (splitFlowForInputs) {
-                        addDutchAmountOnly(tab.id)
+                        addDutchAmountOnly(tab.id as MoveTarget)
                         if (tab.id === 'other') setShowOtherPayments(true)
                       } else {
                         if (tab.id === 'cash') moveAllAmountTo('cash')
                         if (tab.id === 'card') moveAllAmountTo('card')
                         if (tab.id === 'qr') moveAllAmountTo('qr')
+                        if (tab.id === 'delivery_app') moveAllAmountTo('delivery_app')
                         if (tab.id === 'other') {
                           setShowOtherPayments(true)
                           moveAllAmountTo('other')
@@ -2256,8 +2437,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                       }
                     }}
                   >
-                    <Icon className={cn('h-5 w-5', activePaymentTab === tab.id ? 'text-primary' : '')} />
-                    <span className="text-[13px] font-medium leading-tight">{tab.label}</span>
+                    <Icon className={cn('h-5 w-5 shrink-0', activePaymentTab === tab.id ? 'text-primary' : '')} />
+                    <span className="text-[11px] font-medium leading-tight text-center">{tab.label}</span>
                   </Button>
                 )
               })}
@@ -2271,7 +2452,7 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 { key: 'card', value: payCard, set: setPayCard, label: t('posPaymentCard') || '카드', icon: CreditCard },
                 { key: 'qr', value: payPromptPay, set: setPayPromptPay, label: `${t('posPaymentQr') || 'QR'} 코드`, icon: QrCode },
               ]
-                .filter(({ key }) => activePaymentTab === 'other' ? false : key === activePaymentTab)
+                .filter(({ key }) => (activePaymentTab === 'other' || activePaymentTab === 'delivery_app' ? false : key === activePaymentTab))
                 .map(({ key, value, set, label, icon: Icon }) => (
                 <div
                   key={key}
@@ -2312,6 +2493,60 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                 </div>
               ))}
 
+              {activePaymentTab === 'delivery_app' && (
+                <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm transition-colors focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/15">
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-foreground">
+                        <Bike className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold leading-none">{t('posPaymentDeliveryApp') || '배달앱'}</p>
+                        <button
+                          type="button"
+                          className="mt-1 text-left text-[11px] font-medium text-primary hover:underline"
+                          onClick={() =>
+                            splitFlowForInputs ? addDutchAmountOnly('delivery_app') : moveAllAmountTo('delivery_app')
+                          }
+                        >
+                          {tr('posPayAllToThisMethod', '이 수단으로 전액')}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 sm:items-end">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs text-muted-foreground">{t('posDeliveryPaymentChannel') || '채널'}</Label>
+                        <Select
+                          value={deliveryPaymentChannel}
+                          onValueChange={(v) => setDeliveryPaymentChannel(v as 'grab' | 'lineman' | 'shopee' | 'dine_in')}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="grab">{t('posDeliveryPayGrab') || 'Grab'}</SelectItem>
+                            <SelectItem value="lineman">{t('posDeliveryPayLineman') || 'Line Man'}</SelectItem>
+                            <SelectItem value="shopee">{t('posDeliveryPayShopeeFood') || 'Shopee Food'}</SelectItem>
+                            <SelectItem value="dine_in">{t('posDeliveryPayDineIn') || 'Dine in'}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={payDeliveryApp}
+                          onChange={(e) => setPayDeliveryApp(e.target.value)}
+                          className="h-12 flex-1 rounded-xl border-border/80 text-right text-lg font-semibold tabular-nums tracking-tight"
+                        />
+                        <span className="w-4 shrink-0 text-sm font-medium text-muted-foreground">฿</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {activePaymentTab === 'other' && (
                 <Collapsible open={showSplit ? true : showOtherPayments} onOpenChange={(v) => { if (!showSplit) setShowOtherPayments(v) }}>
                   <CollapsibleTrigger asChild>
@@ -2329,50 +2564,117 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="grid gap-2 border-l-2 border-primary/20 pl-3 pt-3">
-                    {[
-                      { value: payTrueMoney, set: setPayTrueMoney, labelKey: 'posPaymentTrueMoney', moveKey: 'truemoney' as const },
-                      { value: payWeChat, set: setPayWeChat, labelKey: 'posPaymentWeChat', moveKey: 'wechat' as const },
-                      { value: payAlipay, set: setPayAlipay, labelKey: 'posPaymentAlipay', moveKey: 'alipay' as const },
-                      { value: payLinePay, set: setPayLinePay, labelKey: 'posPaymentLinePay', moveKey: 'linepay' as const },
-                      { value: payShopeePay, set: setPayShopeePay, labelKey: 'posPaymentShopeePay', moveKey: 'shopeepay' as const },
-                      { value: payOther, set: setPayOther, labelKey: 'posPaymentOtherEtc', moveKey: 'other' as const },
-                    ].map(({ value, set, labelKey, moveKey }) => (
-                      <div key={labelKey} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
-                        <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
-                        <button
-                          type="button"
-                          className="min-w-0 shrink text-left text-sm font-medium hover:underline"
-                          onClick={() =>
-                            splitFlowForInputs ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)
-                          }
-                        >
-                          {t(labelKey)}
-                        </button>
-                        {splitFlowForInputs && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="h-8 shrink-0 px-2 text-xs"
-                            onClick={() => addDutchAmountOnly(moveKey)}
-                          >
-                            +{formatBahtNum(dutchUnitAmount)} ฿
-                          </Button>
+                    {useAdminPaymentLines && (
+                      <p className="text-[10px] leading-snug text-muted-foreground -mt-1 mb-1">
+                        {tr(
+                          'posPaymentAdminLinesHint',
+                          '항목은 관리자 › POS 설정 › 결제 관리에서 편집합니다. (QR·모바일·기타 분류)'
                         )}
+                      </p>
+                    )}
+                    {useAdminPaymentLines &&
+                      adminPaymentLines.map((item, idx) => {
+                        const prev = adminPaymentLines[idx - 1]
+                        const showCatHead = !prev || prev.category !== item.category
+                        return (
+                          <Fragment key={item.id}>
+                            {showCatHead && (
+                              <p className="text-[11px] font-semibold text-muted-foreground pt-1">
+                                {item.category === 'qr'
+                                  ? tr('posPaymentAdminQrSection', 'QR · 모바일')
+                                  : tr('posPaymentAdminOtherSection', '기타')}
+                              </p>
+                            )}
+                            <div className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
+                              <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
+                                <button
+                                  type="button"
+                                  className="min-w-0 shrink text-left text-sm font-medium hover:underline"
+                                  onClick={() =>
+                                    splitFlowForInputs
+                                      ? addDutchAmountToAdminLine(item.id)
+                                      : applyFullAmountToSingleAdminLine(item.id)
+                                  }
+                                >
+                                  {item.name}
+                                </button>
+                                {splitFlowForInputs && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    className="h-8 shrink-0 px-2 text-xs"
+                                    onClick={() => addDutchAmountToAdminLine(item.id)}
+                                  >
+                                    +{formatBahtNum(dutchUnitAmount)} ฿
+                                  </Button>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 sm:max-w-[12rem]">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  value={payAdminLineAmounts[item.id] ?? '0'}
+                                  onChange={(e) =>
+                                    setPayAdminLineAmounts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
+                                />
+                                <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
+                              </div>
+                            </div>
+                          </Fragment>
+                        )
+                      })}
+                    {!useAdminPaymentLines &&
+                      [
+                        { value: payTrueMoney, set: setPayTrueMoney, labelKey: 'posPaymentTrueMoney', moveKey: 'truemoney' as const },
+                        { value: payWeChat, set: setPayWeChat, labelKey: 'posPaymentWeChat', moveKey: 'wechat' as const },
+                        { value: payAlipay, set: setPayAlipay, labelKey: 'posPaymentAlipay', moveKey: 'alipay' as const },
+                        { value: payLinePay, set: setPayLinePay, labelKey: 'posPaymentLinePay', moveKey: 'linepay' as const },
+                        { value: payShopeePay, set: setPayShopeePay, labelKey: 'posPaymentShopeePay', moveKey: 'shopeepay' as const },
+                        { value: payOther, set: setPayOther, labelKey: 'posPaymentOtherEtc', moveKey: 'other' as const },
+                      ].map(({ value, set, labelKey, moveKey }) => (
+                        <div key={labelKey} className="flex flex-col gap-2 rounded-2xl border border-border/60 bg-muted/20 p-3 sm:flex-row sm:items-center">
+                          <div className="flex min-w-0 flex-1 items-start justify-between gap-2 sm:items-center">
+                            <button
+                              type="button"
+                              className="min-w-0 shrink text-left text-sm font-medium hover:underline"
+                              onClick={() =>
+                                splitFlowForInputs ? addDutchAmountOnly(moveKey) : moveAllAmountTo(moveKey)
+                              }
+                            >
+                              {t(labelKey)}
+                            </button>
+                            {splitFlowForInputs && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                className="h-8 shrink-0 px-2 text-xs"
+                                onClick={() => addDutchAmountOnly(moveKey)}
+                              >
+                                +{formatBahtNum(dutchUnitAmount)} ฿
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 sm:max-w-[12rem]">
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              value={value}
+                              onChange={(e) => set(e.target.value)}
+                              className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
+                            />
+                            <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 sm:max-w-[12rem]">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={value}
-                          onChange={e => set(e.target.value)}
-                          className="h-11 flex-1 rounded-xl text-right text-base font-semibold tabular-nums"
-                        />
-                        <span className="w-4 shrink-0 text-xs font-medium text-muted-foreground">฿</span>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
                   </CollapsibleContent>
                 </Collapsible>
               )}

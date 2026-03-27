@@ -48,8 +48,11 @@ import {
   adminTabsScrollCn,
   adminTabsTriggerCn,
 } from "@/lib/admin-tab-styles"
-import { cn } from "@/lib/utils"
-import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import { cn, escapeHtml } from "@/lib/utils"
+import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
+import { parsePosOrderMemo } from "@/lib/pos-tax-invoice"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type CookCompareKey = "unset" | "ok" | "warn" | "late"
@@ -377,43 +380,55 @@ export default function PosOrdersPage() {
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode })
-      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
       const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
-
-      const slips = buildKitchenSlipGroups(items, {
-        kitchenMode: settings.kitchenMode || 1,
-        kitchen2Categories: settings.kitchen2Categories || [],
-        kitchen3Categories: settings.kitchen3Categories || [],
-        categoryByMenuId,
-        labels: {
-          unified: t("posKitchenOrder") || "주방 주문서",
-          kitchen1: `${t("posKitchen1") || "주방 1"}`,
-          kitchen2: `${t("posKitchen2") || "주방 2"}`,
-          kitchen3: `${t("posKitchen3") || "주방 3"}`,
-        },
-      })
+      const kLabels = {
+        unified: t("posKitchenOrder") || "주방 주문서",
+        kitchen1: `${t("posKitchen1") || "주방 1"}`,
+        kitchen2: `${t("posKitchen2") || "주방 2"}`,
+        kitchen3: `${t("posKitchen3") || "주방 3"}`,
+      }
+      const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+      if (!slips.length) {
+        win.close()
+        await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다.")
+        return
+      }
+      const slipDesign = resolveKitchenSlipDesign(settings)
+      const kitchenMemo = parsePosOrderMemo(o.memo).plainMemo
+      const memoLine = kitchenMemo.trim()
+        ? `${t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}`
+        : ""
+      const dateStr =
+        o.createdAt ? formatBangkokDateTime(o.createdAt, bangkokDisplayLocale(lang)) : "-"
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]
         const w = idx === 0 ? win : window.open("", "_blank")
         if (!w) return
-        const html = `
-          <!DOCTYPE html>
-          <html><head><title>${slip.label}</title>
-          <style>
-            body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
-            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .k-row { margin: 6px 0; font-size: 18px; }
-            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
-          </style></head><body>
-          <div class="k-header">${slip.label}</div>
-          <div class="k-row"><strong>${o.orderNo}</strong></div>
-          <div class="k-row">${storeCode} · ${formatListOrderType(o)}${o.tableName && o.orderType !== "delivery" ? ` · ${t("posTable") || "테이블"}: ${o.tableName}` : ""}</div>
-          <div class="k-row">${o.createdAt ? formatBangkokDateTime(o.createdAt, bangkokDisplayLocale(lang)) : "-"}</div>
-          <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${it.name ?? "-"} × ${it.qty ?? 1}</div>`).join("")}
-          ${o.memo ? `<div class="k-memo">${t("posCustomerMemo") || "메모"}: ${o.memo}</div>` : ""}
-          </body></html>`
+        const tablePart =
+          o.tableName && o.orderType !== "delivery"
+            ? ` · ${t("posTable") || "테이블"}: ${o.tableName}`
+            : ""
+        const html = buildKitchenSlipDocumentHtml({
+          label: slip.label,
+          orderNo: String(o.orderNo ?? ""),
+          storeCode,
+          orderTypeLabel: formatListOrderType(o),
+          tablePart,
+          dateStr,
+          items: slip.items.map((it) => {
+            const row = it as { name?: string; qty?: number; note?: string }
+            return {
+              name: translatePosMenuLineForReceipt(String(row.name ?? "-"), t),
+              qty: Number(row.qty ?? 1),
+              note: row.note,
+            }
+          }),
+          memoLine: memoLine || null,
+          escapeHtml,
+          design: slipDesign,
+          printColorAdjust: "economy",
+        })
         w.document.write(html)
         w.document.close()
         w.focus()
@@ -854,7 +869,11 @@ export default function PosOrdersPage() {
                                     (o.discountAmt && o.discountAmt > 0) ||
                                     (o.deliveryFee ?? 0) > 0 ||
                                     (o.packagingFee ?? 0) > 0 ||
-                                    (o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0) >
+                                    (o.paymentCash ?? 0) +
+                                      (o.paymentCard ?? 0) +
+                                      (o.paymentQr ?? 0) +
+                                      (o.paymentOther ?? 0) +
+                                      (o.paymentDeliveryApp ?? 0) >
                                       0) && (
                                     <div className="mb-2 pb-2 border-b">
                                       {o.tableName && o.orderType !== "delivery" && (
@@ -889,12 +908,30 @@ export default function PosOrdersPage() {
                                           {t("posPackagingFee") || "포장 수수료"}: +{(o.packagingFee ?? 0).toLocaleString()} ฿
                                         </div>
                                       )}
-                                      {((o.paymentCash ?? 0) + (o.paymentCard ?? 0) + (o.paymentQr ?? 0) + (o.paymentOther ?? 0)) > 0 && (
+                                      {((o.paymentCash ?? 0) +
+                                        (o.paymentCard ?? 0) +
+                                        (o.paymentQr ?? 0) +
+                                        (o.paymentOther ?? 0) +
+                                        (o.paymentDeliveryApp ?? 0)) > 0 && (
                                         <div className="mt-1 pt-1 border-t border-dashed text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
                                           {(o.paymentCash ?? 0) > 0 && <span>{t("posPaymentCash") || "현금"}: {(o.paymentCash ?? 0).toLocaleString()} ฿</span>}
                                           {(o.paymentCard ?? 0) > 0 && <span>{t("posPaymentCard") || "카드"}: {(o.paymentCard ?? 0).toLocaleString()} ฿</span>}
                                           {(o.paymentQr ?? 0) > 0 && <span>{t("posPaymentQr") || "QR"}: {(o.paymentQr ?? 0).toLocaleString()} ฿</span>}
                                           {(o.paymentOther ?? 0) > 0 && <span>{t("posPaymentOther") || "기타"}: {(o.paymentOther ?? 0).toLocaleString()} ฿</span>}
+                                          {(o.paymentDeliveryApp ?? 0) > 0 && (
+                                            <span>
+                                              {t("posPaymentDeliveryApp") || "배달앱"} ({o.deliveryPaymentChannel === "grab"
+                                                ? t("posDeliveryPayGrab") || "Grab"
+                                                : o.deliveryPaymentChannel === "lineman"
+                                                  ? t("posDeliveryPayLineman") || "Line Man"
+                                                  : o.deliveryPaymentChannel === "shopee"
+                                                    ? t("posDeliveryPayShopeeFood") || "Shopee Food"
+                                                    : o.deliveryPaymentChannel === "dine_in"
+                                                      ? t("posDeliveryPayDineIn") || "Dine in"
+                                                      : o.deliveryPaymentChannel || "—"}
+                                              ): {(o.paymentDeliveryApp ?? 0).toLocaleString()} ฿
+                                            </span>
+                                          )}
                                         </div>
                                       )}
                                     </div>

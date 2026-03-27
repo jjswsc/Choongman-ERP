@@ -20,6 +20,8 @@ type PosOrderRow = {
   payment_card?: number
   payment_qr?: number
   payment_other?: number
+  payment_delivery_app?: number
+  delivery_payment_channel?: string | null
   member_id?: number | null
   member_no?: string | null
   coupon_code?: string | null
@@ -38,7 +40,8 @@ function paymentSum(r: PosOrderRow): number {
     Math.max(0, Number(r.payment_cash) || 0) +
     Math.max(0, Number(r.payment_card) || 0) +
     Math.max(0, Number(r.payment_qr) || 0) +
-    Math.max(0, Number(r.payment_other) || 0)
+    Math.max(0, Number(r.payment_other) || 0) +
+    Math.max(0, Number(r.payment_delivery_app) || 0)
   )
 }
 
@@ -292,6 +295,20 @@ export async function POST(req: NextRequest) {
           Math.max(0, Number(keep.payment_qr) || 0) + Math.max(0, Number(absorb.payment_qr) || 0),
         payment_other:
           Math.max(0, Number(keep.payment_other) || 0) + Math.max(0, Number(absorb.payment_other) || 0),
+        payment_delivery_app:
+          Math.max(0, Number(keep.payment_delivery_app) || 0) +
+          Math.max(0, Number(absorb.payment_delivery_app) || 0),
+        delivery_payment_channel: (() => {
+          const pk = Math.max(0, Number(keep.payment_delivery_app) || 0)
+          const pa = Math.max(0, Number(absorb.payment_delivery_app) || 0)
+          const sum = pk + pa
+          if (sum <= 0) return null
+          const ck = String(keep.delivery_payment_channel ?? '').trim().toLowerCase()
+          const ca = String(absorb.delivery_payment_channel ?? '').trim().toLowerCase()
+          if (pk > 0 && ck) return ck
+          if (pa > 0 && ca) return ca
+          return ck || ca || null
+        })(),
         member_id: memberId || null,
         member_no: memberNo || null,
         point_used: pointUsed,

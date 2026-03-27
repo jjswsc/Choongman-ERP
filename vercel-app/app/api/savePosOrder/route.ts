@@ -6,6 +6,15 @@ import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
 import { parseDeliveryAppCodeFromItemsJson } from '@/lib/pos-delivery-order-meta'
 import { upsertTaxRecipientFromOrderMemo } from '@/lib/pos-tax-invoice-recipients-server'
 
+const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+
+function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
+  if (paymentDeliveryApp <= 0.005) return null
+  const s = String(raw ?? '').trim().toLowerCase()
+  if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
+  return 'grab'
+}
+
 /** 주문 번호 생성 (8자리: ST0317A3 = 매장2자+MMDD+랜덤2자) */
 function generateOrderNo(storeCode: string): string {
   const now = new Date()
@@ -34,6 +43,11 @@ export async function POST(req: NextRequest) {
     const paymentCard = Math.max(0, Number(body.paymentCard ?? 0))
     const paymentQr = Math.max(0, Number(body.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body.paymentOther ?? 0))
+    const paymentDeliveryApp = Math.max(0, Number(body.paymentDeliveryApp ?? body.payment_delivery_app ?? 0))
+    const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
+      body.deliveryPaymentChannel ?? body.delivery_payment_channel,
+      paymentDeliveryApp
+    )
     const memberId = Math.max(0, Number(body.memberId ?? 0))
     const memberNo = String(body.memberNo ?? '').trim()
     const couponCode = String(body.couponCode ?? '').trim().toUpperCase()
@@ -110,6 +124,8 @@ export async function POST(req: NextRequest) {
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
+      payment_delivery_app: paymentDeliveryApp,
+      delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
       coupon_code: couponCode || null,
@@ -122,7 +138,7 @@ export async function POST(req: NextRequest) {
     const inserted = await supabaseInsert('pos_orders', row) as { id?: number }[]
     const created = Array.isArray(inserted) ? inserted[0] : inserted
 
-    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther
+    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     let pointEarned = pointEarnedReq
     if (memberId > 0 && paymentSum > 0 && created?.id) {
       const loyalty = await applyLoyaltyOnOrder({

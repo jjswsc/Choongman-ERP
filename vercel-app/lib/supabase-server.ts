@@ -168,6 +168,16 @@ function getConfig() {
   return { url: base, key }
 }
 
+/**
+ * PostgREST 한 요청당 가져올 행 상한(기본값). Supabase Dashboard → Settings → API 의 max rows 와 맞추거나 env로 상향.
+ * 예: SUPABASE_SELECT_PAGE_SIZE_MAX=20000
+ */
+export function supabaseSelectPageCap(): number {
+  const raw = Number(process.env.SUPABASE_SELECT_PAGE_SIZE_MAX || '10000')
+  if (!Number.isFinite(raw) || raw < 1) return 10000
+  return Math.min(Math.floor(raw), 500_000)
+}
+
 export async function supabaseSelect(
   table: string,
   options: { order?: string; limit?: number; offset?: number; select?: string } = {}
@@ -176,10 +186,13 @@ export async function supabaseSelect(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*']
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 10000
+  const cap = supabaseSelectPageCap()
+  const limit =
+    options.limit != null ? Math.max(1, Math.min(Number(options.limit), cap)) : cap
   const offset = options.offset != null ? Math.max(0, Number(options.offset)) : 0
   query.push(`limit=${limit}`)
   if (offset > 0) query.push(`offset=${offset}`)
+  const rangeStart = offset
   const rangeEnd = offset + limit - 1
   const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
     method: 'GET',
@@ -187,7 +200,7 @@ export async function supabaseSelect(
       apikey: key,
       Authorization: `Bearer ${key}`,
       Accept: 'application/json',
-      Range: `0-${Math.max(0, rangeEnd)}`,
+      Range: `${rangeStart}-${Math.max(rangeStart, rangeEnd)}`,
     },
   })
   if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))
@@ -202,10 +215,15 @@ export async function supabaseSelectAllPages(
   table: string,
   options: { order: string; select: string; pageSize?: number; maxRows?: number }
 ): Promise<unknown[]> {
-  const pageSize = Math.min(Math.max(options.pageSize ?? 4000, 1), 10000)
+  const cap = supabaseSelectPageCap()
+  const pageSize = Math.max(1, Math.min(options.pageSize ?? cap, cap))
   const maxRows = options.maxRows ?? 1_000_000
   const out: unknown[] = []
-  for (let offset = 0; out.length < maxRows; offset += pageSize) {
+  let offset = 0
+  /** PostgREST/프록시가 limit=10000 요청에도 예: 1000행만 줄 수 있음. rows.length < pageSize 로 끊으면 나머지 페이지를 영원히 안 읽음 → 원가 분석 등에서 최신 BOM 누락 */
+  let guard = 0
+  const maxPages = 5000
+  while (out.length < maxRows && guard++ < maxPages) {
     const batch = await supabaseSelect(table, {
       order: options.order,
       limit: pageSize,
@@ -213,8 +231,10 @@ export async function supabaseSelectAllPages(
       select: options.select,
     })
     const rows = Array.isArray(batch) ? batch : []
+    if (rows.length === 0) break
     out.push(...rows)
-    if (rows.length < pageSize) break
+    if (out.length >= maxRows) break
+    offset += rows.length
   }
   return out
 }
@@ -265,7 +285,9 @@ export async function supabaseSelectFilter(
   const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
   const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*', filter]
   if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
-  const limit = options.limit != null ? Math.max(1, Number(options.limit)) : 10000
+  const cap = supabaseSelectPageCap()
+  const limit =
+    options.limit != null ? Math.max(1, Math.min(Number(options.limit), cap)) : cap
   query.push(`limit=${limit}`)
   const rangeEnd = limit - 1
   const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
@@ -317,11 +339,14 @@ export async function supabaseSelectFilterAllPages(
   filter: string,
   options: { order?: string; select?: string; pageSize?: number; maxRows?: number } = {}
 ): Promise<unknown[]> {
-  const pageSize = Math.min(Math.max(500, Number(options.pageSize) || 8000), 20000)
+  const cap = supabaseSelectPageCap()
+  const pageSize = Math.max(500, Math.min(Number(options.pageSize) || Math.min(8000, cap), cap))
   const maxRows = Math.min(Math.max(pageSize, Number(options.maxRows) || 2_000_000), 5_000_000)
   const all: unknown[] = []
   let start = 0
-  while (all.length < maxRows) {
+  let guard = 0
+  const maxPages = 5000
+  while (all.length < maxRows && guard++ < maxPages) {
     const end = start + pageSize - 1
     const batch = (await supabaseSelectFilterRange(table, filter, {
       order: options.order,
@@ -331,8 +356,8 @@ export async function supabaseSelectFilterAllPages(
     })) as unknown[]
     if (!Array.isArray(batch) || batch.length === 0) break
     all.push(...batch)
-    if (batch.length < pageSize) break
-    start += pageSize
+    if (all.length >= maxRows) break
+    start += batch.length
   }
   return all
 }

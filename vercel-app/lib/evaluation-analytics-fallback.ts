@@ -34,6 +34,13 @@ export type EvalAnalyticsByEvaluator = {
   avgScore: number | null
 }
 
+export type EvalAnalyticsCoverage = {
+  activeEmployeesInPeriod: number
+  evaluatedEmployees: number
+  unevaluatedEmployees: number
+  unevaluated: { store: string; name: string; nick: string; job: string }[]
+}
+
 export type EvaluationAnalyticsPayload = {
   summary: EvalAnalyticsSummary
   gradeDistribution: Record<string, number>
@@ -44,6 +51,8 @@ export type EvaluationAnalyticsPayload = {
   /** RPC에는 없음 — fallback에서 sections 평균 */
   sectionAverages?: Record<string, number | null>
   source: 'rpc' | 'fallback'
+  /** employees 마스터 대비 기간·유형별 미평가 (조회 실패 시 없음) */
+  coverage?: EvalAnalyticsCoverage | null
 }
 
 const SECTION_KEYS = ['menu', 'cost', 'hygiene', 'attitude'] as const

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseInsert, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { normalizeKitchenRouteMapInput } from '@/lib/pos-kitchen-slip-routing'
 
 /** JSON 본문에서 true/false 문자열 등도 안전하게 해석 (지연 배지 등) */
 function parseBoolParam(v: unknown, defaultVal: boolean): boolean {
@@ -125,6 +126,10 @@ export async function POST(req: NextRequest) {
     const receiptShowPaidStamp = body?.receiptShowPaidStamp !== false
     const receiptShowThankYou = body?.receiptShowThankYou !== false
     const receiptShowCustomerCopy = body?.receiptShowCustomerCopy !== false
+    const kitchenSlipScaleRaw = String(body?.kitchenSlipFontScale || 'md').toLowerCase()
+    const kitchenSlipFontScale = kitchenSlipScaleRaw === 'sm' ? 'sm' : kitchenSlipScaleRaw === 'lg' ? 'lg' : 'md'
+    const kitchenSlipShowLineNotes = body?.kitchenSlipShowLineNotes !== false
+    const kitchenSlipShowOrderMemo = body?.kitchenSlipShowOrderMemo !== false
     const vatRate = Math.max(0, Number(body?.vatRate ?? 7))
     const vatMode = String(body?.vatMode || 'included') === 'separate' ? 'separate' : 'included'
     const serviceRate = Math.max(0, Number(body?.serviceRate ?? 0))
@@ -142,6 +147,17 @@ export async function POST(req: NextRequest) {
     const validPrintLangs = ['ko', 'en', 'th', 'mm', 'la', 'kh', 'vi', 'ms']
     const receiptPrintLangRaw = String(body?.receiptPrintLang ?? '').trim()
     const receiptPrintLang = receiptPrintLangRaw && validPrintLangs.includes(receiptPrintLangRaw) ? receiptPrintLangRaw : ''
+
+    const routeMenuPatch =
+      body?.kitchenRouteByMenu !== undefined ? normalizeKitchenRouteMapInput(body.kitchenRouteByMenu) : undefined
+    const routeCatPatch =
+      body?.kitchenRouteByCategory !== undefined
+        ? normalizeKitchenRouteMapInput(body.kitchenRouteByCategory)
+        : undefined
+    const routeMainPatch =
+      body?.kitchenRouteByCategoryMain !== undefined
+        ? normalizeKitchenRouteMapInput(body.kitchenRouteByCategoryMain)
+        : undefined
 
     if (!storeCode) {
       return NextResponse.json({ success: false, message: 'storeCode required' }, { headers })
@@ -200,6 +216,9 @@ export async function POST(req: NextRequest) {
       receipt_show_paid_stamp: receiptShowPaidStamp,
       receipt_show_thank_you: receiptShowThankYou,
       receipt_show_customer_copy: receiptShowCustomerCopy,
+      kitchen_slip_font_scale: kitchenSlipFontScale,
+      kitchen_slip_show_line_notes: kitchenSlipShowLineNotes,
+      kitchen_slip_show_order_memo: kitchenSlipShowOrderMemo,
       receipt_print_lang: receiptPrintLang,
       vat_rate: vatRate,
       vat_mode: vatMode,
@@ -211,6 +230,9 @@ export async function POST(req: NextRequest) {
       other_rate: otherRate,
       other_mode: otherMode,
       updated_at: new Date().toISOString(),
+      ...(routeMenuPatch !== undefined ? { kitchen_route_by_menu: routeMenuPatch } : {}),
+      ...(routeCatPatch !== undefined ? { kitchen_route_by_category: routeCatPatch } : {}),
+      ...(routeMainPatch !== undefined ? { kitchen_route_by_category_main: routeMainPatch } : {}),
     }
 
     await saveWithMissingColumnFallback({

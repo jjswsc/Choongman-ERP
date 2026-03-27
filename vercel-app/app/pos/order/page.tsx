@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -59,7 +60,9 @@ import {
 import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
-import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
+import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
+import { translatePosMenuLineForReceipt } from "@/lib/pos-print-translate"
 
 type OrderType = "dine_in" | "takeout" | "delivery"
 
@@ -165,6 +168,8 @@ export default function PosOrderPage() {
   const [payCard, setPayCard] = React.useState("")
   const [payQr, setPayQr] = React.useState("")
   const [payOther, setPayOther] = React.useState("")
+  const [payDeliveryApp, setPayDeliveryApp] = React.useState("")
+  const [deliveryPaymentChannel, setDeliveryPaymentChannel] = React.useState<"grab" | "lineman" | "shopee" | "dine_in">("grab")
   const [receiptData, setReceiptData] = React.useState<{
     orderNo: string
     items: CartItem[]
@@ -626,7 +631,12 @@ export default function PosOrderPage() {
     adjustments: pricingAdjustments,
   })
   const paymentPreviewTotal = paymentPreview.finalTotal
-  const paymentInputSum = (Number(payCash) || 0) + (Number(payCard) || 0) + (Number(payQr) || 0) + (Number(payOther) || 0)
+  const paymentInputSum =
+    (Number(payCash) || 0) +
+    (Number(payCard) || 0) +
+    (Number(payQr) || 0) +
+    (Number(payOther) || 0) +
+    (Number(payDeliveryApp) || 0)
   const paymentInputMatch = Math.abs(paymentInputSum - paymentPreviewTotal) < 0.01
 
   const handleApplyCoupon = async () => {
@@ -671,10 +681,19 @@ export default function PosOrderPage() {
     setPayCard("0")
     setPayQr("0")
     setPayOther("0")
+    setPayDeliveryApp("0")
+    setDeliveryPaymentChannel("grab")
     setShowPaymentModal(true)
   }
 
-  const handleCheckout = async (payment: { cash: number; card: number; qr: number; other: number }) => {
+  const handleCheckout = async (payment: {
+    cash: number
+    card: number
+    qr: number
+    other: number
+    deliveryApp: number
+    deliveryChannel: "grab" | "lineman" | "shopee" | "dine_in" | null
+  }) => {
     if (cart.length === 0) return
     const checkoutPricing = computePosPricing({
       subtotal,
@@ -685,7 +704,7 @@ export default function PosOrderPage() {
       adjustments: pricingAdjustments,
     })
     const checkoutTotal = checkoutPricing.finalTotal
-    const sum = payment.cash + payment.card + payment.qr + payment.other
+    const sum = payment.cash + payment.card + payment.qr + payment.other + payment.deliveryApp
     if (Math.abs(sum - checkoutTotal) > 0.01) {
       await appAlert(t("posPaymentSumMismatch") || "결제 합계가 주문 금액과 일치하지 않습니다.")
       return
@@ -706,6 +725,9 @@ export default function PosOrderPage() {
         paymentCard: payment.card || undefined,
         paymentQr: payment.qr || undefined,
         paymentOther: payment.other || undefined,
+        paymentDeliveryApp: payment.deliveryApp || undefined,
+        deliveryPaymentChannel:
+          payment.deliveryApp > 0.005 ? payment.deliveryChannel : null,
         pricingAdjustments,
         items: cart.map((it) => ({
           id: it.id,
@@ -841,42 +863,50 @@ export default function PosOrderPage() {
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: receiptData.storeCode })
-      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
-      const slips = buildKitchenSlipGroups(receiptData.items, {
-        kitchenMode: settings.kitchenMode || 1,
-        kitchen2Categories: settings.kitchen2Categories || [],
-        kitchen3Categories: settings.kitchen3Categories || [],
-        categoryByMenuId,
-        labels: {
-          unified: t("posKitchenOrder") || "주방 주문서",
-          kitchen1: `${t("posKitchen1") || "주방 1"}`,
-          kitchen2: `${t("posKitchen2") || "주방 2"}`,
-          kitchen3: `${t("posKitchen3") || "주방 3"}`,
-        },
-      })
+      const kLabels = {
+        unified: t("posKitchenOrder") || "주방 주문서",
+        kitchen1: `${t("posKitchen1") || "주방 1"}`,
+        kitchen2: `${t("posKitchen2") || "주방 2"}`,
+        kitchen3: `${t("posKitchen3") || "주방 3"}`,
+      }
+      const slips = buildKitchenSlipGroups(
+        receiptData.items,
+        buildKitchenSlipGroupOpts(settings, menus, kLabels)
+      )
+      if (slips.length === 0) {
+        win.close()
+        await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 출력할 품목이 없습니다.")
+        return
+      }
+      const slipDesign = resolveKitchenSlipDesign(settings)
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]
         const w = idx === 0 ? win : window.open("", "_blank")
         if (!w) return
         const kitchenMemo = parsePosOrderMemo(receiptData.memo).plainMemo
-        const html = `
-          <!DOCTYPE html>
-          <html><head><title>${escapeHtml(slip.label)}</title>
-          <style>
-            ${getPosPaperBaseCss("sans-serif", 18)}
-            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .k-row { margin: 6px 0; font-size: 18px; }
-            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
-          </style></head><body>
-          <div class="k-header">${escapeHtml(slip.label)}</div>
-          <div class="k-row"><strong>${escapeHtml(receiptData.orderNo)}</strong></div>
-          <div class="k-row">${escapeHtml(receiptData.storeCode + " · " + (orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType) + (receiptData.tableName ? ` · ${t("posTable") || "테이블"}: ${receiptData.tableName}` : ""))}</div>
-          <div class="k-row">${formatPosDateTimeMedium(new Date(), lang)}</div>
-          <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${escapeHtml(it.name)} × ${it.qty}</div>`).join("")}
-          ${kitchenMemo ? `<div class="k-memo">${escapeHtml((t("posCustomerMemo") || "메모") + ": " + kitchenMemo)}</div>` : ""}
-          </body></html>`
+        const tablePart = receiptData.tableName
+          ? ` · ${t("posTable") || "테이블"}: ${translateReceiptTableDisplayName(receiptData.tableName, t)}`
+          : ""
+        const memoLine =
+          kitchenMemo.trim() ? `${t("posCustomerMemo") || "메모"}: ${kitchenMemo.trim()}` : ""
+        const html = buildKitchenSlipDocumentHtml({
+          label: slip.label,
+          orderNo: receiptData.orderNo,
+          storeCode: receiptData.storeCode,
+          orderTypeLabel: orderTypeLabels[receiptData.orderType as OrderType] || receiptData.orderType,
+          tablePart,
+          dateStr: formatPosDateTimeMedium(new Date(), lang),
+          items: slip.items.map((it) => ({
+            name: translatePosMenuLineForReceipt(it.name, t),
+            qty: it.qty,
+            note: (it as { note?: string }).note,
+          })),
+          memoLine: memoLine || null,
+          escapeHtml,
+          design: slipDesign,
+          printColorAdjust: "economy",
+        })
         w.document.write(html)
         w.document.close()
         w.focus()
@@ -1479,6 +1509,36 @@ export default function PosOrderPage() {
                   className="h-9 text-right"
                 />
               </div>
+              <div className="rounded-lg border border-border/60 p-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="w-16 shrink-0 text-sm">{t("posPaymentDeliveryApp") || "배달앱"}</label>
+                  <div className="grid flex-1 gap-1.5 min-w-0">
+                    <Label className="text-[11px] text-muted-foreground">{t("posDeliveryPaymentChannel") || "채널"}</Label>
+                    <Select
+                      value={deliveryPaymentChannel}
+                      onValueChange={(v) => setDeliveryPaymentChannel(v as "grab" | "lineman" | "shopee" | "dine_in")}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="grab">{t("posDeliveryPayGrab") || "Grab"}</SelectItem>
+                        <SelectItem value="lineman">{t("posDeliveryPayLineman") || "Line Man"}</SelectItem>
+                        <SelectItem value="shopee">{t("posDeliveryPayShopeeFood") || "Shopee Food"}</SelectItem>
+                        <SelectItem value="dine_in">{t("posDeliveryPayDineIn") || "Dine in"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={payDeliveryApp}
+                    onChange={(e) => setPayDeliveryApp(e.target.value)}
+                    className="h-9 w-24 text-right shrink-0"
+                  />
+                </div>
+              </div>
             </div>
             <div className="flex justify-between text-sm border-t pt-2">
               <span>{t("posPaymentSum") || "입력 합계"}</span>
@@ -1501,6 +1561,7 @@ export default function PosOrderPage() {
                   setPayCard("0")
                   setPayQr("0")
                   setPayOther("0")
+                  setPayDeliveryApp("0")
                 }}
               >
                 {t("posPaymentFullCash") || "전액 현금"}
@@ -1514,6 +1575,8 @@ export default function PosOrderPage() {
                   card: parseFloat(payCard) || 0,
                   qr: parseFloat(payQr) || 0,
                   other: parseFloat(payOther) || 0,
+                  deliveryApp: parseFloat(payDeliveryApp) || 0,
+                  deliveryChannel: deliveryPaymentChannel,
                 })}
               >
                 {submitting ? "..." : t("posCheckout") || "결제"}
@@ -1632,6 +1695,7 @@ export default function PosOrderPage() {
                 topping: "토핑",
                 bone: "뼈/순살",
                 type: "타입",
+                set_main: "세트 메인",
                 side: "사이드",
                 drink: "음료",
                 soup: "스프",

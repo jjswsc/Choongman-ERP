@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelect, supabaseSelectAllPages } from '@/lib/supabase-server'
+import { supabaseSelectAllPages } from '@/lib/supabase-server'
 import { normalizePromotionCategoryMain } from '@/lib/pos-promo-constants'
 
 /** 메뉴·재료·옵션 페이지 반복 조회 시 서버리스 타임아웃 완화 (플랜별 상한 적용) */
@@ -65,33 +65,67 @@ function effectiveItemCodeKey(r: ItemRow): string {
   return ''
 }
 
-async function loadPosMenusPaged(): Promise<MenuRow[]> {
-  const pageSize = 8000
-  const fetchAll = async (order: string, select: string) => {
-    const acc: MenuRow[] = []
-    for (let offset = 0; ; offset += pageSize) {
-      const batch = await supabaseSelect('pos_menus', { order, limit: pageSize, offset, select })
-      const rows = Array.isArray(batch) ? (batch as MenuRow[]) : []
-      acc.push(...rows)
-      if (rows.length < pageSize) break
-    }
-    return acc
+type ItemMapEntry = {
+  name: string
+  cost: number
+  unit: string
+  purchaseSource: 'hq' | 'store'
+  raw?: ItemRow
+}
+
+/** BOM·엑셀에서 전각 숫자·대소문자만 다른 코드로 itemMap 미스 → 원가 0 방지 */
+function itemCodeLookupVariants(raw: string): string[] {
+  const t = String(raw ?? '').trim()
+  if (!t) return []
+  const asciiDigits = t.replace(/[\uFF10-\uFF19]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 48)
+  )
+  const variants = new Set<string>([t, asciiDigits])
+  for (const x of [t, asciiDigits]) {
+    variants.add(x.toUpperCase())
+    variants.add(x.toLowerCase())
   }
+  const digitsOnly = asciiDigits.replace(/\s/g, '')
+  if (/^[0-9]+$/.test(digitsOnly)) {
+    variants.add(String(Number(digitsOnly)))
+  }
+  return [...variants].filter(Boolean)
+}
+
+function buildItemLookup(map: Record<string, ItemMapEntry>): Record<string, ItemMapEntry> {
+  const lookup: Record<string, ItemMapEntry> = { ...map }
+  for (const k of Object.keys(map)) {
+    const entry = map[k]
+    for (const v of itemCodeLookupVariants(k)) {
+      if (v && lookup[v] === undefined) lookup[v] = entry
+    }
+  }
+  return lookup
+}
+
+function resolveItemInfo(rawCode: string, lookup: Record<string, ItemMapEntry>): ItemMapEntry | undefined {
+  for (const v of itemCodeLookupVariants(rawCode)) {
+    const hit = lookup[v]
+    if (hit) return hit
+  }
+  return undefined
+}
+
+async function loadPosMenusPaged(): Promise<MenuRow[]> {
   try {
-    return await fetchAll(
-      'category_main.asc,category.asc,sort_order.asc,name.asc',
-      'id,code,name,category,category_main,price,price_delivery,vat_included,cooking_time_min'
-    )
+    return (await supabaseSelectAllPages('pos_menus', {
+      order: 'category_main.asc,category.asc,sort_order.asc,name.asc',
+      select: 'id,code,name,category,category_main,price,price_delivery,vat_included,cooking_time_min',
+    })) as MenuRow[]
   } catch {
-    return await fetchAll(
-      'category.asc,sort_order.asc,name.asc',
-      'id,code,name,category,price,price_delivery,vat_included'
-    )
+    return (await supabaseSelectAllPages('pos_menus', {
+      order: 'category.asc,sort_order.asc,name.asc',
+      select: 'id,code,name,category,price,price_delivery,vat_included',
+    })) as MenuRow[]
   }
 }
 
 async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
-  const pageSize = 3000
   const order = 'menu_id.asc,sort_order.asc,name.asc'
   const selects = [
     'id,menu_id,name,option_type,item_code,additive_source_menu_id,quantity,sort_order,price_modifier,price_modifier_delivery',
@@ -100,14 +134,7 @@ async function loadPosMenuOptionsPaged(): Promise<OptRow[]> {
   ]
   for (const select of selects) {
     try {
-      const acc: OptRow[] = []
-      for (let offset = 0; ; offset += pageSize) {
-        const batch = await supabaseSelect('pos_menu_options', { order, limit: pageSize, offset, select })
-        const rows = Array.isArray(batch) ? (batch as OptRow[]) : []
-        acc.push(...rows)
-        if (rows.length < pageSize) break
-      }
-      return acc
+      return (await supabaseSelectAllPages('pos_menu_options', { order, select })) as OptRow[]
     } catch {
       /* 다음 select 조합 시도 */
     }
@@ -132,33 +159,33 @@ export async function GET(request: NextRequest) {
         supabaseSelectAllPages('pos_menu_ingredients', {
           order: 'id.asc',
           select: 'id,menu_id,option_id,item_code,quantity,loss_rate,ingredient_type',
-          pageSize: 10000,
         }),
         loadPosMenuOptionsPaged(),
         supabaseSelectAllPages('items', {
           order: 'code.asc',
           select: 'id,code,name,cost,price,total_quantity,unit,purchase_source,category',
-          pageSize: 10000,
         }),
       ]),
-      supabaseSelect('sauces', { limit: 500, select: 'id,code,name,cost_per_unit,unit,overhead_percent' }).catch(() => null),
+      supabaseSelectAllPages('sauces', {
+        order: 'id.asc',
+        select: 'id,code,name,cost_per_unit,unit,overhead_percent',
+      }).catch(() => []),
       supabaseSelectAllPages('sauce_ingredients', {
         order: 'sauce_id.asc',
         select: 'sauce_id,item_code,quantity,loss_rate',
-        pageSize: 10000,
       }).catch(() => []),
     ])
     const [menuRows, ingRows, optRows, itemRows] = menuData as [MenuRow[], IngRow[], OptRow[], ItemRow[]]
     if ((ingRows || []).length === 0 && (menuRows || []).length > 0) {
       console.warn(
-        'getPosMenuCostAnalysis: pos_menu_ingredients 0행·메뉴는 있음. RLS에 SELECT 정책 없음 또는 anon 키만 쓰는 경우입니다. supabase_pos_orders_table_layouts_rls_policies.sql 의 pos_menu_ingredients 정책 적용 또는 SUPABASE_SERVICE_ROLE_KEY 사용.'
+        'getPosMenuCostAnalysis: pos_menu_ingredients 0행·메뉴는 있음. RLS에 SELECT 정책 없음 또는 anon 키만 쓰는 경우입니다. sql/pos_menu_ingredients_rls_policies.sql 실행 또는 SUPABASE_SERVICE_ROLE_KEY 사용.'
       )
     }
     const sauceRows = sauceData as { id?: number; code?: string; name?: string; cost_per_unit?: number; unit?: string; overhead_percent?: number }[] | null
     const sauceIngRows = sauceIngData as { sauce_id?: number; item_code?: string; quantity?: number; loss_rate?: number }[] | null
 
     const { getItemCostPerUnit } = await import('@/lib/item-cost-util')
-    const itemMap: Record<string, { name: string; cost: number; unit: string; purchaseSource: 'hq' | 'store'; raw?: typeof itemRows extends (infer R)[] | null ? R : never }> = {}
+    const itemMap: Record<string, ItemMapEntry> = {}
     for (const r of itemRows || []) {
       const code = effectiveItemCodeKey(r)
       if (!code) continue
@@ -171,6 +198,7 @@ export async function GET(request: NextRequest) {
         raw: r,
       }
     }
+    let itemLookup = buildItemLookup(itemMap)
     const sauceCostComputed: Record<string, number> = {}
     const sauceByCode: Record<string, { id?: number; cost_per_unit?: number; overhead_percent?: number }> = {}
     for (const s of sauceRows || []) {
@@ -196,7 +224,7 @@ export async function GET(request: NextRequest) {
           const icode = String(ing.item_code ?? '').trim()
           const qty = Number(ing.quantity ?? 1)
           const lossRate = Number(ing.loss_rate ?? 0)
-          const itemInfo = itemMap[icode]
+          const itemInfo = resolveItemInfo(icode, itemLookup)
           let subCost: number | undefined
           if (itemInfo) subCost = itemInfo.cost
           else if (sauceByCode[icode]) subCost = (sauceCostComputed[icode] ?? Number(sauceByCode[icode].cost_per_unit ?? 0)) || undefined
@@ -230,6 +258,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+    itemLookup = buildItemLookup(itemMap)
 
     const menusById: Record<number, typeof menuRows extends (infer R)[] | null ? R : never> = {}
     for (const m of menuRows || []) {
@@ -338,7 +367,7 @@ export async function GET(request: NextRequest) {
           const qty = Number(ing.quantity) ?? 1
           const lossRate = Number(ing.loss_rate) ?? 0
           const itype = (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' as const : 'food' as const
-          const info = itemMap[code]
+          const info = resolveItemInfo(code, itemLookup)
           const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
           const costTotal = additive ? costPerUnit * qty : costPerUnit * qty * (1 + lossRate / 100)
           if (itype === 'packaging') packageCost += costTotal
@@ -351,7 +380,7 @@ export async function GET(request: NextRequest) {
             quantity: qty,
             lossRate: additive ? 0 : lossRate,
             costTotal: Math.round(costTotal * 10) / 10,
-            source: itemMap[code] ? (itemMap[code].purchaseSource as 'hq' | 'store') : 'store',
+            source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
             ingredientType: itype,
           })
         }
@@ -367,7 +396,150 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      /** 가산형 옵션만: 소스메뉴·item_code·옵션 BOM (기본 레시피 제외) */
+      const additiveIncremental = (opt: OptRow): { addFood: number; addPkg: number; incBreakdown: BreakdownRow[] } => {
+        let addFood = 0
+        let addPkg = 0
+        const incBreakdown: BreakdownRow[] = []
+        const srcMid = Number(opt.additive_source_menu_id ?? 0)
+        const qtyMult = Number(opt.quantity) ?? 1
+        if (srcMid > 0) {
+          const srcKey = `${srcMid}:null`
+          for (const ing of ingByMenuOpt[srcKey] || []) {
+            const code = String(ing.item_code ?? '').trim()
+            const qty = (Number(ing.quantity) ?? 1) * qtyMult
+            const lossRate = Number(ing.loss_rate) ?? 0
+            const itype: 'food' | 'packaging' =
+              (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
+            const info = resolveItemInfo(code, itemLookup)
+            const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
+            const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+            if (itype === 'packaging') addPkg += costTotal
+            else addFood += costTotal
+            incBreakdown.push({
+              itemCode: code,
+              itemName: info?.name ?? code,
+              unit: info?.unit ?? '',
+              costPerUnit,
+              quantity: qty,
+              lossRate,
+              costTotal: Math.round(costTotal * 10) / 10,
+              source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
+              ingredientType: itype,
+            })
+          }
+        } else if (opt.item_code) {
+          const info = resolveItemInfo(String(opt.item_code).trim(), itemLookup)
+          const qty = Number(opt.quantity) ?? 1
+          const costTotal = (info?.cost ?? 0) * qty
+          addFood = costTotal
+          incBreakdown.push({
+            itemCode: String(opt.item_code ?? ''),
+            itemName: info?.name ?? String(opt.item_code ?? ''),
+            unit: info?.unit ?? '',
+            costPerUnit: info?.cost ?? 0,
+            quantity: qty,
+            lossRate: 0,
+            costTotal: Math.round(costTotal * 10) / 10,
+            source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
+            ingredientType: 'food',
+          })
+        }
+        const addOptSeg = normalizeIngOptionKeySeg(String(opt.id ?? ''))
+        if (addOptSeg !== 'null') {
+          for (const ing of ingByMenuOpt[`${mid}:${addOptSeg}`] || []) {
+            const code = String(ing.item_code ?? '').trim()
+            const qty = Number(ing.quantity) ?? 1
+            const lossRate = Number(ing.loss_rate) ?? 0
+            const itype: 'food' | 'packaging' =
+              (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
+            const info = resolveItemInfo(code, itemLookup)
+            const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
+            const costTotal = costPerUnit * qty * (1 + lossRate / 100)
+            if (itype === 'packaging') addPkg += costTotal
+            else addFood += costTotal
+            incBreakdown.push({
+              itemCode: code,
+              itemName: info?.name ?? code,
+              unit: info?.unit ?? '',
+              costPerUnit,
+              quantity: qty,
+              lossRate,
+              costTotal: Math.round(costTotal * 10) / 10,
+              source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
+              ingredientType: itype,
+            })
+          }
+        }
+        return { addFood, addPkg, incBreakdown }
+      }
+
       const base = computeCost(null)
+      /**
+       * 기본(option null) BOM이 비었을 때: 대체형만 보던 기존 로직은 가산형(additive)에만 레시피가 붙은 메뉴에서 기본 행이 0으로 남음.
+       * → 옵션 타입 무관하게 sort_order 순으로 첫 BOM을 baseDisplay로 쓴다.
+       * pos_menu_options 행이 없거나 필터에서 빠진 option_id에만 BOM이 있으면 ingByMenuOpt 키로 고아 옵션을 스캔한다.
+       * 기본 행 롤업(다른 가산 옵션 합산) 시 baseDisplay 출처 옵션은 제외해 같은 레시피를 두 번 더하지 않는다.
+       */
+      let baseDisplay = base
+      let baseDisplaySourceOptId: number | null = null
+      const baseIsEmpty =
+        base.breakdown.length === 0 && base.costHall <= 0 && base.costDelivery <= 0
+      if (baseIsEmpty) {
+        for (const opt of optsToShow) {
+          if (opt.id == null) continue
+          const sub = computeCost(String(opt.id), { substitutionFallbackBase: false })
+          if (sub.breakdown.length > 0 || sub.costHall > 0) {
+            baseDisplay = sub
+            baseDisplaySourceOptId = Number(opt.id)
+            break
+          }
+        }
+        if (baseDisplay === base) {
+          const prefix = `${mid}:`
+          const segs = new Set<string>()
+          for (const k of Object.keys(ingByMenuOpt)) {
+            if (!k.startsWith(prefix)) continue
+            const seg = k.slice(prefix.length)
+            if (seg === 'null') continue
+            segs.add(seg)
+          }
+          const sortedSegs = Array.from(segs).sort((a, b) => {
+            const na = Number(a)
+            const nb = Number(b)
+            if (Number.isFinite(na) && Number.isFinite(nb) && /^\d+$/.test(a) && /^\d+$/.test(b)) return na - nb
+            return a.localeCompare(b)
+          })
+          for (const seg of sortedSegs) {
+            const sub = computeCost(seg, { substitutionFallbackBase: false })
+            if (sub.breakdown.length > 0 || sub.costHall > 0) {
+              baseDisplay = sub
+              const n = Number(seg)
+              baseDisplaySourceOptId = Number.isFinite(n) && /^\d+$/.test(String(seg).trim()) ? n : null
+              break
+            }
+          }
+        }
+      }
+      const additiveIncByOptId = new Map<number, { addFood: number; addPkg: number; incBreakdown: BreakdownRow[] }>()
+      for (const opt of optsToShow) {
+        if ((opt.option_type || '') === 'additive' && opt.id != null) {
+          additiveIncByOptId.set(Number(opt.id), additiveIncremental(opt))
+        }
+      }
+      let rollupAddFood = 0
+      let rollupAddPkg = 0
+      const rollupIncBreakdown: BreakdownRow[] = []
+      for (const opt of optsToShow) {
+        if ((opt.option_type || '') !== 'additive' || opt.id == null) continue
+        if (baseDisplaySourceOptId != null && Number(opt.id) === baseDisplaySourceOptId) continue
+        const v = additiveIncByOptId.get(Number(opt.id))
+        if (!v) continue
+        rollupAddFood += v.addFood
+        rollupAddPkg += v.addPkg
+        rollupIncBreakdown.push(...v.incBreakdown)
+      }
+
       const categoryMain = normalizePromotionCategoryMain(menu.category_main)
       const cookingTimeMin = menu.cooking_time_min != null && Number.isFinite(menu.cooking_time_min) ? menu.cooking_time_min : null
       const vatIncluded = menu.vat_included !== false
@@ -383,9 +555,9 @@ export async function GET(request: NextRequest) {
         optionId: null,
         optionName: null,
         optionType: null,
-        costHall: base.costHall,
-        costDelivery: base.costDelivery,
-        breakdown: base.breakdown,
+        costHall: Math.round((baseDisplay.costHall + rollupAddFood) * 10) / 10,
+        costDelivery: Math.round((baseDisplay.costDelivery + rollupAddFood + rollupAddPkg) * 10) / 10,
+        breakdown: [...baseDisplay.breakdown, ...rollupIncBreakdown],
         cookingTimeMin,
       })
 
@@ -396,55 +568,14 @@ export async function GET(request: NextRequest) {
         const optPriceDelivery = priceDelivery != null ? priceDelivery + modDelivery : null
         const isAdditive = (opt.option_type || '') === 'additive'
         if (isAdditive) {
-          const baseCost = base.costHall
-          const basePkg = base.costDelivery - base.costHall
-          let addFood = 0
-          let addPkg = 0
-          const addBreakdown: BreakdownRow[] = [...base.breakdown]
-          const srcMid = Number((opt as { additive_source_menu_id?: number | null }).additive_source_menu_id ?? 0)
-          const qtyMult = Number(opt.quantity) ?? 1
-          if (srcMid > 0) {
-            const srcKey = `${srcMid}:null`
-            for (const ing of ingByMenuOpt[srcKey] || []) {
-              const code = String(ing.item_code ?? '').trim()
-              const qty = (Number(ing.quantity) ?? 1) * qtyMult
-              const lossRate = Number(ing.loss_rate) ?? 0
-              const itype: 'food' | 'packaging' =
-                (ing.ingredient_type ?? 'food') === 'packaging' ? 'packaging' : 'food'
-              const info = itemMap[code]
-              const costPerUnit = info?.raw ? getItemCostPerUnit(info.raw, itype === 'packaging') : (info?.cost ?? 0)
-              const costTotal = costPerUnit * qty * (1 + lossRate / 100)
-              if (itype === 'packaging') addPkg += costTotal
-              else addFood += costTotal
-              addBreakdown.push({
-                itemCode: code,
-                itemName: info?.name ?? code,
-                unit: info?.unit ?? '',
-                costPerUnit,
-                quantity: qty,
-                lossRate,
-                costTotal: Math.round(costTotal * 10) / 10,
-                source: itemMap[code] ? (itemMap[code].purchaseSource as 'hq' | 'store') : 'store',
-                ingredientType: itype,
-              })
-            }
-          } else if (opt.item_code) {
-            const info = itemMap[String(opt.item_code).trim()]
-            const qty = Number(opt.quantity) ?? 1
-            const costTotal = (info?.cost ?? 0) * qty
-            addFood = costTotal
-            addBreakdown.push({
-              itemCode: String(opt.item_code ?? ''),
-              itemName: info?.name ?? String(opt.item_code ?? ''),
-              unit: info?.unit ?? '',
-              costPerUnit: info?.cost ?? 0,
-              quantity: qty,
-              lossRate: 0,
-              costTotal: Math.round(costTotal * 10) / 10,
-              source: info ? (info.purchaseSource as 'hq' | 'store') : 'store',
-              ingredientType: 'food',
-            })
-          }
+          const baseCost = baseDisplay.costHall
+          const basePkg = baseDisplay.costDelivery - baseDisplay.costHall
+          const inc =
+            opt.id != null
+              ? (additiveIncByOptId.get(Number(opt.id)) ?? { addFood: 0, addPkg: 0, incBreakdown: [] })
+              : additiveIncremental(opt)
+          const { addFood, addPkg, incBreakdown } = inc
+          const addBreakdown: BreakdownRow[] = [...baseDisplay.breakdown, ...incBreakdown]
           result.push({
             menuId: String(menu.id ?? ''),
             menuCode: String(menu.code ?? ''),

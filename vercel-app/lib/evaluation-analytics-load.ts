@@ -10,6 +10,7 @@ import {
   aggregateEvaluationAnalyticsFromRows,
   type EvaluationAnalyticsPayload,
 } from '@/lib/evaluation-analytics-fallback'
+import { computeEvalCoverageStats } from '@/lib/evaluation-analytics-coverage'
 
 export function canViewEvalAnalyticsRole(role: string): boolean {
   if (isOfficeRole(role) || isAccountingRole(role)) return true
@@ -107,6 +108,25 @@ export function normalizeEvaluationAnalyticsPayload(
       sectionAverages[k] = numOrNull(v)
     }
   }
+  let coverage: EvaluationAnalyticsPayload['coverage']
+  const cov = data.coverage
+  if (cov && typeof cov === 'object' && !Array.isArray(cov)) {
+    const c = cov as Record<string, unknown>
+    const un = Array.isArray(c.unevaluated) ? c.unevaluated : []
+    coverage = {
+      activeEmployeesInPeriod: Math.max(0, Math.floor(numOrNull(c.activeEmployeesInPeriod) ?? 0)),
+      evaluatedEmployees: Math.max(0, Math.floor(numOrNull(c.evaluatedEmployees) ?? 0)),
+      unevaluatedEmployees: Math.max(0, Math.floor(numOrNull(c.unevaluatedEmployees) ?? 0)),
+      unevaluated: un
+        .filter((x): x is Record<string, unknown> => x != null && typeof x === 'object' && !Array.isArray(x))
+        .map((x) => ({
+          store: String(x.store ?? ''),
+          name: String(x.name ?? ''),
+          nick: String(x.nick ?? ''),
+          job: String(x.job ?? ''),
+        })),
+    }
+  }
   return {
     summary,
     gradeDistribution,
@@ -116,6 +136,7 @@ export function normalizeEvaluationAnalyticsPayload(
     byEvaluator,
     sectionAverages,
     source,
+    coverage,
   }
 }
 
@@ -188,12 +209,38 @@ export async function loadEvaluationAnalytics(
     })
     const unwrapped = unwrapRpcAnalytics(raw)
     if (unwrapped) {
-      return normalizeEvaluationAnalyticsPayload(unwrapped, 'rpc')
+      const base = normalizeEvaluationAnalyticsPayload(unwrapped, 'rpc')
+      try {
+        const coverage = await computeEvalCoverageStats({
+          auth,
+          periodStart: startStr,
+          periodEnd: endStr,
+          evalType: type,
+          pStore,
+        })
+        return { ...base, coverage: coverage ?? null }
+      } catch (e) {
+        console.warn('eval coverage (rpc path):', e)
+        return { ...base, coverage: null }
+      }
     }
   } catch (e) {
     console.warn('get_evaluation_analytics RPC:', e)
   }
 
   const rows = await fetchRowsForFallback(type, startStr, endStr, pStore)
-  return aggregateEvaluationAnalyticsFromRows(rows)
+  const base = aggregateEvaluationAnalyticsFromRows(rows)
+  try {
+    const coverage = await computeEvalCoverageStats({
+      auth,
+      periodStart: startStr,
+      periodEnd: endStr,
+      evalType: type,
+      pStore,
+    })
+    return { ...base, coverage: coverage ?? null }
+  } catch (e) {
+    console.warn('eval coverage (fallback path):', e)
+    return { ...base, coverage: null }
+  }
 }

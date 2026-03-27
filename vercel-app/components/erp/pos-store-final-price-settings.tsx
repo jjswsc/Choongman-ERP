@@ -28,6 +28,9 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
   >("card_only")
   const [otherRate, setOtherRate] = React.useState("0")
   const [otherMode, setOtherMode] = React.useState<"included" | "separate">("separate")
+  const [deliveryFee, setDeliveryFee] = React.useState("0")
+  const [packagingFee, setPackagingFee] = React.useState("0")
+  const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
 
   const load = React.useCallback(() => {
     const s = String(storeCode || "").trim()
@@ -50,6 +53,8 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         )
         setOtherRate(String(settings.otherRate ?? 0))
         setOtherMode(settings.otherMode === "included" ? "included" : "separate")
+        setDeliveryFee(String(settings.deliveryFee ?? 0))
+        setPackagingFee(String(settings.packagingFee ?? 0))
       })
       .catch(() => {
         /* ignore */
@@ -81,6 +86,9 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
         cardBaseMode,
         otherRate: Number(otherRate) || 0,
         otherMode,
+        deliveryFee: Math.max(0, Number(deliveryFee) || 0),
+        packagingFee: Math.max(0, Number(packagingFee) || 0),
+        autoStockDeduction,
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -114,6 +122,59 @@ export function PosStoreFinalPriceSettings({ storeCode }: { storeCode: string })
       )}
       {!loading && (
         <div className="rounded-lg border p-4 space-y-3">
+          <div className="rounded-md border border-dashed bg-muted/15 p-3 space-y-3">
+            <div>
+              <p className="text-sm font-medium">{t("posStoreFixedFeesSection") || "배달·포장 정액 수수료"}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {t("posStoreFixedFeesHint") ||
+                  "배달 주문에는 배달 수수료, 포장 주문에는 포장 수수료가 합계에 더해집니다."}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">{t("posDeliveryFee") || "배달 수수료"} (฿)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={deliveryFee}
+                  onChange={(e) => setDeliveryFee(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">{t("posPackagingFee") || "포장 수수료"} (฿)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={packagingFee}
+                  onChange={(e) => setPackagingFee(e.target.value)}
+                  className="mt-1 h-9"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-dashed bg-muted/15 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium">{t("posAutoStockDeduction") || "자동 재고 차감"}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {t("posAutoStockDeductionHint") ||
+                    "주문 완료 시 메뉴 BOM에 따라 재고가 자동 차감됩니다. 매장 적응 후 사용하세요."}
+                </p>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={autoStockDeduction}
+                  onChange={(e) => setAutoStockDeduction(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">{t("posUse") || "사용"}</span>
+              </label>
+            </div>
+          </div>
+
           <p className="text-sm font-medium">{t("posPricingAdjustmentsTitle") || "최종가격 옵션 (매장별)"}</p>
           <p className="text-[11px] text-muted-foreground">
             {t("posPricingAdjustmentsHint") || "각 항목은 % 기준입니다. 포함: 최종금액에 이미 포함, 별도: 최종금액에 추가됩니다."}

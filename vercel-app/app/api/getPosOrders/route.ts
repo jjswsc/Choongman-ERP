@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelectFilter('pos_orders', filterStr, {
         order: 'created_at.desc',
         limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
 
       if (!rows?.length && storeCode) {
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
           rows = (await supabaseSelectFilter('pos_orders', altFilter, {
             order: 'created_at.desc',
             limit: 10000,
-            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+            select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
           })) as typeof rows
           if (rows?.length) break
         }
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       rows = (await supabaseSelect('pos_orders', {
         order: 'created_at.desc',
         limit: 10000,
-        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
+        select: 'id,order_no,store_code,order_type,table_name,memo,discount_amt,discount_reason,delivery_fee,packaging_fee,payment_cash,payment_card,payment_qr,payment_other,payment_delivery_app,delivery_payment_channel,member_id,member_no,coupon_code,coupon_discount_amt,point_used,point_earned,guest_count,items_json,subtotal,vat,total,status,created_at',
       })) as typeof rows
     }
 
@@ -129,6 +129,11 @@ export async function GET(request: NextRequest) {
         paymentCard: Number(r.payment_card) ?? 0,
         paymentQr: Number(r.payment_qr) ?? 0,
         paymentOther: Number(r.payment_other) ?? 0,
+        paymentDeliveryApp: Number((r as { payment_delivery_app?: number }).payment_delivery_app) || 0,
+        deliveryPaymentChannel: (() => {
+          const c = String((r as { delivery_payment_channel?: string }).delivery_payment_channel ?? '').trim()
+          return c || undefined
+        })(),
         memberId: Number(r.member_id) || 0,
         memberNo: String(r.member_no ?? ''),
         couponCode: String(r.coupon_code ?? ''),

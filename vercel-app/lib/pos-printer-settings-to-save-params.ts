@@ -83,6 +83,13 @@ export function posPrinterSettingsToSaveParams(s: PosPrinterSettings) {
     receiptShowThankYou: s.receiptShowThankYou !== false,
     receiptShowCustomerCopy: s.receiptShowCustomerCopy !== false,
     receiptPrintLang: String(s.receiptPrintLang ?? "").trim() || undefined,
+    kitchenSlipFontScale: (String(s.kitchenSlipFontScale || "md").toLowerCase() === "sm"
+      ? "sm"
+      : String(s.kitchenSlipFontScale || "md").toLowerCase() === "lg"
+        ? "lg"
+        : "md") as "sm" | "md" | "lg",
+    kitchenSlipShowLineNotes: s.kitchenSlipShowLineNotes !== false,
+    kitchenSlipShowOrderMemo: s.kitchenSlipShowOrderMemo !== false,
     vatRate: Math.max(0, Number(s.vatRate ?? 7)),
     vatMode: (String(s.vatMode || "included") === "separate" ? "separate" : "included") as "included" | "separate",
     serviceRate: Math.max(0, Number(s.serviceRate ?? 0)),

@@ -19,6 +19,27 @@ function buildSlimPayloadForLlm(input: Record<string, unknown>) {
           avgScore: e.avgScore ?? null,
         }))
     : []
+  const cov = input.coverage as Record<string, unknown> | null | undefined
+  let coverageSlim: Record<string, unknown> | null = null
+  if (cov && typeof cov === 'object') {
+    const un = Array.isArray(cov.unevaluated) ? cov.unevaluated : []
+    const sample = un
+      .slice(0, 25)
+      .map((row: unknown) => {
+        const r = row as { store?: string; name?: string; job?: string }
+        return {
+          store: String(r.store || '').slice(0, 40),
+          name: String(r.name || '').slice(0, 40),
+          job: String(r.job || '').slice(0, 24),
+        }
+      })
+    coverageSlim = {
+      activeEmployeesInPeriod: cov.activeEmployeesInPeriod,
+      evaluatedEmployees: cov.evaluatedEmployees,
+      unevaluatedEmployees: cov.unevaluatedEmployees,
+      unevaluatedSample: sample,
+    }
+  }
   return {
     summary: input.summary,
     gradeDistribution: input.gradeDistribution,
@@ -28,6 +49,7 @@ function buildSlimPayloadForLlm(input: Record<string, unknown>) {
     byEvaluatorSample: byEv,
     sectionAverages: input.sectionAverages,
     source: input.source,
+    coverage: coverageSlim,
   }
 }
 

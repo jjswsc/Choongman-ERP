@@ -3670,7 +3670,7 @@ export interface PosMenu {
   soldOutDate?: string | null
   /** 옵션 단계별 선택 그룹. 예: ["size","bone"] → 1단계 사이즈, 2단계 뼈/순살 */
   optionSelectionGroups?: string[]
-  /** 주방 프린터: null=카테고리기준, 1=주방1, 2=주방2 */
+  /** 주방: null=설정·카테고리 따름, 0=주방 미인쇄, 1~3=해당 주방 */
   kitchenPrinter?: number | null
   /** 조리 시간(분), 예상 완성 시간/KDS 등 활용 */
   cookingTimeMin?: number | null
@@ -5220,6 +5220,10 @@ export interface PosPrinterSettings {
   kitchen1Categories: string[]
   kitchen2Categories: string[]
   kitchen3Categories?: string[]
+  /** 프린터 탭: 메뉴 id → 0 주방 미인쇄, 1~3 주방 (pos_menus.kitchen_printer 보다 우선) */
+  kitchenRouteByMenu?: Record<string, 0 | 1 | 2 | 3>
+  kitchenRouteByCategory?: Record<string, 0 | 1 | 2 | 3>
+  kitchenRouteByCategoryMain?: Record<string, 0 | 1 | 2 | 3>
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
@@ -5263,6 +5267,10 @@ export interface PosPrinterSettings {
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
   receiptPrintLang?: string
+  /** 주방 주문서 글자 크기 */
+  kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
+  kitchenSlipShowLineNotes?: boolean
+  kitchenSlipShowOrderMemo?: boolean
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
@@ -5293,6 +5301,9 @@ export async function savePosPrinterSettings(params: {
   kitchen1Categories: string[]
   kitchen2Categories: string[]
   kitchen3Categories?: string[]
+  kitchenRouteByMenu?: Record<string, 0 | 1 | 2 | 3>
+  kitchenRouteByCategory?: Record<string, 0 | 1 | 2 | 3>
+  kitchenRouteByCategoryMain?: Record<string, 0 | 1 | 2 | 3>
   autoStockDeduction?: boolean
   deliveryFee?: number
   packagingFee?: number
@@ -5336,6 +5347,9 @@ export async function savePosPrinterSettings(params: {
   receiptShowThankYou?: boolean
   receiptShowCustomerCopy?: boolean
   receiptPrintLang?: string
+  kitchenSlipFontScale?: 'sm' | 'md' | 'lg'
+  kitchenSlipShowLineNotes?: boolean
+  kitchenSlipShowOrderMemo?: boolean
   vatRate?: number
   vatMode?: 'included' | 'separate'
   serviceRate?: number
@@ -5669,6 +5683,10 @@ export interface PosOrder {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  /** 배달앱(Grab/Line Man/Shopee 등) 플랫폼 결제 금액 */
+  paymentDeliveryApp?: number
+  /** grab | lineman | shopee | dine_in */
+  deliveryPaymentChannel?: string
   memberId?: number
   memberNo?: string
   couponCode?: string
@@ -5789,6 +5807,8 @@ export async function updatePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  paymentDeliveryApp?: number
+  deliveryPaymentChannel?: string | null
   memberId?: number
   memberNo?: string
   couponCode?: string
@@ -5885,6 +5905,8 @@ export async function savePosOrder(params: {
   paymentCard?: number
   paymentQr?: number
   paymentOther?: number
+  paymentDeliveryApp?: number
+  deliveryPaymentChannel?: string | null
   memberId?: number
   memberNo?: string
   couponCode?: string
@@ -6813,6 +6835,12 @@ export type EvaluationAnalyticsPayload = {
   byEvaluator: { evaluator: string; evaluations: number; avgScore: number | null }[]
   sectionAverages?: Record<string, number | null>
   source: 'rpc' | 'fallback'
+  coverage?: {
+    activeEmployeesInPeriod: number
+    evaluatedEmployees: number
+    unevaluatedEmployees: number
+    unevaluated: { store: string; name: string; nick: string; job: string }[]
+  } | null
 }
 
 /** 직원 평가 집계 (분석 탭) */

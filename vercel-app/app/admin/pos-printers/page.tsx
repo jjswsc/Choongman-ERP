@@ -34,13 +34,22 @@ import { useT } from "@/lib/i18n"
 import {
   getPosPrinterSettings,
   getPosMenuCategories,
+  getPosMenus,
   savePosPrinterSettings,
   useStoreList,
+  type PosMenu,
 } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole, canAccessPosPrinters } from "@/lib/permissions"
 import { cn, escapeHtml } from "@/lib/utils"
 import { posPrinterSettingsToSaveParams } from "@/lib/pos-printer-settings-to-save-params"
+import {
+  buildKitchenSlipGroupOpts,
+  buildKitchenSlipGroups,
+  normalizeKitchenRouteMapInput,
+  type KitchenRouteValue,
+} from "@/lib/pos-kitchen-slip-routing"
+import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from "@/lib/pos-kitchen-slip-html"
 
 type PreviewKind = "receipt" | "kitchen"
 
@@ -104,6 +113,46 @@ function ToggleRow({
   )
 }
 
+const KITCHEN_ROUTE_NONE = "__kitchen_route_none__"
+
+function KitchenRouteSelectRow({
+  label,
+  value,
+  onChange,
+  maxK,
+  t,
+}: {
+  label: string
+  value: KitchenRouteValue | undefined
+  onChange: (v: KitchenRouteValue | undefined) => void
+  maxK: 1 | 2 | 3
+  t: (k: string) => string
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 py-2 last:border-0">
+      <span className="min-w-0 flex-1 text-xs text-foreground">{label}</span>
+      <Select
+        value={value == null ? KITCHEN_ROUTE_NONE : String(value)}
+        onValueChange={(v) => {
+          if (v === KITCHEN_ROUTE_NONE) onChange(undefined)
+          else onChange(Number(v) as KitchenRouteValue)
+        }}
+      >
+        <SelectTrigger className="h-8 w-[148px] shrink-0 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={KITCHEN_ROUTE_NONE}>{t("posKitchenRouteDefault")}</SelectItem>
+          <SelectItem value="0">{t("posKitchenSkipPrint")}</SelectItem>
+          {maxK >= 1 ? <SelectItem value="1">{t("posKitchen1")}</SelectItem> : null}
+          {maxK >= 2 ? <SelectItem value="2">{t("posKitchen2")}</SelectItem> : null}
+          {maxK >= 3 ? <SelectItem value="3">{t("posKitchen3")}</SelectItem> : null}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
 function getBangkokNowStr() {
   return new Intl.DateTimeFormat("ko-KR", {
     timeZone: "Asia/Bangkok",
@@ -129,14 +178,23 @@ export default function PosPrintersPage() {
 
   const [storeCode, setStoreCode] = React.useState("")
   const [kitchenMode, setKitchenMode] = React.useState<1 | 2 | 3>(1)
-  const [kitchen1Categories, setKitchen1Categories] = React.useState<string[]>([])
-  const [kitchen2Categories, setKitchen2Categories] = React.useState<string[]>([])
-  const [kitchen3Categories, setKitchen3Categories] = React.useState<string[]>([])
   const [mainDeviceTokensPreview, setMainDeviceTokensPreview] = React.useState<string[]>([])
-  const [autoStockDeduction, setAutoStockDeduction] = React.useState(false)
-  const [deliveryFee, setDeliveryFee] = React.useState("0")
-  const [packagingFee, setPackagingFee] = React.useState("0")
+  /** 영수증 미리보기용 (DB 값, 메뉴 관리 최종가격 탭에서 수정) */
+  const [receiptPreviewDelivery, setReceiptPreviewDelivery] = React.useState(0)
+  const [receiptPreviewPackaging, setReceiptPreviewPackaging] = React.useState(0)
   const [categories, setCategories] = React.useState<string[]>([])
+  const [mainCategories, setMainCategories] = React.useState<string[]>([])
+  const [menusList, setMenusList] = React.useState<PosMenu[]>([])
+  const [kitchenRouteByMenu, setKitchenRouteByMenu] = React.useState<Record<string, KitchenRouteValue>>(
+    {}
+  )
+  const [kitchenRouteByCategory, setKitchenRouteByCategory] = React.useState<
+    Record<string, KitchenRouteValue>
+  >({})
+  const [kitchenRouteByCategoryMain, setKitchenRouteByCategoryMain] = React.useState<
+    Record<string, KitchenRouteValue>
+  >({})
+  const [menuRouteFilter, setMenuRouteFilter] = React.useState("")
   const [loading, setLoading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [previewKind, setPreviewKind] = React.useState<PreviewKind>("receipt")
@@ -176,9 +234,28 @@ export default function PosPrintersPage() {
   const [receiptShowThankYou, setReceiptShowThankYou] = React.useState(true)
   const [receiptShowCustomerCopy, setReceiptShowCustomerCopy] = React.useState(true)
   const [receiptPrintLang, setReceiptPrintLang] = React.useState<string>("")
+  const [kitchenSlipFontScale, setKitchenSlipFontScale] = React.useState<"sm" | "md" | "lg">("md")
+  const [kitchenSlipShowLineNotes, setKitchenSlipShowLineNotes] = React.useState(true)
+  const [kitchenSlipShowOrderMemo, setKitchenSlipShowOrderMemo] = React.useState(true)
 
   const canSearchAll = isOfficeRole(auth?.role || "")
   const effectiveStore = canSearchAll && storeCode ? storeCode : auth?.store || ""
+
+  const menusFilteredForRoute = React.useMemo(() => {
+    const q = menuRouteFilter.trim().toLowerCase()
+    const list = [...menusList].sort((a, b) => {
+      const c = (a.category || "").localeCompare(b.category || "")
+      if (c !== 0) return c
+      return (a.name || "").localeCompare(b.name || "")
+    })
+    if (!q) return list
+    return list.filter(
+      (m) =>
+        (m.name || "").toLowerCase().includes(q) ||
+        (m.code || "").toLowerCase().includes(q) ||
+        String(m.id).includes(q)
+    )
+  }, [menusList, menuRouteFilter])
 
   const loadData = React.useCallback(() => {
     if (!effectiveStore) return
@@ -186,13 +263,12 @@ export default function PosPrintersPage() {
     Promise.all([
       getPosPrinterSettings({ storeCode: effectiveStore }),
       getPosMenuCategories(),
+      getPosMenus(),
     ])
-      .then(([settings, { categories: cats }]) => {
+      .then(([settings, catRes, menus]) => {
+        const cats = catRes.categories
         const km = Math.min(3, Math.max(1, Number(settings.kitchenMode) || 1)) as 1 | 2 | 3
         setKitchenMode(km)
-        setKitchen1Categories(settings.kitchen1Categories || [])
-        setKitchen2Categories(settings.kitchen2Categories || [])
-        setKitchen3Categories(settings.kitchen3Categories || [])
         const mt = Array.isArray(settings.mainDeviceTokens)
           ? settings.mainDeviceTokens.map((x) => String(x || '').trim()).filter(Boolean)
           : []
@@ -201,10 +277,16 @@ export default function PosPrintersPage() {
             ? [String(settings.mainDeviceToken).trim()]
             : []
         setMainDeviceTokensPreview(mt.length > 0 ? mt : leg)
-        setAutoStockDeduction(Boolean(settings.autoStockDeduction))
-        setDeliveryFee(String(settings.deliveryFee ?? 0))
-        setPackagingFee(String(settings.packagingFee ?? 0))
+        setReceiptPreviewDelivery(Math.max(0, Number(settings.deliveryFee ?? 0)))
+        setReceiptPreviewPackaging(Math.max(0, Number(settings.packagingFee ?? 0)))
         setCategories(cats || [])
+        setMainCategories(Array.isArray(catRes.mainCategories) ? catRes.mainCategories : [])
+        setMenusList(Array.isArray(menus) ? menus : [])
+        setKitchenRouteByMenu(normalizeKitchenRouteMapInput(settings.kitchenRouteByMenu as unknown))
+        setKitchenRouteByCategory(normalizeKitchenRouteMapInput(settings.kitchenRouteByCategory as unknown))
+        setKitchenRouteByCategoryMain(
+          normalizeKitchenRouteMapInput(settings.kitchenRouteByCategoryMain as unknown)
+        )
         setCardAutoOpen(Boolean(settings.cardAutoOpen))
         setCheckAutoOpen(Boolean(settings.checkAutoOpen))
         setDrawerOpenOption((['password_and_reason', 'reason_only', 'force'].includes(settings.drawerOpenOption || '') ? settings.drawerOpenOption : 'reason_only') as 'password_and_reason' | 'reason_only' | 'force')
@@ -243,6 +325,15 @@ export default function PosPrintersPage() {
         setReceiptShowThankYou(settings.receiptShowThankYou !== false)
         setReceiptShowCustomerCopy(settings.receiptShowCustomerCopy !== false)
         setReceiptPrintLang(String(settings.receiptPrintLang ?? "").trim())
+        setKitchenSlipFontScale(
+          settings.kitchenSlipFontScale === "sm"
+            ? "sm"
+            : settings.kitchenSlipFontScale === "lg"
+              ? "lg"
+              : "md"
+        )
+        setKitchenSlipShowLineNotes(settings.kitchenSlipShowLineNotes !== false)
+        setKitchenSlipShowOrderMemo(settings.kitchenSlipShowOrderMemo !== false)
       })
       .catch(() => {
         setCategories([])
@@ -262,44 +353,6 @@ export default function PosPrintersPage() {
     loadData()
   }, [loadData])
 
-  const toggleKitchen1 = (cat: string) => {
-    if (kitchen1Categories.includes(cat)) {
-      setKitchen1Categories((prev) => prev.filter((c) => c !== cat))
-    } else {
-      setKitchen1Categories((prev) => [...prev, cat])
-      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
-      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
-    }
-  }
-
-  const toggleKitchen2 = (cat: string) => {
-    if (kitchen2Categories.includes(cat)) {
-      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
-    } else {
-      setKitchen2Categories((prev) => [...prev, cat])
-      setKitchen1Categories((prev) => prev.filter((c) => c !== cat))
-      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
-    }
-  }
-
-  const toggleKitchen2Mode3 = (cat: string) => {
-    if (kitchen2Categories.includes(cat)) {
-      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
-    } else {
-      setKitchen2Categories((prev) => [...prev, cat])
-      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
-    }
-  }
-
-  const toggleKitchen3 = (cat: string) => {
-    if (kitchen3Categories.includes(cat)) {
-      setKitchen3Categories((prev) => prev.filter((c) => c !== cat))
-    } else {
-      setKitchen3Categories((prev) => [...prev, cat])
-      setKitchen2Categories((prev) => prev.filter((c) => c !== cat))
-    }
-  }
-
   const handleSave = async () => {
     if (!effectiveStore) {
       await appAlert(t("store") || "매장을 선택하세요.")
@@ -312,12 +365,9 @@ export default function PosPrintersPage() {
         ...posPrinterSettingsToSaveParams(latest),
         storeCode: effectiveStore,
         kitchenMode,
-        kitchen1Categories,
-        kitchen2Categories,
-        kitchen3Categories,
-        autoStockDeduction,
-        deliveryFee: Number(deliveryFee) || 0,
-        packagingFee: Number(packagingFee) || 0,
+        kitchen1Categories: [],
+        kitchen2Categories: [],
+        kitchen3Categories: [],
         cardAutoOpen,
         checkAutoOpen,
         drawerOpenOption,
@@ -350,6 +400,12 @@ export default function PosPrintersPage() {
         receiptShowThankYou,
         receiptShowCustomerCopy,
         receiptPrintLang: receiptPrintLang || undefined,
+        kitchenSlipFontScale,
+        kitchenSlipShowLineNotes,
+        kitchenSlipShowOrderMemo,
+        kitchenRouteByMenu,
+        kitchenRouteByCategory,
+        kitchenRouteByCategoryMain,
       })
       if (res.success) {
         await appAlert(t("itemsAlertSaved") || "저장되었습니다.")
@@ -370,8 +426,8 @@ export default function PosPrintersPage() {
       { name: "콜라 1.25L", qty: 1, price: 45 },
     ]
     const subtotal = items.reduce((sum, it) => sum + it.qty * it.price, 0)
-    const delivery = Math.max(0, Number(deliveryFee) || 0)
-    const packaging = Math.max(0, Number(packagingFee) || 0)
+    const delivery = receiptPreviewDelivery
+    const packaging = receiptPreviewPackaging
     const discount = 10
     const total = Math.max(0, subtotal - discount + delivery + packaging)
     return {
@@ -386,9 +442,59 @@ export default function PosPrintersPage() {
       delivery,
       packaging,
       total,
-      memo: t("posCustomerMemo") || "덜 맵게 부탁드려요.",
+      memo: "덜 맵게 부탁드려요.",
     }
-  }, [deliveryFee, packagingFee, effectiveStore, t])
+  }, [receiptPreviewDelivery, receiptPreviewPackaging, effectiveStore, t])
+
+  const kitchenSlipsForPreview = React.useMemo(() => {
+    const cats = categories.length > 0 ? categories : ["A", "B"]
+    const m1 = cats[0] || "A"
+    const m2 = cats[1] || m1
+    const items = previewData.items.map((it, i) => ({
+      id: `pv${i}`,
+      name: it.name,
+      qty: it.qty,
+      note: i === 0 ? tr("posLineNote", "메모") + " 예시" : undefined,
+    }))
+    const previewMenus: PosMenu[] = items.map((_, i) => ({
+      id: `pv${i}`,
+      code: "",
+      name: previewData.items[i]?.name ?? "",
+      category: i % 2 === 0 ? m1 : m2,
+      categoryMain: "",
+      price: 0,
+      imageUrl: "",
+      vatIncluded: true,
+      isActive: true,
+      sortOrder: i,
+    }))
+    const settingsPreview = {
+      kitchenMode,
+      kitchen2Categories: [] as string[],
+      kitchen3Categories: [] as string[],
+      kitchenRouteByMenu,
+      kitchenRouteByCategory,
+      kitchenRouteByCategoryMain,
+    }
+    return buildKitchenSlipGroups(
+      items,
+      buildKitchenSlipGroupOpts(settingsPreview, previewMenus, {
+        unified: t("posKitchenOrder") || "주방 주문서",
+        kitchen1: `${t("posKitchen1") || "주방 1"}`,
+        kitchen2: `${t("posKitchen2") || "주방 2"}`,
+        kitchen3: `${t("posKitchen3") || "주방 3"}`,
+      })
+    )
+  }, [
+    previewData.items,
+    kitchenMode,
+    kitchenRouteByMenu,
+    kitchenRouteByCategory,
+    kitchenRouteByCategoryMain,
+    categories,
+    t,
+    tr,
+  ])
 
   const buildReceiptHtml = React.useCallback(() => {
     const logoUrl = `${window.location.origin}/company-stamp.png`
@@ -487,36 +593,41 @@ export default function PosPrintersPage() {
     `
   }, [previewData, tr, receiptLogoSize, receiptShowTitle, receiptShowPaidStamp, receiptShowThankYou, receiptShowCustomerCopy, receiptBizName, receiptBizTaxId, receiptBizOwner, receiptBizAddress, receiptBizPhone])
 
-  const buildKitchenHtml = React.useCallback(() => {
-    const lines = previewData.items
-      .map((it) => `<div class="k-row">${escapeHtml(it.name)} x ${it.qty}</div>`)
-      .join("")
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${escapeHtml(t("posKitchenOrder") || "주방 주문서")}</title>
-          <style>
-            ${getPosPaperBaseCss("sans-serif", 18)}
-            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .k-row { margin: 6px 0; font-size: 18px; }
-            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
-          </style>
-        </head>
-        <body>
-          <div class="k-header">${escapeHtml(t("posKitchenOrder") || "주방 주문서")}</div>
-          <div class="k-row"><strong>${escapeHtml(previewData.orderNo)}</strong></div>
-          <div class="k-row">${escapeHtml(
-            `${previewData.storeCode} · ${previewData.orderType} · ${t("posTable") || "테이블"}: ${previewData.tableName}`
-          )}</div>
-          <div class="k-row">${escapeHtml(previewData.now)}</div>
-          <hr style="margin: 10px 0;" />
-          ${lines}
-          <div class="k-memo">${escapeHtml(`${t("posCustomerMemo") || "메모"}: ${previewData.memo}`)}</div>
-        </body>
-      </html>
-    `
-  }, [previewData, t])
+  const buildKitchenSlipHtmlForSlip = React.useCallback(
+    (slip: { label: string; items: { name: string; qty: number; note?: string }[] }) => {
+      const design = resolveKitchenSlipDesign({
+        kitchenSlipFontScale,
+        kitchenSlipShowLineNotes,
+        kitchenSlipShowOrderMemo,
+      })
+      const memoLine = `${t("posCustomerMemo") || "메모"}: ${previewData.memo}`
+      return buildKitchenSlipDocumentHtml({
+        label: slip.label,
+        orderNo: previewData.orderNo,
+        storeCode: previewData.storeCode,
+        orderTypeLabel: previewData.orderType,
+        tablePart: ` · ${t("posTable") || "테이블"}: ${previewData.tableName}`,
+        dateStr: previewData.now,
+        items: slip.items,
+        memoLine,
+        escapeHtml,
+        design,
+        printColorAdjust: "economy",
+      })
+    },
+    [
+      previewData.orderNo,
+      previewData.storeCode,
+      previewData.orderType,
+      previewData.tableName,
+      previewData.now,
+      previewData.memo,
+      kitchenSlipFontScale,
+      kitchenSlipShowLineNotes,
+      kitchenSlipShowOrderMemo,
+      t,
+    ]
+  )
 
   const handleOpenPreview = (kind: PreviewKind) => {
     setPreviewKind(kind)
@@ -524,30 +635,56 @@ export default function PosPrintersPage() {
   }
 
   const handleTestPrint = async (kind: PreviewKind) => {
-    // #region agent log
-    const ping = {sessionId:'960801',runId:'run-4',hypothesisId:'H9',location:'admin/pos-printers/page.tsx:handleTestPrint',message:'admin test print triggered',data:{kind,storeCode:effectiveStore||'',logoSize:receiptLogoSize},timestamp:Date.now()}
-    fetch('http://127.0.0.1:7383/ingest/f85ce2e6-3f30-4dec-a500-2fe4222a00ab',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'960801'},body:JSON.stringify(ping)}).catch(()=>{})
-    fetch('/api/debugPrintProbe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ping)}).catch(()=>{})
-    // #endregion
-    const html = kind === "receipt" ? buildReceiptHtml() : buildKitchenHtml()
-    const title = kind === "receipt" ? t("posReceipt") || "영수증" : t("posKitchenOrder") || "주방 주문서"
-    const w = window.open("", "_blank")
-    if (!w) {
-      await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+    if (kind === "receipt") {
+      const html = buildReceiptHtml()
+      const w = window.open("", "_blank")
+      if (!w) {
+        await appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+        return
+      }
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      let closed = false
+      const safeClose = () => {
+        if (closed) return
+        closed = true
+        w.close()
+      }
+      w.onafterprint = safeClose
+      setTimeout(() => w.print(), 250)
+      setTimeout(safeClose, 30000)
       return
     }
-    w.document.write(html)
-    w.document.close()
-    w.focus()
-    let closed = false
-    const safeClose = () => {
-      if (closed) return
-      closed = true
-      w.close()
+    const slips = kitchenSlipsForPreview
+    if (!slips.length) {
+      await appAlert(t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다.")
+      return
     }
-    w.onafterprint = safeClose
-    setTimeout(() => w.print(), 250)
-    setTimeout(safeClose, 30000)
+    const printOne = (idx: number) => {
+      if (idx >= slips.length) return
+      const slip = slips[idx]
+      const html = buildKitchenSlipHtmlForSlip(slip)
+      const w = window.open("", "_blank")
+      if (!w) {
+        void appAlert(t("posPrintBlocked") || "팝업이 차단되었습니다. 인쇄를 허용해 주세요.")
+        return
+      }
+      w.document.write(html)
+      w.document.close()
+      w.focus()
+      let done = false
+      const afterPrint = () => {
+        if (done) return
+        done = true
+        w.close()
+        if (idx + 1 < slips.length) setTimeout(() => printOne(idx + 1), 400)
+      }
+      w.onafterprint = afterPrint
+      setTimeout(() => w.print(), 250)
+      setTimeout(afterPrint, 30000)
+    }
+    printOne(0)
   }
 
   if (!canAccessPosPrinters(auth?.role || "")) {
@@ -621,11 +758,7 @@ export default function PosPrintersPage() {
                   </TabsTrigger>
                   <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
                     <Receipt className={adminTabsIconCn} aria-hidden />
-                    {t("posReceiptDesignTab") || "영수증 디자인"}
-                  </TabsTrigger>
-                  <TabsTrigger value="kitchen" className={adminTabsTriggerCn}>
-                    <Printer className={adminTabsIconCn} aria-hidden />
-                    {t("posKitchenSlip") || "주방 인쇄"}
+                    {t("posReceiptDesignTab") || "디자인"}
                   </TabsTrigger>
                   <TabsTrigger value="business" className={adminTabsTriggerCn}>
                     <Building2 className={adminTabsIconCn} aria-hidden />
@@ -640,60 +773,12 @@ export default function PosPrintersPage() {
             </div>
 
             <TabsContent value="printer" className={cn(adminTabsContentCn, "space-y-6")}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium">{t("posDeliveryFee") || "배달 수수료"} (฿)</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={deliveryFee}
-                  onChange={(e) => setDeliveryFee(e.target.value)}
-                  className="mt-1 h-9"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">{t("posPackagingFee") || "포장 수수료"} (฿)</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={packagingFee}
-                  onChange={(e) => setPackagingFee(e.target.value)}
-                  className="mt-1 h-9"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <p className="text-sm font-medium">{t("posAutoStockDeduction") || "자동 재고 차감"}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t("posAutoStockDeductionHint") || "주문 완료 시 메뉴 BOM에 따라 재고가 자동 차감됩니다. 매장 적응 후 사용하세요."}
-                </p>
-              </div>
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={autoStockDeduction}
-                  onChange={(e) => setAutoStockDeduction(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <span className="text-sm">{t("posUse") || "사용"}</span>
-              </label>
-            </div>
-
             <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-xs text-muted-foreground">
               {t("posPrinterNote") ||
-                "※ 손님 영수증·주방 주문서는 결제 완료 후 모달에서 수동 인쇄하거나, 각 탭에서 자동 인쇄를 설정할 수 있습니다."}
+                "※ 손님 영수증·주방 주문서는 결제 완료 후 모달에서 수동 인쇄하거나, 아래 자동 인쇄를 설정할 수 있습니다."}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-1">
-              <Button variant="outline" onClick={() => handleOpenPreview("receipt")}>
-                <Printer className="mr-2 h-4 w-4" />
-                {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
-              </Button>
-            </div>
-            </TabsContent>
-
-            <TabsContent value="kitchen" className={cn(adminTabsContentCn, "space-y-4")}>
+              <p className="text-sm font-medium text-foreground">{t("posPrinterWorkflowSectionTitle") || "카운터·주방 출력"}</p>
               <p className="text-sm text-muted-foreground">
                 {t("posKitchenOptionsHint") || "주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다."}
               </p>
@@ -727,143 +812,119 @@ export default function PosPrintersPage() {
                   </SelectContent>
                 </Select>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {kitchenMode === 3
-                    ? t("posKitchenMode3Hint") ||
-                      "주방2·주방3에 넣을 카테고리만 고릅니다. 나머지 메뉴는 주방1 슬립으로 갑니다."
-                    : t("posKitchenModeHint") || "2대: 치킨→주방1, 한식→주방2 등 카테고리별 출력"}
+                  {t("posKitchenModeRoutingHint") ||
+                    "아래 표에서 대분류·카테고리·메뉴별로 주방 1~3 또는 주방 미인쇄를 지정합니다. 2·3대 모드에서는 슬립이 주방별로 나뉩니다."}
                 </p>
               </div>
 
-              {kitchenMode === 2 && categories.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border p-4">
-                    <h3 className="mb-2 text-sm font-semibold">
-                      {t("posKitchen1") || "주방 1"}
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {categories.map((cat) => (
-                        <label
-                          key={cat}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                            kitchen1Categories.includes(cat)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-muted bg-muted/30 text-muted-foreground"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={kitchen1Categories.includes(cat)}
-                            onChange={() => toggleKitchen1(cat)}
-                            className="mr-1.5"
-                          />
-                          {cat}
-                        </label>
+              <div className="space-y-3 rounded-lg border p-4">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t("posKitchenRouteSection")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("posKitchenRouteHint")}</p>
+                </div>
+                {mainCategories.length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      {t("posKitchenRouteByMain")}
+                    </p>
+                    <div className="max-h-48 overflow-y-auto rounded-md border px-2">
+                      {mainCategories.map((main) => (
+                        <KitchenRouteSelectRow
+                          key={`km-${main}`}
+                          label={main}
+                          value={kitchenRouteByCategoryMain[main]}
+                          maxK={kitchenMode}
+                          t={t}
+                          onChange={(v) =>
+                            setKitchenRouteByCategoryMain((prev) => {
+                              const next = { ...prev }
+                              if (v == null) delete next[main]
+                              else next[main] = v
+                              return next
+                            })
+                          }
+                        />
                       ))}
                     </div>
                   </div>
-                  <div className="rounded-lg border p-4">
-                    <h3 className="mb-2 text-sm font-semibold">
-                      {t("posKitchen2") || "주방 2"}
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
+                ) : null}
+                {categories.length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      {t("posKitchenRouteByCategoryCol")}
+                    </p>
+                    <div className="max-h-48 overflow-y-auto rounded-md border px-2">
                       {categories.map((cat) => (
-                        <label
-                          key={cat}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                            kitchen2Categories.includes(cat)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-muted bg-muted/30 text-muted-foreground"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={kitchen2Categories.includes(cat)}
-                            onChange={() => toggleKitchen2(cat)}
-                            className="mr-1.5"
-                          />
-                          {cat}
-                        </label>
+                        <KitchenRouteSelectRow
+                          key={`kc-${cat}`}
+                          label={cat}
+                          value={kitchenRouteByCategory[cat]}
+                          maxK={kitchenMode}
+                          t={t}
+                          onChange={(v) =>
+                            setKitchenRouteByCategory((prev) => {
+                              const next = { ...prev }
+                              if (v == null) delete next[cat]
+                              else next[cat] = v
+                              return next
+                            })
+                          }
+                        />
                       ))}
                     </div>
+                  </div>
+                ) : null}
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">
+                    {t("posKitchenRouteByMenuCol")}
+                  </p>
+                  <Input
+                    className="mb-2 h-9 text-sm"
+                    placeholder={t("posKitchenRouteMenuSearch")}
+                    value={menuRouteFilter}
+                    onChange={(e) => setMenuRouteFilter(e.target.value)}
+                  />
+                  <div className="max-h-72 overflow-y-auto rounded-md border px-2">
+                    {menusFilteredForRoute.map((m) => (
+                      <KitchenRouteSelectRow
+                        key={m.id}
+                        label={`${m.name} (${m.code || m.id})`}
+                        value={kitchenRouteByMenu[String(m.id)]}
+                        maxK={kitchenMode}
+                        t={t}
+                        onChange={(v) =>
+                          setKitchenRouteByMenu((prev) => {
+                            const next = { ...prev }
+                            const id = String(m.id)
+                            if (v == null) delete next[id]
+                            else next[id] = v
+                            return next
+                          })
+                        }
+                      />
+                    ))}
                   </div>
                 </div>
-              )}
+              </div>
 
-              {kitchenMode === 3 && categories.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border p-4">
-                    <h3 className="mb-2 text-sm font-semibold">
-                      {t("posKitchen2") || "주방 2"}
-                    </h3>
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      {t("posKitchenMode3Col2Hint") || "이쪽 카테고리는 ‘주방 2’ 제목 슬립으로 인쇄됩니다."}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {categories.map((cat) => (
-                        <label
-                          key={cat}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                            kitchen2Categories.includes(cat)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-muted bg-muted/30 text-muted-foreground"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={kitchen2Categories.includes(cat)}
-                            onChange={() => toggleKitchen2Mode3(cat)}
-                            className="mr-1.5"
-                          />
-                          {cat}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <h3 className="mb-2 text-sm font-semibold">
-                      {t("posKitchen3") || "주방 3"}
-                    </h3>
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      {t("posKitchenMode3Col3Hint") || "이쪽 카테고리는 ‘주방 3’ 제목 슬립으로 인쇄됩니다. 위·아래에 같은 카테고리를 둘 수 없습니다."}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {categories.map((cat) => (
-                        <label
-                          key={cat}
-                          className={cn(
-                            "inline-flex cursor-pointer items-center rounded-md border px-2.5 py-1 text-xs",
-                            kitchen3Categories.includes(cat)
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-muted bg-muted/30 text-muted-foreground"
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={kitchen3Categories.includes(cat)}
-                            onChange={() => toggleKitchen3(cat)}
-                            className="mr-1.5"
-                          />
-                          {cat}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-3">
+              <div className="space-y-3 rounded-lg border p-4">
+                <p className="text-sm font-medium">{t("posPrinterAutoPrintSection") || "자동 인쇄"}</p>
                 <ToggleRow label={t("posKitchenAutoPrintOnOrder") || "주문 완료 시 주방 주문서 자동 인쇄"} value={autoPrintKitchenSlipOnOrder} onChange={setAutoPrintKitchenSlipOnOrder} t={t} />
+                <ToggleRow label={t("posAutoPrintReceiptOnOrder") || "주문 시 영수증 자동 인쇄"} value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
+                <ToggleRow label={t("posAutoPrintReceiptOnAddOrder") || "추가 주문 시 영수증 자동 인쇄"} value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
+                <ToggleRow label={t("posAutoPrintReceiptOnPayment") || "결제 시 영수증 자동 인쇄"} value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-1">
-                <Button variant="outline" onClick={() => handleOpenPreview("kitchen")}>
-                  <Printer className="mr-2 h-4 w-4" />
-                  {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
-                </Button>
-              </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button variant="outline" onClick={() => handleOpenPreview("receipt")}>
+                <Receipt className="mr-2 h-4 w-4" />
+                {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+              </Button>
+              <Button variant="outline" onClick={() => handleOpenPreview("kitchen")}>
+                <Printer className="mr-2 h-4 w-4" />
+                {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+              </Button>
+            </div>
             </TabsContent>
 
             <TabsContent value="receipt" className={cn(adminTabsContentCn, "space-y-4")}>
@@ -923,20 +984,77 @@ export default function PosPrintersPage() {
                 <ToggleRow label={t("posMerchantReceiptPrint") || "가맹점 영수증 출력"} value={merchantReceiptPrint} onChange={setMerchantReceiptPrint} t={t} />
                 <ToggleRow label={t("posActualOrderDetails") || "실 주문 내역 출력"} value={actualOrderDetails} onChange={setActualOrderDetails} t={t} />
                 <ToggleRow label={t("posToppingOptionsPrint") || "토핑메뉴 추가옵션"} value={toppingOptionsPrint} onChange={setToppingOptionsPrint} t={t} />
-                <ToggleRow label="주문시 영수증 자동 인쇄" value={autoPrintReceiptOnOrder} onChange={setAutoPrintReceiptOnOrder} t={t} />
-                <ToggleRow label="추가 주문시 영수증 자동 인쇄" value={autoPrintReceiptOnAddOrder} onChange={setAutoPrintReceiptOnAddOrder} t={t} />
-                <ToggleRow label="결제시 영수증 자동 인쇄" value={autoPrintReceiptOnPayment} onChange={setAutoPrintReceiptOnPayment} t={t} />
                 <p className="text-xs text-muted-foreground mt-2">
                   인쇄 화면(미리보기) 없이 바로 프린터로 나가게 하려면, 포스 전용 PC에서 Chrome을 <code className="rounded bg-muted px-1">--kiosk-printing</code> 옵션으로 실행하세요. 매장 오픈 시 PC 세팅 방법: <code className="rounded bg-muted px-1">vercel-app/docs/STORE-OPEN-SETUP.md</code> 참고.
                 </p>
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
+                    <Receipt className="h-4 w-4" />
+                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("kitchen")}>
+                    <Printer className="h-4 w-4" />
+                    {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 
             <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
-                {t("posReceiptDesignHint") || "손님 영수증 레이아웃 표시 항목을 설정합니다."}
+                {t("posReceiptDesignHint") || "손님 영수증·주방 주문서 레이아웃을 설정합니다."}
               </p>
+
               <div className="rounded-lg border p-4 space-y-3">
+                <p className="text-sm font-semibold">{t("posKitchenSlipDesignSection") || "주방 주문서"}</p>
+                <div>
+                  <label className="text-sm font-medium">{t("posKitchenSlipFontScaleLabel") || "주방 슬립 글자 크기"}</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(["sm", "md", "lg"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setKitchenSlipFontScale(v)}
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-sm",
+                          kitchenSlipFontScale === v ? "border-primary bg-primary/10 text-primary" : "border-muted bg-muted/30"
+                        )}
+                      >
+                        {v === "sm" ? t("posReceiptLogoSizeSm") || "작게" : v === "md" ? t("posReceiptLogoSizeMd") || "중간" : t("posReceiptLogoSizeLg") || "크게"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <ToggleRow
+                  label={t("posKitchenSlipShowLineNotesLabel") || "품목 줄 메모 표시"}
+                  value={kitchenSlipShowLineNotes}
+                  onChange={setKitchenSlipShowLineNotes}
+                  t={t}
+                />
+                <ToggleRow
+                  label={t("posKitchenSlipShowOrderMemoLabel") || "주문 메모 박스 표시"}
+                  value={kitchenSlipShowOrderMemo}
+                  onChange={setKitchenSlipShowOrderMemo}
+                  t={t}
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
+                    <Receipt className="h-4 w-4" />
+                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("kitchen")}>
+                    <Printer className="h-4 w-4" />
+                    {t("posKitchenOrder") || "주방 주문서"} {t("preview") || "미리보기"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void handleTestPrint("kitchen")}>
+                    <Printer className="h-4 w-4" />
+                    {t("posKitchenOrder") || "주방 주문서"} {t("posPrint") || "인쇄"} {t("test") || "테스트"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4 space-y-3">
+                <p className="text-sm font-semibold">{t("posReceiptDesignCustomerSection") || "손님 영수증"}</p>
                 <div>
                   <label className="text-sm font-medium">{t("posReceiptDesignStyleLabel") || "헤더 스타일"}</label>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -1001,6 +1119,16 @@ export default function PosPrintersPage() {
                 <ToggleRow label={t("posReceiptShowPaidStamp") || "PAID 스탬프 표시"} value={receiptShowPaidStamp} onChange={setReceiptShowPaidStamp} t={t} />
                 <ToggleRow label={t("posReceiptShowThankYou") || "하단 Thank you 표시"} value={receiptShowThankYou} onChange={setReceiptShowThankYou} t={t} />
                 <ToggleRow label={t("posReceiptShowCustomerCopy") || "하단 Customer Copy 표시"} value={receiptShowCustomerCopy} onChange={setReceiptShowCustomerCopy} t={t} />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleOpenPreview("receipt")}>
+                    <Receipt className="h-4 w-4" />
+                    {t("posReceipt") || "영수증"} {t("preview") || "미리보기"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => void handleTestPrint("receipt")}>
+                    <Printer className="h-4 w-4" />
+                    {t("posReceipt") || "영수증"} {t("posPrint") || "인쇄"} {t("test") || "테스트"}
+                  </Button>
+                </div>
               </div>
             </TabsContent>
 
@@ -1086,15 +1214,31 @@ export default function PosPrintersPage() {
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>
-              {previewKind === "receipt"
-                ? `${t("posReceipt") || "영수증"} ${t("preview") || "미리보기"}`
-                : `${t("posKitchenOrder") || "주방 주문서"} ${t("preview") || "미리보기"}`}
-            </DialogTitle>
+            <DialogTitle>{t("posPrintPreviewBothTitle") || "영수증 · 주방 미리보기"}</DialogTitle>
           </DialogHeader>
+          <Tabs
+            value={previewKind}
+            onValueChange={(v) => setPreviewKind(v as PreviewKind)}
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="receipt" className="gap-1.5">
+                <Receipt className="h-3.5 w-3.5" />
+                {t("posReceipt") || "영수증"}
+              </TabsTrigger>
+              <TabsTrigger value="kitchen" className="gap-1.5">
+                <Printer className="h-3.5 w-3.5" />
+                {t("posKitchenOrder") || "주방 주문서"}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="receipt" className="mt-3 outline-none">
           <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/20 p-4">
-            <div className="mx-auto w-full max-w-[320px] rounded-md border bg-white p-3 text-black">
-              {previewKind === "receipt" ? (
+            <div
+              className={cn(
+                "mx-auto w-full rounded-md border bg-white p-3 text-black",
+                "max-w-[320px]"
+              )}
+            >
                 <div className="font-mono text-xs">
                   <div className="text-center">
                     <img
@@ -1163,29 +1307,68 @@ export default function PosPrintersPage() {
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="text-base">
-                  <div className="mb-2 border-b-2 border-black pb-2 text-center text-lg font-bold">
-                    {t("posKitchenOrder") || "주방 주문서"}
-                  </div>
-                  <div className="mb-1 font-bold">{previewData.orderNo}</div>
-                  <div className="mb-1">
-                    {previewData.storeCode} · {previewData.orderType} · {t("posTable") || "테이블"}: {previewData.tableName}
-                  </div>
-                  <div className="mb-2">{previewData.now}</div>
-                  <hr className="my-2 border-black" />
-                  {previewData.items.map((it) => (
-                    <div key={it.name} className="my-1">
-                      {it.name} x {it.qty}
-                    </div>
-                  ))}
-                  <div className="mt-3 rounded bg-slate-100 p-2 text-sm">
-                    {t("posCustomerMemo") || "메모"}: {previewData.memo}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
+            </TabsContent>
+            <TabsContent value="kitchen" className="mt-3 outline-none">
+          <div className="max-h-[70vh] overflow-auto rounded-md border bg-muted/20 p-4">
+            <div
+              className={cn(
+                "mx-auto w-full rounded-md border bg-white p-3 text-black",
+                "max-w-2xl space-y-4"
+              )}
+            >
+                  {kitchenSlipsForPreview.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      {t("posKitchenNoItemsToPrint") || "주방으로 인쇄할 품목이 없습니다."}
+                    </p>
+                  ) : (
+                    kitchenSlipsForPreview.map((slip) => (
+                      <div
+                        key={slip.label}
+                        className={cn(
+                          "text-base rounded-md border border-dashed p-3",
+                          kitchenSlipFontScale === "sm" && "text-sm",
+                          kitchenSlipFontScale === "lg" && "text-lg"
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "mb-2 border-b-2 border-black pb-2 text-center font-bold",
+                            kitchenSlipFontScale === "sm" && "text-base",
+                            kitchenSlipFontScale === "md" && "text-lg",
+                            kitchenSlipFontScale === "lg" && "text-xl"
+                          )}
+                        >
+                          {slip.label}
+                        </div>
+                        <div className="mb-1 font-bold">{previewData.orderNo}</div>
+                        <div className="mb-1">
+                          {previewData.storeCode} · {previewData.orderType} · {t("posTable") || "테이블"}:{" "}
+                          {previewData.tableName}
+                        </div>
+                        <div className="mb-2">{previewData.now}</div>
+                        <hr className="my-2 border-black" />
+                        {slip.items.map((it) => (
+                          <div key={`${slip.label}-${it.name}-${it.qty}`} className="my-1">
+                            {it.name} × {it.qty}
+                            {kitchenSlipShowLineNotes && it.note ? (
+                              <div className="pl-1 text-xs text-neutral-600">{it.note}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                        {kitchenSlipShowOrderMemo ? (
+                          <div className="mt-3 rounded bg-slate-100 p-2 text-sm">
+                            {t("posCustomerMemo") || "메모"}: {previewData.memo}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+            </div>
+          </div>
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>
               {t("close") || "닫기"}

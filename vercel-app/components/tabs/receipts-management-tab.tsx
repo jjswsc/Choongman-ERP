@@ -21,8 +21,12 @@ import { useLang } from '@/lib/lang-context'
 import { useT } from '@/lib/i18n'
 import { useOnlineStatus } from '@/lib/offline'
 import { isOfficeRole } from '@/lib/permissions'
-import { cn, formatBahtNum } from '@/lib/utils'
-import { buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import { cn, formatBahtNum, escapeHtml } from '@/lib/utils'
+import { buildKitchenSlipGroupOpts, buildKitchenSlipGroups } from '@/lib/pos-kitchen-slip-routing'
+import { buildKitchenSlipDocumentHtml, resolveKitchenSlipDesign } from '@/lib/pos-kitchen-slip-html'
+import { parsePosOrderMemo } from '@/lib/pos-tax-invoice'
+import { formatPosDateTimeMedium } from '@/lib/pos-datetime-locale'
+import { translatePosMenuLineForReceipt } from '@/lib/pos-print-translate'
 
 const orderTypeLabels: Record<string, string> = {
   dine_in: '매장',
@@ -159,43 +163,53 @@ export function ReceiptsManagementTab({ offlineAware = false, readOnly = false }
     }
     try {
       const settings = await getPosPrinterSettings({ storeCode: store })
-      const categoryByMenuId = Object.fromEntries(menus.map((m) => [String(m.id), m.category]))
       const items = o.items as { id?: string; name?: string; price?: number; qty?: number }[]
-
-      const slips = buildKitchenSlipGroups(items, {
-        kitchenMode: settings.kitchenMode || 1,
-        kitchen2Categories: settings.kitchen2Categories || [],
-        kitchen3Categories: settings.kitchen3Categories || [],
-        categoryByMenuId,
-        labels: {
-          unified: t('posKitchenOrder') || '주방 주문서',
-          kitchen1: `${t('posKitchen1') || '주방 1'}`,
-          kitchen2: `${t('posKitchen2') || '주방 2'}`,
-          kitchen3: `${t('posKitchen3') || '주방 3'}`,
-        },
-      })
+      const kLabels = {
+        unified: t('posKitchenOrder') || '주방 주문서',
+        kitchen1: `${t('posKitchen1') || '주방 1'}`,
+        kitchen2: `${t('posKitchen2') || '주방 2'}`,
+        kitchen3: `${t('posKitchen3') || '주방 3'}`,
+      }
+      const slips = buildKitchenSlipGroups(items, buildKitchenSlipGroupOpts(settings, menus, kLabels))
+      if (!slips.length) {
+        win.close()
+        await appAlert(t('posKitchenNoItemsToPrint') || '주방으로 인쇄할 품목이 없습니다.')
+        return
+      }
+      const slipDesign = resolveKitchenSlipDesign(settings)
+      const kitchenMemo = parsePosOrderMemo(o.memo).plainMemo
+      const memoLine = kitchenMemo.trim()
+        ? `${t('posCustomerMemo') || '메모'}: ${kitchenMemo.trim()}`
+        : ''
+      const dateStr = o.createdAt
+        ? formatPosDateTimeMedium(new Date(o.createdAt), lang)
+        : '-'
       const printOne = (idx: number) => {
         if (idx >= slips.length) return
         const slip = slips[idx]
         const w = idx === 0 ? win : window.open('', '_blank')
         if (!w) return
-        const html = `
-          <!DOCTYPE html>
-          <html><head><title>${slip.label}</title>
-          <style>
-            body { font-family: sans-serif; font-size: 18px; padding: 20px; max-width: 320px; }
-            .k-header { text-align: center; font-size: 22px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .k-row { margin: 6px 0; font-size: 18px; }
-            .k-memo { margin-top: 8px; padding: 8px; background: #f0f0f0; font-size: 16px; }
-          </style></head><body>
-          <div class="k-header">${slip.label}</div>
-          <div class="k-row"><strong>${o.orderNo}</strong></div>
-          <div class="k-row">${store} · ${orderTypeLabels[o.orderType] || o.orderType}${o.tableName ? ` · ${t('posTable') || '테이블'}: ${o.tableName}` : ''}</div>
-          <div class="k-row">${o.createdAt ? new Date(o.createdAt).toLocaleString('ko-KR') : '-'}</div>
-          <hr style="margin: 10px 0;" />
-          ${slip.items.map((it) => `<div class="k-row">${it.name ?? '-'} × ${it.qty ?? 1}</div>`).join('')}
-          ${o.memo ? `<div class="k-memo">${t('posCustomerMemo') || '메모'}: ${o.memo}</div>` : ''}
-          </body></html>`
+        const tablePart = o.tableName ? ` · ${t('posTable') || '테이블'}: ${o.tableName}` : ''
+        const html = buildKitchenSlipDocumentHtml({
+          label: slip.label,
+          orderNo: String(o.orderNo ?? ''),
+          storeCode: store,
+          orderTypeLabel: orderTypeLabels[o.orderType] || o.orderType,
+          tablePart,
+          dateStr,
+          items: slip.items.map((it) => {
+            const row = it as { name?: string; qty?: number; note?: string }
+            return {
+              name: translatePosMenuLineForReceipt(String(row.name ?? '-'), t),
+              qty: Number(row.qty ?? 1),
+              note: row.note,
+            }
+          }),
+          memoLine: memoLine || null,
+          escapeHtml,
+          design: slipDesign,
+          printColorAdjust: 'economy',
+        })
         w.document.write(html)
         w.document.close()
         w.focus()

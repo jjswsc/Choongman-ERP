@@ -77,7 +77,7 @@ export async function GET() {
         sortOrder: Number(row.sort_order) ?? 0,
         soldOutDate: row.sold_out_date ? String(row.sold_out_date).slice(0, 10) : null,
         optionSelectionGroups,
-        kitchenPrinter: kp === 1 || kp === 2 ? kp : null,
+        kitchenPrinter: kp === 0 || kp === 1 || kp === 2 || kp === 3 ? kp : null,
         cookingTimeMin: ctm != null && Number.isFinite(ctm) && ctm >= 0 ? ctm : null,
         isBanban,
         promoId: pid != null && Number(pid) > 0 ? String(pid) : null,

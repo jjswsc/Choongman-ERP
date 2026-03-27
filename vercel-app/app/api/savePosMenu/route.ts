@@ -50,7 +50,13 @@ export async function POST(req: NextRequest) {
       !optionSelectionGroupsExplicit && Array.isArray(body.optionSelectionGroups) && body.optionSelectionGroups.length > 0
         ? body.optionSelectionGroups.map((x) => String(x).trim()).filter(Boolean)
         : null
-    const kitchenPrinter = body.kitchenPrinter === 1 || body.kitchenPrinter === 2 ? body.kitchenPrinter : null
+    const kitchenPrinter =
+      body.kitchenPrinter === 0 ||
+      body.kitchenPrinter === 1 ||
+      body.kitchenPrinter === 2 ||
+      body.kitchenPrinter === 3
+        ? body.kitchenPrinter
+        : null
     const cookingTimeMin = body.cookingTimeMin != null && Number.isFinite(body.cookingTimeMin) && body.cookingTimeMin >= 0 ? body.cookingTimeMin : null
     const isBanban = body.isBanban === true
     const baseRow: Record<string, unknown> = {
@@ -222,6 +228,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result, { headers })
     } catch (saveErr: unknown) {
       const err = String(saveErr)
+      if (
+        optionSelectionGroupsExplicit &&
+        (err.includes('option_selection_groups') || err.includes('option selection'))
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              'option_selection_groups 저장에 실패했습니다. Supabase pos_menus 테이블에 option_selection_groups 컬럼이 있는지 확인하세요.',
+          },
+          { headers }
+        )
+      }
       if ((optionSelectionGroupsExplicit || optionSelectionGroupsLegacy || kitchenPrinter != null || cookingTimeMin != null || isBanban) && (err.includes('option_selection_groups') || err.includes('kitchen_printer') || err.includes('cooking_time_min') || err.includes('is_banban') || err.includes('42703'))) {
         const rowWithout = { ...baseRow }
         delete rowWithout.option_selection_groups

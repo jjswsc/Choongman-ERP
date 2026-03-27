@@ -4,6 +4,15 @@ import { applyLoyaltyOnOrder } from '@/lib/members-server'
 import { computePosPricing } from '@/lib/pos-pricing'
 import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
 
+const DELIVERY_PAYMENT_CHANNELS = new Set(['grab', 'lineman', 'shopee', 'dine_in'])
+
+function normalizeDeliveryPaymentChannel(raw: unknown, paymentDeliveryApp: number): string | null {
+  if (paymentDeliveryApp <= 0.005) return null
+  const s = String(raw ?? '').trim().toLowerCase()
+  if (DELIVERY_PAYMENT_CHANNELS.has(s)) return s
+  return 'grab'
+}
+
 const EDITABLE_STATUSES = ['pending', 'paid', 'preparing', 'cooking', 'ready', 'completed']
 
 /** POS 주문 수정 (항목·메모·할인·주문번호 등) - completed 전까지 수정 가능 */
@@ -23,6 +32,11 @@ export async function POST(req: NextRequest) {
     const paymentCard = Math.max(0, Number(body?.paymentCard ?? 0))
     const paymentQr = Math.max(0, Number(body?.paymentQr ?? 0))
     const paymentOther = Math.max(0, Number(body?.paymentOther ?? 0))
+    const paymentDeliveryApp = Math.max(0, Number(body?.paymentDeliveryApp ?? body?.payment_delivery_app ?? 0))
+    const deliveryPaymentChannel = normalizeDeliveryPaymentChannel(
+      body?.deliveryPaymentChannel ?? body?.delivery_payment_channel,
+      paymentDeliveryApp
+    )
     const memberId = Math.max(0, Number(body?.memberId ?? 0))
     const memberNo = String(body?.memberNo ?? '').trim()
     const couponCode = String(body?.couponCode ?? '').trim().toUpperCase()
@@ -83,6 +97,8 @@ export async function POST(req: NextRequest) {
       payment_card: paymentCard,
       payment_qr: paymentQr,
       payment_other: paymentOther,
+      payment_delivery_app: paymentDeliveryApp,
+      delivery_payment_channel: deliveryPaymentChannel,
       member_id: memberId || null,
       member_no: memberNo || null,
       coupon_code: couponCode || null,
@@ -104,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     await supabaseUpdateByFilter('pos_orders', `id=eq.${id}`, patch)
 
-    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther
+    const paymentSum = paymentCash + paymentCard + paymentQr + paymentOther + paymentDeliveryApp
     let pointEarned = pointEarnedReq
     const previousEarned = Number(existing[0]?.point_earned || 0)
     if (memberId > 0 && paymentSum > 0 && previousEarned <= 0) {

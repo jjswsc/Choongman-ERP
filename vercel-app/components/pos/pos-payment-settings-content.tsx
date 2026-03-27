@@ -218,27 +218,45 @@ export function PosPaymentSettingsContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredItems.map((item, idx) => (
-                      <tr
-                        key={item.id}
-                        className={cn(
-                          'border-t cursor-pointer hover:bg-muted/30',
-                          selected?.id === item.id && 'bg-primary/10'
-                        )}
-                        onClick={() => setSelected(item)}
-                      >
-                        <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
-                        <td className="px-2 py-1.5 text-muted-foreground">
-                          {CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {item.name}
-                          {item.hidden && (
-                            <span className="ml-1 text-xs text-muted-foreground">(숨김)</span>
+                    {filteredItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                          {items.length === 0 ? (
+                            <span>
+                              {t('posPaymentMethodListEmptyAll') ||
+                                '등록된 항목이 없습니다. API/DB 오류이거나 pos_payment_method_items 테이블이 없을 수 있습니다. Supabase에서 vercel-app/scripts/pos_payment_method_items.sql 실행 후 새로고침해 보세요.'}
+                            </span>
+                          ) : (
+                            <span>
+                              {t('posPaymentMethodListEmptyCategory') ||
+                                '이 분류에 해당하는 항목이 없습니다. 분류를「전체」로 바꾸거나 오른쪽에서 신규로 추가하세요.'}
+                            </span>
                           )}
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredItems.map((item, idx) => (
+                        <tr
+                          key={item.id}
+                          className={cn(
+                            'border-t cursor-pointer hover:bg-muted/30',
+                            selected?.id === item.id && 'bg-primary/10'
+                          )}
+                          onClick={() => setSelected(item)}
+                        >
+                          <td className="px-2 py-1.5 text-muted-foreground">{idx + 1}</td>
+                          <td className="px-2 py-1.5 text-muted-foreground">
+                            {CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {item.name}
+                            {item.hidden && (
+                              <span className="ml-1 text-xs text-muted-foreground">(숨김)</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -304,7 +322,7 @@ export function PosPaymentSettingsContent() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {t('posPaymentSettingsGuide') ||
-                  '결산 페이지의 카드·QR breakdown 입력란에 사용됩니다. 숨김 처리 시 POS 결산에 표시되지 않습니다.'}
+                  'POS 결제 화면「기타」세부 수단(QR·모바일·기타 분류)과 결산의 카드·QR·배달앱 breakdown에 연동됩니다. 목록이 비면 Supabase에 테이블 pos_payment_method_items가 있는지(scripts/pos_payment_method_items.sql) 확인하세요.'}
               </p>
             </div>
           </div>

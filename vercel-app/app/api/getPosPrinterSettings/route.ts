@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 import { listMainDeviceTokensForStore } from '@/lib/pos-main-devices-server'
+import { parseKitchenRouteMapDb } from '@/lib/pos-kitchen-slip-routing'
 
 type VendorBizInfo = {
   name?: string
@@ -117,6 +118,9 @@ export async function GET(request: NextRequest) {
     receiptShowPaidStamp: true,
     receiptShowThankYou: true,
     receiptShowCustomerCopy: true,
+    kitchenSlipFontScale: 'md' as const,
+    kitchenSlipShowLineNotes: true,
+    kitchenSlipShowOrderMemo: true,
     vatRate: 7,
     vatMode: 'included' as const,
     serviceRate: 0,
@@ -129,6 +133,9 @@ export async function GET(request: NextRequest) {
     receiptPrintLang: '' as string,
     mainDeviceToken: null as string | null,
     mainDeviceTokens: [] as string[],
+    kitchenRouteByMenu: {} as Record<string, 0 | 1 | 2 | 3>,
+    kitchenRouteByCategory: {} as Record<string, 0 | 1 | 2 | 3>,
+    kitchenRouteByCategoryMain: {} as Record<string, 0 | 1 | 2 | 3>,
   }
   if (!storeCode) {
     return NextResponse.json(defaultRes, { headers })
@@ -186,6 +193,9 @@ export async function GET(request: NextRequest) {
       receipt_show_paid_stamp?: boolean
       receipt_show_thank_you?: boolean
       receipt_show_customer_copy?: boolean
+      kitchen_slip_font_scale?: string
+      kitchen_slip_show_line_notes?: boolean
+      kitchen_slip_show_order_memo?: boolean
       receipt_print_lang?: string
       vat_rate?: number
       vat_mode?: string
@@ -198,6 +208,9 @@ export async function GET(request: NextRequest) {
       other_mode?: string
       main_device_token?: string | null
       kitchen3_categories?: unknown
+      kitchen_route_by_menu?: unknown
+      kitchen_route_by_category?: unknown
+      kitchen_route_by_category_main?: unknown
     }[] | null
 
     const raw = rows?.[0]
@@ -288,6 +301,14 @@ export async function GET(request: NextRequest) {
       receiptShowPaidStamp: raw?.receipt_show_paid_stamp !== false,
       receiptShowThankYou: raw?.receipt_show_thank_you !== false,
       receiptShowCustomerCopy: raw?.receipt_show_customer_copy !== false,
+      kitchenSlipFontScale:
+        String(raw?.kitchen_slip_font_scale || 'md').toLowerCase() === 'sm'
+          ? 'sm'
+          : String(raw?.kitchen_slip_font_scale || 'md').toLowerCase() === 'lg'
+            ? 'lg'
+            : 'md',
+      kitchenSlipShowLineNotes: raw?.kitchen_slip_show_line_notes !== false,
+      kitchenSlipShowOrderMemo: raw?.kitchen_slip_show_order_memo !== false,
       receiptPrintLang: String(raw?.receipt_print_lang ?? '').trim(),
       vatRate: Math.max(0, Number(raw?.vat_rate ?? 7)),
       vatMode: String(raw?.vat_mode || 'included') === 'separate' ? 'separate' : 'included',
@@ -305,6 +326,9 @@ export async function GET(request: NextRequest) {
       otherMode: String(raw?.other_mode || 'separate') === 'included' ? 'included' : 'separate',
       mainDeviceTokens,
       mainDeviceToken: mainDeviceTokenResolved,
+      kitchenRouteByMenu: parseKitchenRouteMapDb(raw?.kitchen_route_by_menu),
+      kitchenRouteByCategory: parseKitchenRouteMapDb(raw?.kitchen_route_by_category),
+      kitchenRouteByCategoryMain: parseKitchenRouteMapDb(raw?.kitchen_route_by_category_main),
     }, { headers })
   } catch (e) {
     console.error('getPosPrinterSettings:', e)

@@ -149,7 +149,8 @@ export default function PosScreenConfigPage() {
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabPayment") || "결제 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {t("posScreenConfigTabPaymentDesc") || "결산 시 사용할 카드·QR 수단 breakdown 키를 설정합니다."}
+                {t("posScreenConfigTabPaymentDesc") ||
+                  "POS 결제 화면의 기타·QR 세부 수단과 결산 breakdown에 쓰일 항목을 매장별로 관리합니다."}
               </p>
               <PosPaymentSettingsContent />
             </div>

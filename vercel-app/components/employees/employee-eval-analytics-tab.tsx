@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { Loader2, PieChart as PieChartIcon, RefreshCw } from "lucide-react"
+import { Loader2, PieChart as PieChartIcon, Search } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import {
@@ -85,9 +85,10 @@ export function EmployeeEvalAnalyticsTab({
     }
   }, [start, end, type, storeFilter, canPickAllStores])
 
+  /** 조건 변경 시 이전 집계는 숨김 — 반드시 [검색]으로 다시 조회 */
   React.useEffect(() => {
-    void load()
-  }, [load])
+    setData(null)
+  }, [start, end, type, storeFilter, canPickAllStores])
 
   const onAi = async () => {
     if (!canUseAiSummary) return
@@ -183,9 +184,9 @@ export function EmployeeEvalAnalyticsTab({
             </div>
           )}
         </div>
-        <Button type="button" variant="secondary" size="sm" className="shrink-0 gap-1" onClick={() => void load()}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          {t("eval_analytics_refresh")}
+        <Button type="button" variant="default" size="sm" className="shrink-0 gap-1.5" onClick={() => void load()}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" aria-hidden />}
+          {t("eval_analytics_search")}
         </Button>
       </div>
 
@@ -197,6 +198,12 @@ export function EmployeeEvalAnalyticsTab({
               {data.source === "rpc" ? t("eval_analytics_source_rpc") : t("eval_analytics_source_fallback")}
             </strong>
           </span>
+        </div>
+      )}
+
+      {!data && !loading && (
+        <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
+          {t("eval_analytics_search_hint")}
         </div>
       )}
 
@@ -228,6 +235,59 @@ export function EmployeeEvalAnalyticsTab({
               <div className="text-xl font-semibold tabular-nums">{data.byEvaluator.length}</div>
             </div>
           </div>
+
+          {data.coverage != null ? (
+            <div className="rounded-xl border bg-card p-4">
+              <h3 className="mb-1 text-sm font-semibold">{t("eval_analytics_coverage_title")}</h3>
+              <p className="mb-3 text-xs text-muted-foreground">{t("eval_analytics_coverage_hint")}</p>
+              <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="rounded-md border bg-muted/30 px-2 py-1.5">
+                  <div className="text-[10px] text-muted-foreground">{t("eval_analytics_coverage_active")}</div>
+                  <div className="text-lg font-semibold tabular-nums">{data.coverage.activeEmployeesInPeriod}</div>
+                </div>
+                <div className="rounded-md border bg-muted/30 px-2 py-1.5">
+                  <div className="text-[10px] text-muted-foreground">{t("eval_analytics_coverage_evaluated")}</div>
+                  <div className="text-lg font-semibold tabular-nums">{data.coverage.evaluatedEmployees}</div>
+                </div>
+                <div className="rounded-md border border-amber-500/30 bg-amber-50/50 px-2 py-1.5 dark:bg-amber-950/20">
+                  <div className="text-[10px] text-muted-foreground">{t("eval_analytics_coverage_unevaluated")}</div>
+                  <div className="text-lg font-semibold tabular-nums text-amber-900 dark:text-amber-100">
+                    {data.coverage.unevaluatedEmployees}
+                  </div>
+                </div>
+              </div>
+              {data.coverage.unevaluated.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t("eval_analytics_coverage_none")}</p>
+              ) : (
+                <div className="max-h-[360px] overflow-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="px-2 py-2">{t("eval_analytics_store")}</th>
+                        <th className="px-2 py-2">{t("emp_label_name")}</th>
+                        <th className="px-2 py-2">{t("emp_label_nickname")}</th>
+                        <th className="px-2 py-2">{t("eval_analytics_col_job")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.coverage.unevaluated.map((r) => (
+                        <tr key={`${r.store}|${r.name}|${r.nick}`} className="border-b border-border/60">
+                          <td className="px-2 py-1.5">{r.store}</td>
+                          <td className="px-2 py-1.5 font-medium">{r.name}</td>
+                          <td className="px-2 py-1.5 text-muted-foreground">{r.nick || "—"}</td>
+                          <td className="px-2 py-1.5 text-muted-foreground">{r.job || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+              {t("eval_analytics_coverage_unavailable")}
+            </div>
+          )}
 
           {data.sectionAverages && Object.keys(data.sectionAverages).length > 0 && (
             <div className="rounded-lg border bg-muted/20 px-3 py-2">
