@@ -13,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Save, Image } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
@@ -274,13 +282,21 @@ export function AdminComplaints() {
           <h1 className="text-xl font-bold tracking-tight">{t("adminComplaints")}</h1>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "input" | "list")}>
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="input">{t("tab_complaint_input")}</TabsTrigger>
-            <TabsTrigger value="list">{t("tab_complaint_list")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "input" | "list")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
+                <TabsTrigger value="input" className={adminTabsTriggerGridCn}>
+                  {t("tab_complaint_input")}
+                </TabsTrigger>
+                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                  {t("tab_complaint_list")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="input" className="mt-4">
+          <TabsContent value="input" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -455,7 +471,7 @@ export function AdminComplaints() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="list" className="mt-4">
+          <TabsContent value="list" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-2 mb-4">

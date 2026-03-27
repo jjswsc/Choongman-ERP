@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
+import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
-/** 본사 발주 내역 조회 (기간, 거래처 필터 지원) */
+/** 본사 발주 내역 조회 (기간, 거래처 필터 지원). 기간은 방콕 달력 기준. */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -16,8 +17,21 @@ export async function GET(request: NextRequest) {
     } else {
       parts.push('id=gt.0')
       if (vendorCode) parts.push(`vendor_code=eq.${encodeURIComponent(vendorCode)}`)
-      if (startDate) parts.push(`created_at=gte.${startDate}T00:00:00.000Z`)
-      if (endDate) parts.push(`created_at=lte.${endDate}T23:59:59.999Z`)
+      const startStr = startDate.slice(0, 10)
+      const endStr = endDate.slice(0, 10)
+      if (startStr && endStr) {
+        const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, endStr)
+        parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+        parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+      } else if (startStr) {
+        const { startISO, endISOExclusive } = bangkokDateRangeToUtc(startStr, startStr)
+        parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+        parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+      } else if (endStr) {
+        const { startISO, endISOExclusive } = bangkokDateRangeToUtc(endStr, endStr)
+        parts.push(`created_at=gte.${encodeURIComponent(startISO)}`)
+        parts.push(`created_at=lt.${encodeURIComponent(endISOExclusive)}`)
+      }
     }
     const filter = parts.join('&')
     const rows = (await supabaseSelectFilter(

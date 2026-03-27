@@ -10,6 +10,8 @@ export interface RecipeItem {
   ingredientCode: number
   quantity: number // g/unit or unit count
   misePercent?: number // 로스/미세 %, 기본 3
+  /** 목록에서 불러온 품목코드. 전역 runtime 맵이 비어도 저장 시 매핑 유지 */
+  savedItemCode?: string
 }
 
 export interface MenuItem {

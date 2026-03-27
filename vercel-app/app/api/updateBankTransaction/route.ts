@@ -55,9 +55,13 @@ export async function POST(request: NextRequest) {
     const patch: Record<string, unknown> = {}
 
     if (category !== undefined) {
-      const validCategory = transType === 'deposit'
+      let validCategory = transType === 'deposit'
         ? (depositCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
         : (withdrawCategories.includes(String(category).toLowerCase()) ? String(category).toLowerCase() : existing[0].category)
+      if (transType === 'withdraw' && validCategory === 'fixed') {
+        validCategory = 'expense'
+        patch.fixed_expense_id = null
+      }
       patch.category = validCategory
     }
     if (accountSubjectId !== undefined) {

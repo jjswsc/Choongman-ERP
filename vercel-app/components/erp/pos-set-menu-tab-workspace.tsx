@@ -25,6 +25,7 @@ import {
   getMenuCost,
   getPosMenuCostAnalysis,
   getPosDeliveryApps,
+  getNextPosPromoCode,
   getPosMenuOptions,
   getPosPromoItems,
   savePosPromo,
@@ -102,6 +103,11 @@ export type PosSetMenuTabWorkspaceProps = {
   schemaBannerDismissed: boolean
   onDismissSchemaBanner: () => void
   onAfterSave: () => void
+  /** 조회 탭 등에서 넘길 때: 해당 프로모 편집으로 전환 후 부모에서 초기화 */
+  focusPromoId?: string | null
+  onFocusPromoConsumed?: () => void
+  /** 마케팅 화면: 항상 이 캠페인에 연결(신규는 standaloneSetMenu false, 코드 자동 채번) */
+  fixedMarketingCampaignId?: string | null
 }
 
 type ComposerLine = {
@@ -143,13 +149,19 @@ export function PosSetMenuTabWorkspace({
   schemaBannerDismissed,
   onDismissSchemaBanner,
   onAfterSave,
+  focusPromoId,
+  onFocusPromoConsumed,
+  fixedMarketingCampaignId,
 }: PosSetMenuTabWorkspaceProps) {
   const { lang } = useLang()
   const t = useT(lang)
   const { auth } = useAuth()
+  const fixedCid = (fixedMarketingCampaignId ?? "").trim()
 
   const [allOptions, setAllOptions] = React.useState<PosMenuOption[]>([])
   const [editPromoId, setEditPromoId] = React.useState<string | null>(null)
+  /** 신규 초안 세션(캠페인 고정 시 다음 코드 재채번) */
+  const [promoDraftGen, setPromoDraftGen] = React.useState(0)
   const [form, setForm] = React.useState(emptyForm)
   const [lines, setLines] = React.useState<ComposerLine[]>([])
   const [savingPromo, setSavingPromo] = React.useState(false)
@@ -453,7 +465,8 @@ export function PosSetMenuTabWorkspace({
 
   React.useEffect(() => {
     if (!editPromoId) {
-      setForm(emptyForm())
+      const base = emptyForm()
+      setForm(fixedCid ? { ...base, marketingCampaignId: fixedCid } : base)
       setLines([])
       setDiscountPctStr("")
       setDiscountBahtStr("")
@@ -503,13 +516,65 @@ export function PosSetMenuTabWorkspace({
     return () => {
       cancelled = true
     }
-  }, [editPromoId, promos, menus, allOptions])
+  }, [editPromoId, promos, menus, allOptions, fixedCid])
+
+  React.useEffect(() => {
+    if (!fixedCid || editPromoId) return
+    let cancelled = false
+    void getNextPosPromoCode({ campaignId: fixedCid })
+      .then((r) => {
+        if (cancelled) return
+        const next = r?.code?.trim()
+        if (!next) return
+        setForm((p) => {
+          if (p.code.trim()) return p
+          if ((p.marketingCampaignId || "").trim() !== fixedCid) return p
+          return { ...p, code: next }
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [editPromoId, fixedCid, promoDraftGen])
 
   const promoById = React.useMemo(() => {
     const r: Record<string, PosPromo> = {}
     for (const p of promos) r[String(p.id)] = p
     return r
   }, [promos])
+
+  /** DB에 이미 있는 프로모션 표시명 목록 (그룹 선택용) */
+  const promoGroupNamesSorted = React.useMemo(() => {
+    const s = new Set<string>()
+    for (const p of promos) {
+      const n = (p.name ?? "").trim()
+      if (n) s.add(n)
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  }, [promos])
+
+  /** 셀렉트에 현재 입력 중인 이름도 올려서 값이 항상 유효하도록 */
+  const namesForGroupSelect = React.useMemo(() => {
+    const cur = form.name.trim()
+    const merged = new Set(promoGroupNamesSorted)
+    if (cur) merged.add(cur)
+    return [...merged].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+  }, [promoGroupNamesSorted, form.name])
+
+  const groupSelectValue = form.name.trim() ? form.name.trim() : "__new__"
+
+  const applyPromoGroupPick = React.useCallback((raw: string) => {
+    if (raw === "__new__") {
+      setForm((p) => ({ ...p, name: "", code: "" }))
+      setEditPromoId(null)
+      setLines([])
+      return
+    }
+    setForm((p) => ({ ...p, name: raw, code: "" }))
+    setEditPromoId(null)
+    setLines([])
+  }, [])
 
   /** 오른쪽 목록: 프로모션명(마스터 name) 기준 그룹 */
   const mirrorMenusByPromoName = React.useMemo(() => {
@@ -528,14 +593,38 @@ export function PosSetMenuTabWorkspace({
     return entries
   }, [mirrorMenus, promoById])
 
+  /** 우측 목록: 현재 편집 중인 프로모션명(그룹)과 같은 이름의 미러 세트만 */
+  const savedSetsNameKey = React.useMemo(() => {
+    if (editPromoId) {
+      const pr = promoById[editPromoId]
+      return (pr?.name ?? "").trim() || form.name.trim()
+    }
+    return form.name.trim()
+  }, [editPromoId, promoById, form.name])
+
+  const mirrorRowsForCurrentPromoName = React.useMemo(() => {
+    if (!savedSetsNameKey) return [] as PosMenu[]
+    const entry = mirrorMenusByPromoName.find(([n]) => n === savedSetsNameKey)
+    return entry ? entry[1] : []
+  }, [mirrorMenusByPromoName, savedSetsNameKey])
+
+  React.useEffect(() => {
+    const id = focusPromoId?.trim()
+    if (!id) return
+    setEditPromoId(id)
+    onFocusPromoConsumed?.()
+  }, [focusPromoId, onFocusPromoConsumed])
+
   const startNew = () => {
     setEditPromoId(null)
-    setForm(emptyForm())
+    const base = emptyForm()
+    setForm(fixedCid ? { ...base, marketingCampaignId: fixedCid } : base)
     setLines([])
     setPickMenuId("")
     setDiscountPctStr("")
     setDiscountBahtStr("")
     setSalesSetCountStr("")
+    setPromoDraftGen((n) => n + 1)
   }
 
   /** 같은 프로모션명·채널·가격 등은 유지하고 새 세트(새 코드)만 구성 */
@@ -696,6 +785,7 @@ export function PosSetMenuTabWorkspace({
   const buildSavePromoPayload = () => {
     const name = form.name.trim()
     const codeTrim = form.code.trim()
+    const effCid = form.marketingCampaignId.trim() || fixedCid
     const dpct = regularSum > 0 ? Math.round(economics.discountPercent * 100) / 100 : null
     return {
       name,
@@ -711,7 +801,7 @@ export function PosSetMenuTabWorkspace({
         priceDelivery: form.priceDelivery.trim() !== "" ? Number(form.priceDelivery) : null,
         vatIncluded: form.vatIncluded,
         isActive: form.isActive,
-        marketingCampaignId: form.marketingCampaignId.trim() || null,
+        marketingCampaignId: effCid || null,
         channelHall: form.channelHall,
         channelTakeout: form.channelTakeout,
         channelDelivery: form.channelDelivery,
@@ -723,7 +813,7 @@ export function PosSetMenuTabWorkspace({
         validFrom: null,
         validTo: null,
         marketingActualCost: 0,
-        standaloneSetMenu: !editPromoId,
+        standaloneSetMenu: !editPromoId && !effCid,
         userRole: auth?.role,
         userName: auth?.user,
       },
@@ -801,17 +891,19 @@ export function PosSetMenuTabWorkspace({
           <h3 className="text-base font-bold tracking-tight">{t("posSetTabWorkspaceTitle")}</h3>
           <p className="mt-1 max-w-2xl text-xs text-muted-foreground leading-relaxed">{t("posSetTabWorkspaceDesc")}</p>
           <p className="mt-2 max-w-2xl text-[11px] text-muted-foreground/90 leading-relaxed border-l-2 border-emerald-500/60 pl-3">
-            {t("posSetTabMarketingPromoNote")}
+            {fixedCid ? t("posSetTabMarketingCampaignContextNote") : t("posSetTabMarketingPromoNote")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-xs" asChild>
-            <Link href="/admin/marketing/promos">
-              <ExternalLink className="h-3.5 w-3.5" />
-              {t("posMenuSetOpenMarketing")}
-            </Link>
-          </Button>
-        </div>
+        {!fixedCid ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 text-xs" asChild>
+              <Link href="/admin/marketing/promos">
+                <ExternalLink className="h-3.5 w-3.5" />
+                {t("posMenuSetOpenMarketing")}
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {schemaOk === false && !schemaBannerDismissed && (
@@ -843,6 +935,9 @@ export function PosSetMenuTabWorkspace({
             <p className="text-xs font-bold text-foreground">{t("posMenuBundleSimPickTitle")}</p>
             <span className="text-[10px] text-muted-foreground">{t("posSetTabCostFromAnalysis")}</span>
           </div>
+          <p className="text-[10px] text-muted-foreground leading-relaxed border-l-2 border-border pl-2.5">
+            {t("posSetTabPickMenusCategoryHint")}
+          </p>
           <Select value={pickMain} onValueChange={(v) => { setPickMain(v); setPickSub("all") }}>
             <SelectTrigger className="h-9 text-xs">
               <SelectValue placeholder={t("posMenuCategoryMain")} />
@@ -932,12 +1027,12 @@ export function PosSetMenuTabWorkspace({
                         <div className="min-w-0">
                           <p className="truncate font-medium leading-tight">{m.name}</p>
                           <p className="truncate text-[10px] text-muted-foreground font-mono">{m.code}</p>
-                          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] tabular-nums text-muted-foreground">
-                            <span>
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-sm font-semibold tabular-nums leading-snug">
+                            <span className="text-foreground">
                               {t("itemsCost")} ฿
                               {hallCost != null ? hallCost.toFixed(1) : costAnalysisLoaded ? "—" : "…"}
                             </span>
-                            <span className="text-emerald-600 dark:text-emerald-400">
+                            <span className="text-emerald-700 dark:text-emerald-300">
                               {t("itemsSellingPrice")} ฿{Math.round(listHall).toLocaleString()}
                             </span>
                           </div>
@@ -1002,21 +1097,39 @@ export function PosSetMenuTabWorkspace({
               <Sparkles className="h-4 w-4 text-emerald-500/70" aria-hidden />
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {editPromoId && form.code.trim() ? (
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-medium text-muted-foreground">{t("itemsColCode")}</label>
-                  <p className="mt-1 rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-xs">{form.code.trim()}</p>
-                </div>
-              ) : null}
+              <div className="sm:col-span-2 space-y-2">
+                <label className="text-[10px] font-medium text-muted-foreground">{t("posSetTabPromoGroupLabel")}</label>
+                <Select value={groupSelectValue} onValueChange={applyPromoGroupPick}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder={t("posSetTabPromoGroupPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__new__">{t("posSetTabPromoGroupSelectNew")}</SelectItem>
+                    {namesForGroupSelect.map((n) => (
+                      <SelectItem key={n} value={n}>
+                        {n}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPromoGroupHint")}</p>
+              </div>
               <div className="sm:col-span-2">
-                <label className="text-[10px] font-medium text-muted-foreground">{t("posPromoName")} *</label>
+                <label className="text-[10px] font-medium text-muted-foreground">{t("posSetTabPromoNameFieldLabel")} *</label>
                 <Input
                   className="mt-1 h-9 text-sm"
                   placeholder={t("posSetTabSetNamePh")}
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 />
+                <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabPromoNameFieldHint")}</p>
               </div>
+              {editPromoId && form.code.trim() ? (
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] font-medium text-muted-foreground">{t("itemsColCode")}</label>
+                  <p className="mt-1 rounded-md border bg-muted/30 px-2 py-1.5 font-mono text-xs">{form.code.trim()}</p>
+                </div>
+              ) : null}
               <div className="sm:col-span-2 rounded-lg border border-border/60 bg-muted/10 px-3 py-3">
                 <p className="text-xs font-semibold">{t("posPromoChannels")}</p>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
@@ -1490,21 +1603,8 @@ export function PosSetMenuTabWorkspace({
                 <Save className="mr-2 h-4 w-4" />
                 {savingPromo ? t("loading") : t("posSetTabSavePromo")}
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10"
-                disabled={savingPromo || savingSet}
-                onClick={() => void handleSaveSetComposition()}
-              >
-                <Layers className="mr-2 h-4 w-4" />
-                {savingSet ? t("loading") : t("posSetTabSaveSetComposition")}
-              </Button>
-              <Button type="button" variant="outline" className="h-10" onClick={resetBundleOnly}>
-                {t("posSetTabResetBundle")}
-              </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSaveSplitHint")}</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavePromoFooterHint")}</p>
           </div>
         </div>
 
@@ -1512,7 +1612,8 @@ export function PosSetMenuTabWorkspace({
         <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4 shadow-sm dark:bg-zinc-950/40">
           <div className="flex flex-col gap-2">
             <p className="text-xs font-bold">{t("posSetTabSavedSetsTitle")}</p>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavedSetsGroupedHint")}</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSavedSetsSamePromoHint")}</p>
+            <p className="text-[10px] text-muted-foreground/90 leading-relaxed">{t("posSetTabSavedSetsInquiryLinkHint")}</p>
             <div className="flex flex-wrap gap-1.5">
               <Button
                 type="button"
@@ -1535,48 +1636,75 @@ export function PosSetMenuTabWorkspace({
               <p className="text-sm font-medium text-muted-foreground">{t("posSetTabSavedSetsEmpty")}</p>
               <p className="mt-1 text-[11px] text-muted-foreground/90">{t("posSetTabSavedSetsEmptyHint")}</p>
             </div>
+          ) : !savedSetsNameKey ? (
+            <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed border-muted-foreground/25 bg-background/50 px-3 py-8 text-center">
+              <p className="text-sm font-medium text-muted-foreground">{t("posSetTabSavedSetsNeedPromoName")}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground/90">{t("posSetTabSavedSetsNeedPromoNameHint")}</p>
+            </div>
+          ) : mirrorRowsForCurrentPromoName.length === 0 ? (
+            <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed border-muted-foreground/25 bg-background/50 px-3 py-8 text-center">
+              <p className="text-sm font-medium text-muted-foreground">
+                {t("posSetTabSavedSetsEmptyForCurrentName").replace("{{name}}", savedSetsNameKey)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground/90">{t("posSetTabSavedSetsEmptyHint")}</p>
+            </div>
           ) : (
-            <ul className="max-h-[min(520px,65vh)] space-y-3 overflow-y-auto pr-0.5">
-              {mirrorMenusByPromoName.map(([groupName, rows]) => (
-                <li key={groupName} className="space-y-1.5">
-                  <p className="border-b border-border/50 pb-1 text-[11px] font-bold tracking-tight text-foreground">
-                    {groupName}
-                    <span className="ml-2 font-normal text-muted-foreground">({rows.length})</span>
-                  </p>
-                  <ul className="space-y-1 border-l-2 border-emerald-500/30 pl-2.5">
-                    {rows.map((m) => {
-                      const pid = String(m.promoId ?? "").trim()
-                      const pr = pid ? promoById[pid] : undefined
-                      const active = editPromoId && pid === editPromoId
-                      return (
-                        <li key={m.id}>
-                          <button
-                            type="button"
-                            disabled={!pid || promosLoading}
-                            onClick={() => pid && setEditPromoId(pid)}
-                            className={cn(
-                              "w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
-                              active
-                                ? "border-emerald-500/50 bg-emerald-500/10"
-                                : "border-border/60 bg-card/80 hover:bg-muted/60"
-                            )}
-                          >
-                            <p className="truncate font-medium">{pr?.code || m.code}</p>
-                            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                              {t("posMenuPriceHall")} ฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}
-                              {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0
-                                ? ` · ${t("posMenuPriceDelivery")} ฿${Math.round(Number(pr.priceDelivery)).toLocaleString()}`
-                                : ""}
-                            </p>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </li>
-              ))}
+            <ul className="max-h-[min(520px,65vh)] space-y-1 overflow-y-auto pr-0.5">
+              {mirrorRowsForCurrentPromoName.map((m) => {
+                const pid = String(m.promoId ?? "").trim()
+                const pr = pid ? promoById[pid] : undefined
+                const active = editPromoId && pid === editPromoId
+                return (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      disabled={!pid || promosLoading}
+                      onClick={() => pid && setEditPromoId(pid)}
+                      className={cn(
+                        "w-full rounded-lg border px-2.5 py-2 text-left text-xs transition-colors",
+                        active
+                          ? "border-emerald-500/50 bg-emerald-500/10"
+                          : "border-border/60 bg-card/80 hover:bg-muted/60"
+                      )}
+                    >
+                      <p className="truncate font-medium">{pr?.code || m.code}</p>
+                      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                        {t("posMenuPriceHall")} ฿{Math.round(pr?.price ?? m.price ?? 0).toLocaleString()}
+                        {pr?.priceDelivery != null && Number(pr.priceDelivery) > 0
+                          ? ` · ${t("posMenuPriceDelivery")} ฿${Math.round(Number(pr.priceDelivery)).toLocaleString()}`
+                          : ""}
+                      </p>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
+          <div className="mt-2 space-y-2 border-t border-border/60 pt-3">
+            <p className="text-[10px] font-semibold text-foreground">{t("posSetTabSavedSetActionsTitle")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-10"
+                disabled={savingPromo || savingSet}
+                onClick={() => void handleSaveSetComposition()}
+              >
+                <Layers className="mr-2 h-4 w-4" />
+                {savingSet ? t("loading") : t("posSetTabSaveSetComposition")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10"
+                disabled={savingPromo || savingSet}
+                onClick={resetBundleOnly}
+              >
+                {t("posSetTabResetBundle")}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">{t("posSetTabSaveSplitHint")}</p>
+          </div>
         </div>
       </div>
     </div>

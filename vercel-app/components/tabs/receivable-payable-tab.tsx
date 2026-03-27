@@ -12,6 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Accordion,
@@ -32,6 +41,7 @@ import {
   canManageReceivablePayableAllStores,
   canSyncOrderReceivable,
   canBulkReconcileOrderReceivables,
+  canUpdateReceivableReceiveCheck,
 } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 import { getVendorsForPurchase, getVendorsForSales } from "@/lib/api-client"
@@ -39,6 +49,7 @@ import {
   getReceivablePayableList,
   getPayableTransactionItems,
   addBalanceTransaction,
+  updateReceivableReceiveCheck,
   syncOrderReceivable,
   syncAllOrderReceivablesBatch,
   translateTexts,
@@ -46,8 +57,9 @@ import {
   type PayableTransactionItem,
 } from "@/lib/api-client"
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+/** 방콕 달력 날짜 (YYYY-MM-DD). 로컬 PC 타임존/UTC와 어긋나면 종료일 필터로 행이 잘릴 수 있음. */
+function bangkokTodayStr() {
+  return new Date().toLocaleString("en-CA", { timeZone: "Asia/Bangkok" }).slice(0, 10)
 }
 
 export function ReceivablePayableTab() {
@@ -83,14 +95,14 @@ export function ReceivablePayableTab() {
   const recStoreFilter = salesOutletFilter !== "All" ? salesOutletFilter : "All"
   const payStoreFilter = payableStoreFilter !== "All" ? payableStoreFilter : "All"
   const storeFilter = tab === "receivable" ? recStoreFilter : payStoreFilter
-  const [startStr, setStartStr] = React.useState(todayStr)
-  const [endStr, setEndStr] = React.useState(todayStr)
+  const [startStr, setStartStr] = React.useState(bangkokTodayStr)
+  const [endStr, setEndStr] = React.useState(bangkokTodayStr)
   const [listData, setListData] = React.useState<ReceivablePayableItem[]>([])
   const [loading, setLoading] = React.useState(false)
   const [filterUnpaidOnly, setFilterUnpaidOnly] = React.useState(false)
 
   const [addAmount, setAddAmount] = React.useState("")
-  const [addDate, setAddDate] = React.useState(todayStr)
+  const [addDate, setAddDate] = React.useState(bangkokTodayStr)
   const [addMemo, setAddMemo] = React.useState("")
   const [addEntity, setAddEntity] = React.useState("")
   const [addSaving, setAddSaving] = React.useState(false)
@@ -100,6 +112,7 @@ export function ReceivablePayableTab() {
   const [payableItemsCache, setPayableItemsCache] = React.useState<Record<string, PayableTransactionItem[]>>({})
   const [loadingItemsFor, setLoadingItemsFor] = React.useState<string | null>(null)
   const [syncingOrderId, setSyncingOrderId] = React.useState<number | null>(null)
+  const [updatingReceiveCheckId, setUpdatingReceiveCheckId] = React.useState<number | null>(null)
   const [bulkRecSyncing, setBulkRecSyncing] = React.useState(false)
   const [bulkRecProgress, setBulkRecProgress] = React.useState("")
 
@@ -202,6 +215,47 @@ export function ReceivablePayableTab() {
     setHasSearchedList(true)
     loadList()
   }, [loadList])
+
+  const patchListReceiveChecked = React.useCallback((receivableId: number, receiveChecked: boolean) => {
+    setListData((prev) =>
+      prev.map((grp) => ({
+        ...grp,
+        items: (grp.items || []).map((r) =>
+          r.id === receivableId ? { ...r, receive_checked: receiveChecked } : r
+        ),
+      }))
+    )
+  }, [])
+
+  const handleReceiveCheckChange = React.useCallback(
+    async (params: {
+      receivableId: number
+      receiveChecked: boolean
+      outletStoreName: string
+    }) => {
+      const { receivableId, receiveChecked, outletStoreName } = params
+      if (!canUpdateReceivableReceiveCheck(auth?.role || "", auth?.store || "", outletStoreName)) return
+      setUpdatingReceiveCheckId(receivableId)
+      try {
+        const res = await updateReceivableReceiveCheck({
+          id: receivableId,
+          receiveChecked,
+          userStore: auth?.store,
+          userRole: auth?.role,
+        })
+        if (res.success) {
+          patchListReceiveChecked(receivableId, res.receiveChecked ?? receiveChecked)
+        } else {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "실패")
+        }
+      } catch (e) {
+        await appAlert((t("processFail") || "실패") + ": " + (e instanceof Error ? e.message : String(e)))
+      } finally {
+        setUpdatingReceiveCheckId(null)
+      }
+    },
+    [auth?.role, auth?.store, patchListReceiveChecked, t]
+  )
 
   const handleSyncOrderReceivable = React.useCallback(
     async (orderId: number | undefined) => {
@@ -417,7 +471,7 @@ export function ReceivablePayableTab() {
     const statusRec = (r: { ref_type?: string }) => r.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")
     const statusPay = (r: { ref_type?: string }) => r.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급")
     const header = isRec
-      ? [entityCol, t("date") || "날짜", t("type") || "구분", t("recColOrderNo") || "주문번호", t("recColReceiveStatus") || "수령여부", t("amount") || "금액", t("memo") || "메모"]
+      ? [entityCol, t("date") || "날짜", t("type") || "구분", t("recColOrderNo") || "주문번호", t("recColReceiveStatus") || "수령여부", t("recColReceiveCheck") || "수금확인", t("amount") || "금액", t("memo") || "메모"]
       : [entityCol, t("date") || "날짜", t("type") || "구분", t("poInvoice") || "인보이스", t("payColPaymentStatus") || "지급여부", t("amount") || "금액", t("memo") || "메모"]
     const rows: string[][] = [header]
     for (const item of listData) {
@@ -427,6 +481,13 @@ export function ReceivablePayableTab() {
       const typeLabel = (ref: string) => (ref === "Opening" ? typeOpening : ref === (isRec ? "Order" : "PO") ? typeOrder : typeReceive)
       for (const row of displayItems) {
         const orderOrInv = isRec && row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "")) : ""
+        const receiveCheckCell = isRec
+          ? (row.ref_type === "Order"
+            ? ((row as { receive_checked?: boolean }).receive_checked
+              ? (t("recCheckPaid") || "수금완료")
+              : (t("recCheckWait") || "수금대기"))
+            : "-")
+          : ""
         const invPayable = !isRec
           ? ((row as { invoice_received?: boolean; invoice_no?: string }).invoice_received === true
             ? ((row as { invoice_no?: string }).invoice_no || t("poInvoiceReceived") || "수령")
@@ -436,7 +497,7 @@ export function ReceivablePayableTab() {
           : ""
         rows.push(
           isRec
-            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
+            ? [name, row.trans_date || "-", typeLabel(row.ref_type || ""), orderOrInv, statusRec(row), receiveCheckCell, String(row.amount ?? 0), getMemo(row.memo) || ""]
             : [name, row.trans_date || "-", typeLabel(row.ref_type || ""), invPayable, statusPay(row), String(row.amount ?? 0), getMemo(row.memo) || ""]
         )
       }
@@ -494,6 +555,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                         {isRec && <th className="text-center py-1 px-2 w-[110px]">{t("recColOrderNo") || "주문번호"}</th>}
                         {!isRec && <th className="text-center py-1 px-2 w-[100px]">{t("poInvoice") || "인보이스"}</th>}
                         <th className="text-center py-1 px-2 w-[95px]">{isRec ? (t("recColReceiveStatus") || "수령여부") : (t("payColPaymentStatus") || "지급여부")}</th>
+                        {isRec && <th className="text-center py-1 px-2 w-[88px] whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>}
                         <th className="text-center py-1 px-2 w-[135px]">{t("amount") || "금액"}</th>
                         <th className="text-center py-1 px-2 min-w-[150px]">{t("memo") || "메모"}</th>
                       </tr>
@@ -514,6 +576,13 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                           {isRec && <td className="py-1 px-2">{row.ref_type === "Order" ? (row.invoice_no || (row.ref_id && row.trans_date ? `IV${String(row.trans_date).replace(/\D/g, "").slice(0, 8)}-${row.ref_id}` : row.ref_id ? `#${row.ref_id}` : "") || "-") : "-"}</td>}
                           {!isRec && <td className="py-1 px-2 text-center">{invCell}</td>}
                           <td className="py-1 px-2 text-center">{isRec ? (row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")) : (row.ref_type === "Payment" ? (t("payStatusPaid") || "지급") : (t("payStatusUnpaid") || "미지급"))}</td>
+                          {isRec && (
+                            <td className="py-1 px-2 text-center text-xs">
+                              {row.ref_type === "Order"
+                                ? (row.receive_checked ? (t("recCheckPaid") || "수금완료") : (t("recCheckWait") || "수금대기"))
+                                : "—"}
+                            </td>
+                          )}
                           <td className="py-1 px-2 text-right">{Number(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                           <td className="py-1 px-2 text-muted-foreground">{getMemo(row.memo)}</td>
                         </tr>
@@ -528,21 +597,25 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
         )}
       </div>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "receivable" | "payable")}>
-        <TabsList className={cn("grid w-full max-w-md", canSelectStores ? "grid-cols-2" : "grid-cols-1")}>
-          <TabsTrigger value="receivable" className="flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            {t("receivableTab") || "미수금 (매출)"}
-          </TabsTrigger>
-          {canSelectStores && (
-            <TabsTrigger value="payable" className="flex items-center gap-2">
-              <Building2 className="h-4 w-4" />
-              {t("payableTab") || "미지급금 (매입)"}
-            </TabsTrigger>
-          )}
-        </TabsList>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "receivable" | "payable")} className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="receivable" className={adminTabsTriggerCn}>
+                <Wallet className={adminTabsIconCn} aria-hidden />
+                {t("receivableTab") || "미수금 (매출)"}
+              </TabsTrigger>
+              {canSelectStores && (
+                <TabsTrigger value="payable" className={adminTabsTriggerCn}>
+                  <Building2 className={adminTabsIconCn} aria-hidden />
+                  {t("payableTab") || "미지급금 (매입)"}
+                </TabsTrigger>
+              )}
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="receivable" className="space-y-4 mt-4">
+        <TabsContent value="receivable" className={cn(adminTabsContentCn, "space-y-4")}>
           <Card>
             <CardContent className="pt-4">
               <div className="w-full">
@@ -657,6 +730,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("type") || "구분"}</th>
                                     <th className="text-center py-2 px-4 w-[110px] font-semibold">{t("recColOrderNo") || "주문번호"}</th>
                                     <th className="text-center py-2 px-4 w-[95px] font-semibold">{t("recColReceiveStatus") || "수령여부"}</th>
+                                    <th className="text-center py-2 px-2 w-[108px] font-semibold whitespace-nowrap">{t("recColReceiveCheck") || "수금확인"}</th>
                                     <th className="text-center py-2 px-4 w-[135px] font-semibold">{t("amount") || "금액"}</th>
                                     <th className="text-center py-2 px-4 min-w-[150px] font-semibold">{t("memo") || "메모"}</th>
                                     {showRecSyncBtn && (
@@ -670,7 +744,16 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {tableItems.map((row) => (
+                                  {tableItems.map((row) => {
+                                    const canEditReceiveCheck =
+                                      row.ref_type === "Order" &&
+                                      row.id != null &&
+                                      canUpdateReceivableReceiveCheck(
+                                        auth?.role || "",
+                                        auth?.store || "",
+                                        item.storeName || ""
+                                      )
+                                    return (
                                     <tr key={row.id} className="border-b border-border/50">
                                       <td className="py-1.5 px-4 w-[115px]">{row.trans_date || "-"}</td>
                                       <td className="py-1.5 px-4 w-[95px]">{row.ref_type === "Opening" ? (t("recTypeOpening") || "기초이월") : row.ref_type === "Order" ? (t("recTypeOrder") || "주문") : (t("recTypeReceive") || "수령")}</td>
@@ -682,6 +765,37 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         )}>
                                           {row.ref_type === "Receive" ? (t("recStatusReceived") || "수령") : (t("recStatusUnpaid") || "미수")}
                                         </span>
+                                      </td>
+                                      <td className="py-1.5 px-2 w-[108px] text-center align-middle">
+                                        {row.ref_type === "Order" && row.id != null ? (
+                                          <div className="flex flex-col items-center gap-0.5">
+                                            <Checkbox
+                                              checked={!!row.receive_checked}
+                                              disabled={!canEditReceiveCheck || updatingReceiveCheckId === row.id}
+                                              title={
+                                                row.receive_checked
+                                                  ? (t("recCheckPaid") || "수금완료")
+                                                  : (t("recCheckWait") || "수금대기")
+                                              }
+                                              onCheckedChange={(v) => {
+                                                if (!canEditReceiveCheck || row.id == null) return
+                                                void handleReceiveCheckChange({
+                                                  receivableId: row.id,
+                                                  receiveChecked: !!v,
+                                                  outletStoreName: item.storeName || "",
+                                                })
+                                              }}
+                                              className="mt-0.5"
+                                            />
+                                            <span className="text-[10px] text-muted-foreground leading-none">
+                                              {row.receive_checked
+                                                ? (t("recCheckPaid") || "완료")
+                                                : (t("recCheckWait") || "대기")}
+                                            </span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
                                       </td>
                                       <td className="py-1.5 px-4 w-[135px] text-right tabular-nums font-medium">{(row.amount ?? 0) >= 0 ? "+" : ""}฿{(row.amount ?? 0).toLocaleString()}</td>
                                       <td className="py-1.5 px-4 min-w-[150px] text-muted-foreground">{getMemo(row.memo)}</td>
@@ -703,7 +817,8 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
                                         </td>
                                       )}
                                     </tr>
-                                  ))}
+                                    )
+                                  })}
                                 </tbody>
                               </table>
                             </AccordionContent>
@@ -718,7 +833,7 @@ ${rows.slice(1).map((row) => `<tr>${row.map((c) => `<td>${escapeXml(c)}</td>`).j
           </Card>
         </TabsContent>
 
-        <TabsContent value="payable" className="space-y-4 mt-4">
+        <TabsContent value="payable" className={cn(adminTabsContentCn, "space-y-4")}>
           <Card>
             <CardContent className="pt-4">
                   <div className="flex flex-wrap items-end gap-3 mb-4">

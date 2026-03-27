@@ -34,7 +34,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from '@/components/ui/tooltip'
-import { ShoppingCart, Trash2, Tag, Minus, Plus, ChevronDown, ChevronUp, CreditCard, Banknote, QrCode, Wallet, Users, Receipt, Building2, User, Check, X, Pencil } from 'lucide-react'
+import { ShoppingCart, Trash2, Tag, Minus, Plus, ChevronDown, ChevronUp, CreditCard, Banknote, QrCode, Wallet, Users, Receipt, Building2, User, Check, X, Pencil, LayoutGrid } from 'lucide-react'
 import type { Store, Table, OrderItem } from '@/lib/pos-types'
 import { cn, formatBahtNum } from '@/lib/utils'
 import { useLang } from '@/lib/lang-context'
@@ -1418,8 +1418,17 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
               {membersLoading ? '...' : (t('posSearch') || '검색')}
             </Button>
             {orderType === 'dine-in' && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Label className="text-sm whitespace-nowrap">{t('posGuestCount') || '손님'}</Label>
+              <div
+                className="flex items-center gap-1.5 shrink-0 rounded-lg border border-sky-500/45 bg-sky-500/[0.08] px-2 py-1 shadow-sm dark:bg-sky-950/25"
+                title={t('posOrderGuestCount') || '홀 주문 손님 수(매출·통계용)'}
+              >
+                <Users className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
+                <div className="flex min-w-0 flex-col leading-none">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-sky-900/90 dark:text-sky-100/90">
+                    {t('posGuestCount') || '손님'}
+                  </span>
+                  <span className="sr-only">{t('posOrderGuestCount') || ''}</span>
+                </div>
                 <Select
                   value={guestCount === 0 ? '__zero__' : guestCount >= 1 && guestCount <= 9 ? String(guestCount) : '__direct__'}
                   onValueChange={(v) => {
@@ -1430,8 +1439,8 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
                     } else setGuestCount(Number(v))
                   }}
                 >
-                  <SelectTrigger className="w-14 h-8 [&>span]:flex [&>span]:items-center [&>span]:justify-center">
-                    <span className="tabular-nums">{guestCount}</span>
+                  <SelectTrigger className="h-8 w-[3.25rem] border-sky-600/35 bg-background/90 [&>span]:flex [&>span]:items-center [&>span]:justify-center dark:border-sky-500/40">
+                    <span className="tabular-nums font-semibold">{guestCount}</span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__zero__">0</SelectItem>
@@ -1447,13 +1456,26 @@ export const CartPanel = forwardRef<CartPanelHandle, CartPanelProps>(function Ca
 
           {/* 2행: 테이블(테이블현황) / 배달앱+주문번호(배달) / 포장(포장) */}
           {orderType === 'dine-in' && (
-            <div className="flex items-center gap-2">
-              <Label className="text-sm w-12 flex-shrink-0">{t('posTableLabel')}</Label>
-              <Badge variant="secondary" className="h-7 px-3">
-                {selectedTable?.name
-                  ? translateReceiptTableDisplayName(selectedTable.name, t)
-                  : t('posSelectTableNone')}
-              </Badge>
+            <div
+              className="flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-500/[0.07] px-2.5 py-1.5 shadow-sm dark:bg-emerald-950/20"
+              title={t('posTableLabel') || '선택한 테이블(번호·이름)'}
+            >
+              <LayoutGrid className="h-4 w-4 shrink-0 text-emerald-700 dark:text-emerald-400" aria-hidden />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-900/85 dark:text-emerald-100/85">
+                  {t('posTableLabel') || '테이블'}
+                </span>
+                <Badge
+                  variant="outline"
+                  className="h-7 w-fit max-w-full border-emerald-600/50 bg-background/90 px-2.5 font-semibold text-emerald-950 shadow-none dark:border-emerald-500/45 dark:text-emerald-50"
+                >
+                  <span className="truncate">
+                    {selectedTable?.name
+                      ? translateReceiptTableDisplayName(selectedTable.name, t)
+                      : t('posSelectTableNone')}
+                  </span>
+                </Badge>
+              </div>
             </div>
           )}
           {orderType === 'delivery' && (

@@ -46,14 +46,17 @@ export async function GET(request: NextRequest) {
       })) as Row[]
     }
 
-    let list = (rows || []).map((r) => ({
+    let list = (rows || []).map((r) => {
+      const plRaw = (r.p_and_l_section || '').toString().trim()
+      const plNorm = plRaw ? plRaw.toLowerCase() : null
+      return {
       id: r.id,
       code: String(r.code || '').trim(),
       name: String(r.name || '').trim(),
       nameEn: (r.name_en || '').toString().trim() || null,
       nameTh: r.name_th != null && String(r.name_th).trim() !== '' ? String(r.name_th).trim() : null,
       type: String(r.type || 'expense').toLowerCase(),
-      pAndLSection: (r.p_and_l_section || '').toString().trim() || null,
+      pAndLSection: plNorm,
       sortOrder: Number(r.sort_order) ?? 0,
       statementType: r.statement_type != null ? String(r.statement_type).trim().toLowerCase() || null : null,
       normalSide: r.normal_side != null ? String(r.normal_side).trim().toLowerCase() || null : null,
@@ -61,10 +64,18 @@ export async function GET(request: NextRequest) {
       isHeader: Boolean(r.is_header),
       isSystem: Boolean(r.is_system),
       coaClass: r.coa_class != null && String(r.coa_class).trim() !== '' ? String(r.coa_class).trim() : null,
-    }))
+      }
+    })
 
+    /**
+     * 지출 등록·은행·패티 등 일반 경비: type=expense 중 매출원가(cost)만 제외
+     * (구) 손익 구분 fixed(고정비) 과목도 경비·지출등록에서 동일하게 선택 가능
+     */
     if (forExpense) {
-      list = list.filter((x) => x.type === 'expense' && (x.pAndLSection === 'expense' || !x.pAndLSection))
+      list = list.filter((x) => {
+        if (x.type !== 'expense') return false
+        return x.pAndLSection !== 'cost'
+      })
     }
     if (forFixed) {
       list = list.filter((x) => x.type === 'expense' && x.pAndLSection === 'fixed')

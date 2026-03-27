@@ -15,8 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { adminTabsListRowCn, adminTabsScrollCn, adminTabsTriggerCn } from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ChevronDown, ChevronRight, Download, GitBranch, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Download, GitBranch, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -72,6 +73,48 @@ function buildChildrenMap(rows: AccountSubjectItem[]): Map<number | null, Accoun
   return m
 }
 
+function rowMatchesSearch(row: AccountSubjectItem, needle: string): boolean {
+  if (!needle) return true
+  const parts = [row.code, row.name, row.nameEn ?? "", row.nameTh ?? ""].map((s) => String(s).toLowerCase())
+  return parts.some((p) => p.includes(needle))
+}
+
+/** 검색 시: 본인 일치 또는 하위 트리에 일치가 있는 노드만 남김(null = 검색 없음) */
+function subtreeMatchIdsForSearch(filteredItems: AccountSubjectItem[], rawQuery: string): Set<number> | null {
+  const needle = rawQuery.trim().toLowerCase()
+  if (!needle) return null
+
+  const byId = new Map<number, AccountSubjectItem>()
+  for (const x of filteredItems) {
+    if (x.id != null) byId.set(x.id, x)
+  }
+  const children = buildChildrenMap(filteredItems)
+  const memo = new Map<number, boolean>()
+
+  function subtreeHasMatch(id: number): boolean {
+    if (memo.has(id)) return memo.get(id)!
+    const row = byId.get(id)
+    if (!row) {
+      memo.set(id, false)
+      return false
+    }
+    if (rowMatchesSearch(row, needle)) {
+      memo.set(id, true)
+      return true
+    }
+    const kids = children.get(id) ?? []
+    const v = kids.some((k) => k.id != null && subtreeHasMatch(k.id))
+    memo.set(id, v)
+    return v
+  }
+
+  const out = new Set<number>()
+  for (const x of filteredItems) {
+    if (x.id != null && subtreeHasMatch(x.id)) out.add(x.id)
+  }
+  return out
+}
+
 export function AdminChartOfAccounts() {
   const { lang } = useLang()
   const t = useT(lang)
@@ -90,6 +133,7 @@ export function AdminChartOfAccounts() {
   const [items, setItems] = React.useState<AccountSubjectItem[]>([])
   const [loading, setLoading] = React.useState(true)
   const [tab, setTab] = React.useState<CoaTab>("all")
+  const [searchQuery, setSearchQuery] = React.useState("")
   const [expanded, setExpanded] = React.useState<Set<number>>(() => new Set())
   const [dlgOpen, setDlgOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<AccountSubjectItem | null>(null)
@@ -126,12 +170,27 @@ export function AdminChartOfAccounts() {
   }, [load])
 
   const visibleIds = React.useMemo(() => visibleIdSet(items, tab), [items, tab])
-  const filtered = React.useMemo(
+  const tabFiltered = React.useMemo(
     () => items.filter((x) => x.id != null && visibleIds.has(x.id)),
     [items, visibleIds]
   )
-  const childrenByParent = React.useMemo(() => buildChildrenMap(filtered), [filtered])
+  const searchMatchIds = React.useMemo(
+    () => subtreeMatchIdsForSearch(tabFiltered, searchQuery),
+    [tabFiltered, searchQuery]
+  )
+  const displayFiltered = React.useMemo(() => {
+    if (searchMatchIds === null) return tabFiltered
+    return tabFiltered.filter((x) => x.id != null && searchMatchIds.has(x.id))
+  }, [tabFiltered, searchMatchIds])
+
+  const childrenByParent = React.useMemo(() => buildChildrenMap(displayFiltered), [displayFiltered])
   const roots = childrenByParent.get(null) ?? []
+
+  React.useEffect(() => {
+    if (!searchQuery.trim()) return
+    const ids = displayFiltered.map((x) => x.id).filter((id): id is number => id != null)
+    setExpanded(new Set(ids))
+  }, [searchQuery, displayFiltered])
 
   const openNew = () => {
     setEditing(null)
@@ -160,7 +219,7 @@ export function AdminChartOfAccounts() {
       nameEn: row.nameEn || "",
       nameTh: row.nameTh || "",
       type: row.type,
-      pAndLSection: row.pAndLSection || "",
+      pAndLSection: row.pAndLSection === "fixed" ? "expense" : row.pAndLSection || "",
       sortOrder: row.sortOrder ?? 0,
       parentId: row.parentId != null ? String(row.parentId) : "",
       isHeader: Boolean(row.isHeader),
@@ -372,15 +431,31 @@ export function AdminChartOfAccounts() {
       <CardContent className="space-y-4 pt-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <Tabs value={tab} onValueChange={(v) => setTab(v as CoaTab)} className="w-full sm:w-auto">
-            <TabsList className="flex h-auto flex-wrap gap-1">
-              <TabsTrigger value="all">{tt("coaTabAll", "전체")}</TabsTrigger>
-              <TabsTrigger value="asset">{tt("coaTabAsset", "자산")}</TabsTrigger>
-              <TabsTrigger value="liability">{tt("coaTabLiability", "부채")}</TabsTrigger>
-              <TabsTrigger value="equity">{tt("coaTabEquity", "자본")}</TabsTrigger>
-              <TabsTrigger value="revenue">{tt("coaTabRevenue", "수익")}</TabsTrigger>
-              <TabsTrigger value="expense">{tt("coaTabExpense", "비용")}</TabsTrigger>
-              <TabsTrigger value="transfer">{tt("coaTabTransfer", "이체")}</TabsTrigger>
-            </TabsList>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="all" className={adminTabsTriggerCn}>
+                  {tt("coaTabAll", "전체")}
+                </TabsTrigger>
+                <TabsTrigger value="asset" className={adminTabsTriggerCn}>
+                  {tt("coaTabAsset", "자산")}
+                </TabsTrigger>
+                <TabsTrigger value="liability" className={adminTabsTriggerCn}>
+                  {tt("coaTabLiability", "부채")}
+                </TabsTrigger>
+                <TabsTrigger value="equity" className={adminTabsTriggerCn}>
+                  {tt("coaTabEquity", "자본")}
+                </TabsTrigger>
+                <TabsTrigger value="revenue" className={adminTabsTriggerCn}>
+                  {tt("coaTabRevenue", "수익")}
+                </TabsTrigger>
+                <TabsTrigger value="expense" className={adminTabsTriggerCn}>
+                  {tt("coaTabExpense", "비용")}
+                </TabsTrigger>
+                <TabsTrigger value="transfer" className={adminTabsTriggerCn}>
+                  {tt("coaTabTransfer", "이체")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
           </Tabs>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -406,6 +481,32 @@ export function AdminChartOfAccounts() {
           </div>
         </div>
 
+        <div className="flex w-full flex-col gap-2 sm:max-w-md">
+          <Label className="text-xs text-muted-foreground sr-only">{tt("coaSearchLabel", "계정 검색")}</Label>
+          <div className="relative flex w-full items-center">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              className="h-9 pl-9 pr-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={tt("coaSearchPlaceholder", "코드, 과목명, 영문, 태국어 검색")}
+              aria-label={tt("coaSearchLabel", "계정 검색")}
+            />
+            {searchQuery.trim() ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-0.5 top-1/2 h-7 w-7 -translate-y-1/2 shrink-0 text-muted-foreground"
+                onClick={() => setSearchQuery("")}
+                aria-label={tt("coaSearchClear", "검색 지우기")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
         {!canEdit ? (
           <p className="text-sm text-muted-foreground">{tt("coaOfficeOnlyHint", "본사·회계 역할만 계정 추가·삭제·구조 변경이 가능합니다.")}</p>
         ) : null}
@@ -413,7 +514,9 @@ export function AdminChartOfAccounts() {
         {loading ? (
           <p className="text-sm text-muted-foreground py-8 text-center">{t("loading") || "…"}</p>
         ) : roots.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">{tt("coaEmpty", "표시할 계정이 없습니다.")}</p>
+          <p className="text-sm text-muted-foreground py-8 text-center">
+            {searchQuery.trim() ? tt("coaNoSearchResults", "검색 결과가 없습니다.") : tt("coaEmpty", "표시할 계정이 없습니다.")}
+          </p>
         ) : (
           <div className="rounded-md border bg-card">{roots.map((r) => renderNode(r, 0))}</div>
         )}
@@ -495,7 +598,6 @@ export function AdminChartOfAccounts() {
                     <SelectItem value="revenue">{tt("accountSubjectPLRevenue", "수익")}</SelectItem>
                     <SelectItem value="cost">{tt("accountSubjectPLCost", "매출원가")}</SelectItem>
                     <SelectItem value="expense">{tt("accountSubjectPLExpense", "판관비")}</SelectItem>
-                    <SelectItem value="fixed">{tt("accountSubjectPLFixed", "고정비")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -281,6 +281,62 @@ export async function supabaseSelectFilter(
   return res.json()
 }
 
+/**
+ * PostgREST Range 헤더로 구간 조회 (URL의 limit와 중복 쓰지 않음)
+ */
+export async function supabaseSelectFilterRange(
+  table: string,
+  filter: string,
+  options: { order?: string; select?: string; rangeStart: number; rangeEnd: number }
+) {
+  const { url, key } = getConfig()
+  const pathStr = `${url}/rest/v1/${encodeURIComponent(table)}`
+  const query = [options.select ? `select=${encodeURIComponent(options.select)}` : 'select=*', filter]
+  if (options.order) query.push(`order=${encodeURIComponent(options.order)}`)
+  const rs = Math.max(0, Math.floor(options.rangeStart))
+  const re = Math.max(rs, Math.floor(options.rangeEnd))
+  const res = await supabaseFetch(pathStr + '?' + query.join('&'), {
+    method: 'GET',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Accept: 'application/json',
+      Range: `${rs}-${re}`,
+    },
+  })
+  if (!res.ok) throw new Error('Supabase select failed: ' + (await res.text()))
+  return res.json()
+}
+
+/**
+ * 필터에 맞는 행을 Range 페이지로 반복 조회해 전부 수집 (상한 도달·빈 페이지에서 중단)
+ * schedules 등 행 수가 계속 늘어나도 한 번의 고정 limit에 잘리지 않게 할 때 사용
+ */
+export async function supabaseSelectFilterAllPages(
+  table: string,
+  filter: string,
+  options: { order?: string; select?: string; pageSize?: number; maxRows?: number } = {}
+): Promise<unknown[]> {
+  const pageSize = Math.min(Math.max(500, Number(options.pageSize) || 8000), 20000)
+  const maxRows = Math.min(Math.max(pageSize, Number(options.maxRows) || 2_000_000), 5_000_000)
+  const all: unknown[] = []
+  let start = 0
+  while (all.length < maxRows) {
+    const end = start + pageSize - 1
+    const batch = (await supabaseSelectFilterRange(table, filter, {
+      order: options.order,
+      select: options.select,
+      rangeStart: start,
+      rangeEnd: end,
+    })) as unknown[]
+    if (!Array.isArray(batch) || batch.length === 0) break
+    all.push(...batch)
+    if (batch.length < pageSize) break
+    start += pageSize
+  }
+  return all
+}
+
 export async function supabaseUpdateByFilter(
   table: string,
   filter: string,

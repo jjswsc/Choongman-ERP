@@ -15,6 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -45,17 +53,12 @@ import {
   InboundGuideContent,
   type InboundTableRow,
 } from "@/components/inbound"
+import { parsePurchaseOrderCart } from "@/lib/purchase-order-cart"
 
 const OFFICE_STORES = ["본사", "Office", "오피스", "본점"]
 
 function parsePoCart(json: string | undefined): { code?: string; name?: string; price?: number; qty?: number }[] {
-  if (!json || typeof json !== "string") return []
-  try {
-    const arr = JSON.parse(json)
-    return Array.isArray(arr) ? arr : []
-  } catch {
-    return []
-  }
+  return parsePurchaseOrderCart(json).items
 }
 
 interface InboundCartItem {
@@ -607,14 +610,24 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             <p className="text-xs text-muted-foreground">{isOffice ? t("inPageSubOffice") : t("inPageSubStoreDirect")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "guide")} className="space-y-4">
-          <TabsList className="grid w-full max-w-2xl mb-4 grid-cols-3">
-            <TabsTrigger value="new" className="text-sm font-medium">{t("inTabNew")}</TabsTrigger>
-            <TabsTrigger value="hist" className="text-sm font-medium">{t("inTabHist")}</TabsTrigger>
-            <TabsTrigger value="guide" className="text-sm font-medium">{t("inTabGuide")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "guide")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-3")}>
+                <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                  {t("inTabNew")}
+                </TabsTrigger>
+                <TabsTrigger value="hist" className={adminTabsTriggerGridCn}>
+                  {t("inTabHist")}
+                </TabsTrigger>
+                <TabsTrigger value="guide" className={adminTabsTriggerGridCn}>
+                  {t("inTabGuide")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="new">
+          <TabsContent value="new" className={adminTabsContentCn}>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="md:col-span-2 space-y-4">
                   <div className="rounded-xl border bg-card p-5">
@@ -824,7 +837,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
               </div>
             </TabsContent>
 
-          <TabsContent value="hist">
+          <TabsContent value="hist" className={adminTabsContentCn}>
             <InboundFilterBar
               totalAmount={periodTotalFormatted}
               isOffice={isOffice}
@@ -882,7 +895,7 @@ ${row.poNo ? `<p><strong>${t("inPoNo") || "PO 번호"}:</strong> ${(row.poNo || 
             />
           </TabsContent>
 
-          <TabsContent value="guide" className="mt-4">
+          <TabsContent value="guide" className={adminTabsContentCn}>
             <InboundGuideContent />
           </TabsContent>
         </Tabs>

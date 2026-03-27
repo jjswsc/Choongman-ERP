@@ -2,6 +2,7 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,6 +32,7 @@ export function AdminLeaveApproval() {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
+  const searchParams = useSearchParams()
 
   const [leaveDateFilterType, setLeaveDateFilterType] = useState<'request' | 'leave'>('leave')
   const [leaveStart, setLeaveStart] = useState(todayStr)
@@ -44,6 +46,7 @@ export function AdminLeaveApproval() {
   const [certPreviewUrl, setCertPreviewUrl] = useState<string | null>(null)
   const [rejectDialog, setRejectDialog] = useState<{ id: number } | null>(null)
   const [rejectReason, setRejectReason] = useState("")
+  const [leaveNameFilter, setLeaveNameFilter] = useState("")
 
   const { stores: storeList } = useStoreList()
   useEffect(() => {
@@ -59,11 +62,75 @@ export function AdminLeaveApproval() {
     })
   }, [auth?.store, auth?.role, storeList])
 
+  const isOffice = auth?.role === "director" || auth?.role === "officer"
+
+  /** 급여 수정 등에서 ?month=yyyy-MM&store&name&status=all 로 진입 시 기간·조회 자동 적용 */
+  useEffect(() => {
+    if (!auth?.store) return
+    const month = searchParams.get("month")
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return
+
+    const [y, mo] = month.split("-").map(Number)
+    const start = `${month}-01`
+    const lastD = new Date(y, mo, 0)
+    const mm = String(mo).padStart(2, "0")
+    const end = `${y}-${mm}-${String(lastD.getDate()).padStart(2, "0")}`
+
+    const storeRaw = searchParams.get("store")
+    const decStore = storeRaw ? decodeURIComponent(storeRaw).trim() : ""
+    const nameRaw = searchParams.get("name")
+    const decName = nameRaw ? decodeURIComponent(nameRaw).trim() : ""
+
+    setLeaveStart(start)
+    setLeaveEnd(end)
+    setLeaveDateFilterType("leave")
+    if (searchParams.get("status") === "all") setLeaveStatusFilter("All")
+
+    if (!isOffice && auth.store) {
+      setLeaveStoreFilter(auth.store)
+    } else if (decStore) {
+      setLeaveStoreFilter(decStore)
+    }
+
+    if (decName) setLeaveNameFilter(decName)
+
+    const apiStore = !isOffice && auth.store ? auth.store : decStore && decStore !== "All" ? decStore : undefined
+
+    setLeaveLoading(true)
+    const statusForApi = searchParams.get("status") === "all" ? "All" : leaveStatusFilter
+
+    getLeavePendingList({
+      startStr: start,
+      endStr: end,
+      store: apiStore,
+      typeFilter: undefined,
+      status: statusForApi,
+      userStore: auth.store,
+      userRole: auth.role,
+      dateFilterType: "leave",
+    })
+      .then(setLeaveList)
+      .catch(() => setLeaveList([]))
+      .finally(() => setLeaveLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 급여에서 넘긴 쿼리 문자열이 바뀔 때만 자동 조회
+  }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
+
   const statusLabelMap: Record<string, string> = { "대기": "statusPending", "승인": "statusApproved", "반려": "statusRejected" }
   const leaveTypeToKey: Record<string, string> = { "연차": "annual", "ลากิจ": "lakij", "반차": "half", "병가": "sick", "무급휴가": "unpaid" }
   const translateLeaveType = (type: string) => leaveTypeToKey[type] ? t(leaveTypeToKey[type] as "annual" | "half" | "sick" | "unpaid" | "lakij") : type
 
   const translateApiMessage = (msg: string | undefined) => translateApiMsg(msg, t)
+
+  const leaveStoreSelectValue =
+    leaveStores.length > 0 && leaveStores.includes(leaveStoreFilter) ? leaveStoreFilter : leaveStores[0] ?? "All"
+
+  const nameQ = leaveNameFilter.trim().toLowerCase()
+  const visibleLeaveList = nameQ
+    ? leaveList.filter(
+        (item) =>
+          (item.name || "").toLowerCase().includes(nameQ) || (item.nick || "").toLowerCase().includes(nameQ)
+      )
+    : leaveList
 
   const loadLeaveList = () => {
     if (!auth?.store) return
@@ -172,6 +239,16 @@ export function AdminLeaveApproval() {
               <SelectItem value="All">{t("all")}</SelectItem>
             </SelectContent>
           </Select>
+          <div className="min-w-[120px] flex-1 space-y-1 sm:max-w-[200px]">
+            <label className="sr-only">{t("leave_filter_name")}</label>
+            <Input
+              type="search"
+              value={leaveNameFilter}
+              onChange={(e) => setLeaveNameFilter(e.target.value)}
+              placeholder={t("leave_filter_name")}
+              className="h-9 text-xs"
+            />
+          </div>
           <Button className="h-9 shrink-0 px-4 font-medium" onClick={loadLeaveList} disabled={leaveLoading}>
           <Search className="mr-1.5 h-3.5 w-3.5" />
           {leaveLoading ? t("loading") : t("search")}
@@ -180,6 +257,8 @@ export function AdminLeaveApproval() {
         <div className="overflow-x-auto -mx-2">
           {leaveList.length === 0 ? (
             <p className="py-6 text-center text-xs text-muted-foreground">{t("adminLeaveNoResult")}</p>
+          ) : visibleLeaveList.length === 0 ? (
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("pay_hist_no_match")}</p>
           ) : (
             <table className="w-full text-xs border-collapse">
               <thead>
@@ -195,7 +274,7 @@ export function AdminLeaveApproval() {
                 </tr>
               </thead>
               <tbody>
-                {leaveList.map((item) => (
+                {visibleLeaveList.map((item) => (
                   <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30">
                     <td className="p-2 text-center">{item.store}</td>
                     <td className="p-2 text-center whitespace-nowrap">{item.name}{item.nick ? ` (${displayLabelShort(item.nick)})` : ""}</td>

@@ -2189,6 +2189,7 @@ export default function PosTerminalPage() {
             <TableOrderPanel
               tableName={servingTable.name}
               order={servingTable.order}
+              allTables={currentStore?.tables ?? []}
               deliveryApps={deliveryAppsFromApi}
               onServed={refetchStores}
               onAddOrder={() => {

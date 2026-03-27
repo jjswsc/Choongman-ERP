@@ -81,6 +81,23 @@ export function canBulkReconcileOrderReceivables(role: string): boolean {
   return canManageReceivablePayableAllStores(role)
 }
 
+/** 미수금 목록에서 주문 건 수금 확인(receive_checked) 수정 가능 */
+export function canUpdateReceivableReceiveCheck(
+  role: string,
+  userStore: string,
+  rowStoreName: string
+): boolean {
+  if (canManageReceivablePayableAllStores(role)) return true
+  const r = String(role || "").toLowerCase().trim()
+  const restricted =
+    (r.includes(MANAGER_ROLE) || r.includes(FRANCHISEE_ROLE)) &&
+    !canManageReceivablePayableAllStores(role)
+  if (!restricted) return false
+  const us = String(userStore || "").trim()
+  const sn = String(rowStoreName || "").trim()
+  return Boolean(us && sn && us === sn)
+}
+
 /** 관리자 페이지 접근 가능 (본사 + 매니저 + 가맹점주 + 회계직원 + POS 직원) */
 export function canAccessAdmin(role: string): boolean {
   return (

@@ -49,3 +49,27 @@ export function resignInPeriod(resign: string, startYmd: string, endYmd: string)
   if (!r) return false
   return r >= startYmd && r <= endYmd
 }
+
+/** YYYY-MM-DD에 일수 더하기 (달력일, 문자열 비교용) */
+export function addDaysToYmd(ymd: string, deltaDays: number): string {
+  const y = Number(ymd.slice(0, 4))
+  const m = Number(ymd.slice(5, 7))
+  const d = Number(ymd.slice(8, 10))
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return ymd
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays))
+  const yy = dt.getUTCFullYear()
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getUTCDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+/**
+ * 퇴사일이 [todayYmd, windowEndYmd] 안에 있고, todayYmd 시점 재직인 경우.
+ * (퇴사일 미입력·과거 퇴사는 제외)
+ */
+export function isResignScheduledInWindow(join: string, resign: string, todayYmd: string, windowEndYmd: string): boolean {
+  const r = toYmd(resign)
+  if (!r) return false
+  if (!isEmployedAsOf(join, resign, todayYmd)) return false
+  return r >= todayYmd && r <= windowEndYmd
+}

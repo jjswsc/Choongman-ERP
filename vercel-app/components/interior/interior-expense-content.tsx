@@ -3,6 +3,15 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Plus, Pencil, Trash2, Banknote, Package, CreditCard } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -484,21 +493,25 @@ function InteriorDirectPurchaseTab({ projectId, t }: { projectId: string; t: (ke
 
 export function InteriorExpenseContent({ projectId, t }: InteriorExpenseContentProps) {
   return (
-    <Tabs defaultValue="expense" className="w-full">
-      <TabsList>
-        <TabsTrigger value="expense" className="gap-1.5">
-          <Banknote className="h-4 w-4" />
-          {t("interiorExpenseTab") || "비용"}
-        </TabsTrigger>
-        <TabsTrigger value="direct" className="gap-1.5">
-          <Package className="h-4 w-4" />
-          {t("interiorDirectPurchase") || "직매입"}
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="expense" className="mt-4">
+    <Tabs defaultValue="expense" className={adminTabsRootCn}>
+      <div className={adminTabsBarCn}>
+        <div className={adminTabsScrollCn}>
+          <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+            <TabsTrigger value="expense" className={adminTabsTriggerCn}>
+              <Banknote className={adminTabsIconCn} aria-hidden />
+              {t("interiorExpenseTab") || "비용"}
+            </TabsTrigger>
+            <TabsTrigger value="direct" className={adminTabsTriggerCn}>
+              <Package className={adminTabsIconCn} aria-hidden />
+              {t("interiorDirectPurchase") || "직매입"}
+            </TabsTrigger>
+          </TabsList>
+        </div>
+      </div>
+      <TabsContent value="expense" className={adminTabsContentCn}>
         <InteriorExpenseTab projectId={projectId} t={t} />
       </TabsContent>
-      <TabsContent value="direct" className="mt-4">
+      <TabsContent value="direct" className={adminTabsContentCn}>
         <InteriorDirectPurchaseTab projectId={projectId} t={t} />
       </TabsContent>
     </Tabs>

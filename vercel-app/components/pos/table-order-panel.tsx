@@ -1,7 +1,7 @@
 'use client'
 import { appAlert, appConfirm } from "@/lib/app-message"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -10,18 +10,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { Order } from '@/lib/pos-types'
+import type { Order, Table } from '@/lib/pos-types'
 import type { PosDeliveryApp } from '@/lib/api-client'
-import { markPosOrderItemServed, updatePosOrder, updatePosOrderStatus } from '@/lib/api-client'
+import {
+  markPosOrderItemServed,
+  posDineInTableMerge,
+  posDineInTableMove,
+  updatePosOrder,
+  updatePosOrderStatus,
+} from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { translatePosMenuLineForReceipt, translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
-import { Check, CheckCircle, Clock, Users, XCircle } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Check, CheckCircle, Clock, Users, XCircle, ArrowRightLeft, Combine } from 'lucide-react'
 import { useLang } from '@/lib/lang-context'
 import { formatPosOrderMonthDayTime } from '@/lib/pos-datetime-locale'
 
 export interface TableOrderPanelProps {
   tableName: string
   order: Order | null
+  /** 테이블 이동·합석용 (매장 전체 테이블 목록) */
+  allTables?: Table[]
   deliveryApps?: PosDeliveryApp[]
   onServed?: () => void
   onAddOrder?: () => void
@@ -60,6 +70,7 @@ function getPlatformAndOrderNo(order: Order, deliveryApps?: PosDeliveryApp[]): {
 export function TableOrderPanel({
   tableName,
   order,
+  allTables = [],
   deliveryApps = [],
   onServed,
   onAddOrder,
@@ -74,6 +85,7 @@ export function TableOrderPanel({
   const showPlatformPayOption = dineOutApps.length > 0
   const isServedReadyForPayment = order?.status === 'ready'
   const isPaidPrepaid = order?.status === 'paid'
+  const mergeDisabledByPayment = isPaidPrepaid
   const [itemServed, setItemServed] = useState<Record<string, boolean>>({})
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [savingItemId, setSavingItemId] = useState<string | null>(null)
@@ -126,8 +138,50 @@ export function TableOrderPanel({
   const [platformPaymentConfirmOpen, setPlatformPaymentConfirmOpen] = useState(false)
   const [platformPaymentSubmitting, setPlatformPaymentSubmitting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [moveTargetName, setMoveTargetName] = useState('')
+  const [mergeTargetName, setMergeTargetName] = useState('')
+  const [mergeDirection, setMergeDirection] = useState<'into_selected' | 'into_current'>('into_selected')
+  const [transferSubmitting, setTransferSubmitting] = useState(false)
 
   const canCancel = order && !['completed', 'cancelled'].includes(order.status ?? '')
+  const currentNameNorm = String(tableName ?? '').trim()
+  const emptyTableOptions = useMemo(
+    () =>
+      allTables.filter((t) => {
+        const n = String(t.name ?? '').trim()
+        return n && n !== currentNameNorm && !t.isOccupied
+      }),
+    [allTables, currentNameNorm]
+  )
+  const mergePeerOptions = useMemo(
+    () =>
+      allTables.filter((t) => {
+        const n = String(t.name ?? '').trim()
+        if (!n || n === currentNameNorm) return false
+        const o = t.order
+        if (!t.isOccupied || !o || String(o.id) === String(order?.id ?? '')) return false
+        if (o.status === 'paid') return false
+        return true
+      }),
+    [allTables, currentNameNorm, order?.id]
+  )
+
+  useEffect(() => {
+    if (moveOpen) {
+      const first = emptyTableOptions[0]?.name
+      setMoveTargetName(first ? String(first) : '')
+    }
+  }, [moveOpen, emptyTableOptions])
+
+  useEffect(() => {
+    if (mergeOpen) {
+      const first = mergePeerOptions[0]?.name
+      setMergeTargetName(first ? String(first) : '')
+      setMergeDirection('into_selected')
+    }
+  }, [mergeOpen, mergePeerOptions])
 
   const handleCancelOrder = async () => {
     if (!order || !await appConfirm(t('posCancelConfirm') || '이 주문을 취소하시겠습니까?')) return
@@ -197,6 +251,67 @@ export function TableOrderPanel({
     }
   }
 
+  const handleTableMove = async () => {
+    if (!order || order.type !== 'dine-in' || !moveTargetName.trim()) return
+    const msg = `${translateReceiptTableDisplayName(tableName, t)} → ${translateReceiptTableDisplayName(moveTargetName.trim(), t)}`
+    if (!(await appConfirm(`${t('posTableMoveConfirm') || '이동'}? ${msg}`))) return
+    setTransferSubmitting(true)
+    try {
+      const res = await posDineInTableMove({
+        orderId: Number(order.id),
+        targetTableName: moveTargetName.trim(),
+      })
+      if (!res.success) {
+        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        return
+      }
+      setMoveOpen(false)
+      onServed?.()
+      onClose?.()
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setTransferSubmitting(false)
+    }
+  }
+
+  const handleTableMerge = async () => {
+    if (!order || order.type !== 'dine-in' || !mergeTargetName.trim()) return
+    const peer = allTables.find((x) => String(x.name ?? '').trim() === mergeTargetName.trim())
+    if (!peer?.order) return
+    const peerLabel = translateReceiptTableDisplayName(peer.name, t)
+    const hereLabel = translateReceiptTableDisplayName(tableName, t)
+    const detail =
+      mergeDirection === 'into_selected'
+        ? `${hereLabel} → ${peerLabel} (${t('posTableMergeIntoSelected') || ''})`
+        : `${peerLabel} → ${hereLabel} (${t('posTableMergeIntoCurrent') || ''})`
+    if (
+      !(await appConfirm(
+        `${t('posTableMergeConfirm') || '합석'}?\n${detail}\n${t('posTableMergeHint') || ''}`
+      ))
+    )
+      return
+    setTransferSubmitting(true)
+    try {
+      const keepId =
+        mergeDirection === 'into_selected' ? Number(peer.order.id) : Number(order.id)
+      const absorbId =
+        mergeDirection === 'into_selected' ? Number(order.id) : Number(peer.order.id)
+      const res = await posDineInTableMerge({ keepOrderId: keepId, absorbOrderId: absorbId })
+      if (!res.success) {
+        await appAlert(res.message || (t('processFail') || '처리 실패'))
+        return
+      }
+      setMergeOpen(false)
+      onServed?.()
+      if (mergeDirection === 'into_selected') onClose?.()
+    } catch (e) {
+      await appAlert(String(e))
+    } finally {
+      setTransferSubmitting(false)
+    }
+  }
+
   return (
     <div className="h-full flex flex-col border-l border-border bg-card">
       <div className="px-3 py-3 border-b flex items-center justify-between">
@@ -226,6 +341,41 @@ export function TableOrderPanel({
                   {t('posPeopleUnit') || ''}
                 </span>
               </span>
+            </div>
+          )}
+
+          {order.type === 'dine-in' && allTables.length > 0 && (
+            <div className="rounded-lg border border-border/80 bg-muted/25 p-2.5 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground leading-snug">
+                {t('posTableMoveTitle') || '테이블 이동'} · {t('posTableMergeTitle') || '합석'}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5 text-xs font-semibold"
+                  disabled={emptyTableOptions.length === 0 || transferSubmitting}
+                  onClick={() => setMoveOpen(true)}
+                >
+                  <ArrowRightLeft className="h-4 w-4 shrink-0" aria-hidden />
+                  {t('posTableMoveTitle') || '이동'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 gap-1.5 text-xs font-semibold"
+                  title={mergeDisabledByPayment ? (t('posTableMergeHint') || '') : undefined}
+                  disabled={
+                    mergePeerOptions.length === 0 || mergeDisabledByPayment || transferSubmitting
+                  }
+                  onClick={() => setMergeOpen(true)}
+                >
+                  <Combine className="h-4 w-4 shrink-0" aria-hidden />
+                  {t('posTableMergeTitle') || '합석'}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -396,6 +546,98 @@ export function TableOrderPanel({
           )}
         </div>
       )}
+
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('posTableMoveTitle') || '테이블 이동'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{t('posTableMoveHint') || ''}</p>
+          {emptyTableOptions.length === 0 ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400 py-2">{t('posTableMoveEmpty') || ''}</p>
+          ) : (
+            <div className="space-y-2 py-2">
+              <Label className="text-xs font-semibold">{t('posTableMoveTarget') || '이동할 테이블'}</Label>
+              <Select value={moveTargetName} onValueChange={setMoveTargetName}>
+                <SelectTrigger className="h-10">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {emptyTableOptions.map((tab) => (
+                    <SelectItem key={tab.id} value={String(tab.name ?? '').trim()}>
+                      {translateReceiptTableDisplayName(String(tab.name ?? ''), t)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                className="w-full"
+                disabled={!moveTargetName || transferSubmitting}
+                onClick={() => { void handleTableMove() }}
+              >
+                {transferSubmitting ? '…' : (t('posTableMoveConfirm') || '이동')}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('posTableMergeTitle') || '테이블 합석'}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{t('posTableMergeHint') || ''}</p>
+          <p className="text-xs text-muted-foreground border-l-2 border-muted pl-2">
+            {t('posTableMergeLineRuleHint') || ''}
+          </p>
+          {mergePeerOptions.length === 0 ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400 py-2">{t('posTableMergeNoPeer') || ''}</p>
+          ) : (
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">{t('posTableMergePickTable') || ''}</Label>
+                <Select value={mergeTargetName} onValueChange={setMergeTargetName}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mergePeerOptions.map((tab) => (
+                      <SelectItem key={tab.id} value={String(tab.name ?? '').trim()}>
+                        {translateReceiptTableDisplayName(String(tab.name ?? ''), t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">{t('posTableMergeDirection') || ''}</Label>
+                <Select
+                  value={mergeDirection}
+                  onValueChange={(v) =>
+                    setMergeDirection(v === 'into_current' ? 'into_current' : 'into_selected')
+                  }
+                >
+                  <SelectTrigger className="h-auto min-h-10 py-2 whitespace-normal text-left">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="into_selected">{t('posTableMergeIntoSelected') || ''}</SelectItem>
+                    <SelectItem value="into_current">{t('posTableMergeIntoCurrent') || ''}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                className="w-full"
+                disabled={!mergeTargetName || transferSubmitting}
+                onClick={() => { void handleTableMerge() }}
+              >
+                {transferSubmitting ? '…' : (t('posTableMergeConfirm') || '합석')}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={payChoiceOpen} onOpenChange={setPayChoiceOpen}>
         <DialogContent className="max-w-xs sm:max-w-sm">

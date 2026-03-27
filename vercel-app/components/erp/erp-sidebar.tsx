@@ -159,6 +159,7 @@ const menuSections: MenuSection[] = [
   {
     titleKey: "adminSectionAccounting",
     items: [
+      { titleKey: "adminAccountingPurchaseOrder", icon: FileText, href: "/admin/accounting/purchase-order" },
       { titleKey: "adminPayroll", icon: Wallet, href: "/admin/payroll" },
       { titleKey: "adminReceivablePayable", icon: Banknote, href: "/admin/receivable-payable" },
       { titleKey: "expenseManagementTitle", icon: Wallet, href: "/admin/expense-management" },

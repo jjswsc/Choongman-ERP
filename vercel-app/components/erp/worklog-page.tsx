@@ -2,6 +2,15 @@
 
 import * as React from "react"
 import { ClipboardList, User, ShieldCheck, BarChart3 } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { WorklogMy } from "./worklog-my"
 import { WorklogApproval } from "./worklog-approval"
@@ -34,32 +43,27 @@ export function WorklogPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-        <TabsList className="grid w-full max-w-md grid-cols-3 rounded-xl bg-muted/50 p-1">
-          <TabsTrigger
-            value="my"
-            className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-          >
-            <User className="h-4 w-4" />
-            <span className="text-sm font-semibold">{t("workLogTabMy")}</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="approval"
-            className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-          >
-            <ShieldCheck className="h-4 w-4" />
-            <span className="text-sm font-semibold">{t("workLogTabApproval")}</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="weekly"
-            className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span className="text-sm font-semibold">{t("workLogTabWeekly")}</span>
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="my" className={adminTabsTriggerCn}>
+                <User className={adminTabsIconCn} aria-hidden />
+                {t("workLogTabMy")}
+              </TabsTrigger>
+              <TabsTrigger value="approval" className={adminTabsTriggerCn}>
+                <ShieldCheck className={adminTabsIconCn} aria-hidden />
+                {t("workLogTabApproval")}
+              </TabsTrigger>
+              <TabsTrigger value="weekly" className={adminTabsTriggerCn}>
+                <BarChart3 className={adminTabsIconCn} aria-hidden />
+                {t("workLogTabWeekly")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="my" className="mt-0">
+        <TabsContent value="my" className={adminTabsContentFlushCn}>
           {auth?.user ? (
             <WorklogMy userName={auth.user} />
           ) : (
@@ -68,10 +72,10 @@ export function WorklogPage() {
             </div>
           )}
         </TabsContent>
-        <TabsContent value="approval" className="mt-0">
+        <TabsContent value="approval" className={adminTabsContentFlushCn}>
           <WorklogApproval />
         </TabsContent>
-        <TabsContent value="weekly" className="mt-0">
+        <TabsContent value="weekly" className={adminTabsContentFlushCn}>
           <WorklogWeekly />
         </TabsContent>
       </Tabs>

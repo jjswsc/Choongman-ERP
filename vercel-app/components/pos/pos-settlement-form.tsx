@@ -6,6 +6,12 @@ import { useRouter } from 'next/navigation'
 import { Wallet, Save, RotateCw, Printer, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  adminTabsBarCn,
+  adminTabsListGridClass,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from '@/lib/admin-tab-styles'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -545,10 +551,18 @@ export function PosSettlementForm({ t, compact, offlineAware = false, openMode =
 
         {effectiveStore && !loading && !openMode && (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'entry' | 'history')} className={cn('rounded-xl border bg-card', compact ? 'p-4' : 'p-6')}>
-            <TabsList className="mb-4 grid w-full grid-cols-2">
-              <TabsTrigger value="entry">결산 입력</TabsTrigger>
-              <TabsTrigger value="history">결산 조회</TabsTrigger>
-            </TabsList>
+            <div className={cn(adminTabsBarCn, 'mb-4 overflow-hidden rounded-lg')}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+                  <TabsTrigger value="entry" className={adminTabsTriggerGridCn}>
+                    결산 입력
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                    결산 조회
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+            </div>
 
             <TabsContent value="entry" className="space-y-4">
               <div className="space-y-1.5 rounded-lg bg-muted/30 px-4 py-3">

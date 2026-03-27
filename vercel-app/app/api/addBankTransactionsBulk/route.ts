@@ -3,9 +3,30 @@ import { supabaseInsert, supabaseSelectFilter } from '@/lib/supabase-server'
 import { postBankTransactionJournal } from '@/lib/accounting-posting'
 import { assertAccountSubjectNotHeader } from '@/lib/account-subject-header-guard'
 
-/** 중복 판별용 키: trans_date | trans_type | amount(절대값) | memo */
-function dupKey(transDate: string, transType: string, amount: number, memo: string): string {
-  return `${transDate}|${transType}|${Math.abs(amount)}|${(memo || '').slice(0, 500)}`
+const EXISTING_FETCH_LIMIT = 25000
+
+function normMemoForDedup(memo: string): string {
+  return String(memo || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 500)
+}
+
+/** 동일 날짜·유형·금액에서 CSV 재업로드 시 적요만 오거나 "적요 | 상세"만 오는 경우까지 잡기 */
+function isSameBankMemoLoose(existingMemo: string, incomingMemo: string): boolean {
+  const a = normMemoForDedup(existingMemo)
+  const b = normMemoForDedup(incomingMemo)
+  if (!a && !b) return true
+  if (a === b) return true
+  const aHasDetail = a.includes(' | ')
+  const bHasDetail = b.includes(' | ')
+  if (!bHasDetail && aHasDetail && a.startsWith(`${b} |`)) return true
+  if (bHasDetail && !aHasDetail && b.startsWith(`${a} |`)) return true
+  return false
+}
+
+function bucketKey(transDate: string, transType: string, amount: number): string {
+  return `${transDate}|${transType}|${Math.abs(amount)}`
 }
 
 /** 통장 거래 일괄 등록 (중복 거래는 자동 제외) */
@@ -33,19 +54,21 @@ export async function POST(request: NextRequest) {
     const minDate = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : ''
     const maxDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : ''
 
-    const existingKeys = new Set<string>()
+    const memoBuckets = new Map<string, string[]>()
     if (minDate && maxDate) {
       const filter = `account_id=eq.${accountId}&trans_date=gte.${minDate}&trans_date=lte.${maxDate}`
       const existing = (await supabaseSelectFilter('bank_transactions', filter, {
         select: 'trans_date,trans_type,amount,memo',
-        limit: 5000,
+        limit: EXISTING_FETCH_LIMIT,
       })) as { trans_date?: string; trans_type?: string; amount?: number; memo?: string }[]
       for (const r of existing || []) {
         const d = String(r.trans_date || '').slice(0, 10)
         const t = String(r.trans_type || 'withdraw').toLowerCase()
         const a = Math.abs(Number(r.amount) || 0)
-        const m = String(r.memo || '').trim().slice(0, 500)
-        existingKeys.add(`${d}|${t}|${a}|${m}`)
+        const m = String(r.memo || '')
+        const bk = bucketKey(d, t, a)
+        if (!memoBuckets.has(bk)) memoBuckets.set(bk, [])
+        memoBuckets.get(bk)!.push(m)
       }
     }
 
@@ -67,25 +90,26 @@ export async function POST(request: NextRequest) {
       if (!transDate || amount <= 0) continue
       if (!['deposit', 'withdraw'].includes(transType)) continue
 
-      const key = dupKey(transDate, transType, amount, memo)
-      if (existingKeys.has(key)) {
+      const bk = bucketKey(transDate, transType, amount)
+      const priorMemos = memoBuckets.get(bk) || []
+      if (priorMemos.some((em) => isSameBankMemoLoose(em, memo))) {
         skipped++
         continue
       }
-      existingKeys.add(key)
 
       const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
       const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
       const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
-      const validCategory = transType === 'deposit'
+      let validCategory = transType === 'deposit'
         ? (depositCategories.includes(category) ? category : 'revenue_delivery')
         : (withdrawCategories.includes(category) ? category : 'unclassified')
+      if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
 
       const persistDepositSubject =
         transType === 'deposit' &&
         !['correction', 'loan', 'advance', 'unclassified', 'receivable_receive'].includes(validCategory)
       const persistWithdrawSubject =
-        transType === 'withdraw' && ['transfer', 'expense', 'fixed'].includes(validCategory)
+        transType === 'withdraw' && ['transfer', 'expense'].includes(validCategory)
 
       const row: Record<string, unknown> = {
         account_id: accountId,
@@ -160,7 +184,7 @@ export async function POST(request: NextRequest) {
           })
         } else {
           const journalSubjectId =
-            validCategory === 'expense' || validCategory === 'fixed'
+            validCategory === 'expense'
               ? (accountSubjectId != null && !isNaN(Number(accountSubjectId)) ? Number(accountSubjectId) : null)
               : null
           await postBankTransactionJournal({
@@ -179,6 +203,8 @@ export async function POST(request: NextRequest) {
         console.error('addBankTransactionsBulk posting:', postingErr)
       }
       inserted++
+      if (!memoBuckets.has(bk)) memoBuckets.set(bk, [])
+      memoBuckets.get(bk)!.push(memo)
     }
 
     const msg = skipped > 0

@@ -364,7 +364,7 @@ export function IngredientTable({
   const changeIngredient = useCallback(
     (index: number, code: number) => {
       const updated = [...items]
-      updated[index] = { ...updated[index], ingredientCode: code }
+      updated[index] = { ...updated[index], ingredientCode: code, savedItemCode: undefined }
       onItemsChange(updated)
     },
     [items, onItemsChange]

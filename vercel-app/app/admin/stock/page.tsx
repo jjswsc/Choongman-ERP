@@ -6,6 +6,14 @@ import { BarChart3 } from "lucide-react"
 import { StockTable } from "@/components/erp/stock-table"
 import { StockAdjustDialog } from "@/components/erp/stock-adjust-dialog"
 import { StockAdjustmentHistory } from "@/components/erp/stock-adjustment-history"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -203,12 +211,20 @@ export default function StockPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="list" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="list">{t("stockTabList")}</TabsTrigger>
-            <TabsTrigger value="history">{t("stockTabHistory")}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="list">
+        <Tabs defaultValue="list" className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
+                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                  {t("stockTabList")}
+                </TabsTrigger>
+                <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                  {t("stockTabHistory")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="list" className={adminTabsContentCn}>
             <StockTable
               list={list}
               stores={storesForFilter}
@@ -232,7 +248,7 @@ export default function StockPage() {
               onToggleOrderDisabled={handleToggleOrderDisabled}
             />
           </TabsContent>
-          <TabsContent value="history">
+          <TabsContent value="history" className={adminTabsContentCn}>
             <StockAdjustmentHistory isManager={isManager} userStore={userStore} />
           </TabsContent>
         </Tabs>

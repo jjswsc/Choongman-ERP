@@ -35,6 +35,12 @@ export interface PoPrintData {
   userName: string
   status?: string
   withholdingTaxAmount?: number
+  /** 회계 PO: 연결 매장 */
+  relatedStore?: string
+  /** 회계 PO: 매장별 거래처 표시명 */
+  storeVendorName?: string
+  /** 외부/타사 PO 양식 참고 문구 */
+  poFormatLabel?: string
 }
 
 export interface PoPrintCompany {
@@ -98,6 +104,9 @@ export function PurchaseOrderPrint({
     receivedBy?: string
     signatureDate?: string
     authorizedSignatureStamp?: string
+    poMetaStore?: string
+    poMetaStoreVendor?: string
+    poFormatBadgeExternal?: string
   }
 }) {
   const t = (key: keyof NonNullable<typeof labels>) => labels?.[key] ?? key
@@ -113,8 +122,11 @@ export function PurchaseOrderPrint({
             <h1 className="text-3xl font-bold tracking-tight">
               {t("poTitle") || "PURCHASE ORDER"}
             </h1>
+            {data.poFormatLabel ? (
+              <p className="mt-1 max-w-xl text-sm font-medium leading-snug text-white/95">{data.poFormatLabel}</p>
+            ) : null}
             <Badge variant="secondary" className="mt-2 bg-white/20 text-white hover:bg-white/30">
-              Original
+              {data.poFormatLabel ? t("poFormatBadgeExternal") || "External format" : "Original"}
             </Badge>
           </div>
           <div className="text-right text-sm space-y-1">
@@ -183,6 +195,22 @@ export function PurchaseOrderPrint({
                 <span>Phone:</span>
                 <span>{data.vendorPhone || "-"}</span>
               </div>
+              {(data.relatedStore || data.storeVendorName) && (
+                <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-600">
+                  {data.relatedStore ? (
+                    <p>
+                      <span className="font-medium text-slate-800">{t("poMetaStore") || "Store"}:</span>{" "}
+                      {data.relatedStore}
+                    </p>
+                  ) : null}
+                  {data.storeVendorName ? (
+                    <p className="mt-0.5">
+                      <span className="font-medium text-slate-800">{t("poMetaStoreVendor") || "Store vendor"}:</span>{" "}
+                      {data.storeVendorName}
+                    </p>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -311,7 +339,7 @@ export function PurchaseOrderPrint({
           <div className="w-80 space-y-2">
             <div className="flex justify-between text-sm py-2">
               <span className="text-muted-foreground">
-                {t("subtotal") || "Subtotal"}:
+                {t("subtotal") || "Subtotal:"}
               </span>
               <span className="font-medium">
                 {formatCurrency(data.subtotal)} THB
@@ -338,7 +366,7 @@ export function PurchaseOrderPrint({
               )}
             <div className="flex justify-between py-3 bg-[#1e4d8c] text-white -mx-4 px-4 rounded-lg mt-2">
               <span className="font-bold text-lg">
-                {t("grandTotal") || "Grand Total"}:
+                {t("grandTotal") || "Grand Total:"}
               </span>
               <span className="font-bold text-lg">
                 {formatCurrency(

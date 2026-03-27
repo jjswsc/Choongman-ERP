@@ -47,7 +47,7 @@ export function suggestWithdrawWithRules(
     if (rule.transType !== 'withdraw') continue
     if (rule.keyword && m.includes(rule.keyword.toLowerCase())) {
       return {
-        category: rule.category,
+        category: rule.category === 'fixed' ? 'expense' : rule.category,
         accountSubjectId: rule.accountSubjectId ?? undefined,
       }
     }

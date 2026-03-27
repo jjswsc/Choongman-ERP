@@ -15,6 +15,7 @@ export async function GET() {
       tax_id?: string
       phone?: string
       bank_account_no?: string
+      sales_outlet?: string
     }[] | null
 
     const list = (rows || [])
@@ -31,6 +32,7 @@ export async function GET() {
         taxId: String((row as { tax_id?: string }).tax_id || '').trim(),
         phone: String((row as { phone?: string }).phone || '').trim(),
         bankAccountNo: String((row as { bank_account_no?: string }).bank_account_no || '').trim() || null,
+        salesOutlet: String(row.sales_outlet || '').trim() || null,
       }))
 
     return NextResponse.json(list, { headers })

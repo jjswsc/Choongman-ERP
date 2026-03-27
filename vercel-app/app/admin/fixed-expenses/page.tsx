@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 export default function FixedExpensesPage() {
   const router = useRouter()
   useEffect(() => {
-    router.replace("/admin/bank-transactions?tab=fixed-expenses")
+    router.replace("/admin/bank-transactions?tab=query")
   }, [router])
   return null
 }

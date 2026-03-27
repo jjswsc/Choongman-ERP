@@ -12,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Settings } from "lucide-react"
@@ -240,15 +248,27 @@ export function AdminSettings() {
           <h1 className="text-xl font-bold tracking-tight">{t("adminSettings")}</h1>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "notification" | "about")}>
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
-            <TabsTrigger value="office">{t("settings_head_office")}</TabsTrigger>
-            <TabsTrigger value="permission">{t("settings_menu_permission")}</TabsTrigger>
-            <TabsTrigger value="notification">{t("settings_notification_tab")}</TabsTrigger>
-            <TabsTrigger value="about">{t("settings_permission_title")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "office" | "permission" | "notification" | "about")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-2", "sm:grid-cols-4")}>
+                <TabsTrigger value="office" className={adminTabsTriggerGridCn}>
+                  {t("settings_head_office")}
+                </TabsTrigger>
+                <TabsTrigger value="permission" className={adminTabsTriggerGridCn}>
+                  {t("settings_menu_permission")}
+                </TabsTrigger>
+                <TabsTrigger value="notification" className={adminTabsTriggerGridCn}>
+                  {t("settings_notification_tab")}
+                </TabsTrigger>
+                <TabsTrigger value="about" className={adminTabsTriggerGridCn}>
+                  {t("settings_permission_title")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="office" className="mt-4">
+          <TabsContent value="office" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <p className="text-xs text-muted-foreground mb-4">{t("settings_head_office_desc")}</p>
@@ -281,7 +301,7 @@ export function AdminSettings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="permission" className="mt-4">
+          <TabsContent value="permission" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -338,7 +358,7 @@ export function AdminSettings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="notification" className="mt-4">
+          <TabsContent value="notification" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <p className="text-xs text-muted-foreground mb-4">{t("settings_notification_desc")}</p>
@@ -375,7 +395,7 @@ export function AdminSettings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="about" className="mt-4">
+          <TabsContent value="about" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6 space-y-6">
                 <p className="text-sm text-muted-foreground">{t("settings_perm_intro")}</p>

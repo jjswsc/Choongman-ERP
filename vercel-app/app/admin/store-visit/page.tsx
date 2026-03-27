@@ -1,6 +1,15 @@
 "use client"
 
 import { MapPin } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
@@ -25,19 +34,29 @@ export default function Page() {
           </div>
         </div>
 
-        <Tabs defaultValue="list" className="w-full">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3 mb-4">
-            <TabsTrigger value="list" className="text-sm font-medium">{t("tab_visit_list")}</TabsTrigger>
-            <TabsTrigger value="today" className="text-sm font-medium">{t("tab_visit_today")}</TabsTrigger>
-            <TabsTrigger value="stats" className="text-sm font-medium">{t("tab_visit_stats")}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="list" className="mt-0 space-y-4">
+        <Tabs defaultValue="list" className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-2xl", "grid-cols-3")}>
+                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                  {t("tab_visit_list")}
+                </TabsTrigger>
+                <TabsTrigger value="today" className={adminTabsTriggerGridCn}>
+                  {t("tab_visit_today")}
+                </TabsTrigger>
+                <TabsTrigger value="stats" className={adminTabsTriggerGridCn}>
+                  {t("tab_visit_stats")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
             <VisitListTab />
           </TabsContent>
-          <TabsContent value="today" className="mt-0 space-y-4">
+          <TabsContent value="today" className={cn(adminTabsContentCn, "space-y-4")}>
             <VisitTodayTab />
           </TabsContent>
-          <TabsContent value="stats" className="mt-0 space-y-4">
+          <TabsContent value="stats" className={cn(adminTabsContentCn, "space-y-4")}>
             <VisitStatsContent />
           </TabsContent>
         </Tabs>

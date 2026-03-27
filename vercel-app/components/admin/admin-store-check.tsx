@@ -12,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -394,19 +402,39 @@ export function AdminStoreCheck() {
           <h1 className="text-xl font-bold tracking-tight">{t("adminStoreCheck")}</h1>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => {
-          setTab(v as "check" | "history" | "failedSummary" | "setting")
-          if (v === "history" || v === "failedSummary") searchHistory()
-          if (v === "setting") loadSettingItems()
-        }}>
-          <TabsList className={cn("grid w-full max-w-2xl", isHQ ? "grid-cols-4" : "grid-cols-3")}>
-            <TabsTrigger value="check">{t("tab_store_check")}</TabsTrigger>
-            <TabsTrigger value="history">{t("tab_store_history")}</TabsTrigger>
-            <TabsTrigger value="failedSummary">{t("tab_store_failed_summary")}</TabsTrigger>
-            {isHQ && <TabsTrigger value="setting">{t("tab_store_setting")}</TabsTrigger>}
-          </TabsList>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setTab(v as "check" | "history" | "failedSummary" | "setting")
+            if (v === "history" || v === "failedSummary") searchHistory()
+            if (v === "setting") loadSettingItems()
+          }}
+          className={adminTabsRootCn}
+        >
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList
+                className={cn(adminTabsListGridClass("max-w-2xl"), isHQ ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}
+              >
+                <TabsTrigger value="check" className={adminTabsTriggerGridCn}>
+                  {t("tab_store_check")}
+                </TabsTrigger>
+                <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                  {t("tab_store_history")}
+                </TabsTrigger>
+                <TabsTrigger value="failedSummary" className={adminTabsTriggerGridCn}>
+                  {t("tab_store_failed_summary")}
+                </TabsTrigger>
+                {isHQ && (
+                  <TabsTrigger value="setting" className={adminTabsTriggerGridCn}>
+                    {t("tab_store_setting")}
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="check" className="mt-4">
+          <TabsContent value="check" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -602,7 +630,7 @@ export function AdminStoreCheck() {
             </Dialog>
           </TabsContent>
 
-          <TabsContent value="failedSummary" className="mt-4">
+          <TabsContent value="failedSummary" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-2 mb-4">
@@ -690,7 +718,7 @@ export function AdminStoreCheck() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="history" className="mt-4">
+          <TabsContent value="history" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-2 mb-4">
@@ -775,7 +803,7 @@ export function AdminStoreCheck() {
           </TabsContent>
 
           {isHQ && (
-            <TabsContent value="setting" className="mt-4">
+            <TabsContent value="setting" className={adminTabsContentCn}>
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">

@@ -40,6 +40,14 @@ import {
 } from "@/lib/pos-delivery-platform"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { cn } from "@/lib/utils"
 import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -696,13 +704,21 @@ export default function PosOrdersPage() {
           </div>
         )}
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="orders">{t("posOrderList") || "POS 주문 내역"}</TabsTrigger>
-            <TabsTrigger value="cookTime">{t("posCookTimeAnalysisTab")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "orders" | "cookTime")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
+                <TabsTrigger value="orders" className={adminTabsTriggerGridCn}>
+                  {t("posOrderList") || "POS 주문 내역"}
+                </TabsTrigger>
+                <TabsTrigger value="cookTime" className={adminTabsTriggerGridCn}>
+                  {t("posCookTimeAnalysisTab")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="orders" className="mt-0">
+          <TabsContent value="orders" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -962,7 +978,7 @@ export default function PosOrdersPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="cookTime" className="mt-0">
+          <TabsContent value="cookTime" className={adminTabsContentFlushCn}>
             <div className="mb-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded bg-muted px-2 py-1">
                 {t("posCookTimeStatCompletedLines")}: {cookingRows.length}

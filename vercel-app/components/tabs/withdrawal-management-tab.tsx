@@ -42,9 +42,42 @@ import {
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { compressImageForUpload } from "@/lib/utils"
 import { useSearchParams, useRouter } from "next/navigation"
+import { isOfficeStore } from "@/lib/permissions"
 
 function todayStrBkk() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" })
+}
+
+/** 퇴사일(resign_date) 기준 재직(방콕): 퇴사일 **다음 날**부터 목록 제외(퇴사 당일까지는 표시). 미입력·형식 이상이면 표시 유지 */
+function isActiveEmployeeByResignBangkok(resign: string | undefined): boolean {
+  const r = String(resign ?? "").trim().slice(0, 10)
+  if (!r) return true
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(r)) return true
+  const today = todayStrBkk()
+  return r >= today
+}
+
+/** 이체→패티캐시: 직원 store와 상단 매장 선택값이 본사 계열이면 표기만 달라도(Office vs CM Office) 같은 매장으로 본다 */
+function storeMatchesForPettyTransfer(empStore: string, selectedStore: string): boolean {
+  const a = String(empStore || "").trim()
+  const b = String(selectedStore || "").trim()
+  if (!a || !b) return false
+  if (a === b) return true
+  if (a.toLowerCase() === b.toLowerCase()) return true
+  return isOfficeStore(a) && isOfficeStore(b)
+}
+
+const PETTY_TRANSFER_JOB_JUNK = new Set(["매장명", "Store", "직급", "Job", "부서"])
+
+/** 이체→패티캐시 첫 셀렉트: 매장은 job→role, 본사(CM Office 등)는 job→grade→role로 직무 그룹 */
+function pettyTransferGroupKey(emp: { store: string; job: string; grade: string; role: string }): string {
+  const officeEmp = isOfficeStore(emp.store || "")
+  const candidates = officeEmp ? [emp.job, emp.grade, emp.role] : [emp.job, emp.role]
+  for (const c of candidates) {
+    const s = String(c || "").trim()
+    if (s && !PETTY_TRANSFER_JOB_JUNK.has(s)) return s
+  }
+  return String(emp.role || "Staff").trim() || "Staff"
 }
 
 const CATEGORY_MAIN_OPTIONS = [
@@ -110,6 +143,11 @@ export function WithdrawalManagementTab() {
   const [subjects, setSubjects] = React.useState<AccountSubjectItem[]>([])
   const [subjectEnglishNames, setSubjectEnglishNames] = React.useState<Record<number, string>>({})
   const [employeeList, setEmployeeList] = React.useState<{ store: string; job: string; name: string; accountNumber: string; bankName: string }[]>([])
+
+  const pettyTransferFirstSelectLabel = React.useMemo(
+    () => (isOfficeStore(storeName) ? t("wm_transferToJob") || "직무" : t("wm_transferToDept") || "부서"),
+    [storeName, t]
+  )
 
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -316,8 +354,29 @@ export function WithdrawalManagementTab() {
 
   React.useEffect(() => {
     if (categoryMain === "transfer" && paymentMethod === "petty" && auth?.role) {
-      getAdminEmployeeList({ userStore: auth?.store || "", userRole: auth?.role || "" })
-        .then((r) => setEmployeeList((r.list || []).map((e) => ({ store: e.store || "", job: e.job || "", name: e.name || "", accountNumber: e.accountNumber || "", bankName: e.bankName || "" }))))
+      getAdminEmployeeList({
+        userStore: auth?.store || "",
+        userRole: auth?.role || "",
+        forPettyTransfer: true,
+      })
+        .then((r) =>
+          setEmployeeList(
+            (r.list || [])
+              .filter((e) => isActiveEmployeeByResignBangkok(e.resign))
+              .map((e) => ({
+                store: e.store || "",
+                job: pettyTransferGroupKey({
+                  store: e.store || "",
+                  job: e.job || "",
+                  grade: e.grade || "",
+                  role: e.role || "",
+                }),
+                name: e.name || "",
+                accountNumber: e.accountNumber || "",
+                bankName: e.bankName || "",
+              }))
+          )
+        )
         .catch(() => setEmployeeList([]))
     }
   }, [categoryMain, paymentMethod, auth?.store, auth?.role])
@@ -611,7 +670,12 @@ export function WithdrawalManagementTab() {
         : undefined)
       const transferMemo =
         categoryMain === "transfer" && effectivePaymentMethod === "petty" && (storeName || transferToDept || transferToEmployee)
-          ? [memoText, storeName && `매장: ${storeName}`, transferToDept && transferToDept !== "__none__" && `부서: ${transferToDept}`, transferToEmployee && transferToEmployee !== "__none__" && `직원: ${transferToEmployee}`]
+          ? [
+              memoText,
+              storeName && `매장: ${storeName}`,
+              transferToDept && transferToDept !== "__none__" && `${pettyTransferFirstSelectLabel}: ${transferToDept}`,
+              transferToEmployee && transferToEmployee !== "__none__" && `직원: ${transferToEmployee}`,
+            ]
             .filter(Boolean)
             .join(" ")
           : memoText
@@ -703,6 +767,21 @@ export function WithdrawalManagementTab() {
     if (!bankTransactionIdParam) return
     const bankTxId = Number(bankTransactionIdParam)
     if (!bankTxId) return
+
+    const redirectAfterBankLinkSuccess = () => {
+      const q = new URLSearchParams()
+      q.set("tab", returnTabParam || "query")
+      if (accountId) q.set("accountId", accountId)
+      const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
+      const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
+      q.set("startStr", start)
+      q.set("endStr", end)
+      if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
+        q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
+      }
+      router.push(`/admin/bank-transactions?${q.toString()}`)
+    }
+
     if (categoryMain === "purchase") {
       const vendor = vendorCode.trim()
       if (!vendor) {
@@ -723,56 +802,117 @@ export function WithdrawalManagementTab() {
           return
         }
         await appAlert(res.message || t("success"))
-        const q = new URLSearchParams()
-        q.set("tab", returnTabParam || "query")
-        if (accountId) q.set("accountId", accountId)
-        const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
-        const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
-        q.set("startStr", start)
-        q.set("endStr", end)
-        if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
-          q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
-        }
-        router.push(`/admin/bank-transactions?${q.toString()}`)
+        redirectAfterBankLinkSuccess()
       } finally {
         setSaving(false)
       }
       return
     }
-    const code = payeeCode.trim()
-    const name = payeeName.trim()
-    if (!code && !name) {
-      await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+
+    if (categoryMain === "expense") {
+      const code = payeeCode.trim()
+      const name = payeeName.trim()
+      if (!code && !name) {
+        await appAlert(t("expensePayeeRequired") || "지급처를 선택하거나 입력해 주세요.")
+        return
+      }
+      setSaving(true)
+      try {
+        const res = await registerExpenseFromBankTransaction({
+          bankTransactionId: bankTxId,
+          payeeCode: code || name,
+          payeeName: name || code,
+          accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
+          memo: memo.trim() || undefined,
+          storeName: storeName || undefined,
+          userName: auth?.user,
+          userRole: auth?.role,
+          updateExisting: updateExistingParam,
+        })
+        if (!res.success) {
+          await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
+          return
+        }
+        await appAlert(res.message || t("success"))
+        redirectAfterBankLinkSuccess()
+      } finally {
+        setSaving(false)
+      }
       return
     }
+
+    const amt = Number(String(amount).replace(/,/g, ""))
+    if (!amt || amt <= 0) {
+      await appAlert(t("pettyAlertAmount") || "금액을 입력해 주세요.")
+      return
+    }
+    if (!accountId) {
+      await appAlert(t("bankAccount") || "계좌를 선택하세요.")
+      return
+    }
+    if (!storeName) {
+      await appAlert(t("expenseStoreSelect") || "매장을 선택하세요.")
+      return
+    }
+    if (categoryMain === "transfer" && effectivePaymentMethod === "petty") {
+      if (!transferToDept || transferToDept === "__none__" || !transferToEmployee || transferToEmployee === "__none__") {
+        await appAlert(t("wm_pettyTransferRecipientRequired") || "부서와 직원명을 선택하세요.")
+        return
+      }
+      if (!transferToAccountNo.trim()) {
+        await appAlert(`${t("inv_account_no") || "계좌번호"}를 입력하세요.`)
+        return
+      }
+    }
+    if (categoryMain === "transfer" && effectivePaymentMethod === "bank" && (!transferBankAccountNo.trim() || !transferBankRecipientName.trim())) {
+      await appAlert(t("wm_transferBankRequired") || "계좌번호와 받는 사람을 입력하세요.")
+      return
+    }
+    if (categoryMain === "transfer" && effectivePaymentMethod === "card" && !transferToCardAccountId) {
+      await appAlert(t("wm_transferCardRequired") || "충전할 카드를 선택하세요.")
+      return
+    }
+
+    const memoText = memo.trim() || undefined
+    let classifyMemo = memoText
+    if (categoryMain === "transfer" && effectivePaymentMethod === "petty" && (storeName || transferToDept || transferToEmployee)) {
+      classifyMemo =
+        [
+          memoText,
+          storeName && `매장: ${storeName}`,
+          transferToDept && transferToDept !== "__none__" && `${pettyTransferFirstSelectLabel}: ${transferToDept}`,
+          transferToEmployee && transferToEmployee !== "__none__" && `직원: ${transferToEmployee}`,
+          transferToAccountNo.trim() && `입금계좌: ${transferToAccountNo.trim()}`,
+        ]
+          .filter(Boolean)
+          .join(" ") || memoText
+    } else if (categoryMain === "transfer" && effectivePaymentMethod === "bank") {
+      classifyMemo =
+        [memoText, transferBankRecipientName && `받는사람: ${transferBankRecipientName}`, transferBankAccountNo && `계좌: ${transferBankAccountNo}`]
+          .filter(Boolean)
+          .join(" / ") || memoText
+    }
+
     setSaving(true)
     try {
-      const res = await registerExpenseFromBankTransaction({
+      const res = await updateExpenseRegisterItem({
         bankTransactionId: bankTxId,
-        payeeCode: code || name,
-        payeeName: name || code,
-        accountSubjectId: accountSubjectId ? Number(accountSubjectId) : null,
-        memo: memo.trim() || undefined,
-        userName: auth?.user,
+        accountId: Number(accountId),
+        transDate,
+        amount: amt,
+        memo: classifyMemo,
+        storeName: storeName || undefined,
+        categoryMain,
+        categorySub: (hasSub || hasTaxSub || hasLoanSub) ? categorySub : undefined,
+        accountSubjectId: null,
         userRole: auth?.role,
-        updateExisting: updateExistingParam,
       })
       if (!res.success) {
         await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail"))
         return
       }
       await appAlert(res.message || t("success"))
-      const q = new URLSearchParams()
-      q.set("tab", returnTabParam || "query")
-      if (accountId) q.set("accountId", accountId)
-      const start = (startStrParam && /^\d{4}-\d{2}-\d{2}$/.test(startStrParam)) ? startStrParam : (transDate || todayStrBkk())
-      const end = (endStrParam && /^\d{4}-\d{2}-\d{2}$/.test(endStrParam)) ? endStrParam : (transDate || todayStrBkk())
-      q.set("startStr", start)
-      q.set("endStr", end)
-      if (returnOpenRegisterTxIdParam && Number(returnOpenRegisterTxIdParam) > 0) {
-        q.set("openRegisterTxId", returnOpenRegisterTxIdParam)
-      }
-      router.push(`/admin/bank-transactions?${q.toString()}`)
+      redirectAfterBankLinkSuccess()
     } finally {
       setSaving(false)
     }
@@ -1228,18 +1368,18 @@ export function WithdrawalManagementTab() {
               <Label>{t("wm_transferTo") || "이체 대상"}</Label>
               <div className="grid grid-cols-[160px_180px_200px_240px] gap-3 items-end max-w-3xl">
                 <div>
-                  <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferToDept") || "부서"}</Label>
+                  <Label className="text-xs text-muted-foreground block mb-1.5">{pettyTransferFirstSelectLabel}</Label>
                   <Select
                     value={transferToDept || "__none__"}
                     onValueChange={(v) => { setTransferToDept(v === "__none__" ? "" : v); setTransferToEmployee(""); setTransferToAccountNo(""); }}
                     disabled={!storeName}
                   >
                     <SelectTrigger className="h-9 w-full">
-                      <SelectValue placeholder={t("wm_transferToDept") || "부서"} />
+                      <SelectValue placeholder={pettyTransferFirstSelectLabel} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
-                      {[...new Set(employeeList.filter((e) => e.store === storeName).map((e) => e.job).filter(Boolean))].sort().map((j) => (
+                      {[...new Set(employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName)).map((e) => e.job).filter(Boolean))].sort().map((j) => (
                         <SelectItem key={j} value={j}>{j}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1252,7 +1392,7 @@ export function WithdrawalManagementTab() {
                     onValueChange={(v) => {
                       setTransferToEmployee(v === "__none__" ? "" : v)
                       if (v && v !== "__none__") {
-                        const emp = employeeList.find((e) => e.store === storeName && e.job === transferToDept && e.name === v)
+                        const emp = employeeList.find((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept && e.name === v)
                         setTransferToAccountNo(emp?.accountNumber || "")
                       } else {
                         setTransferToAccountNo("")
@@ -1265,7 +1405,7 @@ export function WithdrawalManagementTab() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">—</SelectItem>
-                      {employeeList.filter((e) => e.store === storeName && e.job === transferToDept).map((e) => (
+                      {employeeList.filter((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept).map((e) => (
                         <SelectItem key={`${e.store}-${e.job}-${e.name}`} value={e.name}>{e.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1274,7 +1414,7 @@ export function WithdrawalManagementTab() {
                 <div>
                   <Label className="text-xs text-muted-foreground block mb-1.5">{t("wm_transferToEmployeeAccount") || "직원 계좌"}</Label>
                   {transferToEmployee && transferToEmployee !== "__none__" ? (() => {
-                    const emp = employeeList.find((e) => e.store === storeName && e.job === transferToDept && e.name === transferToEmployee)
+                    const emp = employeeList.find((e) => storeMatchesForPettyTransfer(e.store, storeName) && e.job === transferToDept && e.name === transferToEmployee)
                     const hasAccount = emp?.accountNumber
                     return (
                       <div className="h-9 flex items-center text-sm font-medium">
@@ -1410,11 +1550,10 @@ export function WithdrawalManagementTab() {
                 disabled={
                   saving ||
                   !categoryMain ||
-                  (isBankLinkMode && (
-                    categoryMain === "purchase"
-                      ? !vendorCode.trim()
-                      : !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode)
-                  ))
+                  (isBankLinkMode &&
+                    ((categoryMain === "purchase" && !vendorCode.trim()) ||
+                      (categoryMain === "expense" &&
+                        !(payeeManual ? (payeeCode.trim() || payeeName.trim()) : payeeCode))))
                 }
               >
                 <Wallet className="h-4 w-4 mr-1" />

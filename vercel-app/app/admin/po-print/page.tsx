@@ -102,6 +102,9 @@ export default function PoPrintPage() {
       signatureDate: t("inv_date") || "Date",
       authorizedSignatureStamp:
         t("poAuthorizedSignatureStamp") || "Authorized Signature & Company Stamp",
+      poMetaStore: t("poMetaStore") || "Store",
+      poMetaStoreVendor: t("poMetaStoreVendor") || "Store vendor",
+      poFormatBadgeExternal: t("poFormatBadgeExternal") || "External format",
     }),
     [t]
   )

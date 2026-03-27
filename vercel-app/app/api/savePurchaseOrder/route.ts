@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseInsert } from '@/lib/supabase-server'
+import { supabaseInsert, supabaseUpdate } from '@/lib/supabase-server'
+import { serializePurchaseOrderCart, type PoCartMeta } from '@/lib/purchase-order-cart'
+import {
+  findDraftPurchaseOrderForBillingUpsert,
+  normalizeBillingMonthYm,
+  parsePoBillingKindFromBody,
+} from '@/lib/po-billing-upsert'
+import { bangkokDateToUtcRange } from '@/lib/attendance-utils'
 
 export async function POST(request: NextRequest) {
   const headers = new Headers()
@@ -16,6 +23,41 @@ export async function POST(request: NextRequest) {
     const userName = String(body.userName || '').trim()
     const withholdingTaxAmount = Number(body.withholdingTaxAmount ?? body.withholding_tax_amount ?? 0) || 0
     const withholdingTaxRate = body.withholdingTaxRate ?? body.withholding_tax_rate
+
+    const relatedStore = String(body.relatedStore ?? body.related_store ?? '').trim()
+    const storeVendorCode = String(body.storeVendorCode ?? body.store_vendor_code ?? '').trim()
+    const storeVendorName = String(body.storeVendorName ?? body.store_vendor_name ?? '').trim()
+    const poFormatLabel = String(body.poFormatLabel ?? body.po_format_label ?? '').trim()
+
+    const billingMonthYmRaw = body.billingMonthYm ?? body.billing_month_ym
+    const billingKindParsed = parsePoBillingKindFromBody(body.billingKind ?? body.billing_kind)
+    const billingMonthYm = normalizeBillingMonthYm(
+      billingMonthYmRaw != null ? String(billingMonthYmRaw) : ''
+    )
+
+    const billingUpsertEligible =
+      Boolean(relatedStore) && billingMonthYm.length === 7 && billingKindParsed != null
+
+    const orderDateRaw = String(body.orderDate ?? body.order_date ?? '').trim().slice(0, 10)
+    const orderDateNorm = /^\d{4}-\d{2}-\d{2}$/.test(orderDateRaw) ? orderDateRaw : ''
+
+    const meta: PoCartMeta | undefined =
+      relatedStore ||
+      storeVendorCode ||
+      storeVendorName ||
+      poFormatLabel ||
+      billingUpsertEligible ||
+      orderDateNorm
+        ? {
+            relatedStore: relatedStore || undefined,
+            storeVendorCode: storeVendorCode || undefined,
+            storeVendorName: storeVendorName || undefined,
+            poFormatLabel: poFormatLabel || undefined,
+            billingMonthYm: billingUpsertEligible ? billingMonthYm : undefined,
+            billingKind: billingUpsertEligible ? billingKindParsed! : undefined,
+            orderDate: orderDateNorm || undefined,
+          }
+        : undefined
 
     if (!vendorCode || !vendorName || cart.length === 0) {
       return NextResponse.json(
@@ -37,13 +79,54 @@ export async function POST(request: NextRequest) {
     }
     const vat = Math.round(taxableSubtotal * 0.07)
     const total = subtotal + vat
-    const netAmount = Math.max(0, total - withholdingTaxAmount)
 
-    const poNo =
-      'PO-' +
-      new Date().toISOString().slice(0, 10).replace(/-/g, '') +
-      '-' +
-      String(Date.now()).slice(-4)
+    const cartJson = serializePurchaseOrderCart(cart, meta)
+
+    if (billingUpsertEligible) {
+      const existing = await findDraftPurchaseOrderForBillingUpsert({
+        vendorCode,
+        locationCode,
+        relatedStore,
+        billingMonthYm,
+        billingKind: billingKindParsed!,
+      })
+      if (existing) {
+        const patch: Record<string, unknown> = {
+          cart_json: cartJson,
+          subtotal,
+          vat,
+          total,
+          user_name: userName,
+          vendor_name: vendorName,
+          location_name: locationName,
+          location_address: locationAddress,
+        }
+        if (withholdingTaxAmount > 0) {
+          patch.withholding_tax_amount = withholdingTaxAmount
+          if (withholdingTaxRate != null) patch.withholding_tax_rate = Number(withholdingTaxRate) || null
+        } else {
+          patch.withholding_tax_amount = null
+          patch.withholding_tax_rate = null
+        }
+        if (orderDateNorm) {
+          patch.created_at = bangkokDateToUtcRange(orderDateNorm).startISO
+        }
+        await supabaseUpdate('purchase_orders', existing.id, patch)
+        return NextResponse.json(
+          {
+            success: true,
+            id: existing.id,
+            poNo: existing.po_no,
+            updated: true,
+            message: '발주 초안이 최신 내용으로 갱신되었습니다.',
+          },
+          { headers }
+        )
+      }
+    }
+
+    const poNoDatePart = orderDateNorm.replace(/-/g, '') || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    const poNo = 'PO-' + poNoDatePart + '-' + String(Date.now()).slice(-4)
 
     const row: Record<string, unknown> = {
       po_no: poNo,
@@ -52,12 +135,15 @@ export async function POST(request: NextRequest) {
       location_name: locationName,
       location_address: locationAddress,
       location_code: locationCode,
-      cart_json: JSON.stringify(cart),
+      cart_json: cartJson,
       subtotal,
       vat,
       total,
       user_name: userName,
       status: 'Draft',
+    }
+    if (orderDateNorm) {
+      row.created_at = bangkokDateToUtcRange(orderDateNorm).startISO
     }
     if (withholdingTaxAmount > 0) {
       row.withholding_tax_amount = withholdingTaxAmount
@@ -68,7 +154,7 @@ export async function POST(request: NextRequest) {
     const id = Array.isArray(inserted) && inserted[0]?.id != null ? inserted[0].id : null
 
     return NextResponse.json(
-      { success: true, id, poNo, message: '발주가 저장되었습니다.' },
+      { success: true, id, poNo, updated: false, message: '발주가 저장되었습니다.' },
       { headers }
     )
   } catch (e) {

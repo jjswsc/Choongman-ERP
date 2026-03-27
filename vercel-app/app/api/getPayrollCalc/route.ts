@@ -5,7 +5,7 @@ import {
 } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { requireAuth } from '@/lib/verify-auth'
-import { getSSOLimitsByYear } from '@/lib/payroll-utils'
+import { clockOutCountsForPayroll, getSSOLimitsByYear } from '@/lib/payroll-utils'
 import { hasOneYearTenureAsOf } from '@/lib/annual-leave'
 
 const LATE_DED_HOURS_BASE = 208 // 태국 근로기준: 월 208시간
@@ -89,7 +89,7 @@ function buildAttendanceSummary(
       if (!byDay[dayKey].outMs || dt > byDay[dayKey].outMs) {
         byDay[dayKey].outMs = dt
         byDay[dayKey].breakMin = Number(r.break_min) || 0
-        byDay[dayKey].outApproved = isApproved
+        byDay[dayKey].outApproved = clockOutCountsForPayroll(r.approved, r.status)
         byDay[dayKey].otMin = Number((r as { ot_min?: number }).ot_min) || 0
         byDay[dayKey].earlyMin = Number((r as { early_min?: number }).early_min) || 0
       }
@@ -406,10 +406,11 @@ export async function GET(request: NextRequest) {
       const isKitchen = /주방|kitchen|chef|쿡|cook/i.test(dept)
       const hazAllow = isKitchen && hazAllowPerDay > 0 ? Math.floor(workDays * hazAllowPerDay) : 0
 
+      // 월 기본급·시급 근무시간에 해당 일의 통상 임금이 이미 포함되므로, 공휴일 가산은 일당(또는 8h분) 1회분만
       let holidayPay = 0
       if (holidayWorkDays > 0) {
-        if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt * 2)
-        else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays * 2)
+        if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt)
+        else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
       }
 
       // 무급 휴가 + 결석 공제 (월급제만, 시급제는 미근무일 이미 급여 없음)

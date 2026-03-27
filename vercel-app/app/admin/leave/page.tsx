@@ -1,15 +1,33 @@
 "use client"
 
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Calendar } from "lucide-react"
 import { AdminLeaveApproval } from "@/components/admin/admin-leave-approval"
 import { AdminLeaveStats } from "@/components/admin/admin-leave-stats"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 
-export default function AdminLeavePage() {
+function AdminLeavePageInner() {
   const { lang } = useLang()
   const t = useT(lang)
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState<"approval" | "stats">("approval")
+
+  useEffect(() => {
+    const p = searchParams.get("tab")
+    if (p === "stats") setTab("stats")
+    else if (p === "approval") setTab("approval")
+  }, [searchParams])
 
   return (
     <div className="flex-1 overflow-auto">
@@ -23,23 +41,41 @@ export default function AdminLeavePage() {
             <p className="text-xs text-muted-foreground">{t("adminLeaveApproval")}</p>
           </div>
         </div>
-        <Tabs defaultValue="approval" className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
-            <TabsTrigger value="approval" className="text-sm font-medium">
-              {t("adminLeaveApproval")}
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="text-sm font-medium">
-              {t("leave_tab_stats")}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="approval">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "approval" | "stats")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="approval" className={adminTabsTriggerCn}>
+                  {t("adminLeaveApproval")}
+                </TabsTrigger>
+                <TabsTrigger value="stats" className={adminTabsTriggerCn}>
+                  {t("leave_tab_stats")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="approval" className={adminTabsContentCn}>
             <AdminLeaveApproval />
           </TabsContent>
-          <TabsContent value="stats">
+          <TabsContent value="stats" className={adminTabsContentCn}>
             <AdminLeaveStats />
           </TabsContent>
         </Tabs>
       </div>
     </div>
+  )
+}
+
+export default function AdminLeavePage() {
+  const { lang } = useLang()
+  const t = useT(lang)
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t("loading")}</div>
+      }
+    >
+      <AdminLeavePageInner />
+    </Suspense>
   )
 }

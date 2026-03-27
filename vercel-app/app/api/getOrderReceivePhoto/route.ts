@@ -1,21 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter } from '@/lib/supabase-server'
 
+/** 수령 사진 URL 허용: http(s), data URL(모든 data:), 프로토콜 상대 // */
+function normalizeReceivePhotoUrl(raw: string): string {
+  const s = raw.trim()
+  if (!s) return s
+  if (s.startsWith('//')) return `https:${s}`
+  return s
+}
+
+function isDisplayableImageRef(s: string): boolean {
+  const t = s.trim()
+  if (!t) return false
+  if (t.toLowerCase().startsWith('data:')) return true
+  if (/^https?:\/\//i.test(t)) return true
+  if (t.startsWith('//')) return true
+  return false
+}
+
 function parseImageUrls(imageUrl: unknown): string[] {
-  if (!imageUrl || typeof imageUrl !== 'string') return []
-  const s = String(imageUrl).trim()
+  const fromArray = (arr: unknown[]): string[] =>
+    arr
+      .filter((u): u is string => typeof u === 'string')
+      .map(normalizeReceivePhotoUrl)
+      .filter(isDisplayableImageRef)
+
+  if (imageUrl == null) return []
+
+  if (Array.isArray(imageUrl)) {
+    return fromArray(imageUrl)
+  }
+
+  if (typeof imageUrl === 'object' && !Array.isArray(imageUrl)) {
+    return fromArray(Object.values(imageUrl as Record<string, unknown>))
+  }
+
+  if (typeof imageUrl !== 'string') return []
+
+  const s = imageUrl.trim()
   if (!s) return []
+
   if (s.startsWith('[')) {
     try {
-      const arr = JSON.parse(s) as unknown[]
-      return (Array.isArray(arr) ? arr : [])
-        .filter((u): u is string => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:image')))
+      const parsed = JSON.parse(s) as unknown
+      if (Array.isArray(parsed)) return fromArray(parsed)
     } catch {
       return []
     }
   }
-  if (s.indexOf('http') === 0 || s.indexOf('data:image') === 0) return [s]
-  return []
+
+  const one = normalizeReceivePhotoUrl(s)
+  return isDisplayableImageRef(one) ? [one] : []
 }
 
 /** 주문 수령 사진 온디맨드 조회 (출고 내역에서 클릭 시 사용) */

@@ -29,7 +29,7 @@ export { apiFetchWithOffline }
 export { loginCheck, changePassword } from './api/auth'
 export { getLoginDataWithCache as getLoginData } from './offline/erp-offline'
 export { useStoreList } from './use-store-list'
-export { invalidateBankTransactionsListCache } from './offline/erp-offline'
+export { invalidateBankTransactionsListCache, invalidatePurchaseOrdersListCache } from './offline/erp-offline'
 
 /** 페이지네이션 목록 API 공통 응답 */
 export interface PaginatedList<T> {
@@ -1409,13 +1409,41 @@ export async function updatePettyCashTransaction(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** 패티캐시 거래 삭제 */
+export async function deletePettyCashTransaction(params: {
+  id: number
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/deletePettyCashTransaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: params.id,
+      userStore: params.userStore,
+      userRole: params.userRole,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 // ─── 미수금/미지급금 관리 ───
 export interface ReceivablePayableItem {
   storeName?: string
   vendorCode?: string
   vendorName?: string
   balance: number
-  items: { id?: number; trans_date?: string; ref_type?: string; ref_id?: number; amount?: number; memo?: string; invoice_no?: string; invoice_received?: boolean }[]
+  items: {
+    id?: number
+    trans_date?: string
+    ref_type?: string
+    ref_id?: number
+    amount?: number
+    memo?: string
+    invoice_no?: string
+    invoice_received?: boolean
+    receive_checked?: boolean
+  }[]
 }
 
 export interface ReceivablePayableSummaryItem {
@@ -2000,6 +2028,20 @@ export async function addBalanceTransaction(params: {
     body: JSON.stringify(params),
   })
   return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+export async function updateReceivableReceiveCheck(params: {
+  id: number
+  receiveChecked: boolean
+  userStore?: string
+  userRole?: string
+}) {
+  const res = await apiFetchWithOffline('/api/updateReceivableReceiveCheck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string; id?: number; receiveChecked?: boolean }>
 }
 
 // ─── 지출 관리 (MVP) ───
@@ -4116,9 +4158,10 @@ export interface PosPromoItem {
   sortOrder: number
 }
 
-export async function getPosPromos(params?: { campaignId?: string }) {
+export async function getPosPromos(params?: { campaignId?: string; standaloneOnly?: boolean }) {
   const q = new URLSearchParams()
   if (params?.campaignId) q.set('campaignId', params.campaignId)
+  if (params?.standaloneOnly) q.set('standaloneOnly', 'true')
   const res = await apiFetchWithOffline('/api/getPosPromos' + (q.toString() ? '?' + q.toString() : ''))
   return res.json() as Promise<PosPromo[]>
 }
@@ -5710,6 +5753,37 @@ export async function updatePosOrder(params: {
   return res.json() as Promise<{ success: boolean; message?: string }>
 }
 
+/** 홀 주문: 빈 테이블로 이동 (table_name만 변경) */
+export async function posDineInTableMove(params: { orderId: number; targetTableName: string }) {
+  const res = await apiFetchWithOffline('/api/posDineInTableActions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'move',
+      orderId: params.orderId,
+      targetTableName: params.targetTableName,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
+/**
+ * 홀 주문 합석: keep 주문에 absorb 주문 품목·인원 등을 합치고 absorb는 cancelled.
+ * 결제 금액이 있는 주문은 합석 불가(API에서 거절).
+ */
+export async function posDineInTableMerge(params: { keepOrderId: number; absorbOrderId: number }) {
+  const res = await apiFetchWithOffline('/api/posDineInTableActions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'merge',
+      keepOrderId: params.keepOrderId,
+      absorbOrderId: params.absorbOrderId,
+    }),
+  })
+  return res.json() as Promise<{ success: boolean; message?: string }>
+}
+
 export async function updatePosOrderStatus(params: { id: number; status: string }) {
   const res = await apiFetchWithOffline('/api/updatePosOrderStatus', {
     method: 'POST',
@@ -6531,11 +6605,12 @@ export interface AdminEmployeeItem {
   photo: string
 }
 
-export async function getAdminEmployeeList(params: { userStore: string; userRole: string }) {
+export async function getAdminEmployeeList(params: { userStore: string; userRole: string; forPettyTransfer?: boolean }) {
   const q = new URLSearchParams({
     userStore: params.userStore,
     userRole: params.userRole,
   })
+  if (params.forPettyTransfer) q.set('forPettyTransfer', '1')
   const res = await apiFetchWithOffline(`/api/getAdminEmployeeList?${q}`)
   const data = await res.json()
   return {
@@ -7170,6 +7245,7 @@ export interface VendorForPurchase {
   taxId?: string
   phone?: string
   bankAccountNo?: string | null
+  salesOutlet?: string | null
 }
 
 export interface ItemByVendor {
@@ -7247,17 +7323,115 @@ export async function savePurchaseOrder(params: {
   locationName: string
   locationAddress: string
   locationCode: string
-  cart: { code: string; name: string; price: number; cost?: number; qty: number }[]
+  cart: { code: string; name: string; price: number; cost?: number; qty: number; store?: string; taxType?: string }[]
   userName: string
   withholdingTaxAmount?: number
   withholdingTaxRate?: number
+  relatedStore?: string
+  storeVendorCode?: string
+  storeVendorName?: string
+  poFormatLabel?: string
+  /** 귀속 월 YYYY-MM + billingKind 있으면 동일 초안 PO가 있으면 갱신 */
+  billingMonthYm?: string
+  billingKind?: 'royalty' | 'delivery_gp' | 'grab_gp' | 'all'
+  /** 본사 발주일 YYYY-MM-DD(방콕). cart_json meta + created_at·PO번호 일자 반영 */
+  orderDate?: string
 }) {
   const res = await apiFetchWithOffline('/api/savePurchaseOrder', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  return res.json() as Promise<{ success: boolean; id?: number; poNo?: string; message?: string }>
+  return res.json() as Promise<{
+    success: boolean
+    id?: number
+    poNo?: string
+    updated?: boolean
+    message?: string
+  }>
+}
+
+export type PoBillingSettingApiRow = {
+  store_name?: string
+  royalty_pct?: number
+  delivery_gp_pct?: number
+  grab_gp_pct?: number
+  label_royalty?: string | null
+  label_delivery_gp?: string | null
+  label_grab_gp?: string | null
+  updated_at?: string
+}
+
+export async function getPoBillingSettings() {
+  const res = await apiFetch('/api/getPoBillingSettings')
+  return res.json() as Promise<{ success: boolean; list: PoBillingSettingApiRow[]; message?: string }>
+}
+
+export async function savePoBillingSettings(
+  rows: {
+    store_name: string
+    royalty_pct: number
+    delivery_gp_pct: number
+    grab_gp_pct: number
+    label_royalty?: string | null
+    label_delivery_gp?: string | null
+    label_grab_gp?: string | null
+  }[]
+): Promise<{ success: boolean; saved?: number; message?: string }> {
+  // 오프라인 래퍼(apiFetchWithOffline)는 실패 시에도 { success: true }를 반환할 수 있어,
+  // 청구 비율은 반드시 서버·DB 반영 여부를 알 수 있게 일반 fetch만 사용한다.
+  const res = await apiFetch('/api/savePoBillingSettings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  })
+  let data: { success?: boolean; saved?: number; message?: string } = {}
+  try {
+    data = (await res.json()) as typeof data
+  } catch {
+    /* empty body 등 */
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      message: data.message || `저장 요청 실패 (${res.status})`,
+    }
+  }
+  return {
+    success: !!data.success,
+    saved: data.saved,
+    message: data.message,
+  }
+}
+
+export async function getPoBillingDraft(params: {
+  store: string
+  startStr: string
+  endStr: string
+  labelRoyalty?: string
+  labelDelivery?: string
+  labelGrab?: string
+  /** 기본 all — royalty | delivery_gp | grab_gp 는 해당 유형만 */
+  mode?: 'all' | 'royalty' | 'delivery_gp' | 'grab_gp'
+}) {
+  const q = new URLSearchParams({
+    store: params.store,
+    startStr: params.startStr,
+    endStr: params.endStr,
+  })
+  if (params.labelRoyalty) q.set('labelRoyalty', params.labelRoyalty)
+  if (params.labelDelivery) q.set('labelDelivery', params.labelDelivery)
+  if (params.labelGrab) q.set('labelGrab', params.labelGrab)
+  if (params.mode && params.mode !== 'all') q.set('mode', params.mode)
+  const res = await apiFetch(`/api/getPoBillingDraft?${q}`)
+  return res.json() as Promise<{
+    success: boolean
+    snapshot?: { totalSales: number; deliverySales: number; grabSales: number }
+    settings?: { royalty_pct: number; delivery_gp_pct: number; grab_gp_pct: number }
+    lines?: { code: string; name: string; price: number; qty: number; taxType: string }[]
+    truncated?: boolean
+    message?: string
+  }>
 }
 
 export interface PurchaseOrderRow {

@@ -12,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Plus, Pencil, Calculator } from "lucide-react"
 import { useStoreList } from "@/lib/api-client"
@@ -184,12 +192,20 @@ export function DepreciationTab() {
       <Card>
         <CardContent className="pt-4">
           <Tabs defaultValue="assets">
-            <TabsList>
-              <TabsTrigger value="assets">고정자산</TabsTrigger>
-              <TabsTrigger value="depreciation">감가상각 실행</TabsTrigger>
-            </TabsList>
+            <div className={adminTabsBarCn}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+                  <TabsTrigger value="assets" className={adminTabsTriggerGridCn}>
+                    고정자산
+                  </TabsTrigger>
+                  <TabsTrigger value="depreciation" className={adminTabsTriggerGridCn}>
+                    감가상각 실행
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+            </div>
 
-            <TabsContent value="assets" className="space-y-4 pt-4">
+            <TabsContent value="assets" className={cn(adminTabsContentFlushCn, "space-y-4 pt-4")}>
               <div className="flex flex-wrap items-center gap-3">
                 <Select value={storeFilter} onValueChange={setStoreFilter}>
                   <SelectTrigger className="w-[140px]">
@@ -315,7 +331,7 @@ export function DepreciationTab() {
               </div>
             </TabsContent>
 
-            <TabsContent value="depreciation" className="space-y-4 pt-4">
+            <TabsContent value="depreciation" className={cn(adminTabsContentFlushCn, "space-y-4 pt-4")}>
               <div className="flex flex-wrap items-center gap-3">
                 <Select value={yearMonth} onValueChange={setYearMonth}>
                   <SelectTrigger className="w-[140px]">

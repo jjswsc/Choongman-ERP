@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
     const store = String(body.store || '').trim()
     const userName = String(body.userName || body.user_name || '').trim()
     const category = String(body.category || 'expense').toLowerCase()
-    const fixedExpenseId = body.fixedExpenseId ?? body.fixed_expense_id
     const accountSubjectId = body.accountSubjectId ?? body.account_subject_id
     const salesDate = body.salesDate ?? body.sales_date
     const expenseDate = body.expenseDate ?? body.expense_date
@@ -45,9 +44,10 @@ export async function POST(request: NextRequest) {
     const amt = transType === 'withdraw' ? -Math.abs(amount) : Math.abs(amount)
     const depositCategories = ['revenue_delivery', 'revenue_card', 'revenue_qr', 'revenue_cash', 'receivable_receive', 'correction', 'loan', 'advance', 'unclassified']
     const withdrawCategories = ['transfer', 'expense', 'fixed', 'purchase_payment', 'correction', 'loan', 'advance', 'unclassified']
-    const validCategory = transType === 'deposit'
+    let validCategory = transType === 'deposit'
       ? (depositCategories.includes(category) ? category : depositCategories[0])
       : (withdrawCategories.includes(category) ? category : 'expense')
+    if (transType === 'withdraw' && validCategory === 'fixed') validCategory = 'expense'
 
     const row: Record<string, unknown> = {
       account_id: accountId,
@@ -59,10 +59,6 @@ export async function POST(request: NextRequest) {
       store: store || null,
       user_name: userName || null,
       category: validCategory,
-    }
-    if (validCategory === 'fixed' && fixedExpenseId != null) {
-      const fid = Number(fixedExpenseId)
-      if (!isNaN(fid)) row.fixed_expense_id = fid
     }
     if (accountSubjectId != null) {
       const asid = Number(accountSubjectId)

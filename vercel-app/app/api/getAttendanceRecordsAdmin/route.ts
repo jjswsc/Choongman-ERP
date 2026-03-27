@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_ADMIN_GRID_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc } from '@/lib/attendance-utils'
 
@@ -9,6 +9,18 @@ const TZ = 'Asia/Bangkok'
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
   const d = new Date(val)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
+}
+
+/** schedules.schedule_date: date 컬럼·ISO 문자열 모두 YYYY-MM-DD로 (타임존 시프트로 키 불일치 방지) */
+function scheduleDateKey(val: string | Date | null | undefined): string {
+  if (val == null) return ''
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10)
+  }
+  const d = new Date(val as string | Date)
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: TZ })
 }
 
@@ -177,10 +189,19 @@ export async function GET(request: NextRequest) {
 
     type SchRow = { schedule_date?: string; store_name?: string; name?: string; plan_in?: string; plan_out?: string; break_start?: string; break_end?: string; plan_in_prev_day?: boolean }
     const scheduleMap: Record<string, SchRow> = {}
-    const schFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr.slice(0, 10)}`
-    const schRows = (await supabaseSelectFilter('schedules', schFilter, { order: 'schedule_date.asc', limit: 1000 })) as SchRow[]
+    /** schedules: 고정 limit는 데이터 증가 시 항상 부족 → Range 페이지로 전부 수집. 매장 필터로 트래픽·메모리 절감 */
+    const schParts = [`schedule_date=gte.${startStr}`, `schedule_date=lte.${endStr.slice(0, 10)}`]
+    if (!isAllStores && storeFilter) {
+      schParts.push(`store_name=ilike.${encodeURIComponent(storeFilter)}`)
+    }
+    const schFilter = schParts.join('&')
+    const schRows = (await supabaseSelectFilterAllPages('schedules', schFilter, {
+      order: 'schedule_date.asc',
+      pageSize: 8000,
+      maxRows: 2_000_000,
+    })) as SchRow[]
     for (const s of schRows || []) {
-      const d = toDateStr(s.schedule_date)
+      const d = scheduleDateKey(s.schedule_date)
       const store = String(s.store_name || '').trim()
       const nm = String(s.name || '').trim()
       if (d && store && nm) {

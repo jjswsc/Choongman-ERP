@@ -2,6 +2,7 @@ import {
   supabaseSelectFilter,
   supabaseInsert,
   supabaseUpdateByFilter,
+  supabaseDeleteByFilter,
 } from '@/lib/supabase-server'
 import { PROMOTION_MAIN_CATEGORY, PROMOTION_DEFAULT_SUBCATEGORIES } from '@/lib/pos-promo-constants'
 
@@ -95,4 +96,11 @@ export async function deactivateMirrorMenuByPromoId(promoId: string): Promise<vo
   } catch {
     /* promo_id 없으면 무시 */
   }
+}
+
+/** 프로모션에 연동된 미러 pos_menus 행 삭제 (pos_promos 삭제 전에 호출 권장) */
+export async function deleteMirrorMenusByPromoId(promoId: string): Promise<void> {
+  const n = Number(promoId)
+  if (!n) return
+  await supabaseDeleteByFilter('pos_menus', `promo_id=eq.${encodeURIComponent(String(n))}`)
 }

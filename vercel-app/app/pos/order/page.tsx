@@ -49,7 +49,14 @@ import {
 import { OfflineBanner } from "@/components/offline-banner"
 import { getBanbanFlavorMenuList, isBanbanMenu } from "@/lib/pos-banban-utils"
 import { translateReceiptTableDisplayName } from "@/lib/pos-print-translate"
-import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from "@/lib/pos-promo-constants"
+import {
+  PROMOTION_MAIN_CATEGORY,
+  normalizePosMainCategoryTabs,
+  normalizePromotionSubcategory,
+  promotionSubcategoriesEqual,
+  uniqueSubcategoriesForMainMenu,
+} from "@/lib/pos-promo-constants"
+import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { isPromoVisibleInContext } from "@/lib/pos-promo-visibility"
 import { formatPosDateTimeMedium } from "@/lib/pos-datetime-locale"
 import { buildKitchenSlipGroups } from "@/lib/pos-kitchen-slip-routing"
@@ -297,7 +304,13 @@ export default function PosOrderPage() {
         const mainMerged = normalizePosMainCategoryTabs([...(mains || []), PROMOTION_MAIN_CATEGORY])
         setMainCategories(mainMerged)
         setSelectedMainCategory((prev) => (mainMerged.includes(prev) ? prev : ""))
-        setSelectedCategory((prev) => (merged.includes(prev) ? prev : ""))
+        setSelectedCategory((prev) => {
+          if (!prev) return ""
+          if (merged.includes(prev)) return prev
+          const pn = normalizePromotionSubcategory(prev)
+          if (merged.some((c) => promotionSubcategoriesEqual(c, pn))) return pn
+          return ""
+        })
       })
       .catch(() => {
         setMenus([])
@@ -335,24 +348,49 @@ export default function PosOrderPage() {
   /** 선택한 대분류에 속한 소분류만 (메뉴 기준) */
   const categoriesForSelectedMain = React.useMemo(() => {
     if (!selectedMainCategory) return [] as string[]
-    const fromMain = menus.filter((m) => (m.categoryMain ?? "") === selectedMainCategory).map((m) => m.category).filter(Boolean)
-    const set = new Set(fromMain)
-    const arr = Array.from(set).sort()
+    const fromMain = menus
+      .filter((m) => (m.categoryMain ?? "") === selectedMainCategory)
+      .map((m) => m.category)
+      .filter(Boolean) as string[]
+    const arr = uniqueSubcategoriesForMainMenu(selectedMainCategory, fromMain)
     if (arr.length > 0) return arr
     const fromCategory = menus.filter((m) => (m.category ?? "") === selectedMainCategory)
     if (fromCategory.length > 0) return [selectedMainCategory]
     return []
   }, [menus, selectedMainCategory])
 
+  React.useEffect(() => {
+    if (categoriesForSelectedMain.length === 0) return
+    const valid =
+      categoriesForSelectedMain.includes(selectedCategory) ||
+      (selectedMainCategory === PROMOTION_MAIN_CATEGORY &&
+        categoriesForSelectedMain.some((c) => promotionSubcategoriesEqual(c, selectedCategory)))
+    if (!valid) {
+      setSelectedCategory(categoriesForSelectedMain[0])
+      return
+    }
+    if (
+      selectedMainCategory === PROMOTION_MAIN_CATEGORY &&
+      selectedCategory &&
+      !categoriesForSelectedMain.includes(selectedCategory)
+    ) {
+      setSelectedCategory(normalizePromotionSubcategory(selectedCategory))
+    }
+  }, [categoriesForSelectedMain, selectedCategory, selectedMainCategory])
+
   const filteredMenus = React.useMemo(() => {
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
     if (!selectedMainCategory || !selectedCategory) return []
+    const subOk = (cat: string | undefined) =>
+      selectedMainCategory === PROMOTION_MAIN_CATEGORY
+        ? promotionSubcategoriesEqual(cat, selectedCategory)
+        : (cat ?? "").trim() === selectedCategory
     const byMainAndSub = notSoldOut.filter(
-      (m) => (m.categoryMain ?? "") === selectedMainCategory && m.category === selectedCategory
+      (m) => (m.categoryMain ?? "") === selectedMainCategory && subOk(m.category)
     )
     if (byMainAndSub.length > 0) return byMainAndSub
-    return notSoldOut.filter((m) => (m.category ?? "") === selectedCategory)
+    return notSoldOut.filter((m) => subOk(m.category))
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
   const linkedPromoIds = React.useMemo(() => {
@@ -373,7 +411,13 @@ export default function PosOrderPage() {
       const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
       const sub = (p.category || "").trim()
       if (selectedMainCategory && cm !== selectedMainCategory) return false
-      if (selectedCategory && sub !== selectedCategory) return false
+      if (selectedCategory) {
+        if (selectedMainCategory === PROMOTION_MAIN_CATEGORY) {
+          if (!promotionSubcategoriesEqual(sub, selectedCategory)) return false
+        } else if (sub !== selectedCategory) {
+          return false
+        }
+      }
       return isPromoVisibleInContext(p, {
         businessDateYmd,
         orderType,
@@ -965,7 +1009,7 @@ export default function PosOrderPage() {
                     selectedCategory === c ? "bg-emerald-500 text-white" : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
                   )}
                 >
-                  {c}
+                  {translatePosMenuCategoryLabel(c, t)}
                 </button>
               ))}
             </div>

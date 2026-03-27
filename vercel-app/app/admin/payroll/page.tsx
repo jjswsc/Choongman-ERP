@@ -6,6 +6,15 @@ import { AdminPayrollCalc } from "@/components/admin/admin-payroll-calc"
 import { AdminPayrollRecords } from "@/components/admin/admin-payroll-records"
 import { AdminPayrollSalaryHistory } from "@/components/admin/admin-payroll-salary-history"
 import { AdminPayrollHolidays } from "@/components/admin/admin-payroll-holidays"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useT } from "@/lib/i18n"
 import { useLang } from "@/lib/lang-context"
@@ -39,37 +48,41 @@ export default function Page() {
             <p className="text-xs text-muted-foreground">{t("pay_month")}</p>
           </div>
         </div>
-        <Tabs defaultValue="calc" className="w-full">
-          <TabsList className="grid w-full max-w-3xl grid-cols-5 mb-4">
-            <TabsTrigger value="calc" className="text-sm font-medium">
-              {t("pay_tab_calc")}
-            </TabsTrigger>
-            <TabsTrigger value="records" className="text-sm font-medium">
-              {t("pay_tab_records")}
-            </TabsTrigger>
-            <TabsTrigger value="salary_history" className="text-sm font-medium">
-              {t("pay_tab_salary_history")}
-            </TabsTrigger>
-            <TabsTrigger value="holidays" className="text-sm font-medium">
-              {t("pay_tab_holidays")}
-            </TabsTrigger>
-            <TabsTrigger value="help" className="text-sm font-medium">
-              {t("pay_tab_help")}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="calc">
+        <Tabs defaultValue="calc" className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="calc" className={adminTabsTriggerCn}>
+                  {t("pay_tab_calc")}
+                </TabsTrigger>
+                <TabsTrigger value="records" className={adminTabsTriggerCn}>
+                  {t("pay_tab_records")}
+                </TabsTrigger>
+                <TabsTrigger value="salary_history" className={adminTabsTriggerCn}>
+                  {t("pay_tab_salary_history")}
+                </TabsTrigger>
+                <TabsTrigger value="holidays" className={adminTabsTriggerCn}>
+                  {t("pay_tab_holidays")}
+                </TabsTrigger>
+                <TabsTrigger value="help" className={adminTabsTriggerCn}>
+                  {t("pay_tab_help")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="calc" className={adminTabsContentCn}>
             <AdminPayrollCalc />
           </TabsContent>
-          <TabsContent value="records">
+          <TabsContent value="records" className={adminTabsContentCn}>
             <AdminPayrollRecords />
           </TabsContent>
-          <TabsContent value="salary_history">
+          <TabsContent value="salary_history" className={adminTabsContentCn}>
             <AdminPayrollSalaryHistory />
           </TabsContent>
-          <TabsContent value="holidays">
+          <TabsContent value="holidays" className={adminTabsContentCn}>
             <AdminPayrollHolidays readOnly={isManagerRole(auth?.role || "")} />
           </TabsContent>
-          <TabsContent value="help" className="mt-0 space-y-4">
+          <TabsContent value="help" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="rounded-lg border border-border bg-card p-5 space-y-4">
               <h2 className="text-base font-semibold">{t("pay_help_title")}</h2>
               <p className="text-xs text-muted-foreground">{t("pay_help_intro")}</p>

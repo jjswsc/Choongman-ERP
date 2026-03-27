@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { Calculator, Save, Pencil, FolderOpen } from "lucide-react"
+import Link from "next/link"
+import { Calculator, Save, Pencil, FolderOpen, Calendar, Clock } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { useAuth } from "@/lib/auth-context"
@@ -548,6 +549,27 @@ export function AdminPayrollCalc() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{t("pay_modal_help")}</p>
+              <div className="mt-3 space-y-2 rounded-md border border-border bg-muted/40 px-3 py-2.5">
+                <p className="text-xs text-muted-foreground">{t("pay_modal_hr_nav_hint")}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="h-8" asChild>
+                    <Link
+                      href={`/admin/leave?tab=approval&month=${encodeURIComponent(monthStr)}&status=all${list[editIdx]?.store ? `&store=${encodeURIComponent(list[editIdx].store)}` : ""}${list[editIdx]?.name ? `&name=${encodeURIComponent(list[editIdx].name)}` : ""}`}
+                    >
+                      <Calendar className="mr-1.5 h-3.5 w-3.5" />
+                      {t("pay_modal_link_leave")}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8" asChild>
+                    <Link
+                      href={`/admin/attendance?tab=status&month=${encodeURIComponent(monthStr)}${list[editIdx]?.store ? `&store=${encodeURIComponent(list[editIdx].store)}` : ""}${list[editIdx]?.name ? `&employee=${encodeURIComponent(list[editIdx].name)}` : ""}`}
+                    >
+                      <Clock className="mr-1.5 h-3.5 w-3.5" />
+                      {t("pay_modal_link_attendance")}
+                    </Link>
+                  </Button>
+                </div>
+              </div>
             </>
           )}
           <DialogFooter>

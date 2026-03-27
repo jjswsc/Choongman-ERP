@@ -44,7 +44,7 @@ function getCategoryLabel(cat: string, t: (k: string) => string): string {
     purchase_advance: t("wm_advance") || "선급",
     expense: t("bankCategoryExpense") || "비용",
     expense_advance: t("wm_advance") || "선급",
-    fixed: t("bankCategoryFixed") || "고정비",
+    fixed: t("bankCategoryExpense") || "비용",
     fixed_asset: t("wm_fixed_asset") || "고정자산",
     transfer: t("bankCategoryTransfer") || "이체",
     tax: t("wm_tax") || "세금",
@@ -219,7 +219,12 @@ export function ExpenseRegisterSearchTab() {
   const filteredList = React.useMemo(() => {
     const needle = vendorFilter.trim().toLowerCase()
     return (list || []).filter((r) => {
-      if (categoryFilter !== "__all__" && String(r.category || "").toLowerCase() !== categoryFilter) return false
+      if (categoryFilter !== "__all__") {
+        const rowCat = String(r.category || "").toLowerCase()
+        if (categoryFilter === "expense") {
+          if (rowCat !== "expense" && rowCat !== "fixed") return false
+        } else if (rowCat !== categoryFilter) return false
+      }
       if (!needle) return true
       const vendorName = r.vendorCode ? (vendors.find((v) => v.code === r.vendorCode)?.name || "") : ""
       const subject = r.accountSubjectId ? accountSubjects.find((a) => a.id === r.accountSubjectId) : null

@@ -3,6 +3,17 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import { LayoutGrid, Monitor, CreditCard, Truck, TimerReset, Smartphone } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsIconCn,
+  adminTabsListGridClass,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PosTableLayoutContent } from "@/components/pos/pos-table-layout-content"
 import { PosCookingRulesContent } from "@/components/pos/pos-cooking-rules-content"
@@ -49,35 +60,39 @@ export default function PosScreenConfigPage() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="flex flex-wrap gap-1 bg-muted/50 p-1">
-            <TabsTrigger value="tables" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <LayoutGrid className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabTables") || "테이블 구성"}
-            </TabsTrigger>
-            <TabsTrigger value="menus" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <Monitor className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
-            </TabsTrigger>
-            <TabsTrigger value="cook-timer" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <TimerReset className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabCookTimer") || "조리시간/색상"}
-            </TabsTrigger>
-            <TabsTrigger value="payment" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <CreditCard className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabPayment") || "결제 관리"}
-            </TabsTrigger>
-            <TabsTrigger value="delivery" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <Truck className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabDelivery") || "배달앱 관리"}
-            </TabsTrigger>
-            <TabsTrigger value="terminal" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <Smartphone className="h-3.5 w-3.5" />
-              {t("posScreenConfigTabTerminal") || "단말 설정"}
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="tables" className={adminTabsTriggerCn}>
+                  <LayoutGrid className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabTables") || "테이블 구성"}
+                </TabsTrigger>
+                <TabsTrigger value="menus" className={adminTabsTriggerCn}>
+                  <Monitor className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
+                </TabsTrigger>
+                <TabsTrigger value="cook-timer" className={adminTabsTriggerCn}>
+                  <TimerReset className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabCookTimer") || "조리시간/색상"}
+                </TabsTrigger>
+                <TabsTrigger value="payment" className={adminTabsTriggerCn}>
+                  <CreditCard className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabPayment") || "결제 관리"}
+                </TabsTrigger>
+                <TabsTrigger value="delivery" className={adminTabsTriggerCn}>
+                  <Truck className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabDelivery") || "배달앱 관리"}
+                </TabsTrigger>
+                <TabsTrigger value="terminal" className={adminTabsTriggerCn}>
+                  <Smartphone className={adminTabsIconCn} aria-hidden />
+                  {t("posScreenConfigTabTerminal") || "단말 설정"}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="tables" className="mt-0">
+          <TabsContent value="tables" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-4">{t("posTableLayout") || "테이블 배치"}</h3>
               <p className="text-xs text-muted-foreground mb-4">{t("posTableLayoutSub") || "매장별 테이블 위치를 드래그하여 배치합니다."}</p>
@@ -85,13 +100,21 @@ export default function PosScreenConfigPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="menus" className="mt-0">
+          <TabsContent value="menus" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-3 min-h-[640px]">
               <Tabs value={menusSubTab} onValueChange={(v) => setMenusSubTab(v as "menu-screen" | "menu-board")} className="space-y-3">
-                <TabsList className="h-9">
-                  <TabsTrigger value="menu-screen" className="text-xs">{t("posScreenConfigTabMenus") || "메뉴 화면 구성"}</TabsTrigger>
-                  <TabsTrigger value="menu-board" className="text-xs">{t("posMenuTabMenuBoard") || "메뉴판 관리"}</TabsTrigger>
-                </TabsList>
+                <div className={adminTabsBarCn}>
+                  <div className={adminTabsScrollCn}>
+                    <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+                      <TabsTrigger value="menu-screen" className={adminTabsTriggerGridCn}>
+                        {t("posScreenConfigTabMenus") || "메뉴 화면 구성"}
+                      </TabsTrigger>
+                      <TabsTrigger value="menu-board" className={adminTabsTriggerGridCn}>
+                        {t("posMenuTabMenuBoard") || "메뉴판 관리"}
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+                </div>
                 <TabsContent value="menu-screen" className="mt-0 flex flex-col min-h-0 overflow-hidden">
                   <div
                     className="flex flex-col overflow-hidden rounded-b-lg border border-border min-h-[560px]"
@@ -114,7 +137,7 @@ export default function PosScreenConfigPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="cook-timer" className="mt-0">
+          <TabsContent value="cook-timer" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabCookTimer") || "조리시간/색상"}</h3>
               <p className="text-xs text-muted-foreground mb-4">
@@ -124,7 +147,7 @@ export default function PosScreenConfigPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="payment" className="mt-0">
+          <TabsContent value="payment" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabPayment") || "결제 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
@@ -134,7 +157,7 @@ export default function PosScreenConfigPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="delivery" className="mt-0">
+          <TabsContent value="delivery" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabDelivery") || "배달앱 관리"}</h3>
               <p className="text-sm text-muted-foreground mb-4">
@@ -144,7 +167,7 @@ export default function PosScreenConfigPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="terminal" className="mt-0">
+          <TabsContent value="terminal" className={adminTabsContentFlushCn}>
             <div className="rounded-xl border bg-card p-6">
               <h3 className="text-sm font-bold mb-2">{t("posScreenConfigTabTerminal") || "단말 설정"}</h3>
               <p className="text-sm text-muted-foreground mb-4">

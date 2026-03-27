@@ -12,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Search } from "lucide-react"
@@ -199,13 +207,21 @@ export function AdminStoreVisit() {
           <p className="text-xs text-muted-foreground">{t("visit_page_title")}</p>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "stats")}>
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="list">{t("tab_visit_list")}</TabsTrigger>
-            <TabsTrigger value="stats">{t("tab_visit_stats")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "stats")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
+                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                  {t("tab_visit_list")}
+                </TabsTrigger>
+                <TabsTrigger value="stats" className={adminTabsTriggerGridCn}>
+                  {t("tab_visit_stats")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="list" className="mt-4">
+          <TabsContent value="list" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-2 mb-4">
@@ -309,7 +325,7 @@ export function AdminStoreVisit() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="stats" className="mt-4">
+          <TabsContent value="stats" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap items-end gap-2 mb-4">

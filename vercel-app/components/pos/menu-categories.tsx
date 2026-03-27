@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getPosMenus, getPosMenuCategories, type PosMenu } from '@/lib/api-client'
 import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useLang } from '@/lib/lang-context'
@@ -67,7 +68,7 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
                   className="h-8 text-xs"
                   onClick={() => setSelectedCategory(cat)}
                 >
-                  {cat}
+                  {translatePosMenuCategoryLabel(cat, t)}
                 </Button>
               ))
             : categories.map(cat => (
@@ -78,7 +79,7 @@ export function MenuCategories({ onItemSelect }: MenuCategoriesProps) {
                   className="h-8 text-xs"
                   onClick={() => setSelectedCategory(cat)}
                 >
-                  {cat}
+                  {translatePosMenuCategoryLabel(cat, t)}
                 </Button>
               ))}
         </div>

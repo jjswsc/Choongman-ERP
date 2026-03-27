@@ -7,6 +7,8 @@ import {
   PROMOTION_DEFAULT_SUBCATEGORIES,
   PROMOTION_MAIN_CATEGORY,
   LEGACY_PROMOTION_MAIN_CATEGORY,
+  normalizePromotionSubcategory,
+  uniqueSubcategoriesForMainMenu,
 } from '@/lib/pos-promo-constants'
 
 export type PosMenuCategoriesConfigShape = {
@@ -33,10 +35,13 @@ export function mergePromotionIntoCategoriesConfig(cfg: PosMenuCategoriesConfigS
 
   if (!mains.includes(main)) mains.push(main)
   const existingSubs = [...(categoriesByMain[main] || [])]
-  const nextSubs = [...existingSubs]
+  let nextSubs = [...existingSubs]
   for (const d of PROMOTION_DEFAULT_SUBCATEGORIES) {
-    if (!nextSubs.includes(d)) nextSubs.push(d)
+    if (!nextSubs.some((s) => normalizePromotionSubcategory(s) === d)) {
+      nextSubs.push(d)
+    }
   }
+  nextSubs = uniqueSubcategoriesForMainMenu(main, nextSubs)
   return {
     mainCategories: mains,
     categoriesByMain: {

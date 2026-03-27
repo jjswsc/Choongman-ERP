@@ -19,6 +19,8 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const userStore = String(searchParams.get('userStore') || '').trim()
     const userRole = String(searchParams.get('userRole') || '').toLowerCase()
+    const forPettyTransfer =
+      searchParams.get('forPettyTransfer') === '1' || searchParams.get('forPettyTransfer') === 'true'
 
     const empSelectFull = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,id_card_photo,tax_id,sso_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
     const empSelectFallback = 'id,store,name,nick,phone,job,birth,nation,join_date,resign_date,sal_type,sal_amt,role,email,id_number,address,bank_name,account_number,position_allowance,haz_allow,grade,photo'
@@ -39,7 +41,7 @@ export async function GET(req: Request) {
     for (const r of rows || []) {
       if (!r.store && !r.name) continue
       const empStore = String(r.store || '').trim()
-      if (!userCanAccessEmployeeStore(role, userStore, empStore)) continue
+      if (!userCanAccessEmployeeStore(role, userStore, empStore, { forPettyTransfer })) continue
       list.push({
         row: r.id,
         store: empStore,

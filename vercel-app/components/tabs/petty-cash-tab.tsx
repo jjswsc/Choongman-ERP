@@ -1,5 +1,5 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,6 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -20,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Search, Plus, Camera, Download, Pencil, Save } from "lucide-react"
+import { Search, Plus, Camera, Download, Pencil, Save, Trash2 } from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
@@ -33,6 +40,7 @@ import {
   getPettyCashMonthDetail,
   addPettyCashTransaction,
   updatePettyCashTransaction,
+  deletePettyCashTransaction,
   translateTexts,
   getAccountSubjects,
   type PettyCashItem,
@@ -117,6 +125,7 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   const [editReceiptFile, setEditReceiptFile] = useState<File | null>(null)
   const [editReceiptPreview, setEditReceiptPreview] = useState<string | null>(null)
   const [editSaving, setEditSaving] = useState(false)
+  const [deletingMonthlyId, setDeletingMonthlyId] = useState<number | null>(null)
   const editReceiptFileInputRef = useRef<HTMLInputElement>(null)
   const editReceiptCameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -157,10 +166,9 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
   useEffect(() => {
     Promise.all([
       getAccountSubjects({ forExpense: true, excludeHeaders: true }),
-      getAccountSubjects({ forFixed: true, excludeHeaders: true }),
       getAccountSubjects({ forCost: true, excludeHeaders: true }),
-    ]).then(([expense, fixed, cost]) => {
-      setAccountSubjectOptions([...(cost || []), ...(fixed || []), ...(expense || [])])
+    ]).then(([expense, cost]) => {
+      setAccountSubjectOptions([...(cost || []), ...(expense || [])])
     }).catch(() => setAccountSubjectOptions([]))
   }, [])
 
@@ -430,6 +438,37 @@ export function PettyCashTab({ showAccountSubjectEmptyFilter = false }: { showAc
     }
   }
 
+  const handleDeleteMonthlyRow = async (r: PettyCashItem) => {
+    if (!auth?.store) return
+    const ok = await appConfirm(t("pettyDeleteConfirm") || "이 내역을 삭제하시겠습니까?")
+    if (!ok) return
+    setDeletingMonthlyId(r.id)
+    try {
+      const res = await deletePettyCashTransaction({
+        id: r.id,
+        userStore: auth.store,
+        userRole: auth.role,
+      })
+      if (res.success) {
+        if (editModalItem?.id === r.id) closeEditModal()
+        setPendingAccountSubjectByRowId((prev) => {
+          const next = { ...prev }
+          delete next[r.id]
+          return next
+        })
+        loadMonthly()
+        loadList()
+        await appAlert(t("pettyDeleted") || t("delete") || "삭제되었습니다.")
+      } else {
+        await appAlert(translateApiMessage(res.message, t) || res.message || t("processFail") || "실패")
+      }
+    } catch {
+      await appAlert(t("processFail") || "실패")
+    } finally {
+      setDeletingMonthlyId(null)
+    }
+  }
+
   const fmt = (n: number) => (n || 0).toLocaleString()
 
   const downloadMonthlyExcel = () => {
@@ -514,12 +553,20 @@ ${rows.map((row, ri) => {
       <Card className="shadow-sm">
         <CardContent className="pt-6">
           <Tabs defaultValue="list" className="w-full">
-            <TabsList className="grid w-full max-w-md grid-cols-2 mb-4">
-              <TabsTrigger value="list">{t("pettyTabList")}</TabsTrigger>
-              <TabsTrigger value="monthly">{t("pettyTabMonthly")}</TabsTrigger>
-            </TabsList>
+            <div className={adminTabsBarCn}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListGridClass("max-w-md", "grid-cols-2")}>
+                  <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                    {t("pettyTabList")}
+                  </TabsTrigger>
+                  <TabsTrigger value="monthly" className={adminTabsTriggerGridCn}>
+                    {t("pettyTabMonthly")}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+            </div>
 
-            <TabsContent value="list" className="space-y-3">
+            <TabsContent value="list" className={cn("space-y-3", adminTabsContentFlushCn)}>
               <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
                 {canSearchAll && (
                   <Select value={listScope} onValueChange={(v) => { setListScope(v as "store" | "office"); setListStore("All"); setListDepartment("All"); }}>
@@ -762,7 +809,7 @@ ${rows.map((row, ri) => {
               </div>
             </TabsContent>
 
-            <TabsContent value="monthly" className="space-y-3">
+            <TabsContent value="monthly" className={cn("space-y-3", adminTabsContentFlushCn)}>
               <div className="flex flex-nowrap items-center gap-1.5 sm:flex-wrap sm:gap-2">
                 {canSearchAll && (
                   <Select value={monthlyScope} onValueChange={(v) => { setMonthlyScope(v as "store" | "office"); setMonthlyStore("All"); setMonthlyDepartment("All"); }}>
@@ -844,7 +891,7 @@ ${rows.map((row, ri) => {
                 {filteredMonthlyData.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">{monthlyData.length === 0 ? (t("pettyNoData") || "데이터가 없습니다") : (t("bankNoMatchFilter") || "조건에 맞는 데이터가 없습니다.")}</p>
                 ) : (
-                  <table className="w-full text-xs table-fixed min-w-[580px]">
+                  <table className="w-full text-xs table-fixed min-w-[620px]">
                     <colgroup>
                       <col style={{ width: "92px" }} />
                       <col style={{ width: "88px" }} />
@@ -855,7 +902,7 @@ ${rows.map((row, ri) => {
                       <col />
                       <col style={{ width: "100px" }} />
                       <col style={{ width: "36px" }} />
-                      <col style={{ width: "40px" }} />
+                      <col style={{ width: "72px" }} />
                     </colgroup>
                     <thead className="bg-muted/50 sticky top-0">
                       <tr>
@@ -868,7 +915,7 @@ ${rows.map((row, ri) => {
                         <th className="p-2 text-center">{t("pettyColMemo") || "내용"}</th>
                         <th className="p-2 text-center">{t("pettyColUser") || "등록자"}</th>
                         <th className="p-2 text-center whitespace-nowrap">{t("pettyColReceipt") || "영수증"}</th>
-                        <th className="p-2 text-center">{t("emp_edit") || "수정"}</th>
+                        <th className="p-2 text-center whitespace-nowrap">{t("pettyColActions") || "수정·삭제"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -937,16 +984,30 @@ ${rows.map((row, ri) => {
                             )}
                           </td>
                           <td className="p-2 text-center">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-primary hover:bg-primary/10"
-                              onClick={() => openEditModal(r)}
-                              title={t("emp_edit") || "수정"}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-0.5">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-primary hover:bg-primary/10"
+                                onClick={() => openEditModal(r)}
+                                disabled={deletingMonthlyId === r.id || inlineSavingId === r.id}
+                                title={t("emp_edit") || "수정"}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                onClick={() => void handleDeleteMonthlyRow(r)}
+                                disabled={deletingMonthlyId === r.id || inlineSavingId === r.id}
+                                title={t("delete") || "삭제"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}

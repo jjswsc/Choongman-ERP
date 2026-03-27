@@ -3,6 +3,14 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { FileText } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { MarketingMonthlyReportPanel } from "@/components/marketing/marketing-monthly-report-panel"
@@ -61,25 +69,29 @@ export default function MarketingReportHubPage() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setTab(normalizeTab(v))} className="w-full">
-          <TabsList className="mb-4 h-auto w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
-            <TabsTrigger value="monthly" className="text-xs sm:text-sm">
-              월간 리포트
-            </TabsTrigger>
-            <TabsTrigger value="performance" className="text-xs sm:text-sm">
-              실적 대시보드
-            </TabsTrigger>
-            <TabsTrigger value="costs" className="text-xs sm:text-sm">
-              비용 연계
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="monthly" className="mt-0 focus-visible:outline-none">
+        <Tabs value={activeTab} onValueChange={(v) => setTab(normalizeTab(v))} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="monthly" className={adminTabsTriggerCn}>
+                  월간 리포트
+                </TabsTrigger>
+                <TabsTrigger value="performance" className={adminTabsTriggerCn}>
+                  실적 대시보드
+                </TabsTrigger>
+                <TabsTrigger value="costs" className={adminTabsTriggerCn}>
+                  비용 연계
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="monthly" className={adminTabsContentFlushCn}>
             <MarketingMonthlyReportPanel campaignIdFromQuery={campaignIdFromQuery} />
           </TabsContent>
           <TabsContent value="performance" className="mt-0 focus-visible:outline-none">
             <MarketingPerformanceDashboardPanel campaignIdFromQuery={campaignIdFromQuery} />
           </TabsContent>
-          <TabsContent value="costs" className="mt-0 focus-visible:outline-none">
+          <TabsContent value="costs" className={adminTabsContentFlushCn}>
             <MarketingCostsHubPanel campaignIdFromQuery={campaignIdFromQuery} />
           </TabsContent>
         </Tabs>

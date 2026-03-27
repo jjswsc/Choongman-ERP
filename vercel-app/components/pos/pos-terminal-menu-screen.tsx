@@ -36,7 +36,15 @@ import {
   type PosMenuScreenConfig,
 } from '@/lib/pos-menu-screen-config'
 import { getBanbanFlavorMenuList, isBanbanMenu } from '@/lib/pos-banban-utils'
-import { PROMOTION_MAIN_CATEGORY, normalizePosMainCategoryTabs } from '@/lib/pos-promo-constants'
+import {
+  PROMOTION_MAIN_CATEGORY,
+  normalizePosMainCategoryTabs,
+  normalizePromotionCategoryMain,
+  normalizePromotionSubcategory,
+  promotionSubcategoriesEqual,
+  uniqueSubcategoriesForMainMenu,
+} from '@/lib/pos-promo-constants'
+import { translatePosMenuCategoryLabel } from '@/lib/pos-menu-category-label'
 import { isPromoVisibleInContext } from '@/lib/pos-promo-visibility'
 import { getPosBusinessDateStr } from '@/lib/pos-business-day'
 import { preparePosMenuImageFileForUpload } from '@/lib/pos-menu-image-compress'
@@ -212,9 +220,8 @@ export function PosTerminalMenuScreen({
     const fromMain = menus
       .filter((m) => (m.categoryMain ?? '') === selectedMainCategory)
       .map((m) => m.category)
-      .filter(Boolean)
-    const set = new Set(fromMain)
-    const arr = Array.from(set).sort()
+      .filter(Boolean) as string[]
+    const arr = uniqueSubcategoriesForMainMenu(selectedMainCategory, fromMain)
     if (arr.length > 0) return arr
     const fromCategory = menus.filter((m) => (m.category ?? '') === selectedMainCategory)
     if (fromCategory.length > 0) return [selectedMainCategory]
@@ -222,10 +229,13 @@ export function PosTerminalMenuScreen({
   }, [menus, selectedMainCategory])
 
   React.useEffect(() => {
-    if (categoriesForSelectedMain.length > 0 && !categoriesForSelectedMain.includes(selectedCategory)) {
-      setSelectedCategory(categoriesForSelectedMain[0])
-    }
-  }, [categoriesForSelectedMain, selectedCategory])
+    if (categoriesForSelectedMain.length === 0) return
+    const valid =
+      categoriesForSelectedMain.includes(selectedCategory) ||
+      (selectedMainCategory === PROMOTION_MAIN_CATEGORY &&
+        categoriesForSelectedMain.some((c) => promotionSubcategoriesEqual(c, selectedCategory)))
+    if (!valid) setSelectedCategory(categoriesForSelectedMain[0])
+  }, [categoriesForSelectedMain, selectedCategory, selectedMainCategory])
 
   React.useEffect(() => {
     setListPage(0)
@@ -235,12 +245,15 @@ export function PosTerminalMenuScreen({
     const active = menus.filter((m) => m.isActive)
     const notSoldOut = active.filter((m) => !m.soldOutDate || m.soldOutDate !== todayStr)
     if (!selectedMainCategory || !selectedCategory) return []
+    const subOk = (cat: string | undefined) =>
+      selectedMainCategory === PROMOTION_MAIN_CATEGORY
+        ? promotionSubcategoriesEqual(cat, selectedCategory)
+        : (cat ?? '').trim() === selectedCategory
     const byMainAndSub = notSoldOut.filter(
-      (m) =>
-        (m.categoryMain ?? '') === selectedMainCategory && m.category === selectedCategory
+      (m) => (m.categoryMain ?? '') === selectedMainCategory && subOk(m.category)
     )
     if (byMainAndSub.length > 0) return byMainAndSub
-    return notSoldOut.filter((m) => (m.category ?? '') === selectedCategory)
+    return notSoldOut.filter((m) => subOk(m.category))
   }, [menus, selectedCategory, selectedMainCategory, todayStr])
 
   const linkedPromoIds = React.useMemo(() => {
@@ -262,7 +275,13 @@ export function PosTerminalMenuScreen({
       const cm = (p.categoryMain || PROMOTION_MAIN_CATEGORY).trim()
       const sub = (p.category || '').trim()
       if (selectedMainCategory && cm !== selectedMainCategory) return false
-      if (selectedCategory && sub !== selectedCategory) return false
+      if (selectedCategory) {
+        if (selectedMainCategory === PROMOTION_MAIN_CATEGORY) {
+          if (!promotionSubcategoriesEqual(sub, selectedCategory)) return false
+        } else if (sub !== selectedCategory) {
+          return false
+        }
+      }
       return isPromoVisibleInContext(p, {
         businessDateYmd,
         orderType: ot,
@@ -463,12 +482,17 @@ export function PosTerminalMenuScreen({
         .split(',')
         .map((v) => v.trim())
         .filter(Boolean)
+      const cm = menuEditForm.categoryMain.trim()
+      let cat = menuEditForm.category.trim()
+      if (normalizePromotionCategoryMain(cm) === PROMOTION_MAIN_CATEGORY) {
+        cat = normalizePromotionSubcategory(cat)
+      }
       const res = await savePosMenu({
         id: menuEditTargetId,
         code,
         name,
-        categoryMain: menuEditForm.categoryMain.trim(),
-        category: menuEditForm.category.trim(),
+        categoryMain: cm,
+        category: cat,
         price: Number(menuEditForm.price || 0),
         priceDelivery: menuEditForm.priceDelivery.trim() === '' ? null : Number(menuEditForm.priceDelivery),
         imageUrl: menuEditForm.imageUrl.trim(),
@@ -505,13 +529,11 @@ export function PosTerminalMenuScreen({
 
   const categoriesForEditForm = React.useMemo(() => {
     if (!menuEditForm.categoryMain) return [] as string[]
-    const set = new Set(
-      menus
-        .filter((m) => (m.categoryMain ?? '') === menuEditForm.categoryMain)
-        .map((m) => m.category)
-        .filter(Boolean)
-    )
-    return Array.from(set).sort()
+    const fromMenus = menus
+      .filter((m) => (m.categoryMain ?? '') === menuEditForm.categoryMain)
+      .map((m) => m.category)
+      .filter(Boolean) as string[]
+    return uniqueSubcategoriesForMainMenu(menuEditForm.categoryMain, fromMenus)
   }, [menus, menuEditForm.categoryMain])
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -635,7 +657,7 @@ export function PosTerminalMenuScreen({
                 )}
                 style={{ fontSize: `${categoryFontPx}px` }}
               >
-                {cat}
+                {translatePosMenuCategoryLabel(cat, t)}
               </button>
             ))}
           </div>
@@ -653,7 +675,8 @@ export function PosTerminalMenuScreen({
           {isAdminMode && (
             <div className="mb-2 flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
-                {selectedMainCategory || '-'} / {selectedCategory || '-'}
+                {selectedMainCategory || '-'} /{' '}
+                {selectedCategory ? translatePosMenuCategoryLabel(selectedCategory, t) : '-'}
               </div>
               <div className="text-xs text-muted-foreground">{filteredMenus.length + filteredPromos.length} items</div>
             </div>
@@ -1152,7 +1175,7 @@ export function PosTerminalMenuScreen({
                       </SelectTrigger>
                       <SelectContent>
                         {categoriesForEditForm.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                          <SelectItem key={c} value={c}>{translatePosMenuCategoryLabel(c, t)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

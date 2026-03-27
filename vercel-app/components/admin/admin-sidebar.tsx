@@ -39,6 +39,7 @@ const menuItems = [
   { href: "/admin/outbound", label: "출고 관리" },
   // 6. 회계 관리
   { header: "회계 관리" },
+  { href: "/admin/accounting/purchase-order", label: "PO 관리" },
   { href: "/admin/payroll", label: "급여 관리" },
   { href: "/admin/receivable-payable", label: "미수금 관리" },
   { href: "/admin/petty-cash", label: "패티 캐쉬" },

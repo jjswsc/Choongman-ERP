@@ -21,6 +21,15 @@ import {
 } from "@/components/ui/select"
 import { getPosMenuCategoriesConfig, savePosMenuCategoriesConfig, type PosMenuCategoriesConfig } from "@/lib/api-client"
 import { Pencil, Trash2, FolderTree } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
+import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export interface PosMenuCategorySettingsDialogProps {
@@ -222,11 +231,19 @@ export function PosMenuCategorySettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="main" className="flex-1 min-h-0 flex flex-col">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="main">{t("posMenuCategoryMain") || "대분류"}</TabsTrigger>
-            <TabsTrigger value="sub">{t("posMenuCategory") || "카테고리"}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="main" className="mt-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+                <TabsTrigger value="main" className={adminTabsTriggerGridCn}>
+                  {t("posMenuCategoryMain") || "대분류"}
+                </TabsTrigger>
+                <TabsTrigger value="sub" className={adminTabsTriggerGridCn}>
+                  {t("posMenuCategory") || "카테고리"}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="main" className={cn(adminTabsContentFlushCn, "mt-4 space-y-4 flex-1 min-h-0 overflow-y-auto")}>
             {editingMain !== null ? (
               <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                 <h4 className="text-sm font-semibold">{editingMain ? (t("emp_edit") || "수정") : (t("btn_add") || "추가")}</h4>
@@ -282,7 +299,7 @@ export function PosMenuCategorySettingsDialog({
               )}
             </div>
           </TabsContent>
-          <TabsContent value="sub" className="mt-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
+          <TabsContent value="sub" className={cn(adminTabsContentFlushCn, "mt-4 space-y-4 flex-1 min-h-0 overflow-y-auto")}>
             {editingSub !== null ? (
               <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                 <h4 className="text-sm font-semibold">
@@ -348,7 +365,7 @@ export function PosMenuCategorySettingsDialog({
                     (config.categoriesByMain[main] || []).map((sub) => (
                       <li key={`${main}-${sub}`} className="flex items-center justify-between gap-2 px-4 py-2">
                         <span className="text-muted-foreground text-xs">{main}</span>
-                        <span className="font-medium flex-1">{sub}</span>
+                        <span className="font-medium flex-1">{translatePosMenuCategoryLabel(sub, t)}</span>
                         <div className="flex gap-1 shrink-0">
                           <Button
                             variant="ghost"

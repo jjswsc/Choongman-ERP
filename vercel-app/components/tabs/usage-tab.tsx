@@ -24,6 +24,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth-context"
@@ -289,13 +298,21 @@ export function UsageTab() {
         </Dialog>
       )}
 
-      <Tabs defaultValue="input" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="input" className="text-sm font-medium">{t('useInput')}</TabsTrigger>
-          <TabsTrigger value="history" className="text-sm font-medium">{t('useHistory')}</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="input" className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+              <TabsTrigger value="input" className={adminTabsTriggerGridCn}>
+                {t('useInput')}
+              </TabsTrigger>
+              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                {t('useHistory')}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="input" className="mt-4 flex flex-col gap-4">
+        <TabsContent value="input" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
             <CardContent className="p-0">
               {loading ? (
@@ -495,7 +512,7 @@ export function UsageTab() {
             {submitting ? t("loading") : t("confirmUsage")}
           </Button>
         </TabsContent>
-        <TabsContent value="history" className="mt-4 flex flex-col gap-4">
+        <TabsContent value="history" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex flex-col gap-2">

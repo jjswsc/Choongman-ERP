@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
+import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -84,7 +85,7 @@ async function getAttendanceSummary(monthStr: string, storeFilter?: string): Pro
       if (!v.outMs || dt > v.outMs) {
         v.outMs = dt
         v.breakMin = Number(r.break_min) || 0
-        v.outApproved = isApproved
+        v.outApproved = clockOutCountsForPayroll(r.approved, r.status)
         v.otMin = Number(r.ot_min) || 0
         v.earlyMin = Number(r.early_min) || 0
       }

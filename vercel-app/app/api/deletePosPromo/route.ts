@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseUpdateByFilter } from '@/lib/supabase-server'
-import { deactivateMirrorMenuByPromoId } from '@/lib/pos-promo-mirror-menu'
+import { supabaseDeleteByFilter } from '@/lib/supabase-server'
+import { deleteMirrorMenusByPromoId } from '@/lib/pos-promo-mirror-menu'
 
-/** POS 프로모션 비활성화(소프트 삭제) — 과거 주문·미러 메뉴 참조 유지 */
+/**
+ * POS 프로모션 완전 삭제: 미러 메뉴(pos_menus.promo_id) → 프로모 마스터(pos_promos).
+ * pos_promo_items 는 FK CASCADE 로 함께 제거됩니다. 복구 불가.
+ */
 export async function POST(req: NextRequest) {
   const headers = new Headers()
   headers.set('Access-Control-Allow-Origin', '*')
@@ -13,9 +16,14 @@ export async function POST(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ success: false, message: 'id가 필요합니다.' }, { headers })
     }
-    await supabaseUpdateByFilter('pos_promos', `id=eq.${encodeURIComponent(id)}`, { is_active: false })
-    await deactivateMirrorMenuByPromoId(id)
-    return NextResponse.json({ success: true, message: '비활성 처리되었습니다.' }, { headers })
+    const enc = encodeURIComponent(id)
+    try {
+      await deleteMirrorMenusByPromoId(id)
+    } catch (mirrorErr) {
+      console.warn('deletePosPromo: mirror menu delete skipped', mirrorErr)
+    }
+    await supabaseDeleteByFilter('pos_promos', `id=eq.${enc}`)
+    return NextResponse.json({ success: true, message: '삭제되었습니다.' }, { headers })
   } catch (e) {
     console.error('deletePosPromo:', e)
     return NextResponse.json({ success: false, message: String(e) }, { headers })

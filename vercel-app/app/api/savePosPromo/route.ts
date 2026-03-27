@@ -4,7 +4,7 @@ import {
   supabaseInsert,
   supabaseUpdateByFilter,
 } from '@/lib/supabase-server'
-import { PROMOTION_MAIN_CATEGORY } from '@/lib/pos-promo-constants'
+import { PROMOTION_MAIN_CATEGORY, normalizePromotionSubcategory } from '@/lib/pos-promo-constants'
 import { upsertPromoMirrorMenu } from '@/lib/pos-promo-mirror-menu'
 import {
   allocateNextPromoCodeForCampaign,
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const categorySub = String(body.category ?? '세트').trim() || '세트'
+    const categorySub = normalizePromotionSubcategory(String(body.category ?? 'Set').trim() || 'Set')
     const categoryMain = String(body.categoryMain ?? PROMOTION_MAIN_CATEGORY).trim() || PROMOTION_MAIN_CATEGORY
     const userRole = String(body.userRole ?? body.user_role ?? '')
     const userName = String(body.userName ?? body.user_name ?? '').trim()

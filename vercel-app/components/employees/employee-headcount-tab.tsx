@@ -24,10 +24,12 @@ import {
 } from "@/lib/api-client"
 import { getBangkokTodayDateString } from "@/lib/bangkok-time"
 import {
+  addDaysToYmd,
   employeeHeadcountWeight,
   formatHeadcountFte,
   isEmployedAsOf,
   isPartTimeSalType,
+  isResignScheduledInWindow,
 } from "@/lib/employee-headcount-utils"
 
 type HcOverviewChartRow = { label: string; full: string; target: number; actual: number }
@@ -512,6 +514,7 @@ export function EmployeeHeadcountTab({
   const [overviewJobFilter, setOverviewJobFilter] = React.useState("")
 
   const todayBkk = React.useMemo(() => getBangkokTodayDateString(), [])
+  const resignWindowEndYmd = React.useMemo(() => addDaysToYmd(todayBkk, 30), [todayBkk])
 
   const loadAll = React.useCallback(async () => {
     setLoading(true)
@@ -587,6 +590,18 @@ export function EmployeeHeadcountTab({
     return m
   }, [empList, selectedStore, todayBkk])
 
+  const resignSoonByJob = React.useMemo(() => {
+    const m = new Map<string, number>()
+    if (!selectedStore) return m
+    for (const e of empList) {
+      if (String(e.store || "").trim() !== selectedStore) continue
+      if (!isResignScheduledInWindow(e.join, e.resign, todayBkk, resignWindowEndYmd)) continue
+      const j = String(e.job || "").trim() || "—"
+      m.set(j, (m.get(j) ?? 0) + 1)
+    }
+    return m
+  }, [empList, selectedStore, todayBkk, resignWindowEndYmd])
+
   const storeChoices = React.useMemo(() => {
     if (isManager && userStore) return [userStore]
     return stores
@@ -627,6 +642,7 @@ export function EmployeeHeadcountTab({
       let full = 0
       let part = 0
       let fte = 0
+      let resignSoon = 0
       for (const e of empList) {
         if (String(e.store || "").trim() !== store) continue
         if (jf && jobKey(e.job) !== jf) continue
@@ -638,10 +654,11 @@ export function EmployeeHeadcountTab({
           full += 1
           fte += 1
         }
+        if (isResignScheduledInWindow(e.join, e.resign, todayBkk, resignWindowEndYmd)) resignSoon += 1
       }
-      return { store, target, full, part, fte, diff: fte - target }
+      return { store, target, full, part, fte, diff: fte - target, resignSoon }
     })
-  }, [stores, empList, headList, todayBkk, overviewJobFilter])
+  }, [stores, empList, headList, todayBkk, overviewJobFilter, resignWindowEndYmd])
 
   const overviewFiltered = React.useMemo(() => {
     type Row = (typeof overviewByStore)[number] & { viewKey: string }
@@ -880,12 +897,13 @@ export function EmployeeHeadcountTab({
                 <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_fte_short")}</th>
                 <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_diff")}</th>
                 <th className="px-3 py-2 font-semibold">{t("emp_hc_status_short")}</th>
+                <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_resign_soon_short")}</th>
               </tr>
             </thead>
             <tbody>
               {overviewFiltered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                     {t("emp_hc_overview_no_results")}
                   </td>
                 </tr>
@@ -927,6 +945,13 @@ export function EmployeeHeadcountTab({
                     {r.diff > 0 ? `+${formatHeadcountFte(r.diff)}` : formatHeadcountFte(r.diff)}
                   </td>
                   <td className="px-3 py-2">{statusBadge(r.fte, r.target)}</td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      r.resignSoon > 0 ? "font-medium text-rose-700 dark:text-rose-300" : "text-muted-foreground"
+                    }`}
+                  >
+                    {r.resignSoon}
+                  </td>
                 </tr>
                 )
               })
@@ -1010,12 +1035,13 @@ export function EmployeeHeadcountTab({
               <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_fte_short")}</th>
               <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_diff")}</th>
               <th className="px-3 py-2 font-semibold">{t("emp_hc_status_short")}</th>
+              <th className="px-3 py-2 font-semibold text-right tabular-nums">{t("emp_hc_resign_soon_short")}</th>
             </tr>
           </thead>
           <tbody>
             {localRows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
                   {selectedStore ? t("emp_hc_empty_jobs") : t("emp_hc_select_store")}
                 </td>
               </tr>
@@ -1023,6 +1049,7 @@ export function EmployeeHeadcountTab({
               localRows.map((row) => {
                 const det = actualByJobDetail.get(row.job) || { full: 0, part: 0, fte: 0 }
                 const diff = det.fte - row.target
+                const rs = resignSoonByJob.get(row.job) ?? 0
                 return (
                   <tr key={row.job} className="border-b border-border/60 hover:bg-muted/10">
                     <td className="px-3 py-2 font-medium">{row.job}</td>
@@ -1048,6 +1075,13 @@ export function EmployeeHeadcountTab({
                       {diff > 0 ? `+${formatHeadcountFte(diff)}` : formatHeadcountFte(diff)}
                     </td>
                     <td className="px-3 py-2">{statusBadge(det.fte, row.target)}</td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${
+                        rs > 0 ? "font-medium text-rose-700 dark:text-rose-300" : "text-muted-foreground"
+                      }`}
+                    >
+                      {rs}
+                    </td>
                   </tr>
                 )
               })
@@ -1056,6 +1090,7 @@ export function EmployeeHeadcountTab({
         </table>
       </div>
       <p className="text-xs text-muted-foreground">{t("emp_hc_asof_hint")}</p>
+      <p className="text-xs text-muted-foreground">{t("emp_hc_resign_soon_hint")}</p>
       <p className="text-xs text-muted-foreground">{t("emp_hc_parttime_half_hint")}</p>
     </div>
   )

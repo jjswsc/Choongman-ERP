@@ -9,6 +9,15 @@ import { ItemTable } from "@/components/erp/item-table"
 import { OutboundLocationSettingsDialog } from "@/components/erp/outbound-location-settings-dialog"
 import { ItemCategorySettingsDialog } from "@/components/erp/item-category-settings-dialog"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
@@ -411,18 +420,22 @@ export default function ItemsPage() {
             {t("loading")}
           </div>
         )}
-        <Tabs value={itemsTab} onValueChange={(v) => setItemsTab(v as "list" | "priceHistory")} className="w-full">
-          <TabsList className="mb-4 h-9">
-            <TabsTrigger value="list" className="gap-1.5 text-xs">
-              <Tags className="h-3.5 w-3.5" />
-              {t("itemsList") || "품목 목록"}
-            </TabsTrigger>
-            <TabsTrigger value="priceHistory" className="gap-1.5 text-xs">
-              <History className="h-3.5 w-3.5" />
-              {t("itemsTabPriceHistory") || "품목 가격이력"}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="list" className="mt-0">
+        <Tabs value={itemsTab} onValueChange={(v) => setItemsTab(v as "list" | "priceHistory")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
+                  <Tags className={adminTabsIconCn} aria-hidden />
+                  {t("itemsList") || "품목 목록"}
+                </TabsTrigger>
+                <TabsTrigger value="priceHistory" className={adminTabsTriggerCn}>
+                  <History className={adminTabsIconCn} aria-hidden />
+                  {t("itemsTabPriceHistory") || "품목 가격이력"}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="list" className={adminTabsContentCn}>
         <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
           <div className="lg:sticky lg:top-0 lg:self-start">
             <ItemForm
@@ -454,7 +467,7 @@ export default function ItemsPage() {
           />
         </div>
           </TabsContent>
-          <TabsContent value="priceHistory" className="mt-0">
+          <TabsContent value="priceHistory" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-6">
               <PriceHistoryTab entityTypes={["item"]} mode="item" />
             </div>

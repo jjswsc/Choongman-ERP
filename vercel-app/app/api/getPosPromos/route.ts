@@ -90,19 +90,22 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const campaignId = searchParams.get('campaignId')?.trim()
+    const standaloneOnly =
+      searchParams.get('standaloneOnly') === '1' || searchParams.get('standaloneOnly') === 'true'
     let rows: RawRow[] | null = null
     for (const sel of [SELECT_WITH_MARKETING_COST, SELECT_EXTENDED, SELECT_BASE]) {
       try {
-        rows = campaignId
-          ? ((await supabaseSelectFilter(
-              'pos_promos',
-              `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`,
-              {
-                order: 'sort_order.asc,name.asc',
-                limit: 10000,
-                select: sel,
-              }
-            )) as RawRow[] | null)
+        const filter = standaloneOnly
+          ? 'marketing_campaign_id=is.null'
+          : campaignId
+            ? `marketing_campaign_id=eq.${encodeURIComponent(campaignId)}`
+            : null
+        rows = filter
+          ? ((await supabaseSelectFilter('pos_promos', filter, {
+              order: 'sort_order.asc,name.asc',
+              limit: 10000,
+              select: sel,
+            })) as RawRow[] | null)
           : ((await supabaseSelect('pos_promos', {
               order: 'sort_order.asc,name.asc',
               limit: 10000,

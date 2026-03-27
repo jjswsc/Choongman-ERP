@@ -6,6 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { parsePurchaseOrderCart } from '@/lib/purchase-order-cart'
 
 export interface PayableItemRow {
   code?: string
@@ -68,8 +69,8 @@ export async function GET(request: NextRequest) {
       const cartJson = poRows?.[0]?.cart_json
       if (cartJson) {
         try {
-          const cart = JSON.parse(cartJson) as { code?: string; name?: string; price?: number; qty?: number }[]
-          for (const c of cart || []) {
+          const { items: cartLines } = parsePurchaseOrderCart(cartJson)
+          for (const c of cartLines || []) {
             const qty = Number(c.qty) || 0
             const price = Number(c.price) || 0
             items.push({

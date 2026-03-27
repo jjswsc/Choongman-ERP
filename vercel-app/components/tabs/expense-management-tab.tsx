@@ -3,6 +3,15 @@ import { appAlert, appConfirm, appPrompt } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -609,15 +618,27 @@ export function ExpenseManagementTab() {
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={(v) => setTab(v as "plan" | "expenseRegister" | "expenseSearch" | "card")}>
-        <TabsList>
-          <TabsTrigger value="plan">{t("expensePlanTab") || "지급예정"}</TabsTrigger>
-          <TabsTrigger value="expenseRegister">{t("expenseRegisterTabTitle") || "지출 등록"}</TabsTrigger>
-          <TabsTrigger value="expenseSearch">{t("expenseRegisterSearchTab") || "지출 검색"}</TabsTrigger>
-          <TabsTrigger value="card">{t("cardManagementTab") || "카드 관리"}</TabsTrigger>
-        </TabsList>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "plan" | "expenseRegister" | "expenseSearch" | "card")} className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="plan" className={adminTabsTriggerCn}>
+                {t("expensePlanTab") || "지급예정"}
+              </TabsTrigger>
+              <TabsTrigger value="expenseRegister" className={adminTabsTriggerCn}>
+                {t("expenseRegisterTabTitle") || "지출 등록"}
+              </TabsTrigger>
+              <TabsTrigger value="expenseSearch" className={adminTabsTriggerCn}>
+                {t("expenseRegisterSearchTab") || "지출 검색"}
+              </TabsTrigger>
+              <TabsTrigger value="card" className={adminTabsTriggerCn}>
+                {t("cardManagementTab") || "카드 관리"}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="plan" className="space-y-4 mt-4">
+        <TabsContent value="plan" className={cn(adminTabsContentCn, "space-y-4")}>
           <div className="flex flex-wrap items-end gap-2">
             <Input type="date" value={startStr} onChange={(e) => setStartStr(e.target.value)} className="w-[140px] h-9" />
             <span className="text-xs">~</span>
@@ -1144,15 +1165,15 @@ export function ExpenseManagementTab() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="expenseRegister" className="mt-4">
+        <TabsContent value="expenseRegister" className={adminTabsContentCn}>
           <WithdrawalManagementTab />
         </TabsContent>
 
-        <TabsContent value="expenseSearch" className="mt-4">
+        <TabsContent value="expenseSearch" className={adminTabsContentCn}>
           <ExpenseRegisterSearchTab />
         </TabsContent>
 
-        <TabsContent value="card" className="mt-4">
+        <TabsContent value="card" className={adminTabsContentCn}>
           <CardManagementTab />
         </TabsContent>
       </Tabs>

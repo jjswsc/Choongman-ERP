@@ -2,6 +2,15 @@
 
 import * as React from "react"
 import { Calculator, ChevronDown, ChevronRight, Download, Search, X, List, FlaskConical } from "lucide-react"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CostCalculatorTab } from "@/components/cost-analysis/cost-calculator-tab"
 import { SauceCostTab } from "@/components/cost-analysis/sauce-cost-tab"
@@ -25,21 +34,13 @@ import {
   getPresetCategoriesForMain,
   mainCategoryMatches,
 } from "@/lib/pos-menu-categories"
+import {
+  costAnalysisMenuIdKey,
+  isCostAnalysisBaseRow,
+  posCostAnalysisRowKey,
+} from "@/lib/pos-cost-analysis-keys"
 
 const MISE_RATE_DEFAULT = 3
-
-/** API·JSON에 따라 menuId가 숫자/문자 혼재 시 flatList 매칭 실패 방지 */
-function costAnalysisMenuIdKey(id: unknown): string {
-  return String(id ?? "")
-}
-
-/** 기본 행(option 없음): null·undefined·''·'null' 문자열까지 기본으로 취급 */
-function isCostAnalysisBaseRow(r: { optionId?: string | number | null }): boolean {
-  const o = r.optionId
-  if (o == null) return true
-  if (typeof o === "string" && (o.trim() === "" || o === "null")) return true
-  return false
-}
 
 /**
  * React Strict Mode(dev)에서 마운트→언마운트→재마운트 시,
@@ -326,23 +327,27 @@ export default function PosCostAnalysisPage() {
           </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="bg-muted/50 border border-border">
-            <TabsTrigger value="list" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <List className="h-4 w-4" />
-              {t("posCostTabList") || "목록"}
-            </TabsTrigger>
-            <TabsTrigger value="sauce" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <FlaskConical className="h-4 w-4" />
-              {t("posCostTabSauce") || "소스 원가"}
-            </TabsTrigger>
-            <TabsTrigger value="calculator" className="gap-1.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
-              <Calculator className="h-4 w-4" />
-              {t("posCostCalculator") || "원가 계산기"}
-            </TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
+                  <List className={adminTabsIconCn} aria-hidden />
+                  {t("posCostTabList") || "목록"}
+                </TabsTrigger>
+                <TabsTrigger value="sauce" className={adminTabsTriggerCn}>
+                  <FlaskConical className={adminTabsIconCn} aria-hidden />
+                  {t("posCostTabSauce") || "소스 원가"}
+                </TabsTrigger>
+                <TabsTrigger value="calculator" className={adminTabsTriggerCn}>
+                  <Calculator className={adminTabsIconCn} aria-hidden />
+                  {t("posCostCalculator") || "원가 계산기"}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="list" className="space-y-4">
+          <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
         {loading && (
           <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t("loading")}
@@ -612,11 +617,11 @@ export default function PosCostAnalysisPage() {
         </div>
           </TabsContent>
 
-          <TabsContent value="sauce" className="space-y-4">
+          <TabsContent value="sauce" className={cn(adminTabsContentCn, "space-y-4")}>
             <SauceCostTab />
           </TabsContent>
 
-          <TabsContent value="calculator" className="space-y-4">
+          <TabsContent value="calculator" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="dark rounded-lg">
               <CostCalculatorTab
                 initialLoadFromRow={selectedForCalculator}
@@ -626,12 +631,8 @@ export default function PosCostAnalysisPage() {
                     const arr = Array.isArray(data) ? data : []
                     setRows(arr)
                     if (selectedForCalculator) {
-                      const key = selectedForCalculator.optionId
-                        ? `${selectedForCalculator.menuId}:${selectedForCalculator.optionId}`
-                        : String(selectedForCalculator.menuId)
-                      const fresh = arr.find(
-                        (r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key
-                      )
+                      const key = posCostAnalysisRowKey(selectedForCalculator)
+                      const fresh = arr.find((r) => posCostAnalysisRowKey(r) === key)
                       if (fresh) setSelectedForCalculator(fresh)
                     }
                   }).catch(() => {})

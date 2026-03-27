@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseSelect, supabaseSelectFilter } from '@/lib/supabase-server'
 import { ATTENDANCE_LOG_PAYROLL_COLS } from '@/lib/postgrest-narrow-select'
 import { bangkokDateRangeToUtc, toDateStrBangkok, getBangkokHour, addDayBangkok } from '@/lib/attendance-utils'
+import { clockOutCountsForPayroll } from '@/lib/payroll-utils'
 
 const LATE_DED_HOURS_BASE = 208
 const OT_MULTIPLIER = 1.5
@@ -119,7 +120,7 @@ async function getAttendanceSummary(monthStr: string): Promise<Record<string, At
       if (!byDay[dayKey].outMs || dt > (byDay[dayKey].outMs || 0)) {
         byDay[dayKey].outMs = dt
         byDay[dayKey].breakMin = Number(r.break_min) || 0
-        byDay[dayKey].outApproved = isApproved
+        byDay[dayKey].outApproved = clockOutCountsForPayroll(r.approved, r.status)
         byDay[dayKey].otMin = Number(r.ot_min) || 0
         byDay[dayKey].earlyMin = Number((r as { early_min?: number }).early_min) || 0
       }
@@ -302,8 +303,8 @@ export async function GET(request: NextRequest) {
       let holidayPay = 0
       const holidayWorkDays = getHolidayWorkDays(attKey, att.workDates || [], holidaySet)
       if (holidayWorkDays > 0) {
-        if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt * 2)
-        else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays * 2)
+        if (isHourly && salAmt > 0) holidayPay = Math.floor(holidayWorkDays * 8 * salAmt)
+        else if (salary > 0) holidayPay = Math.floor((salary / 30) * holidayWorkDays)
       }
 
       const contributable = Math.min(salary, ssoLimits.ceiling)

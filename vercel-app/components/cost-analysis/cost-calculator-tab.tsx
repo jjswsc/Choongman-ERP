@@ -25,6 +25,7 @@ import {
 import type { MenuItem, RecipeItem } from "@/lib/cost-data"
 import type { PosMenuCostAnalysisRow } from "@/lib/api-client"
 import { POS_MAIN_CATEGORIES, mainCategoryMatches, getPresetCategoriesForMain } from "@/lib/pos-menu-categories"
+import { posCostAnalysisRowKey } from "@/lib/pos-cost-analysis-keys"
 import { getSauces, getAdminItems, getPosMenuIngredients, savePosMenuIngredient, deletePosMenuIngredient, savePosMenu, savePosMenuOption, getPosMenuCostAnalysis } from "@/lib/api-client"
 
 interface CostCalculatorTabProps {
@@ -54,6 +55,7 @@ function breakdownToRecipeItems(row: PosMenuCostAnalysisRow): { food: RecipeItem
       ingredientCode: code,
       quantity: b.quantity,
       misePercent: (b.lossRate ?? 0) || MISE_DEFAULT,
+      savedItemCode: String(b.itemCode ?? "").trim() || undefined,
     }
     if (cat === "packaging") packaging.push(item)
     else food.push(item)
@@ -121,7 +123,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
       setFoodItems(emptyFoodRecipe)
       setPackagingItems(emptyPackagingRecipe)
     }
-    return () => clearRuntimeIngredients()
+    // cleanup에서 clearRuntimeIngredients 금지: Strict Mode·탭 전환 등으로 맵만 비면
+    // getIngredientItemCode가 전부 실패 → 저장 시 toSave 빈 배열 → DB 재료 전량 삭제됨.
   }, [initialLoadFromRow])
 
   const foodSubTotal = useMemo(() => calculateSubTotal(foodItems), [foodItems])
@@ -181,10 +184,11 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
     ]
     const toSave: { itemCode: string; quantity: number; lossRate: number; ingredientType: "food" | "packaging" }[] = []
     for (const r of allItems) {
-      const itemCode = getIngredientItemCode(r.ingredientCode)
-      if (!itemCode?.trim()) continue
+      const resolved = getIngredientItemCode(r.ingredientCode) ?? r.savedItemCode
+      const itemCode = String(resolved ?? "").trim()
+      if (!itemCode) continue
       toSave.push({
-        itemCode: itemCode.trim(),
+        itemCode,
         quantity: r.quantity,
         lossRate: r.misePercent ?? MISE_DEFAULT,
         ingredientType: r.ingredientType,
@@ -197,6 +201,13 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
         menuId: String(menuId),
         optionId: optionId != null ? String(optionId) : (undefined as string | undefined),
       })
+      const uiIngredientRows = foodItems.length + packagingItems.length
+      if (uiIngredientRows > 0 && toSave.length === 0) {
+        throw new Error(
+          t("posCostSaveBlockedEmptyIngredients") ||
+            "재료 품목코드를 확인할 수 없어 저장할 수 없습니다. 목록에서 메뉴를 다시 선택한 뒤 수정해 주세요."
+        )
+      }
       for (const ing of existing) {
         const res = await deletePosMenuIngredient({ id: String(ing.id) })
         if (!res.success) throw new Error(res.message)
@@ -276,12 +287,8 @@ export function CostCalculatorTab({ initialLoadFromRow, onClearLoad, onSaveSucce
                 try {
                   const data = await getPosMenuCostAnalysis()
                   const arr = Array.isArray(data) ? data : []
-                  const key = initialLoadFromRow.optionId
-                    ? `${initialLoadFromRow.menuId}:${initialLoadFromRow.optionId}`
-                    : String(initialLoadFromRow.menuId)
-                  const fresh = arr.find(
-                    (r) => (r.optionId ? `${r.menuId}:${r.optionId}` : r.menuId) === key
-                  )
+                  const key = posCostAnalysisRowKey(initialLoadFromRow)
+                  const fresh = arr.find((r) => posCostAnalysisRowKey(r) === key)
                   if (fresh) onReloadMenu(fresh)
                   else await appAlert(t("posCostLoadFail") || "데이터를 찾을 수 없습니다.")
                 } catch {

@@ -5,6 +5,15 @@ import * as React from "react"
 import { Printer, Save, RotateCw, Wallet, Receipt, Building2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -598,37 +607,39 @@ export default function PosPrintersPage() {
         )}
 
         {effectiveStore && !loading && (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="rounded-xl border bg-card overflow-hidden">
-            <div className="w-full overflow-x-auto overflow-y-hidden rounded-t-xl border-b bg-muted/30">
-              <TabsList className="min-w-max justify-start rounded-t-xl rounded-b-none border-0 px-4 pt-4 pb-0 gap-2 bg-transparent">
-              <TabsTrigger value="printer" className="gap-1.5 shrink-0">
-                <Printer className="h-4 w-4" />
-                {t("posPrinterTab") || "프린터"}
-              </TabsTrigger>
-              <TabsTrigger value="receipt" className="gap-1.5 shrink-0">
-                <Receipt className="h-4 w-4" />
-                {t("posReceiptTab") || "영수증"}
-              </TabsTrigger>
-              <TabsTrigger value="receipt-design" className="gap-1.5 shrink-0">
-                <Receipt className="h-4 w-4" />
-                {t("posReceiptDesignTab") || "영수증 디자인"}
-              </TabsTrigger>
-              <TabsTrigger value="kitchen" className="gap-1.5 shrink-0">
-                <Printer className="h-4 w-4" />
-                {t("posKitchenSlip") || "주방 인쇄"}
-              </TabsTrigger>
-              <TabsTrigger value="business" className="gap-1.5 shrink-0">
-                <Building2 className="h-4 w-4" />
-                {t("posBizInfoTab") || "사업자 정보"}
-              </TabsTrigger>
-              <TabsTrigger value="drawer" className="gap-1.5 shrink-0">
-                <Wallet className="h-4 w-4" />
-                {t("posDrawerTab") || "돈통"}
-              </TabsTrigger>
-            </TabsList>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className={adminTabsRootCn}>
+            <div className={adminTabsBarCn}>
+              <div className={adminTabsScrollCn}>
+                <TabsList className={adminTabsListRowCn}>
+                  <TabsTrigger value="printer" className={adminTabsTriggerCn}>
+                    <Printer className={adminTabsIconCn} aria-hidden />
+                    {t("posPrinterTab") || "프린터"}
+                  </TabsTrigger>
+                  <TabsTrigger value="receipt" className={adminTabsTriggerCn}>
+                    <Receipt className={adminTabsIconCn} aria-hidden />
+                    {t("posReceiptTab") || "영수증"}
+                  </TabsTrigger>
+                  <TabsTrigger value="receipt-design" className={adminTabsTriggerCn}>
+                    <Receipt className={adminTabsIconCn} aria-hidden />
+                    {t("posReceiptDesignTab") || "영수증 디자인"}
+                  </TabsTrigger>
+                  <TabsTrigger value="kitchen" className={adminTabsTriggerCn}>
+                    <Printer className={adminTabsIconCn} aria-hidden />
+                    {t("posKitchenSlip") || "주방 인쇄"}
+                  </TabsTrigger>
+                  <TabsTrigger value="business" className={adminTabsTriggerCn}>
+                    <Building2 className={adminTabsIconCn} aria-hidden />
+                    {t("posBizInfoTab") || "사업자 정보"}
+                  </TabsTrigger>
+                  <TabsTrigger value="drawer" className={adminTabsTriggerCn}>
+                    <Wallet className={adminTabsIconCn} aria-hidden />
+                    {t("posDrawerTab") || "돈통"}
+                  </TabsTrigger>
+                </TabsList>
+              </div>
             </div>
 
-            <TabsContent value="printer" className="mt-0 p-6 space-y-6">
+            <TabsContent value="printer" className={cn(adminTabsContentCn, "space-y-6")}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">{t("posDeliveryFee") || "배달 수수료"} (฿)</label>
@@ -682,7 +693,7 @@ export default function PosPrintersPage() {
             </div>
             </TabsContent>
 
-            <TabsContent value="kitchen" className="mt-0 p-6 space-y-4">
+            <TabsContent value="kitchen" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {t("posKitchenOptionsHint") || "주방 주문서 출력 방식, 분류, 자동 인쇄를 설정합니다."}
               </p>
@@ -855,7 +866,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="receipt" className="mt-0 p-6 space-y-4">
+            <TabsContent value="receipt" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {t("posReceiptOptionsHint") || "영수증·고객 주문서 출력 시 포함할 항목을 설정합니다."}
               </p>
@@ -921,7 +932,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="receipt-design" className="mt-0 p-6 space-y-4">
+            <TabsContent value="receipt-design" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {t("posReceiptDesignHint") || "손님 영수증 레이아웃 표시 항목을 설정합니다."}
               </p>
@@ -993,7 +1004,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="business" className="mt-0 p-6 space-y-4">
+            <TabsContent value="business" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-lg border p-4 space-y-3">
                 <p className="text-sm font-medium">{t("posBizInfoTab") || "사업자 정보"}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1022,7 +1033,7 @@ export default function PosPrintersPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="drawer" className="mt-0 p-6 space-y-4">
+            <TabsContent value="drawer" className={cn(adminTabsContentCn, "space-y-4")}>
               <p className="text-sm text-muted-foreground">
                 {t("posDrawerHint") || "결제 유형별 돈통 자동 열림 및 수동 열기 시 인증 옵션을 설정합니다."}
               </p>

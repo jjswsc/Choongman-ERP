@@ -13,6 +13,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Search, Save, Wrench, ImageIcon, X, Pencil } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
@@ -381,15 +390,27 @@ export function AdminStoreRepairs() {
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-          <TabsList className="mb-4 grid w-full max-w-3xl grid-cols-2 gap-1 sm:grid-cols-4">
-            <TabsTrigger value="dash">{t("tab_repair_dashboard")}</TabsTrigger>
-            <TabsTrigger value="list">{t("tab_repair_list")}</TabsTrigger>
-            <TabsTrigger value="process">{t("tab_repair_process")}</TabsTrigger>
-            <TabsTrigger value="new">{t("tab_repair_new")}</TabsTrigger>
-          </TabsList>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListGridClass("max-w-3xl", "grid-cols-2", "sm:grid-cols-4")}>
+                <TabsTrigger value="dash" className={adminTabsTriggerGridCn}>
+                  {t("tab_repair_dashboard")}
+                </TabsTrigger>
+                <TabsTrigger value="list" className={adminTabsTriggerGridCn}>
+                  {t("tab_repair_list")}
+                </TabsTrigger>
+                <TabsTrigger value="process" className={adminTabsTriggerGridCn}>
+                  {t("tab_repair_process")}
+                </TabsTrigger>
+                <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                  {t("tab_repair_new")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="dash" className="space-y-4">
+          <TabsContent value="dash" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="flex flex-wrap gap-2">
               <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="h-9 w-[140px] text-xs" />
               <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 w-[140px] text-xs" />
@@ -474,7 +495,7 @@ export function AdminStoreRepairs() {
             </div>
           </TabsContent>
 
-          <TabsContent value="process" className="space-y-4">
+          <TabsContent value="process" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="flex flex-wrap gap-2">
               <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="h-9 w-[140px] text-xs" />
               <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 w-[140px] text-xs" />
@@ -501,7 +522,7 @@ export function AdminStoreRepairs() {
             />
           </TabsContent>
 
-          <TabsContent value="list" className="space-y-4">
+          <TabsContent value="list" className={cn(adminTabsContentCn, "space-y-4")}>
             <div className="flex flex-wrap gap-2 items-center">
               <Input type="date" value={listStart} onChange={(e) => setListStart(e.target.value)} className="h-9 w-[140px] text-xs" />
               <Input type="date" value={listEnd} onChange={(e) => setListEnd(e.target.value)} className="h-9 w-[140px] text-xs" />
@@ -642,7 +663,7 @@ export function AdminStoreRepairs() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="new">
+          <TabsContent value="new" className={adminTabsContentCn}>
             <Card>
               <CardContent className="pt-6 space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

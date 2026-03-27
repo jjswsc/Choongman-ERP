@@ -1,5 +1,5 @@
 "use client"
-import { appAlert } from "@/lib/app-message"
+import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,13 +28,55 @@ import {
   getVendorsForPurchase,
   getItemsByVendor,
   getHqStockByLocation,
+  getHeadOfficeInfo,
   savePurchaseOrder,
+  invalidatePurchaseOrdersListCache,
+  getPoBillingDraft,
   type PurchaseLocation,
   type VendorForPurchase,
   type ItemByVendor,
 } from "@/lib/api-client"
+import { useStoreList } from "@/lib/use-store-list"
 import { useOrderCreate } from "@/lib/order-create-context"
-import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown } from "lucide-react"
+import { todayStrBangkok } from "@/lib/attendance-utils"
+import { Minus, Plus, Search, ShoppingCart, Trash2, Package, ChevronDown, Calculator } from "lucide-react"
+
+function bangkokYearMonth(): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(new Date())
+    const y = parts.find((p) => p.type === "year")?.value
+    const mo = parts.find((p) => p.type === "month")?.value
+    if (y && mo) return `${y}-${mo}`
+  } catch {
+    /* ignore */
+  }
+  return new Date().toISOString().slice(0, 7)
+}
+
+function monthBoundsFromYm(ym: string): { startStr: string; endStr: string } {
+  const [ys, ms] = ym.split("-").map((x) => x.trim())
+  const y = Number(ys)
+  const mo = Number(ms)
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || mo < 1 || mo > 12) {
+    const t = new Date().toISOString().slice(0, 10)
+    return { startStr: t, endStr: t }
+  }
+  const startStr = `${y}-${String(mo).padStart(2, "0")}-01`
+  const last = new Date(y, mo, 0).getDate()
+  const endStr = `${y}-${String(mo).padStart(2, "0")}-${String(last).padStart(2, "0")}`
+  return { startStr, endStr }
+}
+
+/** 금액 표시: 천 단위 콤마, 소수는 필요 시 최대 2자리 */
+function formatMoneyComma(n: number): string {
+  const x = Number(n)
+  if (!Number.isFinite(x)) return "0"
+  return x.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
 
 interface CartItem {
   code: string
@@ -43,9 +85,16 @@ interface CartItem {
   qty: number
   store?: string
   taxType?: 'taxable' | 'exempt' | 'zero' | '면세' | '영세율'
+  /** POS 청구 줄 — 동일 유형 재담기 시 장바구니에서 교체용(저장 시 전달 안 함) */
+  poBillingKind?: 'royalty' | 'delivery_gp' | 'grab_gp' | 'all'
 }
 
-export function AdminPurchaseOrder() {
+export interface AdminPurchaseOrderProps {
+  /** 회계용: 품목 마스터 없이 라인 추가 (로얄티·GP 등) */
+  allowManualLines?: boolean
+}
+
+export function AdminPurchaseOrder({ allowManualLines = false }: AdminPurchaseOrderProps) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
@@ -53,6 +102,7 @@ export function AdminPurchaseOrder() {
   const pendingTransferCart = React.useRef<CartItem[] | null>(null)
   const appliedTransferRef = React.useRef(false)
   const prevVendorRef = React.useRef<VendorForPurchase | null>(null)
+  const prevLocationCodeRef = React.useRef<string | null>(null)
   const [cartGroupByStore, setCartGroupByStore] = React.useState(false)
 
   const [locations, setLocations] = React.useState<PurchaseLocation[]>([])
@@ -114,15 +164,94 @@ export function AdminPurchaseOrder() {
     const v = Math.round(taxableSub * 0.07)
     return { subtotal: sub, vat: v, total: sub + v }
   }, [cart])
+  /** 본사(회계) 발주일 — 방콕 달력 YYYY-MM-DD */
+  const [poOrderDate, setPoOrderDate] = React.useState(todayStrBangkok)
   const [withholdingTaxAmount, setWithholdingTaxAmount] = React.useState("")
+  const [manualLineName, setManualLineName] = React.useState("")
+  const [manualLinePrice, setManualLinePrice] = React.useState("")
+  const [manualLineQty, setManualLineQty] = React.useState("1")
+  /** 회계 PO: 선택 매장 (미선택 가능) */
+  const [relatedStore, setRelatedStore] = React.useState<string>("_none")
+  const [billingStart, setBillingStart] = React.useState("")
+  const [billingEnd, setBillingEnd] = React.useState("")
+  const [billingLoad, setBillingLoad] = React.useState(false)
+  const [billingSnap, setBillingSnap] = React.useState<{
+    totalSales: number
+    deliverySales: number
+    grabSales: number
+  } | null>(null)
+  /** POS 청구로 담은 뒤 저장 시 월별 초안 갱신 키로 사용 */
+  const [billingIntentMode, setBillingIntentMode] = React.useState<
+    'royalty' | 'delivery_gp' | 'grab_gp' | 'all' | null
+  >(null)
+  const { stores: storeList } = useStoreList()
+
+  const billingMonthYm = React.useMemo(
+    () => (billingStart.length >= 7 ? billingStart.slice(0, 7) : ''),
+    [billingStart]
+  )
 
   React.useEffect(() => {
-    Promise.all([getPurchaseLocations(), getVendorsForPurchase()]).then(([loc, ven]) => {
-      setLocations(loc || [])
+    setBillingIntentMode(null)
+  }, [billingMonthYm, relatedStore])
+
+  React.useEffect(() => {
+    if (!allowManualLines) return
+    const { startStr, endStr } = monthBoundsFromYm(bangkokYearMonth())
+    setBillingStart(startStr)
+    setBillingEnd(endStr)
+  }, [allowManualLines])
+
+  const addManualLineToCart = React.useCallback(() => {
+    const name = manualLineName.trim()
+    if (!name) return
+    const price = Number(String(manualLinePrice).replace(/,/g, "")) || 0
+    const qty = Math.max(0.0001, Number(String(manualLineQty).replace(/,/g, "")) || 1)
+    const code = `SVC-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    setBillingIntentMode(null)
+    setCart((prev) => [...prev, { code, name, price, qty, taxType: "taxable" }])
+    setManualLineName("")
+    setManualLinePrice("")
+    setManualLineQty("1")
+  }, [manualLineName, manualLinePrice, manualLineQty])
+
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [loc, ven, ho] = await Promise.all([
+        getPurchaseLocations(),
+        getVendorsForPurchase(),
+        allowManualLines
+          ? getHeadOfficeInfo().catch(() => ({
+              companyName: "",
+              taxId: "",
+              address: "",
+              phone: "",
+              bankInfo: "",
+            }))
+          : Promise.resolve({ companyName: "", taxId: "", address: "", phone: "", bankInfo: "" }),
+      ])
+      if (cancelled) return
       setVendors(ven || [])
-      if ((loc || []).length > 0 && !locationSelect) setLocationSelect(loc[0])
-    })
-  }, [])
+      if (allowManualLines) {
+        const hqAddr = String(ho?.address || "").trim()
+        const hq: PurchaseLocation = { name: "본사", address: hqAddr, location_code: "본사" }
+        const rest = (loc || []).filter(
+          (l) =>
+            String(l.location_code || "").toLowerCase() !== "본사" &&
+            !String(l.name || "").toLowerCase().includes("본사")
+        )
+        setLocations([hq, ...rest])
+        setLocationSelect(hq)
+      } else {
+        setLocations(loc || [])
+        setLocationSelect((prev) => (prev == null && (loc || []).length > 0 ? loc![0]! : prev))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [allowManualLines])
 
   React.useEffect(() => {
     if (!transferToPo || transferToPo.cart.length === 0) return
@@ -154,19 +283,53 @@ export function AdminPurchaseOrder() {
       )
     }
     setTransferToPo?.(null)
-  }, [transferToPo, vendors, locations, setTransferToPo])
+  }, [transferToPo, vendors, locations, setTransferToPo, allowManualLines])
 
   React.useEffect(() => {
-    if (!vendorSelect || !locationSelect) {
+    if (!locationSelect) {
       setItems([])
       setStock({})
-      if (!vendorSelect) {
+      setLoading(false)
+      return
+    }
+
+    if (!vendorSelect) {
+      setItems([])
+      setStock({})
+      setLoading(false)
+      if (!allowManualLines) {
         setCart([])
         appliedTransferRef.current = false
+        prevVendorRef.current = null
+        prevLocationCodeRef.current = null
+      } else {
         prevVendorRef.current = null
       }
       return
     }
+
+    if (allowManualLines) {
+      setItems([])
+      setStock({})
+      setLoading(false)
+      setSelectedItem(null)
+      const locKey = locationSelect.location_code
+      const prevV = prevVendorRef.current
+      const prevLoc = prevLocationCodeRef.current
+      const vendorChanged = prevV?.code !== vendorSelect.code
+      const locChanged = prevLoc !== locKey
+      prevVendorRef.current = vendorSelect
+      prevLocationCodeRef.current = locKey
+      if (pendingTransferCart.current) {
+        setCart(pendingTransferCart.current)
+        pendingTransferCart.current = null
+        appliedTransferRef.current = true
+      } else if ((vendorChanged && prevV != null) || (locChanged && prevLoc != null)) {
+        setCart([])
+      }
+      return
+    }
+
     if (!hasSearched && !pendingTransferCart.current) return
 
     const vendorChanged = prevVendorRef.current?.code !== vendorSelect.code
@@ -202,7 +365,7 @@ export function AdminPurchaseOrder() {
         setStock({})
       })
       .finally(() => setLoading(false))
-  }, [vendorSelect, locationSelect?.location_code, hasSearched])
+  }, [vendorSelect, locationSelect?.location_code, hasSearched, allowManualLines])
 
   const addToCart = () => {
     if (!selectedItem) return
@@ -229,6 +392,7 @@ export function AdminPurchaseOrder() {
   }
 
   const removeFromCart = (codeOrIdx: string | number) => {
+    setBillingIntentMode(null)
     if (typeof codeOrIdx === "number") {
       setCart((prev) => prev.filter((_, i) => i !== codeOrIdx))
     } else {
@@ -236,10 +400,152 @@ export function AdminPurchaseOrder() {
     }
   }
 
+  const applyBillingMonthBangkok = () => {
+    const { startStr, endStr } = monthBoundsFromYm(bangkokYearMonth())
+    setBillingStart(startStr)
+    setBillingEnd(endStr)
+  }
+
+  const appendBillingFromPos = async (mode: "all" | "royalty" | "delivery_gp" | "grab_gp") => {
+    if (relatedStore === "_none") {
+      await appAlert(t("poBillingSelectStoreFirst"))
+      return
+    }
+    if (!billingStart || !billingEnd) return
+    setBillingLoad(true)
+    try {
+      const res = await getPoBillingDraft({
+        store: relatedStore,
+        startStr: billingStart,
+        endStr: billingEnd,
+        mode,
+        labelRoyalty: t("poLineLabelRoyalty"),
+        labelDelivery: t("poLineLabelDelGp"),
+        labelGrab: t("poLineLabelGrab"),
+      })
+      if (res.snapshot) setBillingSnap(res.snapshot)
+      if (!res.success || !res.lines?.length) {
+        await appAlert(res.message || t("poBillingDraftEmpty"))
+        return
+      }
+      const tag: CartItem["poBillingKind"] = mode
+      setBillingIntentMode(mode)
+      setCart((prev) => {
+        const filtered = prev.filter((c) => c.poBillingKind !== tag)
+        const added = res.lines!.map((ln) => ({
+          code: ln.code,
+          name: ln.name,
+          price: ln.price,
+          qty: ln.qty,
+          taxType: (ln.taxType as CartItem["taxType"]) || "taxable",
+          poBillingKind: tag,
+        }))
+        return [...filtered, ...added]
+      })
+      if (res.truncated) await appAlert(t("poBillingTruncatedWarning"))
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBillingLoad(false)
+    }
+  }
+
+  /** 청구 비율이 0%가 아닌 매장만, 매장당 초안 PO 1건 저장 */
+  const bulkSavePoBillingAllStores = async (mode: "royalty" | "delivery_gp" | "grab_gp") => {
+    if (!billingStart || !billingEnd) return
+    if (!vendorSelect || !locationSelect) {
+      await appAlert(t("poBillingBulkNeedVendor"))
+      return
+    }
+    if (!auth?.user) {
+      await appAlert(t("poBillingBulkNeedAuth"))
+      return
+    }
+    const ok = await appConfirm(t("poBillingBulkConfirm"))
+    if (!ok) return
+    const ym = billingMonthYm
+    if (ym.length !== 7) {
+      await appAlert(t("poBillingBulkNeedPeriod"))
+      return
+    }
+    setBillingLoad(true)
+    let created = 0
+    let updated = 0
+    let truncatedAny = false
+    try {
+      for (const store of storeList) {
+        const res = await getPoBillingDraft({
+          store,
+          startStr: billingStart,
+          endStr: billingEnd,
+          mode,
+          labelRoyalty: t("poLineLabelRoyalty"),
+          labelDelivery: t("poLineLabelDelGp"),
+          labelGrab: t("poLineLabelGrab"),
+        })
+        if (res.truncated) truncatedAny = true
+        if (!res.success || !res.lines?.length) continue
+        const saveRes = await savePurchaseOrder({
+          vendorCode: vendorSelect.code,
+          vendorName: vendorSelect.name,
+          locationName: locationSelect.name,
+          locationAddress: locationSelect.address,
+          locationCode: locationSelect.location_code,
+          cart: res.lines.map((ln) => ({
+            code: ln.code,
+            name: ln.name,
+            price: ln.price,
+            qty: ln.qty,
+            taxType: ln.taxType,
+          })),
+          userName: auth.user,
+          relatedStore: store,
+          billingMonthYm: ym,
+          billingKind: mode,
+          orderDate: poOrderDate || undefined,
+        })
+        if (saveRes.success) {
+          if (saveRes.updated) updated += 1
+          else created += 1
+        } else {
+          await appAlert(
+            t("purchaseOrderFail") +
+              (saveRes.message ? ": " + translateApiMessage(saveRes.message, t) : "")
+          )
+          return
+        }
+      }
+      if (truncatedAny) await appAlert(t("poBillingTruncatedWarning"))
+      if (created + updated > 0) void invalidatePurchaseOrdersListCache()
+      const total = created + updated
+      if (total === 0) await appAlert(t("poBillingBulkSkipped"))
+      else if (updated === 0)
+        await appAlert(t("poBillingBulkDone").replace("{n}", String(created)))
+      else if (created === 0)
+        await appAlert(t("poBillingBulkDoneUpdated").replace("{n}", String(updated)))
+      else
+        await appAlert(
+          t("poBillingBulkDoneSplit")
+            .replace("{c}", String(created))
+            .replace("{u}", String(updated))
+        )
+    } catch (e) {
+      await appAlert(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBillingLoad(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!locationSelect || !vendorSelect || !auth?.user || cart.length === 0) return
     setSubmitting(true)
     try {
+      const passBillingUpsert =
+        allowManualLines &&
+        relatedStore &&
+        relatedStore !== "_none" &&
+        billingMonthYm.length === 7 &&
+        billingIntentMode != null
       const res = await savePurchaseOrder({
         vendorCode: vendorSelect.code,
         vendorName: vendorSelect.name,
@@ -249,11 +555,22 @@ export function AdminPurchaseOrder() {
         cart: cart.map((c) => ({ code: c.code, name: c.name, price: c.price, qty: c.qty, store: c.store, taxType: c.taxType })),
         userName: auth.user,
         withholdingTaxAmount: Number(withholdingTaxAmount?.replace(/,/g, "")) || 0,
+        relatedStore:
+          allowManualLines && relatedStore && relatedStore !== "_none" ? relatedStore : undefined,
+        billingMonthYm: passBillingUpsert ? billingMonthYm : undefined,
+        billingKind: passBillingUpsert ? billingIntentMode! : undefined,
+        orderDate: allowManualLines && poOrderDate ? poOrderDate : undefined,
       })
       if (res.success) {
-        await appAlert(t("purchaseOrderSuccess") + (res.poNo ? ` (${res.poNo})` : ""))
+        void invalidatePurchaseOrdersListCache()
+        const msg =
+          res.updated === true
+            ? t("purchaseOrderSuccessUpdated")
+            : t("purchaseOrderSuccess")
+        await appAlert(msg + (res.poNo ? ` (${res.poNo})` : ""))
         setCart([])
         setWithholdingTaxAmount("")
+        setBillingIntentMode(null)
       } else {
         await appAlert(t("purchaseOrderFail") + (res.message ? ": " + translateApiMessage(res.message, t) : ""))
       }
@@ -374,11 +691,254 @@ export function AdminPurchaseOrder() {
                 </div>
               )}
             </div>
+            {allowManualLines ? (
+              <div className="mt-3 space-y-1">
+                <label className="text-xs text-muted-foreground">{t("expenseStoreSelect")}</label>
+                <Select value={relatedStore} onValueChange={setRelatedStore}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={t("expenseStoreSelect")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">{t("poRelatedStoreNone")}</SelectItem>
+                    {storeList.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
 
-      {locationSelect && (vendorSelect || vendorSearchQuery.trim()) && (
+      {allowManualLines ? (
+        <div className="flex flex-col gap-1 rounded-lg border border-border bg-card px-4 py-3 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground">{t("poOrderDateLabel")}</label>
+            <Input
+              type="date"
+              className="h-9 w-[11rem]"
+              value={poOrderDate}
+              onChange={(e) => setPoOrderDate(e.target.value)}
+            />
+          </div>
+          <p className="max-w-xl text-xs text-muted-foreground sm:pb-0.5">{t("poOrderDateHint")}</p>
+        </div>
+      ) : null}
+
+      {allowManualLines ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">{t("poBillingBulkCreateTitle")}</CardTitle>
+            <p className="text-xs text-muted-foreground">{t("poBillingBulkStandaloneHint")}</p>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="h-10 flex-1 gap-1.5 sm:min-w-[10rem]"
+              disabled={billingLoad}
+              onClick={() => void bulkSavePoBillingAllStores("royalty")}
+            >
+              {billingLoad ? t("loading") : t("poBillingBulkRoyalty")}
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="h-10 flex-1 gap-1.5 sm:min-w-[10rem]"
+              disabled={billingLoad}
+              onClick={() => void bulkSavePoBillingAllStores("delivery_gp")}
+            >
+              {billingLoad ? t("loading") : t("poBillingBulkDeliveryGp")}
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="h-10 flex-1 gap-1.5 sm:min-w-[10rem]"
+              disabled={billingLoad}
+              onClick={() => void bulkSavePoBillingAllStores("grab_gp")}
+            >
+              {billingLoad ? t("loading") : t("poBillingBulkGrabGp")}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {allowManualLines ? (
+        <Card id="po-manual-line-section">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-sm font-semibold">{t("poManualLineSection")}</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">{t("poManualLineLead")}</p>
+                <p className="text-xs text-muted-foreground">{t("poManualLineHint")}</p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => {
+                  document.getElementById("po-manual-line-name-input")?.focus()
+                }}
+              >
+                {t("poBillingAddOrderLineBtn")}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="min-w-[12rem] flex-1 space-y-1">
+              <label className="text-xs text-muted-foreground">{t("poManualLineName")}</label>
+              <Input
+                id="po-manual-line-name-input"
+                value={manualLineName}
+                onChange={(e) => setManualLineName(e.target.value)}
+                placeholder={t("poManualLineName")}
+                className="h-9"
+              />
+            </div>
+            <div className="w-full space-y-1 sm:w-28">
+              <label className="text-xs text-muted-foreground">{t("poManualLinePrice")}</label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={manualLinePrice}
+                onChange={(e) => setManualLinePrice(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="w-full space-y-1 sm:w-24">
+              <label className="text-xs text-muted-foreground">{t("poManualLineQty")}</label>
+              <Input
+                type="number"
+                min={0.0001}
+                step={0.01}
+                value={manualLineQty}
+                onChange={(e) => setManualLineQty(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <Button type="button" variant="secondary" className="h-9 w-full sm:w-auto" onClick={addManualLineToCart}>
+              {t("poManualLineAdd")}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {allowManualLines ? (
+        <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{t("poBillingFromSales")}</CardTitle>
+              <p className="text-xs text-muted-foreground">{t("poBillingFromSalesHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("poBillingUpsertExplain")}</p>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="min-w-[10rem] space-y-1">
+                  <label className="text-xs text-muted-foreground">{t("poBillingMonthPicker")}</label>
+                  <Input
+                    type="month"
+                    className="h-9"
+                    value={billingStart ? billingStart.slice(0, 7) : ""}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v) {
+                        const { startStr, endStr } = monthBoundsFromYm(v)
+                        setBillingStart(startStr)
+                        setBillingEnd(endStr)
+                      }
+                    }}
+                  />
+                </div>
+                <div className="min-w-[10rem] flex-1 space-y-1">
+                  <label className="text-xs text-muted-foreground">{t("poBillingPeriodStart")}</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={billingStart}
+                    onChange={(e) => setBillingStart(e.target.value)}
+                  />
+                </div>
+                <div className="min-w-[10rem] flex-1 space-y-1">
+                  <label className="text-xs text-muted-foreground">{t("poBillingPeriodEnd")}</label>
+                  <Input
+                    type="date"
+                    className="h-9"
+                    value={billingEnd}
+                    onChange={(e) => setBillingEnd(e.target.value)}
+                  />
+                </div>
+                <Button type="button" variant="outline" size="sm" className="h-9 w-full sm:w-auto" onClick={applyBillingMonthBangkok}>
+                  {t("poBillingMonthQuick")}
+                </Button>
+              </div>
+              <p className="text-xs font-medium text-foreground">{t("poBillingAddToCartTitle")}</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
+                  disabled={billingLoad || relatedStore === "_none"}
+                  onClick={() => void appendBillingFromPos("royalty")}
+                >
+                  <Calculator className="h-3.5 w-3.5 shrink-0" />
+                  {billingLoad ? t("loading") : t("poBillingAddRoyalty")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
+                  disabled={billingLoad || relatedStore === "_none"}
+                  onClick={() => void appendBillingFromPos("delivery_gp")}
+                >
+                  <Calculator className="h-3.5 w-3.5 shrink-0" />
+                  {billingLoad ? t("loading") : t("poBillingAddDeliveryGp")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
+                  disabled={billingLoad || relatedStore === "_none"}
+                  onClick={() => void appendBillingFromPos("grab_gp")}
+                >
+                  <Calculator className="h-3.5 w-3.5 shrink-0" />
+                  {billingLoad ? t("loading") : t("poBillingAddGrabGp")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-10 flex-1 gap-1.5 sm:min-w-[9rem]"
+                  disabled={billingLoad || relatedStore === "_none"}
+                  onClick={() => void appendBillingFromPos("all")}
+                >
+                  {billingLoad ? t("loading") : t("poBillingLoadDraft")}
+                </Button>
+              </div>
+              {billingSnap ? (
+                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{t("poBillingSnapshot")}: </span>
+                  {t("poBillingTotalSales")} {Math.round(billingSnap.totalSales).toLocaleString()} ·{" "}
+                  {t("poBillingDelSales")} {Math.round(billingSnap.deliverySales).toLocaleString()} ·{" "}
+                  {t("poBillingGrabSales")} {Math.round(billingSnap.grabSales).toLocaleString()}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
+
+      {!allowManualLines && locationSelect && (vendorSelect || vendorSearchQuery.trim()) && (
         <div className="flex justify-end">
           <Button
             size="sm"
@@ -416,119 +976,143 @@ export function AdminPurchaseOrder() {
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">{t("ordNew")}</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            {t("purchaseOrderSelectLocationFirst")} • {t("purchaseOrderSelectVendor")} • {t("orderStockHq")} 표시
-          </p>
-        </CardHeader>
-        <CardContent className="p-0">
-          {!vendorSelect || !locationSelect ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {!vendorSelect ? t("purchaseOrderSelectVendor") : t("purchaseOrderSelectLocation")}
-            </div>
-          ) : !hasSearched ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
-            </div>
-          ) : loading ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</div>
-          ) : items.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              {t("purchaseOrderNoItems")}
-            </div>
-          ) : (
-            <Accordion type="single" collapsible className="w-full">
-              {categories.map(([catName, catItems]) => (
-                <AccordionItem
-                  key={catName}
-                  value={catName}
-                  className="border-b border-border/60 last:border-0"
-                >
-                  <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
-                    <div className="flex items-center gap-2">
-                      <Package className="h-4 w-4 text-primary" />
-                      {catName}
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-3">
-                    <div className="flex flex-col gap-1.5">
-                      {catItems.map((item) => {
-                        const qty = stock[item.code] ?? 0
-                        const price = item.cost > 0 ? item.cost : item.price
-                        return (
-                          <div
-                            key={item.code}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => setSelectedItem(item)}
-                            onKeyDown={(e) => e.key === "Enter" && setSelectedItem(item)}
-                            className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                              selectedItem?.code === item.code
-                                ? "bg-primary/10 font-medium text-primary"
-                                : "text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="font-semibold">{item.name}</span>
-                                <span className="text-xs text-muted-foreground">({item.spec || "-"})</span>
-                                <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-                                  {t("orderStockHq")}:{qty}
+      {!allowManualLines ? (
+        <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{t("ordNew")}</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {t("purchaseOrderSelectLocationFirst")} • {t("purchaseOrderSelectVendor")} • {t("orderStockHq")} 표시
+              </p>
+            </CardHeader>
+            <CardContent className="p-0">
+              {!vendorSelect || !locationSelect ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  {!vendorSelect ? t("purchaseOrderSelectVendor") : t("purchaseOrderSelectLocation")}
+                </div>
+              ) : !hasSearched ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  {t("orderSearchHint") || "조회 버튼을 눌러 주세요."}
+                </div>
+              ) : loading ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">{t("loadingItems")}</div>
+              ) : items.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  <p>{t("purchaseOrderNoItems")}</p>
+                </div>
+              ) : (
+                <Accordion type="single" collapsible className="w-full">
+                  {categories.map(([catName, catItems]) => (
+                    <AccordionItem
+                      key={catName}
+                      value={catName}
+                      className="border-b border-border/60 last:border-0"
+                    >
+                      <AccordionTrigger className="px-4 py-3.5 text-sm font-semibold hover:no-underline">
+                        <div className="flex items-center gap-2">
+                          <Package className="h-4 w-4 text-primary" />
+                          {catName}
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-4 pb-3">
+                        <div className="flex flex-col gap-1.5">
+                          {catItems.map((item) => {
+                            const qty = stock[item.code] ?? 0
+                            const price = item.cost > 0 ? item.cost : item.price
+                            return (
+                              <div
+                                key={item.code}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => setSelectedItem(item)}
+                                onKeyDown={(e) => e.key === "Enter" && setSelectedItem(item)}
+                                className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                                  selectedItem?.code === item.code
+                                    ? "bg-primary/10 font-medium text-primary"
+                                    : "text-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <span className="font-semibold">{item.name}</span>
+                                    <span className="text-xs text-muted-foreground">({item.spec || "-"})</span>
+                                    <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+                                      {t("orderStockHq")}:{qty}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+                                  {price}
                                 </span>
                               </div>
-                            </div>
-                            <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-                              {price}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          )}
-        </CardContent>
-      </Card>
+                            )
+                          })}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
 
-      {vendorSelect && items.length > 0 && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-xl border border-border bg-card">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-l-xl text-primary"
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <span className="w-10 text-center text-sm font-semibold text-foreground">{quantity}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-r-xl text-primary"
-              onClick={() => setQuantity((q) => q + 1)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            {t("addCart")}
-          </Button>
-        </div>
-      )}
+          {vendorSelect && items.length > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center rounded-xl border border-border bg-card">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-l-xl text-primary"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <span className="w-10 text-center text-sm font-semibold text-foreground">{quantity}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-r-xl text-primary"
+                  onClick={() => setQuantity((q) => q + 1)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button className="h-10 flex-1 font-semibold" onClick={addToCart} disabled={!selectedItem}>
+                <ShoppingCart className="mr-2 h-4 w-4" />
+                {t("addCart")}
+              </Button>
+            </div>
+          )}
+        </>
+      ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-semibold">{t("ordCartItems")}</CardTitle>
-          <Badge variant="secondary" className="text-xs">
-            {cart.length}
-            {t("countUnit")}
-          </Badge>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 pb-2">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-sm font-semibold">{t("ordCartItems")}</CardTitle>
+            {allowManualLines ? (
+              <p className="mt-1 text-xs text-muted-foreground">{t("poCartLeadAccounting")}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {allowManualLines ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() =>
+                  document.getElementById("po-manual-line-section")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                {t("poBillingAddOrderLineBtn")}
+              </Button>
+            ) : null}
+            <Badge variant="secondary" className="text-xs">
+              {cart.length}
+              {t("countUnit")}
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           {cart.length === 0 ? (
@@ -556,10 +1140,10 @@ export function AdminPurchaseOrder() {
                           <td className="px-3 py-2 font-medium">{c.store || "-"}</td>
                         )}
                         <td className="px-3 py-2 font-medium">{c.name}</td>
-                        <td className="px-3 py-2 text-right">{c.price}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyComma(c.price)}</td>
                         <td className="px-3 py-2 text-right">{c.qty}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-primary">
-                          {c.price * c.qty}
+                        <td className="px-3 py-2 text-right font-semibold text-primary tabular-nums">
+                          {formatMoneyComma(c.price * c.qty)}
                         </td>
                         <td className="px-1 py-2">
                           <Button
@@ -579,15 +1163,15 @@ export function AdminPurchaseOrder() {
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                 <div className="flex justify-between">
                   <span>{t("subtotal")}</span>
-                  <span>{subtotal}</span>
+                  <span className="tabular-nums">{formatMoneyComma(subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>{t("vat")}</span>
-                  <span>{vat}</span>
+                  <span className="tabular-nums">{formatMoneyComma(vat)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 font-semibold text-foreground">
                   <span>{t("total")}</span>
-                  <span>{total}</span>
+                  <span className="tabular-nums">{formatMoneyComma(total)}</span>
                 </div>
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-xs text-muted-foreground whitespace-nowrap">{t("poWithholdingTax") || "원천징수세"}</span>
@@ -604,7 +1188,11 @@ export function AdminPurchaseOrder() {
                 {Number(withholdingTaxAmount || 0) > 0 && (
                   <div className="flex justify-between text-xs font-medium text-muted-foreground">
                     <span>{t("poNetAmount") || "실지급액"}</span>
-                    <span>{total - (Number(withholdingTaxAmount?.replace(/,/g, "")) || 0)}</span>
+                    <span className="tabular-nums">
+                      {formatMoneyComma(
+                        total - (Number(withholdingTaxAmount?.replace(/,/g, "")) || 0)
+                      )}
+                    </span>
                   </div>
                 )}
               </div>

@@ -21,10 +21,6 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 const LOGIN_I18N_FALLBACK_EN: Record<string, string> = {
   msg_login_network_error:
     "Cannot connect to the network. You may be offline or the server may be unreachable.",
-  msg_login_offline_banner_hint:
-    "A previous login session exists on this device. Tap the button below to continue without the internet.",
-  msg_login_offline_banner_hint_online:
-    "Wi‑Fi may look connected but the server may still be unreachable. Tap below to continue with the account saved on this device (cache/offline).",
 }
 
 function pickLoginStr(tMsg: (k: string) => string, key: string): string {
@@ -72,9 +68,6 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   const [pwChanging, setPwChanging] = useState(false)
   const [pwError, setPwError] = useState("")
   const [loadError, setLoadError] = useState<string | null>(null)
-  /** 서버 장애로 목록이 없을 때 매장/이름 직접 입력 */
-  const [manualStore, setManualStore] = useState("")
-  const [manualUser, setManualUser] = useState("")
   const [browserOnline, setBrowserOnline] = useState(true)
 
   useEffect(() => {
@@ -159,8 +152,8 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const effectiveStore = (manualStore || store).trim()
-    const effectiveUser = (manualUser || user).trim()
+    const effectiveStore = store.trim()
+    const effectiveUser = user.trim()
     if (!effectiveStore || !effectiveUser) {
       setErrorIsConnectivity(false)
       setError(tMsg("msg_select_store_name"))
@@ -255,13 +248,6 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
     }
   }
 
-  /**
-   * 이전 로그인 스냅샷이 있으면 항상 오프라인 진입 허용.
-   * (navigator.onLine === true 인데 서버/DB만 죽은 경우 캐시로 목록이 채워지면 loadError가 없어
-   * 예전에는 버튼이 아예 안 보였음.)
-   */
-  const canEnterOffline = Boolean(resumeAuth)
-
   const isOfficeStore = (s: string) => {
     const x = String(s || "").trim()
     return x === "본사" || x === "오피스" || x === "본점" || x.toLowerCase().includes("office")
@@ -273,12 +259,9 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
   })
   const users = store ? (loginData[store] || []) : []
   const noStores = !loading && stores.length === 0
-  /**
-   * 이전 세션 복구 배너: 오프라인이거나 서버에서 매장 목록을 못 받았을 때만 표시.
-   * (예전에는 resumeAuth만 있으면 온라인+정상일 때도 Wi‑Fi/서버 문구가 항상 떠서 혼란스러움)
-   */
   const serverListDegraded = Boolean(loadError) || noStores
-  const showResumeBanner = Boolean(resumeAuth) && (!browserOnline || serverListDegraded)
+  /** 이전 세션 있음 + (오프라인 또는 매장 목록 실패) → 화면에는 오프라인 진입 버튼만 */
+  const offlineOnlyScreen = Boolean(resumeAuth) && (!browserOnline || serverListDegraded)
 
   const labels = {
     ko: {
@@ -294,14 +277,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwChangeBtn: "변경",
       cancel: "취소",
       serverError: "서버에 연결할 수 없습니다.",
-      offlineRequiresPreviousLogin: "이 기기에서 이전에 로그인한 적이 있어야 오프라인으로 들어갈 수 있습니다.",
       enterOfflineMode: "오프라인 모드로 들어가기",
       retry: "다시 시도",
       refresh: "새로고침",
       connectingToServer: "서버에 연결 중...",
-      manualEntryHint: "매장 목록을 불러올 수 없습니다. 아래에 직접 입력 후 비밀번호를 넣고 로그인을 시도하세요. (서버 복구 시 로그인됩니다)",
-      manualStorePlaceholder: "매장명 직접 입력",
-      manualUserPlaceholder: "이름 직접 입력",
     },
     en: {
       selectStore: "Select Store",
@@ -316,14 +295,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwChangeBtn: "Change",
       cancel: "Cancel",
       serverError: "Cannot connect to the server.",
-      offlineRequiresPreviousLogin: "You must have logged in on this device before to enter offline.",
       enterOfflineMode: "Enter offline mode",
       retry: "Retry",
       refresh: "Refresh",
       connectingToServer: "Connecting to server...",
-      manualEntryHint: "Store list could not be loaded. Enter store and name below, then try login. (Login will work when server is back.)",
-      manualStorePlaceholder: "Enter store name",
-      manualUserPlaceholder: "Enter your name",
     },
     th: {
       selectStore: "เลือกสาขา",
@@ -338,14 +313,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwChangeBtn: "เปลี่ยน",
       cancel: "ยกเลิก",
       serverError: "ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้",
-      offlineRequiresPreviousLogin: "ต้องเคยเข้าสู่ระบบบนอุปกรณ์นี้ก่อนจึงจะเข้าโหมดออฟไลน์ได้",
       enterOfflineMode: "เข้าโหมดออฟไลน์",
       retry: "ลองอีกครั้ง",
       refresh: "รีเฟรช",
       connectingToServer: "กำลังเชื่อมต่อเซิร์ฟเวอร์...",
-      manualEntryHint: "โหลดรายการสาขาไม่ได้ กรุณาพิมพ์สาขาและชื่อด้านล่าง แล้วลองเข้าสู่ระบบ (จะเข้าได้เมื่อเซิร์ฟเวอร์กลับมา)",
-      manualStorePlaceholder: "พิมพ์ชื่อสาขา",
-      manualUserPlaceholder: "พิมพ์ชื่อของคุณ",
     },
     mm: {
       selectStore: "ဆိုင်ရွေးပါ",
@@ -360,14 +331,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwChangeBtn: "ပြောင်းမည်",
       cancel: "ပယ်ဖျက်မည်",
       serverError: "ဆာဗာနှင့် ချိတ်ဆက်မရပါ။",
-      offlineRequiresPreviousLogin: "အော့ဖ်လိုင်းဝင်ရန် ဤစက်တွင် ယခင်က ဝင်ထားရမည်။",
       enterOfflineMode: "အော့ဖ်လိုင်းမုဒ်သို့ ဝင်မည်",
       retry: "ပြန်ကြိုးစားမည်",
       refresh: "ပြန်စမည်",
       connectingToServer: "ဆာဗာနှင့် ချိတ်ဆက်နေသည်...",
-      manualEntryHint: "ဆိုင်စာရင်း မရနိုင်ပါ။ အောက်တွင် ဆိုင်နှင့် အမည် ရိုက်ထည့်ပြီး ဝင်ကြိုးစားပါ။ (ဆာဗာ ပြန်ကောင်းလျှင် ဝင်မည်)",
-      manualStorePlaceholder: "ဆိုင်အမည် ရိုက်ထည့်ပါ",
-      manualUserPlaceholder: "အမည် ရိုက်ထည့်ပါ",
     },
     la: {
       selectStore: "ເລືອກສາຂາ",
@@ -382,14 +349,10 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
       pwChangeBtn: "ປ່ຽນ",
       cancel: "ຍົກເລີກ",
       serverError: "ເຊື່ອມຕໍ່ເຊີບເວີບໍ່ໄດ້.",
-      offlineRequiresPreviousLogin: "ຕ້ອງເຄີຍເຂົ້າສູ່ລະບົບໃນອຸປະກອນນີ້ກ່ອນ ຈຶ່ງເຂົ້າໂອບຟ໌ລາຍໄດ້.",
       enterOfflineMode: "ເຂົ້າໂອບຟ໌ລາຍ",
       retry: "ລອງໃໝ່",
       refresh: "ໂຫຼດໃໝ່",
       connectingToServer: "ກຳລັງເຊື່ອມຕໍ່ເຊີບເວີ...",
-      manualEntryHint: "โຫຼດລາຍການສາຂາບໍ່ໄດ້ ກະລຸນາພິມສາຂາແລະຊື່ດ້ານລຸ່ມ ແລ້ວລອງເຂົ້າສູ່ລະບົບ (ຈະເຂົ້າໄດ້ເມື່ອເຊີບເວີກັບມາ)",
-      manualStorePlaceholder: "ພິມຊື່ສາຂາ",
-      manualUserPlaceholder: "ພິມຊື່ຂອງທ່ານ",
     },
   } as const
 
@@ -423,30 +386,42 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
             <p className="erp-text">CM ERP SYSTEM</p>
           </div>
 
-          {showResumeBanner && (
-            <div className="mb-4 rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-3 py-3 text-sm text-emerald-100">
-              <p className="mb-2 leading-snug">
-                {!browserOnline
-                  ? pickLoginStr(tMsg, "msg_login_offline_banner_hint")
-                  : pickLoginStr(tMsg, "msg_login_offline_banner_hint_online")}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuth(resumeAuth)
-                  router.replace(redirectTo)
-                }}
-                className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-              >
-                {t.enterOfflineMode}
-              </button>
-            </div>
-          )}
-
           {loading ? (
             <div className="login-loading py-6">
               <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-orange-500/30 border-t-orange-500" />
               <p className="mt-4 text-center text-sm text-white/80">{t.connectingToServer}</p>
+            </div>
+          ) : offlineOnlyScreen ? (
+            <div className="py-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (resumeAuth) {
+                    setAuth(resumeAuth)
+                    router.replace(redirectTo)
+                  }
+                }}
+                className="w-full rounded-md bg-emerald-600 px-3 py-3 text-sm font-medium text-white hover:bg-emerald-500"
+              >
+                {t.enterOfflineMode}
+              </button>
+            </div>
+          ) : (!browserOnline || serverListDegraded) && !resumeAuth ? (
+            <div className="flex flex-wrap justify-center gap-2 py-8">
+              <button
+                type="button"
+                onClick={() => fetchLoginData()}
+                className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+              >
+                {t.retry}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-md bg-amber-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-amber-500/50"
+              >
+                {t.refresh}
+              </button>
             </div>
           ) : (
           <form onSubmit={handleSubmit}>
@@ -478,72 +453,8 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
                 ))}
               </SelectContent>
             </Select>
-            {(noStores || loadError) && (
-              <div className="-mt-2 mb-3 flex flex-col gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
-                <span>{loadError === 'SERVER_ERROR' ? t.serverError : (loadError || tMsg("msg_no_stores_env"))}</span>
-                {!resumeAuth && (noStores || loadError) && (
-                  <span className="text-xs text-amber-200/90">
-                    {t.offlineRequiresPreviousLogin}
-                  </span>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {canEnterOffline && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (resumeAuth) {
-                          setAuth(resumeAuth)
-                          router.replace(redirectTo)
-                        }
-                      }}
-                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
-                    >
-                      {t.enterOfflineMode}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => fetchLoginData()}
-                    className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
-                  >
-                    {t.retry}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    className="rounded-md bg-amber-500/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500/50"
-                  >
-                    {t.refresh}
-                  </button>
-                </div>
-              </div>
-            )}
 
-            {(loadError || noStores) && (
-              <div className="-mt-1 mb-3 flex flex-col gap-2 text-sm">
-                <span className="text-amber-200/90">{t.manualEntryHint}</span>
-                <input
-                  type="text"
-                  value={manualStore}
-                  onChange={(e) => setManualStore(e.target.value)}
-                  placeholder={t.manualStorePlaceholder}
-                  className="login-input-field"
-                  autoComplete="off"
-                  aria-label={t.manualStorePlaceholder}
-                />
-                <input
-                  type="text"
-                  value={manualUser}
-                  onChange={(e) => setManualUser(e.target.value)}
-                  placeholder={t.manualUserPlaceholder}
-                  className="login-input-field"
-                  autoComplete="off"
-                  aria-label={t.manualUserPlaceholder}
-                />
-              </div>
-            )}
-
-            <Select value={user} onValueChange={setUser} disabled={!store && !manualStore}>
+            <Select value={user} onValueChange={setUser} disabled={!store}>
               <SelectTrigger type="button" className="login-select-trigger" style={{ color: "white" }}>
                 <SelectValue placeholder={`${t.selectName}...`} />
               </SelectTrigger>
@@ -566,35 +477,27 @@ export function LoginForm({ redirectTo, isAdminPage }: LoginFormProps) {
               aria-label="Password"
             />
 
-            {error && (
-              <div className="mb-3 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                <p className="leading-snug">{error}</p>
-                {errorIsConnectivity && typeof window !== "undefined" && (
-                  <div className="mt-3 border-t border-red-500/25 pt-3">
-                    {(() => {
-                      const snap = loadOfflineResumeAuth()
-                      if (snap) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAuth(snap)
-                              router.replace(redirectTo)
-                            }}
-                            className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                          >
-                            {t.enterOfflineMode}
-                          </button>
-                        )
-                      }
-                      return (
-                        <p className="text-xs leading-snug text-amber-200/90">{t.offlineRequiresPreviousLogin}</p>
-                      )
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
+            {error &&
+              (errorIsConnectivity && resumeAuth ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuth(resumeAuth)
+                    router.replace(redirectTo)
+                  }}
+                  className="mb-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+                >
+                  {t.enterOfflineMode}
+                </button>
+              ) : errorIsConnectivity ? (
+                <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-sm text-amber-200">
+                  {t.serverError}
+                </div>
+              ) : (
+                <div className="mb-3 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  <p className="leading-snug">{error}</p>
+                </div>
+              ))}
 
             <button type="submit" className="login-btn" disabled={submitting}>
               {submitting ? t.loggingIn : t.login}

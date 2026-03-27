@@ -2,12 +2,30 @@
 import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
-import { Users } from "lucide-react"
+import {
+  BarChart2,
+  ChefHat,
+  ClipboardList,
+  ClipboardPenLine,
+  Headphones,
+  ListChecks,
+  Users,
+  UsersRound,
+} from "lucide-react"
 import { useLang } from "@/lib/lang-context"
 import { useT } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { useAuth } from "@/lib/auth-context"
 import { isManagerRole, isFranchiseeRole, isOfficeRole, isOfficeStore, isAccountingRole } from "@/lib/permissions"
+import {
+  adminTabsBarCn,
+  adminTabsIconCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+  adminTabsContentCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   getAdminEmployeeList,
@@ -340,42 +358,54 @@ export default function EmployeesPage() {
             <Users className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{t("adminEmployees")}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("adminEmployees")}</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">{t("adminEmployeesSub")}</p>
           </div>
         </div>
 
-        <Tabs defaultValue="list" className="space-y-4">
-          <TabsList className="flex h-auto min-h-9 w-full max-w-5xl flex-wrap gap-1 bg-muted/60 p-1">
-            <TabsTrigger value="list" className="shrink-0">
-              {t("tab_hr_list")}
-            </TabsTrigger>
-            <TabsTrigger value="movement" className="shrink-0">
-              {t("tab_hr_movement")}
-            </TabsTrigger>
-            <TabsTrigger value="headcount" className="shrink-0">
-              {t("tab_hr_headcount")}
-            </TabsTrigger>
-            {isOffice && (
-              <TabsTrigger value="eval" className="shrink-0">
-                {t("tab_hr_eval")}
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="eval-list" className="shrink-0">
-              {t("tab_eval_list")}
-            </TabsTrigger>
-            {isOffice && (
-              <>
-                <TabsTrigger value="kitchen-setting" className="shrink-0">
-                  {t("tab_eval_kitchen_setting")}
+        <Tabs defaultValue="list" className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="list" className={adminTabsTriggerCn}>
+                  <ClipboardList className={adminTabsIconCn} aria-hidden />
+                  {t("tab_hr_list")}
                 </TabsTrigger>
-                <TabsTrigger value="service-setting" className="shrink-0">
-                  {t("tab_eval_service_setting")}
+                <TabsTrigger value="movement" className={adminTabsTriggerCn}>
+                  <BarChart2 className={adminTabsIconCn} aria-hidden />
+                  {t("tab_hr_movement")}
                 </TabsTrigger>
-              </>
-            )}
-          </TabsList>
+                <TabsTrigger value="headcount" className={adminTabsTriggerCn}>
+                  <UsersRound className={adminTabsIconCn} aria-hidden />
+                  {t("tab_hr_headcount")}
+                </TabsTrigger>
+                {isOffice && (
+                  <TabsTrigger value="eval" className={adminTabsTriggerCn}>
+                    <ClipboardPenLine className={adminTabsIconCn} aria-hidden />
+                    {t("tab_hr_eval")}
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="eval-list" className={adminTabsTriggerCn}>
+                  <ListChecks className={adminTabsIconCn} aria-hidden />
+                  {t("tab_eval_list")}
+                </TabsTrigger>
+                {isOffice && (
+                  <>
+                    <TabsTrigger value="kitchen-setting" className={adminTabsTriggerCn}>
+                      <ChefHat className={adminTabsIconCn} aria-hidden />
+                      {t("tab_eval_kitchen_setting")}
+                    </TabsTrigger>
+                    <TabsTrigger value="service-setting" className={adminTabsTriggerCn}>
+                      <Headphones className={adminTabsIconCn} aria-hidden />
+                      {t("tab_eval_service_setting")}
+                    </TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="list" className="mt-0">
+          <TabsContent value="list" className={adminTabsContentCn}>
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-4 lg:sticky lg:top-0 lg:self-start">
                 <EmployeeForm
@@ -439,16 +469,16 @@ export default function EmployeesPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="movement" className="mt-0">
+          <TabsContent value="movement" className={adminTabsContentCn}>
             <EmployeeMovementTab userStore={userStore} userRole={userRole} />
           </TabsContent>
 
-          <TabsContent value="headcount" className="mt-0">
+          <TabsContent value="headcount" className={adminTabsContentCn}>
             <EmployeeHeadcountTab userStore={userStore} userRole={userRole} isManager={isManagerOrFranchisee} />
           </TabsContent>
 
           {isOffice && (
-            <TabsContent value="eval">
+            <TabsContent value="eval" className={adminTabsContentCn}>
               <EmployeeEvalTab
                 stores={storesForForm}
                 employees={allEmployees}
@@ -456,15 +486,15 @@ export default function EmployeesPage() {
               />
             </TabsContent>
           )}
-          <TabsContent value="eval-list">
+          <TabsContent value="eval-list" className="mt-0 p-4 sm:p-6">
             <EmployeeEvalListTab stores={storesForFilter} />
           </TabsContent>
           {isOffice && (
             <>
-              <TabsContent value="kitchen-setting">
+              <TabsContent value="kitchen-setting" className={adminTabsContentCn}>
                 <EmployeeEvalSettingTab type="kitchen" readOnly={isManager} />
               </TabsContent>
-              <TabsContent value="service-setting">
+              <TabsContent value="service-setting" className={adminTabsContentCn}>
                 <EmployeeEvalSettingTab type="service" readOnly={isManager} />
               </TabsContent>
             </>

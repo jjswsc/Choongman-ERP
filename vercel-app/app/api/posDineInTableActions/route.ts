@@ -1,0 +1,315 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseSelectFilter, supabaseUpdateByFilter } from '@/lib/supabase-server'
+import { computePosPricing } from '@/lib/pos-pricing'
+import { coercePosOrderTypeForDb } from '@/lib/pos-sales-order-type-filter'
+import { isDineInOrderTypeForGuestCount } from '@/lib/pos-sales-order-type-filter'
+import { consolidatePosOrderLinesAfterMerge } from '@/lib/pos-dine-in-table-merge-rules'
+
+type PosOrderRow = {
+  id?: number
+  store_code?: string
+  order_type?: string
+  table_name?: string
+  status?: string
+  items_json?: string
+  memo?: string
+  discount_amt?: number
+  discount_reason?: string
+  guest_count?: number
+  payment_cash?: number
+  payment_card?: number
+  payment_qr?: number
+  payment_other?: number
+  member_id?: number | null
+  member_no?: string | null
+  coupon_code?: string | null
+  coupon_discount_amt?: number
+  point_used?: number
+  point_earned?: number
+}
+
+function isClosedStatus(status: string): boolean {
+  const s = String(status || '').toLowerCase()
+  return s === 'cancelled' || s === 'refunded' || s === 'completed'
+}
+
+function paymentSum(r: PosOrderRow): number {
+  return (
+    Math.max(0, Number(r.payment_cash) || 0) +
+    Math.max(0, Number(r.payment_card) || 0) +
+    Math.max(0, Number(r.payment_qr) || 0) +
+    Math.max(0, Number(r.payment_other) || 0)
+  )
+}
+
+function parseItems(json: string | undefined): Record<string, unknown>[] {
+  try {
+    const arr = JSON.parse(json || '[]')
+    return Array.isArray(arr) ? (arr as Record<string, unknown>[]) : []
+  } catch {
+    return []
+  }
+}
+
+function normalizeItem(raw: Record<string, unknown>, forcedId: string): Record<string, unknown> {
+  const qty = Math.max(0.01, Number(raw.qty ?? raw.quantity ?? 1) || 1)
+  const price = Number(raw.price ?? 0) || 0
+  const name = String(raw.name ?? '')
+  const note = String(raw.note ?? '').trim()
+  const out: Record<string, unknown> = {
+    id: forcedId,
+    name,
+    price,
+    qty,
+  }
+  if (note) out.note = note
+  if (raw.orderType != null) out.orderType = raw.orderType
+  if (raw.deliveryAppCode != null) out.deliveryAppCode = raw.deliveryAppCode
+  if (raw.promoId != null) out.promoId = raw.promoId
+  if (raw.promoCode != null) out.promoCode = raw.promoCode
+  if (raw.promoItems != null) out.promoItems = raw.promoItems
+  if (raw.servedAt != null) out.servedAt = raw.servedAt
+  if (raw.servedBy != null) out.servedBy = raw.servedBy
+  return out
+}
+
+async function fetchOrder(id: number): Promise<PosOrderRow | null> {
+  const rows = (await supabaseSelectFilter('pos_orders', `id=eq.${id}`, {
+    limit: 1,
+  })) as PosOrderRow[] | null
+  return rows?.[0] ?? null
+}
+
+async function hasOtherActiveOrderOnTable(
+  storeCode: string,
+  tableName: string,
+  excludeOrderId: number
+): Promise<boolean> {
+  const name = String(tableName ?? '').trim()
+  if (!name) return false
+  const rows = (await supabaseSelectFilter(
+    'pos_orders',
+    `store_code=ilike.${encodeURIComponent(storeCode)}&table_name=eq.${encodeURIComponent(name)}`,
+    { limit: 50 }
+  )) as PosOrderRow[] | null
+  if (!rows?.length) return false
+  return rows.some((r) => {
+    const rid = Number(r.id)
+    if (!rid || rid === excludeOrderId) return false
+    return !isClosedStatus(String(r.status ?? ''))
+  })
+}
+
+/**
+ * 홀(dine_in) 테이블 이동·합석 — 상세 규칙은 `lib/pos-dine-in-table-merge-rules.ts` 주석 참고.
+ * - move: 같은 주문의 table_name만 변경 (빈 테이블로만)
+ * - merge: keep 주문에 absorb 주문 품목·인원·할인 등을 합친 뒤 absorb는 cancelled
+ */
+export async function POST(req: NextRequest) {
+  const headers = new Headers()
+  headers.set('Access-Control-Allow-Origin', '*')
+
+  try {
+    const body = await req.json()
+    const action = String(body?.action ?? '').toLowerCase()
+
+    if (action === 'move') {
+      const orderId = Number(body?.orderId)
+      const targetTableName = String(body?.targetTableName ?? '').trim()
+      if (!orderId || !targetTableName) {
+        return NextResponse.json(
+          { success: false, message: 'orderId and targetTableName required' },
+          { headers }
+        )
+      }
+
+      const row = await fetchOrder(orderId)
+      if (!row?.id) {
+        return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+      }
+      if (coercePosOrderTypeForDb(row.order_type) !== 'dine_in') {
+        return NextResponse.json({ success: false, message: '매장(홀) 주문만 이동할 수 있습니다.' }, { headers })
+      }
+      if (isClosedStatus(String(row.status ?? ''))) {
+        return NextResponse.json({ success: false, message: '완료·취소된 주문은 이동할 수 없습니다.' }, { headers })
+      }
+
+      const store = String(row.store_code ?? '').trim()
+      const currentName = String(row.table_name ?? '').trim()
+      if (currentName === targetTableName) {
+        return NextResponse.json({ success: true }, { headers })
+      }
+
+      const busy = await hasOtherActiveOrderOnTable(store, targetTableName, orderId)
+      if (busy) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              '이미 주문이 있는 테이블입니다. 빈 테이블로 이동하거나 합석 기능을 사용해 주세요.',
+          },
+          { headers }
+        )
+      }
+
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${orderId}`, {
+        table_name: targetTableName,
+      })
+      return NextResponse.json({ success: true }, { headers })
+    }
+
+    if (action === 'merge') {
+      const keepOrderId = Number(body?.keepOrderId)
+      const absorbOrderId = Number(body?.absorbOrderId)
+      if (!keepOrderId || !absorbOrderId || keepOrderId === absorbOrderId) {
+        return NextResponse.json(
+          { success: false, message: 'keepOrderId and absorbOrderId required (must differ)' },
+          { headers }
+        )
+      }
+
+      const keep = await fetchOrder(keepOrderId)
+      const absorb = await fetchOrder(absorbOrderId)
+      if (!keep?.id || !absorb?.id) {
+        return NextResponse.json({ success: false, message: '주문을 찾을 수 없습니다.' }, { headers })
+      }
+
+      if (
+        coercePosOrderTypeForDb(keep.order_type) !== 'dine_in' ||
+        coercePosOrderTypeForDb(absorb.order_type) !== 'dine_in'
+      ) {
+        return NextResponse.json({ success: false, message: '매장(홀) 주문만 합석할 수 있습니다.' }, { headers })
+      }
+
+      if (isClosedStatus(String(keep.status ?? '')) || isClosedStatus(String(absorb.status ?? ''))) {
+        return NextResponse.json(
+          { success: false, message: '완료·취소된 주문은 합석할 수 없습니다.' },
+          { headers }
+        )
+      }
+
+      if (paymentSum(keep) > 0 || paymentSum(absorb) > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: '결제 금액이 반영된 주문은 합석할 수 없습니다. 이동만 가능합니다.',
+          },
+          { headers }
+        )
+      }
+
+      const storeKeep = String(keep.store_code ?? '').trim()
+      const storeAbs = String(absorb.store_code ?? '').trim()
+      if (!storeKeep || storeKeep.toLowerCase() !== storeAbs.toLowerCase()) {
+        return NextResponse.json(
+          { success: false, message: '같은 매장 주문만 합석할 수 있습니다.' },
+          { headers }
+        )
+      }
+
+      const keepItemsRaw = parseItems(keep.items_json)
+      const absorbItemsRaw = parseItems(absorb.items_json)
+      if (!keepItemsRaw.length || !absorbItemsRaw.length) {
+        return NextResponse.json({ success: false, message: '합석할 품목이 없습니다.' }, { headers })
+      }
+
+      const keepItems = keepItemsRaw.map((raw, i) =>
+        normalizeItem(raw, String(raw.id ?? '').trim() || `k${keepOrderId}-${i}`)
+      )
+      const absorbItems = absorbItemsRaw.map((raw, i) =>
+        normalizeItem(
+          raw,
+          `m${absorbOrderId}-${String(raw.id ?? '').trim() || String(i)}`
+        )
+      )
+      const mergedItems = consolidatePosOrderLinesAfterMerge([...keepItems, ...absorbItems])
+
+      let subtotal = 0
+      for (const it of mergedItems) {
+        const price = Number(it.price ?? 0) || 0
+        const qty = Number(it.qty ?? 1) || 1
+        subtotal += price * qty
+      }
+
+      const discountAmt =
+        Math.max(0, Number(keep.discount_amt) || 0) + Math.max(0, Number(absorb.discount_amt) || 0)
+      const couponDiscountAmt =
+        Math.max(0, Number(keep.coupon_discount_amt) || 0) +
+        Math.max(0, Number(absorb.coupon_discount_amt) || 0)
+      const discountReason = [String(keep.discount_reason ?? '').trim(), String(absorb.discount_reason ?? '').trim()]
+        .filter(Boolean)
+        .join(' · ')
+      const paymentCard =
+        Math.max(0, Number(keep.payment_card) || 0) + Math.max(0, Number(absorb.payment_card) || 0)
+
+      const pricing = computePosPricing({
+        subtotal,
+        discountAmt,
+        deliveryFee: 0,
+        packagingFee: 0,
+        cardPaymentAmount: paymentCard,
+        adjustments: {},
+      })
+
+      let guestCount = Math.max(0, Math.trunc(Number(keep.guest_count) || 0))
+      if (isDineInOrderTypeForGuestCount(keep.order_type)) {
+        guestCount += Math.max(0, Math.trunc(Number(absorb.guest_count) || 0))
+        guestCount = Math.min(99, guestCount)
+      }
+
+      const memK = Math.max(0, Number(keep.member_id) || 0)
+      const memA = Math.max(0, Number(absorb.member_id) || 0)
+      const memberId = memK || memA
+      const memberNo = String(keep.member_no ?? '').trim() || String(absorb.member_no ?? '').trim()
+
+      let couponCode = String(keep.coupon_code ?? '').trim().toUpperCase()
+      const absorbCoupon = String(absorb.coupon_code ?? '').trim().toUpperCase()
+      let memo = [String(keep.memo ?? '').trim(), String(absorb.memo ?? '').trim()].filter(Boolean).join('\n')
+      if (absorbCoupon && absorbCoupon !== couponCode) {
+        memo = memo
+          ? `${memo}\n[합석] 보조 쿠폰: ${absorbCoupon}`
+          : `[합석] 보조 쿠폰: ${absorbCoupon}`
+      }
+      if (!couponCode && absorbCoupon) couponCode = absorbCoupon
+
+      const pointUsed =
+        Math.max(0, Math.trunc(Number(keep.point_used) || 0)) +
+        Math.max(0, Math.trunc(Number(absorb.point_used) || 0))
+
+      const patch: Record<string, unknown> = {
+        items_json: JSON.stringify(mergedItems),
+        subtotal,
+        vat: pricing.vatFeeAmt,
+        total: pricing.finalTotal,
+        discount_amt: discountAmt,
+        discount_reason: discountReason,
+        coupon_code: couponCode || null,
+        coupon_discount_amt: couponDiscountAmt,
+        payment_cash:
+          Math.max(0, Number(keep.payment_cash) || 0) + Math.max(0, Number(absorb.payment_cash) || 0),
+        payment_card: paymentCard,
+        payment_qr:
+          Math.max(0, Number(keep.payment_qr) || 0) + Math.max(0, Number(absorb.payment_qr) || 0),
+        payment_other:
+          Math.max(0, Number(keep.payment_other) || 0) + Math.max(0, Number(absorb.payment_other) || 0),
+        member_id: memberId || null,
+        member_no: memberNo || null,
+        point_used: pointUsed,
+        memo,
+        guest_count: guestCount,
+      }
+
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${keepOrderId}`, patch)
+      await supabaseUpdateByFilter('pos_orders', `id=eq.${absorbOrderId}`, {
+        status: 'cancelled',
+      })
+
+      return NextResponse.json({ success: true }, { headers })
+    }
+
+    return NextResponse.json({ success: false, message: 'Unknown action' }, { headers })
+  } catch (e) {
+    console.error('posDineInTableActions:', e)
+    return NextResponse.json({ success: false, message: String(e) }, { headers })
+  }
+}

@@ -3,7 +3,7 @@ import { appAlert, appConfirm } from "@/lib/app-message"
 
 import * as React from "react"
 import Link from "next/link"
-import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator } from "lucide-react"
+import { UtensilsCrossed, FilePlus, Save, RotateCcw, RefreshCw, Pencil, Trash2, Plus, ChevronDown, ChevronRight, LayoutGrid, Layers, Monitor, PauseCircle, PlayCircle, FolderTree, History, DollarSign, Calculator, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -54,15 +54,35 @@ import {
   type PosMenuIngredient,
   type PosPromo,
 } from "@/lib/api-client"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsIconCn,
+  adminTabsListGridClass,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { PosMenuCategorySettingsDialog } from "@/components/erp/pos-menu-category-settings-dialog"
 import { PosSetMenuTabWorkspace } from "@/components/erp/pos-set-menu-tab-workspace"
+import { PosSetMenuInquiryTab } from "@/components/erp/pos-set-menu-inquiry-tab"
 import { PosStoreFinalPriceSettings } from "@/components/erp/pos-store-final-price-settings"
 import { PriceHistoryTab } from "@/components/erp/price-history-tab"
 import { useAuth } from "@/lib/auth-context"
 import { isOfficeRole } from "@/lib/permissions"
 import { POS_MAIN_CATEGORIES, POS_CATEGORIES_BY_MAIN } from "@/lib/pos-menu-categories"
+import {
+  PROMOTION_MAIN_CATEGORY,
+  normalizePromotionCategoryMain,
+  normalizePromotionSubcategory,
+  promotionSubcategoriesEqual,
+  uniqueSubcategoriesForMainMenu,
+} from "@/lib/pos-promo-constants"
+import { translatePosMenuCategoryLabel } from "@/lib/pos-menu-category-label"
 import { sortByCode } from "@/lib/sort-utils"
 
 /** 코드 자동 생성 대상 대분류 (C/K/S/D/T 접두사) */
@@ -171,7 +191,7 @@ export default function PosMenusPage() {
   const [expandedMenuData, setExpandedMenuData] = React.useState<{ options: PosMenuOption[] } | null>(null)
   const [formTab, setFormTab] = React.useState<"info" | "options" | "cost">("info")
   const [mainTab, setMainTab] = React.useState<
-    "screen" | "optionsConfig" | "set" | "priceHistory" | "priceApply" | "finalPrice"
+    "screen" | "optionsConfig" | "set" | "setInquiry" | "priceHistory" | "priceApply" | "finalPrice"
   >("screen")
   const [pricingStoreCode, setPricingStoreCode] = React.useState("")
   const canSearchAllStores = isOfficeRole(auth?.role || "")
@@ -201,6 +221,7 @@ export default function PosMenusPage() {
     ok: boolean
   } | null>(null)
   const [setTabSchemaDismissed, setSetTabSchemaDismissed] = React.useState(false)
+  const [setTabFocusPromoId, setSetTabFocusPromoId] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     try {
@@ -221,7 +242,7 @@ export default function PosMenusPage() {
   }, [canSearchAllStores, stores, auth?.store, pricingStoreCode])
 
   React.useEffect(() => {
-    if (mainTab !== "set") return
+    if (mainTab !== "set" && mainTab !== "setInquiry") return
     setSetTabPromosLoading(true)
     Promise.all([getPosPromos().catch(() => []), getPosPromoSchemaStatus().catch(() => null)])
       .then(([plist, schema]) => {
@@ -262,6 +283,8 @@ export default function PosMenusPage() {
       .catch(() => {})
     void loadMenusAndCategories()
   }, [loadMenusAndCategories])
+
+  const handleSetTabFocusConsumed = React.useCallback(() => setSetTabFocusPromoId(null), [])
 
   // 카테고리 설정은 페이지 로드 시 미리 로드 (메뉴 폼에서 대분류·카테고리 선택 가능)
   React.useEffect(() => {
@@ -445,7 +468,10 @@ export default function PosMenusPage() {
       return
     }
     const effectiveCategoryMain = formData.categoryMain.trim()
-    const effectiveCategory = formData.category.trim()
+    let effectiveCategory = formData.category.trim()
+    if (normalizePromotionCategoryMain(effectiveCategoryMain) === PROMOTION_MAIN_CATEGORY) {
+      effectiveCategory = normalizePromotionSubcategory(effectiveCategory)
+    }
     const editingMenu = editingId ? menus.find((m) => m.id === editingId) : null
     const res = await savePosMenu({
       id: editingId || undefined,
@@ -499,11 +525,15 @@ export default function PosMenusPage() {
   }
 
   const handleEdit = (menu: PosMenu) => {
+    const mainNorm = normalizePromotionCategoryMain(menu.categoryMain ?? "")
     setFormData({
       code: menu.code,
       name: menu.name,
       categoryMain: menu.categoryMain ?? "",
-      category: menu.category ?? "",
+      category:
+        mainNorm === PROMOTION_MAIN_CATEGORY
+          ? normalizePromotionSubcategory(menu.category ?? "")
+          : (menu.category ?? ""),
       price: String(menu.price),
       priceDelivery: menu.priceDelivery != null ? String(menu.priceDelivery) : "",
       imageUrl: menu.imageUrl,
@@ -1119,7 +1149,11 @@ export default function PosMenusPage() {
         !searchTerm ||
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(searchTerm.toLowerCase())
-      const categoryEq = m.category === categoryFilter
+      const categoryEq =
+        categoryFilter !== "all" &&
+        (mainCategoryFilter === PROMOTION_MAIN_CATEGORY
+          ? promotionSubcategoriesEqual(m.category, categoryFilter)
+          : m.category === categoryFilter)
       const matchCategory = categoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
       const matchMainCategory = mainCategoryFilter === "all" || mainEq
@@ -1139,7 +1173,11 @@ export default function PosMenusPage() {
         !optionsConfigSearchTerm ||
         m.name.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase()) ||
         m.code.toLowerCase().includes(optionsConfigSearchTerm.toLowerCase())
-      const categoryEq = m.category === optionsConfigCategoryFilter
+      const categoryEq =
+        optionsConfigCategoryFilter !== "all" &&
+        (mainCategoryFilter === PROMOTION_MAIN_CATEGORY
+          ? promotionSubcategoriesEqual(m.category, optionsConfigCategoryFilter)
+          : m.category === optionsConfigCategoryFilter)
       const matchCategory = optionsConfigCategoryFilter === "all" || categoryEq
       const mainEq = (m.categoryMain ?? "") === mainCategoryFilter
       const matchMainCategory = mainCategoryFilter === "all" || mainEq
@@ -1182,9 +1220,11 @@ export default function PosMenusPage() {
       .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)
       .filter((c): c is string => typeof c === "string" && c !== "")
-    return Array.from(new Set([...preset, ...fromMenus]))
-      .filter((c): c is string => typeof c === "string")
-      .sort()
+    const raw = Array.from(new Set([...preset, ...fromMenus])).filter((c): c is string => typeof c === "string")
+    if (main === PROMOTION_MAIN_CATEGORY) {
+      return uniqueSubcategoriesForMainMenu(main, raw)
+    }
+    return raw.sort()
   }, [formData.categoryMain, menus, categories, categoriesConfig])
 
   /** 옵션 구성 탭: 대분류 선택 시 해당 대분류에 속한 소분류만 */
@@ -1198,9 +1238,11 @@ export default function PosMenusPage() {
       .filter((m) => (m.categoryMain ?? "") === main)
       .map((m) => m.category)
       .filter((c): c is string => typeof c === "string" && c !== "")
-    return Array.from(new Set([...preset, ...fromMenus]))
-      .filter((c): c is string => typeof c === "string")
-      .sort()
+    const raw = Array.from(new Set([...preset, ...fromMenus])).filter((c): c is string => typeof c === "string")
+    if (main === PROMOTION_MAIN_CATEGORY) {
+      return uniqueSubcategoriesForMainMenu(main, raw)
+    }
+    return raw.sort()
   }, [mainCategoryFilter, menus, categories, categoriesConfig])
 
   return (
@@ -1241,19 +1283,42 @@ export default function PosMenusPage() {
             {t("loading")}
           </div>
         )}
-        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className="w-full">
-          <TabsList className="mb-4 h-9">
-            <TabsTrigger value="screen" className="gap-1.5 text-xs"><LayoutGrid className="h-3.5 w-3.5" />{t("posMenuTabScreen")}</TabsTrigger>
-            <TabsTrigger value="optionsConfig" className="gap-1.5 text-xs"><Layers className="h-3.5 w-3.5" />{t("posMenuTabOptionsConfig")}</TabsTrigger>
-            <TabsTrigger value="set" className="gap-1.5 text-xs"><Monitor className="h-3.5 w-3.5" />{t("posMenuTabSet")}</TabsTrigger>
-            <TabsTrigger value="priceHistory" className="gap-1.5 text-xs"><History className="h-3.5 w-3.5" />{t("posMenuTabPriceHistory") || "메뉴 가격이력"}</TabsTrigger>
-            <TabsTrigger value="priceApply" className="gap-1.5 text-xs"><DollarSign className="h-3.5 w-3.5" />{t("posMenuTabPriceApply") || "가격 적용"}</TabsTrigger>
-            <TabsTrigger value="finalPrice" className="gap-1.5 text-xs">
-              <Calculator className="h-3.5 w-3.5" />
-              {t("posPricingTab") || "최종가격"}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="screen" className="mt-0">
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as typeof mainTab)} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="screen" className={adminTabsTriggerCn}>
+                  <LayoutGrid className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabScreen")}
+                </TabsTrigger>
+                <TabsTrigger value="optionsConfig" className={adminTabsTriggerCn}>
+                  <Layers className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabOptionsConfig")}
+                </TabsTrigger>
+                <TabsTrigger value="set" className={adminTabsTriggerCn}>
+                  <Monitor className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabSet")}
+                </TabsTrigger>
+                <TabsTrigger value="setInquiry" className={adminTabsTriggerCn}>
+                  <ClipboardList className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabSetInquiry")}
+                </TabsTrigger>
+                <TabsTrigger value="priceHistory" className={adminTabsTriggerCn}>
+                  <History className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabPriceHistory") || "메뉴 가격이력"}
+                </TabsTrigger>
+                <TabsTrigger value="priceApply" className={adminTabsTriggerCn}>
+                  <DollarSign className={adminTabsIconCn} aria-hidden />
+                  {t("posMenuTabPriceApply") || "가격 적용"}
+                </TabsTrigger>
+                <TabsTrigger value="finalPrice" className={adminTabsTriggerCn}>
+                  <Calculator className={adminTabsIconCn} aria-hidden />
+                  {t("posPricingTab") || "최종가격"}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+          </div>
+          <TabsContent value="screen" className={adminTabsContentCn}>
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
           {/* Form */}
           <div className="lg:sticky lg:top-0 lg:self-start">
@@ -1280,11 +1345,21 @@ export default function PosMenusPage() {
               {editingId ? (
                 <>
                 <Tabs value={formTab} onValueChange={(v) => setFormTab(v as typeof formTab)}>
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="info" className="text-xs">{t("posFormTabInfo") || "메뉴정보"}</TabsTrigger>
-                    <TabsTrigger value="options" className="text-xs">{t("posFormTabOptions") || "옵션"}</TabsTrigger>
-                    <TabsTrigger value="cost" className="text-xs">{t("posFormTabCost") || "원가"}</TabsTrigger>
-                  </TabsList>
+                  <div className={adminTabsBarCn}>
+                    <div className={adminTabsScrollCn}>
+                      <TabsList className={adminTabsListGridClass("grid-cols-3")}>
+                        <TabsTrigger value="info" className={adminTabsTriggerGridCn}>
+                          {t("posFormTabInfo") || "메뉴정보"}
+                        </TabsTrigger>
+                        <TabsTrigger value="options" className={adminTabsTriggerGridCn}>
+                          {t("posFormTabOptions") || "옵션"}
+                        </TabsTrigger>
+                        <TabsTrigger value="cost" className={adminTabsTriggerGridCn}>
+                          {t("posFormTabCost") || "원가"}
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
+                  </div>
                   <TabsContent value="info" className="space-y-4 mt-4">
                     <div>
                       <label className="text-xs font-semibold">{t("posMenuCode")}</label>
@@ -1372,7 +1447,7 @@ export default function PosMenusPage() {
                                 setCategoryOpen(false)
                               }}
                             >
-                              {c}
+                              {translatePosMenuCategoryLabel(c, t)}
                             </DropdownMenuItem>
                           ))}
                           {formData.category.trim() &&
@@ -1728,7 +1803,7 @@ export default function PosMenusPage() {
                               setCategoryOpen(false)
                             }}
                           >
-                            {c}
+                            {translatePosMenuCategoryLabel(c, t)}
                           </DropdownMenuItem>
                         ))}
                         {formData.category.trim() &&
@@ -1816,7 +1891,7 @@ export default function PosMenusPage() {
                 <SelectContent>
                   <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
                   {optionsConfigCategoriesByMain.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                    <SelectItem key={c} value={c}>{translatePosMenuCategoryLabel(c, t)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1893,7 +1968,9 @@ export default function PosMenusPage() {
                                 <span className="text-sm">{optionPartLabel(opt.name)}</span>
                               </td>
                               <td className="px-5 py-2 text-center text-muted-foreground text-xs w-20">{m.categoryMain || "-"}</td>
-                              <td className="px-5 py-2 text-center text-muted-foreground w-24">{m.category || "-"}</td>
+                              <td className="px-5 py-2 text-center text-muted-foreground w-24">
+                                {m.category ? translatePosMenuCategoryLabel(m.category, t) : "-"}
+                              </td>
                               <td className="px-5 py-2 text-right font-medium tabular-nums text-xs w-24">{optPrice > 0 ? optPrice.toLocaleString() : "-"}</td>
                               <td className="px-5 py-2 w-28" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex justify-center gap-1">
@@ -1963,7 +2040,9 @@ export default function PosMenusPage() {
                         </td>
                         <td className="px-5 py-3">{m.name}</td>
                         <td className="px-5 py-3 text-center text-muted-foreground text-xs">{m.categoryMain || "-"}</td>
-                        <td className="px-5 py-3 text-center text-muted-foreground">{m.category || "-"}</td>
+                        <td className="px-5 py-3 text-center text-muted-foreground">
+                          {m.category ? translatePosMenuCategoryLabel(m.category, t) : "-"}
+                        </td>
                         <td className="px-5 py-3 text-right font-bold tabular-nums text-xs">
                           {m.price > 0 ? m.price.toLocaleString() : "-"}
                         </td>
@@ -2022,7 +2101,7 @@ export default function PosMenusPage() {
           </div>
         </div>
           </TabsContent>
-          <TabsContent value="optionsConfig" className="mt-0">
+          <TabsContent value="optionsConfig" className={adminTabsContentCn}>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">{t("posChickenBatchHint") || "코드가 c로 시작하는 메뉴(치킨)에 S/M·부위 옵션을 한 번에 적용할 수 있습니다."}</p>
               <Button variant="outline" size="sm" onClick={handleChickenBatchApply} disabled={chickenBatchApplying}>
@@ -2078,7 +2157,7 @@ export default function PosMenusPage() {
                     <SelectContent>
                       <SelectItem value="all">{t("posMenuCategoryAll")}</SelectItem>
                       {optionsConfigCategoriesByMain.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                        <SelectItem key={c} value={c}>{translatePosMenuCategoryLabel(c, t)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2374,7 +2453,7 @@ export default function PosMenusPage() {
               </div>
             </div>
           </TabsContent>
-          <TabsContent value="set" className="mt-0">
+          <TabsContent value="set" className={adminTabsContentCn}>
             {(setTabPromosLoading || loading) && menus.length === 0 ? (
               <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">{t("loading")}</div>
             ) : (
@@ -2396,15 +2475,30 @@ export default function PosMenusPage() {
                   setSetTabSchemaDismissed(true)
                 }}
                 onAfterSave={refreshSetTabAfterSave}
+                focusPromoId={setTabFocusPromoId}
+                onFocusPromoConsumed={handleSetTabFocusConsumed}
               />
             )}
           </TabsContent>
-          <TabsContent value="priceHistory" className="mt-0">
+          <TabsContent value="setInquiry" className={adminTabsContentCn}>
+            <div className="rounded-xl border border-border/80 bg-card p-4 sm:p-6">
+              <PosSetMenuInquiryTab
+                promos={promoListForSetTab}
+                promosLoading={setTabPromosLoading}
+                onRefresh={refreshSetTabAfterSave}
+                onOpenInSetTab={(id) => {
+                  setSetTabFocusPromoId(id)
+                  setMainTab("set")
+                }}
+              />
+            </div>
+          </TabsContent>
+          <TabsContent value="priceHistory" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-6">
               <PriceHistoryTab entityTypes={["pos_menu", "pos_menu_option"]} mode="menu" />
             </div>
           </TabsContent>
-          <TabsContent value="priceApply" className="mt-0">
+          <TabsContent value="priceApply" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-6 space-y-4">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-primary" />
@@ -2432,7 +2526,7 @@ export default function PosMenusPage() {
               </p>
             </div>
           </TabsContent>
-          <TabsContent value="finalPrice" className="mt-0">
+          <TabsContent value="finalPrice" className={adminTabsContentCn}>
             <div className="rounded-xl border bg-card p-6 space-y-4 max-w-2xl">
               <h3 className="text-sm font-bold flex items-center gap-2">
                 <Calculator className="h-4 w-4 text-primary" />

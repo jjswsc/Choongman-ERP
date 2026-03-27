@@ -3,7 +3,7 @@
  * 이체, 고정비, 비용 등
  */
 
-export type WithdrawCategory = 'transfer' | 'expense' | 'fixed' | 'correction' | 'loan' | 'advance' | 'unclassified'
+export type WithdrawCategory = 'transfer' | 'expense' | 'correction' | 'loan' | 'advance' | 'unclassified'
 
 /** 출금 시 적요 기반 용도·계정과목 추천 */
 export function suggestWithdrawFromMemo(
@@ -30,16 +30,16 @@ export function suggestWithdrawFromMemo(
     return { category: 'advance' }
   }
 
-  // 고정비 - 코드 우선 매칭
-  if (/\b(월세|임대|rent|rental|집세)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5410'] }
-  if (/\b(전기|electricity|ไฟฟ้า)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5430'] }
-  if (/\b(수도|water|광열|gas|ประปา)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5440'] }
-  if (/\b(인터넷|통신|internet|โทรศัพท์)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5420'] ?? byCode['5470'] }
-  if (/\b(급여|salary|월급|ค่าจ้าง)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5310'] }
+  // 반복 경비(임대·공과 등) — 통장 용도는 경비(expense)로 통일
+  if (/\b(월세|임대|rent|rental|집세)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5410'] }
+  if (/\b(전기|electricity|ไฟฟ้า)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5430'] }
+  if (/\b(수도|water|광열|gas|ประปา)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5440'] }
+  if (/\b(인터넷|통신|internet|โทรศัพท์)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5420'] ?? byCode['5470'] }
+  if (/\b(급여|salary|월급|ค่าจ้าง)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5310'] }
   if (/\b(상여|bonus|보너스)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5320'] }
   if (/\b(복리|복지|welfare|สวัสดิการ)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5330'] }
-  if (/\b(보험|insurance|ประกัน)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5490'] }
-  if (/\b(감가|depreciation)\b/i.test(m)) return { category: 'fixed', accountSubjectId: byCode['5500'] }
+  if (/\b(보험|insurance|ประกัน)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5490'] }
+  if (/\b(감가|depreciation)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5500'] }
 
   // 비용
   if (/\b(접대|entertainment|รับรอง)\b/i.test(m)) return { category: 'expense', accountSubjectId: byCode['5450'] }

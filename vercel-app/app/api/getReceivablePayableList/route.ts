@@ -185,7 +185,18 @@ export async function GET(request: NextRequest) {
       'receivable_transactions',
       filter,
       { order: 'trans_date.desc', limit: 20000 }
-    )) as { id?: number; store_name?: string; amount?: number; ref_type?: string; ref_id?: number; trans_date?: string; memo?: string; invoice_no?: string; created_at?: string }[]
+    )) as {
+      id?: number
+      store_name?: string
+      amount?: number
+      ref_type?: string
+      ref_id?: number
+      trans_date?: string
+      memo?: string
+      invoice_no?: string
+      created_at?: string
+      receive_checked?: boolean
+    }[]
 
     const byStore: Record<string, { total: number; items: typeof rows }> = {}
     for (const r of rows || []) {

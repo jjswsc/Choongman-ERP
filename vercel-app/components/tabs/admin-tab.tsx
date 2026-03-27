@@ -35,6 +35,14 @@ import {
   type AttendanceDailyRow,
   type AttendanceNoRecordRow,
 } from "@/lib/api-client"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NoticeCompose } from "@/components/erp/notice-compose"
 import { NoticeHistory } from "@/components/erp/notice-history"
@@ -196,19 +204,23 @@ export function AdminTab() {
   return (
     <div className="flex flex-col gap-4 p-4">
       {/* 공지사항 (탭: 새 공지 보내기 | 발송 내역) */}
-      <Tabs defaultValue="compose" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-3">
-          <TabsTrigger value="compose" className="text-sm font-medium">
-            {t("noticeNewTitle")}
-          </TabsTrigger>
-          <TabsTrigger value="history" className="text-sm font-medium">
-            {t("noticeHistoryTitle")}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="compose">
+      <Tabs defaultValue="compose" className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+              <TabsTrigger value="compose" className={adminTabsTriggerGridCn}>
+                {t("noticeNewTitle")}
+              </TabsTrigger>
+              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                {t("noticeHistoryTitle")}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
+        <TabsContent value="compose" className={adminTabsContentCn}>
           <NoticeCompose />
         </TabsContent>
-        <TabsContent value="history">
+        <TabsContent value="history" className={adminTabsContentCn}>
           <NoticeHistory />
         </TabsContent>
       </Tabs>

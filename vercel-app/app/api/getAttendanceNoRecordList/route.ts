@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseSelectFilter, supabaseSelect } from '@/lib/supabase-server'
+import { supabaseSelectFilter, supabaseSelect, supabaseSelectFilterAllPages } from '@/lib/supabase-server'
 
 function toDateStr(val: string | Date | null | undefined): string {
   if (!val) return ''
@@ -55,10 +55,18 @@ export async function GET(request: NextRequest) {
     const schFilter = `schedule_date=gte.${startStr}&schedule_date=lte.${endStr}`
     let schRows: SchRow[] = []
     if (isAllStores) {
-      schRows = (await supabaseSelectFilter('schedules', schFilter, { order: 'schedule_date.asc', limit: 1000 })) as SchRow[]
+      schRows = (await supabaseSelectFilterAllPages('schedules', schFilter, {
+        order: 'schedule_date.asc',
+        pageSize: 8000,
+        maxRows: 2_000_000,
+      })) as SchRow[]
     } else {
       const f = `${schFilter}&store_name=ilike.${encodeURIComponent(storeFilter)}`
-      schRows = (await supabaseSelectFilter('schedules', f, { order: 'schedule_date.asc', limit: 1000 })) as SchRow[]
+      schRows = (await supabaseSelectFilterAllPages('schedules', f, {
+        order: 'schedule_date.asc',
+        pageSize: 8000,
+        maxRows: 2_000_000,
+      })) as SchRow[]
     }
 
     // 출근이 있는 날짜|매장|이름 키 수집

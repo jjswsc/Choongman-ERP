@@ -12,6 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -1115,16 +1124,39 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             <p className="text-xs text-muted-foreground">{t("outPageSub")}</p>
           </div>
         </div>
-        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice")} className="space-y-4">
-          <TabsList className={`grid w-full max-w-2xl mb-4 ${isOffice ? "grid-cols-4" : "grid-cols-1"}`}>
-            {isOffice && <TabsTrigger value="new" className="text-sm font-medium">{t("outTabNew")}</TabsTrigger>}
-            <TabsTrigger value="hist" className="text-sm font-medium">{t("outTabHist")}</TabsTrigger>
-            {isOffice && <TabsTrigger value="warehouse" className="text-sm font-medium">{t("outTabByWarehouse")}</TabsTrigger>}
-            {isOffice && <TabsTrigger value="invoice" className="text-sm font-medium">{t("outTabInvoice")}</TabsTrigger>}
-          </TabsList>
+        <Tabs value={tabValue} onValueChange={(v) => setTabValue(v as "new" | "hist" | "warehouse" | "invoice")} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList
+                className={cn(
+                  adminTabsListGridClass("max-w-2xl"),
+                  isOffice ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1"
+                )}
+              >
+                {isOffice && (
+                  <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                    {t("outTabNew")}
+                  </TabsTrigger>
+                )}
+                <TabsTrigger value="hist" className={adminTabsTriggerGridCn}>
+                  {t("outTabHist")}
+                </TabsTrigger>
+                {isOffice && (
+                  <TabsTrigger value="warehouse" className={adminTabsTriggerGridCn}>
+                    {t("outTabByWarehouse")}
+                  </TabsTrigger>
+                )}
+                {isOffice && (
+                  <TabsTrigger value="invoice" className={adminTabsTriggerGridCn}>
+                    {t("outTabInvoice")}
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
+          </div>
 
           {isOffice && (
-            <TabsContent value="new">
+            <TabsContent value="new" className={adminTabsContentCn}>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="md:col-span-2 space-y-4">
                   <div className="rounded-xl border bg-card p-5">
@@ -1255,7 +1287,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           )}
 
           {isOffice && (
-            <TabsContent value="warehouse" className="space-y-4">
+            <TabsContent value="warehouse" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-xl border bg-card p-5">
                 <p className="text-sm text-muted-foreground mb-4">{t("outWhHint")}</p>
                 <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -1440,7 +1472,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
           )}
 
           {isOffice && (
-            <TabsContent value="invoice" className="space-y-4">
+            <TabsContent value="invoice" className={cn(adminTabsContentCn, "space-y-4")}>
               <div className="rounded-xl border bg-card p-5 max-w-2xl">
                 <h3 className="text-sm font-bold mb-4">{t("outTabInvoice")}</h3>
                 {invSettingsLoading ? (
@@ -1564,7 +1596,7 @@ ${dataRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeXml(cell)}</td>`).
             </TabsContent>
           )}
 
-          <TabsContent value="hist">
+          <TabsContent value="hist" className={adminTabsContentCn}>
             <ShipmentFilterBar
               totalAmount={periodTotalFormatted}
               isOffice={isOffice}

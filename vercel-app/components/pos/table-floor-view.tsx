@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
+import { Users, Armchair } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { PosTableItem } from '@/lib/api-client'
 import { translateReceiptTableDisplayName } from '@/lib/pos-print-translate'
@@ -452,26 +453,49 @@ export function TableFloorView({
               className={labelTextClass}
               style={{ writingMode: 'horizontal-tb' }}
             >
-              {/* 1줄: 테이블명 (+ 사용 중이면 인원). 빈 테이블은 좌석 수 */}
-              <div className="flex min-w-0 max-w-full flex-row flex-nowrap items-baseline justify-center gap-x-1 px-0.5 leading-none">
-                <span className="min-w-0 max-w-[min(100%,8.5rem)] shrink truncate text-base font-extrabold tracking-tight sm:text-lg">
+              {/* 1줄: 테이블명만 강조 · 2줄: 손님 수(주문) vs 테이블 정원(좌석)을 칩·아이콘으로 구분 */}
+              <div className="flex min-w-0 max-w-full flex-col items-center gap-1 px-0.5 leading-none">
+                <span
+                  className="min-w-0 max-w-[min(100%,9rem)] truncate border-b border-current/30 pb-0.5 text-base font-extrabold tracking-tight sm:text-lg"
+                  title={translateReceiptTableDisplayName(tab.name, t)}
+                >
                   {translateReceiptTableDisplayName(tab.name, t)}
                 </span>
-                {isOccupied && tableGuestCount > 0 && (
-                  <span
-                    className="shrink-0 text-xs font-extrabold tabular-nums opacity-90 sm:text-sm"
-                    title={t('posOrderGuestCount') || ''}
-                  >
-                    {tableGuestCount}
-                    {t('posPeopleUnit') || ''}
-                  </span>
-                )}
-                {!isOccupied && tab.seats > 0 && (
-                  <span className="shrink-0 text-xs font-semibold tabular-nums opacity-95 sm:text-sm">
-                    {tab.seats}
-                    {t('posTableSeatsUnit') || '인'}
-                  </span>
-                )}
+                <div className="flex max-w-full flex-wrap items-center justify-center gap-1">
+                  {isOccupied && tableGuestCount > 0 && (
+                    <span
+                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-sky-300/90 bg-sky-950/88 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-50 shadow-md ring-1 ring-sky-400/40 sm:text-xs"
+                      title={t('posOrderGuestCount') || '이 테이블 주문 손님 수'}
+                    >
+                      <Users className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+                      <span className="tabular-nums leading-none">{tableGuestCount}</span>
+                      <span className="max-w-[4rem] truncate text-[9px] font-bold normal-case opacity-95 sm:text-[10px]">
+                        {t('posGuestCount') || '손님'}
+                      </span>
+                    </span>
+                  )}
+                  {isOccupied && tab.seats > 0 && (
+                    <span
+                      className="inline-flex items-center gap-0.5 rounded-full border border-amber-200/50 bg-amber-950/70 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-amber-50 shadow-sm ring-1 ring-amber-700/35 sm:text-[10px]"
+                      title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
+                    >
+                      <Armchair className="h-2.5 w-2.5 shrink-0 opacity-95 sm:h-3 sm:w-3" strokeWidth={2.25} aria-hidden />
+                      {tab.seats}
+                    </span>
+                  )}
+                  {!isOccupied && tab.seats > 0 && (
+                    <span
+                      className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-amber-600/85 bg-amber-950/65 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-50 shadow-md ring-1 ring-amber-800/40 sm:text-xs"
+                      title={`${t('posTableSeats') || '좌석'} · ${t('posTableSeatsCapacityHint') || '테이블 수용 인원(정원)'}`}
+                    >
+                      <Armchair className="h-3 w-3 shrink-0 opacity-95" strokeWidth={2.25} aria-hidden />
+                      <span className="tabular-nums leading-none">{tab.seats}</span>
+                      <span className="max-w-[3.5rem] truncate text-[9px] font-bold normal-case opacity-95 sm:text-[10px]">
+                        {t('posTableSeats') || '좌석'}
+                      </span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* 2줄: 상태 · 주문시각 · 경과(지연 문구는 경과 칩 안으로 합침) */}

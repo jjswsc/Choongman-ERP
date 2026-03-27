@@ -5,6 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  adminTabsBarCn,
+  adminTabsContentCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -504,21 +513,45 @@ export function AdminAccountingCompliance() {
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="flex flex-wrap h-auto gap-1">
-          <TabsTrigger value="scope">{t("accCompTabScope")}</TabsTrigger>
-          <TabsTrigger value="channels">{t("accCompTabChannels")}</TabsTrigger>
-          <TabsTrigger value="resp">{t("accCompTabResp")}</TabsTrigger>
-          <TabsTrigger value="period">{t("accCompTabPeriod")}</TabsTrigger>
-          <TabsTrigger value="trial">{t("accCompTabTrial")}</TabsTrigger>
-          <TabsTrigger value="vat">{t("accCompTabVat")}</TabsTrigger>
-          <TabsTrigger value="wht">{t("accCompTabWht")}</TabsTrigger>
-          <TabsTrigger value="summary">Tax Summary</TabsTrigger>
-          <TabsTrigger value="cit">CIT(PND50/51)</TabsTrigger>
-          <TabsTrigger value="workflow">Workflow</TabsTrigger>
-        </TabsList>
+      <Tabs value={tab} onValueChange={setTab} className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListRowCn}>
+              <TabsTrigger value="scope" className={adminTabsTriggerCn}>
+                {t("accCompTabScope")}
+              </TabsTrigger>
+              <TabsTrigger value="channels" className={adminTabsTriggerCn}>
+                {t("accCompTabChannels")}
+              </TabsTrigger>
+              <TabsTrigger value="resp" className={adminTabsTriggerCn}>
+                {t("accCompTabResp")}
+              </TabsTrigger>
+              <TabsTrigger value="period" className={adminTabsTriggerCn}>
+                {t("accCompTabPeriod")}
+              </TabsTrigger>
+              <TabsTrigger value="trial" className={adminTabsTriggerCn}>
+                {t("accCompTabTrial")}
+              </TabsTrigger>
+              <TabsTrigger value="vat" className={adminTabsTriggerCn}>
+                {t("accCompTabVat")}
+              </TabsTrigger>
+              <TabsTrigger value="wht" className={adminTabsTriggerCn}>
+                {t("accCompTabWht")}
+              </TabsTrigger>
+              <TabsTrigger value="summary" className={adminTabsTriggerCn}>
+                Tax Summary
+              </TabsTrigger>
+              <TabsTrigger value="cit" className={adminTabsTriggerCn}>
+                CIT(PND50/51)
+              </TabsTrigger>
+              <TabsTrigger value="workflow" className={adminTabsTriggerCn}>
+                Workflow
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="scope" className="space-y-3 mt-4">
+        <TabsContent value="scope" className={cn(adminTabsContentCn, "space-y-3")}>
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -572,7 +605,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="channels" className="space-y-3 mt-4">
+        <TabsContent value="channels" className={cn(adminTabsContentCn, "space-y-3")}>
           <Card>
             <CardContent className="pt-6 text-sm space-y-4">
               <p className="text-muted-foreground">{GOV_INTEGRATION_PHASES.phase1}</p>
@@ -609,7 +642,7 @@ export function AdminAccountingCompliance() {
           <p className="text-xs text-muted-foreground px-1">{t("accCompBankReconcileHint")}</p>
         </TabsContent>
 
-        <TabsContent value="resp" className="space-y-3 mt-4">
+        <TabsContent value="resp" className={cn(adminTabsContentCn, "space-y-3")}>
           <Card>
             <CardContent className="pt-6 space-y-4">
               {THAI_FILING_DEFINITIONS.map((d) => {
@@ -653,7 +686,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="period" className="mt-4">
+        <TabsContent value="period" className={adminTabsContentCn}>
           <Card>
             <CardContent className="pt-6 overflow-x-auto">
               <table className="w-full text-sm">
@@ -693,7 +726,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="trial" className="space-y-3 mt-4">
+        <TabsContent value="trial" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">YYYY-MM</div>
@@ -763,7 +796,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="vat" className="space-y-3 mt-4">
+        <TabsContent value="vat" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">tax_month</div>
@@ -887,7 +920,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="wht" className="space-y-3 mt-4">
+        <TabsContent value="wht" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">tax_month</div>
@@ -1005,7 +1038,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="summary" className="space-y-3 mt-4">
+        <TabsContent value="summary" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">year_month</div>
@@ -1055,7 +1088,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cit" className="space-y-3 mt-4">
+        <TabsContent value="cit" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">year_month</div>
@@ -1109,7 +1142,7 @@ export function AdminAccountingCompliance() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="workflow" className="space-y-3 mt-4">
+        <TabsContent value="workflow" className={cn(adminTabsContentCn, "space-y-3")}>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
               <div className="text-xs text-muted-foreground mb-1">year_month</div>

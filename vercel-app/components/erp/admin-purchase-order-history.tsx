@@ -25,6 +25,27 @@ import { translateApiMessage } from "@/lib/translate-api-message"
 import Link from "next/link"
 import { Printer, FileSpreadsheet, History, RefreshCw, CheckCircle, ArrowDownToLine, Search, XCircle } from "lucide-react"
 import { isPoApprovedStatus } from "@/components/invoice/purchase-order-print"
+import { formatPoDisplayDate, parsePurchaseOrderCart, purchaseOrderMetaOrderDate } from "@/lib/purchase-order-cart"
+import { todayStrBangkok } from "@/lib/attendance-utils"
+
+/** 방콕 달력 YYYY-MM-DD에 달 수만큼 더함(일은 월 말에 맞춤) */
+function addCalendarMonthsBangkokYmd(ymd: string, deltaMonth: number): string {
+  const [ys, ms, ds] = ymd.split("-").map((x) => parseInt(x, 10))
+  let y = ys
+  let m = ms + deltaMonth
+  let d = ds
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  while (m > 12) {
+    m -= 12
+    y += 1
+  }
+  const lastDay = new Date(y, m, 0).getDate()
+  const day = Math.min(d, lastDay)
+  return `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+}
 
 export function AdminPurchaseOrderHistory() {
   const { lang } = useLang()
@@ -35,18 +56,47 @@ export function AdminPurchaseOrderHistory() {
   const [approvingId, setApprovingId] = React.useState<number | null>(null)
   const [cancellingId, setCancellingId] = React.useState<number | null>(null)
   const [vendors, setVendors] = React.useState<{ code: string; name: string; address?: string; taxId?: string; phone?: string }[]>([])
-  const [startDate, setStartDate] = React.useState(() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - 1)
-    return d.toISOString().slice(0, 10)
-  })
-  const [endDate, setEndDate] = React.useState(() => new Date().toISOString().slice(0, 10))
+  const [startDate, setStartDate] = React.useState(() => addCalendarMonthsBangkokYmd(todayStrBangkok(), -1))
+  const [endDate, setEndDate] = React.useState(() => todayStrBangkok())
   const [vendorFilter, setVendorFilter] = React.useState<string>("All")
+  const initialFetchDone = React.useRef(false)
+
+  const poDateLocale = React.useMemo(
+    () =>
+      ({
+        ko: "ko-KR",
+        en: "en-US",
+        th: "th-TH",
+        mm: "my-MM",
+        la: "lo-LA",
+        kh: "km-KH",
+        vi: "vi-VN",
+        ms: "ms-MY",
+      }[lang] || "en-US"),
+    [lang]
+  )
 
   React.useEffect(() => {
     getVendorsForPurchase()
       .then((rows) => setVendors((rows || []).map((v) => ({ code: v.code, name: v.name, address: v.address, taxId: v.taxId, phone: v.phone }))))
       .catch(() => setVendors([]))
+  }, [])
+
+  /** 탭 진입 시 한 번 자동 조회(검색 버튼을 누르지 않아도 최근 발주 표시) */
+  React.useEffect(() => {
+    if (initialFetchDone.current) return
+    initialFetchDone.current = true
+    setHasSearched(true)
+    setLoading(true)
+    getPurchaseOrders({
+      startDate,
+      endDate,
+      vendorCode: vendorFilter === "All" ? undefined : vendorFilter,
+    })
+      .then((rows) => setList(Array.isArray(rows) ? rows : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 최초 마운트 시점의 기본 기간만 사용
   }, [])
 
   const load = React.useCallback(() => {
@@ -112,19 +162,9 @@ export function AdminPurchaseOrderHistory() {
   )
 
   const exportPoExcel = (po: PurchaseOrderRow) => {
-    const cart = parseCart(po.cart_json)
+    const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
-    const locale = {
-      ko: "ko-KR",
-      en: "en-US",
-      th: "th-TH",
-      mm: "my-MM",
-      la: "lo-LA",
-      kh: "km-KH",
-      vi: "vi-VN",
-      ms: "ms-MY",
-    }[lang] || "en-US"
-    const dateStr = po.created_at ? new Date(po.created_at).toLocaleDateString(locale) : new Date().toLocaleDateString(locale)
+    const dateStr = formatPoDisplayDate(po, poDateLocale)
     const escapeXml = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
     const hasStore = cart.some((c) => c.store && String(c.store).trim())
@@ -172,6 +212,19 @@ export function AdminPurchaseOrderHistory() {
       pad([t("poDate"), dateStr], colCount),
       pad([t("poShipTo"), po.location_name || "", po.location_address || ""], colCount),
       pad([t("poVendor"), po.vendor_name || ""], colCount),
+      ...(meta?.relatedStore || meta?.storeVendorName
+        ? [
+            pad(
+              [
+                t("poMetaStore"),
+                meta?.relatedStore || "",
+                meta?.storeVendorName ? `${t("poMetaStoreVendor")}: ${meta.storeVendorName}` : "",
+              ],
+              colCount
+            ),
+          ]
+        : []),
+      ...(meta?.poFormatLabel ? [pad([t("poFormPresetLabel"), meta.poFormatLabel], colCount)] : []),
       pad([], colCount),
       pad(headers, colCount),
       ...dataRows.map((r) => pad(r.map((v) => String(v)), colCount)),
@@ -214,21 +267,9 @@ ${allRows.map((row, ri) => {
   }
 
   const printPo = async (po: PurchaseOrderRow) => {
-    const cart = parseCart(po.cart_json)
+    const { items: cart, meta } = parsePurchaseOrderCart(po.cart_json)
     const poNo = po.po_no || `PO-${po.id}`
-    const locale = {
-      ko: "ko-KR",
-      en: "en-US",
-      th: "th-TH",
-      mm: "my-MM",
-      la: "lo-LA",
-      kh: "km-KH",
-      vi: "vi-VN",
-      ms: "ms-MY",
-    }[lang] || "en-US"
-    const dateStr = po.created_at
-      ? new Date(po.created_at).toLocaleDateString(locale)
-      : new Date().toLocaleDateString(locale)
+    const dateStr = formatPoDisplayDate(po, poDateLocale)
 
     const vendor = vendors.find(
       (v) => v.code === po.vendor_code || v.name === po.vendor_name
@@ -256,6 +297,9 @@ ${allRows.map((row, ri) => {
       userName: po.user_name || "-",
       status: po.status,
       withholdingTaxAmount: po.withholding_tax_amount,
+      relatedStore: meta?.relatedStore,
+      storeVendorName: meta?.storeVendorName,
+      poFormatLabel: meta?.poFormatLabel,
     }
     sessionStorage.setItem("po-print-data", JSON.stringify(poPrintData))
     const printWindow = window.open("/admin/po-print", "_blank")
@@ -334,9 +378,7 @@ ${allRows.map((row, ri) => {
               </thead>
               <tbody>
                 {list.map((po) => {
-                  const dateStr = po.created_at
-                    ? new Date(po.created_at).toLocaleDateString()
-                    : "-"
+                  const dateStr = formatPoDisplayDate(po, poDateLocale)
                   return (
                     <tr key={po.id} className="border-b border-border/60 last:border-0">
                       <td className="px-3 py-2 font-medium">{po.po_no || `#${po.id}`}</td>
@@ -430,16 +472,6 @@ ${allRows.map((row, ri) => {
 }
 
 type CartItem = { name?: string; price?: number; qty?: number; store?: string }
-
-function parseCart(json: string | undefined): CartItem[] {
-  if (!json || typeof json !== "string") return []
-  try {
-    const arr = JSON.parse(json)
-    return Array.isArray(arr) ? arr : []
-  } catch {
-    return []
-  }
-}
 
 function groupCartByStore(cart: CartItem[]): Map<string, CartItem[]> {
   const byStore = new Map<string, CartItem[]>()

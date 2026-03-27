@@ -45,6 +45,8 @@ export type VendorForPurchase = {
   taxId?: string
   phone?: string
   bankAccountNo?: string | null
+  /** 거래처 마스터 매출처(매장) — 회계 PO 매장별 거래처 필터용 */
+  salesOutlet?: string | null
 }
 
 export async function getVendorsForPurchaseWithCache(): Promise<VendorForPurchase[]> {
@@ -137,7 +139,17 @@ export interface ReceivablePayableItem {
   vendorCode?: string
   vendorName?: string
   balance: number
-  items: { id?: number; trans_date?: string; ref_type?: string; ref_id?: number; amount?: number; memo?: string; invoice_no?: string; invoice_received?: boolean }[]
+  items: {
+    id?: number
+    trans_date?: string
+    ref_type?: string
+    ref_id?: number
+    amount?: number
+    memo?: string
+    invoice_no?: string
+    invoice_received?: boolean
+    receive_checked?: boolean
+  }[]
 }
 
 export async function getReceivablePayableListWithCache(params: {
@@ -219,6 +231,11 @@ export async function getPurchaseOrdersWithCache(params?: {
     const data = await res.json()
     return Array.isArray(data) ? data : []
   }, fallback)
+}
+
+/** 발주 저장·승인 등 이후 목록 재조회 시 캐시된 getPurchaseOrders 결과 제거 */
+export async function invalidatePurchaseOrdersListCache(): Promise<void> {
+  await deleteErpCacheByPrefix('erp:po')
 }
 
 // ─── 점검 이력 ───

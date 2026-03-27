@@ -2,6 +2,7 @@
 import { appAlert } from "@/lib/app-message"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Clock, Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLang } from "@/lib/lang-context"
@@ -23,6 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListRowCn,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   useStoreList,
@@ -69,12 +78,24 @@ function statusLabel(s: string | undefined, t: (key: string) => string): string 
   return key ? t(key) : raw
 }
 
+/** 근태 기록/승인: 긴 목록은 이 박스 안에서 세로·가로 스크롤 (헤더 행 sticky) */
+const attStatusTableScrollCn =
+  "max-h-[min(72vh,42rem)] overflow-auto overscroll-contain [-webkit-overflow-scrolling:touch] scroll-smooth"
+const attStatusTableCn =
+  "w-full min-w-max border-separate border-spacing-0 text-xs " +
+  "[&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[2] [&_thead_th]:bg-muted/95 [&_thead_th]:backdrop-blur-sm [&_thead_th]:shadow-[0_1px_0_0_hsl(var(--border))] " +
+  /* border-separate에서는 tr 밑줄이 안 보이는 경우가 많아 셀 기준 구분선 */
+  "[&_tbody_td]:border-b [&_tbody_td]:border-border/70"
+
 /** 관리자 `/admin/attendance`와 POS `/pos/attendance`에서 공통 사용 — 동일 API·세션 연동 */
 export function AttendanceManageContent({ readOnly = false }: { readOnly?: boolean }) {
   const { auth } = useAuth()
   const { lang } = useLang()
   const t = useT(lang)
   const allowEdit = !readOnly
+  const searchParams = useSearchParams()
+
+  const [attTab, setAttTab] = React.useState("status")
 
   const [stores, setStores] = React.useState<string[]>([])
   const [employeeOptions, setEmployeeOptions] = React.useState<string[]>([])
@@ -122,6 +143,77 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
       setEmployeeOptions(["All", ...names.filter(Boolean).sort()])
     }
   }, [storeFilter, usersMap])
+
+  const employeeOptionsForSelect = React.useMemo(() => {
+    const opts = [...employeeOptions]
+    const want = employeeFilter
+    if (want && want !== "All" && !opts.includes(want)) opts.push(want)
+    return opts
+  }, [employeeOptions, employeeFilter])
+
+  React.useEffect(() => {
+    const p = searchParams.get("tab")
+    if (p === "help" || p === "today" || p === "view") {
+      setAttTab(p)
+      return
+    }
+    if (p === "schedule" && allowEdit) {
+      setAttTab("schedule")
+      return
+    }
+    if (p === "status") setAttTab("status")
+  }, [searchParams, allowEdit])
+
+  /** 급여 수정 등 ?month=yyyy-MM&store&employee&tab=status */
+  React.useEffect(() => {
+    const month = searchParams.get("month")
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return
+
+    const [y, mo] = month.split("-").map(Number)
+    const start = `${month}-01`
+    const lastD = new Date(y, mo, 0)
+    const mm = String(mo).padStart(2, "0")
+    const end = `${y}-${mm}-${String(lastD.getDate()).padStart(2, "0")}`
+
+    const storeRaw = searchParams.get("store")
+    const decStore = storeRaw ? decodeURIComponent(storeRaw).trim() : ""
+    const empRaw = searchParams.get("employee")
+    const decEmp = empRaw ? decodeURIComponent(empRaw).trim() : ""
+
+    setStartDate(start)
+    setEndDate(end)
+
+    const effStore =
+      !isOffice && auth?.store
+        ? auth.store
+        : decStore && decStore !== "All"
+          ? decStore
+          : undefined
+
+    if (!isOffice && auth?.store) {
+      setStoreFilter(auth.store)
+    } else if (decStore) {
+      setStoreFilter(decStore)
+    }
+
+    if (decEmp) setEmployeeFilter(decEmp)
+
+    setHasSearched(true)
+    setLoading(true)
+    getAttendanceRecordsAdmin({
+      startDate: start,
+      endDate: end,
+      storeFilter: effStore,
+      employeeFilter: decEmp || undefined,
+      statusFilter: "all",
+      userStore: auth?.store,
+      userRole: auth?.role,
+    })
+      .then(setList)
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 쿼리 문자열 변경 시에만 자동 조회
+  }, [auth?.store, auth?.role, isOffice, searchParams.toString()])
 
   const loadRecords = React.useCallback(() => {
     setLoading(true)
@@ -240,18 +332,32 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
           </div>
         </div>
 
-        <Tabs defaultValue="status" className="space-y-4">
-          <TabsList
-            className={readOnly ? "grid w-full max-w-2xl grid-cols-4" : "grid w-full max-w-2xl grid-cols-5"}
-          >
-            <TabsTrigger value="status">{t("tab_att_status")}</TabsTrigger>
-            <TabsTrigger value="help">{t("att_tab_help")}</TabsTrigger>
-            <TabsTrigger value="today">{t("tab_att_today_realtime")}</TabsTrigger>
-            <TabsTrigger value="view">{t("tab_att_view")}</TabsTrigger>
-            {!readOnly && <TabsTrigger value="schedule">{t("tab_att_schedule")}</TabsTrigger>}
-          </TabsList>
+        <Tabs value={attTab} onValueChange={setAttTab} className={adminTabsRootCn}>
+          <div className={adminTabsBarCn}>
+            <div className={adminTabsScrollCn}>
+              <TabsList className={adminTabsListRowCn}>
+                <TabsTrigger value="status" className={adminTabsTriggerCn}>
+                  {t("tab_att_status")}
+                </TabsTrigger>
+                <TabsTrigger value="help" className={adminTabsTriggerCn}>
+                  {t("att_tab_help")}
+                </TabsTrigger>
+                <TabsTrigger value="today" className={adminTabsTriggerCn}>
+                  {t("tab_att_today_realtime")}
+                </TabsTrigger>
+                <TabsTrigger value="view" className={adminTabsTriggerCn}>
+                  {t("tab_att_view")}
+                </TabsTrigger>
+                {!readOnly && (
+                  <TabsTrigger value="schedule" className={adminTabsTriggerCn}>
+                    {t("tab_att_schedule")}
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
+          </div>
 
-          <TabsContent value="help" className="mt-0 space-y-4">
+          <TabsContent value="help" className={cn(adminTabsContentFlushCn, "space-y-4")}>
             <div className="rounded-lg border border-border bg-card p-5 space-y-4">
               <h2 className="text-base font-semibold">{t("att_help_title")}</h2>
               <section>
@@ -283,7 +389,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
             </div>
           </TabsContent>
 
-          <TabsContent value="status" className="mt-0 space-y-4">
+          <TabsContent value="status" className={cn(adminTabsContentFlushCn, "space-y-4")}>
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
@@ -312,12 +418,12 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold">{t("label_employee")}</label>
-                  <Select value={employeeFilter} onValueChange={setEmployeeFilter}>
+                  <Select value={employeeOptionsForSelect.includes(employeeFilter) ? employeeFilter : "All"} onValueChange={setEmployeeFilter}>
                     <SelectTrigger className="h-9 w-36 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {employeeOptions.map((e) => (
+                      {employeeOptionsForSelect.map((e) => (
                         <SelectItem key={e} value={e}>{e}</SelectItem>
                       ))}
                     </SelectContent>
@@ -357,7 +463,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
               {!hasSearched ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   {t("att_query_please")}
@@ -370,7 +476,8 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                     {t("adminAttNoRecord")}
                   </div>
                 ) : (
-                <table className="w-full text-xs">
+                <div className={attStatusTableScrollCn}>
+                <table className={attStatusTableCn}>
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
@@ -390,7 +497,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                     {noRecordList
                       .filter((row) => employeeFilter === "All" || row.name === employeeFilter)
                       .map((row) => (
-                        <tr key={`${row.date}-${row.store}-${row.name}`} className="border-b last:border-b-0">
+                        <tr key={`${row.date}-${row.store}-${row.name}`}>
                           <td className="px-3 py-2.5 text-center">{row.date}</td>
                           <td className="px-2 py-2.5 text-center whitespace-nowrap text-[11px]">{row.store}</td>
                           <td className="px-3 py-2.5 text-center font-medium">{row.name}</td>
@@ -412,14 +519,16 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                       ))}
                   </tbody>
                 </table>
+                </div>
                 )
               ) : displayList.length === 0 ? (
                 <div className="py-16 text-center text-sm text-muted-foreground">
                   {t("adminLeaveNoResult")}
                 </div>
               ) : (
+                <div className={attStatusTableScrollCn}>
                 <form id="att-adjust-form" onSubmit={(e) => e.preventDefault()} className="contents">
-                <table className="w-full text-xs">
+                <table className={attStatusTableCn}>
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="px-3 py-2.5 text-center font-semibold">{t("label_date")}</th>
@@ -458,7 +567,6 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                         <tr
                           key={`${row.date}-${row.store}-${row.name}-${i}`}
                           className={cn(
-                            "border-b last:border-b-0",
                             row.plannedWorkHrs === 0 && !row.isPartTime && "bg-red-100 dark:bg-red-950/40"
                           )}
                         >
@@ -667,11 +775,12 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
                   </tbody>
                 </table>
                 </form>
+                </div>
               )}
             </div>
           </TabsContent>
 
-          <TabsContent value="today" className="mt-0 space-y-3">
+          <TabsContent value="today" className={cn(adminTabsContentFlushCn, "space-y-3")}>
             <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
               <label className="text-xs font-semibold">{t("stockFilterStore")}</label>
               <Select value={todayStore} onValueChange={setTodayStore}>
@@ -693,7 +802,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
             </div>
           </TabsContent>
 
-          <TabsContent value="view" className="mt-0 space-y-3">
+          <TabsContent value="view" className={cn(adminTabsContentFlushCn, "space-y-3")}>
             <div className="rounded-lg border bg-card p-4">
               <WeeklySchedule
                 storeFilter={scheduleStore || stores.find((s) => s !== "All") || ""}
@@ -704,7 +813,7 @@ export function AttendanceManageContent({ readOnly = false }: { readOnly?: boole
           </TabsContent>
 
           {!readOnly && (
-            <TabsContent value="schedule" className="mt-0 space-y-3">
+            <TabsContent value="schedule" className={cn(adminTabsContentFlushCn, "space-y-3")}>
               <div className="rounded-lg border bg-card p-4">
                 <div className="mb-4 flex items-center gap-3">
                   <label className="text-xs font-semibold">{t("stockFilterStore")}</label>

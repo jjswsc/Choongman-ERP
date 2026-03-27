@@ -12,6 +12,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import {
+  adminTabsBarCn,
+  adminTabsContentFlushCn,
+  adminTabsListGridClass,
+  adminTabsRootCn,
+  adminTabsScrollCn,
+  adminTabsTriggerGridCn,
+} from "@/lib/admin-tab-styles"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -27,7 +35,7 @@ import { useLang } from "@/lib/lang-context"
 import { useT, type I18nKeys } from "@/lib/i18n"
 import { translateApiMessage } from "@/lib/translate-api-message"
 import { getAppData, processOrder, getMyOrderHistory, processOrderReceive, translateTexts, type AppItem, type OrderHistoryItem } from "@/lib/api-client"
-import { compressImageForUpload } from "@/lib/utils"
+import { cn, compressImageForUpload } from "@/lib/utils"
 import { Minus, Plus, ShoppingCart, Trash2, Package, ClipboardList, Info } from "lucide-react"
 import { ImageViewerWithRotate } from "@/components/ui/image-viewer-with-rotate"
 import { ListPaginationBar } from "@/components/list-pagination-bar"
@@ -599,17 +607,21 @@ export function OrderTab() {
         </div>,
         document.body
       )}
-      <Tabs defaultValue="new" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="new" className="text-sm font-medium">
-            {t('ordNew')}
-          </TabsTrigger>
-          <TabsTrigger value="history" className="text-sm font-medium">
-            {t('ordHistory')}
-          </TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="new" className={adminTabsRootCn}>
+        <div className={adminTabsBarCn}>
+          <div className={adminTabsScrollCn}>
+            <TabsList className={adminTabsListGridClass("grid-cols-2")}>
+              <TabsTrigger value="new" className={adminTabsTriggerGridCn}>
+                {t('ordNew')}
+              </TabsTrigger>
+              <TabsTrigger value="history" className={adminTabsTriggerGridCn}>
+                {t('ordHistory')}
+              </TabsTrigger>
+            </TabsList>
+          </div>
+        </div>
 
-        <TabsContent value="new" className="mt-4 flex flex-col gap-4">
+        <TabsContent value="new" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <Card className="shadow-sm">
             <CardContent className="p-0">
               {loading ? (
@@ -787,7 +799,7 @@ export function OrderTab() {
           </Button>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4 flex flex-col gap-4">
+        <TabsContent value="history" className={cn(adminTabsContentFlushCn, "flex flex-col gap-4")}>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <Input
